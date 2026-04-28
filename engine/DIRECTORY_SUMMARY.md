@@ -11,11 +11,11 @@ Core game engine for a Magic: The Gathering implementation. Contains 16 Python m
 | `types.py` | 215 | **Foundation** — All enums (`Color`, `ManaType`, `Zone`, `Phase`, `Step`, `CardType`, `Supertype`, `Keyword`) and core dataclasses (`ManaCost` with `.parse()` and `.cmc`, `TargetRequirement`). Zero internal dependencies. |
 | `zones.py` | 168 | `ZoneContainer` (ordered list with add/remove/shuffle/top/bottom), `Zones` (per-player Zone→ZoneContainer mapping), `move_zone()` function, `IllegalMoveError`. Uses identity-based (`is`) lookups. |
 | `player.py` | 167 | `Player` (ABC) with life/zones/mana_pool/has_lost properties and 5 abstract methods (`choose`, `choose_card`, `choose_attackers`, `choose_blockers`, `choose_order`). `DeterministicPlayer` with FIFO scripted choices. `ScriptExhaustedError`. |
-| `mana.py` | 168 | `ManaPool` class — add/empty/total/get/can_pay/pay methods. Auto-pay generic costs preferring colorless mana. |
+| `mana.py` | 175 | `ManaPool` class — add/empty/total/get/can_pay/pay methods. Auto-pay generic costs preferring colorless mana. `last_payment_colors` property and `_MANA_TO_COLOR` mapping for Converge mechanic support. |
 | `card.py` | 465 | `GameObject` (auto-increment ID), `CardImpl` interface (hook methods: `can_cast`, `get_targets`, `on_cast`, `on_resolve`, `get_mana_abilities`, `get_triggers`, `register_replacement_effects`). Concrete subclasses: `Creature`, `Instant`, `Sorcery`, `Enchantment`, `Aura`, `Artifact`, `ArtifactCreature`, `Planeswalker`, `Land`. Supporting dataclasses: `ActivatedAbility`, `LoyaltyAbility`, `ManaAbility`, `ContinuousEffect`, `Mode`. |
 | `game_state.py` | 165 | `GameState` — central state container holding players, stack, trigger/effect/replacement managers, combat state, phase/step tracking, turn number, priority index. `_TURN_SEQUENCE` constant. `advance_phase()` for turn progression. |
 | `stack.py` | 174 | `StackObject` dataclass, `Stack` (LIFO container), `priority_loop()` with auto-pass and stack resolution, `check_state_based_actions()` wrapper. |
-| `casting.py` | 264 | `cast_spell()` (hand→stack→targets→pay mana→on_cast→push), `play_land()`, `is_sorcery_speed()`, `can_cast_at_instant_speed()`. Wires trigger/replacement-effect auto-registration on resolution. |
+| `casting.py` | 273 | `cast_spell()` (hand→stack→targets→pay mana→on_cast→push), `play_land()`, `is_sorcery_speed()`, `can_cast_at_instant_speed()`. Wires trigger/replacement-effect auto-registration on resolution. Stores `colors_spent` on card after mana payment for Converge mechanic. |
 | `combat.py` | 539 | `CombatState` dataclass, `declare_attackers_step()`, `declare_blockers_step()`, `combat_damage_step()`, `end_combat_step()`. Handles first strike, double strike, trample, lifelink, deathtouch, flying/reach, menace, vigilance, summoning sickness. |
 | `abilities.py` | 273 | `activate_ability()`, `tap_cost()`, `ActivatedAbilityInstance`, `LoyaltyAbilityInstance` (per-turn tracking), `AbilityError`. Mana abilities resolve immediately; non-mana go on stack. |
 | `triggers.py` | 171 | `EventType` enum (13 events), `TriggerRegistration` dataclass, `TriggerManager` (register/unregister/fire_event with APNAP ordering). |
@@ -36,7 +36,7 @@ Core game engine for a Magic: The Gathering implementation. Contains 16 Python m
 
 ## Dependencies
 
-- **External**: None (pure Python, stdlib only).
+- **External**: None (pure Python, stdlib only). Note: `mana.py` now references `Color` from `types.py` for the Converge color-tracking feature.
 - **Internal**: `types.py` is the foundation with no internal deps. All other modules depend on `types.py`. `game_state.py` is the central hub importing from most modules. `game.py` and `turn.py` are top-level orchestrators.
 
 ## Testing
