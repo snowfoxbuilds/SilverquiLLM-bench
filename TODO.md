@@ -11,7 +11,7 @@ Scope: Fix Phase 1 bugs → build benchmark runner harness → validate with ~5 
   2. **Remove backward-compat aliases**: In `cards/foundations/simple_spells.py`, aliases like `LightningBolt = BurstLightning` map non-FDN card names to FDN cards with different stats (e.g., Lightning Bolt does 3 damage but Burst Lightning does 2). Remove all such aliases. Update any test imports that reference removed aliases to use the correct FDN card name.
   3. **Cleanup discard fallback warning**: In `engine/turn.py`, the cleanup step catches `ScriptExhaustedError` and silently discards `hand[-1]` (KEY_DECISION #21). Add `import warnings` and emit `warnings.warn(f"ScriptExhaustedError during cleanup discard for {player.name}; auto-discarding {card.name}")` so test authors know their script was incomplete.
   - Testability: `ruff check .` passes after version change. Removed aliases cause `ImportError` if any test still references them (fix those tests). Warning is captured by `pytest -W error::UserWarning` in a dedicated test.
-- [ ] **Benchmark package scaffold + SOS data fetch**
+- [x] **Benchmark package scaffold + SOS data fetch**
   Detail: Create the `benchmark/` runner package and the `benchmarks/sos/` set directory, then fetch Secrets of Strixhaven card data.
 
   - Create `benchmark/` package (set-agnostic runner code) with `__init__.py`.

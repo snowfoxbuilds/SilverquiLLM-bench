@@ -10,6 +10,8 @@ license = "GPL-2.0-only"
 requires-python = ">=3.12"
 dependencies = [
     "requests",
+    "pyyaml",
+    "click",
 ]
 
 [project.optional-dependencies]
@@ -22,7 +24,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["engine*", "cards*"]
+include = ["engine*", "cards*", "benchmark*", "benchmarks*"]
 
 [tool.setuptools.package-data]
 engine = ["py.typed"]
