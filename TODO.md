@@ -225,7 +225,7 @@ SilverquiLLM-bench/
   - `CardMetadata`: dataclass with `name, mana_cost_str, type_line, oracle_text, power, toughness, colors, keywords, rarity, set_code, collector_number`.
   - Fetch MTG Foundations (set code: `fdn`).
   - Testability: mock Scryfall response, verify parsing. Test registry round-trip.
-- [ ] **Basic land implementations (Plains, Island, Swamp, Mountain, Forest)**
+- [x] **Basic land implementations (Plains, Island, Swamp, Mountain, Forest)**
   Detail: Implement the 5 basic lands as the simplest card implementations.
 
   - File: `SilverquiLLM-bench/cards/foundations/basic_lands.py`

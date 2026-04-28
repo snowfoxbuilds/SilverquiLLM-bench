@@ -180,3 +180,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `cards/scryfall.py` — fetch_set() with Scryfall API pagination, 100ms rate limiting, file-based JSON cache in data/sets/, _parse_card() helper
 - `data/sets/.gitkeep` — Placeholder to keep cache directory in git
 - `.gitignore` — Added data/sets/*.json to exclude cached Scryfall data
+
+## Item 19: Basic land implementations (Plains, Island, Swamp, Mountain, Forest)
+
+### Tests
+(No pre-written test file — verified via 1023 existing tests passing + manual smoke tests)
+
+### Implementation
+- `cards/foundations/basic_lands.py` — Plains, Island, Swamp, Mountain, Forest subclasses of Land with Supertype.BASIC, land-type subtypes, and ManaAbility tap-for-mana; register_basic_lands(registry) registration helper
