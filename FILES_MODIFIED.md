@@ -107,3 +107,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `benchmark/evaluator.py` — Evaluation runner with EvalResult dataclass, run_tests (subprocess pytest isolation), run_self_eval, run_cross_eval, run_audited_eval
+
+## Item 13: Scoring calculator
+
+### Implementation
+- `benchmark/scorer.py` — Scoring calculator with Leaderboard dataclass, compute_scores (3-category metrics from EvalResults), generate_leaderboard (Markdown tables)

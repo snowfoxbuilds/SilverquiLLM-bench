@@ -201,7 +201,7 @@ class BenchmarkConfig:
   - Implementation swap mechanism: copy the target `impl.py` to a well-known path (`card_impl.py`) in the test execution directory. Tests import from `card_impl` (per [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) cross-eval spec), so swapping the file swaps the implementation.
   - Subprocess isolation: each pytest run in its own subprocess with `timeout` seconds limit. Capture stdout+stderr. Parse pytest output for `X passed, Y failed` pattern.
   - Testability: create two mock implementations (one correct, one buggy) and a test file. Run cross-eval. Verify the correct impl passes more tests. Verify timeout handling.
-- [ ] **Scoring calculator**
+- [x] **Scoring calculator**
   Detail: Compute all metrics from [SCORING.md](http://scoring.md/) across three independent categories.
 
   - File: `benchmark/scorer.py`

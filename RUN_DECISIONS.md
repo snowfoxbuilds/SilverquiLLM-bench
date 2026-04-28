@@ -14,3 +14,9 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Issue**: Targeted spells falling through to "simple" instead of "medium"
 - **Coordinator decision**: fix implementation (targeted spells should be "medium") and fix the test that was too permissive
 - **Reasoning**: TODO explicitly lists "targeting" as a Medium-tier signal.
+
+## Spec deviation: Item 13 — Scoring calculator discrimination/difficulty granularity
+- **TODO spec expected**: "variance in pass rates across agents' implementations for each test" and "fraction of tests passed by some but not all agents" — per-test granularity.
+- **Actual codebase state**: `EvalResult` from item 12 only stores aggregate counts (`blind_passed`, `blind_failed`, `blind_total`), not per-test pass/fail vectors. Per-test discrimination is impossible with the current data model.
+- **What was implemented instead**: Per-card approximation using suite-level pass ratios. This is the best possible with the current `EvalResult` contract.
+- **Impact**: `benchmark/scorer.py` — discrimination_score and difficulty_calibration are card-level approximations. When `EvalResult` is extended with per-test vectors, these metrics should be updated.
