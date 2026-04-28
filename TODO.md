@@ -115,7 +115,7 @@ class TestCardName:
 - Target: **under 2,000 tokens**.
 - Write output to `docs/test_utils.md`.
 - Testability: all test_utils public functions appear in the doc. Example code is syntactically valid Python.
-- [ ] **MTG rules indexer + rules_**[**overview.md**](http://overview.md/)
+- [x] **MTG rules indexer + rules_**[**overview.md**](http://overview.md/)
   Detail: Build a searchable index of MTG comprehensive rules and a compact overview document.
 
   - File: `benchmark/rules_skill.py`

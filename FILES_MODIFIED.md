@@ -67,3 +67,13 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `docs/test_utils.md` — API reference for test helpers: create_game, set_board_state, cast_spell, advance_to_phase, declare_attackers, declare_blockers
+
+## Item 8: MTG rules indexer + rules_overview.md
+
+### Tests
+- `tests/test_rules_skill.py` — 18 tests covering download, index, lookup, and rules_overview.md
+
+### Implementation
+- `benchmark/rules_skill.py` — MTG comprehensive rules downloader (with force param), parser, indexer, lookup, and generate_rules_overview() function
+- `benchmarks/sos/data/rules_overview.md` — Hand-crafted compact MTG rules overview (~573 tokens)
+- `benchmarks/sos/data/comprehensive_rules.txt` — Cached comprehensive rules (stub fallback)
