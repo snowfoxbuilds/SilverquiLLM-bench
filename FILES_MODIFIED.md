@@ -152,3 +152,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `engine/game_state.py` — Added replacement_manager: ReplacementManager attribute to GameState.__init__(), imported ReplacementManager from engine.replacement_effects
 - `engine/casting.py` — Wired automatic register_replacement_effects call on permanent resolution (_resolve_spell) and land play (play_land)
 - `engine/state_based_actions.py` — _move_to_graveyard now consults replacement_manager.apply() before deciding destination zone; added _DESTINATION_ZONE_MAP for string→Zone mapping; supports exile/hand/library redirection via replacement effects
+
+## Item 16: Game setup, helper actions, and the full game loop
+
+### Tests
+- `tests/engine/test_game.py` — 64 tests for create_game, helper actions, run_game loop, integration (2 tests fail awaiting Tester update for draw-skip rule)
+
+### Implementation
+- `engine/game.py` — New module: create_game (life/library/shuffle/draw-7/active-player), 11 helper actions (deal_damage, destroy, sacrifice, exile, draw_card, discard, create_token, add_counter, remove_counter, tap, untap), run_game loop with SBA checking and MAX_TURNS limit; **revised**: destroy() distinguishes creature vs non-creature for event types; sacrifice() now consults replacement_manager.apply() before zone move
+- `engine/turn.py` — Wired turn-based actions into run_turn: untap step (untap/clear summoning sickness/reset land plays), draw step (active player draws), combat steps (delegates to combat.py), cleanup step (clear damage/remove expired effects); **revised**: _do_draw_step skips draw on turn 1 for starting player (MTG rule §103.7a)

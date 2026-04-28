@@ -194,7 +194,7 @@ SilverquiLLM-bench/
   - Integration: `card.register_replacement_effects(game)` called when entering battlefield.
   - Phase 1 scope: basic infrastructure. Most Foundations cards won't use replacement effects, but the mechanism must exist for CardImpl's `register_replacement_effects` method.
   - Testability: register a "if creature would die, exile instead" replacement → verify creature goes to exile, not graveyard.
-- [ ] **Game setup, helper actions, and the full game loop**
+- [x] **Game setup, helper actions, and the full game loop**
   Detail: Wire everything together: game initialization, common actions, main loop.
 
   - File: `SilverquiLLM-bench/engine/game.py`

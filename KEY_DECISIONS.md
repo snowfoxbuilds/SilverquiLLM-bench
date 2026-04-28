@@ -74,3 +74,13 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: `_move_to_graveyard()` is the single funnel for all SBA battlefield→graveyard moves. It calls `replacement_manager.apply(game, "creature_dies", event_data)` before the zone move, allowing effects to redirect destination. Uses `_DESTINATION_ZONE_MAP` for zone string→enum mapping.
 - **Reasoning**: Minimal change — one hook covers all SBA death paths (zero toughness, lethal damage, legend rule, unattached aura).
 - **Impact**: `engine/state_based_actions.py`, `engine/replacement_effects.py`.
+
+## 13. Sacrifice uses distinct "sacrifice" event type, not "creature_dies"
+- **Context**: sacrifice() and destroy() both move permanents to graveyard, but MTG rules distinguish them — sacrifice is not destruction.
+- **Decision**: `sacrifice()` uses event type `"sacrifice"` for replacement effects, `destroy()` uses `"creature_dies"` (for creatures) or `"permanent_destroyed"` (for non-creatures). Effects that prevent destruction don't apply to sacrifice.
+- **Impact**: `engine/game.py`.
+
+## 14. Starting player skips first draw step
+- **Context**: MTG rule §103.7a — in 2-player games, the starting player skips their first draw step.
+- **Decision**: Guard in `_do_draw_step()` checks `turn_number == 1` and `active_player_index == 0`.
+- **Impact**: `engine/turn.py`.
