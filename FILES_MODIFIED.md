@@ -102,3 +102,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `benchmark/agent_session.py` — AgentSession @dataclass with workspace setup, OpenCode config (exposing engine path), blind phase without template false-positive, test-informed with max_rounds_exhausted status, standalone convenience functions, and BlindResult/TestInformedResult dataclasses
+
+## Item 12: Evaluation runner
+
+### Implementation
+- `benchmark/evaluator.py` — Evaluation runner with EvalResult dataclass, run_tests (subprocess pytest isolation), run_self_eval, run_cross_eval, run_audited_eval

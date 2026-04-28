@@ -189,7 +189,7 @@ class BenchmarkConfig:
   - Error handling per [BENCHMARK-RUNNER.md](http://benchmark-runner.md/): timeout → record "timeout", syntax error → feed to correction round, no output → record "no_output", wrong files modified → discard + record "violation".
   - **Note**: actual OpenCode subprocess invocation depends on OpenCode's CLI/API interface. Implement the workspace setup and config generation concretely; the OpenCode invocation can use `subprocess.run` with the configured command. If OpenCode's exact CLI flags aren't known, implement a `_run_opencode(self, prompt, workspace) -> str` method with a clear interface that can be swapped.
   - Testability: `setup_workspace` creates temp dir with all expected files. `configure_opencode` returns dict with deny-web permission. Mock the OpenCode subprocess to test the full flow: setup → blind → test-informed → cleanup. Verify token recording populates correctly.
-- [ ] **Evaluation runner**
+- [x] **Evaluation runner**
   Detail: Run implementations against test suites for self-eval and cross-eval.
 
   - File: `benchmark/evaluator.py`
