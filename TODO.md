@@ -184,7 +184,7 @@ SilverquiLLM-bench/
   - `EffectManager`: `add(effect)`, `remove_expired(game)`, `apply_all(game)` — apply in layer order, timestamp within layer.
   - Phase 1 scope: implement layers 4 (type-changing), 6 (ability granting/removing), and 7c/7d (P/T mods and counters). Layers 1-3 and 5 can be stubs.
   - Testability: +2/+2 effect on a 2/2 → verify reads as 4/4. Test timestamp ordering.
-- [ ] **Replacement effects engine**
+- [x] **Replacement effects engine**
   Detail: Implement the replacement effect system (separate from triggers per spec).
 
   - File: `SilverquiLLM-bench/engine/replacement_effects.py`

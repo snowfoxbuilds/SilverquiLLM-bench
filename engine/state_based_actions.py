@@ -36,7 +36,14 @@ def _graveyard(game: GameState, player: Player) -> ZoneContainer:
 
 
 def _move_to_graveyard(game: GameState, player: Player, obj: Any) -> None:
-    """Move *obj* from the battlefield to its owner's graveyard.
+    """Move *obj* from the battlefield to its owner's graveyard (or a
+    replacement destination).
+
+    Before performing the zone change, the :class:`ReplacementManager` is
+    consulted via ``game.replacement_manager.apply()``.  A registered
+    replacement effect (e.g. "if this creature would die, exile it
+    instead") can override the destination zone by setting
+    ``event_data["destination"]`` to ``"exile"`` (or another zone name).
 
     Per MTG rule §704.5, when a permanent is destroyed or otherwise put
     into a graveyard by an SBA it goes to its **owner's** graveyard, not
@@ -47,11 +54,38 @@ def _move_to_graveyard(game: GameState, player: Player, obj: Any) -> None:
     bf = _battlefield(game, player)
     if bf.contains(obj):
         owner = obj.owner if hasattr(obj, "owner") else player
-        gy = _graveyard(game, owner)
+
+        # --- Replacement effects: consult before deciding destination ---
+        event_data: dict[str, Any] = {
+            "creature": obj,
+            "destination": "graveyard",
+            "controller": player,
+            "owner": owner,
+        }
+        event_data = game.replacement_manager.apply(
+            game, "creature_dies", event_data,
+        )
+
+        # Determine the actual destination zone from (possibly modified) event_data.
+        destination = event_data.get("destination", "graveyard")
+        dest_zone = _DESTINATION_ZONE_MAP.get(destination, Zone.GRAVEYARD)
+
         bf.remove(obj)
-        gy.add(obj)
+        owner.zones[dest_zone].add(obj)
+
         # Automatically unregister triggered abilities when leaving the battlefield.
         game.trigger_manager.unregister(obj)
+        # Automatically unregister replacement effects when leaving the battlefield.
+        game.replacement_manager.unregister(obj)
+
+
+# Mapping from replacement-effect destination strings to Zone enum values.
+_DESTINATION_ZONE_MAP: dict[str, Zone] = {
+    "graveyard": Zone.GRAVEYARD,
+    "exile": Zone.EXILE,
+    "hand": Zone.HAND,
+    "library": Zone.LIBRARY,
+}
 
 
 def _owner_of(game: GameState, obj: Any) -> Player:

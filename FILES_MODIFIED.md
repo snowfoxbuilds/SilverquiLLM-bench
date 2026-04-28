@@ -141,3 +141,14 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `engine/continuous_effects.py` — New module with Layer enum (7 layers), SubLayer enum (7a–7d), ContinuousEffect dataclass, EffectManager class (add/remove/remove_expired/apply_all in layer+timestamp order), duration constants; revised: apply_all() now resets battlefield objects via _reset_objects() before reapplying effects for idempotency
 - `engine/card.py` — Added _original_card_types/_original_keywords to CardImpl and _original_base_power/_original_base_toughness/_original_plus_one_counters/_original_minus_one_counters to Creature; added _reset_characteristics() methods for continuous-effect reset
 - `engine/game_state.py` — Added effect_manager: EffectManager attribute to GameState.__init__(), imported EffectManager from engine.continuous_effects
+
+## Item 15: Replacement effects engine
+
+### Tests
+- `tests/engine/test_replacement_effects.py` — 40 tests covering ReplacementEffect dataclass, ReplacementManager register/unregister/apply, conditions, self-replacement prevention, instead semantics, GameState integration, SBA unregistration
+
+### Implementation
+- `engine/replacement_effects.py` — New module with ReplacementEffect dataclass (event_type, source, condition, replacement, controller) and ReplacementManager class (register/unregister/apply with self-replacement prevention and player-choice ordering)
+- `engine/game_state.py` — Added replacement_manager: ReplacementManager attribute to GameState.__init__(), imported ReplacementManager from engine.replacement_effects
+- `engine/casting.py` — Wired automatic register_replacement_effects call on permanent resolution (_resolve_spell) and land play (play_land)
+- `engine/state_based_actions.py` — _move_to_graveyard now consults replacement_manager.apply() before deciding destination zone; added _DESTINATION_ZONE_MAP for string→Zone mapping; supports exile/hand/library redirection via replacement effects

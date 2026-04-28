@@ -187,6 +187,9 @@ def _resolve_spell(game: GameState, card: CardImpl, player: Player) -> None:
         # Automatically register triggered abilities when entering the battlefield.
         if hasattr(card, "register_triggers"):
             card.register_triggers(game)
+        # Automatically register replacement effects when entering the battlefield.
+        if hasattr(card, "register_replacement_effects"):
+            card.register_replacement_effects(game)
     else:
         # Use card's owner for graveyard (consistent with SBA convention).
         # Fall back to caster if owner is not set.
@@ -249,6 +252,9 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
     # Automatically register triggered abilities when entering the battlefield.
     if hasattr(land_card, "register_triggers"):
         land_card.register_triggers(game)
+    # Automatically register replacement effects when entering the battlefield.
+    if hasattr(land_card, "register_replacement_effects"):
+        land_card.register_replacement_effects(game)
 
     # Decrement land plays
     player.land_plays_remaining -= 1

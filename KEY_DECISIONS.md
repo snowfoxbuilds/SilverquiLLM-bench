@@ -68,3 +68,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Card objects store immutable "printed" characteristics as `_original_*` fields (e.g., `_original_base_power`). `_reset_characteristics()` restores them before effects are reapplied. Future subclasses with effect-modifiable fields should extend via `super()`.
 - **Reasoning**: Effects are arbitrary callables, so EffectManager can't reverse them. Resetting to base and reapplying is the standard MTG engine approach.
 - **Impact**: `engine/card.py` (CardImpl, Creature), `engine/continuous_effects.py` (EffectManager.apply_all).
+
+## 12. Replacement effects consulted via _move_to_graveyard funnel point
+- **Context**: SBA-driven deaths need to check replacement effects before choosing destination zone.
+- **Decision**: `_move_to_graveyard()` is the single funnel for all SBA battlefield→graveyard moves. It calls `replacement_manager.apply(game, "creature_dies", event_data)` before the zone move, allowing effects to redirect destination. Uses `_DESTINATION_ZONE_MAP` for zone string→enum mapping.
+- **Reasoning**: Minimal change — one hook covers all SBA death paths (zero toughness, lethal damage, legend rule, unattached aura).
+- **Impact**: `engine/state_based_actions.py`, `engine/replacement_effects.py`.
