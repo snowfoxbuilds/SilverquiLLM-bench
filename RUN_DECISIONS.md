@@ -50,3 +50,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept implementer (defer to Item 16)
 - **Reasoning**: The TODO text says "Implement declare attackers → declare blockers → damage → end combat" — focused on the combat system. Item 16 ("Game setup, helper actions, full game loop") explicitly covers wiring everything together. Wiring combat into `run_turn()` now would prematurely couple unfinished systems.
 - **Impact**: Combat functions exist but are not auto-called from `run_turn()` until Item 16.
+
+## Disagreement: Item 14 — remove_expired not called in turn flow
+- **Reviewer comment (strict)**: Duration-based effects never expire because `remove_expired()` is never called during turn progression.
+- **Implementer justification**: Item 14 implements the effects system. Turn/cleanup wiring is Item 23 ("End-of-turn cleanup and damage clearing").
+- **Coordinator decision**: accept implementer (defer to Item 23)
+- **Reasoning**: Same pattern as combat wiring (deferred to Item 16). Item 23 explicitly covers cleanup. The effect system itself is correct; the integration point is a later item.
+- **Impact**: Duration-based effects won't auto-expire until Item 23 wires cleanup.

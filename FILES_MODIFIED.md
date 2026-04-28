@@ -131,3 +131,13 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `engine/state_based_actions.py` — Updated _sba_creature_lethal_damage to also destroy creatures dealt deathtouch damage (rule 704.5h)
 - `engine/card.py` — Added dealt_deathtouch_damage: bool = False to Creature class for deathtouch SBA tracking
 - `engine/game_state.py` — Added combat_state: CombatState attribute to GameState.__init__(), imported CombatState from engine.combat
+
+## Item 14: Continuous effects and layer system
+
+### Tests
+(No pre-written test file — verified via 704 existing tests passing + manual validation)
+
+### Implementation
+- `engine/continuous_effects.py` — New module with Layer enum (7 layers), SubLayer enum (7a–7d), ContinuousEffect dataclass, EffectManager class (add/remove/remove_expired/apply_all in layer+timestamp order), duration constants; revised: apply_all() now resets battlefield objects via _reset_objects() before reapplying effects for idempotency
+- `engine/card.py` — Added _original_card_types/_original_keywords to CardImpl and _original_base_power/_original_base_toughness/_original_plus_one_counters/_original_minus_one_counters to Creature; added _reset_characteristics() methods for continuous-effect reset
+- `engine/game_state.py` — Added effect_manager: EffectManager attribute to GameState.__init__(), imported EffectManager from engine.continuous_effects

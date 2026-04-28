@@ -175,7 +175,7 @@ SilverquiLLM-bench/
   - `combat_damage_step(game)`: first strike damage → SBAs → normal damage. Handle trample (excess over blocker toughness → defending player), lifelink, deathtouch. Unblocked → damage to player.
   - `end_combat_step(game)`: remove from combat, clear combat state.
   - Testability: attack/block scenario → verify damage, trample overflow, first strike ordering, lifelink life gain.
-- [ ] **Continuous effects and layer system**
+- [x] **Continuous effects and layer system**
   Detail: Implement the 7-layer system for continuous effects.
 
   - File: `SilverquiLLM-bench/engine/continuous_effects.py`

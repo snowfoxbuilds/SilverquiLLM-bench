@@ -62,3 +62,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: `CombatState.was_blocked` set tracks which attackers were declared blocked. Damage step checks this set rather than current blocker list.
 - **Reasoning**: Per-combat tracking on CombatState (not creature) keeps it cleanly scoped and cleared with combat state.
 - **Impact**: `engine/combat.py`.
+
+## 11. Continuous effects use _original_* fields and _reset_characteristics() for idempotent recalculation
+- **Context**: apply_all() must be idempotent — calling it multiple times should not accumulate effects.
+- **Decision**: Card objects store immutable "printed" characteristics as `_original_*` fields (e.g., `_original_base_power`). `_reset_characteristics()` restores them before effects are reapplied. Future subclasses with effect-modifiable fields should extend via `super()`.
+- **Reasoning**: Effects are arbitrary callables, so EffectManager can't reverse them. Resetting to base and reapplying is the standard MTG engine approach.
+- **Impact**: `engine/card.py` (CardImpl, Creature), `engine/continuous_effects.py` (EffectManager.apply_all).

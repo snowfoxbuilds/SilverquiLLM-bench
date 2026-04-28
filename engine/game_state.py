@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from engine.combat import CombatState
+from engine.continuous_effects import EffectManager
 from engine.player import Player
 from engine.stack import Stack
 from engine.triggers import TriggerManager
@@ -45,6 +46,7 @@ class GameState:
         turn_number: The current turn number (1-indexed).
         stack: The game stack for spells and abilities.
         trigger_manager: Central registry for triggered abilities.
+        effect_manager: Manager for continuous effects and the layer system.
         is_game_over: Whether the game has ended.
         winner: The winning player, or ``None`` if the game is ongoing / draw.
     """
@@ -63,6 +65,7 @@ class GameState:
         self.turn_number: int = 1
         self.stack: Stack = Stack()
         self.trigger_manager: TriggerManager = TriggerManager()
+        self.effect_manager: EffectManager = EffectManager()
         self.combat_state: CombatState = CombatState()
         self.is_game_over: bool = False
         self.winner: Player | None = None

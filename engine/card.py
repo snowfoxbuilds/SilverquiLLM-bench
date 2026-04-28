@@ -171,6 +171,22 @@ class CardImpl(GameObject):
         self.supertypes: set[Supertype] = supertypes if supertypes is not None else set()
         self.keywords: Keyword = keywords if keywords is not None else Keyword(0)
         self.rules_text: str = rules_text
+        # Snapshot original characteristics for continuous-effect reset.
+        self._original_card_types: frozenset[CardType] = frozenset(self.card_types)
+        self._original_keywords: Keyword = self.keywords
+
+    # ------------------------------------------------------------------
+    # Continuous-effect reset support
+    # ------------------------------------------------------------------
+
+    def _reset_characteristics(self) -> None:
+        """Reset mutable characteristics to their original (pre-effect) values.
+
+        Called by :meth:`EffectManager.apply_all` before reapplying effects
+        so that the recalculation is idempotent.
+        """
+        self.card_types = set(self._original_card_types)
+        self.keywords = self._original_keywords
 
     # ------------------------------------------------------------------
     # Hook methods — override in subclasses / card definitions
@@ -266,6 +282,19 @@ class Creature(CardImpl):
         self.minus_one_counters: int = 0
         self.is_token: bool = False
         self.dealt_deathtouch_damage: bool = False
+        # Snapshot original P/T and counter values for continuous-effect reset.
+        self._original_base_power: int = base_power
+        self._original_base_toughness: int = base_toughness
+        self._original_plus_one_counters: int = 0
+        self._original_minus_one_counters: int = 0
+
+    def _reset_characteristics(self) -> None:
+        """Reset creature characteristics to pre-effect values."""
+        super()._reset_characteristics()
+        self.base_power = self._original_base_power
+        self.base_toughness = self._original_base_toughness
+        self.plus_one_counters = self._original_plus_one_counters
+        self.minus_one_counters = self._original_minus_one_counters
 
     @property
     def power(self) -> int:
