@@ -233,7 +233,7 @@ SilverquiLLM-bench/
   - Each has a `ManaAbility` that taps to produce 1 mana of its color.
   - Register all 5 via `register_basic_lands(registry)`.
   - Testability: play a Plains, tap it, verify 1 white mana in pool. Verify can't play a second land same turn.
-- [ ] **Vanilla and French vanilla creatures from Foundations (~15 cards)**
+- [x] **Vanilla and French vanilla creatures from Foundations (~15 cards)**
   Detail: Implement simple creatures covering keyword variety. Verify exact card names against Scryfall data from the pipeline.
 
   - File: `SilverquiLLM-bench/cards/foundations/simple_creatures.py`

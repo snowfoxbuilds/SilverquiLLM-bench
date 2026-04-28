@@ -188,3 +188,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `cards/foundations/basic_lands.py` — Plains, Island, Swamp, Mountain, Forest subclasses of Land with Supertype.BASIC, land-type subtypes, and ManaAbility tap-for-mana; register_basic_lands(registry) registration helper
+
+## Item 20: Vanilla and French vanilla creatures from Foundations (~15 cards)
+
+### Tests
+`tests/cards/test_simple_creatures.py` — Tests for creature stats, keywords, registry, combat integration (will be rewritten by Tester to match new creature list)
+
+### Implementation
+- `cards/foundations/simple_creatures.py` — Replaced all 15 creatures with Scryfall-verified FDN cards: 5 vanilla (Aegis Turtle, Savannah Lions, Bear Cub, Swab Goblin, Highborn Vampire) + 10 French vanilla (Healer's Hawk, Bishop's Soldier, Leonin Skyhunter, Thornweald Archer, Raging Redcap, Brazen Scourge, Vampire Nighthawk, Magnigoth Sentry, Serra Angel, Tajuru Pathwarden); fixed registry metadata with correct rarity, oracle_text, type_line, collector_number

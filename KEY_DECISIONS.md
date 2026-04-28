@@ -84,3 +84,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Context**: MTG rule §103.7a — in 2-player games, the starting player skips their first draw step.
 - **Decision**: Guard in `_do_draw_step()` checks `turn_number == 1` and `active_player_index == 0`.
 - **Impact**: `engine/turn.py`.
+
+## 15. Simple creatures use Scryfall-verified FDN cards
+- **Context**: Reviewer caught that original creature list used non-FDN cards with wrong stats.
+- **Decision**: All 15 creatures are real FDN set cards verified via Scryfall API. Registry metadata (rarity, oracle_text, type_line, collector_number) matches Scryfall data.
+- **Keywords covered**: Flying, Lifelink, Reach, Deathtouch, Double Strike, Haste, Vigilance, Trample. First Strike and Menace lack purely French-vanilla FDN representatives.
+- **Impact**: cards/foundations/simple_creatures.py, tests/cards/test_simple_creatures.py
