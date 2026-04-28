@@ -53,3 +53,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `benchmark/template_gen.py` — Template generator with PascalCase word-boundary fix and ambiguous multi-type fallback to CardImpl
 
+## Item 6: Engine API docs auto-generation
+
+### Tests
+- `tests/test_docs_gen.py` — 76 tests covering public classes, enums, functions, token budget, module grouping, output file
+
+### Implementation
+- `benchmark/docs_gen.py` — AST-based engine API doc generator; removed hard-coded incorrect examples block
+- `docs/engine_api.md` — Regenerated accurate engine API reference from AST-only extraction
+

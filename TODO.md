@@ -78,7 +78,7 @@ Scope: Fix Phase 1 bugs → build benchmark runner harness → validate with ~5 
     - Stub `power`/`toughness` for creatures, `starting_loyalty` for planeswalkers
   - Per KEY_DECISION #6: subclass constructors union mandatory CardType. Template should follow the same pattern (e.g., `card_types = [CardType.CREATURE]` not empty).
   - Testability: generate template for a creature, instant, and planeswalker spec. Each template `exec()`s without error. Class name matches expected PascalCase. Base class is correct.
-- [ ] **Engine API docs auto-generation**
+- [x] **Engine API docs auto-generation**
   Detail: Generate `engine_api.md` from engine source code for agent consumption.
 
   - File: `benchmark/docs_gen.py`
