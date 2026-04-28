@@ -130,6 +130,10 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     hand.remove(card)
     stack_zone.add(card)
 
+    # Clear any stale colors_spent from a prior cast before new payment.
+    if hasattr(card, "colors_spent"):
+        del card.colors_spent
+
     # 5. Choose targets
     target_specs = card.get_targets(game)
     chosen_targets: list[Any] = []
@@ -149,7 +153,12 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
         hand.add(card)
         raise CastingError(f"Cannot cast {card.name!r} — insufficient mana")
 
+    # TODO: Phase 3 — support player choice for generic mana payment to optimize Converge color count
     player.mana_pool.pay(card.mana_cost)
+
+    # Store colors of mana spent on the card for mechanics like Converge
+    # that care about the colors used to cast the spell.
+    card.colors_spent = list(player.mana_pool.last_payment_colors)  # type: ignore[attr-defined]
 
     # 7. Call on_cast hook
     card.on_cast(game)

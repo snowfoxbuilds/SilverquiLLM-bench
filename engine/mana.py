@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
-from engine.types import ManaCost, ManaType
+from engine.types import Color, ManaCost, ManaType
+
+# Map colored ManaTypes to their corresponding Color enum values.
+_MANA_TO_COLOR: dict[ManaType, Color] = {
+    ManaType.WHITE: Color.WHITE,
+    ManaType.BLUE: Color.BLUE,
+    ManaType.BLACK: Color.BLACK,
+    ManaType.RED: Color.RED,
+    ManaType.GREEN: Color.GREEN,
+}
 
 
 class ManaPool:
@@ -14,6 +23,7 @@ class ManaPool:
 
     def __init__(self) -> None:
         self._pool: dict[ManaType, int] = {mt: 0 for mt in ManaType}
+        self._last_payment_colors: list[Color] = []
 
     # ------------------------------------------------------------------
     # Basic operations
@@ -42,6 +52,16 @@ class ManaPool:
     def get(self, mana_type: ManaType) -> int:
         """Return the amount of a specific mana type in the pool."""
         return self._pool.get(mana_type, 0)
+
+    @property
+    def last_payment_colors(self) -> list[Color]:
+        """Return the distinct colors of mana spent in the last :meth:`pay` call.
+
+        Colorless mana is not a color and is excluded.  The list is sorted
+        by Color enum order for determinism.  Empty if no payment has been
+        made or if all mana spent was colorless.
+        """
+        return list(self._last_payment_colors)
 
     # ------------------------------------------------------------------
     # Cost payment
@@ -111,6 +131,13 @@ class ManaPool:
                     return False  # pragma: no cover – should not happen after can_pay
 
         # Commit the payment.
+        # Compute colors of mana spent by comparing old pool to new working pool.
+        colors_spent: set[Color] = set()
+        for mt, old_amount in self._pool.items():
+            new_amount = working.get(mt, 0)
+            if new_amount < old_amount and mt in _MANA_TO_COLOR:
+                colors_spent.add(_MANA_TO_COLOR[mt])
+        self._last_payment_colors = sorted(colors_spent, key=lambda c: c.value)
         self._pool = working
         return True
 

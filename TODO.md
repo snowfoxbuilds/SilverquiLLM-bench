@@ -267,7 +267,7 @@ benchmarks/sos/results/
   - Write selections to `benchmarks/sos/prototype_cards.json` with rationale.
   - Write gap analysis to `benchmarks/sos/prototype_gaps.md`.
   - Testability: exactly 5 cards selected, one per tier. `prototype_gaps.md` lists specific missing engine features (or "none" if covered).
-- [ ] **Minimal engine extensions for SOS prototype mechanics**
+- [x] **Minimal engine extensions for SOS prototype mechanics**
   Detail: Implement the minimum engine changes needed to support the 5 prototype cards. Scope depends on gap analysis from previous item.
 
   - Likely extensions (implement only what the prototype cards actually need):

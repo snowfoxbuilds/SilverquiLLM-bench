@@ -27,3 +27,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept implementer
 - **Reasoning**: The function's contract is to analyze gaps for provided cards. The improved tier-scoring ensures complex/expert selections exercise Prepared/Converge/Miracle/Opus, so the prototype set naturally covers all mechanics. Always checking all 4 regardless of input would change the function's semantics.
 - **Impact**: benchmark/prototype.py — gap analysis remains card-scoped.
+
+## Disagreement: Item 16 — Converge generic mana choice
+- **Reviewer comment (strict)**: cast_spell() doesn't let the caster choose how generic mana is spent, so Converge color count is wrong when multiple payment mixes exist.
+- **Implementer justification**: N/A (no disagreement filed)
+- **Coordinator decision**: Accept as known limitation, add # TODO comment
+- **Reasoning**: The TODO explicitly says "Do NOT over-engineer: only implement what the 5 prototype cards require. Leave stubs with # TODO for unused branches." Supporting player mana choice for generic costs would require significant casting pipeline changes beyond prototype scope. The auto-pay correctly records colors for the common case. Full mana choice support is a Phase 3 concern.
+- **Impact**: engine/casting.py — Converge color count may be suboptimal with generic mana.

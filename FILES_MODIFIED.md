@@ -127,3 +127,13 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `benchmark/prototype.py` — Replaced binary prefer/fallback with per-tier scoring functions; added classified-data fallback for sos.json independence
 - `benchmarks/sos/prototype_cards.json` — Re-selected 5 prototype cards with scoring-based preferences
 - `benchmarks/sos/prototype_gaps.md` — Regenerated engine gap analysis (Converge mana tracking gap)
+
+## Item 16: Minimal engine extensions for SOS prototype mechanics
+
+### Tests
+- `tests/test_engine_extensions.py` — 21 tests: mana color tracking, cast_spell colors_spent, prototype card instantiation, Converge mechanic
+
+### Implementation
+- `engine/mana.py` — Added `last_payment_colors` property and `_MANA_TO_COLOR` mapping for Converge mana color tracking
+- `engine/casting.py` — Store `colors_spent` on card after mana payment in `cast_spell()`
+- `tests/test_engine_extensions.py` — New test file for engine extension mechanics
