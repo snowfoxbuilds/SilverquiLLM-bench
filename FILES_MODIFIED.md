@@ -111,3 +111,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `engine/game_state.py` — Added trigger_manager: TriggerManager attribute to GameState.__init__(), imported TriggerManager
 - `engine/casting.py` — Wired automatic register_triggers call on permanent resolution (_resolve_spell) and land play (play_land)
 - `engine/state_based_actions.py` — Wired automatic trigger_manager.unregister call when permanents leave battlefield via _move_to_graveyard
+
+## Item 12: Activated abilities system
+
+### Tests
+- `tests/engine/test_abilities.py` — 51 tests covering ability construction, mana/non-mana activation, tap_cost, timing, loyalty abilities, integration
+
+### Implementation
+- `engine/abilities.py` — New module with ActivatedAbilityInstance/LoyaltyAbilityInstance dataclasses, activate_ability() entry point, tap_cost() helper, loyalty per-turn tracking, AbilityError exception; revised: removed sorcery-speed timing check for regular activated abilities (kept only for loyalty abilities)
+- `engine/card.py` — Added is_tapped: bool = False to Land and Artifact classes for tap-cost support

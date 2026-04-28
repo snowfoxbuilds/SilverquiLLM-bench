@@ -353,11 +353,16 @@ class Aura(Enchantment):
 # ---------------------------------------------------------------------------
 
 class Artifact(CardImpl):
-    """An artifact card — no extra fields beyond CardImpl."""
+    """An artifact card.
+
+    Attributes:
+        is_tapped: Whether the artifact is currently tapped.
+    """
 
     def __init__(self, **kwargs: Any) -> None:
         kwargs["card_types"] = (kwargs.get("card_types") or set()) | {CardType.ARTIFACT}
         super().__init__(**kwargs)
+        self.is_tapped: bool = False
 
 
 class ArtifactCreature(Creature):
@@ -407,11 +412,15 @@ class Land(CardImpl):
 
     Lands are not cast — they are played via a special action. ``can_cast``
     always returns ``False``.
+
+    Attributes:
+        is_tapped: Whether the land is currently tapped.
     """
 
     def __init__(self, **kwargs: Any) -> None:
         kwargs["card_types"] = (kwargs.get("card_types") or set()) | {CardType.LAND}
         super().__init__(**kwargs)
+        self.is_tapped: bool = False
 
     def can_cast(self, game: GameState) -> bool:
         """Lands cannot be cast; they are played as a special action."""

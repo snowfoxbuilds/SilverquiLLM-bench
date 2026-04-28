@@ -44,3 +44,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Registration hooks placed in `casting.py` (`_resolve_spell` for permanents, `play_land` for lands) and unregistration in `state_based_actions.py` (`_move_to_graveyard`). Uses `hasattr` guard for defensive compatibility with non-CardImpl objects.
 - **Reasoning**: These are the concrete code paths where cards enter/leave the battlefield. Zone containers themselves (`zones.py`) are generic and shouldn't have trigger-specific logic.
 - **Impact**: Future zone-transition paths (exile, bounce, etc.) will need similar hooks when implemented.
+
+## 8. Activated ability timing: only ability-specific restrictions in activate_ability
+- **Context**: Regular activated abilities in MTG can be activated at instant speed. Only loyalty abilities have sorcery-speed restrictions.
+- **Decision**: `activate_ability` only enforces ability-type-specific timing (loyalty = sorcery speed). General priority checks remain in `priority_loop`, consistent with KEY_DECISIONS #5.
+- **Reasoning**: Keeps timing enforcement centralized in `priority_loop` and avoids duplicating priority checks across cast_spell, activate_ability, etc.
+- **Impact**: `engine/abilities.py` — regular abilities have no timing restriction; loyalty abilities enforce sorcery speed.

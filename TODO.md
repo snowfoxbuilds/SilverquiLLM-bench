@@ -157,7 +157,7 @@ SilverquiLLM-bench/
   - `TriggerManager`: `register(trigger)`, `unregister(source)`, `fire_event(game, event_type, data)` — checks conditions, pushes matching triggers onto stack. APNAP ordering for different players.
   - Integration: call `card.register_triggers(game)` when entering battlefield, `unregister` on leave.
   - Testability: card with ETB trigger → move to battlefield → fire event → verify StackObject pushed.
-- [ ] **Activated abilities system**
+- [x] **Activated abilities system**
   Detail: Implement activated abilities that go on the stack (or resolve immediately for mana abilities).
 
   - File: `SilverquiLLM-bench/engine/abilities.py`

@@ -29,3 +29,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Reasoning**: Layered responsibility — priority_loop gates who can act, cast_spell executes the cast. Adding a priority check to cast_spell would duplicate logic and create coupling. All real game flow goes through priority_loop.
 - **Impact**: engine/casting.py — no priority check added
 
+
+## Disagreement: Item 12 — Mana ability timing validation
+- **Reviewer comment (strict)**: Mana abilities skip timing validation entirely; any player can fire a mana ability at arbitrary times by passing `is_mana_ability=True`.
+- **Implementer justification**: Priority enforcement is handled by `priority_loop`, not individual ability/spell functions. This is consistent with `cast_spell` which also doesn't check priority.
+- **Coordinator decision**: accept implementer
+- **Reasoning**: Per KEY_DECISIONS #5, priority enforcement belongs in `priority_loop`. Both `cast_spell` and `activate_ability` are low-level functions called within the priority loop. Adding priority checks here would duplicate logic and contradict the established architecture.
+- **Impact**: `engine/abilities.py` — mana ability activation remains without priority check, consistent with casting pipeline.
