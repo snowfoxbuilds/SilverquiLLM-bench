@@ -128,6 +128,7 @@ Auto-generated from engine source. For agent consumption.
   - `empty() -> None`  
   - `total() -> int`  
   - `get(mana_type: ManaType) -> int`  
+  - `last_payment_colors() -> list[Color]`  
   - `can_pay(cost: ManaCost) -> bool`  
   - `pay(cost: ManaCost, choices: dict[ManaType, int] | None) -> bool`
 
