@@ -47,7 +47,7 @@ SilverquiLLM-bench/
     - `TargetRequirement(filter_fn, description, zone)`.
   - Note: Defer hybrid/Phyrexian mana parsing to a later TODO — no Foundations cards need it.
   - Testability: unit tests for `ManaCost.parse` covering generic, colored, X costs, and invalid inputs.
-- [ ] **Zone containers**
+- [x] **Zone containers**
   Detail: Implement the zone data structures that hold game objects.
 
   - File: `SilverquiLLM-bench/engine/zones.py`

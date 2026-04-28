@@ -14,3 +14,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: pip install -e . fails if requires-python exceeds available Python. Pragmatic deviation.
 - **Impact**: pyproject.toml
 
+## Zone containers use identity-based matching (not equality)
+- **Context**: Zones store GameObject references. Two distinct objects with same field values must not be confused.
+- **Decision**: `contains()` and `remove()` use `is` (object identity), not `==` (equality).
+- **Reasoning**: Game objects are references; multiple cards can share identical stats but are distinct game objects.
+- **Impact**: engine/zones.py — all lookup/removal operations
+
