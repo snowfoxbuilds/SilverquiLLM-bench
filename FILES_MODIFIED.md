@@ -36,3 +36,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `engine/zones.py` — ZoneContainer (ordered list wrapper with add/remove/shuffle/top/bottom), Zones (per-player Zone→ZoneContainer mapping), move_zone function, IllegalMoveError exception; revised: identity-based (`is`) lookups in contains/remove, atomic position validation in move_zone
 
+## Item 4: Player ABC and DeterministicPlayer
+
+### Tests
+- `tests/engine/test_player.py` — Verifies Player ABC cannot be instantiated, default properties, DeterministicPlayer FIFO scripted choices, ScriptExhaustedError, remaining_choices tracking
+
+### Implementation
+- `engine/player.py` — Player(ABC) with name/life/zones/mana_pool/has_lost/land_plays_remaining properties and 5 abstract methods; DeterministicPlayer with deque-based script queue; ScriptExhaustedError exception
+

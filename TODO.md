@@ -56,7 +56,7 @@ SilverquiLLM-bench/
   - `move_zone(obj, from_zone, to_zone, position="top")` — removes from source, adds to destination. Raises `IllegalMoveError` if not found.
   - Edge cases: moving to library top vs bottom vs shuffle-in; moving a card already on the battlefield back to battlefield (should be a no-op).
   - Testability: test add/remove/move round-trip, shuffle changes order, top/bottom slicing.
-- [ ] **Player ABC and DeterministicPlayer**
+- [x] **Player ABC and DeterministicPlayer**
   Detail: Define the abstract player interface and a scripted test player.
 
   - File: `SilverquiLLM-bench/engine/player.py`
