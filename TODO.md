@@ -20,7 +20,7 @@ Scope: Fix Phase 1 bugs → build benchmark runner harness → validate with ~5 
   - Extend the existing `cards/scryfall.py` `fetch_set()` function to fetch set code `"sos"`. Cache result to `benchmarks/sos/data/sos.json`. If `fetch_set` already works generically (it should — it takes a set_code parameter), just run it and commit the cached data.
   - Log stats after fetch: total card count, breakdown by card type (creature, instant, sorcery, enchantment, artifact, planeswalker, land), rarity distribution, and list of cards using new mechanics (search oracle text for "Prepared", "Converge", "Miracle", "Opus").
   - Testability: `benchmarks/sos/data/sos.json` exists, is valid JSON, every card has `name`, `mana_cost_str`, `type_line`, `oracle_text` fields. `import benchmark` succeeds.
-- [ ] **Card complexity classifier**
+- [x] **Card complexity classifier**
   Detail: Classify each SOS card into a complexity tier for weighted scoring.
 
   - File: `benchmark/card_classifier.py`

@@ -27,3 +27,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `benchmarks/sos/results/.gitkeep` — Placeholder for SOS benchmark results
 - `pyproject.toml` — Added pyyaml and click deps; included benchmark* and benchmarks* in package discovery
 
+## Item 3: Card complexity classifier
+
+### Tests
+- `tests/test_card_classifier.py` — 24 tests covering tier classification, SOS integration, edge cases
+
+### Implementation
+- `benchmark/card_classifier.py` — Heuristic-based card complexity classifier with targeting floor fix (target → at least medium)
+- `benchmarks/sos/data/sos_classified.json` — Regenerated classification output for all 368 SOS cards with fixed targeting heuristic
+
