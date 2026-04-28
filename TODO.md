@@ -159,7 +159,7 @@ class BenchmarkConfig:
 
 - Include a `config.example.yaml` in the repo root.
 - Testability: `benchmark --help` prints usage. `benchmark cards --set SOS` lists cards with tiers. `load_config` raises `ValueError` on missing required fields.
-- [ ] **Prompt templates module**
+- [x] **Prompt templates module**
   Detail: Implement the parameterized prompt templates from [BENCHMARK-RUNNER.md](http://benchmark-runner.md/).
 
   - File: `benchmark/prompts.py`

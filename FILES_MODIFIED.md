@@ -85,3 +85,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `benchmark/cli.py` — Click CLI with run/eval/score/cards subcommands
 - `config.example.yaml` — Example YAML configuration file
 - `pyproject.toml` — Added [project.scripts] benchmark entry point
+
+## Item 10: Prompt templates module
+
+### Tests
+- `tests/test_prompts.py` — Tests for prompt template functions (blind, test-informed, iteration feedback)
+
+### Implementation
+- `benchmark/prompts.py` — Parameterized prompt templates using str.format_map; imports card_name_to_class_name from template_gen for consistent class name derivation
+- `tests/conftest.py` — pytest_collection_modifyitems hook to filter out benchmark functions collected as tests
