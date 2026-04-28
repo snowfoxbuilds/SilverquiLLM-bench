@@ -38,3 +38,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: Prevents invalid card objects.
 - engine/card.py **Impact**: all subclass constructors 
 
+
+## 7. Trigger auto-registration wired into casting and SBA paths
+- **Context**: TODO item 11 requires automatic trigger registration on battlefield entry and unregistration on leave.
+- **Decision**: Registration hooks placed in `casting.py` (`_resolve_spell` for permanents, `play_land` for lands) and unregistration in `state_based_actions.py` (`_move_to_graveyard`). Uses `hasattr` guard for defensive compatibility with non-CardImpl objects.
+- **Reasoning**: These are the concrete code paths where cards enter/leave the battlefield. Zone containers themselves (`zones.py`) are generic and shouldn't have trigger-specific logic.
+- **Impact**: Future zone-transition paths (exile, bounce, etc.) will need similar hooks when implemented.

@@ -148,7 +148,7 @@ SilverquiLLM-bench/
   - `play_land(game, player, land_card)`: verify land play remaining → move hand to battlefield → decrement `land_plays_remaining`.
   - Timing checks: sorcery-speed = main phase + empty stack + active player. Instant-speed or flash = any priority.
   - Testability: cast a vanilla creature → verify battlefield. Cast an instant → verify graveyard. Attempt sorcery at instant speed → verify rejection.
-- [ ] **Triggered abilities system**
+- [x] **Triggered abilities system**
   Detail: Implement the event-driven trigger registration and firing mechanism.
 
   - File: `SilverquiLLM-bench/engine/triggers.py`

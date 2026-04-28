@@ -50,6 +50,8 @@ def _move_to_graveyard(game: GameState, player: Player, obj: Any) -> None:
         gy = _graveyard(game, owner)
         bf.remove(obj)
         gy.add(obj)
+        # Automatically unregister triggered abilities when leaving the battlefield.
+        game.trigger_manager.unregister(obj)
 
 
 def _owner_of(game: GameState, obj: Any) -> Player:

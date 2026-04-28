@@ -100,3 +100,14 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `engine/casting.py` — cast_spell reordered: hand→stack zone→targets→pay mana (with rollback)→on_cast→push StackObject; card placed in Zone.STACK; resolved instants/sorceries go to card.owner's graveyard (fallback to caster); resolution removes card from stack zone
+
+## Item 11: Triggered abilities system
+
+### Tests
+- `tests/engine/test_triggers.py` — 37 tests covering EventType enum, TriggerRegistration dataclass, TriggerManager register/unregister/fire_event, condition filtering, APNAP ordering, GameState integration, ETB trigger flow
+
+### Implementation
+- `engine/triggers.py` — New module with EventType enum (13 events), TriggerRegistration dataclass, TriggerManager class with register/unregister/fire_event (APNAP ordering), get_triggers/get_triggers_for_source/clear helpers
+- `engine/game_state.py` — Added trigger_manager: TriggerManager attribute to GameState.__init__(), imported TriggerManager
+- `engine/casting.py` — Wired automatic register_triggers call on permanent resolution (_resolve_spell) and land play (play_land)
+- `engine/state_based_actions.py` — Wired automatic trigger_manager.unregister call when permanents leave battlefield via _move_to_graveyard

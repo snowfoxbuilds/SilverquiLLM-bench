@@ -184,6 +184,9 @@ def _resolve_spell(game: GameState, card: CardImpl, player: Player) -> None:
 
     if card.card_types & _PERMANENT_TYPES:
         game.get_battlefield(player).add(card)
+        # Automatically register triggered abilities when entering the battlefield.
+        if hasattr(card, "register_triggers"):
+            card.register_triggers(game)
     else:
         # Use card's owner for graveyard (consistent with SBA convention).
         # Fall back to caster if owner is not set.
@@ -242,6 +245,10 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
     # Move from hand to battlefield
     battlefield = game.get_battlefield(player)
     move_zone(land_card, hand, battlefield)
+
+    # Automatically register triggered abilities when entering the battlefield.
+    if hasattr(land_card, "register_triggers"):
+        land_card.register_triggers(game)
 
     # Decrement land plays
     player.land_plays_remaining -= 1
