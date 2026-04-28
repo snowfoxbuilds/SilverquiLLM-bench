@@ -275,7 +275,7 @@ def sync(project_root_id: str, output_dir: str):
         print("  ! No 'TODO.md' page found under project root")
 
     # 4. Export TODO_COMPLETED -> <output_dir>/TODO_COMPLETED.md
-    todo_completed_page = next((c for c in children if c["title"] == "TODO_COMPLETED.md"), None)
+    todo_completed_page = next((c for c in children if c["title"] == "TODO_COMPLETED"), None)
     if todo_completed_page:
         export_page(todo_completed_page["id"], os.path.join(output_dir, "docs", "TODO_COMPLETED.md"))
     else:

@@ -23,7 +23,7 @@ Source: `github.com/magefree/mage` (Java, GPL-2.0)
 - MTG Foundations cards — ~260 cards as the base set
 **How to port:**
 
-- Preserve XMage's class hierarchy; translate to Pythonic idioms (snake_case, dataclasses, type hints)
+- Preserve XMage's class hierarchy; translate to Pythonic idioms (snake_case, dataclasses, type hints). Requires Python ≥3.12.
 - 1:1 logic mapping — each XMage Java method gets a corresponding Python method
 - Tests alongside port — verify each subsystem and card matches XMage behavior
 - Incremental — port in dependency order: zones → mana → stack → combat → triggers → continuous effects → cards

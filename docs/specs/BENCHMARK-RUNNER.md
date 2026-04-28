@@ -45,10 +45,9 @@ agent:
   timeout_per_card: 300
   disable_web_search: true
 paths:
-  card_specs: "./data/cards/"
+  benchmarks_dir: "./benchmarks/"  # Each set gets benchmarks/{set_code}/
   engine_docs: "./docs/engine_api.md"
-  template_dir: "./templates/"
-  output_dir: "./results/"
+  output_dir: "./benchmarks/sos/results/"
 ```
 
 ### Agent Context
@@ -162,7 +161,7 @@ You have up to 3 rounds to iterate on both tests and code.
 
 1. **No web access** — OpenCode `deny` permission on webfetch and network commands
 2. **Clean working directory** — Fresh temp directory per card with only allowed files
-3. **New set cards** — Set not yet in XMage or widely discussed online
+3. **New set cards** — SOS released 2026-04-24; too new for LLM training data or XMage implementation
 4. **No cross-card leakage** — Context reset between cards
 ### Error Handling
 
@@ -176,24 +175,57 @@ You have up to 3 rounds to iterate on both tests and code.
 
 ### Output Artifacts
 
+All set-specific artifacts live under `benchmarks/{set_code}/` so future sets get a clean directory:
+
 ```javascript
-results/
-├── config.yaml
-├── summary.json
-├── cross_eval_matrix.json
+benchmarks/sos/
+├── data/
+│   ├── sos.json                  # Scryfall card data cache
+│   ├── sos_classified.json       # Complexity tier classifications
+│   ├── comprehensive_rules.txt   # Pinned MTG rules for this expansion
+│   └── rules_overview.md         # Compact rules summary for agent context
 ├── cards/
-│   ├── sos-001/
-│   │   ├── claude-sonnet-4/
-│   │   │   ├── blind_impl.py
-│   │   │   ├── tested_impl.py
-│   │   │   ├── tests.py
-│   │   │   ├── iterations/
-│   │   │   └── result.json
-│   │   ├── gpt-5/ ...
-│   │   └── audited_tests.py
+│   ├── 001/
+│   │   └── card_spec.json        # Per-card spec for agents
 │   └── ...
-└── leaderboard.md
+├── prototype_cards.json          # Selected prototype cards + rationale
+├── prototype_gaps.md             # Engine gap analysis
+└── results/
+    └── {run_name}/               # One folder per run (e.g. "claude-sonnet-4_2026-04-28T18-30")
+        ├── config.yaml            # Copy of the run config
+        ├── summary.json           # Aggregate stats for this run
+        ├── cross_eval_matrix.json # Cross-eval results (if multi-agent)
+        ├── leaderboard.md         # Scored leaderboard for this run
+        └── cards/
+            ├── sos-001/
+            │   ├── blind_impl.py
+            │   ├── tested_impl.py
+            │   ├── tests.py
+            │   ├── iterations/
+            │   ├── result.json
+            │   └── audited_tests.py  # Gold-standard tests (if audited)
+            └── ...
 ```
+
+Run name defaults to `{model_name}_{ISO-timestamp}` (e.g. `claude-sonnet-4_2026-04-28T18-30`). Each run is self-contained with its config and per-card artifacts. Cross-run aggregates (multi-model leaderboard, combined cross-eval matrix) live directly in `benchmarks/sos/results/`:
+
+```javascript
+benchmarks/sos/results/
+├── leaderboard.md                 # Combined leaderboard across all runs
+├── cross_eval_matrix.json         # Cross-eval across runs (if multi-model)
+├── summary.json                   # Aggregate stats across all runs
+├── claude-sonnet-4_2026-04-28T18-30/
+│   ├── config.yaml
+│   ├── summary.json               # Per-run stats
+│   └── cards/ ...
+├── gpt-5_2026-04-29T09-15/
+│   ├── config.yaml
+│   ├── summary.json
+│   └── cards/ ...
+└── ...
+```
+
+Set-agnostic files stay at top level: `docs/` (engine_[api.md](http://api.md/), test_[utils.md](http://utils.md/)), `benchmark/` (runner package code). Rules are pinned per set since comprehensive rules change per expansion.
 
 ### Cost Tracking
 
