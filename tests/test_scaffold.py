@@ -49,11 +49,10 @@ class TestPyprojectToml:
         assert normalized == "silverquillm-bench"
 
     def test_requires_python_at_least_3_10(self) -> None:
-        """requires-python must specify >=3.10 as minimum."""
+        """requires-python must specify >=3.12 as minimum."""
         requires_python: str = self.data["project"]["requires-python"]
-        # The build environment only has Python 3.10, so >=3.10 is acceptable.
-        assert "3.10" in requires_python, (
-            f"requires-python should specify >=3.10, got '{requires_python}'"
+        assert "3.12" in requires_python, (
+            f"requires-python should specify >=3.12, got '{requires_python}'"
         )
 
     def test_license_is_gpl2(self) -> None:
@@ -174,7 +173,7 @@ class TestRuffConfig:
         )
 
     def test_target_version_is_py311(self) -> None:
-        """Ruff target-version must be py311 (Python 3.11)."""
-        assert self.data.get("target-version") == "py311", (
-            f"target-version should be 'py311', got {self.data.get('target-version')}"
+        """Ruff target-version must be py312 (Python 3.12)."""
+        assert self.data.get("target-version") == "py312", (
+            f"target-version should be 'py312', got {self.data.get('target-version')}"
         )

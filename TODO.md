@@ -4,7 +4,7 @@ Scope: Fix Phase 1 bugs → build benchmark runner harness → validate with ~5 
 
 ---
 
-- [ ] **Fix Phase 1 tech debt**
+- [x] **Fix Phase 1 tech debt**
   Detail: Three non-blocking issues from PR review that should be cleaned up before new code is added.
 
   1. **Python version alignment**: `pyproject.toml` says `requires-python = ">=3.10"` but `ruff.toml` targets `py311`. Set both to Python 3.12: change `pyproject.toml` to `requires-python = ">=3.12"` and `ruff.toml` to `target-version = "py312"`. Update KEY_DECISION #2 accordingly.

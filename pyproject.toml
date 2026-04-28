@@ -7,7 +7,7 @@ name = "silverquillm-bench"
 version = "0.1.0"
 description = "SilverquiLLM MTG game engine benchmark"
 license = "GPL-2.0-only"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "requests",
 ]
@@ -18,7 +18,7 @@ dev = [
     "pytest-cov",
     "ruff",
     "mypy",
-    "tomli>=1.1.0; python_version < '3.11'",
+
 ]
 
 [tool.setuptools.packages.find]
@@ -32,6 +32,6 @@ cards = ["py.typed"]
 testpaths = ["tests"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.12"
 strict = true
 packages = ["engine", "cards"]
