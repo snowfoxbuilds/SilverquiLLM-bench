@@ -44,3 +44,13 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `engine/player.py` — Player(ABC) with name/life/zones/mana_pool/has_lost/land_plays_remaining properties and 5 abstract methods; DeterministicPlayer with deque-based script queue; ScriptExhaustedError exception
 
+## Item 5: Mana pool and cost payment
+
+### Tests
+- `tests/engine/test_mana.py` — Verifies ManaPool construction, add/get/total, empty, can_pay, pay (with choices & auto-pay), Player integration
+- `tests/engine/test_player.py` — Updated test_mana_pool_defaults_none to expect ManaPool instance instead of None
+
+### Implementation
+- `engine/mana.py` — ManaPool class with add/empty/total/get/can_pay/pay methods, auto-pay generic logic preferring colorless; rejects negative choices; TODO: hybrid/Phyrexian comments
+- `engine/player.py` — Updated Player.__init__ to initialize mana_pool as ManaPool() instead of None
+

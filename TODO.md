@@ -68,7 +68,7 @@ SilverquiLLM-bench/
     - Each abstract method pops the next answer from the script. Raises `ScriptExhaustedError` if script runs out.
     - Add `remaining_choices -> int` property for test assertions.
   - Testability: instantiate DeterministicPlayer with scripted choices, call abstract methods, verify correct values returned and queue drains.
-- [ ] **Mana pool and cost payment**
+- [x] **Mana pool and cost payment**
   Detail: Implement mana production, pooling, and cost payment logic.
 
   - File: `SilverquiLLM-bench/engine/mana.py`

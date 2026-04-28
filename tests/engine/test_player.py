@@ -77,9 +77,11 @@ class TestDeterministicPlayerConstruction:
         assert isinstance(p.zones, Zones)
 
     def test_mana_pool_defaults_none(self) -> None:
-        """mana_pool should default to None (forward ref, not yet implemented)."""
+        """mana_pool should default to a ManaPool instance."""
+        from engine.mana import ManaPool
+
         p = DeterministicPlayer("Alice", [])
-        assert p.mana_pool is None
+        assert isinstance(p.mana_pool, ManaPool)
 
     def test_each_player_gets_distinct_zones(self) -> None:
         """Two players should not share the same Zones instance."""

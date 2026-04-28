@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from collections import deque
 from typing import Any
 
+from engine.mana import ManaPool
 from engine.zones import Zones
 
 
@@ -29,7 +30,7 @@ class Player(ABC):
         self.name: str = name
         self.life: int = life
         self.zones: Zones = Zones.new_player()
-        self.mana_pool: Any = None  # Will be ManaPool once implemented
+        self.mana_pool: ManaPool = ManaPool()
         self.has_lost: bool = False
         self.land_plays_remaining: int = 1
 
