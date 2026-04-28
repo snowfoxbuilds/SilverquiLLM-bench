@@ -194,9 +194,10 @@ class TestContinuousEffect:
         assert eff.duration == DURATION_PERMANENT
 
     def test_default_apply_is_noop(self):
-        """Default apply callable should not raise when invoked."""
+        """Default apply callable should not raise when invoked and should be callable."""
         eff = ContinuousEffect(source="s", layer=Layer.COPY)
-        eff.apply(None)  # Should not raise
+        result = eff.apply(None)  # Should not raise
+        assert callable(eff.apply)
 
     def test_sort_key_layer_ordering(self):
         """Effects in different layers should sort by layer value."""
@@ -391,8 +392,9 @@ class TestEffectManagerApplyAll:
     """Verify EffectManager.apply_all ordering and execution."""
 
     def test_apply_all_empty_no_error(self, manager: EffectManager, game: GameState):
-        """Applying with no effects should not raise."""
+        """Applying with no effects should not raise and leave effect count unchanged."""
         manager.apply_all(game)  # should not raise
+        assert len(manager) == 0
 
     def test_apply_all_calls_each_effect(self, manager: EffectManager, game: GameState):
         calls = []

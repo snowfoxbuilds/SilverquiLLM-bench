@@ -92,6 +92,7 @@ class TestStackObject:
         game = _make_game()
         obj = StackObject(source="x", controller=game.active_player)
         obj.on_resolve(game)  # Should not raise
+        assert callable(obj.on_resolve)
 
     def test_targets_default_is_independent(self) -> None:
         """Each StackObject should get its own independent targets list (no shared mutable default)."""
@@ -236,6 +237,7 @@ class TestPriorityLoopEmptyStack:
         """With empty stack and empty scripts, priority_loop returns immediately (advances phase)."""
         game = _make_game()
         priority_loop(game)  # Should not raise or loop forever
+        assert game.stack.is_empty()
 
     def test_does_not_consume_player_choices(self) -> None:
         """With empty stack, auto-pass means choose() is never called — scripts untouched."""
@@ -437,9 +439,11 @@ class TestCheckStateBasedActions:
     """check_state_based_actions should be callable (stub for later implementation)."""
 
     def test_stub_does_not_raise(self) -> None:
-        """check_state_based_actions should not raise when called."""
+        """check_state_based_actions should not raise when called on a normal game."""
         game = _make_game()
-        check_state_based_actions(game)  # Should not raise
+        check_state_based_actions(game)
+        # Game should still be playable after SBA check
+        assert not game.is_game_over
 
     def test_stub_returns_none(self) -> None:
         """Stub should return None."""

@@ -264,16 +264,18 @@ class TestActivateManaAbility:
         """Mana abilities can be activated even by non-active player."""
         game = _instant_speed_game()
         non_active = game.players[1]
+        effect_called = []
         source = Land(name="Island")
         ability = ActivatedAbilityInstance(
             source=source,
             controller=non_active,
             cost=lambda g, s: True,
-            effect=lambda g: None,
+            effect=lambda g: effect_called.append(True),
             is_mana_ability=True,
         )
-        # Should not raise.
+        # Should not raise — mana abilities can be activated at any time.
         activate_ability(game, non_active, ability)
+        assert len(effect_called) == 1
 
     def test_mana_ability_cost_failure_raises(self):
         """If the cost of a mana ability cannot be paid, AbilityError is raised."""

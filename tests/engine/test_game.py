@@ -282,8 +282,10 @@ class TestDestroy:
         creature = _make_creature()
         creature.owner = p1
         creature.controller = p1
-        # Not on battlefield; should not raise
+        # Not on battlefield; should not raise and should not appear in graveyard
         destroy(game, creature)
+        assert not p1.zones[Zone.GRAVEYARD].contains(creature)
+        assert not p2.zones[Zone.GRAVEYARD].contains(creature)
 
 
 # ===========================================================================
@@ -307,7 +309,9 @@ class TestSacrifice:
         """Sacrificing a permanent not on the battlefield should do nothing."""
         game, p1, p2 = _make_bare_game()
         creature = _make_creature()
+        creature.owner = p1
         sacrifice(game, p1, creature)
+        assert not p1.zones[Zone.GRAVEYARD].contains(creature)
 
     def test_sacrifice_goes_to_owners_graveyard(self) -> None:
         """Sacrificing a stolen creature should put it in the owner's graveyard."""
@@ -363,6 +367,9 @@ class TestExile:
         game, p1, p2 = _make_bare_game()
         card = _make_card()
         exile(game, card)  # Should not raise
+        # Card should not appear in any exile zone
+        assert not p1.zones[Zone.EXILE].contains(card)
+        assert not p2.zones[Zone.EXILE].contains(card)
 
 
 # ===========================================================================
@@ -446,6 +453,7 @@ class TestDiscard:
         card = _make_card()
         card.owner = p1
         discard(game, p1, card)  # Should not raise
+        assert not p1.zones[Zone.GRAVEYARD].contains(card)
 
     def test_discard_goes_to_owners_graveyard(self) -> None:
         """Discarded card should go to its owner's graveyard."""
