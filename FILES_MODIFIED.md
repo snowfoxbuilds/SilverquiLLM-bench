@@ -225,3 +225,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `engine/turn.py` — Enhanced _do_cleanup_step: discard loop catches exceptions and discards deterministically instead of breaking (fix 514.1 violation); re-cleanup check uses SBA return value + stack emptiness per rule 514.3a; MAX_HAND_SIZE constant
 - `engine/state_based_actions.py` — resolve_state_based_actions() now returns bool indicating whether any SBAs were performed
 - `tests/engine/test_game.py` — Fixed test_create_game_and_run_two_turns assertion to verify draw via library shrinkage (accounts for correct cleanup discard behavior)
+
+## Item 24: Integration test: multi-turn game with Foundations cards
+
+### Tests
+`tests/test_integration.py` — 9 end-to-end integration tests: 6-turn multi-turn game, combat+SBAs, vigilance, land-tap mana+damage, cleanup-step effect expiry, flying/reach blocking, summoning sickness, land play limits, triggered ability pipeline
+
+### Implementation
+- `tests/test_integration.py` — Revised integration smoke test: mana via activate_ability (land tap), stack resolution via priority_loop, cleanup via _do_cleanup_step, new triggered ability test; 9 tests exercising real engine APIs end-to-end

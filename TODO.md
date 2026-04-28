@@ -280,7 +280,7 @@ SilverquiLLM-bench/
     6. Check SBAs.
     7. If triggers fired during cleanup, process them and do another cleanup step.
   - Testability: Giant Growth a creature → advance to cleanup → verify P/T reverts. Deal 2 damage to 3/3 → cleanup → verify damage cleared.
-- [ ] **Integration test: multi-turn game with Foundations cards**
+- [x] **Integration test: multi-turn game with Foundations cards**
   Detail: End-to-end test playing out 5+ turns using DeterministicPlayer and Foundations cards.
 
   - File: `SilverquiLLM-bench/tests/test_integration.py`
