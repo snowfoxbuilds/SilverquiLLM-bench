@@ -92,7 +92,7 @@ SilverquiLLM-bench/
   - File: `SilverquiLLM-bench/engine/turn.py`
   - `run_turn(game: GameState)` — iterate through all phases/steps of a single turn. At each priority point, call `priority_loop(game)` (stub for now — just passes).
   - Testability: create 2-player game, call `advance_phase` repeatedly, assert correct phase/step sequence and active player swap after full turn.
-- [ ] **The Stack: data structure, priority passing, and resolution**
+- [x] **The Stack: data structure, priority passing, and resolution**
   Detail: Implement the spell/ability stack with LIFO resolution and priority passing.
 
   - File: `SilverquiLLM-bench/engine/stack.py`

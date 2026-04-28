@@ -122,10 +122,13 @@ class TestGameStateInitialState:
         game = _make_game()
         assert game.winner is None
 
-    def test_initial_stack_is_none(self) -> None:
-        """stack should be None (forward ref until Stack is implemented)."""
+    def test_initial_stack_is_stack_instance(self) -> None:
+        """stack should be an empty Stack instance."""
         game = _make_game()
-        assert game.stack is None
+        from engine.stack import Stack
+
+        assert isinstance(game.stack, Stack)
+        assert game.stack.is_empty()
 
 
 # ---------------------------------------------------------------------------

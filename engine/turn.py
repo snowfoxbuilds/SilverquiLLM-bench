@@ -7,14 +7,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+from engine.stack import priority_loop
 from engine.types import Phase, Step
-
-
-def priority_loop(game: GameState) -> None:
-    """Stub priority loop — simply passes for now.
-
-    Will be fleshed out once the Stack is implemented (item 7+).
-    """
 
 
 # Steps/phases where priority is given to players.

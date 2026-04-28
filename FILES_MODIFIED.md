@@ -63,3 +63,14 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `engine/game_state.py` — GameState class with player properties, zone accessors, advance_phase() turn progression, empty_mana_pools(); _TURN_SEQUENCE constant; rejects != 2 players
 - `engine/turn.py` — run_turn() loop iterating all phases/steps of a turn; priority_loop() stub; _NO_PRIORITY_STEPS set
 
+## Item 7: The Stack — data structure, priority passing, and resolution
+
+### Tests
+- `tests/engine/test_stack.py` — Verifies StackObject dataclass, Stack LIFO push/pop/peek/objects, priority_loop auto-pass and resolution, priority passing with DeterministicPlayer scripts, mana ability immediate resolution, check_state_based_actions stub
+- `tests/engine/test_game_state.py` — Updated test_initial_stack_is_none to test_initial_stack_is_stack_instance (Stack is now initialized)
+
+### Implementation
+- `engine/stack.py` — StackObject dataclass, Stack LIFO container, priority_loop with auto-pass and stack resolution, _handle_priority helper, _get_legal_actions placeholder, check_state_based_actions stub; **revised**: priority_loop now retains priority for acting player and keeps game.priority_player_index in sync
+- `engine/game_state.py` — Updated self.stack from None to Stack() instance; added Stack import
+- `engine/turn.py` — Removed stub priority_loop; now imports real priority_loop from engine.stack
+

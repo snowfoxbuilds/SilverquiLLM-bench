@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from engine.player import Player
+from engine.stack import Stack
 from engine.types import Phase, Step, Zone
 from engine.zones import ZoneContainer
 
@@ -40,7 +41,7 @@ class GameState:
         phase: Current phase of the turn.
         step: Current step within the phase (``None`` for main phases).
         turn_number: The current turn number (1-indexed).
-        stack: The game stack (forward ref; ``None`` until Stack is implemented).
+        stack: The game stack for spells and abilities.
         is_game_over: Whether the game has ended.
         winner: The winning player, or ``None`` if the game is ongoing / draw.
     """
@@ -57,7 +58,7 @@ class GameState:
         self.phase: Phase = Phase.BEGINNING
         self.step: Step | None = Step.UNTAP
         self.turn_number: int = 1
-        self.stack: Any = None  # Forward ref — Stack not yet implemented
+        self.stack: Stack = Stack()
         self.is_game_over: bool = False
         self.winner: Player | None = None
 
