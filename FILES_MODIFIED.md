@@ -169,3 +169,14 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `tests/test_utils.py` — Test helper API with create_game (convenience wrapper with DeterministicPlayer), set_board_state (direct zone/life/mana manipulation), cast_spell (find-in-hand + cast + resolve), advance_to_phase (safe fast-forward), declare_attackers (name-based combat setup), declare_blockers (name-mapping combat setup), TestSetupError exception; **revised**: create_game resets drawn_from_empty_library after empty-deck setup; cast_spell feeds targets into DeterministicPlayer script
+
+## Item 18: Card registry and Scryfall data pipeline
+
+### Tests
+(No pre-written test file — verified via 963 existing tests passing + manual validation)
+
+### Implementation
+- `cards/registry.py` — CardMetadata dataclass (11 fields from Scryfall), CardRegistry class (register/get/create_instance/list_all), default_registry module-level singleton
+- `cards/scryfall.py` — fetch_set() with Scryfall API pagination, 100ms rate limiting, file-based JSON cache in data/sets/, _parse_card() helper
+- `data/sets/.gitkeep` — Placeholder to keep cache directory in git
+- `.gitignore` — Added data/sets/*.json to exclude cached Scryfall data

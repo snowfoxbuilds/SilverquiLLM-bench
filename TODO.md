@@ -215,7 +215,7 @@ SilverquiLLM-bench/
     - `declare_blockers(game, assignments)` — `{"attacker": ["blocker1", ...]}`.
   - Each function raises descriptive errors on failure.
   - Testability: meta-test using test_utils to set up a board and cast a spell.
-- [ ] **Card registry and Scryfall data pipeline**
+- [x] **Card registry and Scryfall data pipeline**
   Detail: Build card data fetcher and registry mapping names to implementations.
 
   - File: `SilverquiLLM-bench/cards/registry.py`

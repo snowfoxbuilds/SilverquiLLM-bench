@@ -5,3 +5,6 @@ __pycache__/
 dist/
 build/
 *.pyc
+
+# Scryfall cache data
+data/sets/*.json
