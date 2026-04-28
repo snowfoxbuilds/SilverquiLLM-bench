@@ -77,3 +77,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `benchmark/rules_skill.py` — MTG comprehensive rules downloader (with force param), parser, indexer, lookup, and generate_rules_overview() function
 - `benchmarks/sos/data/rules_overview.md` — Hand-crafted compact MTG rules overview (~573 tokens)
 - `benchmarks/sos/data/comprehensive_rules.txt` — Cached comprehensive rules (stub fallback)
+
+## Item 9: Runner CLI scaffold + YAML config
+
+### Implementation
+- `benchmark/config.py` — BenchmarkConfig dataclass and load_config() with YAML validation
+- `benchmark/cli.py` — Click CLI with run/eval/score/cards subcommands
+- `config.example.yaml` — Example YAML configuration file
+- `pyproject.toml` — Added [project.scripts] benchmark entry point

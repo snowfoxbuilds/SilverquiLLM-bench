@@ -125,7 +125,7 @@ class TestCardName:
   - Generate `benchmarks/sos/data/rules_overview.md`: high-level summary of MTG rules (~1,000 tokens). Cover: turn structure, casting, stack, combat, zones, targeting, keywords, SBAs. This is always in agent context.
   - The `lookup_rule` function will be exposed as an OpenCode tool in the agent session manager (next items). For now, just build the indexer and verify it works standalone.
   - Testability: `lookup_rule(index, "flying")` returns text containing "702.9" or similar. `lookup_rule(index, "702.2")` returns the first strike rule. `benchmarks/sos/data/rules_overview.md` exists and is under 1,000 tokens.
-- [ ] **Runner CLI scaffold + YAML config**
+- [x] **Runner CLI scaffold + YAML config**
   Detail: Create the benchmark CLI entry point and configuration loading.
 
   - File: `benchmark/cli.py` — use `click` for CLI framework.
