@@ -243,7 +243,7 @@ SilverquiLLM-bench/
   - Consider a generic factory: `make_vanilla(name, cost, power, toughness, keywords)` for pure stat creatures.
   - Register all in registry.
   - Testability: for each, test casting and battlefield presence with correct P/T and keywords. Test flying/reach blocking rules in combat.
-- [ ] **Simple instants and sorceries from Foundations (~10 cards)**
+- [x] **Simple instants and sorceries from Foundations (~10 cards)**
   Detail: Implement non-creature spells to validate casting and resolution.
 
   - File: `SilverquiLLM-bench/cards/foundations/simple_spells.py`

@@ -90,3 +90,13 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: All 15 creatures are real FDN set cards verified via Scryfall API. Registry metadata (rarity, oracle_text, type_line, collector_number) matches Scryfall data.
 - **Keywords covered**: Flying, Lifelink, Reach, Deathtouch, Double Strike, Haste, Vigilance, Trample. First Strike and Menace lack purely French-vanilla FDN representatives.
 - **Impact**: cards/foundations/simple_creatures.py, tests/cards/test_simple_creatures.py
+
+## 16. Spell target resolution via card.chosen_targets
+- **Context**: Reviewer found that targets chosen during casting were lost by the time on_resolve() ran, because the StackObject is popped before resolution.
+- **Decision**: cast_spell() stores `card.chosen_targets = chosen_targets` on the card instance after target selection. Spells access targets via self.chosen_targets in on_resolve().
+- **Impact**: engine/casting.py, cards/foundations/simple_spells.py, all future targeted spell implementations.
+
+## 17. Targeted spells use can_cast() to prevent casting without legal targets
+- **Context**: Returning empty list from get_targets() made spells castable without targets.
+- **Decision**: Targeted spells override can_cast() to return False when no legal targets exist (e.g., Negate on empty stack, graveyard recursion with empty graveyard).
+- **Impact**: cards/foundations/simple_spells.py, pattern for all future targeted spells.

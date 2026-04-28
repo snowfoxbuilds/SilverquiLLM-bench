@@ -196,3 +196,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `cards/foundations/simple_creatures.py` — Replaced all 15 creatures with Scryfall-verified FDN cards: 5 vanilla (Aegis Turtle, Savannah Lions, Bear Cub, Swab Goblin, Highborn Vampire) + 10 French vanilla (Healer's Hawk, Bishop's Soldier, Leonin Skyhunter, Thornweald Archer, Raging Redcap, Brazen Scourge, Vampire Nighthawk, Magnigoth Sentry, Serra Angel, Tajuru Pathwarden); fixed registry metadata with correct rarity, oracle_text, type_line, collector_number
+
+## Item 21: Simple instants and sorceries from Foundations (~10 cards)
+
+### Tests
+`tests/cards/test_simple_spells.py` — Tests for spell attributes, targeting, resolution, registry, metadata (will be rewritten by Tester for new FDN card names)
+
+### Implementation
+- `cards/foundations/simple_spells.py` — 10 Scryfall-verified FDN spells: Burst Lightning, Incinerating Blast (damage); Giant Growth (buff, layer 7c); Quick Study (draw); Hero's Downfall (removal); Negate, Cancel (counter with can_cast guard); Disenchant, Pilfer, Cemetery Recruitment (utility); shared _get_chosen_target() helper; backward-compatible aliases for old names
+- `engine/casting.py` — Store chosen_targets on card object during cast_spell() so targets survive stack pop and are accessible in on_resolve()

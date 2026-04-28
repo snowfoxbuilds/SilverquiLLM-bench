@@ -138,6 +138,10 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
             target = player.choose_target(target_specs, spec)
             chosen_targets.append(target)
 
+    # Store chosen targets on the card so on_resolve() can access them
+    # even after the StackObject has been popped from the stack.
+    card.chosen_targets = chosen_targets  # type: ignore[attr-defined]
+
     # 6. Mana check / payment (rollback on failure)
     if not player.mana_pool.can_pay(card.mana_cost):
         # Rollback: move card from stack zone back to hand
