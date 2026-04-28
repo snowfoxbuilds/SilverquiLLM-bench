@@ -24,6 +24,7 @@ class Player(ABC):
         mana_pool: The player's mana pool (forward ref; initialized to None until ManaPool is implemented).
         has_lost: Whether this player has lost the game.
         land_plays_remaining: Number of land plays remaining this turn.
+        drawn_from_empty_library: Whether this player attempted to draw from an empty library.
     """
 
     def __init__(self, name: str, life: int = 20) -> None:
@@ -33,6 +34,7 @@ class Player(ABC):
         self.mana_pool: ManaPool = ManaPool()
         self.has_lost: bool = False
         self.land_plays_remaining: int = 1
+        self.drawn_from_empty_library: bool = False
 
     @abstractmethod
     def choose_target(self, options: Any, requirement: Any) -> Any:

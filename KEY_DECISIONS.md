@@ -20,3 +20,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: Game objects are references; multiple cards can share identical stats but are distinct game objects.
 - **Impact**: engine/zones.py — all lookup/removal operations
 
+## SBAs use owner's graveyard, not controller's
+- **Context**: When a permanent dies, MTG rules say it goes to its owner's graveyard, not its controller's.
+- **Decision**: SBA code checks `hasattr(obj, 'owner')` and uses owner's zones for graveyard destination. Falls back to controller if no owner attribute.
+- **Reasoning**: Correct per MTG comprehensive rules. Owner and controller can differ (e.g., stolen creatures).
+- **Impact**: engine/state_based_actions.py
+

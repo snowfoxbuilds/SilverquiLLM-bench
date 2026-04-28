@@ -74,3 +74,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `engine/game_state.py` — Updated self.stack from None to Stack() instance; added Stack import
 - `engine/turn.py` — Removed stub priority_loop; now imports real priority_loop from engine.stack
 
+## Item 8: State-based actions
+
+### Tests
+- `tests/engine/test_state_based_actions.py` — 50 tests covering all 8 SBAs, check/resolve API, cascading, multi-SBA passes
+
+### Implementation
+- `engine/state_based_actions.py` — New module with check_state_based_actions (single-pass, returns bool) and resolve_state_based_actions (loop until stable); implements 8 SBAs: life<=0, toughness<=0, lethal damage, empty library draw, legend rule, token cleanup, aura validity, counter annihilation; revised: _move_to_graveyard uses obj.owner (duck-typed) for owner-based graveyard routing; token cleanup covers STACK and COMMAND zones
+- `engine/stack.py` — Replaced check_state_based_actions stub with wrapper delegating to resolve_state_based_actions from the new module
+- `engine/player.py` — Added drawn_from_empty_library: bool = False attribute to Player.__init__ and docstring

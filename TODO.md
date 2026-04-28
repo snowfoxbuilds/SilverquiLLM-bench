@@ -108,7 +108,7 @@ SilverquiLLM-bench/
     - Player decisions come from `Player.choose()` — DeterministicPlayer's script drives this.
   - Mana abilities resolve immediately (don't use the stack).
   - Testability: push two objects, resolve them, verify LIFO order. Test priority passing with DeterministicPlayer scripts.
-- [ ] **State-based actions**
+- [x] **State-based actions**
   Detail: Implement the SBA checker that runs after each stack resolution and at other key points.
 
   - File: `SilverquiLLM-bench/engine/state_based_actions.py`

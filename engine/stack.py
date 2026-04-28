@@ -65,10 +65,18 @@ class Stack:
 
 
 def check_state_based_actions(game: GameState) -> None:
-    """Check and perform state-based actions.
+    """Check and perform all state-based actions until the game state is stable.
 
-    Stub implementation — will be properly implemented in item 8.
+    This is a convenience wrapper around
+    :func:`engine.state_based_actions.resolve_state_based_actions` that
+    maintains the original ``-> None`` call-site contract used by
+    :func:`priority_loop`.  For the single-pass boolean API, import
+    :func:`~engine.state_based_actions.check_state_based_actions` directly
+    from :mod:`engine.state_based_actions`.
     """
+    from engine.state_based_actions import resolve_state_based_actions
+
+    resolve_state_based_actions(game)
 
 
 def _get_legal_actions(game: GameState, player: Player) -> list[Any]:
