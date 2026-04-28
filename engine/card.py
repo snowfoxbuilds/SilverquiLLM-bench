@@ -295,6 +295,10 @@ class Creature(CardImpl):
         self.base_toughness = self._original_base_toughness
         self.plus_one_counters = self._original_plus_one_counters
         self.minus_one_counters = self._original_minus_one_counters
+        # Reset combat-restriction flags set by continuous effects (e.g. Pacifism).
+        # These are reapplied by active effects during apply_all().
+        self._cant_attack: bool = False
+        self._cant_block: bool = False
 
     @property
     def power(self) -> int:

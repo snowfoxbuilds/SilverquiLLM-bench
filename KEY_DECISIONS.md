@@ -100,3 +100,14 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Context**: Returning empty list from get_targets() made spells castable without targets.
 - **Decision**: Targeted spells override can_cast() to return False when no legal targets exist (e.g., Negate on empty stack, graveyard recursion with empty graveyard).
 - **Impact**: cards/foundations/simple_spells.py, pattern for all future targeted spells.
+
+## 18. Combat restriction flags (_cant_attack, _cant_block) checked in combat.py
+- **Context**: Pacifism sets flags but combat engine didn't check them.
+- **Decision**: `_can_attack()` and `_can_block()` in combat.py check `getattr(creature, "_cant_attack", False)` / `_cant_block`. Uses getattr for backward compatibility.
+- **Impact**: engine/combat.py, engine/card.py (_reset_characteristics clears flags), cards/foundations/simple_permanents.py
+
+## 19. Aura continuous effects must check source aura is on battlefield
+- **Context**: Aura effects persisted after aura left battlefield.
+- **Decision**: All aura apply closures check both the aura AND the enchanted permanent are on the battlefield. Reset in _reset_characteristics() provides defense-in-depth.
+- **Pattern**: Future aura implementations must include `if not _is_on_battlefield(game, aura_ref): return` guard.
+- **Impact**: cards/foundations/simple_permanents.py, engine/card.py

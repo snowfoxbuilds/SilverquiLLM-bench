@@ -205,3 +205,13 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `cards/foundations/simple_spells.py` — 10 Scryfall-verified FDN spells: Burst Lightning, Incinerating Blast (damage); Giant Growth (buff, layer 7c); Quick Study (draw); Hero's Downfall (removal); Negate, Cancel (counter with can_cast guard); Disenchant, Pilfer, Cemetery Recruitment (utility); shared _get_chosen_target() helper; backward-compatible aliases for old names
 - `engine/casting.py` — Store chosen_targets on card object during cast_spell() so targets survive stack pop and are accessible in on_resolve()
+
+## Item 22: Simple enchantments and artifacts from Foundations (~5 cards)
+
+### Tests
+`tests/cards/test_simple_permanents.py` — Tests for permanent attributes, aura attachment, continuous effects, combat restrictions, SBAs, mana abilities, registry, metadata
+
+### Implementation
+- `cards/foundations/simple_permanents.py` — 5 Scryfall-verified FDN permanents: Pacifism (aura debuff, can't attack/block, layer 6); Untamed Hunger (aura buff, +2/+1 and menace, layer 7c/6); Unflinching Courage (aura buff, +2/+2 trample lifelink, layer 7c/6); Hedron Archive (mana rock, {T}: Add {C}{C}); Goblin Oriflamme (non-aura enchantment, attacking creatures +1/+0, layer 7c); all aura apply functions check aura is on battlefield before applying
+- `engine/combat.py` — Added _cant_attack/_cant_block flag checks to _can_attack() and _can_block() so Pacifism actually prevents combat participation
+- `engine/card.py` — Added _cant_attack/_cant_block reset to Creature._reset_characteristics() for clean continuous-effect recalculation

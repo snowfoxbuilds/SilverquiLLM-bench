@@ -83,8 +83,13 @@ def _can_attack(creature: Any) -> bool:
     - It is already tapped.
     - It has the ``DEFENDER`` keyword.
     - It has summoning sickness (``summoning_sick``) and does not have ``HASTE``.
+    - A continuous effect has set ``_cant_attack`` (e.g. Pacifism).
     """
     if getattr(creature, "is_tapped", False):
+        return False
+
+    # Check for "can't attack" restriction (set by continuous effects like Pacifism)
+    if getattr(creature, "_cant_attack", False):
         return False
 
     keywords = getattr(creature, "keywords", Keyword(0))
@@ -103,9 +108,14 @@ def _can_block(blocker: Any, attacker: Any) -> bool:
 
     Checks:
     - If the blocker is tapped it cannot block.
+    - A continuous effect has set ``_cant_block`` (e.g. Pacifism).
     - If the attacker has flying, the blocker must have flying or reach.
     """
     if getattr(blocker, "is_tapped", False):
+        return False
+
+    # Check for "can't block" restriction (set by continuous effects like Pacifism)
+    if getattr(blocker, "_cant_block", False):
         return False
 
     attacker_kw = getattr(attacker, "keywords", Keyword(0))

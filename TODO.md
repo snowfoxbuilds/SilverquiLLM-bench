@@ -257,7 +257,7 @@ SilverquiLLM-bench/
   - Each overrides `get_targets()` and `on_resolve()`.
   - Counter spells remove target from stack → graveyard.
   - Testability: Lightning Bolt a 3/3 → verify dies. Giant Growth → verify +3/+3 and EOT revert. Negate a Divination → verify countered.
-- [ ] **Simple enchantments and artifacts from Foundations (~5 cards)**
+- [x] **Simple enchantments and artifacts from Foundations (~5 cards)**
   Detail: Implement permanent noncreature spells to validate aura/artifact handling.
 
   - File: `SilverquiLLM-bench/cards/foundations/simple_permanents.py`
