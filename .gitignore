@@ -1,1 +1,10 @@
 .env
+__pycache__/
+*.egg-info/
+.ruff_cache/
+dist/
+build/
+*.pyc
+
+# Scryfall cache data
+data/sets/*.json

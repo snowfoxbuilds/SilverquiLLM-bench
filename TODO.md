@@ -4,7 +4,7 @@ Scope: Python project setup → core rules engine → card base classes → test
 
 ---
 
-- [ ] **Project scaffold: pyproject.toml, package layout, dev tooling**
+- [x] **Project scaffold: pyproject.toml, package layout, dev tooling**
   Detail: Initialize the Python project structure for the game engine.
 
   - Create `pyproject.toml` with project name `SilverquiLLM-bench`, Python >=3.11, GPL-2.0 license. Dev deps: `pytest`, `pytest-cov`, `ruff`, `mypy`. Runtime dep: `requests` (for Scryfall fetcher).
@@ -29,7 +29,7 @@ SilverquiLLM-bench/
 - Add `py.typed` marker in `SilverquiLLM-bench/`.
 - Confirm: `pip install -e ".[dev]"` succeeds, `pytest` discovers zero tests, `ruff check .` passes.
 - Testability: `pytest --co` returns 0 items, exit code 0.
-- [ ] **Core enums and type definitions**
+- [x] **Core enums and type definitions**
   Detail: Define the fundamental enums and lightweight types the entire engine depends on.
 
   - File: `SilverquiLLM-bench/engine/types.py`
@@ -47,7 +47,7 @@ SilverquiLLM-bench/
     - `TargetRequirement(filter_fn, description, zone)`.
   - Note: Defer hybrid/Phyrexian mana parsing to a later TODO — no Foundations cards need it.
   - Testability: unit tests for `ManaCost.parse` covering generic, colored, X costs, and invalid inputs.
-- [ ] **Zone containers**
+- [x] **Zone containers**
   Detail: Implement the zone data structures that hold game objects.
 
   - File: `SilverquiLLM-bench/engine/zones.py`
@@ -56,7 +56,7 @@ SilverquiLLM-bench/
   - `move_zone(obj, from_zone, to_zone, position="top")` — removes from source, adds to destination. Raises `IllegalMoveError` if not found.
   - Edge cases: moving to library top vs bottom vs shuffle-in; moving a card already on the battlefield back to battlefield (should be a no-op).
   - Testability: test add/remove/move round-trip, shuffle changes order, top/bottom slicing.
-- [ ] **Player ABC and DeterministicPlayer**
+- [x] **Player ABC and DeterministicPlayer**
   Detail: Define the abstract player interface and a scripted test player.
 
   - File: `SilverquiLLM-bench/engine/player.py`
@@ -68,7 +68,7 @@ SilverquiLLM-bench/
     - Each abstract method pops the next answer from the script. Raises `ScriptExhaustedError` if script runs out.
     - Add `remaining_choices -> int` property for test assertions.
   - Testability: instantiate DeterministicPlayer with scripted choices, call abstract methods, verify correct values returned and queue drains.
-- [ ] **Mana pool and cost payment**
+- [x] **Mana pool and cost payment**
   Detail: Implement mana production, pooling, and cost payment logic.
 
   - File: `SilverquiLLM-bench/engine/mana.py`
@@ -79,7 +79,7 @@ SilverquiLLM-bench/
     - `pay(cost: ManaCost, choices: dict[ManaType, int] | None) -> bool` — deduct mana. `choices` maps how generic cost is split across types. If `choices` is None, auto-pay greedily (prefer colorless for generic). Returns False if insufficient.
   - Hybrid/Phyrexian cost payment deferred — leave a `# TODO: hybrid` comment in `can_pay`/`pay`.
   - Testability: test adding mana, paying exact costs, paying generic with mixed colors, can_pay returning False, pool emptying.
-- [ ] **GameState scaffold and turn structure**
+- [x] **GameState scaffold and turn structure**
   Detail: Build the central GameState object and the turn/phase/step progression loop.
 
   - File: `SilverquiLLM-bench/engine/game_state.py`
@@ -92,7 +92,7 @@ SilverquiLLM-bench/
   - File: `SilverquiLLM-bench/engine/turn.py`
   - `run_turn(game: GameState)` — iterate through all phases/steps of a single turn. At each priority point, call `priority_loop(game)` (stub for now — just passes).
   - Testability: create 2-player game, call `advance_phase` repeatedly, assert correct phase/step sequence and active player swap after full turn.
-- [ ] **The Stack: data structure, priority passing, and resolution**
+- [x] **The Stack: data structure, priority passing, and resolution**
   Detail: Implement the spell/ability stack with LIFO resolution and priority passing.
 
   - File: `SilverquiLLM-bench/engine/stack.py`
@@ -108,7 +108,7 @@ SilverquiLLM-bench/
     - Player decisions come from `Player.choose()` — DeterministicPlayer's script drives this.
   - Mana abilities resolve immediately (don't use the stack).
   - Testability: push two objects, resolve them, verify LIFO order. Test priority passing with DeterministicPlayer scripts.
-- [ ] **State-based actions**
+- [x] **State-based actions**
   Detail: Implement the SBA checker that runs after each stack resolution and at other key points.
 
   - File: `SilverquiLLM-bench/engine/state_based_actions.py`
@@ -124,7 +124,7 @@ SilverquiLLM-bench/
     - +1/+1 and -1/-1 counter annihilation.
   - Loop: `resolve_state_based_actions(game)` calls `check_state_based_actions` in a loop until no actions taken, then checks for triggers.
   - Testability: set up creature with 0 toughness → verify moved to graveyard. Player life to 0 → verify loss. Two same-name legendaries → verify legend rule.
-- [ ] **Card base classes and CardImpl interface**
+- [x] **Card base classes and CardImpl interface**
   Detail: Implement the base card class hierarchy matching the Card Interface spec.
 
   - File: `SilverquiLLM-bench/engine/card.py`
@@ -139,7 +139,7 @@ SilverquiLLM-bench/
     - `Land(CardImpl)` — override `can_cast` to check land play limits, `get_mana_abilities()`.
   - Supporting dataclasses: `ActivatedAbility`, `LoyaltyAbility`, `ManaAbility`, `ContinuousEffect`, `Mode`.
   - Testability: instantiate a vanilla Creature, verify power/toughness, cmc, keywords. Instantiate a Land, verify it's not castable via mana.
-- [ ] **Casting and resolution pipeline**
+- [x] **Casting and resolution pipeline**
   Detail: Wire up the full flow from casting a spell to resolution.
 
   - File: `SilverquiLLM-bench/engine/casting.py`
@@ -148,7 +148,7 @@ SilverquiLLM-bench/
   - `play_land(game, player, land_card)`: verify land play remaining → move hand to battlefield → decrement `land_plays_remaining`.
   - Timing checks: sorcery-speed = main phase + empty stack + active player. Instant-speed or flash = any priority.
   - Testability: cast a vanilla creature → verify battlefield. Cast an instant → verify graveyard. Attempt sorcery at instant speed → verify rejection.
-- [ ] **Triggered abilities system**
+- [x] **Triggered abilities system**
   Detail: Implement the event-driven trigger registration and firing mechanism.
 
   - File: `SilverquiLLM-bench/engine/triggers.py`
@@ -157,7 +157,7 @@ SilverquiLLM-bench/
   - `TriggerManager`: `register(trigger)`, `unregister(source)`, `fire_event(game, event_type, data)` — checks conditions, pushes matching triggers onto stack. APNAP ordering for different players.
   - Integration: call `card.register_triggers(game)` when entering battlefield, `unregister` on leave.
   - Testability: card with ETB trigger → move to battlefield → fire event → verify StackObject pushed.
-- [ ] **Activated abilities system**
+- [x] **Activated abilities system**
   Detail: Implement activated abilities that go on the stack (or resolve immediately for mana abilities).
 
   - File: `SilverquiLLM-bench/engine/abilities.py`
@@ -165,7 +165,7 @@ SilverquiLLM-bench/
   - Tap symbol: cost function checks `not source.is_tapped` and sets `source.is_tapped = True`.
   - `LoyaltyAbility` — cost is loyalty adjustment, once-per-turn restriction.
   - Testability: tap-for-mana on a land → verify mana added and card tapped. Non-mana activated ability → verify it goes on stack.
-- [ ] **Combat system**
+- [x] **Combat system**
   Detail: Implement declare attackers → declare blockers → damage → end combat.
 
   - File: `SilverquiLLM-bench/engine/combat.py`
@@ -175,7 +175,7 @@ SilverquiLLM-bench/
   - `combat_damage_step(game)`: first strike damage → SBAs → normal damage. Handle trample (excess over blocker toughness → defending player), lifelink, deathtouch. Unblocked → damage to player.
   - `end_combat_step(game)`: remove from combat, clear combat state.
   - Testability: attack/block scenario → verify damage, trample overflow, first strike ordering, lifelink life gain.
-- [ ] **Continuous effects and layer system**
+- [x] **Continuous effects and layer system**
   Detail: Implement the 7-layer system for continuous effects.
 
   - File: `SilverquiLLM-bench/engine/continuous_effects.py`
@@ -184,7 +184,7 @@ SilverquiLLM-bench/
   - `EffectManager`: `add(effect)`, `remove_expired(game)`, `apply_all(game)` — apply in layer order, timestamp within layer.
   - Phase 1 scope: implement layers 4 (type-changing), 6 (ability granting/removing), and 7c/7d (P/T mods and counters). Layers 1-3 and 5 can be stubs.
   - Testability: +2/+2 effect on a 2/2 → verify reads as 4/4. Test timestamp ordering.
-- [ ] **Replacement effects engine**
+- [x] **Replacement effects engine**
   Detail: Implement the replacement effect system (separate from triggers per spec).
 
   - File: `SilverquiLLM-bench/engine/replacement_effects.py`
@@ -194,7 +194,7 @@ SilverquiLLM-bench/
   - Integration: `card.register_replacement_effects(game)` called when entering battlefield.
   - Phase 1 scope: basic infrastructure. Most Foundations cards won't use replacement effects, but the mechanism must exist for CardImpl's `register_replacement_effects` method.
   - Testability: register a "if creature would die, exile instead" replacement → verify creature goes to exile, not graveyard.
-- [ ] **Game setup, helper actions, and the full game loop**
+- [x] **Game setup, helper actions, and the full game loop**
   Detail: Wire everything together: game initialization, common actions, main loop.
 
   - File: `SilverquiLLM-bench/engine/game.py`
@@ -202,7 +202,7 @@ SilverquiLLM-bench/
   - Common actions on GameState: `deal_damage`, `destroy`, `sacrifice`, `exile`, `draw_card`, `discard`, `create_token`, `add_counter`, `remove_counter`, `tap`, `untap`.
   - `run_game(game) -> Player | None`: loop `run_turn` until `is_game_over`. Return winner.
   - Testability: create game with two players and simple decks, run one full turn, verify phase progression and card draw.
-- [ ] **test_utils module for engine validation**
+- [x] **test_utils module for engine validation**
   Detail: Implement the test helper API that benchmark agents will also use in Phase 2.
 
   - File: `SilverquiLLM-bench/tests/test_utils.py`
@@ -215,7 +215,7 @@ SilverquiLLM-bench/
     - `declare_blockers(game, assignments)` — `{"attacker": ["blocker1", ...]}`.
   - Each function raises descriptive errors on failure.
   - Testability: meta-test using test_utils to set up a board and cast a spell.
-- [ ] **Card registry and Scryfall data pipeline**
+- [x] **Card registry and Scryfall data pipeline**
   Detail: Build card data fetcher and registry mapping names to implementations.
 
   - File: `SilverquiLLM-bench/cards/registry.py`
@@ -225,7 +225,7 @@ SilverquiLLM-bench/
   - `CardMetadata`: dataclass with `name, mana_cost_str, type_line, oracle_text, power, toughness, colors, keywords, rarity, set_code, collector_number`.
   - Fetch MTG Foundations (set code: `fdn`).
   - Testability: mock Scryfall response, verify parsing. Test registry round-trip.
-- [ ] **Basic land implementations (Plains, Island, Swamp, Mountain, Forest)**
+- [x] **Basic land implementations (Plains, Island, Swamp, Mountain, Forest)**
   Detail: Implement the 5 basic lands as the simplest card implementations.
 
   - File: `SilverquiLLM-bench/cards/foundations/basic_lands.py`
@@ -233,7 +233,7 @@ SilverquiLLM-bench/
   - Each has a `ManaAbility` that taps to produce 1 mana of its color.
   - Register all 5 via `register_basic_lands(registry)`.
   - Testability: play a Plains, tap it, verify 1 white mana in pool. Verify can't play a second land same turn.
-- [ ] **Vanilla and French vanilla creatures from Foundations (~15 cards)**
+- [x] **Vanilla and French vanilla creatures from Foundations (~15 cards)**
   Detail: Implement simple creatures covering keyword variety. Verify exact card names against Scryfall data from the pipeline.
 
   - File: `SilverquiLLM-bench/cards/foundations/simple_creatures.py`
@@ -243,7 +243,7 @@ SilverquiLLM-bench/
   - Consider a generic factory: `make_vanilla(name, cost, power, toughness, keywords)` for pure stat creatures.
   - Register all in registry.
   - Testability: for each, test casting and battlefield presence with correct P/T and keywords. Test flying/reach blocking rules in combat.
-- [ ] **Simple instants and sorceries from Foundations (~10 cards)**
+- [x] **Simple instants and sorceries from Foundations (~10 cards)**
   Detail: Implement non-creature spells to validate casting and resolution.
 
   - File: `SilverquiLLM-bench/cards/foundations/simple_spells.py`
@@ -257,7 +257,7 @@ SilverquiLLM-bench/
   - Each overrides `get_targets()` and `on_resolve()`.
   - Counter spells remove target from stack → graveyard.
   - Testability: Lightning Bolt a 3/3 → verify dies. Giant Growth → verify +3/+3 and EOT revert. Negate a Divination → verify countered.
-- [ ] **Simple enchantments and artifacts from Foundations (~5 cards)**
+- [x] **Simple enchantments and artifacts from Foundations (~5 cards)**
   Detail: Implement permanent noncreature spells to validate aura/artifact handling.
 
   - File: `SilverquiLLM-bench/cards/foundations/simple_permanents.py`
@@ -267,7 +267,7 @@ SilverquiLLM-bench/
     - Mana rock: `Sol Ring` or equivalent (tap: add {C}{C}).
   - Aura implementation: `attached_to` field. On resolve, attach to target. SBAs handle aura without legal target → graveyard.
   - Testability: enchant creature with Pacifism → verify can't declare as attacker. Destroy enchanted creature → verify aura goes to graveyard.
-- [ ] **End-of-turn cleanup and damage clearing**
+- [x] **End-of-turn cleanup and damage clearing**
   Detail: Ensure the cleanup step correctly resets transient state.
 
   - Integrate into `SilverquiLLM-bench/engine/turn.py` and `continuous_effects.py`.
@@ -280,7 +280,7 @@ SilverquiLLM-bench/
     6. Check SBAs.
     7. If triggers fired during cleanup, process them and do another cleanup step.
   - Testability: Giant Growth a creature → advance to cleanup → verify P/T reverts. Deal 2 damage to 3/3 → cleanup → verify damage cleared.
-- [ ] **Integration test: multi-turn game with Foundations cards**
+- [x] **Integration test: multi-turn game with Foundations cards**
   Detail: End-to-end test playing out 5+ turns using DeterministicPlayer and Foundations cards.
 
   - File: `SilverquiLLM-bench/tests/test_integration.py`
