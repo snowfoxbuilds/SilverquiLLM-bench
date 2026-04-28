@@ -161,3 +161,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `engine/game.py` — New module: create_game (life/library/shuffle/draw-7/active-player), 11 helper actions (deal_damage, destroy, sacrifice, exile, draw_card, discard, create_token, add_counter, remove_counter, tap, untap), run_game loop with SBA checking and MAX_TURNS limit; **revised**: destroy() distinguishes creature vs non-creature for event types; sacrifice() now consults replacement_manager.apply() before zone move
 - `engine/turn.py` — Wired turn-based actions into run_turn: untap step (untap/clear summoning sickness/reset land plays), draw step (active player draws), combat steps (delegates to combat.py), cleanup step (clear damage/remove expired effects); **revised**: _do_draw_step skips draw on turn 1 for starting player (MTG rule §103.7a)
+
+## Item 17: test_utils module for engine validation
+
+### Tests
+- `tests/engine/test_test_utils.py` — 37 meta-tests covering create_game, set_board_state, cast_spell, advance_to_phase, declare_attackers, declare_blockers, error handling, and integration
+
+### Implementation
+- `tests/test_utils.py` — Test helper API with create_game (convenience wrapper with DeterministicPlayer), set_board_state (direct zone/life/mana manipulation), cast_spell (find-in-hand + cast + resolve), advance_to_phase (safe fast-forward), declare_attackers (name-based combat setup), declare_blockers (name-mapping combat setup), TestSetupError exception; **revised**: create_game resets drawn_from_empty_library after empty-deck setup; cast_spell feeds targets into DeterministicPlayer script

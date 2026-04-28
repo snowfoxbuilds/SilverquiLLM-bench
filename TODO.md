@@ -202,7 +202,7 @@ SilverquiLLM-bench/
   - Common actions on GameState: `deal_damage`, `destroy`, `sacrifice`, `exile`, `draw_card`, `discard`, `create_token`, `add_counter`, `remove_counter`, `tap`, `untap`.
   - `run_game(game) -> Player | None`: loop `run_turn` until `is_game_over`. Return winner.
   - Testability: create game with two players and simple decks, run one full turn, verify phase progression and card draw.
-- [ ] **test_utils module for engine validation**
+- [x] **test_utils module for engine validation**
   Detail: Implement the test helper API that benchmark agents will also use in Phase 2.
 
   - File: `SilverquiLLM-bench/tests/test_utils.py`
