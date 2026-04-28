@@ -111,3 +111,13 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: All aura apply closures check both the aura AND the enchanted permanent are on the battlefield. Reset in _reset_characteristics() provides defense-in-depth.
 - **Pattern**: Future aura implementations must include `if not _is_on_battlefield(game, aura_ref): return` guard.
 - **Impact**: cards/foundations/simple_permanents.py, engine/card.py
+
+## 20. resolve_state_based_actions() returns bool
+- **Context**: Cleanup re-loop (rule 514.3a) needs to know if SBAs changed game state.
+- **Decision**: `resolve_state_based_actions()` returns True if any SBAs were performed, False otherwise. Backward compatible — callers that ignored the None return still work.
+- **Impact**: engine/state_based_actions.py, engine/turn.py cleanup loop
+
+## 21. Cleanup discard fallback picks last card in hand
+- **Context**: DeterministicPlayer.choose_card() may raise when script is exhausted.
+- **Decision**: Cleanup step catches the exception and discards cards_in_hand[-1] as deterministic fallback, ensuring rule 514.1 compliance (player always reaches max hand size).
+- **Impact**: engine/turn.py

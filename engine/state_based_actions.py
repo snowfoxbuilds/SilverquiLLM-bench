@@ -318,12 +318,17 @@ def check_state_based_actions(game: GameState) -> bool:
     return action_taken
 
 
-def resolve_state_based_actions(game: GameState) -> None:
+def resolve_state_based_actions(game: GameState) -> bool:
     """Run state-based actions in a loop until no more actions are taken.
 
     After the loop stabilises, this is where triggered abilities would be
     checked and placed on the stack (not yet implemented).
+
+    Returns ``True`` if any SBAs were performed during the entire process,
+    ``False`` if the game state was already stable.
     """
+    any_performed = False
     while check_state_based_actions(game):
-        pass
+        any_performed = True
     # TODO: check for triggered abilities and put them on the stack
+    return any_performed

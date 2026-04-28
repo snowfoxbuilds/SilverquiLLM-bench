@@ -11,6 +11,10 @@ from engine.stack import priority_loop
 from engine.types import Phase, Step, Zone
 
 
+# Maximum hand size — players discard down to this during cleanup.
+MAX_HAND_SIZE: int = 7
+
+
 # Steps/phases where priority is given to players.
 # In MTG, players do NOT receive priority during Untap and Cleanup (normally).
 _NO_PRIORITY_STEPS: set[tuple[Phase, Step | None]] = {
@@ -78,24 +82,88 @@ def _do_combat_step(game: GameState, step: Step) -> None:
 
 
 def _do_cleanup_step(game: GameState) -> None:
-    """Perform cleanup step actions.
+    """Perform the cleanup step (MTG rule §514).
 
-    - Remove end-of-turn continuous effects.
-    - Clear damage marked on all creatures.
-    - Discard down to maximum hand size (7) — not yet implemented.
+    The cleanup step executes the following actions in order:
+
+    1. Active player discards down to maximum hand size (7) using
+       :meth:`Player.choose_card`.
+    2. Remove all "until end of turn" continuous effects via
+       :meth:`EffectManager.remove_expired`, then reapply remaining
+       effects for a consistent game state.
+    3. Clear damage marked on all creatures on the battlefield.
+    4. Clear combat-related flags (``dealt_deathtouch_damage``,
+       ``is_attacking``, ``is_blocking``) and reset the combat state.
+    5. Empty all players' mana pools.
+    6. Check state-based actions.
+    7. If triggers fired during cleanup (e.g. from discarding), process
+       them (give priority, resolve stack) and perform another cleanup step.
     """
-    # Clear damage on all creatures
+    from engine.game import discard as _discard
+    from engine.player import ScriptExhaustedError
+    from engine.state_based_actions import resolve_state_based_actions
+
+    # --- Step 1: Discard to hand size ---
+    active = game.active_player
+    hand = active.zones[Zone.HAND]
+    while len(hand) > MAX_HAND_SIZE:
+        cards_in_hand = hand.get_all()
+        if not cards_in_hand:
+            break  # safety guard
+        try:
+            chosen = active.choose_card(cards_in_hand, "discard to hand size")
+        except (ScriptExhaustedError, NotImplementedError):
+            # Player implementation doesn't support choose_card and cards
+            # list was somehow empty.  Discard deterministically from end.
+            chosen = cards_in_hand[-1]
+        if chosen is not None and hand.contains(chosen):
+            _discard(game, active, chosen)
+        else:
+            # If choose_card returns something invalid, discard the last card
+            # to avoid an infinite loop.
+            _discard(game, active, cards_in_hand[-1])
+
+    # --- Step 2: Remove "until end of turn" continuous effects ---
+    if hasattr(game, "effect_manager"):
+        game.effect_manager.remove_expired(game)
+        # Reapply remaining effects so the game state is consistent.
+        game.effect_manager.apply_all(game)
+
+    # --- Step 3: Clear damage on all creatures ---
     for player in game.players:
         bf = player.zones[Zone.BATTLEFIELD]
         for obj in bf.get_all():
             if hasattr(obj, "damage_marked"):
                 obj.damage_marked = 0
+
+    # --- Step 4: Clear combat flags ---
+    for player in game.players:
+        bf = player.zones[Zone.BATTLEFIELD]
+        for obj in bf.get_all():
             if hasattr(obj, "dealt_deathtouch_damage"):
                 obj.dealt_deathtouch_damage = False
+            if hasattr(obj, "is_attacking"):
+                obj.is_attacking = False
+            if hasattr(obj, "is_blocking"):
+                obj.is_blocking = False
+    # Reset the CombatState itself.
+    if hasattr(game, "combat_state"):
+        game.combat_state.clear()
 
-    # Remove end-of-turn continuous effects
-    if hasattr(game, "effect_manager"):
-        game.effect_manager.remove_expired(game)
+    # --- Step 5: Empty mana pools ---
+    game.empty_mana_pools()
+
+    # --- Step 6: Check state-based actions ---
+    sba_happened = resolve_state_based_actions(game)
+
+    # --- Step 7: If SBAs were performed or triggers fired, process & repeat ---
+    # Rule 514.3a: if state-based actions were performed or triggered abilities
+    # triggered during cleanup, another cleanup step occurs.
+    if sba_happened or not game.stack.is_empty():
+        # Triggers were placed on the stack — give priority and resolve.
+        priority_loop(game)
+        # After resolving, perform another cleanup step (recursive).
+        _do_cleanup_step(game)
 
 
 def run_turn(game: GameState) -> None:

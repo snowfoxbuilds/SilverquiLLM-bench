@@ -267,7 +267,7 @@ SilverquiLLM-bench/
     - Mana rock: `Sol Ring` or equivalent (tap: add {C}{C}).
   - Aura implementation: `attached_to` field. On resolve, attach to target. SBAs handle aura without legal target → graveyard.
   - Testability: enchant creature with Pacifism → verify can't declare as attacker. Destroy enchanted creature → verify aura goes to graveyard.
-- [ ] **End-of-turn cleanup and damage clearing**
+- [x] **End-of-turn cleanup and damage clearing**
   Detail: Ensure the cleanup step correctly resets transient state.
 
   - Integrate into `SilverquiLLM-bench/engine/turn.py` and `continuous_effects.py`.

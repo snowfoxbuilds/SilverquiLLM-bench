@@ -215,3 +215,13 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `cards/foundations/simple_permanents.py` — 5 Scryfall-verified FDN permanents: Pacifism (aura debuff, can't attack/block, layer 6); Untamed Hunger (aura buff, +2/+1 and menace, layer 7c/6); Unflinching Courage (aura buff, +2/+2 trample lifelink, layer 7c/6); Hedron Archive (mana rock, {T}: Add {C}{C}); Goblin Oriflamme (non-aura enchantment, attacking creatures +1/+0, layer 7c); all aura apply functions check aura is on battlefield before applying
 - `engine/combat.py` — Added _cant_attack/_cant_block flag checks to _can_attack() and _can_block() so Pacifism actually prevents combat participation
 - `engine/card.py` — Added _cant_attack/_cant_block reset to Creature._reset_characteristics() for clean continuous-effect recalculation
+
+## Item 23: End-of-turn cleanup and damage clearing
+
+### Tests
+`tests/engine/test_cleanup.py` — 27 tests covering discard-to-hand-size, EOT effect removal, damage clearing, combat flag clearing, mana pool emptying, SBA check, re-cleanup loop, integration scenarios
+
+### Implementation
+- `engine/turn.py` — Enhanced _do_cleanup_step: discard loop catches exceptions and discards deterministically instead of breaking (fix 514.1 violation); re-cleanup check uses SBA return value + stack emptiness per rule 514.3a; MAX_HAND_SIZE constant
+- `engine/state_based_actions.py` — resolve_state_based_actions() now returns bool indicating whether any SBAs were performed
+- `tests/engine/test_game.py` — Fixed test_create_game_and_run_two_turns assertion to verify draw via library shrinkage (accounts for correct cleanup discard behavior)

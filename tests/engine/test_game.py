@@ -720,12 +720,13 @@ class TestIntegration:
         assert game.turn_number == 2
         assert game.active_player is p2
 
-        hand_p2_before = len(p2.zones[Zone.HAND])
+        lib_p2_before = len(p2.zones[Zone.LIBRARY])
         run_turn(game)
         assert game.turn_number == 3
         assert game.active_player is p1
         # Player 2 should have drawn during their turn's draw step
-        assert len(p2.zones[Zone.HAND]) == hand_p2_before + 1
+        # (library shrank by 1; hand may stay at max due to cleanup discard)
+        assert len(p2.zones[Zone.LIBRARY]) == lib_p2_before - 1
 
     def test_phase_starts_at_beginning_after_turn(self) -> None:
         """After a full turn, phase should reset to BEGINNING/UNTAP."""
