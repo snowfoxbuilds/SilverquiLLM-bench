@@ -94,3 +94,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `benchmark/prompts.py` — Parameterized prompt templates using str.format_map; imports card_name_to_class_name from template_gen for consistent class name derivation
 - `tests/conftest.py` — pytest_collection_modifyitems hook to filter out benchmark functions collected as tests
+
+## Item 11: Agent session manager
+
+### Tests
+- `tests/test_agent_session.py` — 43 tests covering dataclass fields, workspace setup, opencode config, blind/test-informed phases, cleanup
+
+### Implementation
+- `benchmark/agent_session.py` — AgentSession @dataclass with workspace setup, OpenCode config (exposing engine path), blind phase without template false-positive, test-informed with max_rounds_exhausted status, standalone convenience functions, and BlindResult/TestInformedResult dataclasses
