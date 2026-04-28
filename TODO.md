@@ -29,7 +29,7 @@ SilverquiLLM-bench/
 - Add `py.typed` marker in `SilverquiLLM-bench/`.
 - Confirm: `pip install -e ".[dev]"` succeeds, `pytest` discovers zero tests, `ruff check .` passes.
 - Testability: `pytest --co` returns 0 items, exit code 0.
-- [ ] **Core enums and type definitions**
+- [x] **Core enums and type definitions**
   Detail: Define the fundamental enums and lightweight types the entire engine depends on.
 
   - File: `SilverquiLLM-bench/engine/types.py`

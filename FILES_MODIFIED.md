@@ -20,3 +20,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `tests/engine/__init__.py` — Tests engine subpackage init
 - `tests/cards/__init__.py` — Tests cards subpackage init
 
+## Item 2: Core enums and type definitions
+
+### Tests
+- `tests/engine/test_types.py` — Verifies all enums, ManaCost construction/cmc/parse, TargetRequirement
+
+### Implementation
+- `engine/types.py` — All core enums (Color, ManaType, Zone, Phase, Step, CardType, Supertype, Keyword) and dataclasses (ManaCost, TargetRequirement); revised to reject unconsumed input and negative generic mana in ManaCost.parse()
+
