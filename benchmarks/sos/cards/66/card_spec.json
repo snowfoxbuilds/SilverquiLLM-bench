@@ -1,0 +1,17 @@
+{
+  "name": "Run Behind",
+  "mana_cost": "{3}{U}",
+  "type_line": "Instant",
+  "oracle_text": "This spell costs {1} less to cast if it targets an attacking creature.\nTarget creature's owner puts it on their choice of the top or bottom of their library.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "66",
+  "complexity_tier": "medium"
+}

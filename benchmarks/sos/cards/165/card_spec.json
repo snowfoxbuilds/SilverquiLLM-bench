@@ -1,0 +1,19 @@
+{
+  "name": "Topiary Lecturer",
+  "mana_cost": "{2}{G}",
+  "type_line": "Creature — Elf Druid",
+  "oracle_text": "Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.)\n{T}: Add an amount of {G} equal to this creature's power.",
+  "power": "1",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Increment"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "165",
+  "complexity_tier": "medium"
+}

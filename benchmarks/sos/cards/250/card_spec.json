@@ -1,0 +1,17 @@
+{
+  "name": "Page, Loose Leaf",
+  "mana_cost": "{2}",
+  "type_line": "Legendary Artifact Creature — Construct",
+  "oracle_text": "{T}: Add {C}.\nGrandeur — Discard another card named Page, Loose Leaf: Reveal cards from the top of your library until you reveal an instant or sorcery card. Put that card into your hand and the rest on the bottom of your library in a random order.",
+  "power": "0",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [],
+  "keywords": [
+    "Grandeur"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "250",
+  "complexity_tier": "medium"
+}

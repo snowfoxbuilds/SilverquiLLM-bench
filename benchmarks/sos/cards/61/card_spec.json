@@ -1,0 +1,19 @@
+{
+  "name": "Muse's Encouragement",
+  "mana_cost": "{4}{U}",
+  "type_line": "Instant",
+  "oracle_text": "Create a 3/3 blue and red Elemental creature token with flying.\nSurveil 2. (Look at the top two cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Surveil"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "61",
+  "complexity_tier": "medium"
+}

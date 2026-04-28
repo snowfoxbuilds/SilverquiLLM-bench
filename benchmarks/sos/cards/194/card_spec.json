@@ -1,0 +1,21 @@
+{
+  "name": "Hardened Academic",
+  "mana_cost": "{R}{W}",
+  "type_line": "Creature — Bird Cleric",
+  "oracle_text": "Flying, haste\nDiscard a card: This creature gains lifelink until end of turn.\nWhenever one or more cards leave your graveyard, put a +1/+1 counter on target creature you control.",
+  "power": "2",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "R",
+    "W"
+  ],
+  "keywords": [
+    "Flying",
+    "Haste"
+  ],
+  "rarity": "rare",
+  "set_code": "sos",
+  "collector_number": "194",
+  "complexity_tier": "complex"
+}

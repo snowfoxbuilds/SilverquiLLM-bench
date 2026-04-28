@@ -1,0 +1,20 @@
+{
+  "name": "Berta, Wise Extrapolator",
+  "mana_cost": "{2}{G}{U}",
+  "type_line": "Legendary Creature — Frog Druid",
+  "oracle_text": "Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.)\nWhenever one or more +1/+1 counters are put on Berta, add one mana of any color.\n{X}, {T}: Create a 0/0 green and blue Fractal creature token and put X +1/+1 counters on it.",
+  "power": "1",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "G",
+    "U"
+  ],
+  "keywords": [
+    "Increment"
+  ],
+  "rarity": "rare",
+  "set_code": "sos",
+  "collector_number": "175",
+  "complexity_tier": "complex"
+}

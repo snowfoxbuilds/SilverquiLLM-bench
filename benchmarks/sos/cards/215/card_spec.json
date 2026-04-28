@@ -1,0 +1,20 @@
+{
+  "name": "Pterafractyl",
+  "mana_cost": "{X}{G}{U}",
+  "type_line": "Creature — Dinosaur Fractal",
+  "oracle_text": "Flying\nThis creature enters with X +1/+1 counters on it.\nWhen this creature enters, you gain 2 life.",
+  "power": "1",
+  "toughness": "0",
+  "loyalty": null,
+  "colors": [
+    "G",
+    "U"
+  ],
+  "keywords": [
+    "Flying"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "215",
+  "complexity_tier": "complex"
+}

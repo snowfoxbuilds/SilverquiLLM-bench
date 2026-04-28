@@ -1,0 +1,17 @@
+{
+  "name": "Primary Research",
+  "mana_cost": "{4}{W}",
+  "type_line": "Enchantment",
+  "oracle_text": "When this enchantment enters, return target nonland permanent card with mana value 3 or less from your graveyard to the battlefield.\nAt the beginning of your end step, if a card left your graveyard this turn, draw a card.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "26",
+  "complexity_tier": "medium"
+}

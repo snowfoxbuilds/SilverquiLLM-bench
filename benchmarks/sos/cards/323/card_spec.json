@@ -1,0 +1,17 @@
+{
+  "name": "Wisdom of Ages",
+  "mana_cost": "{4}{U}{U}{U}",
+  "type_line": "Sorcery",
+  "oracle_text": "Return all instant and sorcery cards from your graveyard to your hand. You have no maximum hand size for the rest of the game.\nExile Wisdom of Ages.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "sos",
+  "collector_number": "323",
+  "complexity_tier": "medium"
+}

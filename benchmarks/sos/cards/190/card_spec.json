@@ -1,0 +1,21 @@
+{
+  "name": "Fractal Tender",
+  "mana_cost": "{3}{G}{U}",
+  "type_line": "Creature — Elf Wizard",
+  "oracle_text": "Ward {2}\nIncrement (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.)\nAt the beginning of each end step, if you put a counter on this creature this turn, create a 0/0 green and blue Fractal creature token and put three +1/+1 counters on it.",
+  "power": "3",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "G",
+    "U"
+  ],
+  "keywords": [
+    "Ward",
+    "Increment"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "190",
+  "complexity_tier": "complex"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Slumbering Trudge",
+  "mana_cost": "{X}{G}",
+  "type_line": "Creature — Plant Beast",
+  "oracle_text": "This creature enters with a number of stun counters on it equal to three minus X. If X is 2 or less, it enters tapped. (If a permanent with a stun counter would become untapped, remove one from it instead.)",
+  "power": "6",
+  "toughness": "6",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "sos",
+  "collector_number": "341",
+  "complexity_tier": "complex"
+}

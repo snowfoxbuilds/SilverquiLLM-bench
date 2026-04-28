@@ -1,0 +1,19 @@
+{
+  "name": "Ascendant Dustspeaker",
+  "mana_cost": "{4}{W}",
+  "type_line": "Creature — Orc Cleric",
+  "oracle_text": "Flying\nWhen this creature enters, put a +1/+1 counter on another target creature you control.\nAt the beginning of combat on your turn, exile up to one target card from a graveyard.",
+  "power": "3",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Flying"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "8",
+  "complexity_tier": "complex"
+}

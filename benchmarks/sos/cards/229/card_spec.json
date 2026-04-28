@@ -1,0 +1,21 @@
+{
+  "name": "Spectacular Skywhale",
+  "mana_cost": "{2}{U}{R}",
+  "type_line": "Creature — Elemental Whale",
+  "oracle_text": "Flying\nOpus — Whenever you cast an instant or sorcery spell, this creature gets +3/+0 until end of turn. If five or more mana was spent to cast that spell, put three +1/+1 counters on this creature instead.",
+  "power": "1",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "R",
+    "U"
+  ],
+  "keywords": [
+    "Flying",
+    "Opus"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "229",
+  "complexity_tier": "complex"
+}

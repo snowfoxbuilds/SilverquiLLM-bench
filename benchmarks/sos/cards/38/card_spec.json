@@ -1,0 +1,19 @@
+{
+  "name": "Banishing Betrayal",
+  "mana_cost": "{1}{U}",
+  "type_line": "Instant",
+  "oracle_text": "Return target nonland permanent to its owner's hand. Surveil 1. (Look at the top card of your library. You may put it into your graveyard.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Surveil"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "38",
+  "complexity_tier": "medium"
+}

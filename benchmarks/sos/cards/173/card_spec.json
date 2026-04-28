@@ -1,0 +1,20 @@
+{
+  "name": "Ark of Hunger",
+  "mana_cost": "{2}{R}{W}",
+  "type_line": "Artifact",
+  "oracle_text": "Whenever one or more cards leave your graveyard, this artifact deals 1 damage to each opponent and you gain 1 life.\n{T}: Mill a card. You may play that card this turn.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R",
+    "W"
+  ],
+  "keywords": [
+    "Mill"
+  ],
+  "rarity": "rare",
+  "set_code": "sos",
+  "collector_number": "173",
+  "complexity_tier": "medium"
+}

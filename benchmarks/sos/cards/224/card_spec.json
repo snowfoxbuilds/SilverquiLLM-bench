@@ -1,0 +1,21 @@
+{
+  "name": "Scolding Administrator",
+  "mana_cost": "{W}{B}",
+  "type_line": "Creature — Dwarf Cleric",
+  "oracle_text": "Menace (This creature can't be blocked except by two or more creatures.)\nRepartee — Whenever you cast an instant or sorcery spell that targets a creature, put a +1/+1 counter on this creature.\nWhen this creature dies, if it had counters on it, put those counters on up to one target creature.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "B",
+    "W"
+  ],
+  "keywords": [
+    "Menace",
+    "Repartee"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "224",
+  "complexity_tier": "complex"
+}

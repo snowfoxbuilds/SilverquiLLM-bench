@@ -1,0 +1,20 @@
+{
+  "name": "Quill-Blade Laureate // Twofold Intent",
+  "mana_cost": "{1}{W} // {1}{W}",
+  "type_line": "Creature — Human Cleric // Sorcery",
+  "oracle_text": "Double strike\nThis creature enters prepared. (While it's prepared, you may cast a copy of its spell. Doing so unprepares it.)",
+  "power": "1",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Prepared",
+    "Double strike"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "27",
+  "complexity_tier": "complex"
+}

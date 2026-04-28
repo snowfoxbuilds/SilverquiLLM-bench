@@ -1,0 +1,20 @@
+{
+  "name": "Hungry Graffalon",
+  "mana_cost": "{3}{G}",
+  "type_line": "Creature — Giraffe",
+  "oracle_text": "Reach\nIncrement (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.)",
+  "power": "3",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Reach",
+    "Increment"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "151",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Procrastinate",
+  "mana_cost": "{X}{U}",
+  "type_line": "Sorcery",
+  "oracle_text": "Tap target creature. Put twice X stun counters on it. (If a permanent with a stun counter would become untapped, remove one from it instead.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "64",
+  "complexity_tier": "complex"
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Follow the Lumarets",
+  "mana_cost": "{1}{G}",
+  "type_line": "Sorcery",
+  "oracle_text": "Infusion — Look at the top four cards of your library. You may reveal a creature or land card from among them and put it into your hand. If you gained life this turn, you may instead reveal two creature and/or land cards from among them and put them into your hand. Put the rest on the bottom of your library in a random order.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Infusion"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "148",
+  "complexity_tier": "complex"
+}

@@ -35,7 +35,7 @@ Scope: Fix Phase 1 bugs → build benchmark runner harness → validate with ~5 
   - Concrete signals: `len(oracle_text)`, count of `\n` in oracle text (proxy for ability count), presence of "target" keyword, presence of new SOS mechanic keywords, card type (planeswalker → Expert floor), keyword count.
   - Output: `classify_set` writes `benchmarks/sos/data/sos_classified.json` — array of `{"name": ..., "collector_number": ..., "tier": ..., "weight": ...}`.
   - Testability: every SOS card gets a tier. Distribution is non-degenerate (no single tier has >60% of cards). A known vanilla creature classifies as "trivial". A known planeswalker classifies as "expert".
-- [ ] **Card spec generator**
+- [x] **Card spec generator**
   Detail: Generate per-card JSON spec files that agents receive as context.
 
   - File: `benchmark/card_spec.py`

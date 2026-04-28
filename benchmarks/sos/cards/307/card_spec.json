@@ -1,0 +1,17 @@
+{
+  "name": "Together as One",
+  "mana_cost": "{6}",
+  "type_line": "Sorcery",
+  "oracle_text": "Converge — Target player draws X cards, Together as One deals X damage to any target, and you gain X life, where X is the number of colors of mana spent to cast this spell.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [],
+  "keywords": [
+    "Converge"
+  ],
+  "rarity": "rare",
+  "set_code": "sos",
+  "collector_number": "307",
+  "complexity_tier": "complex"
+}

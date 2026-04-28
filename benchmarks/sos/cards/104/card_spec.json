@@ -1,0 +1,17 @@
+{
+  "name": "Wander Off",
+  "mana_cost": "{3}{B}",
+  "type_line": "Instant",
+  "oracle_text": "Exile target creature.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "104",
+  "complexity_tier": "medium"
+}

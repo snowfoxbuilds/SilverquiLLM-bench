@@ -1,0 +1,17 @@
+{
+  "name": "Fractalize",
+  "mana_cost": "{X}{U}",
+  "type_line": "Instant",
+  "oracle_text": "Until end of turn, target creature becomes a green and blue Fractal with base power and toughness each equal to X plus 1. (It loses all other colors and creature types.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "51",
+  "complexity_tier": "medium"
+}

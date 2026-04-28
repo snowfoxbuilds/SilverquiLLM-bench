@@ -1,0 +1,19 @@
+{
+  "name": "Ambitious Augmenter",
+  "mana_cost": "{G}",
+  "type_line": "Creature — Turtle Wizard",
+  "oracle_text": "Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.)\nWhen this creature dies, if it had one or more counters on it, create a 0/0 green and blue Fractal creature token, then put this creature's counters on that token.",
+  "power": "1",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Increment"
+  ],
+  "rarity": "rare",
+  "set_code": "sos",
+  "collector_number": "140",
+  "complexity_tier": "complex"
+}

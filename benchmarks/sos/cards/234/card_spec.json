@@ -1,0 +1,18 @@
+{
+  "name": "Stirring Honormancer",
+  "mana_cost": "{2}{W}{W/B}{B}",
+  "type_line": "Creature — Rhino Bard",
+  "oracle_text": "When this creature enters, look at the top X cards of your library, where X is the number of creatures you control. Put one of those cards into your hand and the rest into your graveyard.",
+  "power": "4",
+  "toughness": "5",
+  "loyalty": null,
+  "colors": [
+    "B",
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "234",
+  "complexity_tier": "simple"
+}

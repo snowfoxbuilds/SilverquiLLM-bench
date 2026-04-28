@@ -1,0 +1,19 @@
+{
+  "name": "Shattered Acolyte",
+  "mana_cost": "{1}{W}",
+  "type_line": "Creature — Dwarf Warlock",
+  "oracle_text": "Lifelink\n{1}, Sacrifice this creature: Destroy target artifact or enchantment.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Lifelink"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "31",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Eager Glyphmage",
+  "mana_cost": "{3}{W}",
+  "type_line": "Creature — Cat Cleric",
+  "oracle_text": "When this creature enters, create a 1/1 white and black Inkling creature token with flying.",
+  "power": "3",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "11",
+  "complexity_tier": "simple"
+}

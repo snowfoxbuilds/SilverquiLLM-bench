@@ -1,0 +1,17 @@
+{
+  "name": "Homesickness",
+  "mana_cost": "{4}{U}{U}",
+  "type_line": "Instant",
+  "oracle_text": "Target player draws two cards. Tap up to two target creatures. Put a stun counter on each of them. (If a permanent with a stun counter would become untapped, remove one from it instead.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "53",
+  "complexity_tier": "complex"
+}

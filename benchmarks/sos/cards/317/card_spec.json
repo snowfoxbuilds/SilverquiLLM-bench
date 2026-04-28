@@ -1,0 +1,19 @@
+{
+  "name": "Harmonized Trio // Brainstorm",
+  "mana_cost": "{U} // {U}",
+  "type_line": "Creature — Merfolk Bard Wizard // Instant",
+  "oracle_text": "{T}, Tap two untapped creatures you control: This creature becomes prepared. (While it's prepared, you may cast a copy of its spell. Doing so unprepares it.)",
+  "power": "1",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Prepared"
+  ],
+  "rarity": "rare",
+  "set_code": "sos",
+  "collector_number": "317",
+  "complexity_tier": "complex"
+}

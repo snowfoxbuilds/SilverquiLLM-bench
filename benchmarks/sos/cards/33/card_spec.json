@@ -1,0 +1,19 @@
+{
+  "name": "Spiritcall Enthusiast // Scrollboost",
+  "mana_cost": "{2}{W} // {1}{W}",
+  "type_line": "Creature — Cat Cleric // Sorcery",
+  "oracle_text": "Whenever one or more tokens you control enter, this creature becomes prepared. (While it's prepared, you may cast a copy of its spell. Doing so unprepares it.)",
+  "power": "3",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Prepared"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "33",
+  "complexity_tier": "complex"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Rubble Rouser",
+  "mana_cost": "{2}{R}",
+  "type_line": "Creature — Dwarf Sorcerer",
+  "oracle_text": "When this creature enters, you may discard a card. If you do, draw a card.\n{T}, Exile a card from your graveyard: Add {R}. When you do, this creature deals 1 damage to each opponent.",
+  "power": "1",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "128",
+  "complexity_tier": "medium"
+}

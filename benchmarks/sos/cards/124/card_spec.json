@@ -1,0 +1,19 @@
+{
+  "name": "Mica, Reader of Ruins",
+  "mana_cost": "{3}{R}",
+  "type_line": "Legendary Creature — Human Artificer",
+  "oracle_text": "Ward—Pay 3 life. (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays 3 life.)\nWhenever you cast an instant or sorcery spell, you may sacrifice an artifact. If you do, copy that spell and you may choose new targets for the copy.",
+  "power": "4",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Ward"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "124",
+  "complexity_tier": "complex"
+}

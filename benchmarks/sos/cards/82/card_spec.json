@@ -1,0 +1,17 @@
+{
+  "name": "Eternal Student",
+  "mana_cost": "{3}{B}",
+  "type_line": "Creature — Zombie Warlock",
+  "oracle_text": "{1}{B}, Exile this card from your graveyard: Create two 1/1 white and black Inkling creature tokens with flying.",
+  "power": "4",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "82",
+  "complexity_tier": "simple"
+}

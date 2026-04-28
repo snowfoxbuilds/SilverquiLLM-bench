@@ -1,0 +1,21 @@
+{
+  "name": "Emeritus of Ideation // Ancestral Recall",
+  "mana_cost": "{3}{U}{U} // {U}",
+  "type_line": "Creature — Human Wizard // Instant",
+  "oracle_text": "Flying, ward {2}\nThis creature enters prepared.\nWhenever this creature attacks, you may exile eight cards from your graveyard. If you do, this creature becomes prepared.",
+  "power": "5",
+  "toughness": "5",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Flying",
+    "Prepared",
+    "Ward"
+  ],
+  "rarity": "mythic",
+  "set_code": "sos",
+  "collector_number": "315",
+  "complexity_tier": "complex"
+}

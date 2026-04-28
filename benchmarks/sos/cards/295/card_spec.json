@@ -1,0 +1,21 @@
+{
+  "name": "Magmablood Archaic",
+  "mana_cost": "{2/R}{2/R}{2/R}",
+  "type_line": "Creature — Avatar",
+  "oracle_text": "Trample, reach\nConverge — This creature enters with a +1/+1 counter on it for each color of mana spent to cast it.\nWhenever you cast an instant or sorcery spell, creatures you control get +1/+0 until end of turn for each color of mana spent to cast that spell.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Reach",
+    "Converge",
+    "Trample"
+  ],
+  "rarity": "rare",
+  "set_code": "sos",
+  "collector_number": "295",
+  "complexity_tier": "complex"
+}

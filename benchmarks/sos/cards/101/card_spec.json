@@ -1,0 +1,19 @@
+{
+  "name": "Sneering Shadewriter",
+  "mana_cost": "{4}{B}",
+  "type_line": "Creature — Vampire Warlock",
+  "oracle_text": "Flying\nWhen this creature enters, each opponent loses 2 life and you gain 2 life.",
+  "power": "3",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Flying"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "101",
+  "complexity_tier": "medium"
+}

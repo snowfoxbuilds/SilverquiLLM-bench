@@ -1,0 +1,19 @@
+{
+  "name": "Daydream",
+  "mana_cost": "{W}",
+  "type_line": "Sorcery",
+  "oracle_text": "Exile target creature you control, then return that card to the battlefield under its owner's control with a +1/+1 counter on it.\nFlashback {2}{W} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Flashback"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "9",
+  "complexity_tier": "medium"
+}

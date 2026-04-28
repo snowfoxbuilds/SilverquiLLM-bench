@@ -1,0 +1,19 @@
+{
+  "name": "Restoration Seminar",
+  "mana_cost": "{5}{W}{W}",
+  "type_line": "Sorcery — Lesson",
+  "oracle_text": "Return target nonland permanent card from your graveyard to the battlefield.\nParadigm (Then exile this spell. After you first resolve a spell with this name, you may cast a copy of it from exile without paying its mana cost at the beginning of each of your first main phases.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Paradigm"
+  ],
+  "rarity": "mythic",
+  "set_code": "sos",
+  "collector_number": "290",
+  "complexity_tier": "complex"
+}

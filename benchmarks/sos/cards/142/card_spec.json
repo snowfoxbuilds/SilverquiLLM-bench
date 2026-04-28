@@ -1,0 +1,19 @@
+{
+  "name": "Chelonian Tackle",
+  "mana_cost": "{2}{G}",
+  "type_line": "Sorcery",
+  "oracle_text": "Target creature you control gets +0/+10 until end of turn. Then it fights up to one target creature an opponent controls. (Each deals damage equal to its power to the other.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Fight"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "142",
+  "complexity_tier": "medium"
+}

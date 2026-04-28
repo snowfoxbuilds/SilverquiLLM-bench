@@ -1,0 +1,18 @@
+{
+  "name": "Stress Dream",
+  "mana_cost": "{3}{U}{R}",
+  "type_line": "Instant",
+  "oracle_text": "Stress Dream deals 5 damage to up to one target creature. Look at the top two cards of your library. Put one of those cards into your hand and the other on the bottom of your library.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R",
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "235",
+  "complexity_tier": "medium"
+}

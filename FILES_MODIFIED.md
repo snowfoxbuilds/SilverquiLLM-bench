@@ -36,3 +36,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `benchmark/card_classifier.py` — Heuristic-based card complexity classifier with targeting floor fix (target → at least medium)
 - `benchmarks/sos/data/sos_classified.json` — Regenerated classification output for all 368 SOS cards with fixed targeting heuristic
 
+## Item 4: Card spec generator
+
+### Tests
+- (no test files provided by tester)
+
+### Implementation
+- `benchmark/card_spec.py` — Card spec generator with generate_card_spec() and generate_all_specs() functions
+- `benchmarks/sos/cards/*/card_spec.json` — Generated 368 per-card JSON spec files for SOS set
+

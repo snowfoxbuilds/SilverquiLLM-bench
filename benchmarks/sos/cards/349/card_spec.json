@@ -1,0 +1,18 @@
+{
+  "name": "Dina's Guidance",
+  "mana_cost": "{1}{B}{G}",
+  "type_line": "Instant",
+  "oracle_text": "Search your library for a creature card, reveal it, put it into your hand or graveyard, then shuffle.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B",
+    "G"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "sos",
+  "collector_number": "349",
+  "complexity_tier": "simple"
+}

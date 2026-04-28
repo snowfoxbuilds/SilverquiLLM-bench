@@ -1,0 +1,19 @@
+{
+  "name": "Poisoner's Apprentice",
+  "mana_cost": "{2}{B}",
+  "type_line": "Creature — Orc Warlock",
+  "oracle_text": "Infusion — When this creature enters, target creature an opponent controls gets -4/-4 until end of turn if you gained life this turn.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Infusion"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "92",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Orysa, Tide Choreographer",
+  "mana_cost": "{4}{U}",
+  "type_line": "Legendary Creature — Merfolk Bard",
+  "oracle_text": "This spell costs {3} less to cast if creatures you control have total toughness 10 or greater.\nWhen Orysa enters, draw two cards.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "62",
+  "complexity_tier": "medium"
+}

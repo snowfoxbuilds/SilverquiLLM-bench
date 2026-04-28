@@ -1,0 +1,17 @@
+{
+  "name": "Burrog Barrage",
+  "mana_cost": "{1}{G}",
+  "type_line": "Instant",
+  "oracle_text": "Target creature you control gets +1/+0 until end of turn if you've cast another instant or sorcery spell this turn. Then it deals damage equal to its power to up to one target creature an opponent controls.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "141",
+  "complexity_tier": "medium"
+}

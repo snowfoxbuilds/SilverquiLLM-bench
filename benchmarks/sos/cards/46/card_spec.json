@@ -1,0 +1,20 @@
+{
+  "name": "Encouraging Aviator // Jump",
+  "mana_cost": "{2}{U} // {U}",
+  "type_line": "Creature — Bird Wizard // Instant",
+  "oracle_text": "Flying\nWhenever this creature attacks, it becomes prepared. (While it's prepared, you may cast a copy of its spell. Doing so unprepares it.)",
+  "power": "2",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Flying",
+    "Prepared"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "46",
+  "complexity_tier": "complex"
+}

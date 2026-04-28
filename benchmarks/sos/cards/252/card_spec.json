@@ -1,0 +1,18 @@
+{
+  "name": "Strixhaven Skycoach",
+  "mana_cost": "{3}",
+  "type_line": "Artifact — Vehicle",
+  "oracle_text": "Flying\nWhen this Vehicle enters, you may search your library for a basic land card, reveal it, put it into your hand, then shuffle.\nCrew 2 (Tap any number of creatures you control with total power 2 or more: This Vehicle becomes an artifact creature until end of turn.)",
+  "power": "3",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [],
+  "keywords": [
+    "Flying",
+    "Crew"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "252",
+  "complexity_tier": "complex"
+}
