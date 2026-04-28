@@ -4,7 +4,7 @@ Scope: Python project setup → core rules engine → card base classes → test
 
 ---
 
-- [ ] **Project scaffold: pyproject.toml, package layout, dev tooling**
+- [x] **Project scaffold: pyproject.toml, package layout, dev tooling**
   Detail: Initialize the Python project structure for the game engine.
 
   - Create `pyproject.toml` with project name `SilverquiLLM-bench`, Python >=3.11, GPL-2.0 license. Dev deps: `pytest`, `pytest-cov`, `ruff`, `mypy`. Runtime dep: `requests` (for Scryfall fetcher).
