@@ -165,7 +165,7 @@ SilverquiLLM-bench/
   - Tap symbol: cost function checks `not source.is_tapped` and sets `source.is_tapped = True`.
   - `LoyaltyAbility` — cost is loyalty adjustment, once-per-turn restriction.
   - Testability: tap-for-mana on a land → verify mana added and card tapped. Non-mana activated ability → verify it goes on stack.
-- [ ] **Combat system**
+- [x] **Combat system**
   Detail: Implement declare attackers → declare blockers → damage → end combat.
 
   - File: `SilverquiLLM-bench/engine/combat.py`

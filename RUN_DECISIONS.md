@@ -36,3 +36,17 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept implementer
 - **Reasoning**: Per KEY_DECISIONS #5, priority enforcement belongs in `priority_loop`. Both `cast_spell` and `activate_ability` are low-level functions called within the priority loop. Adding priority checks here would duplicate logic and contradict the established architecture.
 - **Impact**: `engine/abilities.py` — mana ability activation remains without priority check, consistent with casting pipeline.
+
+## Test failure: Item 13 — Combat system
+- **Failing tests**: TestCombatIntegration::test_first_strike_kills_before_normal_damage
+- **Tester's intent**: Verify that a first-strike creature kills its blocker before the blocker deals normal damage back.
+- **Implementer's approach**: First-strike sub-step exists but likely processes all creatures' damage rather than only first/double strike creatures.
+- **Coordinator decision**: fix implementation
+- **Reasoning**: The MTG rule is clear — only first strike and double strike creatures deal damage in the first-strike damage step. Non-first-strike creatures deal damage in the normal damage step. The test is correct.
+
+## Disagreement: Item 13 — Combat not wired into turn execution
+- **Reviewer comment (strict)**: Combat helpers are never called from `run_turn()`, so combat never happens during normal gameplay.
+- **Implementer justification**: Item 13 is about implementing the combat system itself. Full game loop wiring is Item 16.
+- **Coordinator decision**: accept implementer (defer to Item 16)
+- **Reasoning**: The TODO text says "Implement declare attackers → declare blockers → damage → end combat" — focused on the combat system. Item 16 ("Game setup, helper actions, full game loop") explicitly covers wiring everything together. Wiring combat into `run_turn()` now would prematurely couple unfinished systems.
+- **Impact**: Combat functions exist but are not auto-called from `run_turn()` until Item 16.

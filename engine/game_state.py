@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from engine.combat import CombatState
 from engine.player import Player
 from engine.stack import Stack
 from engine.triggers import TriggerManager
@@ -62,6 +63,7 @@ class GameState:
         self.turn_number: int = 1
         self.stack: Stack = Stack()
         self.trigger_manager: TriggerManager = TriggerManager()
+        self.combat_state: CombatState = CombatState()
         self.is_game_over: bool = False
         self.winner: Player | None = None
 

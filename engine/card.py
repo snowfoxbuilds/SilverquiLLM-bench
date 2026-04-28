@@ -265,6 +265,7 @@ class Creature(CardImpl):
         self.plus_one_counters: int = 0
         self.minus_one_counters: int = 0
         self.is_token: bool = False
+        self.dealt_deathtouch_damage: bool = False
 
     @property
     def power(self) -> int:

@@ -120,3 +120,14 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `engine/abilities.py` — New module with ActivatedAbilityInstance/LoyaltyAbilityInstance dataclasses, activate_ability() entry point, tap_cost() helper, loyalty per-turn tracking, AbilityError exception; revised: removed sorcery-speed timing check for regular activated abilities (kept only for loyalty abilities)
 - `engine/card.py` — Added is_tapped: bool = False to Land and Artifact classes for tap-cost support
+
+## Item 13: Combat system
+
+### Tests
+- `tests/engine/test_combat.py` — 52 tests covering CombatState, attackers, blockers, combat damage, end combat, integration, edge cases
+
+### Implementation
+- `engine/combat.py` — Combat system with CombatState, declare_attackers_step, declare_blockers_step, combat_damage_step, end_combat_step; fixes: first-strike checks blockers too, deathtouch damage tracking, was_blocked set for blocked-stays-blocked rule, attacker/blocker eligibility validation
+- `engine/state_based_actions.py` — Updated _sba_creature_lethal_damage to also destroy creatures dealt deathtouch damage (rule 704.5h)
+- `engine/card.py` — Added dealt_deathtouch_damage: bool = False to Creature class for deathtouch SBA tracking
+- `engine/game_state.py` — Added combat_state: CombatState attribute to GameState.__init__(), imported CombatState from engine.combat

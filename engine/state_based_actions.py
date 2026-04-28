@@ -100,25 +100,35 @@ def _sba_creature_zero_toughness(game: GameState) -> bool:
 def _sba_creature_lethal_damage(game: GameState) -> bool:
     """A creature with lethal damage marked on it is destroyed (moved to graveyard).
 
-    Lethal damage means ``damage_marked >= toughness``.  Creatures with
-    the ``indestructible`` keyword are skipped.
+    Lethal damage means ``damage_marked >= toughness`` (rule 704.5g) or the
+    creature has been dealt damage by a source with deathtouch and has any
+    damage marked on it (rule 704.5h).  Creatures with the ``indestructible``
+    keyword are skipped.
     """
     action_taken = False
     to_remove: list[tuple[Player, Any]] = []
     for player in game.players:
         for obj in _battlefield(game, player).get_all():
-            if (
-                hasattr(obj, "toughness")
-                and hasattr(obj, "damage_marked")
-                and obj.damage_marked >= obj.toughness
-            ):
-                # Skip indestructible creatures
-                if hasattr(obj, "keywords"):
-                    from engine.types import Keyword
+            if not hasattr(obj, "toughness") or not hasattr(obj, "damage_marked"):
+                continue
 
-                    if Keyword.INDESTRUCTIBLE in obj.keywords:
-                        continue
+            # Skip indestructible creatures
+            if hasattr(obj, "keywords"):
+                from engine.types import Keyword
+
+                if Keyword.INDESTRUCTIBLE in obj.keywords:
+                    continue
+
+            lethal = obj.damage_marked >= obj.toughness
+            # Rule 704.5h: creature dealt damage by a deathtouch source
+            deathtouch_lethal = (
+                getattr(obj, "dealt_deathtouch_damage", False)
+                and obj.damage_marked > 0
+            )
+
+            if lethal or deathtouch_lethal:
                 to_remove.append((player, obj))
+
     for player, obj in to_remove:
         _move_to_graveyard(game, player, obj)
         action_taken = True

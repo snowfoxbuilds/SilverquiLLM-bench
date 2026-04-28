@@ -50,3 +50,15 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: `activate_ability` only enforces ability-type-specific timing (loyalty = sorcery speed). General priority checks remain in `priority_loop`, consistent with KEY_DECISIONS #5.
 - **Reasoning**: Keeps timing enforcement centralized in `priority_loop` and avoids duplicating priority checks across cast_spell, activate_ability, etc.
 - **Impact**: `engine/abilities.py` — regular abilities have no timing restriction; loyalty abilities enforce sorcery speed.
+
+## 9. Deathtouch tracked via bool flag on Creature for SBA destruction
+- **Context**: MTG rule 704.5h requires creatures dealt deathtouch damage to be destroyed. SBAs need to know which creatures received deathtouch damage.
+- **Decision**: Added `dealt_deathtouch_damage: bool` on Creature. Set by combat damage code when source has DEATHTOUCH. Checked in SBAs alongside standard lethal damage.
+- **Reasoning**: Simple flag sufficient since any deathtouch damage > 0 is lethal. No need to track individual damage sources.
+- **Impact**: `engine/card.py` (Creature), `engine/combat.py` (damage), `engine/state_based_actions.py` (SBA check).
+
+## 10. Blocked-stays-blocked tracked via `was_blocked` set on CombatState
+- **Context**: MTG rule: once declared blocked, a creature stays blocked even if blockers are removed.
+- **Decision**: `CombatState.was_blocked` set tracks which attackers were declared blocked. Damage step checks this set rather than current blocker list.
+- **Reasoning**: Per-combat tracking on CombatState (not creature) keeps it cleanly scoped and cleared with combat state.
+- **Impact**: `engine/combat.py`.
