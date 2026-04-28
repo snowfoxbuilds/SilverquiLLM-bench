@@ -22,3 +22,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept reviewer — fix the test to handle this properly
 - **Reasoning**: Tests shouldn't depend on undeclared packages
 
+## Disagreement: Item 10 — Casting pipeline (priority check)
+- **Reviewer comment (strict)**: cast_spell should verify player is game.priority_player before allowing a cast.
+- **Implementer justification**: Priority enforcement belongs in priority_loop (stack.py), not in cast_spell. Existing tests expect non-priority players can cast instants when called directly. cast_spell handles mechanics; priority_loop handles turn structure.
+- **Coordinator decision**: accept implementer
+- **Reasoning**: Layered responsibility — priority_loop gates who can act, cast_spell executes the cast. Adding a priority check to cast_spell would duplicate logic and create coupling. All real game flow goes through priority_loop.
+- **Impact**: engine/casting.py — no priority check added
+

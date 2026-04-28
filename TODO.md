@@ -139,7 +139,7 @@ SilverquiLLM-bench/
     - `Land(CardImpl)` — override `can_cast` to check land play limits, `get_mana_abilities()`.
   - Supporting dataclasses: `ActivatedAbility`, `LoyaltyAbility`, `ManaAbility`, `ContinuousEffect`, `Mode`.
   - Testability: instantiate a vanilla Creature, verify power/toughness, cmc, keywords. Instantiate a Land, verify it's not castable via mana.
-- [ ] **Casting and resolution pipeline**
+- [x] **Casting and resolution pipeline**
   Detail: Wire up the full flow from casting a spell to resolution.
 
   - File: `SilverquiLLM-bench/engine/casting.py`

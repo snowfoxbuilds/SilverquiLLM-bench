@@ -92,3 +92,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `engine/card.py` — GameObject base class (auto-increment object_id), CardImpl interface with hook methods, concrete subclasses: Creature, Instant, Sorcery, Enchantment (is_aura=False), Aura(Enchantment, is_aura=True), Artifact, ArtifactCreature, Planeswalker, Land; all subclass constructors enforce mandatory card types via union; supporting dataclasses: ActivatedAbility, LoyaltyAbility, ManaAbility, ContinuousEffect, Mode
 - `engine/state_based_actions.py` — Updated _sba_aura_unattached to check getattr(obj, 'is_aura', True) so non-aura enchantments are not killed by the unattached-aura SBA
+
+## Item 10: Casting and resolution pipeline
+
+### Tests
+- `tests/engine/test_casting.py` — 69 tests covering timing helpers, cast_spell (all card types, timing checks, mana, hooks, stack zone), play_land (timing, limits), permanent type detection, integration
+
+### Implementation
+- `engine/casting.py` — cast_spell reordered: hand→stack zone→targets→pay mana (with rollback)→on_cast→push StackObject; card placed in Zone.STACK; resolved instants/sorceries go to card.owner's graveyard (fallback to caster); resolution removes card from stack zone
