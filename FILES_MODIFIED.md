@@ -62,3 +62,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `benchmark/docs_gen.py` — AST-based engine API doc generator; removed hard-coded incorrect examples block
 - `docs/engine_api.md` — Regenerated accurate engine API reference from AST-only extraction
 
+
+## Item 7: test_utils documentation for agents
+
+### Implementation
+- `docs/test_utils.md` — API reference for test helpers: create_game, set_board_state, cast_spell, advance_to_phase, declare_attackers, declare_blockers

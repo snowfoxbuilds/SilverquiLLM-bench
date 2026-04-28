@@ -92,7 +92,7 @@ Scope: Fix Phase 1 bugs → build benchmark runner harness → validate with ~5 
   - Target: **under 5,000 tokens**. Count tokens using `len(text.split()) * 1.3` as approximation. If over budget, trim docstrings and omit private helper classes.
   - Write output to `docs/engine_api.md`.
   - Testability: generated doc mentions all public engine classes (GameState, CardImpl, Creature, Stack, etc.). Token count < 5,000. Markdown renders without errors.
-- [ ] **test_utils documentation for agents**
+- [x] **test_utils documentation for agents**
   Detail: Generate `test_utils.md` describing the test helper API that benchmark agents must use.
 
   - File: `benchmark/test_utils_doc.py` (or hand-write `docs/test_utils.md`)
