@@ -26,3 +26,15 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: Correct per MTG comprehensive rules. Owner and controller can differ (e.g., stolen creatures).
 - **Impact**: engine/state_based_actions.py
 
+## Aura is a separate subclass of Enchantment
+- **Context**: SBAs check `attached_to` to detect auras. If all Enchantments have `attached_to`, non-Aura enchantments die immediately.
+- **Decision**: `Aura(Enchantment)` subclass with `is_aura = True`. SBA checks `getattr(obj, 'is_aura', False)` before applying aura detachment rules.
+- **Reasoning**: Clean separation between Auras and non-Aura enchantments per MTG rules.
+- **Impact**: engine/card.py, engine/state_based_actions.py
+
+## Card subclass constructors always union mandatory CardType
+- **Context**: If caller passes explicit card_types, the mandatory type could be omitted.
+- **Decision**: All subclass constructors union in their mandatory type (e.g., Creature always includes CardType.CREATURE).
+- **Reasoning**: Prevents invalid card objects.
+- engine/card.py **Impact**: all subclass constructors 
+

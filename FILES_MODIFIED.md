@@ -83,3 +83,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `engine/state_based_actions.py` — New module with check_state_based_actions (single-pass, returns bool) and resolve_state_based_actions (loop until stable); implements 8 SBAs: life<=0, toughness<=0, lethal damage, empty library draw, legend rule, token cleanup, aura validity, counter annihilation; revised: _move_to_graveyard uses obj.owner (duck-typed) for owner-based graveyard routing; token cleanup covers STACK and COMMAND zones
 - `engine/stack.py` — Replaced check_state_based_actions stub with wrapper delegating to resolve_state_based_actions from the new module
 - `engine/player.py` — Added drawn_from_empty_library: bool = False attribute to Player.__init__ and docstring
+
+## Item 9: Card base classes and CardImpl interface
+
+### Tests
+- `tests/engine/test_card.py` — 87 tests covering GameObject IDs, CardImpl fields/hooks, all card subtypes, counters, keywords, supporting dataclasses
+
+### Implementation
+- `engine/card.py` — GameObject base class (auto-increment object_id), CardImpl interface with hook methods, concrete subclasses: Creature, Instant, Sorcery, Enchantment (is_aura=False), Aura(Enchantment, is_aura=True), Artifact, ArtifactCreature, Planeswalker, Land; all subclass constructors enforce mandatory card types via union; supporting dataclasses: ActivatedAbility, LoyaltyAbility, ManaAbility, ContinuousEffect, Mode
+- `engine/state_based_actions.py` — Updated _sba_aura_unattached to check getattr(obj, 'is_aura', True) so non-aura enchantments are not killed by the unattached-aura SBA

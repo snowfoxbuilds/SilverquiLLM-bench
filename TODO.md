@@ -124,7 +124,7 @@ SilverquiLLM-bench/
     - +1/+1 and -1/-1 counter annihilation.
   - Loop: `resolve_state_based_actions(game)` calls `check_state_based_actions` in a loop until no actions taken, then checks for triggers.
   - Testability: set up creature with 0 toughness → verify moved to graveyard. Player life to 0 → verify loss. Two same-name legendaries → verify legend rule.
-- [ ] **Card base classes and CardImpl interface**
+- [x] **Card base classes and CardImpl interface**
   Detail: Implement the base card class hierarchy matching the Card Interface spec.
 
   - File: `SilverquiLLM-bench/engine/card.py`
