@@ -54,3 +54,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `engine/mana.py` — ManaPool class with add/empty/total/get/can_pay/pay methods, auto-pay generic logic preferring colorless; rejects negative choices; TODO: hybrid/Phyrexian comments
 - `engine/player.py` — Updated Player.__init__ to initialize mana_pool as ManaPool() instead of None
 
+## Item 6: GameState scaffold and turn structure
+
+### Tests
+- `tests/engine/test_game_state.py` — Verifies GameState construction, 2-player validation, initial state, player properties, zone accessors, phase/step advancement, mana pool clearing, run_turn loop
+
+### Implementation
+- `engine/game_state.py` — GameState class with player properties, zone accessors, advance_phase() turn progression, empty_mana_pools(); _TURN_SEQUENCE constant; rejects != 2 players
+- `engine/turn.py` — run_turn() loop iterating all phases/steps of a turn; priority_loop() stub; _NO_PRIORITY_STEPS set
+

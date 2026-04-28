@@ -79,7 +79,7 @@ SilverquiLLM-bench/
     - `pay(cost: ManaCost, choices: dict[ManaType, int] | None) -> bool` — deduct mana. `choices` maps how generic cost is split across types. If `choices` is None, auto-pay greedily (prefer colorless for generic). Returns False if insufficient.
   - Hybrid/Phyrexian cost payment deferred — leave a `# TODO: hybrid` comment in `can_pay`/`pay`.
   - Testability: test adding mana, paying exact costs, paying generic with mixed colors, can_pay returning False, pool emptying.
-- [ ] **GameState scaffold and turn structure**
+- [x] **GameState scaffold and turn structure**
   Detail: Build the central GameState object and the turn/phase/step progression loop.
 
   - File: `SilverquiLLM-bench/engine/game_state.py`
