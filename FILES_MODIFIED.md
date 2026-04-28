@@ -112,3 +112,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `benchmark/scorer.py` — Scoring calculator with Leaderboard dataclass, compute_scores (3-category metrics from EvalResults), generate_leaderboard (Markdown tables)
+
+## Item 14: Result recording + output artifacts
+
+### Implementation
+- `benchmark/results.py` — Per-run result recording with generate_run_name, init_results_dir, save_card_result, save_run_summary, save_aggregates

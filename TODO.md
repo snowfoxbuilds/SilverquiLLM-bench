@@ -215,7 +215,7 @@ class BenchmarkConfig:
   - Difficulty calibration: fraction of tests passed by some but not all agents.
   - Function: `generate_leaderboard(scores: Leaderboard) -> str` returns Markdown tables matching [SCORING.md](http://scoring.md/) format.
   - Testability: create mock eval results for 3 agents × 5 cards. Verify `weighted_score` matches hand calculation. Verify `improvement_delta` = Cat2 - Cat1. Verify discrimination score is 0 when all agents have identical pass rates.
-- [ ] **Result recording + output artifacts**
+- [x] **Result recording + output artifacts**
   Detail: Write all benchmark results to a per-run directory structure under `benchmarks/sos/results/` (per [BENCHMARK-RUNNER.md](http://benchmark-runner.md/)). Each run gets its own folder so results from different models or re-runs never collide.
 
   - File: `benchmark/results.py`
