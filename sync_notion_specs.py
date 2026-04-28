@@ -7,8 +7,7 @@ Exports Notion spec pages to a local repo directory:
   - Specs/*     -> <output_dir>/docs/specs/<page_title>
 
 Usage:
-  export NOTION_TOKEN=ntn_...
-  python sync_notion_specs.py --project-root-id <PAGE_ID> --output-dir ./
+  python3 sync_notion_specs.py
 
 Requires: pip install requests
 """
@@ -18,8 +17,16 @@ import os
 import re
 import requests
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 NOTION_VERSION = "2022-06-28"
 HEADERS = {}
+
+PROJECT_ROOT_PAGE_ID = "34f6a7adc8ed80dd8eb0fe6fefae940f"  # <-- set this to your project root page ID
 
 
 def init_headers():
@@ -259,6 +266,20 @@ def sync(project_root_id: str, output_dir: str):
             export_page(spec["id"], filepath)
     else:
         print("  ! No 'Specs' page found under project root")
+    
+    # 3. Export TODO -> <output_dir>/TODO.md
+    todo_page = next((c for c in children if c["title"] == "TODO"), None)
+    if todo_page:
+        export_page(todo_page["id"], os.path.join(output_dir, "TODO.md"))
+    else:
+        print("  ! No 'TODO.md' page found under project root")
+
+    # 4. Export TODO_COMPLETED -> <output_dir>/TODO_COMPLETED.md
+    todo_completed_page = next((c for c in children if c["title"] == "TODO_COMPLETED.md"), None)
+    if todo_completed_page:
+        export_page(todo_completed_page["id"], os.path.join(output_dir, "docs", "TODO_COMPLETED.md"))
+    else:
+        print("  ! No 'TODO_COMPLETED.md' page found under project root")
 
 
 # --- CLI ---
@@ -266,8 +287,9 @@ def sync(project_root_id: str, output_dir: str):
 def main():
     parser = argparse.ArgumentParser(description="Export Notion specs to repo")
     parser.add_argument(
-        "--project-root-id", required=True,
+        "--project-root-id",
         help="Notion page ID of the project root",
+        default=PROJECT_ROOT_PAGE_ID,
     )
     parser.add_argument(
         "--output-dir", default=".",
