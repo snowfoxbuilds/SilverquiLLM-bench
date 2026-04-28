@@ -249,7 +249,7 @@ benchmarks/sos/results/
 - `result.json` (per card, inside each run) schema matches the result record from [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) (card_id, agent, complexity_tier, implementation metrics, self_eval, cross_eval, audited_eval).
 - `cross_eval_matrix.json`: `{"card_id": {"impl_agent": {"test_agent": {"passed": N, "failed": M}}}}`. For single-model runs this is empty.
 - Testability: call `init_results_dir` twice with different run names, verify separate directories. Call `save_card_result` with mock data, verify all files exist and JSON is valid. Call `save_aggregates`, verify `summary.json` has correct card count and `leaderboard.md` matches scorer output.
-- [ ] **Prototype card selection + engine gap analysis**
+- [x] **Prototype card selection + engine gap analysis**
   Detail: Select ~5 SOS cards for the prototype run and identify engine gaps.
 
   - File: `benchmark/prototype.py`

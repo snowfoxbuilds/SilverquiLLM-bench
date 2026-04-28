@@ -20,3 +20,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Actual codebase state**: `EvalResult` from item 12 only stores aggregate counts (`blind_passed`, `blind_failed`, `blind_total`), not per-test pass/fail vectors. Per-test discrimination is impossible with the current data model.
 - **What was implemented instead**: Per-card approximation using suite-level pass ratios. This is the best possible with the current `EvalResult` contract.
 - **Impact**: `benchmark/scorer.py` — discrimination_score and difficulty_calibration are card-level approximations. When `EvalResult` is extended with per-test vectors, these metrics should be updated.
+
+## Disagreement: Item 15 — Gap analysis scope
+- **Reviewer comment (strict)**: analyze_engine_gaps should always check all 4 mechanics (Prepared, Converge, Miracle, Opus) regardless of selected cards.
+- **Implementer justification**: Function contract takes `cards` as input, scoping analysis to those cards' mechanics. Test `test_no_gaps_for_vanilla_cards` asserts `[]` for vanilla cards. Improved card selection now scores for mechanic coverage, so all 4 mechanics are naturally represented.
+- **Coordinator decision**: accept implementer
+- **Reasoning**: The function's contract is to analyze gaps for provided cards. The improved tier-scoring ensures complex/expert selections exercise Prepared/Converge/Miracle/Opus, so the prototype set naturally covers all mechanics. Always checking all 4 regardless of input would change the function's semantics.
+- **Impact**: benchmark/prototype.py — gap analysis remains card-scoped.

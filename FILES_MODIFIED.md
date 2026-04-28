@@ -117,3 +117,13 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `benchmark/results.py` — Per-run result recording with generate_run_name, init_results_dir, save_card_result, save_run_summary, save_aggregates
+
+## Item 15: Prototype card selection + engine gap analysis
+
+### Tests
+(no test files provided by tester)
+
+### Implementation
+- `benchmark/prototype.py` — Replaced binary prefer/fallback with per-tier scoring functions; added classified-data fallback for sos.json independence
+- `benchmarks/sos/prototype_cards.json` — Re-selected 5 prototype cards with scoring-based preferences
+- `benchmarks/sos/prototype_gaps.md` — Regenerated engine gap analysis (Converge mana tracking gap)
