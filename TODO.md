@@ -63,7 +63,7 @@ Scope: Fix Phase 1 bugs → build benchmark runner harness → validate with ~5 
 
 - Source data from `benchmarks/sos/data/sos.json` (Scryfall cache) + `benchmarks/sos/data/sos_classified.json` (classifier output).
 - Testability: generate specs for all SOS cards, verify every field is non-null (except loyalty for non-planeswalkers and power/toughness for non-creatures). JSON is valid and parseable.
-- [ ] **Template generator**
+- [x] **Template generator**
   Detail: Generate the Python skeleton file each agent starts from, per [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) cross-eval spec.
 
   - File: `benchmark/template_gen.py`

@@ -45,3 +45,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `benchmark/card_spec.py` — Card spec generator with generate_card_spec() and generate_all_specs() functions
 - `benchmarks/sos/cards/*/card_spec.json` — Generated 368 per-card JSON spec files for SOS set
 
+## Item 5: Template generator
+
+### Tests
+- `tests/test_template_gen.py` — 49 tests covering class name conversion, base class resolution, template compilation/exec
+
+### Implementation
+- `benchmark/template_gen.py` — Template generator with PascalCase word-boundary fix and ambiguous multi-type fallback to CardImpl
+
