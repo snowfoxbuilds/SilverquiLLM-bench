@@ -26,6 +26,7 @@ You have access to:
 - foundations/ (browse working card implementations as reference)
 
 Produce a single Python file that implements this card.
+Write your implementation to `blind_impl.py`.
 Do not rename the class. Do not write tests. Do not modify any other files."""
 
 
@@ -86,6 +87,7 @@ Use these results to fix failing tests or update your implementation."""
 def test_informed_prompt(
     card_spec: dict,
     round_num: int,
+    max_rounds: int = 3,
     prev_test_results: str | None = None,
 ) -> str:
     """Build the Step 2 (test-informed) prompt from *card_spec*.
@@ -96,6 +98,8 @@ def test_informed_prompt(
         Card specification dictionary.  Must contain ``name``.
     round_num:
         Current iteration round (1-indexed).
+    max_rounds:
+        Total allowed rounds from the benchmark config.
     prev_test_results:
         Optional raw test output from the previous round.  When provided the
         prompt includes a feedback section so the agent can see what
@@ -113,7 +117,7 @@ def test_informed_prompt(
         {
             "card_name": card_spec["name"],
             "class_name": class_name,
-            "max_rounds": 3,
+            "max_rounds": max_rounds,
         }
     )
 

@@ -213,7 +213,21 @@ class AgentSession:
         if rules_src.exists():
             shutil.copy2(rules_src, workspace / "rules_overview.md")
 
-        # 6. foundations/ — read-only copy
+        # 6. engine/ — read-only copy so base_classes.py imports resolve
+        engine_src = repo_root / "engine"
+        if engine_src.exists():
+            engine_dst = workspace / "engine"
+            shutil.copytree(engine_src, engine_dst)
+            for root, dirs, files in os.walk(engine_dst):
+                for fname in files:
+                    fpath = Path(root) / fname
+                    fpath.chmod(0o444)
+                for dname in dirs:
+                    dpath = Path(root) / dname
+                    dpath.chmod(0o555)
+            engine_dst.chmod(0o555)
+
+        # 7. foundations/ — read-only copy
         foundations_src = repo_root / "cards" / "foundations"
         if foundations_src.exists():
             foundations_dst = workspace / "foundations"
@@ -335,6 +349,7 @@ class AgentSession:
         BlindResult
         """
         prompt = blind_implementation_prompt(self.card_spec)
+        engine_snapshot = _snapshot_mtimes(_REPO_ROOT / "engine")
         start = time.monotonic()
 
         try:
@@ -380,7 +395,7 @@ class AgentSession:
             )
 
         # Check for violations (writing outside workspace)
-        if _check_violations(workspace):
+        if _check_violations(workspace, before=engine_snapshot):
             return BlindResult(
                 impl_path=None,
                 tokens=_estimate_tokens(output),
@@ -445,7 +460,11 @@ class AgentSession:
         tests_passed = False
         start = time.monotonic()
 
-        prompt = test_informed_prompt(self.card_spec, round_num=1)
+        prompt = test_informed_prompt(
+            self.card_spec,
+            round_num=1,
+            max_rounds=self.config.max_test_rounds,
+        )
 
         for round_num in range(1, self.config.max_test_rounds + 1):
             iterations = round_num
@@ -481,7 +500,9 @@ class AgentSession:
                 # No tests produced yet — continue if more rounds
                 if round_num < self.config.max_test_rounds:
                     prompt = test_informed_prompt(
-                        self.card_spec, round_num=round_num + 1
+                        self.card_spec,
+                        round_num=round_num + 1,
+                        max_rounds=self.config.max_test_rounds,
                     )
                     continue
 
@@ -593,12 +614,34 @@ def _count_rules_lookups(output: str) -> int:
     return len(re.findall(r"(?:rules?_?lookup|looking up rule)", output, re.IGNORECASE))
 
 
-def _check_violations(workspace: Path) -> bool:
-    """Check if any files were modified outside the workspace.
+def _snapshot_mtimes(root: Path) -> dict[Path, float]:
+    """Record mtime for every file under *root*."""
+    snapshot: dict[Path, float] = {}
+    for dirpath, _dirs, files in os.walk(root):
+        for fname in files:
+            fpath = Path(dirpath) / fname
+            try:
+                snapshot[fpath] = fpath.stat().st_mtime
+            except OSError:
+                pass
+    return snapshot
 
-    For now, this is a placeholder — real implementation would compare
-    filesystem state before/after the agent run.
+
+def _check_violations(workspace: Path, before: dict[Path, float] | None = None) -> bool:
+    """Return True if any files outside *workspace* were modified since *before*.
+
+    Compares current mtimes against the *before* snapshot.  If no snapshot is
+    provided, the check cannot detect violations and returns False.
     """
+    if before is None:
+        return False
+    engine_root = _REPO_ROOT / "engine"
+    after = _snapshot_mtimes(engine_root)
+    for path, mtime in after.items():
+        prior = before.get(path)
+        if prior is None or mtime > prior:
+            logger.warning("Contamination violation: %s was modified by agent", path)
+            return True
     return False
 
 
@@ -644,7 +687,7 @@ def run_blind(session: AgentSession) -> BlindResult:
     return session.run_blind_implementation(session.workspace)
 
 
-def run_test_informed(session: AgentSession, tests: Path) -> TestInformedResult:
+def run_test_informed(session: AgentSession, blind_impl: Path) -> TestInformedResult:
     """Run the test-informed implementation phase.
 
     Delegates to ``session.run_test_informed``.
@@ -652,7 +695,7 @@ def run_test_informed(session: AgentSession, tests: Path) -> TestInformedResult:
     if session.workspace is None:
         msg = "Workspace not set up — call setup_workspace first"
         raise RuntimeError(msg)
-    return session.run_test_informed(session.workspace, tests)
+    return session.run_test_informed(session.workspace, blind_impl)
 
 
 def cleanup(session: AgentSession) -> None:

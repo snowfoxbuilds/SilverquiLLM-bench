@@ -46,15 +46,17 @@ def run(config_path: str) -> None:
 @main.command()
 @click.option("--results-dir", required=True, help="Path to results directory.")
 def eval(results_dir: str) -> None:
-    """Run evaluation (stub)."""
-    click.echo(f"Eval stub: results_dir={results_dir}")
+    """Run evaluation (not yet implemented)."""
+    click.echo("Error: 'eval' is not yet implemented.", err=True)
+    raise SystemExit(1)
 
 
 @main.command()
 @click.option("--results-dir", required=True, help="Path to results directory.")
 def score(results_dir: str) -> None:
-    """Compute scores (stub)."""
-    click.echo(f"Score stub: results_dir={results_dir}")
+    """Compute scores (not yet implemented)."""
+    click.echo("Error: 'score' is not yet implemented.", err=True)
+    raise SystemExit(1)
 
 
 @main.command()
