@@ -1,0 +1,21 @@
+{
+  "name": "Sanar, Unfinished Genius // Wild Idea",
+  "mana_cost": "{U}{R} // {3}{U}{R}",
+  "type_line": "Legendary Creature — Goblin Sorcerer // Sorcery",
+  "oracle_text": "Sanar enters prepared. (While it's prepared, you may cast a copy of its spell. Doing so unprepares it.)\n{T}: Create a Treasure token. Activate only if you've cast an instant or sorcery spell this turn.",
+  "power": "0",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "R",
+    "U"
+  ],
+  "keywords": [
+    "Treasure",
+    "Prepared"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "223",
+  "complexity_tier": "complex"
+}

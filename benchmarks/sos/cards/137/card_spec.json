@@ -1,0 +1,17 @@
+{
+  "name": "Zealous Lorecaster",
+  "mana_cost": "{5}{R}",
+  "type_line": "Creature — Giant Sorcerer",
+  "oracle_text": "When this creature enters, return target instant or sorcery card from your graveyard to your hand.",
+  "power": "4",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "137",
+  "complexity_tier": "medium"
+}

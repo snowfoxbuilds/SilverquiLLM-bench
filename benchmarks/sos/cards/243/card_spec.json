@@ -1,0 +1,18 @@
+{
+  "name": "Wilt in the Heat",
+  "mana_cost": "{2}{R}{W}",
+  "type_line": "Instant",
+  "oracle_text": "This spell costs {2} less to cast if one or more cards left your graveyard this turn.\nWilt in the Heat deals 5 damage to target creature. If that creature would die this turn, exile it instead.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R",
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "243",
+  "complexity_tier": "complex"
+}

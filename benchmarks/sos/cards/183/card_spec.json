@@ -1,0 +1,23 @@
+{
+  "name": "Cuboid Colony",
+  "mana_cost": "{G}{U}",
+  "type_line": "Creature — Insect",
+  "oracle_text": "Flash\nFlying, trample\nIncrement (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.)",
+  "power": "1",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "G",
+    "U"
+  ],
+  "keywords": [
+    "Flying",
+    "Trample",
+    "Flash",
+    "Increment"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "183",
+  "complexity_tier": "complex"
+}

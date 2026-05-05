@@ -1,0 +1,20 @@
+{
+  "name": "Textbook Tabulator",
+  "mana_cost": "{2}{U}",
+  "type_line": "Creature — Frog Wizard",
+  "oracle_text": "Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.)\nWhen this creature enters, surveil 2. (Look at the top two cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)",
+  "power": "0",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Surveil",
+    "Increment"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "70",
+  "complexity_tier": "complex"
+}

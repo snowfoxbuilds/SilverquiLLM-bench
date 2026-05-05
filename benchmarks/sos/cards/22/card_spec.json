@@ -1,0 +1,17 @@
+{
+  "name": "Interjection",
+  "mana_cost": "{W}",
+  "type_line": "Instant",
+  "oracle_text": "Target creature gets +2/+2 and gains first strike until end of turn.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "22",
+  "complexity_tier": "medium"
+}

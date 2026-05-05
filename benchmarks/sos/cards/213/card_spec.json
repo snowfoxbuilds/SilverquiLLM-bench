@@ -1,0 +1,18 @@
+{
+  "name": "Proctor's Gaze",
+  "mana_cost": "{2}{G}{U}",
+  "type_line": "Instant",
+  "oracle_text": "Return up to one target nonland permanent to its owner's hand. Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "G",
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "213",
+  "complexity_tier": "medium"
+}

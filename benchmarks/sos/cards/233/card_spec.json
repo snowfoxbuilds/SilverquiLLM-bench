@@ -1,0 +1,21 @@
+{
+  "name": "Startled Relic Sloth",
+  "mana_cost": "{2}{R}{W}",
+  "type_line": "Creature — Sloth Beast",
+  "oracle_text": "Trample, lifelink\nAt the beginning of combat on your turn, exile up to one target card from a graveyard.",
+  "power": "4",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "R",
+    "W"
+  ],
+  "keywords": [
+    "Lifelink",
+    "Trample"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "233",
+  "complexity_tier": "medium"
+}

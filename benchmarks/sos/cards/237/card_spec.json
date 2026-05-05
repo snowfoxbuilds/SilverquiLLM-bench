@@ -1,0 +1,21 @@
+{
+  "name": "Tam, Observant Sequencer // Deep Sight",
+  "mana_cost": "{2}{G}{U} // {G}{U}",
+  "type_line": "Legendary Creature — Gorgon Wizard // Sorcery",
+  "oracle_text": "Landfall — Whenever a land you control enters, Tam becomes prepared. (While it's prepared, you may cast a copy of its spell. Doing so unprepares it.)",
+  "power": "4",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "G",
+    "U"
+  ],
+  "keywords": [
+    "Prepared",
+    "Landfall"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "237",
+  "complexity_tier": "complex"
+}

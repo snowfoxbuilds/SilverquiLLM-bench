@@ -1,0 +1,20 @@
+{
+  "name": "Fractal Mascot",
+  "mana_cost": "{4}{G}{U}",
+  "type_line": "Creature — Fractal Elk",
+  "oracle_text": "Trample\nWhen this creature enters, tap target creature an opponent controls. Put a stun counter on it. (If a permanent with a stun counter would become untapped, remove one from it instead.)",
+  "power": "6",
+  "toughness": "6",
+  "loyalty": null,
+  "colors": [
+    "G",
+    "U"
+  ],
+  "keywords": [
+    "Trample"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "189",
+  "complexity_tier": "complex"
+}

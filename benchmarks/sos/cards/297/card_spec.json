@@ -1,0 +1,21 @@
+{
+  "name": "Wildgrowth Archaic",
+  "mana_cost": "{2/G}{2/G}",
+  "type_line": "Creature — Avatar",
+  "oracle_text": "Trample, reach\nConverge — This creature enters with a +1/+1 counter on it for each color of mana spent to cast it.\nWhenever you cast a creature spell, that creature enters with X additional +1/+1 counters on it, where X is the number of colors of mana spent to cast it.",
+  "power": "0",
+  "toughness": "0",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Reach",
+    "Converge",
+    "Trample"
+  ],
+  "rarity": "rare",
+  "set_code": "sos",
+  "collector_number": "297",
+  "complexity_tier": "complex"
+}

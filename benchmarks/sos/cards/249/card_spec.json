@@ -1,0 +1,15 @@
+{
+  "name": "Mage Tower Referee",
+  "mana_cost": "{2}",
+  "type_line": "Artifact Creature — Construct",
+  "oracle_text": "Whenever you cast a multicolored spell, put a +1/+1 counter on this creature.",
+  "power": "2",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "249",
+  "complexity_tier": "simple"
+}

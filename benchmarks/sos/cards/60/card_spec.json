@@ -1,0 +1,19 @@
+{
+  "name": "Muse Seeker",
+  "mana_cost": "{1}{U}",
+  "type_line": "Creature — Elf Wizard",
+  "oracle_text": "Opus — Whenever you cast an instant or sorcery spell, draw a card. Then discard a card unless five or more mana was spent to cast that spell.",
+  "power": "1",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Opus"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "60",
+  "complexity_tier": "complex"
+}

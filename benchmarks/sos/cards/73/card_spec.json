@@ -1,0 +1,19 @@
+{
+  "name": "Arcane Omens",
+  "mana_cost": "{4}{B}",
+  "type_line": "Sorcery",
+  "oracle_text": "Converge — Target player discards X cards, where X is the number of colors of mana spent to cast this spell.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Converge"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "73",
+  "complexity_tier": "complex"
+}

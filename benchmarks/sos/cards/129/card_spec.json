@@ -1,0 +1,19 @@
+{
+  "name": "Seize the Spoils",
+  "mana_cost": "{2}{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "As an additional cost to cast this spell, discard a card.\nDraw two cards and create a Treasure token. (It's an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Treasure"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "129",
+  "complexity_tier": "medium"
+}

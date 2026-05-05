@@ -1,0 +1,17 @@
+{
+  "name": "Mathemagics",
+  "mana_cost": "{X}{X}{U}{U}",
+  "type_line": "Sorcery",
+  "oracle_text": "Target player draws 2ˣ cards. (2º = 1, 2¹ = 2, 2² = 4, 2³ = 8, 2⁴ = 16, 2⁵ = 32, and so on.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "mythic",
+  "set_code": "sos",
+  "collector_number": "320",
+  "complexity_tier": "medium"
+}

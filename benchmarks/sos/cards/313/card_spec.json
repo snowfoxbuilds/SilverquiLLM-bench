@@ -1,0 +1,19 @@
+{
+  "name": "Practiced Offense",
+  "mana_cost": "{2}{W}",
+  "type_line": "Sorcery",
+  "oracle_text": "Put a +1/+1 counter on each creature target player controls. Target creature gains your choice of double strike or lifelink until end of turn.\nFlashback {1}{W} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Flashback"
+  ],
+  "rarity": "rare",
+  "set_code": "sos",
+  "collector_number": "313",
+  "complexity_tier": "medium"
+}

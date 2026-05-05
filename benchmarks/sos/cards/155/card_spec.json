@@ -1,0 +1,19 @@
+{
+  "name": "Noxious Newt",
+  "mana_cost": "{1}{G}",
+  "type_line": "Creature — Salamander",
+  "oracle_text": "Deathtouch\n{T}: Add {G}.",
+  "power": "1",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Deathtouch"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "155",
+  "complexity_tier": "medium"
+}

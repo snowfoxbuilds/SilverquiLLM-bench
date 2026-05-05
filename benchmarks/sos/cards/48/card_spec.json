@@ -1,0 +1,20 @@
+{
+  "name": "Exhibition Tidecaller",
+  "mana_cost": "{U}",
+  "type_line": "Creature — Djinn Wizard",
+  "oracle_text": "Opus — Whenever you cast an instant or sorcery spell, target player mills three cards. If five or more mana was spent to cast that spell, that player mills ten cards instead.",
+  "power": "0",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Mill",
+    "Opus"
+  ],
+  "rarity": "rare",
+  "set_code": "sos",
+  "collector_number": "48",
+  "complexity_tier": "complex"
+}

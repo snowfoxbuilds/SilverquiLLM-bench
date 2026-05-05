@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -112,10 +113,15 @@ def _do_cleanup_step(game: GameState) -> None:
             break  # safety guard
         try:
             chosen = active.choose_card(cards_in_hand, "discard to hand size")
-        except (ScriptExhaustedError, NotImplementedError):
-            # Player implementation doesn't support choose_card and cards
-            # list was somehow empty.  Discard deterministically from end.
+        except (ScriptExhaustedError, NotImplementedError) as exc:
+            # Player implementation doesn't support choose_card or script
+            # was exhausted.  Discard deterministically from end.
             chosen = cards_in_hand[-1]
+            exc_name = type(exc).__name__
+            warnings.warn(
+                f"{exc_name} during cleanup discard for {active.name}; "
+                f"auto-discarding {chosen.name}"
+            )
         if chosen is not None and hand.contains(chosen):
             _discard(game, active, chosen)
         else:

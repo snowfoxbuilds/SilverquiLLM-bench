@@ -1,0 +1,20 @@
+{
+  "name": "Emeritus of Conflict // Lightning Bolt",
+  "mana_cost": "{1}{R} // {R}",
+  "type_line": "Creature — Human Wizard // Instant",
+  "oracle_text": "First strike\nWhenever you cast your third spell each turn, this creature becomes prepared. (While it's prepared, you may cast a copy of its spell. Doing so unprepares it.)",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "First strike",
+    "Prepared"
+  ],
+  "rarity": "mythic",
+  "set_code": "sos",
+  "collector_number": "332",
+  "complexity_tier": "complex"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Quick Study",
+  "mana_cost": "{2}{U}",
+  "type_line": "Instant",
+  "oracle_text": "Draw two cards.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "65",
+  "complexity_tier": "simple"
+}

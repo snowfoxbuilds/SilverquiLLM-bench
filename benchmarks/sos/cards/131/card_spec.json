@@ -1,0 +1,20 @@
+{
+  "name": "Strife Scholar // Awaken the Ages",
+  "mana_cost": "{2}{R} // {5}{R}",
+  "type_line": "Creature — Orc Sorcerer // Sorcery",
+  "oracle_text": "Ward—Pay 2 life.\nThis creature enters prepared. (While it's prepared, you may cast a copy of its spell. Doing so unprepares it.)",
+  "power": "3",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Prepared",
+    "Ward"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "131",
+  "complexity_tier": "complex"
+}

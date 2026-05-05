@@ -1,0 +1,19 @@
+{
+  "name": "Charging Strifeknight",
+  "mana_cost": "{2}{R}",
+  "type_line": "Creature — Spirit Knight",
+  "oracle_text": "Haste\n{T}, Discard a card: Draw a card.",
+  "power": "3",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Haste"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "110",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Efflorescence",
+  "mana_cost": "{2}{G}",
+  "type_line": "Instant",
+  "oracle_text": "Put two +1/+1 counters on target creature.\nInfusion — If you gained life this turn, that creature also gains trample and indestructible until end of turn.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Infusion"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "144",
+  "complexity_tier": "medium"
+}

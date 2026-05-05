@@ -152,6 +152,11 @@ def move_zone(
 
     from_zone.remove(obj)
 
+    # Clear transient casting metadata when a card changes zones so that
+    # stale data (e.g. colors_spent from a previous cast) does not leak.
+    if hasattr(obj, "colors_spent"):
+        del obj.colors_spent
+
     if position == "shuffle":
         to_zone.add(obj, position="top")
         to_zone.shuffle()

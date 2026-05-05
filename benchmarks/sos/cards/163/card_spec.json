@@ -1,0 +1,20 @@
+{
+  "name": "Tenured Concocter",
+  "mana_cost": "{4}{G}",
+  "type_line": "Creature — Troll Druid",
+  "oracle_text": "Vigilance\nWhenever this creature becomes the target of a spell or ability an opponent controls, you may draw a card.\nInfusion — This creature gets +2/+0 as long as you gained life this turn.",
+  "power": "4",
+  "toughness": "5",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Infusion",
+    "Vigilance"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "163",
+  "complexity_tier": "complex"
+}

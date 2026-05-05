@@ -597,19 +597,6 @@ class CemeteryRecruitment(Sorcery):
             hand.add(target)
 
 
-# ---------------------------------------------------------------------------
-# Backward-compatible aliases for old card names
-# ---------------------------------------------------------------------------
-# The tests import the old class names (LightningBolt, LavaAxe, etc.)
-# These aliases allow the tests to keep working until they are rewritten.
-
-LightningBolt = BurstLightning
-LavaAxe = IncineratingBlast
-Divination = QuickStudy
-Murder = HerosDownfall
-Naturalize = Disenchant
-MindRot = Pilfer
-RaiseDead = CemeteryRecruitment
 
 
 # ---------------------------------------------------------------------------

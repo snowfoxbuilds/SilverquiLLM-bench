@@ -1,0 +1,20 @@
+{
+  "name": "Molten Note",
+  "mana_cost": "{X}{R}{W}",
+  "type_line": "Sorcery",
+  "oracle_text": "Molten Note deals damage to target creature equal to the amount of mana spent to cast this spell. Untap all creatures you control.\nFlashback {6}{R}{W} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R",
+    "W"
+  ],
+  "keywords": [
+    "Flashback"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "204",
+  "complexity_tier": "medium"
+}

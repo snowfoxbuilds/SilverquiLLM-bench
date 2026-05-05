@@ -1,0 +1,22 @@
+{
+  "name": "Skycoach Conductor // All Aboard",
+  "mana_cost": "{2}{U} // {U}",
+  "type_line": "Creature — Bird Pilot // Instant",
+  "oracle_text": "Flash\nFlying, vigilance\nThis creature enters prepared. (While it's prepared, you may cast a copy of its spell. Doing so unprepares it.)",
+  "power": "2",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Flying",
+    "Vigilance",
+    "Prepared",
+    "Flash"
+  ],
+  "rarity": "rare",
+  "set_code": "sos",
+  "collector_number": "322",
+  "complexity_tier": "complex"
+}

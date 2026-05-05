@@ -1,0 +1,20 @@
+{
+  "name": "Teacher's Pest",
+  "mana_cost": "{B}{G}",
+  "type_line": "Creature — Skeleton Pest",
+  "oracle_text": "Menace (This creature can't be blocked except by two or more creatures.)\nWhenever this creature attacks, you gain 1 life.\n{B}{G}: Return this card from your graveyard to the battlefield tapped.",
+  "power": "1",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "B",
+    "G"
+  ],
+  "keywords": [
+    "Menace"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "238",
+  "complexity_tier": "complex"
+}

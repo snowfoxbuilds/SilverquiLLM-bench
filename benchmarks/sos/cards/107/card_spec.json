@@ -1,0 +1,19 @@
+{
+  "name": "Archaic's Agony",
+  "mana_cost": "{4}{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "Converge — Archaic's Agony deals X damage to target creature, where X is the number of colors of mana spent to cast this spell. Exile cards from the top of your library equal to the excess damage dealt to that creature this way. You may play those cards until the end of your next turn.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Converge"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "107",
+  "complexity_tier": "complex"
+}

@@ -1,0 +1,15 @@
+{
+  "name": "Diary of Dreams",
+  "mana_cost": "{2}",
+  "type_line": "Artifact — Book",
+  "oracle_text": "Whenever you cast an instant or sorcery spell, put a page counter on this artifact.\n{5}, {T}: Draw a card. This ability costs {1} less to activate for each page counter on this artifact.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "248",
+  "complexity_tier": "medium"
+}

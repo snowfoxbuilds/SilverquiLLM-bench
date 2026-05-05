@@ -2,55 +2,53 @@
 
 **Skill**: execute-todo-with-subagents
 **Reviewer model**: GPT-5.4 (via `Reviewer` custom agent)
-**Started**: 2026-04-28T07:36:40Z
-**Finished**: 2026-04-28T16:12:09Z
-**Total duration**: 8h 35m 29s
-**Total duration (seconds)**: 30929
+**Started**: 2026-04-28T18:20:30Z
+**Finished**: 2026-04-28T21:41:51Z
+**Total duration**: 3h 21m 21s
+**Total duration (seconds)**: 12081
 
 ## Summary
-- TODO items completed: 24
-- Items requiring test dispute: 5 (items 13, 20, 21, 22, 23)
-- Items requiring review revision: 10 (items 11, 12, 13, 14, 15, 16, 17, 20, 21, 22, 23, 24)
-- Items with coordinator arbitration: 6 (items 12, 13, 14, 15, 16, 17)
-- Commits: 30
-- RUN_DECISIONS entries: 7
-- KEY_DECISIONS entries added: 21
-- Test quality audit: 0 added, 10 fixed, 0 deleted
-- Test suite result: passing (1254 tests)
+- TODO items completed: 16
+- Items requiring test dispute: 0
+- Items requiring review revision: 16
+- Items with coordinator arbitration: 3 (items 3, 15, 16)
+- Commits: 19 (16 items + 1 reset + 1 dir summaries + 1 audit)
+- RUN_DECISIONS entries: 4
+- KEY_DECISIONS entries added: 0
+- Test quality audit: 0 added, 1 fixed, 0 deleted
+- Test suite result: passing
 
 ## Tokens (subagents)
 - Total Tester tokens: N/A (not observable)
 - Total Implementer tokens: N/A (not observable)
 - Total Reviewer tokens: N/A (not observable)
-- Total across all subagents: N/A
+- Total across all subagents: N/A (not observable)
 - Coordinator tokens: null (not observable)
 
+## Subagent durations (seconds)
+- Total Implementer duration: 5202
+- Total Tester duration: 2772
+- Total Reviewer duration: 1991
+- Total across all subagents: 9965
+
 ## Per-item breakdown
-| TODO item | Implementer | Tester | Reviewer | Test disputes | Review revisions | Duration (s) |
-|-----------|-------------|--------|----------|---------------|------------------|--------------|
-| Item 1: Scaffold | N/A | N/A | N/A | 0 | 0 | N/A |
-| Item 2: Core enums | N/A | N/A | N/A | 0 | 0 | N/A |
-| Item 3: Zone containers | N/A | N/A | N/A | 0 | 0 | N/A |
-| Item 4: Player ABC | N/A | N/A | N/A | 0 | 0 | N/A |
-| Item 5: Mana pool | N/A | N/A | N/A | 0 | 0 | N/A |
-| Item 6: GameState/turns | N/A | N/A | N/A | 0 | 0 | N/A |
-| Item 7: Stack | N/A | N/A | N/A | 0 | 0 | N/A |
-| Item 8: SBAs | N/A | N/A | N/A | 0 | 0 | N/A |
-| Item 9: Card classes | N/A | N/A | N/A | 0 | 0 | N/A |
-| Item 10: Casting | N/A | N/A | N/A | 0 | 0 | N/A |
-| Item 11: Triggers | N/A | N/A | N/A | 0 | 1 | N/A |
-| Item 12: Abilities | N/A | N/A | N/A | 0 | 1 | N/A |
-| Item 13: Combat | N/A | N/A | N/A | 1 | 1 | N/A |
-| Item 14: Continuous effects | N/A | N/A | N/A | 0 | 1 | N/A |
-| Item 15: Replacement effects | N/A | N/A | N/A | 0 | 1 | N/A |
-| Item 16: Game loop | N/A | N/A | N/A | 0 | 1 | N/A |
-| Item 17: test_utils | N/A | N/A | N/A | 1 | 1 | N/A |
-| Item 18: Card registry | N/A | N/A | N/A | 0 | 1 | N/A |
-| Item 19: Basic lands | N/A | N/A | N/A | 0 | 1 | N/A |
-| Item 20: Creatures | 232000 | 226000+448000 | 340000 | 0 | 1 (card accuracy) | ~2160 |
-| Item 21: Spells | 297000+600000 | 209000+381000 | 684000 | 0 | 1 (targeting+FDN) | ~2870 |
-| Item 22: Permanents | 463000+233000 | 228000+343000 | 296000 | 0 | 1 (aura/combat) | ~1870 |
-| Item 23: Cleanup | 471000+370000 | 190000+246000 | 251000 | 0 | 1 (discard+514.3a) | ~1780 |
-| Item 24: Integration | 642000+567000 | N/A | 170000 | 0 | 1 (real pipeline) | ~2070 |
-| Dir summaries | 218000 | — | — | — | — | 218 |
-| Test audit | — | 446000 | — | — | — | 446 |
+| TODO item | Implementer (s) | Tester (s) | Reviewer (s) | Test disputes | Review revisions | Duration (s) |
+|-----------|-----------------|------------|--------------|---------------|------------------|--------------|
+| Item 1: Fix Phase 1 tech debt | 287 | 123 | 141 | 0 | 1 | 551 |
+| Item 2: Benchmark scaffold + SOS fetch | 269 | 95 | 108 | 0 | 1 | 472 |
+| Item 3: Card complexity classifier | 252 | 212 | 135 | 0 | 1 (impl+tester) | 599 |
+| Item 4: Card spec generator | 282 | 132 | 172 | 0 | 1 | 586 |
+| Item 5: Template generator | 277 | 101 | 175 | 0 | 1 | 553 |
+| Item 6: Engine API docs | 226 | 189 | 125 | 0 | 1 (impl+tester) | 540 |
+| Item 7: test_utils documentation | 206 | 132 | 106 | 0 | 1 (impl+tester) | 444 |
+| Item 8: MTG rules indexer | 398 | 145 | 100 | 0 | 1 (impl+tester) | 643 |
+| Item 9: Runner CLI scaffold | 166 | 86 | 163 | 0 | 1 | 415 |
+| Item 10: Prompt templates | 255 | 81 | 55 | 0 | 1 | 391 |
+| Item 11: Agent session manager | 417 | 346 | 99 | 0 | 1 (impl+tester) | 862 |
+| Item 12: Evaluation runner | 332 | 116 | 114 | 0 | 1 | 562 |
+| Item 13: Scoring calculator | 407 | 244 | 129 | 0 | 1 (impl+tester) | 780 |
+| Item 14: Result recording | 410 | 313 | 121 | 0 | 2 (impl×2+tester) | 844 |
+| Item 15: Prototype card selection | 460 | 217 | 140 | 0 | 1 (impl+tester) | 817 |
+| Item 16: Engine extensions | 349 | 83 | 108 | 0 | 1 | 540 |
+| Dir summaries | 209 | — | — | — | — | 209 |
+| Test audit | — | 157 | — | — | — | 157 |

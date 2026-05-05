@@ -1,0 +1,17 @@
+{
+  "name": "Ennis, Debate Moderator",
+  "mana_cost": "{1}{W}",
+  "type_line": "Legendary Creature — Human Cleric",
+  "oracle_text": "When Ennis enters, exile up to one other target creature you control. Return that card to the battlefield under its owner's control at the beginning of the next end step.\nAt the beginning of your end step, if one or more cards were put into exile this turn, put a +1/+1 counter on Ennis.",
+  "power": "1",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "14",
+  "complexity_tier": "complex"
+}

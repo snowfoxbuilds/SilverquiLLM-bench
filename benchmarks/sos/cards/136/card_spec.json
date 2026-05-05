@@ -1,0 +1,19 @@
+{
+  "name": "Unsubtle Mockery",
+  "mana_cost": "{2}{R}",
+  "type_line": "Instant",
+  "oracle_text": "Unsubtle Mockery deals 4 damage to target creature. Surveil 1. (Look at the top card of your library. You may put it into your graveyard.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Surveil"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "136",
+  "complexity_tier": "medium"
+}

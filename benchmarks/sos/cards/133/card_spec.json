@@ -1,0 +1,20 @@
+{
+  "name": "Tackle Artist",
+  "mana_cost": "{3}{R}",
+  "type_line": "Creature — Orc Sorcerer",
+  "oracle_text": "Trample\nOpus — Whenever you cast an instant or sorcery spell, put a +1/+1 counter on this creature. If five or more mana was spent to cast that spell, put two +1/+1 counters on this creature instead.",
+  "power": "4",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Trample",
+    "Opus"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "133",
+  "complexity_tier": "complex"
+}

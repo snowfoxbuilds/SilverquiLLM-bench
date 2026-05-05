@@ -1,0 +1,19 @@
+{
+  "name": "Burrog Banemaker",
+  "mana_cost": "{B}",
+  "type_line": "Creature — Frog Warlock",
+  "oracle_text": "Deathtouch\n{1}{B}: This creature gets +1/+1 until end of turn.",
+  "power": "1",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Deathtouch"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "75",
+  "complexity_tier": "medium"
+}

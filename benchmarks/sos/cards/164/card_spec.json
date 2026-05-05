@@ -1,0 +1,20 @@
+{
+  "name": "Thornfist Striker",
+  "mana_cost": "{2}{G}",
+  "type_line": "Creature — Elf Druid",
+  "oracle_text": "Ward {1} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {1}.)\nInfusion — Creatures you control get +1/+0 and have trample as long as you gained life this turn.",
+  "power": "3",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Infusion",
+    "Ward"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "164",
+  "complexity_tier": "medium"
+}

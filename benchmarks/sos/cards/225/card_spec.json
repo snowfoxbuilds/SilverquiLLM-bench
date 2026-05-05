@@ -1,0 +1,18 @@
+{
+  "name": "Silverquill Charm",
+  "mana_cost": "{W}{B}",
+  "type_line": "Instant",
+  "oracle_text": "Choose one —\n• Put two +1/+1 counters on target creature.\n• Exile target creature with power 2 or less.\n• Each opponent loses 3 life and you gain 3 life.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B",
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "225",
+  "complexity_tier": "complex"
+}

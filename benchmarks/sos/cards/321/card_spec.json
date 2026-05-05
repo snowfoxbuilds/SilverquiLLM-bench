@@ -1,0 +1,19 @@
+{
+  "name": "Pensive Professor",
+  "mana_cost": "{1}{U}{U}",
+  "type_line": "Creature — Human Wizard",
+  "oracle_text": "Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.)\nWhenever one or more +1/+1 counters are put on this creature, draw a card.",
+  "power": "0",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Increment"
+  ],
+  "rarity": "rare",
+  "set_code": "sos",
+  "collector_number": "321",
+  "complexity_tier": "medium"
+}

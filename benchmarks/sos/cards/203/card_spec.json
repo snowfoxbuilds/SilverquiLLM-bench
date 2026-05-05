@@ -1,0 +1,18 @@
+{
+  "name": "Mind Roots",
+  "mana_cost": "{1}{B}{G}",
+  "type_line": "Sorcery",
+  "oracle_text": "Target player discards two cards. Put up to one land card discarded this way onto the battlefield tapped under your control.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B",
+    "G"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "203",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Artistic Process",
+  "mana_cost": "{3}{R}{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "Choose one —\n• Artistic Process deals 6 damage to target creature.\n• Artistic Process deals 2 damage to each creature you don't control.\n• Create a 3/3 blue and red Elemental creature token with flying. It gains haste until end of turn.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "108",
+  "complexity_tier": "complex"
+}

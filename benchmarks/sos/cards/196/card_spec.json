@@ -1,0 +1,21 @@
+{
+  "name": "Inkling Mascot",
+  "mana_cost": "{W}{B}",
+  "type_line": "Creature — Inkling Cat",
+  "oracle_text": "Repartee — Whenever you cast an instant or sorcery spell that targets a creature, this creature gains flying until end of turn. Surveil 1. (Look at the top card of your library. You may put it into your graveyard.)",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "B",
+    "W"
+  ],
+  "keywords": [
+    "Surveil",
+    "Repartee"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "196",
+  "complexity_tier": "medium"
+}

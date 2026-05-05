@@ -1,0 +1,19 @@
+{
+  "name": "Aberrant Manawurm",
+  "mana_cost": "{3}{G}",
+  "type_line": "Creature — Wurm",
+  "oracle_text": "Trample\nWhenever you cast an instant or sorcery spell, this creature gets +X/+0 until end of turn, where X is the amount of mana spent to cast that spell.",
+  "power": "2",
+  "toughness": "5",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Trample"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "138",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,20 @@
+{
+  "name": "Emeritus of Abundance // Regrowth",
+  "mana_cost": "{2}{G} // {1}{G}",
+  "type_line": "Creature — Elf Druid // Sorcery",
+  "oracle_text": "Vigilance\nThis creature enters prepared.\nWhenever this creature attacks, if you control eight or more lands, this creature becomes prepared.",
+  "power": "3",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Vigilance",
+    "Prepared"
+  ],
+  "rarity": "mythic",
+  "set_code": "sos",
+  "collector_number": "145",
+  "complexity_tier": "complex"
+}

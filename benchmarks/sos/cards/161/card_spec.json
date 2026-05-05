@@ -1,0 +1,19 @@
+{
+  "name": "Snarl Song",
+  "mana_cost": "{5}{G}",
+  "type_line": "Sorcery",
+  "oracle_text": "Converge — Create two 0/0 green and blue Fractal creature tokens. Put X +1/+1 counters on each of them and you gain X life, where X is the number of colors of mana spent to cast this spell.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Converge"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "161",
+  "complexity_tier": "complex"
+}

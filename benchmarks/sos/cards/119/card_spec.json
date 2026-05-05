@@ -1,0 +1,17 @@
+{
+  "name": "Impractical Joke",
+  "mana_cost": "{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "Damage can't be prevented this turn. Impractical Joke deals 3 damage to up to one target creature or planeswalker.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "119",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Zimone's Experiment",
+  "mana_cost": "{3}{G}",
+  "type_line": "Sorcery",
+  "oracle_text": "Look at the top five cards of your library. You may reveal up to two creature and/or land cards from among them, then put the rest on the bottom of your library in a random order. Put all land cards revealed this way onto the battlefield tapped and put all creature cards revealed this way into your hand.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "169",
+  "complexity_tier": "complex"
+}

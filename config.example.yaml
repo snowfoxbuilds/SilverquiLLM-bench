@@ -1,0 +1,23 @@
+# SilverquiLLM Benchmark Configuration
+# Copy to config.yaml and adjust for your run.
+
+name: "SOS Benchmark Run"
+set_code: "SOS"
+model_name: "claude-sonnet-4-20250514"
+model_provider: "anthropic"
+
+# Model parameters
+max_context: 200000
+temperature: 0.0
+
+# Agent configuration
+agent_tool: "opencode"
+max_test_rounds: 3
+timeout_per_card: 300
+disable_web_search: true
+
+# Paths (relative to repo root)
+card_specs_dir: "benchmarks/sos/cards"
+engine_docs_path: "docs/engine_api.md"
+# template_dir: "benchmark/templates"  # uncomment when templates directory exists
+output_dir: "benchmarks/sos/results"

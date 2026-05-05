@@ -1,0 +1,19 @@
+{
+  "name": "Foolish Fate",
+  "mana_cost": "{2}{B}",
+  "type_line": "Instant",
+  "oracle_text": "Destroy target creature.\nInfusion — If you gained life this turn, that creature's controller loses 3 life.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Infusion"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "83",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,15 @@
+{
+  "name": "Sundown Pass",
+  "mana_cost": "",
+  "type_line": "Land",
+  "oracle_text": "This land enters tapped unless you control two or more other lands.\n{T}: Add {R} or {W}.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "sos",
+  "collector_number": "305",
+  "complexity_tier": "medium"
+}

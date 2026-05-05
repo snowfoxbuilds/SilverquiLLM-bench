@@ -1,0 +1,19 @@
+{
+  "name": "Pestbrood Sloth",
+  "mana_cost": "{3}{G}",
+  "type_line": "Creature — Plant Sloth",
+  "oracle_text": "Reach\nWhen this creature dies, create two 1/1 black and green Pest creature tokens with \"Whenever this token attacks, you gain 1 life.\"",
+  "power": "4",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Reach"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "157",
+  "complexity_tier": "medium"
+}

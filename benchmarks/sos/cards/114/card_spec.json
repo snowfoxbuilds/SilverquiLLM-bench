@@ -1,0 +1,19 @@
+{
+  "name": "Expressive Firedancer",
+  "mana_cost": "{1}{R}",
+  "type_line": "Creature — Human Sorcerer",
+  "oracle_text": "Opus — Whenever you cast an instant or sorcery spell, this creature gets +1/+1 until end of turn. If five or more mana was spent to cast that spell, this creature also gains double strike until end of turn.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Opus"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "114",
+  "complexity_tier": "complex"
+}

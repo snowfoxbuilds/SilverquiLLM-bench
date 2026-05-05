@@ -1,0 +1,19 @@
+{
+  "name": "Summoned Dromedary",
+  "mana_cost": "{3}{W}",
+  "type_line": "Creature — Spirit Camel",
+  "oracle_text": "Vigilance\n{1}{W}: Return this card from your graveyard to your hand. Activate only as a sorcery.",
+  "power": "4",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Vigilance"
+  ],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "37",
+  "complexity_tier": "medium"
+}

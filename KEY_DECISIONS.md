@@ -8,11 +8,11 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: Type checkers need the marker inside the installed package, not at repo root.
 - **Impact**: engine/, cards/, pyproject.toml
 
-## Python version: requires-python >= 3.10
-- **Context**: TODO specified Python >=3.11, but build environment only has Python 3.10.12.
-- **Decision**: Set `requires-python = ">=3.10"` in pyproject.toml. ruff.toml target-version remains py311.
-- **Reasoning**: pip install -e . fails if requires-python exceeds available Python. Pragmatic deviation.
-- **Impact**: pyproject.toml
+## Python version: requires-python >= 3.12
+- **Context**: TODO specified Python >=3.11, but build environment only has Python 3.10.12. Updated in Phase 2 to target Python 3.12.
+- **Decision**: Set `requires-python = ">=3.12"` in pyproject.toml. ruff.toml target-version set to py312. mypy python_version set to 3.12.
+- **Reasoning**: Align all tooling on a single Python version. 3.12 is the current stable release.
+- **Impact**: pyproject.toml, ruff.toml
 
 ## Zone containers use identity-based matching (not equality)
 - **Context**: Zones store GameObject references. Two distinct objects with same field values must not be confused.

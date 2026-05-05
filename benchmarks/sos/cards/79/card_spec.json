@@ -1,0 +1,17 @@
+{
+  "name": "Dissection Practice",
+  "mana_cost": "{B}",
+  "type_line": "Instant",
+  "oracle_text": "Target opponent loses 1 life and you gain 1 life.\nUp to one target creature gets +1/+1 until end of turn.\nUp to one target creature gets -1/-1 until end of turn.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "79",
+  "complexity_tier": "complex"
+}

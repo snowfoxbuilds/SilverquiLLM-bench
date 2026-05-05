@@ -1,0 +1,18 @@
+{
+  "name": "Killian's Confidence",
+  "mana_cost": "{W}{B}",
+  "type_line": "Sorcery",
+  "oracle_text": "Target creature gets +1/+1 until end of turn. Draw a card.\nWhenever one or more creatures you control deal combat damage to a player, you may pay {W/B}. If you do, return this card from your graveyard to your hand.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B",
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "197",
+  "complexity_tier": "medium"
+}

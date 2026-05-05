@@ -1,0 +1,19 @@
+{
+  "name": "Adventurous Eater // Have a Bite",
+  "mana_cost": "{2}{B} // {B}",
+  "type_line": "Creature — Human Warlock // Sorcery",
+  "oracle_text": "This creature enters prepared. (While it's prepared, you may cast a copy of its spell. Doing so unprepares it.)",
+  "power": "3",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Prepared"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "72",
+  "complexity_tier": "complex"
+}

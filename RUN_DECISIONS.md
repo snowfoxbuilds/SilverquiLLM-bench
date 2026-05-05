@@ -2,58 +2,35 @@
 
 Decisions made during this run only. Before the PR, migrate anything worth preserving long-term into `KEY_DECISIONS.md`.
 
-## Test failure: Item 1 — Project scaffold
-- **Failing tests**: test_requires_python_at_least_3_11
-- **Tester's intent**: Verify requires-python is >=3.11 per the TODO spec
-- **Implementer's approach**: Relaxed to >=3.10 because the build environment only has Python 3.10.12; pip install -e . would fail with >=3.11
-- **Coordinator decision**: fix tests
-- **Reasoning**: The environment constraint is real — pip install -e . fails if requires-python exceeds the available Python version. The ruff.toml target-version is still py311 for forward-looking linting. This is a pragmatic deviation.
 
-## Disagreement: Item 1 — Project scaffold (review round)
-- **Reviewer comment 1 (strict)**: Tests make `pytest --co` return non-zero items, violating scaffold testability criterion
-- **Coordinator decision**: reject reviewer — the "0 items" criterion described the scaffold state before tests exist; adding tests is expected behavior
-- **Reasoning**: Every TODO item gets tests. The testability line was a one-time verification step, not a permanent invariant.
-
-- **Reviewer comment 2 (strict)**: `py.typed` at repo root isn't PEP 561 compliant; should be in each package directory
-- **Coordinator decision**: accept reviewer — move `py.typed` into `engine/` and `cards/`
-- **Reasoning**: Technically correct for type checker discovery
-
-- **Reviewer comment 3 (strict)**: Tests use `tomli` fallback on Python 3.10 but it's not declared as a dependency
-- **Coordinator decision**: accept reviewer — fix the test to handle this properly
-- **Reasoning**: Tests shouldn't depend on undeclared packages
-
-## Disagreement: Item 10 — Casting pipeline (priority check)
-- **Reviewer comment (strict)**: cast_spell should verify player is game.priority_player before allowing a cast.
-- **Implementer justification**: Priority enforcement belongs in priority_loop (stack.py), not in cast_spell. Existing tests expect non-priority players can cast instants when called directly. cast_spell handles mechanics; priority_loop handles turn structure.
+## Disagreement: Item 3 — Card complexity classifier (keyword-only tier)
+- **Reviewer comment (strict)**: Test encodes wrong heuristic — keyword-only creature should be "simple" not "trivial", citing "Single keyword or one straightforward ability" in Simple tier.
+- **Implementer justification**: The Trivial tier definition explicitly includes "just keyword abilities" — a creature with only keywords (e.g., Flying) is trivial.
 - **Coordinator decision**: accept implementer
-- **Reasoning**: Layered responsibility — priority_loop gates who can act, cast_spell executes the cast. Adding a priority check to cast_spell would duplicate logic and create coupling. All real game flow goes through priority_loop.
-- **Impact**: engine/casting.py — no priority check added
+- **Reasoning**: The TODO text under Trivial says "No rules text or just keyword abilities, vanilla creatures, basic lands." The word "just" distinguishes keyword-only cards from cards with substantive abilities. The Simple tier's "single keyword" refers to cards that also have a non-keyword ability. The test correctly asserts keyword-only → trivial.
+- **Impact**: benchmark/card_classifier.py, tests/test_card_classifier.py — keyword-only creatures remain trivial tier.
 
+## Test failure potential: Item 3 — Targeted spells classification
+- **Issue**: Targeted spells falling through to "simple" instead of "medium"
+- **Coordinator decision**: fix implementation (targeted spells should be "medium") and fix the test that was too permissive
+- **Reasoning**: TODO explicitly lists "targeting" as a Medium-tier signal.
 
-## Disagreement: Item 12 — Mana ability timing validation
-- **Reviewer comment (strict)**: Mana abilities skip timing validation entirely; any player can fire a mana ability at arbitrary times by passing `is_mana_ability=True`.
-- **Implementer justification**: Priority enforcement is handled by `priority_loop`, not individual ability/spell functions. This is consistent with `cast_spell` which also doesn't check priority.
+## Spec deviation: Item 13 — Scoring calculator discrimination/difficulty granularity
+- **TODO spec expected**: "variance in pass rates across agents' implementations for each test" and "fraction of tests passed by some but not all agents" — per-test granularity.
+- **Actual codebase state**: `EvalResult` from item 12 only stores aggregate counts (`blind_passed`, `blind_failed`, `blind_total`), not per-test pass/fail vectors. Per-test discrimination is impossible with the current data model.
+- **What was implemented instead**: Per-card approximation using suite-level pass ratios. This is the best possible with the current `EvalResult` contract.
+- **Impact**: `benchmark/scorer.py` — discrimination_score and difficulty_calibration are card-level approximations. When `EvalResult` is extended with per-test vectors, these metrics should be updated.
+
+## Disagreement: Item 15 — Gap analysis scope
+- **Reviewer comment (strict)**: analyze_engine_gaps should always check all 4 mechanics (Prepared, Converge, Miracle, Opus) regardless of selected cards.
+- **Implementer justification**: Function contract takes `cards` as input, scoping analysis to those cards' mechanics. Test `test_no_gaps_for_vanilla_cards` asserts `[]` for vanilla cards. Improved card selection now scores for mechanic coverage, so all 4 mechanics are naturally represented.
 - **Coordinator decision**: accept implementer
-- **Reasoning**: Per KEY_DECISIONS #5, priority enforcement belongs in `priority_loop`. Both `cast_spell` and `activate_ability` are low-level functions called within the priority loop. Adding priority checks here would duplicate logic and contradict the established architecture.
-- **Impact**: `engine/abilities.py` — mana ability activation remains without priority check, consistent with casting pipeline.
+- **Reasoning**: The function's contract is to analyze gaps for provided cards. The improved tier-scoring ensures complex/expert selections exercise Prepared/Converge/Miracle/Opus, so the prototype set naturally covers all mechanics. Always checking all 4 regardless of input would change the function's semantics.
+- **Impact**: benchmark/prototype.py — gap analysis remains card-scoped.
 
-## Test failure: Item 13 — Combat system
-- **Failing tests**: TestCombatIntegration::test_first_strike_kills_before_normal_damage
-- **Tester's intent**: Verify that a first-strike creature kills its blocker before the blocker deals normal damage back.
-- **Implementer's approach**: First-strike sub-step exists but likely processes all creatures' damage rather than only first/double strike creatures.
-- **Coordinator decision**: fix implementation
-- **Reasoning**: The MTG rule is clear — only first strike and double strike creatures deal damage in the first-strike damage step. Non-first-strike creatures deal damage in the normal damage step. The test is correct.
-
-## Disagreement: Item 13 — Combat not wired into turn execution
-- **Reviewer comment (strict)**: Combat helpers are never called from `run_turn()`, so combat never happens during normal gameplay.
-- **Implementer justification**: Item 13 is about implementing the combat system itself. Full game loop wiring is Item 16.
-- **Coordinator decision**: accept implementer (defer to Item 16)
-- **Reasoning**: The TODO text says "Implement declare attackers → declare blockers → damage → end combat" — focused on the combat system. Item 16 ("Game setup, helper actions, full game loop") explicitly covers wiring everything together. Wiring combat into `run_turn()` now would prematurely couple unfinished systems.
-- **Impact**: Combat functions exist but are not auto-called from `run_turn()` until Item 16.
-
-## Disagreement: Item 14 — remove_expired not called in turn flow
-- **Reviewer comment (strict)**: Duration-based effects never expire because `remove_expired()` is never called during turn progression.
-- **Implementer justification**: Item 14 implements the effects system. Turn/cleanup wiring is Item 23 ("End-of-turn cleanup and damage clearing").
-- **Coordinator decision**: accept implementer (defer to Item 23)
-- **Reasoning**: Same pattern as combat wiring (deferred to Item 16). Item 23 explicitly covers cleanup. The effect system itself is correct; the integration point is a later item.
-- **Impact**: Duration-based effects won't auto-expire until Item 23 wires cleanup.
+## Disagreement: Item 16 — Converge generic mana choice
+- **Reviewer comment (strict)**: cast_spell() doesn't let the caster choose how generic mana is spent, so Converge color count is wrong when multiple payment mixes exist.
+- **Implementer justification**: N/A (no disagreement filed)
+- **Coordinator decision**: Accept as known limitation, add # TODO comment
+- **Reasoning**: The TODO explicitly says "Do NOT over-engineer: only implement what the 5 prototype cards require. Leave stubs with # TODO for unused branches." Supporting player mana choice for generic costs would require significant casting pipeline changes beyond prototype scope. The auto-pay correctly records colors for the common case. Full mana choice support is a Phase 3 concern.
+- **Impact**: engine/casting.py — Converge color count may be suboptimal with generic mana.

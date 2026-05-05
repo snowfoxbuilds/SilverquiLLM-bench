@@ -1,0 +1,17 @@
+{
+  "name": "Biblioplex Tomekeeper",
+  "mana_cost": "{4}",
+  "type_line": "Artifact Creature — Construct",
+  "oracle_text": "When this creature enters, choose up to one —\n• Target creature becomes prepared. (Only creatures with prepare spells can become prepared.)\n• Target creature becomes unprepared.",
+  "power": "3",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [],
+  "keywords": [
+    "Prepared"
+  ],
+  "rarity": "common",
+  "set_code": "sos",
+  "collector_number": "247",
+  "complexity_tier": "complex"
+}

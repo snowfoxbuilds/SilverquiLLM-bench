@@ -1,0 +1,20 @@
+{
+  "name": "Maelstrom Artisan // Rocket Volley",
+  "mana_cost": "{1}{R}{R} // {1}{R}",
+  "type_line": "Creature — Minotaur Sorcerer // Sorcery",
+  "oracle_text": "Haste\nThis creature enters prepared. (While it's prepared, you may cast a copy of its spell. Doing so unprepares it.)",
+  "power": "3",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Haste",
+    "Prepared"
+  ],
+  "rarity": "rare",
+  "set_code": "sos",
+  "collector_number": "122",
+  "complexity_tier": "complex"
+}

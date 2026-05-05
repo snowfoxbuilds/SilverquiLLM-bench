@@ -4,14 +4,14 @@ Scope: Fix Phase 1 bugs → build benchmark runner harness → validate with ~5 
 
 ---
 
-- [ ] **Fix Phase 1 tech debt**
+- [x] **Fix Phase 1 tech debt**
   Detail: Three non-blocking issues from PR review that should be cleaned up before new code is added.
 
   1. **Python version alignment**: `pyproject.toml` says `requires-python = ">=3.10"` but `ruff.toml` targets `py311`. Set both to Python 3.12: change `pyproject.toml` to `requires-python = ">=3.12"` and `ruff.toml` to `target-version = "py312"`. Update KEY_DECISION #2 accordingly.
   2. **Remove backward-compat aliases**: In `cards/foundations/simple_spells.py`, aliases like `LightningBolt = BurstLightning` map non-FDN card names to FDN cards with different stats (e.g., Lightning Bolt does 3 damage but Burst Lightning does 2). Remove all such aliases. Update any test imports that reference removed aliases to use the correct FDN card name.
   3. **Cleanup discard fallback warning**: In `engine/turn.py`, the cleanup step catches `ScriptExhaustedError` and silently discards `hand[-1]` (KEY_DECISION #21). Add `import warnings` and emit `warnings.warn(f"ScriptExhaustedError during cleanup discard for {player.name}; auto-discarding {card.name}")` so test authors know their script was incomplete.
   - Testability: `ruff check .` passes after version change. Removed aliases cause `ImportError` if any test still references them (fix those tests). Warning is captured by `pytest -W error::UserWarning` in a dedicated test.
-- [ ] **Benchmark package scaffold + SOS data fetch**
+- [x] **Benchmark package scaffold + SOS data fetch**
   Detail: Create the `benchmark/` runner package and the `benchmarks/sos/` set directory, then fetch Secrets of Strixhaven card data.
 
   - Create `benchmark/` package (set-agnostic runner code) with `__init__.py`.
@@ -20,7 +20,7 @@ Scope: Fix Phase 1 bugs → build benchmark runner harness → validate with ~5 
   - Extend the existing `cards/scryfall.py` `fetch_set()` function to fetch set code `"sos"`. Cache result to `benchmarks/sos/data/sos.json`. If `fetch_set` already works generically (it should — it takes a set_code parameter), just run it and commit the cached data.
   - Log stats after fetch: total card count, breakdown by card type (creature, instant, sorcery, enchantment, artifact, planeswalker, land), rarity distribution, and list of cards using new mechanics (search oracle text for "Prepared", "Converge", "Miracle", "Opus").
   - Testability: `benchmarks/sos/data/sos.json` exists, is valid JSON, every card has `name`, `mana_cost_str`, `type_line`, `oracle_text` fields. `import benchmark` succeeds.
-- [ ] **Card complexity classifier**
+- [x] **Card complexity classifier**
   Detail: Classify each SOS card into a complexity tier for weighted scoring.
 
   - File: `benchmark/card_classifier.py`
@@ -35,7 +35,7 @@ Scope: Fix Phase 1 bugs → build benchmark runner harness → validate with ~5 
   - Concrete signals: `len(oracle_text)`, count of `\n` in oracle text (proxy for ability count), presence of "target" keyword, presence of new SOS mechanic keywords, card type (planeswalker → Expert floor), keyword count.
   - Output: `classify_set` writes `benchmarks/sos/data/sos_classified.json` — array of `{"name": ..., "collector_number": ..., "tier": ..., "weight": ...}`.
   - Testability: every SOS card gets a tier. Distribution is non-degenerate (no single tier has >60% of cards). A known vanilla creature classifies as "trivial". A known planeswalker classifies as "expert".
-- [ ] **Card spec generator**
+- [x] **Card spec generator**
   Detail: Generate per-card JSON spec files that agents receive as context.
 
   - File: `benchmark/card_spec.py`
@@ -63,7 +63,7 @@ Scope: Fix Phase 1 bugs → build benchmark runner harness → validate with ~5 
 
 - Source data from `benchmarks/sos/data/sos.json` (Scryfall cache) + `benchmarks/sos/data/sos_classified.json` (classifier output).
 - Testability: generate specs for all SOS cards, verify every field is non-null (except loyalty for non-planeswalkers and power/toughness for non-creatures). JSON is valid and parseable.
-- [ ] **Template generator**
+- [x] **Template generator**
   Detail: Generate the Python skeleton file each agent starts from, per [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) cross-eval spec.
 
   - File: `benchmark/template_gen.py`
@@ -78,7 +78,7 @@ Scope: Fix Phase 1 bugs → build benchmark runner harness → validate with ~5 
     - Stub `power`/`toughness` for creatures, `starting_loyalty` for planeswalkers
   - Per KEY_DECISION #6: subclass constructors union mandatory CardType. Template should follow the same pattern (e.g., `card_types = [CardType.CREATURE]` not empty).
   - Testability: generate template for a creature, instant, and planeswalker spec. Each template `exec()`s without error. Class name matches expected PascalCase. Base class is correct.
-- [ ] **Engine API docs auto-generation**
+- [x] **Engine API docs auto-generation**
   Detail: Generate `engine_api.md` from engine source code for agent consumption.
 
   - File: `benchmark/docs_gen.py`
@@ -92,7 +92,7 @@ Scope: Fix Phase 1 bugs → build benchmark runner harness → validate with ~5 
   - Target: **under 5,000 tokens**. Count tokens using `len(text.split()) * 1.3` as approximation. If over budget, trim docstrings and omit private helper classes.
   - Write output to `docs/engine_api.md`.
   - Testability: generated doc mentions all public engine classes (GameState, CardImpl, Creature, Stack, etc.). Token count < 5,000. Markdown renders without errors.
-- [ ] **test_utils documentation for agents**
+- [x] **test_utils documentation for agents**
   Detail: Generate `test_utils.md` describing the test helper API that benchmark agents must use.
 
   - File: `benchmark/test_utils_doc.py` (or hand-write `docs/test_utils.md`)
@@ -115,7 +115,7 @@ class TestCardName:
 - Target: **under 2,000 tokens**.
 - Write output to `docs/test_utils.md`.
 - Testability: all test_utils public functions appear in the doc. Example code is syntactically valid Python.
-- [ ] **MTG rules indexer + rules_**[**overview.md**](http://overview.md/)
+- [x] **MTG rules indexer + rules_**[**overview.md**](http://overview.md/)
   Detail: Build a searchable index of MTG comprehensive rules and a compact overview document.
 
   - File: `benchmark/rules_skill.py`
@@ -125,7 +125,7 @@ class TestCardName:
   - Generate `benchmarks/sos/data/rules_overview.md`: high-level summary of MTG rules (~1,000 tokens). Cover: turn structure, casting, stack, combat, zones, targeting, keywords, SBAs. This is always in agent context.
   - The `lookup_rule` function will be exposed as an OpenCode tool in the agent session manager (next items). For now, just build the indexer and verify it works standalone.
   - Testability: `lookup_rule(index, "flying")` returns text containing "702.9" or similar. `lookup_rule(index, "702.2")` returns the first strike rule. `benchmarks/sos/data/rules_overview.md` exists and is under 1,000 tokens.
-- [ ] **Runner CLI scaffold + YAML config**
+- [x] **Runner CLI scaffold + YAML config**
   Detail: Create the benchmark CLI entry point and configuration loading.
 
   - File: `benchmark/cli.py` — use `click` for CLI framework.
@@ -159,7 +159,7 @@ class BenchmarkConfig:
 
 - Include a `config.example.yaml` in the repo root.
 - Testability: `benchmark --help` prints usage. `benchmark cards --set SOS` lists cards with tiers. `load_config` raises `ValueError` on missing required fields.
-- [ ] **Prompt templates module**
+- [x] **Prompt templates module**
   Detail: Implement the parameterized prompt templates from [BENCHMARK-RUNNER.md](http://benchmark-runner.md/).
 
   - File: `benchmark/prompts.py`
@@ -189,7 +189,7 @@ class BenchmarkConfig:
   - Error handling per [BENCHMARK-RUNNER.md](http://benchmark-runner.md/): timeout → record "timeout", syntax error → feed to correction round, no output → record "no_output", wrong files modified → discard + record "violation".
   - **Note**: actual OpenCode subprocess invocation depends on OpenCode's CLI/API interface. Implement the workspace setup and config generation concretely; the OpenCode invocation can use `subprocess.run` with the configured command. If OpenCode's exact CLI flags aren't known, implement a `_run_opencode(self, prompt, workspace) -> str` method with a clear interface that can be swapped.
   - Testability: `setup_workspace` creates temp dir with all expected files. `configure_opencode` returns dict with deny-web permission. Mock the OpenCode subprocess to test the full flow: setup → blind → test-informed → cleanup. Verify token recording populates correctly.
-- [ ] **Evaluation runner**
+- [x] **Evaluation runner**
   Detail: Run implementations against test suites for self-eval and cross-eval.
 
   - File: `benchmark/evaluator.py`
@@ -201,7 +201,7 @@ class BenchmarkConfig:
   - Implementation swap mechanism: copy the target `impl.py` to a well-known path (`card_impl.py`) in the test execution directory. Tests import from `card_impl` (per [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) cross-eval spec), so swapping the file swaps the implementation.
   - Subprocess isolation: each pytest run in its own subprocess with `timeout` seconds limit. Capture stdout+stderr. Parse pytest output for `X passed, Y failed` pattern.
   - Testability: create two mock implementations (one correct, one buggy) and a test file. Run cross-eval. Verify the correct impl passes more tests. Verify timeout handling.
-- [ ] **Scoring calculator**
+- [x] **Scoring calculator**
   Detail: Compute all metrics from [SCORING.md](http://scoring.md/) across three independent categories.
 
   - File: `benchmark/scorer.py`
@@ -215,7 +215,7 @@ class BenchmarkConfig:
   - Difficulty calibration: fraction of tests passed by some but not all agents.
   - Function: `generate_leaderboard(scores: Leaderboard) -> str` returns Markdown tables matching [SCORING.md](http://scoring.md/) format.
   - Testability: create mock eval results for 3 agents × 5 cards. Verify `weighted_score` matches hand calculation. Verify `improvement_delta` = Cat2 - Cat1. Verify discrimination score is 0 when all agents have identical pass rates.
-- [ ] **Result recording + output artifacts**
+- [x] **Result recording + output artifacts**
   Detail: Write all benchmark results to a per-run directory structure under `benchmarks/sos/results/` (per [BENCHMARK-RUNNER.md](http://benchmark-runner.md/)). Each run gets its own folder so results from different models or re-runs never collide.
 
   - File: `benchmark/results.py`
@@ -249,7 +249,7 @@ benchmarks/sos/results/
 - `result.json` (per card, inside each run) schema matches the result record from [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) (card_id, agent, complexity_tier, implementation metrics, self_eval, cross_eval, audited_eval).
 - `cross_eval_matrix.json`: `{"card_id": {"impl_agent": {"test_agent": {"passed": N, "failed": M}}}}`. For single-model runs this is empty.
 - Testability: call `init_results_dir` twice with different run names, verify separate directories. Call `save_card_result` with mock data, verify all files exist and JSON is valid. Call `save_aggregates`, verify `summary.json` has correct card count and `leaderboard.md` matches scorer output.
-- [ ] **Prototype card selection + engine gap analysis**
+- [x] **Prototype card selection + engine gap analysis**
   Detail: Select ~5 SOS cards for the prototype run and identify engine gaps.
 
   - File: `benchmark/prototype.py`
@@ -267,7 +267,7 @@ benchmarks/sos/results/
   - Write selections to `benchmarks/sos/prototype_cards.json` with rationale.
   - Write gap analysis to `benchmarks/sos/prototype_gaps.md`.
   - Testability: exactly 5 cards selected, one per tier. `prototype_gaps.md` lists specific missing engine features (or "none" if covered).
-- [ ] **Minimal engine extensions for SOS prototype mechanics**
+- [x] **Minimal engine extensions for SOS prototype mechanics**
   Detail: Implement the minimum engine changes needed to support the 5 prototype cards. Scope depends on gap analysis from previous item.
 
   - Likely extensions (implement only what the prototype cards actually need):
