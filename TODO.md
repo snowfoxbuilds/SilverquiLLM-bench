@@ -150,7 +150,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
     8. Print paths to written files: `leaderboard.md`, `summary.json`.
   Testability: Create a mock `results_dir` containing `results.json` with eval data. `benchmark score --results-dir ...` prints leaderboard. `leaderboard.md` and `summary.json` are written.
 
-- [ ] **Create integration test helpers: mock OpenCode and test fixtures**
+- [x] **Create integration test helpers: mock OpenCode and test fixtures**
   Detail: Create `tests/benchmark/test_helpers.py` with reusable fixtures for the full-pipeline integration test.
 
   File: `tests/benchmark/test_helpers.py`

@@ -78,3 +78,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `benchmark/cli.py` — Replaced score stub with full implementation: --tier-data/--set options, load classified JSON, build tier map, compute_scores, generate_leaderboard, save_aggregates, print output paths; normalized set_code with .lower()
 - `benchmarks/sos/data/sos_classified.json` — Restored original dataset from main branch (was incorrectly replaced with test fixture)
+
+## Item 9: Create integration test helpers
+
+### Tests
+- (no pre-written tests — this item creates helper utilities for future integration tests)
+
+### Implementation
+- `tests/benchmark/__init__.py` — Package init for benchmark test subpackage
+- `tests/benchmark/test_helpers.py` — Mock OpenCode callables (blind + test-informed) and BenchmarkConfig factory for integration tests
