@@ -49,7 +49,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
 
   Testability: Create a temp directory with two `card_spec.json` files. `load_card_specs` finds both. `filter_by_collectors` with one number returns one card. `filter_by_collectors` with unknown number raises `ValueError`.
 
-- [ ] **Add ****`--cards`****, ****`--prototype`****, and ****`--dry-run`**** flags to ****`benchmark run`**
+- [x] **Add ****`--cards`****, ****`--prototype`****, and ****`--dry-run`**** flags to ****`benchmark run`**
   Detail: In `benchmark/cli.py`, extend the `run` command with filtering and validation flags.
 
   Changes to `benchmark/cli.py`:

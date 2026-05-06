@@ -11,6 +11,7 @@ from pathlib import Path
 
 import click
 
+from benchmark.card_loader import filter_by_collectors, filter_by_prototype, load_card_specs
 from benchmark.config import load_config
 
 
@@ -25,22 +26,55 @@ def main() -> None:
 
 @main.command()
 @click.option("--config", "config_path", required=True, help="Path to YAML config file.")
-def run(config_path: str) -> None:
-    """Run benchmark (stub: load config, print card count)."""
+@click.option("--cards", "card_ids", default=None, help="Comma-separated collector numbers to run.")
+@click.option("--prototype", "use_prototype", is_flag=True, default=False, help="Use prototype card selection.")
+@click.option("--dry-run", "dry_run", is_flag=True, default=False, help="Print selected cards and exit.")
+def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bool) -> None:
+    """Run benchmark against selected cards."""
+    if card_ids and use_prototype:
+        raise click.UsageError("--cards and --prototype are mutually exclusive.")
+
     cfg = load_config(config_path)
 
-    # Count cards from classified data
-    data_file = _BENCHMARKS_DIR / cfg.set_code.lower() / "data" / f"{cfg.set_code.lower()}_classified.json"
-    if not data_file.exists():
-        click.echo(f"No classified data found for set '{cfg.set_code}' at {data_file}", err=True)
+    # Determine card_specs_dir: use config value or default convention
+    specs_dir = cfg.card_specs_dir
+    if not specs_dir:
+        specs_dir = str(_BENCHMARKS_DIR / cfg.set_code.lower() / "cards")
+
+    try:
+        specs = load_card_specs(specs_dir)
+    except FileNotFoundError:
+        raise click.ClickException(f"Card specs directory not found: {specs_dir}")
+
+    if not specs:
+        click.echo(f"No card specs found in {specs_dir}", err=True)
         raise SystemExit(1)
 
-    with open(data_file) as f:
-        cards = json.load(f)
-    card_count = len(cards)
+    # Apply filters
+    if card_ids:
+        collector_numbers = [c.strip() for c in card_ids.split(",")]
+        try:
+            specs = filter_by_collectors(specs, collector_numbers)
+        except ValueError as exc:
+            raise click.UsageError(str(exc))
+    elif use_prototype:
+        prototype_path = str(_BENCHMARKS_DIR / cfg.set_code.lower() / "prototype_cards.json")
+        try:
+            specs = filter_by_prototype(specs, prototype_path)
+        except (ValueError, FileNotFoundError) as exc:
+            raise click.ClickException(f"Prototype filter error: {exc}")
 
+    # Print summary
     click.echo(f"Config loaded: {cfg.name}")
-    click.echo(f"Cards: {card_count}")
+    click.echo(f"Cards: {len(specs)}")
+    for spec in specs:
+        name = spec.get("name", "???")
+        tier = spec.get("tier", "unknown")
+        click.echo(f"  [{tier}] {name}")
+
+    if dry_run:
+        click.echo(f"Dry run complete. {len(specs)} cards selected.")
+        return
 
 
 @main.command()

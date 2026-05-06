@@ -28,3 +28,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `benchmark/card_loader.py` — New module with load_card_specs, load_prototype_cards, filter_by_collectors, and filter_by_prototype utilities for CLI card selection; improved docstring for load_prototype_cards
+
+## Item 4: Add --cards, --prototype, and --dry-run flags to benchmark run
+
+### Tests
+- `tests/test_cli_run_flags.py` — 9 tests covering --dry-run, --cards, --prototype, mutual exclusion, and error handling
+- `tests/test_cli_config.py` — existing CLI tests (31 passing, no regressions)
+
+### Implementation
+- `benchmark/cli.py` — Added --cards, --prototype, --dry-run flags; replaced classified-data loading with card_loader functions; wrapped load_card_specs/filter_by_collectors/filter_by_prototype in try/except to surface CLI errors
