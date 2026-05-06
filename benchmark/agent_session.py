@@ -352,7 +352,7 @@ class AgentSession:
         BlindResult
         """
         prompt = blind_implementation_prompt(self.card_spec)
-        engine_snapshot = _snapshot_all_protected(_REPO_ROOT)
+        protected_snapshot = _snapshot_all_protected(_REPO_ROOT)
         start = time.monotonic()
 
         try:
@@ -398,7 +398,9 @@ class AgentSession:
             )
 
         # Check for violations (writing outside workspace)
-        if _check_violations(workspace, before=engine_snapshot):
+        violations = _check_violations(workspace, before=protected_snapshot)
+        if violations:
+            logger.warning("Violations detected during blind implementation: %s", violations)
             return BlindResult(
                 impl_path=None,
                 tokens=_estimate_tokens(output),
@@ -472,6 +474,8 @@ class AgentSession:
         for round_num in range(1, self.config.max_test_rounds + 1):
             iterations = round_num
 
+            protected_snapshot = _snapshot_all_protected(_REPO_ROOT)
+
             try:
                 output = self._run_opencode(prompt, workspace)
             except subprocess.TimeoutExpired:
@@ -486,10 +490,30 @@ class AgentSession:
                     status="timeout",
                 )
 
+            # Update metrics for this round before checking violations
             round_tokens = _estimate_tokens(output)
             total_tokens += round_tokens
             peak_context = max(peak_context, _estimate_tokens(prompt + output))
             rules_lookups += _count_rules_lookups(output)
+
+            # Check for violations after each agent invocation
+            violations = _check_violations(workspace, before=protected_snapshot)
+            if violations:
+                logger.warning(
+                    "Violations detected during test-informed round %d: %s",
+                    round_num,
+                    violations,
+                )
+                return TestInformedResult(
+                    impl_path=card_impl_path if card_impl_path.exists() else None,
+                    tests_path=workspace / "tests.py" if (workspace / "tests.py").exists() else None,
+                    iterations=iterations,
+                    tokens=total_tokens,
+                    runtime_seconds=time.monotonic() - start,
+                    peak_context=peak_context,
+                    rules_lookups=rules_lookups,
+                    status="violation",
+                )
 
             # Check for test file
             tests_path = workspace / "tests.py"

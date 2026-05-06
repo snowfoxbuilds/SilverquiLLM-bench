@@ -20,7 +20,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
     - Continue to use `logger.warning` for each violation found.
   - Keep `_snapshot_mtimes` unchanged (still used internally).
   - Testability: Unit test with a temp directory — create a "before" snapshot, add a new file to a protected dir and modify an existing one, verify `_check_violations` returns two violation strings. Verify empty list when nothing changed. Verify workspace-internal changes are NOT flagged.
-- [ ] **Wire enhanced violation checks into both agent run methods**
+- [x] **Wire enhanced violation checks into both agent run methods**
   Detail: In `benchmark/agent_session.py`, update `run_blind_implementation` and `run_test_informed` to use the expanded `_check_violations`.
 
   Changes to `run_blind_implementation`:
