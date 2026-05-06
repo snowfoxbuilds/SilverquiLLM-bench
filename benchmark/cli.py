@@ -17,7 +17,8 @@ from benchmark.agent_session import AgentSession
 from benchmark.card_loader import filter_by_collectors, filter_by_prototype, load_card_specs
 from benchmark.config import BenchmarkConfig, load_config
 from benchmark.evaluator import run_self_eval_flat
-from benchmark.results import init_results_dir, save_card_result, save_run_summary
+from benchmark.results import init_results_dir, save_aggregates, save_card_result, save_run_summary
+from benchmark.scorer import compute_scores, generate_leaderboard
 from benchmark.run_utils import _session_results_to_dicts
 
 
@@ -330,10 +331,48 @@ def eval_cmd(results_dir: str, audited_tests: str | None) -> None:
 
 @main.command()
 @click.option("--results-dir", required=True, help="Path to results directory.")
-def score(results_dir: str) -> None:
-    """Compute scores (not yet implemented)."""
-    click.echo("Error: 'score' is not yet implemented.", err=True)
-    raise SystemExit(1)
+@click.option(
+    "--tier-data",
+    default=None,
+    type=click.Path(exists=False),
+    help="Path to tier data JSON. Defaults to benchmarks/{set}/data/{set}_classified.json.",
+)
+@click.option("--set", "set_code", default="sos", help="Set code for default tier data path resolution.")
+def score(results_dir: str, tier_data: str | None, set_code: str) -> None:
+    """Compute scores and generate leaderboard."""
+    results_path = Path(results_dir)
+
+    # Load tier data
+    set_code = set_code.lower()
+    if tier_data is None:
+        tier_data_path = _BENCHMARKS_DIR / set_code / "data" / f"{set_code}_classified.json"
+    else:
+        tier_data_path = Path(tier_data)
+
+    with open(tier_data_path) as f:
+        classified = json.load(f)
+
+    # Build collector_number → tier mapping
+    tier_map: dict[str, str] = {
+        entry["collector_number"]: entry["tier"] for entry in classified
+    }
+
+    # Compute scores
+    scores = compute_scores(results_path, tier_map)
+
+    # Generate and print leaderboard
+    leaderboard_md = generate_leaderboard(scores)
+    click.echo(leaderboard_md)
+
+    # Collect run directories
+    run_dirs = [d for d in results_path.iterdir() if d.is_dir()]
+
+    # Save aggregates
+    save_aggregates(results_path, run_dirs, scores)
+
+    # Print paths to written files
+    click.echo(f"Written: {results_path / 'leaderboard.md'}")
+    click.echo(f"Written: {results_path / 'summary.json'}")
 
 
 @main.command()

@@ -132,7 +132,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
     7. Print eval summary: cards evaluated, pass rates by eval type.
   Testability: Create a mock results dir with one run containing `blind_impl.py`, `tested_impl.py`, `tests.py`. `benchmark eval --results-dir ...` exits 0, writes `results.json`. With `--audited-tests`, audited eval results appear in the JSON.
 
-- [ ] **Wire ****`benchmark score`**** command**
+- [x] **Wire ****`benchmark score`**** command**
   Detail: In `benchmark/cli.py`, implement the `score` subcommand.
 
   Changes to `benchmark/cli.py`:

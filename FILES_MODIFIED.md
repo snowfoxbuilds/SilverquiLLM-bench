@@ -68,3 +68,13 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `benchmark/cli.py` — Replaced eval stub with full implementation: scan run dirs, detect agents from config.yaml, run self-eval flat for single-agent, audited eval with --audited-tests, deduplicate by (agent, card_id, eval_type) keeping latest run, save results.json, print summary
+
+## Item 8: Wire benchmark score command
+
+### Tests
+- `tests/test_cli_score.py` — CLI score command tests
+- `tests/test_scorer.py` — existing scorer tests (39 passing, no regressions)
+
+### Implementation
+- `benchmark/cli.py` — Replaced score stub with full implementation: --tier-data/--set options, load classified JSON, build tier map, compute_scores, generate_leaderboard, save_aggregates, print output paths; normalized set_code with .lower()
+- `benchmarks/sos/data/sos_classified.json` — Restored original dataset from main branch (was incorrectly replaced with test fixture)
