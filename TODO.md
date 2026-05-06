@@ -116,7 +116,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
   4. Print summary: total cards run, self-eval pass rates (blind vs tested), elapsed wall-clock time.
   Testability: Create a mock run directory with `blind_impl.py`, `tested_impl.py`, and `tests.py` files. Verify `summary.json` is written with correct `card_count`. Verify self-eval results appear in each card's `result.json`.
 
-- [ ] **Wire ****`benchmark eval`**** command**
+- [x] **Wire ****`benchmark eval`**** command**
   Detail: In `benchmark/cli.py`, implement the `eval` subcommand to run evaluation on existing results.
 
   Changes to `benchmark/cli.py`:

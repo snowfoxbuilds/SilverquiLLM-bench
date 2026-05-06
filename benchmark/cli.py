@@ -193,12 +193,139 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
         raise SystemExit(1)
 
 
-@main.command()
+@main.command("eval")
 @click.option("--results-dir", required=True, help="Path to results directory.")
-def eval(results_dir: str) -> None:
-    """Run evaluation (not yet implemented)."""
-    click.echo("Error: 'eval' is not yet implemented.", err=True)
-    raise SystemExit(1)
+@click.option("--audited-tests", default=None, type=click.Path(exists=True), help="Path to gold-standard test file.")
+def eval_cmd(results_dir: str, audited_tests: str | None) -> None:
+    """Run evaluation on existing results."""
+    from dataclasses import asdict as _asdict
+
+    from benchmark.evaluator import EvalResult, run_self_eval_flat, run_tests
+
+    results_path = Path(results_dir)
+    if not results_path.exists():
+        raise click.ClickException(f"Results directory not found: {results_dir}")
+
+    # Step 1: Scan results_dir to find run directories (each has config.yaml + cards/)
+    run_dirs: list[Path] = []
+    # Check if results_dir itself is a run directory
+    if (results_path / "config.yaml").exists() and (results_path / "cards").exists():
+        run_dirs.append(results_path)
+    else:
+        # Look for subdirectories that are run directories
+        for sub in sorted(results_path.iterdir()):
+            if sub.is_dir() and (sub / "config.yaml").exists() and (sub / "cards").exists():
+                run_dirs.append(sub)
+
+    if not run_dirs:
+        raise click.ClickException(f"No run directories found in {results_dir}")
+
+    all_eval_results: list[dict] = []
+    total_cards = 0
+
+    for run_dir in run_dirs:
+        # Step 2: Detect agents from config.yaml
+        import yaml
+
+        config_file = run_dir / "config.yaml"
+        with open(config_file) as f:
+            run_config = yaml.safe_load(f)
+        agent_name = run_config.get("model_name", "unknown")
+
+        cards_dir = run_dir / "cards"
+        if not cards_dir.exists():
+            continue
+
+        agents = [agent_name]
+        num_agents = len(agents)
+
+        for card_path in sorted(cards_dir.iterdir()):
+            if not card_path.is_dir():
+                continue
+            total_cards += 1
+
+            # Step 3: Single-agent runs — run self-eval flat
+            if num_agents == 1:
+                eval_result = run_self_eval_flat(card_path, agent_name)
+                all_eval_results.append(_asdict(eval_result))
+            else:
+                # Step 4: Multi-agent cross-eval (future)
+                # TODO: multi-agent cross-eval consolidation
+                pass
+
+            # Step 5: If --audited-tests provided, run audited eval
+            if audited_tests:
+                audited_path = Path(audited_tests)
+                blind_impl = card_path / "blind_impl.py"
+                tested_impl = card_path / "tested_impl.py"
+
+                all_errors: list[str] = []
+                bp, bf, bt = 0, 0, 0
+                tp, tf, tt = 0, 0, 0
+
+                if blind_impl.exists() and audited_path.exists():
+                    bp, bf, bt, be = run_tests(blind_impl, audited_path)
+                    all_errors.extend(be)
+
+                if tested_impl.exists() and audited_path.exists():
+                    tp, tf, tt, te = run_tests(tested_impl, audited_path)
+                    all_errors.extend(te)
+
+                audited_result = EvalResult(
+                    card_id=card_path.name,
+                    agent=agent_name,
+                    eval_type="audited",
+                    blind_passed=bp,
+                    blind_failed=bf,
+                    blind_total=bt,
+                    tested_passed=tp,
+                    tested_failed=tf,
+                    tested_total=tt,
+                    errors=all_errors,
+                )
+                all_eval_results.append(_asdict(audited_result))
+
+    # Step 6: Deduplicate by (agent, card_id, eval_type), keeping the last entry
+    # (latest run wins since run_dirs are sorted by name/timestamp).
+    deduped: dict[tuple[str, str, str], dict] = {}
+    for r in all_eval_results:
+        key = (r.get("agent", ""), r.get("card_id", ""), r.get("eval_type", ""))
+        deduped[key] = r
+    all_eval_results = list(deduped.values())
+
+    # Save all eval results as JSON list in results_dir/results.json
+    output_file = results_path / "results.json"
+    output_file.write_text(json.dumps(all_eval_results, indent=2, default=str))
+
+    # Step 7: Print eval summary
+    click.echo(f"\n--- Eval Summary ---")
+    click.echo(f"Cards evaluated: {total_cards}")
+
+    # Pass rates by eval type
+    by_type: dict[str, list[dict]] = {}
+    for r in all_eval_results:
+        et = r.get("eval_type", "unknown")
+        by_type.setdefault(et, []).append(r)
+
+    for eval_type, results in sorted(by_type.items()):
+        blind_passed = sum(r.get("blind_passed", 0) for r in results)
+        blind_total = sum(r.get("blind_total", 0) for r in results)
+        tested_passed = sum(r.get("tested_passed", 0) for r in results)
+        tested_total = sum(r.get("tested_total", 0) for r in results)
+
+        if blind_total > 0:
+            blind_rate = blind_passed / blind_total * 100
+            click.echo(f"  [{eval_type}] blind: {blind_passed}/{blind_total} ({blind_rate:.1f}%)")
+        else:
+            click.echo(f"  [{eval_type}] blind: 0/0 (N/A)")
+
+        if tested_total > 0:
+            tested_rate = tested_passed / tested_total * 100
+            click.echo(f"  [{eval_type}] tested: {tested_passed}/{tested_total} ({tested_rate:.1f}%)")
+        else:
+            click.echo(f"  [{eval_type}] tested: 0/0 (N/A)")
+
+    click.echo(f"Results saved to: {output_file}")
 
 
 @main.command()

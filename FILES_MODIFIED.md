@@ -59,3 +59,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `benchmark/evaluator.py` — Added `run_self_eval_flat` function for flat card directory layout
 - `benchmark/cli.py` — Wired post-loop self-eval, result.json merge (with phase-level errors matching _build_result_record schema), save_run_summary, and summary printing with elapsed time
+
+## Item 7: Wire benchmark eval command
+
+### Tests
+- `tests/test_cli_config.py` — existing CLI tests (31 passing, no regressions)
+- `tests/test_post_loop_eval.py` — existing evaluator tests (passing, no regressions)
+
+### Implementation
+- `benchmark/cli.py` — Replaced eval stub with full implementation: scan run dirs, detect agents from config.yaml, run self-eval flat for single-agent, audited eval with --audited-tests, deduplicate by (agent, card_id, eval_type) keeping latest run, save results.json, print summary
