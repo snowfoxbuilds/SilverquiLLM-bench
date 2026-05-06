@@ -4,7 +4,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
 
 ---
 
-- [ ] **Expand ****`_check_violations`**** to cover all protected directories and return structured violations**
+- [x] **Expand ****`_check_violations`**** to cover all protected directories and return structured violations**
   Detail: In `benchmark/agent_session.py`, the current `_check_violations` function only snapshots `engine/` mtimes via `_snapshot_mtimes` and only detects modifications to existing files within `engine/`. It misses new files created outside the workspace and ignores other protected directories.
 
   Changes to `benchmark/agent_session.py`:
