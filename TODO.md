@@ -167,7 +167,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
 
   Testability: Helpers are importable. `mock_opencode_blind` produces a `.py` file that `compile()`s without `SyntaxError`.
 
-- [ ] **Full pipeline integration test with Eager Glyphmage and Ajani's Response**
+- [x] **Full pipeline integration test with Eager Glyphmage and Ajani's Response**
   Detail: Create `tests/benchmark/test_e2e.py` with a pytest integration test validating the full pipeline.
 
   Test class: `TestBenchmarkEndToEnd` (mark with `@pytest.mark.integration`)

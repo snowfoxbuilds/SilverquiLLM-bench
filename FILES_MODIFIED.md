@@ -87,3 +87,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `tests/benchmark/__init__.py` — Package init for benchmark test subpackage
 - `tests/benchmark/test_helpers.py` — Mock OpenCode callables (blind + test-informed) and BenchmarkConfig factory for integration tests
+
+## Item 10: Full pipeline integration test
+
+### Tests
+- `tests/benchmark/test_e2e.py` — E2E integration test for full benchmark pipeline
+
+### Implementation
+- `tests/benchmark/test_e2e.py` — Integration test class with test_full_pipeline_two_cards and test_workspace_contamination_detected
+- `tests/conftest.py` — Fixed collection filter to allow tests/benchmark/ tests; registered integration marker
