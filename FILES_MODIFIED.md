@@ -49,3 +49,13 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `benchmark/cli.py` — Added orchestration loop with finally-based cleanup, failure tracking, and non-zero exit on card failures
 - `benchmark/run_utils.py` — New module with _session_results_to_dicts helper for dataclass-to-dict conversion with source file reading
 - `tests/test_cli_config.py` — Added --dry-run to test_run_loads_config (test predates orchestration loop)
+
+## Item 6: Wire benchmark run post-loop: self-eval and summary
+
+### Tests
+- `tests/test_cli_orchestration.py` — existing orchestration tests (8 passing, no regressions)
+- `tests/test_evaluator.py` — existing evaluator tests (36 passing, no regressions)
+
+### Implementation
+- `benchmark/evaluator.py` — Added `run_self_eval_flat` function for flat card directory layout
+- `benchmark/cli.py` — Wired post-loop self-eval, result.json merge (with phase-level errors matching _build_result_record schema), save_run_summary, and summary printing with elapsed time

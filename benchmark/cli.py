@@ -7,6 +7,8 @@ and ``benchmark cards`` subcommands via Click.
 from __future__ import annotations
 
 import json
+import time
+from dataclasses import asdict
 from pathlib import Path
 
 import click
@@ -14,7 +16,8 @@ import click
 from benchmark.agent_session import AgentSession
 from benchmark.card_loader import filter_by_collectors, filter_by_prototype, load_card_specs
 from benchmark.config import BenchmarkConfig, load_config
-from benchmark.results import init_results_dir, save_card_result
+from benchmark.evaluator import run_self_eval_flat
+from benchmark.results import init_results_dir, save_card_result, save_run_summary
 from benchmark.run_utils import _session_results_to_dicts
 
 
@@ -83,6 +86,7 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
     run_dir = init_results_dir(cfg)
     total = len(specs)
     failures: list[tuple[str, Exception]] = []
+    start_time = time.time()
 
     for i, spec in enumerate(specs, 1):
         card_name = spec.get("name", "???")
@@ -123,6 +127,64 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
         finally:
             if session is not None:
                 session.cleanup()
+
+    # --- Post-loop: self-eval and summary ---
+    elapsed = time.time() - start_time
+    cards_dir = run_dir / "cards"
+    all_results: list[dict] = []
+
+    if cards_dir.exists():
+        for card_path in sorted(cards_dir.iterdir()):
+            if not card_path.is_dir():
+                continue
+            result_json = card_path / "result.json"
+            if not result_json.exists():
+                continue
+
+            # Run self-eval on the flat layout
+            eval_result = run_self_eval_flat(card_path, cfg.model_name)
+
+            # Load existing result, merge self-eval, re-save
+            record = json.loads(result_json.read_text())
+            record["self_eval"] = {
+                "blind": {
+                    "passed": eval_result.blind_passed,
+                    "failed": eval_result.blind_failed,
+                    "total": eval_result.blind_total,
+                    "errors": [e for e in eval_result.errors],
+                },
+                "tested": {
+                    "passed": eval_result.tested_passed,
+                    "failed": eval_result.tested_failed,
+                    "total": eval_result.tested_total,
+                    "errors": [],
+                },
+                "errors": eval_result.errors,
+            }
+            result_json.write_text(json.dumps(record, indent=2, default=str))
+            all_results.append(record)
+
+    save_run_summary(run_dir, all_results)
+
+    # --- Print summary ---
+    blind_passed = sum(r.get("self_eval", {}).get("blind", {}).get("passed", 0) for r in all_results)
+    blind_total_tests = sum(r.get("self_eval", {}).get("blind", {}).get("total", 0) for r in all_results)
+    tested_passed = sum(r.get("self_eval", {}).get("tested", {}).get("passed", 0) for r in all_results)
+    tested_total_tests = sum(r.get("self_eval", {}).get("tested", {}).get("total", 0) for r in all_results)
+
+    click.echo(f"\n--- Run Summary ---")
+    click.echo(f"Cards run: {len(all_results)}")
+    if blind_total_tests > 0:
+        blind_rate = blind_passed / blind_total_tests * 100
+        click.echo(f"Self-eval blind pass rate: {blind_passed}/{blind_total_tests} ({blind_rate:.1f}%)")
+    else:
+        click.echo(f"Self-eval blind pass rate: 0/0 (N/A)")
+    if tested_total_tests > 0:
+        tested_rate = tested_passed / tested_total_tests * 100
+        click.echo(f"Self-eval tested pass rate: {tested_passed}/{tested_total_tests} ({tested_rate:.1f}%)")
+    else:
+        click.echo(f"Self-eval tested pass rate: 0/0 (N/A)")
+    click.echo(f"Elapsed time: {elapsed:.1f}s")
 
     if failures:
         click.echo(f"\n{len(failures)} card(s) failed:", err=True)

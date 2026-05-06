@@ -102,7 +102,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
 
   Testability: Mock `AgentSession._run_opencode` to produce a stub `blind_impl.py` in the workspace. Run `benchmark run --config ... --cards 011`. Verify `run_dir/cards/011/result.json` exists with expected structure. Verify `blind_impl.py` file exists in results.
 
-- [ ] **Wire ****`benchmark run`**** post-loop: self-eval and summary**
+- [x] **Wire ****`benchmark run`**** post-loop: self-eval and summary**
   Detail: After the orchestration loop completes in `benchmark/cli.py`, run self-eval on all results and save the run summary.
 
   After the card loop:
