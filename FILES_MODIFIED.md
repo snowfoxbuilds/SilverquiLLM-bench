@@ -37,3 +37,15 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `benchmark/cli.py` — Added --cards, --prototype, --dry-run flags; replaced classified-data loading with card_loader functions; wrapped load_card_specs/filter_by_collectors/filter_by_prototype in try/except to surface CLI errors
+
+## Item 5: Wire benchmark run orchestration loop
+
+### Tests
+- `tests/test_cli_orchestration.py` — 8 tests covering orchestration loop, result saving, progress output, skip logic
+- `tests/test_cli_config.py` — existing CLI tests (31 passing, updated test_run_loads_config to use --dry-run)
+- `tests/test_cli_run_flags.py` — existing flag tests (9 passing, no regressions)
+
+### Implementation
+- `benchmark/cli.py` — Added orchestration loop with finally-based cleanup, failure tracking, and non-zero exit on card failures
+- `benchmark/run_utils.py` — New module with _session_results_to_dicts helper for dataclass-to-dict conversion with source file reading
+- `tests/test_cli_config.py` — Added --dry-run to test_run_loads_config (test predates orchestration loop)

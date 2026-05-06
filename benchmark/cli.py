@@ -11,8 +11,11 @@ from pathlib import Path
 
 import click
 
+from benchmark.agent_session import AgentSession
 from benchmark.card_loader import filter_by_collectors, filter_by_prototype, load_card_specs
-from benchmark.config import load_config
+from benchmark.config import BenchmarkConfig, load_config
+from benchmark.results import init_results_dir, save_card_result
+from benchmark.run_utils import _session_results_to_dicts
 
 
 # Resolve data paths relative to this file's location
@@ -75,6 +78,57 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
     if dry_run:
         click.echo(f"Dry run complete. {len(specs)} cards selected.")
         return
+
+    # --- Orchestration loop ---
+    run_dir = init_results_dir(cfg)
+    total = len(specs)
+    failures: list[tuple[str, Exception]] = []
+
+    for i, spec in enumerate(specs, 1):
+        card_name = spec.get("name", "???")
+        collector_number = spec.get("collector_number", spec.get("number", "unknown"))
+        card_dir = f"{specs_dir}/{collector_number}/"
+
+        session: AgentSession | None = None
+        try:
+            session = AgentSession(config=cfg, card_spec=spec, card_dir=card_dir)
+            workspace = session.setup_workspace()
+
+            blind_result = session.run_blind_implementation(workspace)
+
+            tested_result = None
+            if (
+                blind_result.impl_path
+                and blind_result.status in ("ok", "syntax_error")
+            ):
+                tested_result = session.run_test_informed(workspace, blind_result.impl_path)
+
+            # Read source files before cleanup destroys the workspace
+            blind_dict, test_dict = _session_results_to_dicts(
+                blind_result, tested_result, spec, cfg
+            )
+
+            save_card_result(run_dir, collector_number, blind_dict, test_dict)
+
+            blind_status = blind_result.status
+            tested_status = tested_result.status if tested_result else "skipped"
+            click.echo(
+                f"[{i}/{total}] {card_name}: blind={blind_status}, tested={tested_status}"
+            )
+        except Exception as exc:  # noqa: BLE001
+            failures.append((card_name, exc))
+            click.echo(
+                f"[{i}/{total}] {card_name}: error={exc!r}", err=True
+            )
+        finally:
+            if session is not None:
+                session.cleanup()
+
+    if failures:
+        click.echo(f"\n{len(failures)} card(s) failed:", err=True)
+        for name, exc in failures:
+            click.echo(f"  {name}: {exc!r}", err=True)
+        raise SystemExit(1)
 
 
 @main.command()

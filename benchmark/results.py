@@ -192,6 +192,9 @@ def save_card_result(
         (test_result, "tested"),
     ]:
         iterations = source.get("iterations", [])
+        # iterations may be an int (count) or a list of iteration dicts
+        if isinstance(iterations, int):
+            iterations = [{} for _ in range(iterations)]
         for i, iteration_data in enumerate(iterations, 1):
             iter_dir = iterations_dir / f"iteration_{i}"
             iter_dir.mkdir(exist_ok=True)
@@ -239,17 +242,22 @@ def _build_result_record(
     blind_metrics = {
         k: v for k, v in blind_result.items() if k not in _IMPL_EXCLUDE
     }
-    blind_metrics["iterations"] = len(blind_result.get("iterations", []))
+    _blind_iters = blind_result.get("iterations", [])
+    blind_metrics["iterations"] = _blind_iters if isinstance(_blind_iters, int) else len(_blind_iters)
 
     tested_metrics = {
         k: v for k, v in test_result.items() if k not in _IMPL_EXCLUDE
     }
-    tested_metrics["iterations"] = len(test_result.get("iterations", []))
+    _tested_iters = test_result.get("iterations", [])
+    tested_metrics["iterations"] = _tested_iters if isinstance(_tested_iters, int) else len(_tested_iters)
 
     record: dict[str, Any] = {
         "card_id": card_id,
+        "status": test_result.get("status", blind_result.get("status", "ok")),
         "agent": agent,
         "complexity_tier": complexity_tier,
+        "blind": blind_metrics,
+        "tested": tested_metrics,
         "implementation": {
             "blind": blind_metrics,
             "tested": tested_metrics,

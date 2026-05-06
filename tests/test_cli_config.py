@@ -289,7 +289,7 @@ class TestCLIRun:
         p = tmp_path / "cfg.yaml"
         p.write_text(yaml.dump(_MINIMAL_CONFIG))
         runner = CliRunner()
-        result = runner.invoke(main, ["run", "--config", str(p)])
+        result = runner.invoke(main, ["run", "--config", str(p), "--dry-run"])
         assert result.exit_code == 0
         assert "Config loaded" in result.output
         assert "test-run" in result.output

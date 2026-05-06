@@ -70,7 +70,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
   - Remove the existing classified-data loading logic from `run` (card_loader replaces it).
   Testability: `benchmark run --config ... --dry-run` exits 0 and prints card count. `benchmark run --config ... --cards 011 --dry-run` lists only Eager Glyphmage. `--cards` and `--prototype` together produces an error.
 
-- [ ] **Wire ****`benchmark run`**** orchestration loop**
+- [x] **Wire ****`benchmark run`**** orchestration loop**
   Detail: In `benchmark/cli.py`, implement the main benchmark execution loop inside the `run` command after card selection (when `--dry-run` is not set).
 
   The loop must:

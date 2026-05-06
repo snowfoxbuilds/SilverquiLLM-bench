@@ -15,3 +15,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **What was implemented**: Changed return type to `list[str]`, extracting collector_number from each entry
 - **Reasoning**: The description "extract collector numbers, and return them" is the intended behavior. The type annotation `list[dict]` is inconsistent with the description. Returning just collector numbers makes the API composable — `filter_by_prototype` can directly pass to `filter_by_collectors`.
 - **Impact**: benchmark/card_loader.py, tests/test_card_loader.py
+
+## Test failure: Item 5 — Wire benchmark run orchestration loop
+- **Failing tests**: test_orchestration_creates_result_json, test_orchestration_prints_progress
+- **Tester's intent**: Verify result.json is created correctly and progress is printed
+- **Implementer's approach**: Passed TestInformedResult.iterations (int) directly to save_card_result
+- **Coordinator decision**: fix implementation — save_card_result expects iterations as a list, _session_results_to_dicts must convert
+- **Reasoning**: The tests match save_card_result's existing contract; the helper function has a type mismatch bug
