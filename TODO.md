@@ -36,7 +36,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
   - Place the snapshot+check around each agent invocation, not the whole loop, so per-round violations are detected.
   Testability: Mock `_run_opencode` to create a file in a protected dir (e.g., `engine/hack.py`). Verify `run_blind_implementation` returns `status="violation"`. Verify `run_test_informed` returns `status="violation"` when a protected file is created during a round.
 
-- [ ] **Add card-spec loading and filtering utility**
+- [x] **Add card-spec loading and filtering utility**
   Detail: Create `benchmark/card_loader.py` with functions to load card specs and filter them for CLI use.
 
   File: `benchmark/card_loader.py`

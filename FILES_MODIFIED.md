@@ -19,3 +19,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `benchmark/agent_session.py` — Wired `_snapshot_all_protected` and list-returning `_check_violations` into both `run_blind_implementation` (renamed var, added logging) and `run_test_informed` (added per-round snapshot+check with violation early-return); moved metrics accounting before violation check so violating round's tokens/context/rules are included
+
+
+## Item 3: Add card-spec loading and filtering utility
+
+### Tests
+- `tests/test_card_loader.py` — 14 tests covering load_card_specs, load_prototype_cards, filter_by_collectors, filter_by_prototype
+
+### Implementation
+- `benchmark/card_loader.py` — New module with load_card_specs, load_prototype_cards, filter_by_collectors, and filter_by_prototype utilities for CLI card selection; improved docstring for load_prototype_cards
