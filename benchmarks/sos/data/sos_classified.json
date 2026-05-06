@@ -1,1 +1,1842 @@
-[{"collector_number": "card-001", "tier": "simple", "name": "Card 1"}, {"collector_number": "card-002", "tier": "medium", "name": "Card 2"}]
+[
+  {
+    "collector_number": "1",
+    "tier": "complex",
+    "name": "The Dawning Archaic"
+  },
+  {
+    "collector_number": "2",
+    "tier": "complex",
+    "name": "Rancorous Archaic"
+  },
+  {
+    "collector_number": "3",
+    "tier": "complex",
+    "name": "Sundering Archaic"
+  },
+  {
+    "collector_number": "4",
+    "tier": "complex",
+    "name": "Together as One"
+  },
+  {
+    "collector_number": "5",
+    "tier": "complex",
+    "name": "Transcendent Archaic"
+  },
+  {
+    "collector_number": "6",
+    "tier": "medium",
+    "name": "Ajani's Response"
+  },
+  {
+    "collector_number": "7",
+    "tier": "complex",
+    "name": "Antiquities on the Loose"
+  },
+  {
+    "collector_number": "8",
+    "tier": "complex",
+    "name": "Ascendant Dustspeaker"
+  },
+  {
+    "collector_number": "9",
+    "tier": "medium",
+    "name": "Daydream"
+  },
+  {
+    "collector_number": "10",
+    "tier": "medium",
+    "name": "Dig Site Inventory"
+  },
+  {
+    "collector_number": "11",
+    "tier": "simple",
+    "name": "Eager Glyphmage"
+  },
+  {
+    "collector_number": "12",
+    "tier": "complex",
+    "name": "Elite Interceptor // Rejoinder"
+  },
+  {
+    "collector_number": "13",
+    "tier": "complex",
+    "name": "Emeritus of Truce // Swords to Plowshares"
+  },
+  {
+    "collector_number": "14",
+    "tier": "complex",
+    "name": "Ennis, Debate Moderator"
+  },
+  {
+    "collector_number": "15",
+    "tier": "medium",
+    "name": "Erode"
+  },
+  {
+    "collector_number": "16",
+    "tier": "medium",
+    "name": "Graduation Day"
+  },
+  {
+    "collector_number": "17",
+    "tier": "medium",
+    "name": "Group Project"
+  },
+  {
+    "collector_number": "18",
+    "tier": "medium",
+    "name": "Harsh Annotation"
+  },
+  {
+    "collector_number": "19",
+    "tier": "complex",
+    "name": "Honorbound Page // Forum's Favor"
+  },
+  {
+    "collector_number": "20",
+    "tier": "medium",
+    "name": "Informed Inkwright"
+  },
+  {
+    "collector_number": "21",
+    "tier": "complex",
+    "name": "Inkshape Demonstrator"
+  },
+  {
+    "collector_number": "22",
+    "tier": "medium",
+    "name": "Interjection"
+  },
+  {
+    "collector_number": "23",
+    "tier": "complex",
+    "name": "Joined Researchers // Secret Rendezvous"
+  },
+  {
+    "collector_number": "24",
+    "tier": "complex",
+    "name": "Owlin Historian"
+  },
+  {
+    "collector_number": "25",
+    "tier": "medium",
+    "name": "Practiced Offense"
+  },
+  {
+    "collector_number": "26",
+    "tier": "medium",
+    "name": "Primary Research"
+  },
+  {
+    "collector_number": "27",
+    "tier": "complex",
+    "name": "Quill-Blade Laureate // Twofold Intent"
+  },
+  {
+    "collector_number": "28",
+    "tier": "complex",
+    "name": "Rapier Wit"
+  },
+  {
+    "collector_number": "29",
+    "tier": "medium",
+    "name": "Rehearsed Debater"
+  },
+  {
+    "collector_number": "30",
+    "tier": "complex",
+    "name": "Restoration Seminar"
+  },
+  {
+    "collector_number": "31",
+    "tier": "medium",
+    "name": "Shattered Acolyte"
+  },
+  {
+    "collector_number": "32",
+    "tier": "medium",
+    "name": "Soaring Stoneglider"
+  },
+  {
+    "collector_number": "33",
+    "tier": "complex",
+    "name": "Spiritcall Enthusiast // Scrollboost"
+  },
+  {
+    "collector_number": "34",
+    "tier": "medium",
+    "name": "Stand Up for Yourself"
+  },
+  {
+    "collector_number": "35",
+    "tier": "medium",
+    "name": "Stirring Hopesinger"
+  },
+  {
+    "collector_number": "36",
+    "tier": "simple",
+    "name": "Stone Docent"
+  },
+  {
+    "collector_number": "37",
+    "tier": "medium",
+    "name": "Summoned Dromedary"
+  },
+  {
+    "collector_number": "38",
+    "tier": "medium",
+    "name": "Banishing Betrayal"
+  },
+  {
+    "collector_number": "39",
+    "tier": "medium",
+    "name": "Brush Off"
+  },
+  {
+    "collector_number": "40",
+    "tier": "complex",
+    "name": "Campus Composer // Aqueous Aria"
+  },
+  {
+    "collector_number": "41",
+    "tier": "medium",
+    "name": "Chase Inspiration"
+  },
+  {
+    "collector_number": "42",
+    "tier": "complex",
+    "name": "Deluge Virtuoso"
+  },
+  {
+    "collector_number": "43",
+    "tier": "medium",
+    "name": "Divergent Equation"
+  },
+  {
+    "collector_number": "44",
+    "tier": "complex",
+    "name": "Echocasting Symposium"
+  },
+  {
+    "collector_number": "45",
+    "tier": "complex",
+    "name": "Emeritus of Ideation // Ancestral Recall"
+  },
+  {
+    "collector_number": "46",
+    "tier": "complex",
+    "name": "Encouraging Aviator // Jump"
+  },
+  {
+    "collector_number": "47",
+    "tier": "medium",
+    "name": "Essence Scatter"
+  },
+  {
+    "collector_number": "48",
+    "tier": "complex",
+    "name": "Exhibition Tidecaller"
+  },
+  {
+    "collector_number": "49",
+    "tier": "complex",
+    "name": "Flow State"
+  },
+  {
+    "collector_number": "50",
+    "tier": "simple",
+    "name": "Fractal Anomaly"
+  },
+  {
+    "collector_number": "51",
+    "tier": "medium",
+    "name": "Fractalize"
+  },
+  {
+    "collector_number": "52",
+    "tier": "complex",
+    "name": "Harmonized Trio // Brainstorm"
+  },
+  {
+    "collector_number": "53",
+    "tier": "complex",
+    "name": "Homesickness"
+  },
+  {
+    "collector_number": "54",
+    "tier": "medium",
+    "name": "Hydro-Channeler"
+  },
+  {
+    "collector_number": "55",
+    "tier": "complex",
+    "name": "Jadzi, Steward of Fate // Oracle's Gift"
+  },
+  {
+    "collector_number": "56",
+    "tier": "complex",
+    "name": "Landscape Painter // Vibrant Idea"
+  },
+  {
+    "collector_number": "57",
+    "tier": "medium",
+    "name": "Mana Sculpt"
+  },
+  {
+    "collector_number": "58",
+    "tier": "medium",
+    "name": "Mathemagics"
+  },
+  {
+    "collector_number": "59",
+    "tier": "medium",
+    "name": "Matterbending Mage"
+  },
+  {
+    "collector_number": "60",
+    "tier": "complex",
+    "name": "Muse Seeker"
+  },
+  {
+    "collector_number": "61",
+    "tier": "medium",
+    "name": "Muse's Encouragement"
+  },
+  {
+    "collector_number": "62",
+    "tier": "medium",
+    "name": "Orysa, Tide Choreographer"
+  },
+  {
+    "collector_number": "63",
+    "tier": "medium",
+    "name": "Pensive Professor"
+  },
+  {
+    "collector_number": "64",
+    "tier": "complex",
+    "name": "Procrastinate"
+  },
+  {
+    "collector_number": "65",
+    "tier": "simple",
+    "name": "Quick Study"
+  },
+  {
+    "collector_number": "66",
+    "tier": "medium",
+    "name": "Run Behind"
+  },
+  {
+    "collector_number": "67",
+    "tier": "complex",
+    "name": "Skycoach Conductor // All Aboard"
+  },
+  {
+    "collector_number": "68",
+    "tier": "complex",
+    "name": "Spellbook Seeker // Careful Study"
+  },
+  {
+    "collector_number": "69",
+    "tier": "complex",
+    "name": "Tester of the Tangential"
+  },
+  {
+    "collector_number": "70",
+    "tier": "complex",
+    "name": "Textbook Tabulator"
+  },
+  {
+    "collector_number": "71",
+    "tier": "medium",
+    "name": "Wisdom of Ages"
+  },
+  {
+    "collector_number": "72",
+    "tier": "complex",
+    "name": "Adventurous Eater // Have a Bite"
+  },
+  {
+    "collector_number": "73",
+    "tier": "complex",
+    "name": "Arcane Omens"
+  },
+  {
+    "collector_number": "74",
+    "tier": "medium",
+    "name": "Arnyn, Deathbloom Botanist"
+  },
+  {
+    "collector_number": "75",
+    "tier": "medium",
+    "name": "Burrog Banemaker"
+  },
+  {
+    "collector_number": "76",
+    "tier": "complex",
+    "name": "Cheerful Osteomancer // Raise Dead"
+  },
+  {
+    "collector_number": "77",
+    "tier": "medium",
+    "name": "Cost of Brilliance"
+  },
+  {
+    "collector_number": "78",
+    "tier": "medium",
+    "name": "Decorum Dissertation"
+  },
+  {
+    "collector_number": "79",
+    "tier": "complex",
+    "name": "Dissection Practice"
+  },
+  {
+    "collector_number": "80",
+    "tier": "complex",
+    "name": "Emeritus of Woe // Demonic Tutor"
+  },
+  {
+    "collector_number": "81",
+    "tier": "medium",
+    "name": "End of the Hunt"
+  },
+  {
+    "collector_number": "82",
+    "tier": "simple",
+    "name": "Eternal Student"
+  },
+  {
+    "collector_number": "83",
+    "tier": "medium",
+    "name": "Foolish Fate"
+  },
+  {
+    "collector_number": "84",
+    "tier": "medium",
+    "name": "Forum Necroscribe"
+  },
+  {
+    "collector_number": "85",
+    "tier": "complex",
+    "name": "Grave Researcher // Reanimate"
+  },
+  {
+    "collector_number": "86",
+    "tier": "medium",
+    "name": "Last Gasp"
+  },
+  {
+    "collector_number": "87",
+    "tier": "medium",
+    "name": "Lecturing Scornmage"
+  },
+  {
+    "collector_number": "88",
+    "tier": "complex",
+    "name": "Leech Collector // Bloodletting"
+  },
+  {
+    "collector_number": "89",
+    "tier": "medium",
+    "name": "Masterful Flourish"
+  },
+  {
+    "collector_number": "90",
+    "tier": "medium",
+    "name": "Melancholic Poet"
+  },
+  {
+    "collector_number": "91",
+    "tier": "complex",
+    "name": "Moseo, Vein's New Dean"
+  },
+  {
+    "collector_number": "92",
+    "tier": "medium",
+    "name": "Poisoner's Apprentice"
+  },
+  {
+    "collector_number": "93",
+    "tier": "complex",
+    "name": "Postmortem Professor"
+  },
+  {
+    "collector_number": "94",
+    "tier": "simple",
+    "name": "Pox Plague"
+  },
+  {
+    "collector_number": "95",
+    "tier": "medium",
+    "name": "Pull from the Grave"
+  },
+  {
+    "collector_number": "96",
+    "tier": "medium",
+    "name": "Rabid Attack"
+  },
+  {
+    "collector_number": "97",
+    "tier": "expert",
+    "name": "Ral Zarek, Guest Lecturer"
+  },
+  {
+    "collector_number": "98",
+    "tier": "complex",
+    "name": "Scathing Shadelock // Venomous Words"
+  },
+  {
+    "collector_number": "99",
+    "tier": "complex",
+    "name": "Scheming Silvertongue // Sign in Blood"
+  },
+  {
+    "collector_number": "100",
+    "tier": "simple",
+    "name": "Send in the Pest"
+  },
+  {
+    "collector_number": "101",
+    "tier": "medium",
+    "name": "Sneering Shadewriter"
+  },
+  {
+    "collector_number": "102",
+    "tier": "complex",
+    "name": "Tragedy Feaster"
+  },
+  {
+    "collector_number": "103",
+    "tier": "medium",
+    "name": "Ulna Alley Shopkeep"
+  },
+  {
+    "collector_number": "104",
+    "tier": "medium",
+    "name": "Wander Off"
+  },
+  {
+    "collector_number": "105",
+    "tier": "complex",
+    "name": "Withering Curse"
+  },
+  {
+    "collector_number": "106",
+    "tier": "medium",
+    "name": "Ancestral Anger"
+  },
+  {
+    "collector_number": "107",
+    "tier": "complex",
+    "name": "Archaic's Agony"
+  },
+  {
+    "collector_number": "108",
+    "tier": "complex",
+    "name": "Artistic Process"
+  },
+  {
+    "collector_number": "109",
+    "tier": "complex",
+    "name": "Blazing Firesinger // Seething Song"
+  },
+  {
+    "collector_number": "110",
+    "tier": "medium",
+    "name": "Charging Strifeknight"
+  },
+  {
+    "collector_number": "111",
+    "tier": "complex",
+    "name": "Choreographed Sparks"
+  },
+  {
+    "collector_number": "112",
+    "tier": "medium",
+    "name": "Duel Tactics"
+  },
+  {
+    "collector_number": "113",
+    "tier": "complex",
+    "name": "Emeritus of Conflict // Lightning Bolt"
+  },
+  {
+    "collector_number": "114",
+    "tier": "complex",
+    "name": "Expressive Firedancer"
+  },
+  {
+    "collector_number": "115",
+    "tier": "medium",
+    "name": "Flashback"
+  },
+  {
+    "collector_number": "116",
+    "tier": "medium",
+    "name": "Garrison Excavator"
+  },
+  {
+    "collector_number": "117",
+    "tier": "complex",
+    "name": "Goblin Glasswright // Craft with Pride"
+  },
+  {
+    "collector_number": "118",
+    "tier": "medium",
+    "name": "Heated Argument"
+  },
+  {
+    "collector_number": "119",
+    "tier": "medium",
+    "name": "Impractical Joke"
+  },
+  {
+    "collector_number": "120",
+    "tier": "complex",
+    "name": "Improvisation Capstone"
+  },
+  {
+    "collector_number": "121",
+    "tier": "medium",
+    "name": "Living History"
+  },
+  {
+    "collector_number": "122",
+    "tier": "complex",
+    "name": "Maelstrom Artisan // Rocket Volley"
+  },
+  {
+    "collector_number": "123",
+    "tier": "complex",
+    "name": "Magmablood Archaic"
+  },
+  {
+    "collector_number": "124",
+    "tier": "complex",
+    "name": "Mica, Reader of Ruins"
+  },
+  {
+    "collector_number": "125",
+    "tier": "complex",
+    "name": "Molten-Core Maestro"
+  },
+  {
+    "collector_number": "126",
+    "tier": "complex",
+    "name": "Pigment Wrangler // Striking Palette"
+  },
+  {
+    "collector_number": "127",
+    "tier": "medium",
+    "name": "Rearing Embermare"
+  },
+  {
+    "collector_number": "128",
+    "tier": "medium",
+    "name": "Rubble Rouser"
+  },
+  {
+    "collector_number": "129",
+    "tier": "medium",
+    "name": "Seize the Spoils"
+  },
+  {
+    "collector_number": "130",
+    "tier": "complex",
+    "name": "Steal the Show"
+  },
+  {
+    "collector_number": "131",
+    "tier": "complex",
+    "name": "Strife Scholar // Awaken the Ages"
+  },
+  {
+    "collector_number": "132",
+    "tier": "complex",
+    "name": "Tablet of Discovery"
+  },
+  {
+    "collector_number": "133",
+    "tier": "complex",
+    "name": "Tackle Artist"
+  },
+  {
+    "collector_number": "134",
+    "tier": "complex",
+    "name": "Thunderdrum Soloist"
+  },
+  {
+    "collector_number": "135",
+    "tier": "medium",
+    "name": "Tome Blast"
+  },
+  {
+    "collector_number": "136",
+    "tier": "medium",
+    "name": "Unsubtle Mockery"
+  },
+  {
+    "collector_number": "137",
+    "tier": "medium",
+    "name": "Zealous Lorecaster"
+  },
+  {
+    "collector_number": "138",
+    "tier": "medium",
+    "name": "Aberrant Manawurm"
+  },
+  {
+    "collector_number": "139",
+    "tier": "medium",
+    "name": "Additive Evolution"
+  },
+  {
+    "collector_number": "140",
+    "tier": "complex",
+    "name": "Ambitious Augmenter"
+  },
+  {
+    "collector_number": "141",
+    "tier": "medium",
+    "name": "Burrog Barrage"
+  },
+  {
+    "collector_number": "142",
+    "tier": "medium",
+    "name": "Chelonian Tackle"
+  },
+  {
+    "collector_number": "143",
+    "tier": "medium",
+    "name": "Comforting Counsel"
+  },
+  {
+    "collector_number": "144",
+    "tier": "medium",
+    "name": "Efflorescence"
+  },
+  {
+    "collector_number": "145",
+    "tier": "complex",
+    "name": "Emeritus of Abundance // Regrowth"
+  },
+  {
+    "collector_number": "146",
+    "tier": "medium",
+    "name": "Emil, Vastlands Roamer"
+  },
+  {
+    "collector_number": "147",
+    "tier": "simple",
+    "name": "Environmental Scientist"
+  },
+  {
+    "collector_number": "148",
+    "tier": "complex",
+    "name": "Follow the Lumarets"
+  },
+  {
+    "collector_number": "149",
+    "tier": "complex",
+    "name": "Germination Practicum"
+  },
+  {
+    "collector_number": "150",
+    "tier": "complex",
+    "name": "Glorious Decay"
+  },
+  {
+    "collector_number": "151",
+    "tier": "medium",
+    "name": "Hungry Graffalon"
+  },
+  {
+    "collector_number": "152",
+    "tier": "complex",
+    "name": "Infirmary Healer // Stream of Life"
+  },
+  {
+    "collector_number": "153",
+    "tier": "medium",
+    "name": "Lumaret's Favor"
+  },
+  {
+    "collector_number": "154",
+    "tier": "medium",
+    "name": "Mindful Biomancer"
+  },
+  {
+    "collector_number": "155",
+    "tier": "medium",
+    "name": "Noxious Newt"
+  },
+  {
+    "collector_number": "156",
+    "tier": "medium",
+    "name": "Oracle's Restoration"
+  },
+  {
+    "collector_number": "157",
+    "tier": "medium",
+    "name": "Pestbrood Sloth"
+  },
+  {
+    "collector_number": "158",
+    "tier": "simple",
+    "name": "Planar Engineering"
+  },
+  {
+    "collector_number": "159",
+    "tier": "medium",
+    "name": "Shopkeeper's Bane"
+  },
+  {
+    "collector_number": "160",
+    "tier": "complex",
+    "name": "Slumbering Trudge"
+  },
+  {
+    "collector_number": "161",
+    "tier": "complex",
+    "name": "Snarl Song"
+  },
+  {
+    "collector_number": "162",
+    "tier": "complex",
+    "name": "Studious First-Year // Rampant Growth"
+  },
+  {
+    "collector_number": "163",
+    "tier": "complex",
+    "name": "Tenured Concocter"
+  },
+  {
+    "collector_number": "164",
+    "tier": "medium",
+    "name": "Thornfist Striker"
+  },
+  {
+    "collector_number": "165",
+    "tier": "medium",
+    "name": "Topiary Lecturer"
+  },
+  {
+    "collector_number": "166",
+    "tier": "complex",
+    "name": "Vastlands Scavenger // Bind to Life"
+  },
+  {
+    "collector_number": "167",
+    "tier": "medium",
+    "name": "Wild Hypothesis"
+  },
+  {
+    "collector_number": "168",
+    "tier": "complex",
+    "name": "Wildgrowth Archaic"
+  },
+  {
+    "collector_number": "169",
+    "tier": "complex",
+    "name": "Zimone's Experiment"
+  },
+  {
+    "collector_number": "170",
+    "tier": "complex",
+    "name": "Abigale, Poet Laureate // Heroic Stanza"
+  },
+  {
+    "collector_number": "171",
+    "tier": "simple",
+    "name": "Abstract Paintmage"
+  },
+  {
+    "collector_number": "172",
+    "tier": "medium",
+    "name": "Applied Geometry"
+  },
+  {
+    "collector_number": "173",
+    "tier": "medium",
+    "name": "Ark of Hunger"
+  },
+  {
+    "collector_number": "174",
+    "tier": "medium",
+    "name": "Aziza, Mage Tower Captain"
+  },
+  {
+    "collector_number": "175",
+    "tier": "complex",
+    "name": "Berta, Wise Extrapolator"
+  },
+  {
+    "collector_number": "176",
+    "tier": "simple",
+    "name": "Blech, Loafing Pest"
+  },
+  {
+    "collector_number": "177",
+    "tier": "simple",
+    "name": "Bogwater Lumaret"
+  },
+  {
+    "collector_number": "178",
+    "tier": "complex",
+    "name": "Borrowed Knowledge"
+  },
+  {
+    "collector_number": "179",
+    "tier": "medium",
+    "name": "Cauldron of Essence"
+  },
+  {
+    "collector_number": "180",
+    "tier": "complex",
+    "name": "Colorstorm Stallion"
+  },
+  {
+    "collector_number": "181",
+    "tier": "medium",
+    "name": "Colossus of the Blood Age"
+  },
+  {
+    "collector_number": "182",
+    "tier": "complex",
+    "name": "Conciliator's Duelist"
+  },
+  {
+    "collector_number": "183",
+    "tier": "complex",
+    "name": "Cuboid Colony"
+  },
+  {
+    "collector_number": "184",
+    "tier": "simple",
+    "name": "Dina's Guidance"
+  },
+  {
+    "collector_number": "185",
+    "tier": "complex",
+    "name": "Elemental Mascot"
+  },
+  {
+    "collector_number": "186",
+    "tier": "simple",
+    "name": "Embrace the Paradox"
+  },
+  {
+    "collector_number": "187",
+    "tier": "medium",
+    "name": "Essenceknit Scholar"
+  },
+  {
+    "collector_number": "188",
+    "tier": "medium",
+    "name": "Fix What's Broken"
+  },
+  {
+    "collector_number": "189",
+    "tier": "complex",
+    "name": "Fractal Mascot"
+  },
+  {
+    "collector_number": "190",
+    "tier": "complex",
+    "name": "Fractal Tender"
+  },
+  {
+    "collector_number": "191",
+    "tier": "simple",
+    "name": "Geometer's Arthropod"
+  },
+  {
+    "collector_number": "192",
+    "tier": "medium",
+    "name": "Grapple with Death"
+  },
+  {
+    "collector_number": "193",
+    "tier": "medium",
+    "name": "Growth Curve"
+  },
+  {
+    "collector_number": "194",
+    "tier": "complex",
+    "name": "Hardened Academic"
+  },
+  {
+    "collector_number": "195",
+    "tier": "medium",
+    "name": "Imperious Inkmage"
+  },
+  {
+    "collector_number": "196",
+    "tier": "medium",
+    "name": "Inkling Mascot"
+  },
+  {
+    "collector_number": "197",
+    "tier": "medium",
+    "name": "Killian's Confidence"
+  },
+  {
+    "collector_number": "198",
+    "tier": "complex",
+    "name": "Kirol, History Buff // Pack a Punch"
+  },
+  {
+    "collector_number": "199",
+    "tier": "complex",
+    "name": "Lluwen, Exchange Student // Pest Friend"
+  },
+  {
+    "collector_number": "200",
+    "tier": "complex",
+    "name": "Lorehold Charm"
+  },
+  {
+    "collector_number": "201",
+    "tier": "expert",
+    "name": "Lorehold, the Historian"
+  },
+  {
+    "collector_number": "202",
+    "tier": "simple",
+    "name": "Mind into Matter"
+  },
+  {
+    "collector_number": "203",
+    "tier": "medium",
+    "name": "Mind Roots"
+  },
+  {
+    "collector_number": "204",
+    "tier": "medium",
+    "name": "Molten Note"
+  },
+  {
+    "collector_number": "205",
+    "tier": "complex",
+    "name": "Moment of Reckoning"
+  },
+  {
+    "collector_number": "206",
+    "tier": "complex",
+    "name": "Nita, Forum Conciliator"
+  },
+  {
+    "collector_number": "207",
+    "tier": "medium",
+    "name": "Old-Growth Educator"
+  },
+  {
+    "collector_number": "208",
+    "tier": "medium",
+    "name": "Paradox Surveyor"
+  },
+  {
+    "collector_number": "209",
+    "tier": "medium",
+    "name": "Pest Mascot"
+  },
+  {
+    "collector_number": "210",
+    "tier": "medium",
+    "name": "Practiced Scrollsmith"
+  },
+  {
+    "collector_number": "211",
+    "tier": "complex",
+    "name": "Prismari Charm"
+  },
+  {
+    "collector_number": "212",
+    "tier": "complex",
+    "name": "Prismari, the Inspiration"
+  },
+  {
+    "collector_number": "213",
+    "tier": "medium",
+    "name": "Proctor's Gaze"
+  },
+  {
+    "collector_number": "214",
+    "tier": "expert",
+    "name": "Professor Dellian Fel"
+  },
+  {
+    "collector_number": "215",
+    "tier": "complex",
+    "name": "Pterafractyl"
+  },
+  {
+    "collector_number": "216",
+    "tier": "medium",
+    "name": "Pursue the Past"
+  },
+  {
+    "collector_number": "217",
+    "tier": "complex",
+    "name": "Quandrix Charm"
+  },
+  {
+    "collector_number": "218",
+    "tier": "complex",
+    "name": "Quandrix, the Proof"
+  },
+  {
+    "collector_number": "219",
+    "tier": "simple",
+    "name": "Rapturous Moment"
+  },
+  {
+    "collector_number": "220",
+    "tier": "medium",
+    "name": "Render Speechless"
+  },
+  {
+    "collector_number": "221",
+    "tier": "medium",
+    "name": "Resonating Lute"
+  },
+  {
+    "collector_number": "222",
+    "tier": "simple",
+    "name": "Root Manipulation"
+  },
+  {
+    "collector_number": "223",
+    "tier": "complex",
+    "name": "Sanar, Unfinished Genius // Wild Idea"
+  },
+  {
+    "collector_number": "224",
+    "tier": "complex",
+    "name": "Scolding Administrator"
+  },
+  {
+    "collector_number": "225",
+    "tier": "complex",
+    "name": "Silverquill Charm"
+  },
+  {
+    "collector_number": "226",
+    "tier": "medium",
+    "name": "Silverquill, the Disputant"
+  },
+  {
+    "collector_number": "227",
+    "tier": "medium",
+    "name": "Snooping Page"
+  },
+  {
+    "collector_number": "228",
+    "tier": "medium",
+    "name": "Social Snub"
+  },
+  {
+    "collector_number": "229",
+    "tier": "complex",
+    "name": "Spectacular Skywhale"
+  },
+  {
+    "collector_number": "230",
+    "tier": "simple",
+    "name": "Spirit Mascot"
+  },
+  {
+    "collector_number": "231",
+    "tier": "complex",
+    "name": "Splatter Technique"
+  },
+  {
+    "collector_number": "232",
+    "tier": "simple",
+    "name": "Stadium Tidalmage"
+  },
+  {
+    "collector_number": "233",
+    "tier": "medium",
+    "name": "Startled Relic Sloth"
+  },
+  {
+    "collector_number": "234",
+    "tier": "simple",
+    "name": "Stirring Honormancer"
+  },
+  {
+    "collector_number": "235",
+    "tier": "medium",
+    "name": "Stress Dream"
+  },
+  {
+    "collector_number": "236",
+    "tier": "medium",
+    "name": "Suspend Aggression"
+  },
+  {
+    "collector_number": "237",
+    "tier": "complex",
+    "name": "Tam, Observant Sequencer // Deep Sight"
+  },
+  {
+    "collector_number": "238",
+    "tier": "complex",
+    "name": "Teacher's Pest"
+  },
+  {
+    "collector_number": "239",
+    "tier": "medium",
+    "name": "Traumatic Critique"
+  },
+  {
+    "collector_number": "240",
+    "tier": "medium",
+    "name": "Vibrant Outburst"
+  },
+  {
+    "collector_number": "241",
+    "tier": "medium",
+    "name": "Vicious Rivalry"
+  },
+  {
+    "collector_number": "242",
+    "tier": "medium",
+    "name": "Visionary's Dance"
+  },
+  {
+    "collector_number": "243",
+    "tier": "complex",
+    "name": "Wilt in the Heat"
+  },
+  {
+    "collector_number": "244",
+    "tier": "complex",
+    "name": "Witherbloom Charm"
+  },
+  {
+    "collector_number": "245",
+    "tier": "complex",
+    "name": "Witherbloom, the Balancer"
+  },
+  {
+    "collector_number": "246",
+    "tier": "simple",
+    "name": "Zaffai and the Tempests"
+  },
+  {
+    "collector_number": "247",
+    "tier": "complex",
+    "name": "Biblioplex Tomekeeper"
+  },
+  {
+    "collector_number": "248",
+    "tier": "medium",
+    "name": "Diary of Dreams"
+  },
+  {
+    "collector_number": "249",
+    "tier": "simple",
+    "name": "Mage Tower Referee"
+  },
+  {
+    "collector_number": "250",
+    "tier": "medium",
+    "name": "Page, Loose Leaf"
+  },
+  {
+    "collector_number": "251",
+    "tier": "medium",
+    "name": "Potioner's Trove"
+  },
+  {
+    "collector_number": "252",
+    "tier": "complex",
+    "name": "Strixhaven Skycoach"
+  },
+  {
+    "collector_number": "253",
+    "tier": "medium",
+    "name": "Deathcap Glade"
+  },
+  {
+    "collector_number": "254",
+    "tier": "medium",
+    "name": "Dreamroot Cascade"
+  },
+  {
+    "collector_number": "255",
+    "tier": "complex",
+    "name": "Fields of Strife"
+  },
+  {
+    "collector_number": "256",
+    "tier": "complex",
+    "name": "Forum of Amity"
+  },
+  {
+    "collector_number": "257",
+    "tier": "complex",
+    "name": "Great Hall of the Biblioplex"
+  },
+  {
+    "collector_number": "258",
+    "tier": "complex",
+    "name": "Paradox Gardens"
+  },
+  {
+    "collector_number": "259",
+    "tier": "complex",
+    "name": "Petrified Hamlet"
+  },
+  {
+    "collector_number": "260",
+    "tier": "medium",
+    "name": "Shattered Sanctum"
+  },
+  {
+    "collector_number": "261",
+    "tier": "complex",
+    "name": "Skycoach Waypoint"
+  },
+  {
+    "collector_number": "262",
+    "tier": "complex",
+    "name": "Spectacle Summit"
+  },
+  {
+    "collector_number": "263",
+    "tier": "medium",
+    "name": "Stormcarved Coast"
+  },
+  {
+    "collector_number": "264",
+    "tier": "medium",
+    "name": "Sundown Pass"
+  },
+  {
+    "collector_number": "265",
+    "tier": "simple",
+    "name": "Terramorphic Expanse"
+  },
+  {
+    "collector_number": "266",
+    "tier": "complex",
+    "name": "Titan's Grave"
+  },
+  {
+    "collector_number": "267",
+    "tier": "trivial",
+    "name": "Plains"
+  },
+  {
+    "collector_number": "268",
+    "tier": "trivial",
+    "name": "Island"
+  },
+  {
+    "collector_number": "269",
+    "tier": "trivial",
+    "name": "Swamp"
+  },
+  {
+    "collector_number": "270",
+    "tier": "trivial",
+    "name": "Mountain"
+  },
+  {
+    "collector_number": "271",
+    "tier": "trivial",
+    "name": "Forest"
+  },
+  {
+    "collector_number": "272",
+    "tier": "trivial",
+    "name": "Plains"
+  },
+  {
+    "collector_number": "273",
+    "tier": "trivial",
+    "name": "Plains"
+  },
+  {
+    "collector_number": "274",
+    "tier": "trivial",
+    "name": "Island"
+  },
+  {
+    "collector_number": "275",
+    "tier": "trivial",
+    "name": "Island"
+  },
+  {
+    "collector_number": "276",
+    "tier": "trivial",
+    "name": "Swamp"
+  },
+  {
+    "collector_number": "277",
+    "tier": "trivial",
+    "name": "Swamp"
+  },
+  {
+    "collector_number": "278",
+    "tier": "trivial",
+    "name": "Mountain"
+  },
+  {
+    "collector_number": "279",
+    "tier": "trivial",
+    "name": "Mountain"
+  },
+  {
+    "collector_number": "280",
+    "tier": "trivial",
+    "name": "Forest"
+  },
+  {
+    "collector_number": "281",
+    "tier": "trivial",
+    "name": "Forest"
+  },
+  {
+    "collector_number": "282",
+    "tier": "expert",
+    "name": "Ral Zarek, Guest Lecturer"
+  },
+  {
+    "collector_number": "283",
+    "tier": "expert",
+    "name": "Professor Dellian Fel"
+  },
+  {
+    "collector_number": "284",
+    "tier": "expert",
+    "name": "Lorehold, the Historian"
+  },
+  {
+    "collector_number": "285",
+    "tier": "complex",
+    "name": "Prismari, the Inspiration"
+  },
+  {
+    "collector_number": "286",
+    "tier": "complex",
+    "name": "Quandrix, the Proof"
+  },
+  {
+    "collector_number": "287",
+    "tier": "medium",
+    "name": "Silverquill, the Disputant"
+  },
+  {
+    "collector_number": "288",
+    "tier": "complex",
+    "name": "Witherbloom, the Balancer"
+  },
+  {
+    "collector_number": "289",
+    "tier": "complex",
+    "name": "The Dawning Archaic"
+  },
+  {
+    "collector_number": "290",
+    "tier": "complex",
+    "name": "Restoration Seminar"
+  },
+  {
+    "collector_number": "291",
+    "tier": "complex",
+    "name": "Echocasting Symposium"
+  },
+  {
+    "collector_number": "292",
+    "tier": "medium",
+    "name": "Decorum Dissertation"
+  },
+  {
+    "collector_number": "293",
+    "tier": "complex",
+    "name": "Tragedy Feaster"
+  },
+  {
+    "collector_number": "294",
+    "tier": "complex",
+    "name": "Improvisation Capstone"
+  },
+  {
+    "collector_number": "295",
+    "tier": "complex",
+    "name": "Magmablood Archaic"
+  },
+  {
+    "collector_number": "296",
+    "tier": "complex",
+    "name": "Germination Practicum"
+  },
+  {
+    "collector_number": "297",
+    "tier": "complex",
+    "name": "Wildgrowth Archaic"
+  },
+  {
+    "collector_number": "298",
+    "tier": "simple",
+    "name": "Blech, Loafing Pest"
+  },
+  {
+    "collector_number": "299",
+    "tier": "complex",
+    "name": "Colorstorm Stallion"
+  },
+  {
+    "collector_number": "300",
+    "tier": "simple",
+    "name": "Geometer's Arthropod"
+  },
+  {
+    "collector_number": "301",
+    "tier": "medium",
+    "name": "Deathcap Glade"
+  },
+  {
+    "collector_number": "302",
+    "tier": "medium",
+    "name": "Dreamroot Cascade"
+  },
+  {
+    "collector_number": "303",
+    "tier": "medium",
+    "name": "Shattered Sanctum"
+  },
+  {
+    "collector_number": "304",
+    "tier": "medium",
+    "name": "Stormcarved Coast"
+  },
+  {
+    "collector_number": "305",
+    "tier": "medium",
+    "name": "Sundown Pass"
+  },
+  {
+    "collector_number": "306",
+    "tier": "complex",
+    "name": "Emeritus of Ideation // Ancestral Recall"
+  },
+  {
+    "collector_number": "307",
+    "tier": "complex",
+    "name": "Together as One"
+  },
+  {
+    "collector_number": "308",
+    "tier": "complex",
+    "name": "Antiquities on the Loose"
+  },
+  {
+    "collector_number": "309",
+    "tier": "complex",
+    "name": "Emeritus of Truce // Swords to Plowshares"
+  },
+  {
+    "collector_number": "310",
+    "tier": "medium",
+    "name": "Erode"
+  },
+  {
+    "collector_number": "311",
+    "tier": "medium",
+    "name": "Informed Inkwright"
+  },
+  {
+    "collector_number": "312",
+    "tier": "complex",
+    "name": "Joined Researchers // Secret Rendezvous"
+  },
+  {
+    "collector_number": "313",
+    "tier": "medium",
+    "name": "Practiced Offense"
+  },
+  {
+    "collector_number": "314",
+    "tier": "medium",
+    "name": "Stirring Hopesinger"
+  },
+  {
+    "collector_number": "315",
+    "tier": "complex",
+    "name": "Emeritus of Ideation // Ancestral Recall"
+  },
+  {
+    "collector_number": "316",
+    "tier": "complex",
+    "name": "Exhibition Tidecaller"
+  },
+  {
+    "collector_number": "317",
+    "tier": "complex",
+    "name": "Harmonized Trio // Brainstorm"
+  },
+  {
+    "collector_number": "318",
+    "tier": "complex",
+    "name": "Jadzi, Steward of Fate // Oracle's Gift"
+  },
+  {
+    "collector_number": "319",
+    "tier": "medium",
+    "name": "Mana Sculpt"
+  },
+  {
+    "collector_number": "320",
+    "tier": "medium",
+    "name": "Mathemagics"
+  },
+  {
+    "collector_number": "321",
+    "tier": "medium",
+    "name": "Pensive Professor"
+  },
+  {
+    "collector_number": "322",
+    "tier": "complex",
+    "name": "Skycoach Conductor // All Aboard"
+  },
+  {
+    "collector_number": "323",
+    "tier": "medium",
+    "name": "Wisdom of Ages"
+  },
+  {
+    "collector_number": "324",
+    "tier": "complex",
+    "name": "Emeritus of Woe // Demonic Tutor"
+  },
+  {
+    "collector_number": "325",
+    "tier": "complex",
+    "name": "Grave Researcher // Reanimate"
+  },
+  {
+    "collector_number": "326",
+    "tier": "complex",
+    "name": "Moseo, Vein's New Dean"
+  },
+  {
+    "collector_number": "327",
+    "tier": "complex",
+    "name": "Postmortem Professor"
+  },
+  {
+    "collector_number": "328",
+    "tier": "simple",
+    "name": "Pox Plague"
+  },
+  {
+    "collector_number": "329",
+    "tier": "complex",
+    "name": "Scheming Silvertongue // Sign in Blood"
+  },
+  {
+    "collector_number": "330",
+    "tier": "complex",
+    "name": "Withering Curse"
+  },
+  {
+    "collector_number": "331",
+    "tier": "complex",
+    "name": "Choreographed Sparks"
+  },
+  {
+    "collector_number": "332",
+    "tier": "complex",
+    "name": "Emeritus of Conflict // Lightning Bolt"
+  },
+  {
+    "collector_number": "333",
+    "tier": "medium",
+    "name": "Flashback"
+  },
+  {
+    "collector_number": "334",
+    "tier": "complex",
+    "name": "Maelstrom Artisan // Rocket Volley"
+  },
+  {
+    "collector_number": "335",
+    "tier": "complex",
+    "name": "Molten-Core Maestro"
+  },
+  {
+    "collector_number": "336",
+    "tier": "complex",
+    "name": "Steal the Show"
+  },
+  {
+    "collector_number": "337",
+    "tier": "complex",
+    "name": "Ambitious Augmenter"
+  },
+  {
+    "collector_number": "338",
+    "tier": "medium",
+    "name": "Comforting Counsel"
+  },
+  {
+    "collector_number": "339",
+    "tier": "complex",
+    "name": "Emeritus of Abundance // Regrowth"
+  },
+  {
+    "collector_number": "340",
+    "tier": "simple",
+    "name": "Planar Engineering"
+  },
+  {
+    "collector_number": "341",
+    "tier": "complex",
+    "name": "Slumbering Trudge"
+  },
+  {
+    "collector_number": "342",
+    "tier": "complex",
+    "name": "Vastlands Scavenger // Bind to Life"
+  },
+  {
+    "collector_number": "343",
+    "tier": "medium",
+    "name": "Applied Geometry"
+  },
+  {
+    "collector_number": "344",
+    "tier": "medium",
+    "name": "Ark of Hunger"
+  },
+  {
+    "collector_number": "345",
+    "tier": "medium",
+    "name": "Aziza, Mage Tower Captain"
+  },
+  {
+    "collector_number": "346",
+    "tier": "complex",
+    "name": "Berta, Wise Extrapolator"
+  },
+  {
+    "collector_number": "347",
+    "tier": "medium",
+    "name": "Cauldron of Essence"
+  },
+  {
+    "collector_number": "348",
+    "tier": "complex",
+    "name": "Conciliator's Duelist"
+  },
+  {
+    "collector_number": "349",
+    "tier": "simple",
+    "name": "Dina's Guidance"
+  },
+  {
+    "collector_number": "350",
+    "tier": "medium",
+    "name": "Fix What's Broken"
+  },
+  {
+    "collector_number": "351",
+    "tier": "complex",
+    "name": "Hardened Academic"
+  },
+  {
+    "collector_number": "352",
+    "tier": "simple",
+    "name": "Mind into Matter"
+  },
+  {
+    "collector_number": "353",
+    "tier": "complex",
+    "name": "Moment of Reckoning"
+  },
+  {
+    "collector_number": "354",
+    "tier": "complex",
+    "name": "Nita, Forum Conciliator"
+  },
+  {
+    "collector_number": "355",
+    "tier": "medium",
+    "name": "Resonating Lute"
+  },
+  {
+    "collector_number": "356",
+    "tier": "complex",
+    "name": "Splatter Technique"
+  },
+  {
+    "collector_number": "357",
+    "tier": "medium",
+    "name": "Suspend Aggression"
+  },
+  {
+    "collector_number": "358",
+    "tier": "medium",
+    "name": "Traumatic Critique"
+  },
+  {
+    "collector_number": "359",
+    "tier": "medium",
+    "name": "Vicious Rivalry"
+  },
+  {
+    "collector_number": "360",
+    "tier": "simple",
+    "name": "Zaffai and the Tempests"
+  },
+  {
+    "collector_number": "361",
+    "tier": "complex",
+    "name": "Great Hall of the Biblioplex"
+  },
+  {
+    "collector_number": "362",
+    "tier": "complex",
+    "name": "Petrified Hamlet"
+  },
+  {
+    "collector_number": "363",
+    "tier": "complex",
+    "name": "Lorehold Charm"
+  },
+  {
+    "collector_number": "364",
+    "tier": "complex",
+    "name": "Prismari Charm"
+  },
+  {
+    "collector_number": "365",
+    "tier": "complex",
+    "name": "Quandrix Charm"
+  },
+  {
+    "collector_number": "366",
+    "tier": "complex",
+    "name": "Silverquill Charm"
+  },
+  {
+    "collector_number": "367",
+    "tier": "complex",
+    "name": "Witherbloom Charm"
+  },
+  {
+    "collector_number": "368",
+    "tier": "medium",
+    "name": "Wisdom of Ages"
+  }
+]
