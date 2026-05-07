@@ -146,3 +146,8 @@ tests/test_regression.py — Tests regression runner dataclasses, pytest parsing
 
 ### Implementation
 - `silverquillm/regression.py` — New module: CardRegressionResult, CompletedCard, RegressionResult dataclasses; run_regressions runner; regression_feedback_prompt for agent correction
+
+## Item 18: Sort cards by complexity tier for sequential processing
+
+### Implementation
+- `silverquillm/cli.py` — Added _TIER_ORDER constant and _sort_cards_by_tier function; sort specs before orchestration loop by (tier_rank, collector_number)

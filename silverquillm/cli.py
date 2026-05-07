@@ -30,6 +30,40 @@ from silverquillm.run_utils import _session_results_to_dicts
 # Resolve data paths relative to this file's location
 _BENCHMARKS_DIR = Path(__file__).resolve().parent.parent / "benchmarks"
 
+# Tier ordering for sequential processing (trivial → expert).
+# Unknown tiers sort last (high sentinel value).
+_TIER_ORDER: dict[str, int] = {
+    "trivial": 0,
+    "simple": 1,
+    "moderate": 2,
+    "complex": 3,
+    "expert": 4,
+}
+_UNKNOWN_TIER_SENTINEL = max(_TIER_ORDER.values()) + 1
+
+
+def _sort_cards_by_tier(specs: list[dict]) -> list[dict]:
+    """Sort card specs by complexity tier then collector number.
+
+    Ensures the agent processes simpler cards first, building up engine
+    capabilities gradually.  Within the same tier, cards are sorted by
+    collector number ascending for determinism.  Unknown tiers are placed
+    last.
+    """
+
+    def _sort_key(spec: dict) -> tuple[int, int | float, str]:
+        tier = spec.get("complexity_tier", spec.get("tier", ""))
+        tier_rank = _TIER_ORDER.get(tier, _UNKNOWN_TIER_SENTINEL)
+        collector = spec.get("collector_number", spec.get("number", ""))
+        collector_str = str(collector)
+        try:
+            collector_num: int | float = int(collector_str)
+        except (ValueError, TypeError):
+            collector_num = float("inf")
+        return (tier_rank, collector_num, collector_str)
+
+    return sorted(specs, key=_sort_key)
+
 
 @click.group()
 def main() -> None:
@@ -75,6 +109,9 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
             specs = filter_by_prototype(specs, prototype_path)
         except (ValueError, FileNotFoundError) as exc:
             raise click.ClickException(f"Prototype filter error: {exc}")
+
+    # Sort cards by complexity tier (trivial → expert), then collector number
+    specs = _sort_cards_by_tier(specs)
 
     # Print summary
     click.echo(f"Config loaded: {cfg.name}")
