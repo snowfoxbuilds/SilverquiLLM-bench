@@ -61,3 +61,9 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `silverquillm/adapters/claude_code.py` — Concrete ClaudeCodeAdapter: wraps claude CLI with --print flag, passes prompt via stdin, checks exit status, auto-registers as "claude_code"
 - `silverquillm/adapters/__init__.py` — Added import of claude_code module for auto-registration
 
+## Item 7: Implement AiderAdapter
+
+### Implementation
+- `silverquillm/adapters/aider.py` — Concrete AiderAdapter: wraps aider CLI with --message-file for prompt, --no-auto-commits, checks exit status, auto-registers as "aider"
+- `silverquillm/adapters/__init__.py` — Added import of aider module for auto-registration
+
