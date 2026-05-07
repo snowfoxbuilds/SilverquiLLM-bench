@@ -168,3 +168,16 @@ tests/test_regression.py — Tests regression runner dataclasses, pytest parsing
 ### Implementation
 - `silverquillm/scorer.py` — Added AgentCat4Scores dataclass, compute_cat4_scores function, Category 4 table in generate_leaderboard, updated Leaderboard to include category4
 - `silverquillm/results.py` — Added category4 data to save_aggregates summary.json output
+
+## Item 22: Expand Foundations card pool (batch 1: +30 cards)
+
+### Implementation
+- `cards/foundations/enchantments.py` — 8 enchantment cards (4 auras, 4 global enchantments) with continuous effects
+- `cards/foundations/planeswalkers.py` — 4 planeswalker cards with loyalty abilities (real effects, no double-counting)
+- `cards/foundations/modal_spells.py` — 8 modal spell cards with Mode definitions and on_resolve() implementations
+- `cards/foundations/artifacts.py` — 10 artifact cards (mana rocks, equipment, utility)
+- `engine/card.py` — Added _cant_be_blocked and _cant_activate to Creature._reset_characteristics()
+- `tests/cards/test_enchantments.py` — Unit tests for enchantment cards
+- `tests/cards/test_planeswalkers.py` — Unit tests for planeswalker cards
+- `tests/cards/test_modal_spells.py` — Unit tests for modal spell cards
+- `tests/cards/test_artifacts.py` — Unit tests for artifact cards

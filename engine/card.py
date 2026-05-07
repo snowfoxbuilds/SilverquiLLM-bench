@@ -299,6 +299,8 @@ class Creature(CardImpl):
         # These are reapplied by active effects during apply_all().
         self._cant_attack: bool = False
         self._cant_block: bool = False
+        self._cant_be_blocked: bool = False
+        self._cant_activate: bool = False
 
     @property
     def power(self) -> int:
