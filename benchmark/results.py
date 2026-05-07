@@ -251,13 +251,13 @@ def _build_result_record(
     _tested_iters = test_result.get("iterations", [])
     tested_metrics["iterations"] = _tested_iters if isinstance(_tested_iters, int) else len(_tested_iters)
 
+    # Canonical schema: implementation.blind / implementation.tested hold all
+    # per-phase metrics. self_eval/audited_eval hold test-run outcomes.
     record: dict[str, Any] = {
         "card_id": card_id,
         "status": test_result.get("status", blind_result.get("status", "ok")),
         "agent": agent,
         "complexity_tier": complexity_tier,
-        "blind": blind_metrics,
-        "tested": tested_metrics,
         "implementation": {
             "blind": blind_metrics,
             "tested": tested_metrics,

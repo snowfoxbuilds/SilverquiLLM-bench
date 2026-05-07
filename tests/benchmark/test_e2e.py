@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -120,7 +121,8 @@ class TestBenchmarkEndToEnd:
             card_artifacts[card_id] = {
                 "blind_result": {
                     "impl_source": impl_source,
-                    "agent": config.model_name,
+                    "agent": config.agent_tool,
+                    "model": config.model_name,
                     "complexity_tier": "simple",
                     "status": blind_result.status,
                     "tokens": blind_result.tokens,
@@ -130,7 +132,8 @@ class TestBenchmarkEndToEnd:
                 "test_result": {
                     "impl_source": tested_source,
                     "tests_source": tests_source,
-                    "agent": config.model_name,
+                    "agent": config.agent_tool,
+                    "model": config.model_name,
                     "complexity_tier": "simple",
                     "status": test_informed_result.status,
                     "tokens": test_informed_result.tokens,
@@ -157,6 +160,15 @@ class TestBenchmarkEndToEnd:
         assert (run_dir / "cards" / "11" / "tested_impl.py").exists()
         assert (run_dir / "cards" / "6" / "blind_impl.py").exists()
         assert (run_dir / "cards" / "6" / "tested_impl.py").exists()
+
+        # Assert both agent (tool) and model fields are present in result records
+        for card_id in ["11", "6"]:
+            result = json.loads((run_dir / "cards" / card_id / "result.json").read_text())
+            impl = result["implementation"]
+            assert impl["blind"]["agent"] == config.agent_tool
+            assert impl["blind"]["model"] == config.model_name
+            assert impl["tested"]["agent"] == config.agent_tool
+            assert impl["tested"]["model"] == config.model_name
 
         # 6. Run self-eval
         eval_results = []
@@ -213,35 +225,25 @@ class TestBenchmarkEndToEnd:
         config = create_test_config(tmp_path)
         card_dir = str(_CARDS_DIR / "11")
 
-        session = AgentSession(
-            config=config,
-            card_spec=card_spec,
-            card_dir=card_dir,
-        )
+        fake_engine = tmp_path / "engine"
+        fake_engine.mkdir()
 
-        workspace = session.setup_workspace()
+        with patch("benchmark.agent_session._REPO_ROOT", tmp_path):
+            session = AgentSession(
+                config=config,
+                card_spec=card_spec,
+                card_dir=card_dir,
+            )
 
-        # Monkey-patch _run_opencode to simulate contamination:
-        # write a file outside workspace (in engine/)
-        repo_root = Path(__file__).resolve().parent.parent.parent
+            workspace = session.setup_workspace()
 
-        def _contaminating_opencode(prompt: str, ws: Path) -> str:
-            # Write blind_impl.py so the agent "produces output"
-            (ws / "blind_impl.py").write_text("class Foo: pass\n")
-            # Simulate contamination: modify a protected file
-            engine_dir = repo_root / "engine"
-            contamination_file = engine_dir / "_test_contamination_marker.py"
-            contamination_file.write_text("# contamination\n")
-            return "done"
+            def _contaminating_opencode(prompt: str, ws: Path) -> str:
+                (ws / "blind_impl.py").write_text("class Foo: pass\n")
+                (fake_engine / "_test_contamination_marker.py").write_text("# contamination\n")
+                return "done"
 
-        session._run_opencode = _contaminating_opencode  # type: ignore[assignment]
+            session._run_opencode = _contaminating_opencode  # type: ignore[assignment]
 
-        try:
             result = session.run_blind_implementation(workspace)
             assert result.status == "violation"
-        finally:
-            # Clean up the contamination file
-            contamination_file = repo_root / "engine" / "_test_contamination_marker.py"
-            if contamination_file.exists():
-                contamination_file.unlink()
             session.cleanup()

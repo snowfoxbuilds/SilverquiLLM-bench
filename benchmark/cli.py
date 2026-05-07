@@ -199,7 +199,7 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
 @click.option("--audited-tests", default=None, type=click.Path(exists=True), help="Path to gold-standard test file.")
 def eval_cmd(results_dir: str, audited_tests: str | None) -> None:
     """Run evaluation on existing results."""
-    from dataclasses import asdict as _asdict
+    import yaml
 
     from benchmark.evaluator import EvalResult, run_self_eval_flat, run_tests
 
@@ -226,8 +226,6 @@ def eval_cmd(results_dir: str, audited_tests: str | None) -> None:
 
     for run_dir in run_dirs:
         # Step 2: Detect agents from config.yaml
-        import yaml
-
         config_file = run_dir / "config.yaml"
         with open(config_file) as f:
             run_config = yaml.safe_load(f)
@@ -248,7 +246,7 @@ def eval_cmd(results_dir: str, audited_tests: str | None) -> None:
             # Step 3: Single-agent runs — run self-eval flat
             if num_agents == 1:
                 eval_result = run_self_eval_flat(card_path, agent_name)
-                all_eval_results.append(_asdict(eval_result))
+                all_eval_results.append(asdict(eval_result))
             else:
                 # Step 4: Multi-agent cross-eval (future)
                 # TODO: multi-agent cross-eval consolidation
@@ -284,7 +282,7 @@ def eval_cmd(results_dir: str, audited_tests: str | None) -> None:
                     tested_total=tt,
                     errors=all_errors,
                 )
-                all_eval_results.append(_asdict(audited_result))
+                all_eval_results.append(asdict(audited_result))
 
     # Step 6: Deduplicate by (agent, card_id, eval_type), keeping the last entry
     # (latest run wins since run_dirs are sorted by name/timestamp).

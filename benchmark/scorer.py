@@ -211,6 +211,7 @@ def compute_scores(results_dir: Path, tier_data: dict[str, str]) -> Leaderboard:
     lb = Leaderboard()
 
     # Group results by agent
+    # TODO: group by (agent, model) for multi-model leaderboards
     agents: set[str] = set()
     # Keyed by (agent, card_id, eval_type) -> result dict
     by_key: dict[tuple[str, str, str], dict[str, Any]] = {}

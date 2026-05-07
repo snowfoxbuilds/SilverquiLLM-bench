@@ -47,6 +47,7 @@ def _session_results_to_dicts(
         "runtime_seconds": blind.runtime_seconds,
         "peak_context": blind.peak_context,
         "agent": config.agent_tool,
+        "model": config.model_name,
         "complexity_tier": spec.get("tier", "unknown"),
         "impl_source": _read_source(blind.impl_path),
     }
@@ -61,6 +62,7 @@ def _session_results_to_dicts(
             "iterations": tested.iterations,
             "rules_lookups": tested.rules_lookups,
             "agent": config.agent_tool,
+            "model": config.model_name,
             "complexity_tier": spec.get("tier", "unknown"),
             "impl_source": _read_source(tested.impl_path),
             "tests_source": _read_source(tested.tests_path),
