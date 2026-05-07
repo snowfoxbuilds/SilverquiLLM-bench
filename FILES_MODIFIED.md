@@ -81,3 +81,12 @@ tests/test_agent_session.py — Verifies session dataclass, workspace setup, bli
 
 ### Implementation
 silverquillm/agent_session.py — Replaced hardcoded OpenCode subprocess logic with adapter-based delegation; added adapter lifecycle (setup/teardown); removed threading import
+
+## Item 10: Implement postmortem JSONL logging
+
+### Tests
+tests/test_postmortem_logging.py — Tests _append_postmortem helper, blind/test-informed postmortem logging, error handling
+
+### Implementation
+silverquillm/agent_session.py — Added _append_postmortem helper, _get_postmortem_path, wrapped _run_opencode calls with timing and JSONL logging
+tests/test_postmortem_logging.py — Test suite for postmortem JSONL logging feature

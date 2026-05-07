@@ -42,6 +42,7 @@ __all__ = [
     "AgentSession",
     "BlindResult",
     "TestInformedResult",
+    "_append_postmortem",
     "setup_workspace",
     "run_blind",
     "run_test_informed",
@@ -325,18 +326,56 @@ class AgentSession:
         protected_snapshot = _snapshot_all_protected(_REPO_ROOT)
         start = time.monotonic()
 
+        postmortem_path = _get_postmortem_path(self.config, self.card_name)
+
         try:
             output = self._run_opencode(prompt, workspace)
         except subprocess.TimeoutExpired:
+            elapsed = time.monotonic() - start
+            if postmortem_path:
+                _append_postmortem(
+                    postmortem_path=postmortem_path,
+                    prompt=prompt,
+                    response="TimeoutExpired",
+                    tokens=None,
+                    timing_ms=elapsed * 1000,
+                    round_num=1,
+                    status="error",
+                )
             return BlindResult(
                 impl_path=None,
                 tokens=0,
-                runtime_seconds=time.monotonic() - start,
+                runtime_seconds=elapsed,
                 peak_context=0,
                 status="timeout",
             )
+        except Exception as exc:
+            elapsed = time.monotonic() - start
+            if postmortem_path:
+                _append_postmortem(
+                    postmortem_path=postmortem_path,
+                    prompt=prompt,
+                    response=f"{type(exc).__name__}: {exc}",
+                    tokens=None,
+                    timing_ms=elapsed * 1000,
+                    round_num=1,
+                    status="error",
+                )
+            raise
 
         elapsed = time.monotonic() - start
+
+        # Log successful invocation
+        if postmortem_path:
+            _append_postmortem(
+                postmortem_path=postmortem_path,
+                prompt=prompt,
+                response=output,
+                tokens=_estimate_tokens(output),
+                timing_ms=elapsed * 1000,
+                round_num=1,
+                status="success",
+            )
 
         # Look for implementation file produced by the agent
         impl_path = workspace / "blind_impl.py"
@@ -435,6 +474,8 @@ class AgentSession:
         tests_passed = False
         start = time.monotonic()
 
+        postmortem_path = _get_postmortem_path(self.config, self.card_name)
+
         prompt = test_informed_prompt(
             self.card_spec,
             round_num=1,
@@ -447,8 +488,20 @@ class AgentSession:
             protected_snapshot = _snapshot_all_protected(_REPO_ROOT)
 
             try:
+                round_start = time.monotonic()
                 output = self._run_opencode(prompt, workspace)
             except subprocess.TimeoutExpired:
+                round_elapsed = time.monotonic() - round_start
+                if postmortem_path:
+                    _append_postmortem(
+                        postmortem_path=postmortem_path,
+                        prompt=prompt,
+                        response="TimeoutExpired",
+                        tokens=None,
+                        timing_ms=round_elapsed * 1000,
+                        round_num=round_num,
+                        status="error",
+                    )
                 return TestInformedResult(
                     impl_path=card_impl_path if card_impl_path.exists() else None,
                     tests_path=workspace / "tests.py" if (workspace / "tests.py").exists() else None,
@@ -459,12 +512,38 @@ class AgentSession:
                     rules_lookups=rules_lookups,
                     status="timeout",
                 )
+            except Exception as exc:
+                round_elapsed = time.monotonic() - round_start
+                if postmortem_path:
+                    _append_postmortem(
+                        postmortem_path=postmortem_path,
+                        prompt=prompt,
+                        response=f"{type(exc).__name__}: {exc}",
+                        tokens=None,
+                        timing_ms=round_elapsed * 1000,
+                        round_num=round_num,
+                        status="error",
+                    )
+                raise
 
             # Update metrics for this round before checking violations
             round_tokens = _estimate_tokens(output)
+            round_elapsed = time.monotonic() - round_start
             total_tokens += round_tokens
             peak_context = max(peak_context, _estimate_tokens(prompt + output))
             rules_lookups += _count_rules_lookups(output)
+
+            # Log postmortem for this round
+            if postmortem_path:
+                _append_postmortem(
+                    postmortem_path=postmortem_path,
+                    prompt=prompt,
+                    response=output,
+                    tokens=round_tokens,
+                    timing_ms=round_elapsed * 1000,
+                    round_num=round_num,
+                    status="success",
+                )
 
             # Check for violations after each agent invocation
             violations = _check_violations(workspace, before=protected_snapshot)
@@ -601,6 +680,67 @@ class AgentSession:
                     fpath.chmod(0o644)
             shutil.rmtree(self._workspace, ignore_errors=True)
             self._workspace = None
+
+
+# ---------------------------------------------------------------------------
+# Postmortem JSONL logging
+# ---------------------------------------------------------------------------
+
+_POSTMORTEM_RESPONSE_MAX = 10_000
+
+
+def _append_postmortem(
+    postmortem_path: Path,
+    prompt: str,
+    response: str,
+    tokens: int | None,
+    timing_ms: float,
+    round_num: int,
+    status: str,
+) -> None:
+    """Append a single JSON line to the postmortem log file.
+
+    Parameters
+    ----------
+    postmortem_path:
+        Path to the ``postmortem.jsonl`` file.
+    prompt:
+        The prompt text sent to the agent.
+    response:
+        The agent's response text.  Truncated to *_POSTMORTEM_RESPONSE_MAX*
+        characters when writing.
+    tokens:
+        Estimated token count, or ``None`` if unavailable.
+    timing_ms:
+        Duration of the invocation in milliseconds.
+    round_num:
+        1-based round number (1 for blind phase).
+    status:
+        ``"success"`` or ``"error"``.
+    """
+    # Truncate very long responses
+    if len(response) > _POSTMORTEM_RESPONSE_MAX:
+        response = response[:_POSTMORTEM_RESPONSE_MAX] + "...[truncated]"
+
+    entry = {
+        "prompt": prompt,
+        "response": response,
+        "tokens": tokens,
+        "timing_ms": timing_ms,
+        "round": round_num,
+        "status": status,
+    }
+
+    postmortem_path.parent.mkdir(parents=True, exist_ok=True)
+    with postmortem_path.open("a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def _get_postmortem_path(config: BenchmarkConfig, card_name: str) -> Path | None:
+    """Return the postmortem.jsonl path, or None if output_dir is not set."""
+    if not config.output_dir:
+        return None
+    return Path(config.output_dir) / card_name / "postmortem.jsonl"
 
 
 # ---------------------------------------------------------------------------
