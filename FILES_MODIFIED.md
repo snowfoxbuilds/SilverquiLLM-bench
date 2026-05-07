@@ -49,3 +49,9 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `silverquillm/adapters/__init__.py` — New package init re-exporting AgentAdapter, get_adapter, register_adapter
 - `silverquillm/adapters/base.py` — AgentAdapter ABC with run/setup/teardown, run_with_retries helper, registry-based get_adapter factory
 
+## Item 5: Implement OpenCodeAdapter
+
+### Implementation
+- `silverquillm/adapters/opencode.py` — Concrete OpenCodeAdapter: wraps opencode CLI, passes prompt via stdin, removes invalid --thinking flag, auto-registers as "opencode"
+- `silverquillm/adapters/__init__.py` — Added import of opencode module for auto-registration
+
