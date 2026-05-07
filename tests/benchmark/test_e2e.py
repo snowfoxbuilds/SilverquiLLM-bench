@@ -121,7 +121,7 @@ class TestBenchmarkEndToEnd:
             card_artifacts[card_id] = {
                 "blind_result": {
                     "impl_source": impl_source,
-                    "agent": config.agent_tool,
+                    "agent": config.agent.adapter,
                     "model": config.model_name,
                     "complexity_tier": "simple",
                     "status": blind_result.status,
@@ -132,7 +132,7 @@ class TestBenchmarkEndToEnd:
                 "test_result": {
                     "impl_source": tested_source,
                     "tests_source": tests_source,
-                    "agent": config.agent_tool,
+                    "agent": config.agent.adapter,
                     "model": config.model_name,
                     "complexity_tier": "simple",
                     "status": test_informed_result.status,
@@ -164,7 +164,7 @@ class TestBenchmarkEndToEnd:
         # Assert both agent (tool) and model fields are present in result records
         for card_id in ["11", "6"]:
             result = json.loads((run_dir / "cards" / card_id / "result.json").read_text())
-            assert result["agent"] == config.agent_tool
+            assert result["agent"] == config.agent.adapter
             assert result["model"] == config.model_name
 
         # 6. Run self-eval

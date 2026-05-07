@@ -14,3 +14,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Agent-related config lives under `agent:` in YAML and `config.agent.*` in code. Legacy flat access (`config.max_test_rounds`, `config.agent_tool`) works via deprecated properties. Field `agent_tool` renamed to `agent.adapter`.
 - **Reasoning**: Backward-compatible properties allow gradual migration of consumers in the next TODO item.
 - **Impact**: `silverquillm/config.py`, `config.example.yaml`, `silverquillm/results.py`.
+
+## Deprecated flat config properties removed
+- **Context**: After migrating all consumers, backward-compat properties were no longer needed.
+- **Decision**: Removed deprecated properties from BenchmarkConfig. All code uses `config.agent.*`. YAML backward compat for flat keys is preserved in `load_config()`.
+- **Reasoning**: Clean API surface; no more dual access patterns.
+- **Impact**: All test fixtures use `agent=AgentConfig(...)`. New code must use `config.agent.*`.

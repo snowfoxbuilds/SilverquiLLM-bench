@@ -54,10 +54,10 @@ class TestBenchmarkConfig:
         cfg = BenchmarkConfig(**_MINIMAL_CONFIG)
         assert isinstance(cfg.max_context, int)
         assert isinstance(cfg.temperature, (int, float))
-        assert isinstance(cfg.agent_tool, str)
-        assert isinstance(cfg.max_test_rounds, int)
-        assert isinstance(cfg.timeout_per_card, int)
-        assert isinstance(cfg.disable_web_search, bool)
+        assert isinstance(cfg.agent.adapter, str)
+        assert isinstance(cfg.agent.max_test_rounds, int)
+        assert isinstance(cfg.agent.timeout_per_card, int)
+        assert isinstance(cfg.agent.disable_web_search, bool)
 
     def test_default_max_context(self) -> None:
         """max_context defaults to 200_000."""
@@ -72,22 +72,22 @@ class TestBenchmarkConfig:
     def test_default_max_test_rounds(self) -> None:
         """max_test_rounds defaults to 3."""
         cfg = BenchmarkConfig(**_MINIMAL_CONFIG)
-        assert cfg.max_test_rounds == 3
+        assert cfg.agent.max_test_rounds == 3
 
     def test_default_timeout_per_card(self) -> None:
         """timeout_per_card defaults to 300."""
         cfg = BenchmarkConfig(**_MINIMAL_CONFIG)
-        assert cfg.timeout_per_card == 300
+        assert cfg.agent.timeout_per_card == 300
 
     def test_default_disable_web_search(self) -> None:
         """disable_web_search defaults to True."""
         cfg = BenchmarkConfig(**_MINIMAL_CONFIG)
-        assert cfg.disable_web_search is True
+        assert cfg.agent.disable_web_search is True
 
     def test_default_agent_tool(self) -> None:
-        """agent_tool defaults to 'opencode'."""
+        """agent.adapter defaults to 'opencode'."""
         cfg = BenchmarkConfig(**_MINIMAL_CONFIG)
-        assert cfg.agent_tool == "opencode"
+        assert cfg.agent.adapter == "opencode"
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ class TestLoadConfig:
         cfg = load_config(str(p))
         assert cfg.max_context == 200_000
         assert cfg.temperature == 0.0
-        assert cfg.max_test_rounds == 3
+        assert cfg.agent.max_test_rounds == 3
 
     def test_override_optional_fields(self, tmp_path: Path) -> None:
         """Optional fields can be overridden via YAML."""

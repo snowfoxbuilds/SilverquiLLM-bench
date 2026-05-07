@@ -4,8 +4,7 @@ Tests verify:
 - AgentConfig dataclass exists with correct fields and defaults.
 - BenchmarkConfig embeds an AgentConfig via the ``agent`` attribute.
 - load_config() correctly parses nested ``agent:`` YAML blocks.
-- load_config() supports flat legacy keys for backward compat.
-- Backward-compatible properties (agent_tool, max_test_rounds, etc.) delegate to agent.*.
+- load_config() supports flat legacy keys in YAML for backward compat.
 - Edge cases: missing agent block, partial agent block, nested overrides flat.
 """
 
@@ -100,43 +99,6 @@ class TestBenchmarkConfigAgent:
         assert cfg.agent is ac
         assert cfg.agent.adapter == "myagent"
         assert cfg.agent.max_test_rounds == 10
-
-
-# ---------------------------------------------------------------------------
-# Backward-compatibility properties
-# ---------------------------------------------------------------------------
-class TestBackwardCompatProperties:
-    """Legacy flat properties should delegate to agent.*."""
-
-    def test_agent_tool_reads_adapter(self) -> None:
-        cfg = BenchmarkConfig(**_MINIMAL_RAW, agent=AgentConfig(adapter="foo"))
-        assert cfg.agent_tool == "foo"
-
-    def test_agent_tool_setter_updates_adapter(self) -> None:
-        cfg = BenchmarkConfig(**_MINIMAL_RAW)
-        cfg.agent_tool = "bar"
-        assert cfg.agent.adapter == "bar"
-
-    def test_max_test_rounds_property(self) -> None:
-        cfg = BenchmarkConfig(**_MINIMAL_RAW, agent=AgentConfig(max_test_rounds=7))
-        assert cfg.max_test_rounds == 7
-
-    def test_timeout_per_card_property(self) -> None:
-        cfg = BenchmarkConfig(**_MINIMAL_RAW, agent=AgentConfig(timeout_per_card=999))
-        assert cfg.timeout_per_card == 999
-
-    def test_disable_web_search_property(self) -> None:
-        cfg = BenchmarkConfig(**_MINIMAL_RAW, agent=AgentConfig(disable_web_search=False))
-        assert cfg.disable_web_search is False
-
-    def test_legacy_flat_kwarg_agent_tool(self) -> None:
-        """Passing ``agent_tool=`` as flat kwarg should set agent.adapter."""
-        cfg = BenchmarkConfig(**_MINIMAL_RAW, agent_tool="legacy-tool")
-        assert cfg.agent.adapter == "legacy-tool"
-
-    def test_legacy_flat_kwarg_max_test_rounds(self) -> None:
-        cfg = BenchmarkConfig(**_MINIMAL_RAW, max_test_rounds=12)
-        assert cfg.agent.max_test_rounds == 12
 
 
 # ---------------------------------------------------------------------------

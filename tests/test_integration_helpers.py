@@ -190,5 +190,5 @@ class TestCreateTestConfig:
         assert config.model_name
         assert config.model_provider
         assert config.max_context > 0
-        assert config.timeout_per_card > 0
-        assert config.max_test_rounds >= 1
+        assert config.agent.timeout_per_card > 0
+        assert config.agent.max_test_rounds >= 1

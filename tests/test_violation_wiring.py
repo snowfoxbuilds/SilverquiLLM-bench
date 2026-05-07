@@ -20,7 +20,7 @@ from silverquillm.agent_session import (
     run_blind,
     run_test_informed,
 )
-from silverquillm.config import BenchmarkConfig
+from silverquillm.config import AgentConfig, BenchmarkConfig
 
 
 # ---------------------------------------------------------------------------
@@ -36,8 +36,10 @@ def _make_config(**overrides) -> BenchmarkConfig:
         model_provider="test-provider",
         max_context=200_000,
         temperature=0.0,
-        max_test_rounds=3,
-        timeout_per_card=300,
+        agent=AgentConfig(
+            max_test_rounds=3,
+            timeout_per_card=300,
+        ),
     )
     defaults.update(overrides)
     return BenchmarkConfig(**defaults)

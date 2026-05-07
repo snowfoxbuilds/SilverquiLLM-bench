@@ -276,6 +276,7 @@ class AgentSession:
         dict
             OpenCode-compatible configuration dictionary.
         """
+        deny_web = self.config.agent.disable_web_search
         cfg = {
             "model": self.config.model_name,
             "provider": self.config.model_provider,
@@ -285,12 +286,12 @@ class AgentSession:
             "repo_root": str(_REPO_ROOT),
             "engine_path": str(_REPO_ROOT / "engine"),
             "permissions": {
-                "deny_web_fetch": True,
-                "deny_network": True,
+                "deny_web_fetch": deny_web,
+                "deny_network": deny_web,
                 "allow_read": [str(workspace), str(_REPO_ROOT / "engine")],
                 "allow_write": [str(workspace)],
             },
-            "timeout": self.config.timeout_per_card,
+            "timeout": self.config.agent.timeout_per_card,
         }
         return cfg
 
@@ -355,7 +356,7 @@ class AgentSession:
             stdout_lines.append(line)
 
         t.join(timeout=5)
-        process.wait(timeout=self.config.timeout_per_card)
+        process.wait(timeout=self.config.agent.timeout_per_card)
 
         return "".join(stdout_lines)
 
@@ -495,10 +496,10 @@ class AgentSession:
         prompt = test_informed_prompt(
             self.card_spec,
             round_num=1,
-            max_rounds=self.config.max_test_rounds,
+            max_rounds=self.config.agent.max_test_rounds,
         )
 
-        for round_num in range(1, self.config.max_test_rounds + 1):
+        for round_num in range(1, self.config.agent.max_test_rounds + 1):
             iterations = round_num
 
             protected_snapshot = _snapshot_all_protected(_REPO_ROOT)
@@ -552,11 +553,11 @@ class AgentSession:
 
             if not tests_path.exists():
                 # No tests produced yet — continue if more rounds
-                if round_num < self.config.max_test_rounds:
+                if round_num < self.config.agent.max_test_rounds:
                     prompt = test_informed_prompt(
                         self.card_spec,
                         round_num=round_num + 1,
-                        max_rounds=self.config.max_test_rounds,
+                        max_rounds=self.config.agent.max_test_rounds,
                     )
                     continue
 
@@ -570,11 +571,11 @@ class AgentSession:
                     break
 
                 # More rounds available → feed back
-                if round_num < self.config.max_test_rounds:
+                if round_num < self.config.agent.max_test_rounds:
                     prompt = iteration_feedback_prompt(
                         test_output=test_result.stdout + test_result.stderr,
                         round_num=round_num,
-                        max_rounds=self.config.max_test_rounds,
+                        max_rounds=self.config.agent.max_test_rounds,
                     )
                     continue
 

@@ -33,7 +33,7 @@ from silverquillm.agent_session import (
     setup_workspace,
     write_opencode_config,
 )
-from silverquillm.config import BenchmarkConfig
+from silverquillm.config import AgentConfig, BenchmarkConfig
 
 
 # ---------------------------------------------------------------------------
@@ -49,8 +49,10 @@ def _make_config(**overrides) -> BenchmarkConfig:
         model_provider="test-provider",
         max_context=200_000,
         temperature=0.0,
-        max_test_rounds=3,
-        timeout_per_card=300,
+        agent=AgentConfig(
+            max_test_rounds=3,
+            timeout_per_card=300,
+        ),
     )
     defaults.update(overrides)
     return BenchmarkConfig(**defaults)
@@ -381,7 +383,7 @@ class TestRunTestInformed:
         session._run_pytest = fake_pytest
         result = session.run_test_informed(ws, blind_impl)
         assert result.status == "max_rounds_exhausted"
-        assert result.iterations == session.config.max_test_rounds
+        assert result.iterations == session.config.agent.max_test_rounds
 
     def test_standalone_raises_without_workspace(self, session):
         with pytest.raises(RuntimeError, match="[Ww]orkspace"):

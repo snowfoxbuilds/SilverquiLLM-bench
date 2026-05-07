@@ -29,3 +29,17 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `silverquillm/results.py` — Fixed config serialization to convert nested dataclasses to plain dicts for safe YAML output
 - `config.example.yaml` — Updated to use nested agent: block with adapter field
 
+## Item 3: Update all BenchmarkConfig consumers for nested agent config
+
+### Implementation
+- `silverquillm/config.py` — Removed deprecated backward-compat properties and legacy flat kwargs from __init__
+- `silverquillm/run_utils.py` — Migrated config.agent_tool → config.agent.adapter
+- `silverquillm/agent_session.py` — Migrated config.timeout_per_card → config.agent.timeout_per_card, config.max_test_rounds → config.agent.max_test_rounds; wired configure_opencode deny_web_fetch/deny_network from config.agent.disable_web_search
+- `tests/test_agent_config.py` — Removed TestBackwardCompatProperties class and legacy flat kwarg tests
+- `tests/test_agent_session.py` — Updated _make_config to use agent=AgentConfig(...), migrated config.max_test_rounds access
+- `tests/test_cli_config.py` — Migrated all flat accessor assertions to config.agent.* form
+- `tests/test_integration_helpers.py` — Migrated config.timeout_per_card/max_test_rounds to config.agent.*
+- `tests/test_violation_wiring.py` — Updated _make_config to use agent=AgentConfig(...)
+- `tests/benchmark/test_helpers.py` — Updated create_test_config to use agent=AgentConfig(...)
+- `tests/benchmark/test_e2e.py` — Migrated config.agent_tool → config.agent.adapter
+

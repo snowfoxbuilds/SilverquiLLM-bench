@@ -37,10 +37,7 @@ class BenchmarkConfig:
 
     Agent-related fields (``adapter``, ``max_test_rounds``, ``timeout_per_card``,
     ``disable_web_search``) live inside a nested :class:`AgentConfig` accessible
-    via the ``agent`` attribute.  For backward compatibility the legacy flat
-    keywords (``agent_tool``, ``max_test_rounds``, ``timeout_per_card``,
-    ``disable_web_search``) are still accepted by the constructor and exposed as
-    properties that delegate to ``agent.*``.
+    via the ``agent`` attribute.
     """
 
     name: str
@@ -68,11 +65,6 @@ class BenchmarkConfig:
         engine_docs_path: str = "",
         template_dir: str = "",
         output_dir: str = "",
-        # Legacy flat kwargs (backward compat) -------------------------
-        agent_tool: str | None = None,
-        max_test_rounds: int | None = None,
-        timeout_per_card: int | None = None,
-        disable_web_search: bool | None = None,
     ) -> None:
         self.name = name
         self.set_code = set_code
@@ -85,57 +77,7 @@ class BenchmarkConfig:
         self.template_dir = template_dir
         self.output_dir = output_dir
 
-        # Build AgentConfig: start from explicit nested, overlay legacy flat keys
         self.agent = agent if agent is not None else AgentConfig()
-
-        if agent_tool is not None:
-            self.agent.adapter = agent_tool
-        if max_test_rounds is not None:
-            self.agent.max_test_rounds = max_test_rounds
-        if timeout_per_card is not None:
-            self.agent.timeout_per_card = timeout_per_card
-        if disable_web_search is not None:
-            self.agent.disable_web_search = disable_web_search
-
-    # ------------------------------------------------------------------
-    # Backward-compatibility properties (deprecated, delegate to agent.*)
-    # ------------------------------------------------------------------
-
-    @property
-    def agent_tool(self) -> str:
-        """Deprecated: use ``agent.adapter`` instead."""
-        return self.agent.adapter
-
-    @agent_tool.setter
-    def agent_tool(self, value: str) -> None:
-        self.agent.adapter = value
-
-    @property
-    def max_test_rounds(self) -> int:
-        """Deprecated: use ``agent.max_test_rounds`` instead."""
-        return self.agent.max_test_rounds
-
-    @max_test_rounds.setter
-    def max_test_rounds(self, value: int) -> None:
-        self.agent.max_test_rounds = value
-
-    @property
-    def timeout_per_card(self) -> int:
-        """Deprecated: use ``agent.timeout_per_card`` instead."""
-        return self.agent.timeout_per_card
-
-    @timeout_per_card.setter
-    def timeout_per_card(self, value: int) -> None:
-        self.agent.timeout_per_card = value
-
-    @property
-    def disable_web_search(self) -> bool:
-        """Deprecated: use ``agent.disable_web_search`` instead."""
-        return self.agent.disable_web_search
-
-    @disable_web_search.setter
-    def disable_web_search(self, value: bool) -> None:
-        self.agent.disable_web_search = value
 
 
 # Fields that have no default and must be present in config YAML
