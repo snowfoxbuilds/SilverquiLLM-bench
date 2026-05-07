@@ -90,3 +90,11 @@ tests/test_postmortem_logging.py — Tests _append_postmortem helper, blind/test
 ### Implementation
 silverquillm/agent_session.py — Added _append_postmortem helper, _get_postmortem_path, wrapped _run_opencode calls with timing and JSONL logging
 tests/test_postmortem_logging.py — Test suite for postmortem JSONL logging feature
+
+## Item 11: Implement agent_thoughts.md narrative generation
+
+### Tests
+(no dedicated test file — verified via existing test suite)
+
+### Implementation
+silverquillm/agent_session.py — Added _generate_agent_thoughts helper that reads postmortem.jsonl and generates agent_thoughts.md; hooked into run_test_informed after all rounds complete

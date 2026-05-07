@@ -43,6 +43,7 @@ __all__ = [
     "BlindResult",
     "TestInformedResult",
     "_append_postmortem",
+    "_generate_agent_thoughts",
     "setup_workspace",
     "run_blind",
     "run_test_informed",
@@ -482,123 +483,170 @@ class AgentSession:
             max_rounds=self.config.agent.max_test_rounds,
         )
 
-        for round_num in range(1, self.config.agent.max_test_rounds + 1):
-            iterations = round_num
+        try:
+            for round_num in range(1, self.config.agent.max_test_rounds + 1):
+                iterations = round_num
 
-            protected_snapshot = _snapshot_all_protected(_REPO_ROOT)
+                protected_snapshot = _snapshot_all_protected(_REPO_ROOT)
 
-            try:
-                round_start = time.monotonic()
-                output = self._run_opencode(prompt, workspace)
-            except subprocess.TimeoutExpired:
+                try:
+                    round_start = time.monotonic()
+                    output = self._run_opencode(prompt, workspace)
+                except subprocess.TimeoutExpired:
+                    round_elapsed = time.monotonic() - round_start
+                    if postmortem_path:
+                        _append_postmortem(
+                            postmortem_path=postmortem_path,
+                            prompt=prompt,
+                            response="TimeoutExpired",
+                            tokens=None,
+                            timing_ms=round_elapsed * 1000,
+                            round_num=round_num,
+                            status="error",
+                        )
+                    return TestInformedResult(
+                        impl_path=card_impl_path if card_impl_path.exists() else None,
+                        tests_path=workspace / "tests.py" if (workspace / "tests.py").exists() else None,
+                        iterations=iterations,
+                        tokens=total_tokens,
+                        runtime_seconds=time.monotonic() - start,
+                        peak_context=peak_context,
+                        rules_lookups=rules_lookups,
+                        status="timeout",
+                    )
+                except Exception as exc:
+                    round_elapsed = time.monotonic() - round_start
+                    if postmortem_path:
+                        _append_postmortem(
+                            postmortem_path=postmortem_path,
+                            prompt=prompt,
+                            response=f"{type(exc).__name__}: {exc}",
+                            tokens=None,
+                            timing_ms=round_elapsed * 1000,
+                            round_num=round_num,
+                            status="error",
+                        )
+                    raise
+
+                # Update metrics for this round before checking violations
+                round_tokens = _estimate_tokens(output)
                 round_elapsed = time.monotonic() - round_start
+                total_tokens += round_tokens
+                peak_context = max(peak_context, _estimate_tokens(prompt + output))
+                rules_lookups += _count_rules_lookups(output)
+
+                # Determine test pass/fail for this round (before logging
+                # postmortem so the entry includes the result).
+                round_tests_passing: bool | None = None
+
+                # Check for violations after each agent invocation
+                violations = _check_violations(workspace, before=protected_snapshot)
+                if violations:
+                    logger.warning(
+                        "Violations detected during test-informed round %d: %s",
+                        round_num,
+                        violations,
+                    )
+                    # Log postmortem with violation context
+                    if postmortem_path:
+                        _append_postmortem(
+                            postmortem_path=postmortem_path,
+                            prompt=prompt,
+                            response=output,
+                            tokens=round_tokens,
+                            timing_ms=round_elapsed * 1000,
+                            round_num=round_num,
+                            status="success",
+                            tests_passing=False,
+                        )
+                    return TestInformedResult(
+                        impl_path=card_impl_path if card_impl_path.exists() else None,
+                        tests_path=workspace / "tests.py" if (workspace / "tests.py").exists() else None,
+                        iterations=iterations,
+                        tokens=total_tokens,
+                        runtime_seconds=time.monotonic() - start,
+                        peak_context=peak_context,
+                        rules_lookups=rules_lookups,
+                        status="violation",
+                    )
+
+                # Check for test file
+                tests_path = workspace / "tests.py"
+                impl_path = workspace / "tested_impl.py"
+
+                # Agent may update card_impl.py directly
+                if not impl_path.exists() and card_impl_path.exists():
+                    impl_path = card_impl_path
+
+                if not tests_path.exists():
+                    # No tests produced yet — continue if more rounds
+                    if round_num < self.config.agent.max_test_rounds:
+                        # Log postmortem for this round (no test info yet)
+                        if postmortem_path:
+                            _append_postmortem(
+                                postmortem_path=postmortem_path,
+                                prompt=prompt,
+                                response=output,
+                                tokens=round_tokens,
+                                timing_ms=round_elapsed * 1000,
+                                round_num=round_num,
+                                status="success",
+                            )
+                        prompt = test_informed_prompt(
+                            self.card_spec,
+                            round_num=round_num + 1,
+                            max_rounds=self.config.agent.max_test_rounds,
+                        )
+                        continue
+
+                # Run pytest on the tests
+                if tests_path.exists():
+                    test_result = self._run_pytest(workspace, tests_path)
+
+                    # All passing → done
+                    if test_result.returncode == 0:
+                        tests_passed = True
+                        round_tests_passing = True
+                    else:
+                        round_tests_passing = False
+
+                # Log postmortem for this round
                 if postmortem_path:
                     _append_postmortem(
                         postmortem_path=postmortem_path,
                         prompt=prompt,
-                        response="TimeoutExpired",
-                        tokens=None,
+                        response=output,
+                        tokens=round_tokens,
                         timing_ms=round_elapsed * 1000,
                         round_num=round_num,
-                        status="error",
+                        status="success",
+                        tests_passing=round_tests_passing,
                     )
-                return TestInformedResult(
-                    impl_path=card_impl_path if card_impl_path.exists() else None,
-                    tests_path=workspace / "tests.py" if (workspace / "tests.py").exists() else None,
-                    iterations=iterations,
-                    tokens=total_tokens,
-                    runtime_seconds=time.monotonic() - start,
-                    peak_context=peak_context,
-                    rules_lookups=rules_lookups,
-                    status="timeout",
-                )
-            except Exception as exc:
-                round_elapsed = time.monotonic() - round_start
-                if postmortem_path:
-                    _append_postmortem(
-                        postmortem_path=postmortem_path,
-                        prompt=prompt,
-                        response=f"{type(exc).__name__}: {exc}",
-                        tokens=None,
-                        timing_ms=round_elapsed * 1000,
-                        round_num=round_num,
-                        status="error",
-                    )
-                raise
 
-            # Update metrics for this round before checking violations
-            round_tokens = _estimate_tokens(output)
-            round_elapsed = time.monotonic() - round_start
-            total_tokens += round_tokens
-            peak_context = max(peak_context, _estimate_tokens(prompt + output))
-            rules_lookups += _count_rules_lookups(output)
-
-            # Log postmortem for this round
-            if postmortem_path:
-                _append_postmortem(
-                    postmortem_path=postmortem_path,
-                    prompt=prompt,
-                    response=output,
-                    tokens=round_tokens,
-                    timing_ms=round_elapsed * 1000,
-                    round_num=round_num,
-                    status="success",
-                )
-
-            # Check for violations after each agent invocation
-            violations = _check_violations(workspace, before=protected_snapshot)
-            if violations:
-                logger.warning(
-                    "Violations detected during test-informed round %d: %s",
-                    round_num,
-                    violations,
-                )
-                return TestInformedResult(
-                    impl_path=card_impl_path if card_impl_path.exists() else None,
-                    tests_path=workspace / "tests.py" if (workspace / "tests.py").exists() else None,
-                    iterations=iterations,
-                    tokens=total_tokens,
-                    runtime_seconds=time.monotonic() - start,
-                    peak_context=peak_context,
-                    rules_lookups=rules_lookups,
-                    status="violation",
-                )
-
-            # Check for test file
-            tests_path = workspace / "tests.py"
-            impl_path = workspace / "tested_impl.py"
-
-            # Agent may update card_impl.py directly
-            if not impl_path.exists() and card_impl_path.exists():
-                impl_path = card_impl_path
-
-            if not tests_path.exists():
-                # No tests produced yet — continue if more rounds
-                if round_num < self.config.agent.max_test_rounds:
-                    prompt = test_informed_prompt(
-                        self.card_spec,
-                        round_num=round_num + 1,
-                        max_rounds=self.config.agent.max_test_rounds,
-                    )
-                    continue
-
-            # Run pytest on the tests
-            if tests_path.exists():
-                test_result = self._run_pytest(workspace, tests_path)
-
-                # All passing → done
-                if test_result.returncode == 0:
-                    tests_passed = True
+                if tests_passed:
                     break
 
                 # More rounds available → feed back
-                if round_num < self.config.agent.max_test_rounds:
+                if tests_path.exists() and round_num < self.config.agent.max_test_rounds:
                     prompt = iteration_feedback_prompt(
                         test_output=test_result.stdout + test_result.stderr,
                         round_num=round_num,
                         max_rounds=self.config.agent.max_test_rounds,
                     )
                     continue
+
+        finally:
+            # Generate agent_thoughts.md on ALL exit paths (normal,
+            # early-return on timeout/violation, and exceptions).
+            if self.config.output_dir:
+                try:
+                    _generate_agent_thoughts(self.config.output_dir, self.card_name)
+                except Exception:
+                    logger.debug(
+                        "Failed to generate agent_thoughts.md for %s",
+                        self.card_name,
+                        exc_info=True,
+                    )
 
         elapsed = time.monotonic() - start
 
@@ -697,6 +745,8 @@ def _append_postmortem(
     timing_ms: float,
     round_num: int,
     status: str,
+    *,
+    tests_passing: bool | None = None,
 ) -> None:
     """Append a single JSON line to the postmortem log file.
 
@@ -717,12 +767,15 @@ def _append_postmortem(
         1-based round number (1 for blind phase).
     status:
         ``"success"`` or ``"error"``.
+    tests_passing:
+        Whether pytest passed after this round.  ``None`` when unknown
+        (e.g. blind phase or timeout before tests ran).
     """
     # Truncate very long responses
     if len(response) > _POSTMORTEM_RESPONSE_MAX:
         response = response[:_POSTMORTEM_RESPONSE_MAX] + "...[truncated]"
 
-    entry = {
+    entry: dict[str, Any] = {
         "prompt": prompt,
         "response": response,
         "tokens": tokens,
@@ -730,6 +783,8 @@ def _append_postmortem(
         "round": round_num,
         "status": status,
     }
+    if tests_passing is not None:
+        entry["tests_passing"] = tests_passing
 
     postmortem_path.parent.mkdir(parents=True, exist_ok=True)
     with postmortem_path.open("a") as f:
@@ -741,6 +796,165 @@ def _get_postmortem_path(config: BenchmarkConfig, card_name: str) -> Path | None
     if not config.output_dir:
         return None
     return Path(config.output_dir) / card_name / "postmortem.jsonl"
+
+
+# ---------------------------------------------------------------------------
+# Agent thoughts narrative generation
+# ---------------------------------------------------------------------------
+
+
+def _generate_agent_thoughts(output_dir: str | Path, card_name: str) -> Path | None:
+    """Generate ``agent_thoughts.md`` summarising reasoning across rounds.
+
+    Reads ``<output_dir>/<card_name>/postmortem.jsonl`` and produces a
+    structured Markdown narrative at
+    ``<output_dir>/<card_name>/agent_thoughts.md``.
+
+    Parameters
+    ----------
+    output_dir:
+        Top-level output directory for the benchmark run.
+    card_name:
+        Name of the card whose postmortem should be summarised.
+
+    Returns
+    -------
+    Path | None
+        Path to the generated file, or ``None`` if the postmortem file
+        does not exist or is empty.
+    """
+    output_dir = Path(output_dir)
+    postmortem_path = output_dir / card_name / "postmortem.jsonl"
+
+    if not postmortem_path.exists():
+        return None
+
+    entries: list[dict[str, Any]] = []
+    for line in postmortem_path.read_text().splitlines():
+        line = line.strip()
+        if line:
+            try:
+                entries.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+
+    if not entries:
+        return None
+
+    # --- Determine overall status ---
+    statuses = [e.get("status", "unknown") for e in entries]
+    total_rounds = len(entries)
+    success_count = statuses.count("success")
+    error_count = total_rounds - success_count
+
+    # Check if any entry carries test-pass/fail information.  When present,
+    # use the *last* entry's ``tests_passing`` flag to decide whether tests
+    # actually passed — adapter call "success" only means the adapter ran
+    # without error, not that pytest passed.
+    tests_passing_values = [e.get("tests_passing") for e in entries if "tests_passing" in e]
+    final_tests_passing = tests_passing_values[-1] if tests_passing_values else None
+
+    if error_count == 0:
+        # All adapter calls succeeded, but if tests never passed we should
+        # not claim "all_passed".
+        if final_tests_passing is False:
+            overall_status = "max_rounds_exhausted"
+        else:
+            overall_status = "all_passed"
+    elif success_count == 0:
+        overall_status = "all_failed"
+    else:
+        overall_status = "partial"
+
+    lines: list[str] = []
+
+    # --- Header ---
+    lines.append(f"# Agent Thoughts: {card_name}")
+    lines.append("")
+    lines.append(f"**Total rounds:** {total_rounds}  ")
+    lines.append(f"**Overall status:** {overall_status}  ")
+    lines.append("")
+
+    # --- Per-round sections ---
+    lines.append("## Round Details")
+    lines.append("")
+
+    for entry in entries:
+        round_num = entry.get("round", "?")
+        status = entry.get("status", "unknown")
+        timing_ms = entry.get("timing_ms", 0)
+        prompt = entry.get("prompt", "")
+        response = entry.get("response", "")
+
+        prompt_summary = prompt[:100]
+        if len(prompt) > 100:
+            prompt_summary += "..."
+
+        response_summary = response[:200]
+        if len(response) > 200:
+            response_summary += "..."
+
+        timing_s = timing_ms / 1000.0
+
+        lines.append(f"### Round {round_num}")
+        lines.append("")
+        lines.append(f"- **Status:** {status}")
+        lines.append(f"- **Timing:** {timing_s:.2f}s")
+        lines.append(f"- **Prompt (first 100 chars):** {prompt_summary}")
+        lines.append(f"- **Response (first 200 chars):** {response_summary}")
+        lines.append("")
+
+    # --- Final analysis ---
+    lines.append("## Analysis")
+    lines.append("")
+
+    if total_rounds == 1:
+        lines.append(f"Single round executed with status: {statuses[0]}.")
+    else:
+        # Detect patterns
+        patterns: list[str] = []
+
+        if overall_status == "all_passed":
+            patterns.append(
+                f"All {total_rounds} rounds completed successfully."
+            )
+        elif overall_status == "max_rounds_exhausted":
+            patterns.append(
+                f"All {total_rounds} adapter calls succeeded but tests "
+                f"never passed — rounds exhausted."
+            )
+        elif overall_status == "all_failed":
+            patterns.append(
+                f"All {total_rounds} rounds failed — persistent errors throughout."
+            )
+        else:
+            patterns.append(
+                f"{success_count}/{total_rounds} rounds succeeded, "
+                f"{error_count} failed."
+            )
+
+        # Check for improvement (errors early, success later)
+        if len(statuses) >= 2:
+            if statuses[0] == "error" and statuses[-1] == "success":
+                patterns.append("Improvement observed: early failures resolved in later rounds.")
+            elif statuses[0] == "success" and statuses[-1] == "error":
+                patterns.append("Regression observed: initial success followed by later failures.")
+
+        # Check for persistent failures
+        if error_count > 1:
+            patterns.append(f"Persistent failures detected across {error_count} rounds.")
+
+        for p in patterns:
+            lines.append(f"- {p}")
+
+    lines.append("")
+
+    # --- Write the file ---
+    thoughts_path = output_dir / card_name / "agent_thoughts.md"
+    thoughts_path.parent.mkdir(parents=True, exist_ok=True)
+    thoughts_path.write_text("\n".join(lines))
+
+    return thoughts_path
 
 
 # ---------------------------------------------------------------------------
