@@ -106,3 +106,11 @@ silverquillm/agent_session.py — Added _generate_agent_thoughts helper that rea
 
 ### Implementation
 silverquillm/setup_questions.py — New module: load_setup_questions, validate_setup, _check_answer for loading and validating setup questions JSON against adapter responses
+
+## Item 13: Create setup_questions.json question bank
+
+### Tests
+tests/test_setup_questions_bank.py — Validates question bank structure, topic coverage, field quality, and round-trip validation
+
+### Implementation
+setup_questions.json — 7 setup questions referencing only agent-workspace-visible files (engine/, test_utils.py, template.py, base_classes.py, foundations/, engine_api.md)
