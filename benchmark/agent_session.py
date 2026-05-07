@@ -20,6 +20,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -323,14 +324,34 @@ class AgentSession:
         prompt_path = workspace / ".prompt.txt"
         prompt_path.write_text(prompt)
 
-        result = subprocess.run(
-            ["opencode", "--config", str(config_path), "--prompt", str(prompt_path)],
+        process = subprocess.Popen(
+            ["opencode", "run", prompt, "--thinking"],
             cwd=str(workspace),
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=self.config.timeout_per_card,
         )
-        return result.stdout
+        stdout_lines = []
+        stderr_lines = []
+
+        # Stream stderr in a background thread (that's where agent activity goes)
+        def stream_stderr():
+            for line in process.stderr:
+                print(f"  [agent:err] {line}", end="", flush=True)
+                stderr_lines.append(line)
+
+        t = threading.Thread(target=stream_stderr, daemon=True)
+        t.start()
+
+        # Stream stdout in main thread
+        for line in process.stdout:
+            print(f"  [agent:out] {line}", end="", flush=True)
+            stdout_lines.append(line)
+
+        t.join(timeout=5)
+        process.wait(timeout=self.config.timeout_per_card)
+
+        return "".join(stdout_lines)
 
     # ------------------------------------------------------------------
     # Step 1 — Blind implementation

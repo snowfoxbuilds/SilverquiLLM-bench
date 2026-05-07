@@ -76,7 +76,7 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
     click.echo(f"Cards: {len(specs)}")
     for spec in specs:
         name = spec.get("name", "???")
-        tier = spec.get("tier", "unknown")
+        tier = spec.get("complexity_tier", "unknown")
         click.echo(f"  [{tier}] {name}")
 
     if dry_run:

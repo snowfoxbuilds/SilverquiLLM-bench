@@ -73,7 +73,7 @@ class TestSessionResultsToDicts:
             peak_context=200,
             status="ok",
         )
-        spec = {"name": "Test Card", "tier": "simple", "collector_number": "11"}
+        spec = {"name": "Test Card", "complexity_tier": "simple", "collector_number": "11"}
         config = BenchmarkConfig(
             name="test",
             set_code="SOS",
@@ -109,7 +109,7 @@ class TestSessionResultsToDicts:
             iterations=3, tokens=200, runtime_seconds=10.0,
             peak_context=400, rules_lookups=2, status="ok",
         )
-        spec = {"name": "Card", "tier": "complex"}
+        spec = {"name": "Card", "complexity_tier": "complex"}
         config = BenchmarkConfig(
             name="test", set_code="SOS",
             model_name="m", model_provider="p",
