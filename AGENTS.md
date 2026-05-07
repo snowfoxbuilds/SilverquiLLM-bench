@@ -5,11 +5,11 @@ LLM benchmark that evaluates coding ability by tasking models with implementing 
 ## Conventions
 
 - Language: Python 3.11+
-- Engine: Python port of XMage (Java GPL-2.0)
+- Engine: Python game engine inspired by XMage (MIT licensed)
 - Base set: MTG Foundations (~260 cards ported from XMage)
 - Target benchmark set: Secrets of Strixhaven (SOS, released 2026-04-24)
 - Agentic tool: OpenCode
-- License: GPL-2.0
+- License: MIT
 - Card implementations: one class per card, subclassing `CardImpl`
 - Tests: pytest with `test_utils` helpers, max 30 per card
 - Three scoring categories: blind implementation, implementation with tests, test quality

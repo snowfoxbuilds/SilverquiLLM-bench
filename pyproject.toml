@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "silverquillm-bench"
 version = "0.1.0"
 description = "SilverquiLLM MTG game engine benchmark"
-license = "GPL-2.0-only"
+license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "requests",
