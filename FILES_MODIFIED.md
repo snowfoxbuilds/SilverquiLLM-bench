@@ -43,3 +43,9 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `tests/benchmark/test_helpers.py` — Updated create_test_config to use agent=AgentConfig(...)
 - `tests/benchmark/test_e2e.py` — Migrated config.agent_tool → config.agent.adapter
 
+## Item 4: Create AgentAdapter abstract base class
+
+### Implementation
+- `silverquillm/adapters/__init__.py` — New package init re-exporting AgentAdapter, get_adapter, register_adapter
+- `silverquillm/adapters/base.py` — AgentAdapter ABC with run/setup/teardown, run_with_retries helper, registry-based get_adapter factory
+

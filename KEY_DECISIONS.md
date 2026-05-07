@@ -20,3 +20,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Removed deprecated properties from BenchmarkConfig. All code uses `config.agent.*`. YAML backward compat for flat keys is preserved in `load_config()`.
 - **Reasoning**: Clean API surface; no more dual access patterns.
 - **Impact**: All test fixtures use `agent=AgentConfig(...)`. New code must use `config.agent.*`.
+
+## AgentAdapter pattern
+- **Context**: Need pluggable agent adapters for different CLI tools.
+- **Decision**: ABC with `run(prompt, workspace) -> str`, `setup()`, `teardown()`. Registry-based factory via `get_adapter(config)`. Concrete adapters call `register_adapter("name", cls)` at module level. `run_with_retries` uses a single overall deadline from `timeout_per_card`.
+- **Reasoning**: Registry pattern allows adapter modules to self-register on import. Overall deadline prevents retry multiplication of timeouts.
+- **Impact**: `silverquillm/adapters/base.py`, `silverquillm/adapters/__init__.py`.
