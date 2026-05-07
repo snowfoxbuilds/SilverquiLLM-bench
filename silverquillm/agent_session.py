@@ -15,6 +15,7 @@ Public API:
 
 from __future__ import annotations
 
+import difflib
 import json
 import logging
 import os
@@ -47,6 +48,7 @@ __all__ = [
     "_generate_agent_thoughts",
     "init_run_engine",
     "commit_engine_changes",
+    "compute_engine_diff",
     "save_engine_final",
     "setup_workspace",
     "run_blind",
@@ -1135,6 +1137,145 @@ def commit_engine_changes(workspace: Path, run_engine_dir: Path) -> list[str]:
                 updated.append(f"-{rel}")
 
     return updated
+
+
+def compute_engine_diff(
+    workspace: Path,
+    run_engine_dir: Path,
+    results_dir: Path,
+) -> Path:
+    """Compute a diff between a card's engine and the run-level engine.
+
+    Compares files in ``<workspace>/engine/`` against *run_engine_dir*
+    and writes a unified-diff patch to ``<results_dir>/engine_diff.patch``.
+
+    Handles new files, deleted files, modified files, and binary files.
+    If there are no differences an empty patch file is still created.
+
+    Parameters
+    ----------
+    workspace:
+        The card's workspace directory (contains ``engine/``).
+    run_engine_dir:
+        The persistent run-level engine directory.
+    results_dir:
+        Card results directory where ``engine_diff.patch`` is written.
+
+    Returns
+    -------
+    Path
+        Path to the written patch file.
+    """
+    card_engine = workspace / "engine"
+    patch_path = results_dir / "engine_diff.patch"
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    hunks: list[str] = []
+
+    # Collect all relative paths from both sides
+    run_files: set[str] = set()
+    card_files: set[str] = set()
+
+    if run_engine_dir.exists():
+        for dirpath, _dirs, files in os.walk(run_engine_dir):
+            for fname in files:
+                rel = str(Path(dirpath, fname).relative_to(run_engine_dir))
+                run_files.add(rel)
+
+    if card_engine.exists():
+        for dirpath, _dirs, files in os.walk(card_engine):
+            for fname in files:
+                rel = str(Path(dirpath, fname).relative_to(card_engine))
+                card_files.add(rel)
+
+    all_paths = sorted(run_files | card_files)
+
+    for rel in all_paths:
+        run_path = run_engine_dir / rel
+        card_path = card_engine / rel
+
+        a_label = f"a/engine/{rel}"
+        b_label = f"b/engine/{rel}"
+
+        if rel not in run_files:
+            # New file added in card workspace
+            try:
+                new_bytes = card_path.read_bytes()
+            except Exception:
+                hunks.append(
+                    f"Binary file {b_label} added\n"
+                )
+                continue
+            if b"\x00" in new_bytes:
+                hunks.append(
+                    f"Binary file {b_label} added\n"
+                )
+                continue
+            new_lines = new_bytes.decode(errors="replace").splitlines(
+                keepends=True
+            )
+            diff = difflib.unified_diff(
+                [], new_lines, fromfile="/dev/null", tofile=b_label
+            )
+            chunk = "".join(diff)
+            if chunk:
+                hunks.append(chunk)
+        elif rel not in card_files:
+            # File deleted in card workspace
+            try:
+                old_bytes = run_path.read_bytes()
+            except Exception:
+                hunks.append(
+                    f"Binary file {a_label} deleted\n"
+                )
+                continue
+            if b"\x00" in old_bytes:
+                hunks.append(
+                    f"Binary file {a_label} deleted\n"
+                )
+                continue
+            old_lines = old_bytes.decode(errors="replace").splitlines(
+                keepends=True
+            )
+            diff = difflib.unified_diff(
+                old_lines, [], fromfile=a_label, tofile="/dev/null"
+            )
+            chunk = "".join(diff)
+            if chunk:
+                hunks.append(chunk)
+        else:
+            # Both exist – check for differences
+            try:
+                old_bytes = run_path.read_bytes()
+                new_bytes = card_path.read_bytes()
+            except Exception:
+                continue
+
+            if old_bytes == new_bytes:
+                continue
+
+            # Check if binary
+            if b"\x00" in old_bytes or b"\x00" in new_bytes:
+                hunks.append(
+                    f"Binary files {a_label} and {b_label} differ\n"
+                )
+                continue
+
+            old_lines = old_bytes.decode(errors="replace").splitlines(
+                keepends=True
+            )
+            new_lines = new_bytes.decode(errors="replace").splitlines(
+                keepends=True
+            )
+            diff = difflib.unified_diff(
+                old_lines, new_lines, fromfile=a_label, tofile=b_label
+            )
+            chunk = "".join(diff)
+            if chunk:
+                hunks.append(chunk)
+
+    patch_path.write_text("".join(hunks))
+    return patch_path
 
 
 def save_engine_final(run_engine_dir: Path, output_dir: str | Path) -> Path:

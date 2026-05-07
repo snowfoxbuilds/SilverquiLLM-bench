@@ -16,6 +16,7 @@ import click
 from silverquillm.agent_session import (
     AgentSession,
     commit_engine_changes,
+    compute_engine_diff,
     init_run_engine,
     save_engine_final,
 )
@@ -162,6 +163,10 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
             )
 
             save_card_result(run_dir, collector_number, blind_dict, test_dict)
+
+            # Capture engine diff before committing changes
+            card_results_dir = run_dir / "cards" / str(collector_number)
+            compute_engine_diff(workspace, run_engine_dir, card_results_dir)
 
             # Commit engine changes back to run-level directory
             commit_engine_changes(workspace, run_engine_dir)

@@ -151,3 +151,9 @@ tests/test_regression.py — Tests regression runner dataclasses, pytest parsing
 
 ### Implementation
 - `silverquillm/cli.py` — Added _TIER_ORDER constant and _sort_cards_by_tier function; sort specs before orchestration loop by (tier_rank, collector_number)
+
+## Item 19: Capture engine diffs as per-card artifacts
+
+### Implementation
+- `silverquillm/agent_session.py` — Added compute_engine_diff() function using difflib for pure-Python unified diffs; handles new/deleted/binary files and empty patches
+- `silverquillm/cli.py` — Imported compute_engine_diff; call it before commit_engine_changes to capture per-card engine diff as engine_diff.patch
