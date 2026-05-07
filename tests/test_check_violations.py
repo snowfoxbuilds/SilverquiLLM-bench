@@ -29,7 +29,7 @@ class TestProtectedDirs:
     """Verify the _PROTECTED_DIRS constant covers all required directories."""
 
     def test_contains_all_required_dirs(self):
-        required = {"engine", "cards", "tests", "silverquillm", "benchmarks", "docs"}
+        required = {"cards", "tests", "silverquillm", "benchmarks", "docs"}
         assert set(_PROTECTED_DIRS) == required
 
     def test_is_tuple(self):
@@ -47,28 +47,28 @@ class TestSnapshotAllProtected:
     def test_snapshots_existing_protected_dirs(self, tmp_path):
         """Should snapshot files from multiple protected dirs that exist."""
         # Create some protected dirs with files
-        (tmp_path / "engine").mkdir()
-        (tmp_path / "engine" / "core.py").write_text("x")
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "core.py").write_text("x")
         (tmp_path / "cards").mkdir()
         (tmp_path / "cards" / "card1.py").write_text("y")
 
         result = _snapshot_all_protected(tmp_path)
 
-        assert tmp_path / "engine" / "core.py" in result
+        assert tmp_path / "docs" / "core.py" in result
         assert tmp_path / "cards" / "card1.py" in result
 
     def test_skips_missing_dirs(self, tmp_path):
         """Should not error when a protected dir doesn't exist."""
         # Only create one dir
-        (tmp_path / "engine").mkdir()
-        (tmp_path / "engine" / "file.py").write_text("x")
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "file.py").write_text("x")
 
         result = _snapshot_all_protected(tmp_path)
 
-        # Should still have the engine file
-        assert tmp_path / "engine" / "file.py" in result
+        # Should still have the docs file
+        assert tmp_path / "docs" / "file.py" in result
         # Should not contain entries from non-existent dirs
-        assert all("cards" not in str(p) or "engine" in str(p) for p in result)
+        assert all("cards" not in str(p) or "docs" in str(p) for p in result)
 
     def test_empty_when_no_protected_dirs_exist(self, tmp_path):
         """Should return empty dict if none of the protected dirs exist."""
@@ -77,12 +77,12 @@ class TestSnapshotAllProtected:
 
     def test_includes_nested_files(self, tmp_path):
         """Should walk subdirectories within protected dirs."""
-        (tmp_path / "engine" / "sub").mkdir(parents=True)
-        (tmp_path / "engine" / "sub" / "nested.py").write_text("z")
+        (tmp_path / "docs" / "sub").mkdir(parents=True)
+        (tmp_path / "docs" / "sub" / "nested.py").write_text("z")
 
         result = _snapshot_all_protected(tmp_path)
 
-        assert tmp_path / "engine" / "sub" / "nested.py" in result
+        assert tmp_path / "docs" / "sub" / "nested.py" in result
 
 
 # ---------------------------------------------------------------------------
@@ -95,8 +95,8 @@ class TestCheckViolationsNoChanges:
 
     def test_returns_empty_list_when_nothing_changed(self, tmp_path):
         """If before == after, no violations should be reported."""
-        (tmp_path / "engine").mkdir()
-        (tmp_path / "engine" / "file.py").write_text("content")
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "file.py").write_text("content")
 
         workspace = tmp_path / "workspace"
         workspace.mkdir()
@@ -128,8 +128,8 @@ class TestCheckViolationsCreatedFiles:
 
     def test_detects_new_file_in_protected_dir(self, tmp_path):
         """A file created in a protected dir after snapshot should be flagged."""
-        (tmp_path / "engine").mkdir()
-        (tmp_path / "engine" / "existing.py").write_text("original")
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "existing.py").write_text("original")
 
         workspace = tmp_path / "workspace"
         workspace.mkdir()
@@ -137,7 +137,7 @@ class TestCheckViolationsCreatedFiles:
         before = _snapshot_all_protected(tmp_path)
 
         # Create a new file after the snapshot
-        (tmp_path / "engine" / "new_file.py").write_text("injected")
+        (tmp_path / "docs" / "new_file.py").write_text("injected")
 
         with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
             result = _check_violations(workspace, before=before)
@@ -173,8 +173,8 @@ class TestCheckViolationsModifiedFiles:
 
     def test_detects_modified_file_in_protected_dir(self, tmp_path):
         """A file modified after snapshot should be flagged as modified."""
-        (tmp_path / "engine").mkdir()
-        (tmp_path / "engine" / "core.py").write_text("original")
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "core.py").write_text("original")
 
         workspace = tmp_path / "workspace"
         workspace.mkdir()
@@ -183,7 +183,7 @@ class TestCheckViolationsModifiedFiles:
 
         # Ensure mtime changes
         time.sleep(0.05)
-        (tmp_path / "engine" / "core.py").write_text("tampered")
+        (tmp_path / "docs" / "core.py").write_text("tampered")
 
         with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
             result = _check_violations(workspace, before=before)
@@ -205,11 +205,11 @@ class TestCheckViolationsWorkspaceExclusion:
         """Changes inside the workspace should be ignored even if it's a protected dir."""
         # Set up workspace inside a protected dir structure
         # The workspace IS inside the repo but changes there are expected
-        (tmp_path / "engine").mkdir()
-        (tmp_path / "engine" / "existing.py").write_text("ok")
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "existing.py").write_text("ok")
 
         # Workspace is a subdir that could overlap with protected space
-        workspace = tmp_path / "engine" / "workspace_area"
+        workspace = tmp_path / "docs" / "workspace_area"
         workspace.mkdir()
         (workspace / "impl.py").write_text("before")
 
@@ -228,8 +228,8 @@ class TestCheckViolationsWorkspaceExclusion:
 
     def test_workspace_outside_protected_dirs(self, tmp_path):
         """A workspace outside protected dirs — protected dir changes still flagged."""
-        (tmp_path / "engine").mkdir()
-        (tmp_path / "engine" / "core.py").write_text("original")
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "core.py").write_text("original")
 
         workspace = tmp_path / "workspace"
         workspace.mkdir()
@@ -237,7 +237,7 @@ class TestCheckViolationsWorkspaceExclusion:
         before = _snapshot_all_protected(tmp_path)
 
         time.sleep(0.05)
-        (tmp_path / "engine" / "core.py").write_text("hacked")
+        (tmp_path / "docs" / "core.py").write_text("hacked")
 
         with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
             result = _check_violations(workspace, before=before)
@@ -256,8 +256,8 @@ class TestCheckViolationsMultiple:
 
     def test_returns_both_created_and_modified(self, tmp_path):
         """Should return violations for both new and modified files."""
-        (tmp_path / "engine").mkdir()
-        (tmp_path / "engine" / "existing.py").write_text("original")
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "existing.py").write_text("original")
 
         workspace = tmp_path / "workspace"
         workspace.mkdir()
@@ -266,9 +266,9 @@ class TestCheckViolationsMultiple:
 
         time.sleep(0.05)
         # Modify an existing file
-        (tmp_path / "engine" / "existing.py").write_text("tampered")
+        (tmp_path / "docs" / "existing.py").write_text("tampered")
         # Create a new file
-        (tmp_path / "engine" / "injected.py").write_text("new code")
+        (tmp_path / "docs" / "injected.py").write_text("new code")
 
         with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
             result = _check_violations(workspace, before=before)
@@ -280,8 +280,8 @@ class TestCheckViolationsMultiple:
 
     def test_violations_across_multiple_protected_dirs(self, tmp_path):
         """Violations in different protected dirs are all detected."""
-        (tmp_path / "engine").mkdir()
-        (tmp_path / "engine" / "e.py").write_text("x")
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "e.py").write_text("x")
         (tmp_path / "cards").mkdir()
         (tmp_path / "cards" / "c.py").write_text("y")
 
@@ -291,7 +291,7 @@ class TestCheckViolationsMultiple:
         before = _snapshot_all_protected(tmp_path)
 
         time.sleep(0.05)
-        (tmp_path / "engine" / "e.py").write_text("modified_x")
+        (tmp_path / "docs" / "e.py").write_text("modified_x")
         (tmp_path / "cards" / "c.py").write_text("modified_y")
 
         with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
@@ -310,8 +310,8 @@ class TestCheckViolationsDeletion:
 
     def test_deleted_file_outside_workspace_is_violation(self, tmp_path):
         """Should detect deletion of a file in a protected directory."""
-        (tmp_path / "engine").mkdir()
-        protected_file = tmp_path / "engine" / "important.py"
+        (tmp_path / "docs").mkdir()
+        protected_file = tmp_path / "docs" / "important.py"
         protected_file.write_text("do not delete")
 
         workspace = tmp_path / "workspace"
@@ -337,7 +337,7 @@ class TestCheckViolationsDeletion:
         ws_file.write_text("temporary")
 
         # Ensure workspace is treated as a protected dir for snapshotting
-        (tmp_path / "engine").mkdir()
+        (tmp_path / "docs").mkdir()
 
         before = _snapshot_all_protected(tmp_path)
         # Also add workspace file to before snapshot manually

@@ -45,6 +45,9 @@ __all__ = [
     "TestInformedResult",
     "_append_postmortem",
     "_generate_agent_thoughts",
+    "init_run_engine",
+    "commit_engine_changes",
+    "save_engine_final",
     "setup_workspace",
     "run_blind",
     "run_test_informed",
@@ -55,7 +58,7 @@ __all__ = [
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Directories that agents must never modify
-_PROTECTED_DIRS: tuple[str, ...] = ("engine", "cards", "tests", "silverquillm", "benchmarks", "docs")
+_PROTECTED_DIRS: tuple[str, ...] = ("cards", "tests", "silverquillm", "benchmarks", "docs")
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +150,7 @@ class AgentSession:
     config: BenchmarkConfig
     card_spec: dict[str, Any]
     card_dir: str
+    run_engine_dir: Path | None = field(default=None)
     _workspace: Path | None = field(default=None, init=False, repr=False)
     _adapter: AgentAdapter | None = field(default=None, init=False, repr=False)
 
@@ -203,7 +207,11 @@ class AgentSession:
             shutil.copy2(engine_api_src, workspace / "engine_api.md")
 
         # 3. base_classes.py — extracted from engine/card.py
-        card_py = repo_root / "engine" / "card.py"
+        card_py = (
+            self.run_engine_dir / "card.py"
+            if self.run_engine_dir and (self.run_engine_dir / "card.py").exists()
+            else repo_root / "engine" / "card.py"
+        )
         if card_py.exists():
             base_classes_content = _extract_base_classes(card_py)
             (workspace / "base_classes.py").write_text(base_classes_content)
@@ -217,19 +225,15 @@ class AgentSession:
         if rules_src.exists():
             shutil.copy2(rules_src, workspace / "rules_overview.md")
 
-        # 6. engine/ — read-only copy so base_classes.py imports resolve
-        engine_src = repo_root / "engine"
+        # 6. engine/ — writable copy (from run_engine_dir if available, else repo)
+        engine_src = (
+            self.run_engine_dir
+            if self.run_engine_dir and self.run_engine_dir.exists()
+            else repo_root / "engine"
+        )
         if engine_src.exists():
             engine_dst = workspace / "engine"
             shutil.copytree(engine_src, engine_dst)
-            for root, dirs, files in os.walk(engine_dst):
-                for fname in files:
-                    fpath = Path(root) / fname
-                    fpath.chmod(0o444)
-                for dname in dirs:
-                    dpath = Path(root) / dname
-                    dpath.chmod(0o555)
-            engine_dst.chmod(0o555)
 
         # 7. foundations/ — read-only copy
         foundations_src = repo_root / "cards" / "foundations"
@@ -1050,17 +1054,138 @@ def _check_violations(workspace: Path, before: dict[Path, float] | None = None) 
 
 
 # ---------------------------------------------------------------------------
+# Persistent run-level engine helpers
+# ---------------------------------------------------------------------------
+
+
+def init_run_engine(output_dir: str | Path) -> Path:
+    """Create a persistent run-level engine directory.
+
+    Copies the repo's ``engine/`` tree into ``<output_dir>/run_engine/``
+    so that it can be shared (and evolved) across all cards in the run.
+
+    Parameters
+    ----------
+    output_dir:
+        Top-level output directory for the benchmark run.
+
+    Returns
+    -------
+    Path
+        Path to the newly created run-level engine directory.
+    """
+    output_dir = Path(output_dir)
+    run_engine = output_dir / "run_engine"
+    engine_src = _REPO_ROOT / "engine"
+    if engine_src.exists():
+        if run_engine.exists():
+            shutil.rmtree(run_engine)
+        shutil.copytree(engine_src, run_engine)
+    else:
+        run_engine.mkdir(parents=True, exist_ok=True)
+    return run_engine
+
+
+def commit_engine_changes(workspace: Path, run_engine_dir: Path) -> list[str]:
+    """Commit engine changes from a card workspace back to the run engine.
+
+    Compares files in ``<workspace>/engine/`` against *run_engine_dir*
+    and copies any new or modified files back.
+
+    Parameters
+    ----------
+    workspace:
+        The card's workspace directory (contains ``engine/``).
+    run_engine_dir:
+        The persistent run-level engine directory.
+
+    Returns
+    -------
+    list[str]
+        List of relative paths that were updated.
+    """
+    card_engine = workspace / "engine"
+    if not card_engine.exists():
+        return []
+
+    updated: list[str] = []
+    for dirpath, _dirs, files in os.walk(card_engine):
+        for fname in files:
+            src = Path(dirpath) / fname
+            rel = src.relative_to(card_engine)
+            dst = run_engine_dir / rel
+            # Copy if new or content differs
+            if not dst.exists():
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+                updated.append(str(rel))
+            else:
+                if src.read_bytes() != dst.read_bytes():
+                    shutil.copy2(src, dst)
+                    updated.append(str(rel))
+
+    # Handle deletions: files in run_engine but not in card engine
+    for dirpath, _dirs, files in os.walk(run_engine_dir):
+        for fname in files:
+            dst = Path(dirpath) / fname
+            rel = dst.relative_to(run_engine_dir)
+            src = card_engine / rel
+            if not src.exists():
+                dst.unlink()
+                updated.append(f"-{rel}")
+
+    return updated
+
+
+def save_engine_final(run_engine_dir: Path, output_dir: str | Path) -> Path:
+    """Save the final engine state as a run artifact.
+
+    Copies the run-level engine directory to
+    ``<output_dir>/engine_final/``.
+
+    Parameters
+    ----------
+    run_engine_dir:
+        The persistent run-level engine directory.
+    output_dir:
+        Top-level output directory for the benchmark run.
+
+    Returns
+    -------
+    Path
+        Path to the saved engine artifact.
+    """
+    output_dir = Path(output_dir)
+    engine_final = output_dir / "engine_final"
+    if engine_final.exists():
+        shutil.rmtree(engine_final)
+    shutil.copytree(run_engine_dir, engine_final)
+    return engine_final
+
+
+# ---------------------------------------------------------------------------
 # Standalone convenience functions (match TODO contract names)
 # ---------------------------------------------------------------------------
 
 
-def setup_workspace(card_name: str, config: BenchmarkConfig, card_spec: dict[str, Any], card_dir: str) -> AgentSession:
+def setup_workspace(
+    card_name: str,
+    config: BenchmarkConfig,
+    card_spec: dict[str, Any],
+    card_dir: str,
+    run_engine_dir: Path | None = None,
+) -> AgentSession:
     """Create a session and set up its workspace.
 
     Convenience wrapper that constructs an ``AgentSession``, calls
     ``setup_workspace()``, and returns the session.
     """
-    session = AgentSession(config=config, card_spec=card_spec, card_dir=card_dir)
+    session = AgentSession(
+        config=config,
+        card_spec=card_spec,
+        card_dir=card_dir,
+        run_engine_dir=run_engine_dir,
+    )
     session.setup_workspace()
     return session
 

@@ -13,7 +13,12 @@ from pathlib import Path
 
 import click
 
-from silverquillm.agent_session import AgentSession
+from silverquillm.agent_session import (
+    AgentSession,
+    commit_engine_changes,
+    init_run_engine,
+    save_engine_final,
+)
 from silverquillm.card_loader import filter_by_collectors, filter_by_prototype, load_card_specs
 from silverquillm.config import BenchmarkConfig, load_config
 from silverquillm.evaluator import run_self_eval_flat
@@ -89,6 +94,9 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
     failures: list[tuple[str, Exception]] = []
     start_time = time.time()
 
+    # Persistent engine: initialise run-level engine directory
+    run_engine_dir = init_run_engine(run_dir)
+
     for i, spec in enumerate(specs, 1):
         card_name = spec.get("name", "???")
         collector_number = spec.get("collector_number", spec.get("number", "unknown"))
@@ -96,7 +104,10 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
 
         session: AgentSession | None = None
         try:
-            session = AgentSession(config=cfg, card_spec=spec, card_dir=card_dir)
+            session = AgentSession(
+                config=cfg, card_spec=spec, card_dir=card_dir,
+                run_engine_dir=run_engine_dir,
+            )
             workspace = session.setup_workspace()
 
             blind_result = session.run_blind_implementation(workspace)
@@ -115,6 +126,9 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
 
             save_card_result(run_dir, collector_number, blind_dict, test_dict)
 
+            # Commit engine changes back to run-level directory
+            commit_engine_changes(workspace, run_engine_dir)
+
             blind_status = blind_result.status
             tested_status = tested_result.status if tested_result else "skipped"
             click.echo(
@@ -128,6 +142,9 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
         finally:
             if session is not None:
                 session.cleanup()
+
+    # Save final engine state as a run artifact
+    save_engine_final(run_engine_dir, run_dir)
 
     # --- Post-loop: self-eval and summary ---
     elapsed = time.time() - start_time
