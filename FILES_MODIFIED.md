@@ -98,3 +98,11 @@ tests/test_postmortem_logging.py — Test suite for postmortem JSONL logging fea
 
 ### Implementation
 silverquillm/agent_session.py — Added _generate_agent_thoughts helper that reads postmortem.jsonl and generates agent_thoughts.md; hooked into run_test_informed after all rounds complete
+
+## Item 12: Implement setup questions validation
+
+### Tests
+(no dedicated test file — verified via existing test suite)
+
+### Implementation
+silverquillm/setup_questions.py — New module: load_setup_questions, validate_setup, _check_answer for loading and validating setup questions JSON against adapter responses

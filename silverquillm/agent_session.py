@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from silverquillm.adapters import AgentAdapter, get_adapter
+from silverquillm.setup_questions import validate_setup
 from silverquillm.config import BenchmarkConfig
 from silverquillm.prompts import (
     blind_implementation_prompt,
@@ -256,6 +257,14 @@ class AgentSession:
         # Initialize and set up the adapter
         adapter = self._get_adapter()
         adapter.setup()
+
+        # Validate adapter with setup questions (if file exists)
+        setup_q_path = repo_root / "setup_questions.json"
+        if setup_q_path.exists():
+            if not validate_setup(adapter, setup_q_path, workspace):
+                raise RuntimeError(
+                    "Adapter failed setup-questions validation; aborting run."
+                )
 
         return workspace
 
