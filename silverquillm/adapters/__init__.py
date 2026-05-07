@@ -8,5 +8,6 @@ from silverquillm.adapters.base import AgentAdapter, get_adapter, register_adapt
 
 # Import concrete adapters so they auto-register via register_adapter().
 import silverquillm.adapters.opencode as _opencode_adapter  # noqa: F401
+import silverquillm.adapters.claude_code as _claude_code_adapter  # noqa: F401
 
 __all__ = ["AgentAdapter", "get_adapter", "register_adapter"]

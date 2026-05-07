@@ -9,7 +9,7 @@ Scope: Rename the package to `silverquillm`, refactor config to match the spec's
 - [x] **Update all ****`BenchmarkConfig`**** consumers for nested agent config** — Audit every module reading `config.agent_tool`, `config.max_test_rounds`, `config.timeout_per_card`, `config.disable_web_search` and migrate to `config.agent.*`. Update tests.
 - [x] **Create ****`AgentAdapter`**** abstract base class** — Define `silverquillm/adapters/base.py` with abstract `run(prompt, workspace) -> str`, `setup()`, `teardown()`. Include timeout/retry logic and factory `get_adapter(config) -> AgentAdapter`.
 - [x] **Implement ****`OpenCodeAdapter`** — Create `silverquillm/adapters/opencode.py`. Remove invalid `--thinking` flag. Pass prompts via stdin or temp file (not CLI arg). Wire into adapter factory.
-- [ ] **Implement ****`ClaudeCodeAdapter`** — Create `silverquillm/adapters/claude_code.py` wrapping the `claude` CLI. Handle prompt via stdin/temp file. Wire into factory.
+- [x] **Implement ****`ClaudeCodeAdapter`** — Create `silverquillm/adapters/claude_code.py` wrapping the `claude` CLI. Handle prompt via stdin/temp file. Wire into factory.
 - [ ] **Implement ****`AiderAdapter`** — Create `silverquillm/adapters/aider.py` wrapping the `aider` CLI. Wire into factory.
 - [ ] **Implement ****`PiAdapter`** — Create `silverquillm/adapters/pi.py` wrapping the `pi` CLI. Wire into factory.
 - [ ] **Refactor ****`agent_session.py`**** to use ****`AgentAdapter`** — Replace hardcoded `_run_opencode()` with adapter resolved from `config.agent.adapter`. Remove all OpenCode-specific logic from session; it should be adapter-agnostic.

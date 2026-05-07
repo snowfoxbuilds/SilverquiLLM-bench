@@ -55,3 +55,9 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `silverquillm/adapters/opencode.py` — Concrete OpenCodeAdapter: wraps opencode CLI, passes prompt via stdin, removes invalid --thinking flag, auto-registers as "opencode"
 - `silverquillm/adapters/__init__.py` — Added import of opencode module for auto-registration
 
+## Item 6: Implement ClaudeCodeAdapter
+
+### Implementation
+- `silverquillm/adapters/claude_code.py` — Concrete ClaudeCodeAdapter: wraps claude CLI with --print flag, passes prompt via stdin, checks exit status, auto-registers as "claude_code"
+- `silverquillm/adapters/__init__.py` — Added import of claude_code module for auto-registration
+
