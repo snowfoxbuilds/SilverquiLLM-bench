@@ -1,13 +1,15 @@
 """Scoring calculator for benchmark leaderboards.
 
-Computes metrics from SCORING.md across three independent categories:
+Computes metrics from SCORING.md across four independent categories:
 - Category 1 (Blind): pure spec-to-code implementation quality
 - Category 2 (Tested): implementation with test-driven iteration
 - Category 3 (Test Quality): how good the agent's tests are
+- Category 4 (Engine Extension Quality): engine extension without regressions
 
 Public API:
 - ``Leaderboard`` — dataclass holding per-agent scores for each category.
 - ``compute_scores`` — compute all metrics from evaluation results.
+- ``compute_cat4_scores`` — compute Category 4 metrics from run artifacts.
 - ``generate_leaderboard`` — render leaderboard as Markdown tables.
 """
 
@@ -29,7 +31,9 @@ __all__ = [
     "AgentCat1Scores",
     "AgentCat2Scores",
     "AgentCat3Scores",
+    "AgentCat4Scores",
     "compute_scores",
+    "compute_cat4_scores",
     "generate_leaderboard",
 ]
 
@@ -71,12 +75,23 @@ class AgentCat3Scores:
 
 
 @dataclass
+class AgentCat4Scores:
+    """Category 4 (Engine Extension Quality) scores for a single agent."""
+
+    regression_rate: float = 0.0
+    regression_free_streak: int = 0
+    engine_churn: int = 0
+    mechanic_reuse_rate: float = 0.0
+
+
+@dataclass
 class Leaderboard:
-    """Per-agent scores for all three categories."""
+    """Per-agent scores for all four categories."""
 
     category1: dict[str, AgentCat1Scores] = field(default_factory=dict)
     category2: dict[str, AgentCat2Scores] = field(default_factory=dict)
     category3: dict[str, AgentCat3Scores] = field(default_factory=dict)
+    category4: dict[str, AgentCat4Scores] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +208,13 @@ def _load_eval_results(results_dir: Path) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def compute_scores(results_dir: Path, tier_data: dict[str, str]) -> Leaderboard:
+def compute_scores(
+    results_dir: Path,
+    tier_data: dict[str, str],
+    *,
+    run_dirs: dict[str, Path] | None = None,
+    card_order: list[str] | None = None,
+) -> Leaderboard:
     """Compute all metrics from evaluation results.
 
     Parameters
@@ -202,10 +223,17 @@ def compute_scores(results_dir: Path, tier_data: dict[str, str]) -> Leaderboard:
         Directory containing JSON evaluation results (EvalResult dicts).
     tier_data:
         Mapping of card_id -> tier name (e.g. ``{"card_a": "simple"}``).
+    run_dirs:
+        Optional mapping of agent name -> run directory path.  When
+        provided together with *card_order*, Category 4 scores are
+        computed automatically for each agent.
+    card_order:
+        Ordered list of card IDs representing the sequence cards were
+        processed in.  Required when *run_dirs* is provided.
 
     Returns
     -------
-    Leaderboard with per-agent scores across all three categories.
+    Leaderboard with per-agent scores across all four categories.
     """
     raw = _load_eval_results(results_dir)
     lb = Leaderboard()
@@ -374,7 +402,198 @@ def compute_scores(results_dir: Path, tier_data: dict[str, str]) -> Leaderboard:
         )
         lb.category3[agent] = cat3
 
+    # ------------------------------------------------------------------
+    # Category 4: Engine Extension Quality
+    # ------------------------------------------------------------------
+    if run_dirs and card_order is not None:
+        for agent in sorted_agents:
+            agent_run_dir = run_dirs.get(agent)
+            if agent_run_dir is not None:
+                lb.category4[agent] = compute_cat4_scores(
+                    agent_run_dir, card_order,
+                )
+
     return lb
+
+
+# ---------------------------------------------------------------------------
+# Category 4: Engine Extension Quality
+# ---------------------------------------------------------------------------
+
+
+def _count_patch_lines(patch_text: str) -> int:
+    """Count lines changed (added + removed) in a unified diff patch.
+
+    Only counts lines starting with ``+`` or ``-`` that are not part of
+    the ``---``/``+++`` file headers.
+    """
+    count = 0
+    for line in patch_text.splitlines():
+        if line.startswith("---") or line.startswith("+++"):
+            continue
+        if line.startswith("+") or line.startswith("-"):
+            count += 1
+    return count
+
+
+def _detect_engine_files_added(patch_text: str) -> set[str]:
+    """Extract engine file paths that were newly added in a patch.
+
+    A new file in unified diff is indicated by ``--- /dev/null`` followed
+    by ``+++ b/engine/...``.
+    """
+    added: set[str] = set()
+    lines = patch_text.splitlines()
+    for i, line in enumerate(lines):
+        if line.startswith("--- /dev/null") and i + 1 < len(lines):
+            next_line = lines[i + 1]
+            if next_line.startswith("+++ b/engine/"):
+                # Extract the relative path after "b/"
+                path = next_line[len("+++ b/"):].strip()
+                added.add(path)
+        elif line.startswith("--- a/dev/null") and i + 1 < len(lines):
+            next_line = lines[i + 1]
+            if next_line.startswith("+++ b/engine/"):
+                path = next_line[len("+++ b/"):].strip()
+                added.add(path)
+    return added
+
+
+def _detect_engine_files_imported(patch_text: str, known_files: set[str]) -> bool:
+    """Check if a patch imports from any of the known engine files.
+
+    Heuristic: look for ``from engine.<module>`` or ``import engine.<module>``
+    patterns in added lines (``+`` lines) where the module corresponds to
+    a file in *known_files*.
+    """
+    if not known_files:
+        return False
+
+    # Build set of module names from file paths
+    # e.g. "engine/keywords.py" -> "keywords"
+    module_names: set[str] = set()
+    for fp in known_files:
+        # Strip leading "engine/" and trailing ".py"
+        name = fp
+        if name.startswith("engine/"):
+            name = name[len("engine/"):]
+        if name.endswith(".py"):
+            name = name[:-3]
+        if name:
+            module_names.add(name)
+
+    if not module_names:
+        return False
+
+    for line in patch_text.splitlines():
+        if not line.startswith("+") or line.startswith("+++"):
+            continue
+        for mod in module_names:
+            if f"from engine.{mod}" in line or f"import engine.{mod}" in line:
+                return True
+            # Also check for relative imports within engine
+            if f"from .{mod}" in line or f"import .{mod}" in line:
+                return True
+    return False
+
+
+def compute_cat4_scores(
+    run_dir: Path,
+    card_order: list[str],
+) -> AgentCat4Scores:
+    """Compute Category 4 (Engine Extension Quality) metrics for a single run.
+
+    Parameters
+    ----------
+    run_dir:
+        Path to the run directory containing ``cards/<card_id>/`` subdirs.
+        Each card dir may contain ``engine_diff.patch`` and ``result.json``.
+    card_order:
+        Ordered list of card IDs representing the sequence cards were
+        processed in.  Order matters for regression-free streak and
+        mechanic reuse calculations.
+
+    Returns
+    -------
+    AgentCat4Scores with all four metrics populated.
+    """
+    cards_dir = run_dir / "cards"
+
+    total_churn = 0
+    regression_count = 0
+    total_cards = len(card_order)
+    reuse_count = 0
+
+    # Track engine files added by previous cards for mechanic reuse detection
+    engine_files_added_so_far: set[str] = set()
+
+    # Track regression-free streak
+    current_streak = 0
+    max_streak = 0
+
+    for card_id in card_order:
+        card_dir = cards_dir / card_id
+        if not card_dir.exists():
+            continue
+
+        # --- Engine churn from engine_diff.patch ---
+        patch_file = card_dir / "engine_diff.patch"
+        patch_text = ""
+        if patch_file.exists():
+            patch_text = patch_file.read_text()
+            total_churn += _count_patch_lines(patch_text)
+
+        # --- Regression data from result.json ---
+        result_file = card_dir / "result.json"
+        has_regression = False
+        if result_file.exists():
+            try:
+                result_data = json.loads(result_file.read_text())
+                # Regression data stored as regression_results or failed_tests
+                regression_results = result_data.get("regression_results", {})
+                if isinstance(regression_results, dict):
+                    card_results = regression_results.get("card_results", [])
+                    for cr in card_results:
+                        if not cr.get("passed", True):
+                            has_regression = True
+                            break
+                elif isinstance(regression_results, list):
+                    for cr in regression_results:
+                        if not cr.get("passed", True):
+                            has_regression = True
+                            break
+
+                # Also check top-level failed_tests (backward compat)
+                if not has_regression:
+                    failed_tests = result_data.get("failed_tests", [])
+                    if failed_tests:
+                        has_regression = True
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+        if has_regression:
+            regression_count += 1
+            current_streak = 0
+        else:
+            current_streak += 1
+            max_streak = max(max_streak, current_streak)
+
+        # --- Mechanic reuse detection ---
+        if patch_text and engine_files_added_so_far:
+            if _detect_engine_files_imported(patch_text, engine_files_added_so_far):
+                reuse_count += 1
+
+        # Track new engine files added by this card
+        if patch_text:
+            new_files = _detect_engine_files_added(patch_text)
+            engine_files_added_so_far |= new_files
+
+    return AgentCat4Scores(
+        regression_rate=_safe_div(regression_count, total_cards),
+        regression_free_streak=max_streak,
+        engine_churn=total_churn,
+        mechanic_reuse_rate=_safe_div(reuse_count, max(total_cards - 1, 0)) if total_cards > 1 else 0.0,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -460,6 +679,30 @@ def generate_leaderboard(scores: Leaderboard) -> str:
             f"| {s.discrimination_score:.2f} "
             f"| {s.difficulty_calibration:.0%} "
             f"| {s.coverage:.0%} |"
+        )
+    lines.append("")
+
+    # --- Category 4 ---
+    lines.append("## Category 4: Engine Extension Quality")
+    lines.append("")
+    lines.append(
+        "| Rank | Model | Regression Rate | Reg-Free Streak | Engine Churn | Mechanic Reuse |"
+    )
+    lines.append(
+        "|------|-------|-----------------|-----------------|--------------|----------------|"
+    )
+    sorted_cat4 = sorted(
+        scores.category4.items(),
+        key=lambda x: (-x[1].regression_rate, x[1].regression_free_streak),
+        reverse=True,
+    )
+    for rank, (agent, s) in enumerate(sorted_cat4, 1):
+        lines.append(
+            f"| {rank} | {agent} "
+            f"| {s.regression_rate:.1%} "
+            f"| {s.regression_free_streak} "
+            f"| {s.engine_churn} "
+            f"| {s.mechanic_reuse_rate:.1%} |"
         )
     lines.append("")
 

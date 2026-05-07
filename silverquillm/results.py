@@ -527,5 +527,14 @@ def _build_aggregate_summary(
                 }
                 for agent, s in leaderboard.category2.items()
             },
+            "category4": {
+                agent: {
+                    "regression_rate": s.regression_rate,
+                    "regression_free_streak": s.regression_free_streak,
+                    "engine_churn": s.engine_churn,
+                    "mechanic_reuse_rate": s.mechanic_reuse_rate,
+                }
+                for agent, s in leaderboard.category4.items()
+            },
         },
     }

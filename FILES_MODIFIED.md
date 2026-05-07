@@ -162,3 +162,9 @@ tests/test_regression.py — Tests regression runner dataclasses, pytest parsing
 
 ### Implementation
 - `silverquillm/prompts.py` — Updated blind, test-informed, and iteration feedback prompt templates with engine extensibility info (writable engine/, regression re-runs, backward compatibility)
+
+## Item 21: Add Category 4 scoring — Engine Extension Quality
+
+### Implementation
+- `silverquillm/scorer.py` — Added AgentCat4Scores dataclass, compute_cat4_scores function, Category 4 table in generate_leaderboard, updated Leaderboard to include category4
+- `silverquillm/results.py` — Added category4 data to save_aggregates summary.json output
