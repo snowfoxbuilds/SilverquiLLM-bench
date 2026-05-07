@@ -5,7 +5,7 @@ Scope: Rename the package to `silverquillm`, refactor config to match the spec's
 ---
 
 - [x] **Rename ****`benchmark/`**** package to ****`silverquillm/`** — Rename the directory, update all `from benchmark.*` imports (source + tests + CLI entry points), update `pyproject.toml` package discovery and `[project.scripts]`, verify clean install.
-- [ ] **Refactor ****`BenchmarkConfig`**** to use nested ****`agent:`**** block** — Create `AgentConfig` dataclass with `adapter`, `max_test_rounds`, `timeout_per_card`, `disable_web_search`. Embed as `agent: AgentConfig` in `BenchmarkConfig`. Update `load_config()` for nested YAML. Update `config.example.yaml`.
+- [x] **Refactor ****`BenchmarkConfig`**** to use nested ****`agent:`**** block** — Create `AgentConfig` dataclass with `adapter`, `max_test_rounds`, `timeout_per_card`, `disable_web_search`. Embed as `agent: AgentConfig` in `BenchmarkConfig`. Update `load_config()` for nested YAML. Update `config.example.yaml`.
 - [ ] **Update all ****`BenchmarkConfig`**** consumers for nested agent config** — Audit every module reading `config.agent_tool`, `config.max_test_rounds`, `config.timeout_per_card`, `config.disable_web_search` and migrate to `config.agent.*`. Update tests.
 - [ ] **Create ****`AgentAdapter`**** abstract base class** — Define `silverquillm/adapters/base.py` with abstract `run(prompt, workspace) -> str`, `setup()`, `teardown()`. Include timeout/retry logic and factory `get_adapter(config) -> AgentAdapter`.
 - [ ] **Implement ****`OpenCodeAdapter`** — Create `silverquillm/adapters/opencode.py`. Remove invalid `--thinking` flag. Pass prompts via stdin or temp file (not CLI arg). Wire into adapter factory.

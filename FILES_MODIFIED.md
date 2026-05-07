@@ -22,3 +22,10 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `tests/benchmark/test_e2e.py` — Updated imports and `patch()` target strings
 - `tests/*.py` (all test files) — Updated `from benchmark.*` imports to `from silverquillm.*`
 
+## Item 2: Refactor BenchmarkConfig to use nested agent: block
+
+### Implementation
+- `silverquillm/config.py` — Added AgentConfig dataclass; refactored BenchmarkConfig to embed agent: AgentConfig with backward-compat properties and custom __init__
+- `silverquillm/results.py` — Fixed config serialization to convert nested dataclasses to plain dicts for safe YAML output
+- `config.example.yaml` — Updated to use nested agent: block with adapter field
+

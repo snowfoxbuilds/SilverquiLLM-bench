@@ -115,6 +115,10 @@ def init_results_dir(
         f.name: getattr(config, f.name)
         for f in config.__dataclass_fields__.values()
     }
+    # Convert nested dataclasses (e.g. AgentConfig) to plain dicts for safe YAML
+    for key, val in config_dict.items():
+        if hasattr(val, "__dataclass_fields__"):
+            config_dict[key] = asdict(val)
     config_path = run_dir / "config.yaml"
     config_path.write_text(yaml.dump(config_dict, default_flow_style=False))
 

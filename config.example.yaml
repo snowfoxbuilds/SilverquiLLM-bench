@@ -10,11 +10,12 @@ model_provider: "anthropic"
 max_context: 200000
 temperature: 0.0
 
-# Agent configuration
-agent_tool: "opencode"
-max_test_rounds: 3
-timeout_per_card: 300
-disable_web_search: true
+# Agent configuration (nested block)
+agent:
+  adapter: "opencode"
+  max_test_rounds: 3
+  timeout_per_card: 300
+  disable_web_search: true
 
 # Paths (relative to repo root)
 card_specs_dir: "benchmarks/sos/cards"
