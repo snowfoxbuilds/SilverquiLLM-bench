@@ -160,9 +160,51 @@ class MultanisAcolyte(Creature):
         )
 ```
 
+### New Mechanics Declaration
+
+Target set cards may use mechanics not found in the Foundations card pool. When an agent's implementation requires a mechanic that has no example in `foundations/`, it should declare this in a `mechanics_declaration.json` file in the workspace:
+
+```json
+{
+  "new_mechanics": [
+    {
+      "name": "Ward",
+      "rules_reference": "702.21",
+      "description": "Whenever this permanent becomes the target of a spell or ability an opponent controls, counter that spell or ability unless its controller pays the ward cost.",
+      "implementation_approach": "Registered as a trigger on 'becomes_target' event. Checks if source controller is an opponent, then creates a pay-or-counter choice.",
+      "engine_hooks_used": ["register_triggers", "counter_spell", "pay_cost"],
+      "foundation_analogs": ["Hexproof (similar targeting restriction)", "Counterspell (counter mechanic)"]
+    },
+    {
+      "name": "Magecraft",
+      "rules_reference": null,
+      "description": "Whenever you cast or copy an instant or sorcery spell, [effect].",
+      "implementation_approach": "Trigger on 'spell_cast' event filtered to instant/sorcery types, plus 'spell_copied' event.",
+      "engine_hooks_used": ["register_triggers"],
+      "foundation_analogs": ["Prowess (triggers on instant/sorcery cast)"]
+    }
+  ]
+}
+```
+
+**Schema fields per mechanic:**
+
+- `name`: Mechanic keyword or ability word
+- `rules_reference`: MTG comprehensive rules section number (if known, from rules lookup skill)
+- `description`: Plain English description of the mechanic
+- `implementation_approach`: How the agent plans to implement it using the engine API
+- `engine_hooks_used`: Which `Card` methods or `GameState` methods the implementation relies on
+- `foundation_analogs`: Existing Foundations cards with similar (but not identical) patterns the agent used as reference
+This declaration serves two purposes:
+
+1. **Postmortem analysis** — Reviewers can check whether the agent correctly understood the mechanic and chose appropriate engine hooks
+2. **Engine gap detection** — If many agents flag the same mechanic as lacking engine support, it surfaces a gap to fix
+The file is optional. Agents are instructed to create it when they encounter mechanics with no direct example in `foundations/`, but the runner does not enforce it.
+
 ## Decisions
 
 - **Declarative properties + hook methods**: Static card data as class attributes; behavior via method overrides. [SETTLED]
 - **One file, one class per card**: Standardized class name from `template.py` for cross-evaluation compatibility. [SETTLED]
 - **Modal spells via get_modes()**: All modes available; DeterministicPlayer selects mode in tests. [SETTLED]
 - **Replacement effects separate from triggers**: `register_replacement_effects()` mechanism, no stack, "instead" semantics. [SETTLED]
+- **New mechanics declaration**: Agents produce `mechanics_declaration.json` when using mechanics not in Foundations, documenting approach and engine hooks. [SETTLED]

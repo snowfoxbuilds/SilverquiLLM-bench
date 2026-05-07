@@ -8,7 +8,7 @@ Agents write their own tests. Test quality is part of the evaluation.
 
 ## Context
 
-Unlike traditional benchmarks with pre-built test suites, MagicBench has agents generate tests as part of the benchmark. This enables cross-evaluation and measures test-writing ability as a separate dimension.
+Unlike traditional benchmarks with pre-built test suites, SilverquiLLM-bench has agents generate tests as part of the benchmark. This enables cross-evaluation and measures test-writing ability as a separate dimension.
 
 ## Design
 
@@ -48,7 +48,7 @@ Matrix reveals: implementation quality (row pass rates), test quality (column di
 
 ```python
 import pytest
-from magicbench.test_utils import (
+from silverquillm.test_utils import (
     create_game, set_board_state, cast_spell,
     advance_to_phase, assert_zone_contains,
     assert_life_total, assert_battlefield_count,

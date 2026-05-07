@@ -74,7 +74,12 @@ Test for:
 - Interaction with game rules (stack, priority, state-based actions)
 
 You may also update your implementation if you discover issues.
-You have up to {max_rounds} rounds to iterate on both tests and code."""
+You have up to {max_rounds} rounds to iterate on both tests and code.
+
+Write your tests to `tests.py`.
+If you update your implementation, save it to `tested_impl.py`.
+Do not modify any other files.
+"""
 
 _TEST_INFORMED_FEEDBACK_SECTION = """
 
@@ -141,7 +146,12 @@ Test run results (round {round_num} of {max_rounds}):
 
 {test_output}
 
-Fix the failing tests or update your implementation, then resubmit both files."""
+Fix the failing tests or update your implementation, then resubmit both files.
+
+Write your tests to `tests.py`.
+If you update your implementation, save it to `tested_impl.py`.
+Do not modify any other files.
+"""
 
 
 def iteration_feedback_prompt(

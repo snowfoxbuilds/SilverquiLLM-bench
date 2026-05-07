@@ -281,6 +281,28 @@ def sync(project_root_id: str, output_dir: str):
     else:
         print("  ! No 'TODO_COMPLETED.md' page found under project root")
 
+    
+    # 5. Export CONTEXT -> <output_dir>/CONTEXT.md
+    context_page = next((c for c in children if c["title"] == "CONTEXT.md"), None)
+    if context_page:
+        export_page(context_page["id"], os.path.join(output_dir, "CONTEXT.md"))
+    else:
+        print("  ! No 'CONTEXT.md' page found under project root")
+
+
+
+    # 2. Export ADRs/* -> <output_dir>/docs/adrs/<title>
+    adrs_page = next((c for c in children if c["title"] == "ADRs"), None)
+    if adrs_page:
+        adrs_children = get_child_pages(adrs_page["id"])
+        if not adrs_children:
+            print("  ! ADRs page has no children")
+        for adr in adrs_children:
+            filename = adr["title"]
+            if not filename.endswith(".md"):
+                filename += ".md"
+            filepath = os.path.join(output_dir, "docs", "adrs", filename)
+            export_page(adr["id"], filepath)
 
 # --- CLI ---
 

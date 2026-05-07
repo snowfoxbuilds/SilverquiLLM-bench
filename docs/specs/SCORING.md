@@ -8,7 +8,7 @@ Three independent scoring categories. No composite score.
 
 ## Context
 
-MagicBench evaluates three distinct skills — implementation from spec, iterative debugging, and test writing — so each gets its own leaderboard.
+SilverquiLLM-bench evaluates three distinct skills — implementation from spec, iterative debugging, and test writing — so each gets its own leaderboard.
 
 ## Design
 
@@ -62,6 +62,19 @@ Weighted Score = Σ(w_c × pass(c)) / Σ(w_c), where pass(c) = 1 if all audited 
 
 Tiers assigned via automated heuristics: rules text length, keyword count, ability count, target requirements, zone interactions, card type. Thresholds calibrated from target set distribution.
 
+### Category 4: Engine Extension Quality
+
+Measures the agent's ability to extend the shared engine without breaking existing cards. Only applies when the persistent-engine model is used (cards processed sequentially with a shared writable engine per run).
+
+| Metric | Definition |
+| --- | --- |
+| Regression rate | % of cards whose tests broke due to engine changes made for a later card |
+| Regression-free streak | Longest consecutive sequence of cards completed without any regression |
+| Engine churn | Total lines changed in engine/ across all cards (lower = cleaner extensions) |
+| Mechanic reuse rate | % of cards that reused an engine mechanic added by a previous card (vs. adding a new one) |
+
+A perfect score means the agent extended the engine for every card that needed it, and no engine change ever broke a previously-passing test. High churn with low regression = acceptable (the agent extended a lot but cleanly). High regression = the agent writes brittle, card-specific hacks.
+
 ### Secondary Metrics
 
 **Per-category breakdown**: Pass rates by test category (basic, ability, edge, interaction, rules).
@@ -71,6 +84,8 @@ Tiers assigned via automated heuristics: rules text length, keyword count, abili
 **Error classification**: Syntax errors, import errors, logic errors, missing implementation, rules misunderstanding.
 
 **Efficiency metrics**: Tokens per card, cost per card, time per card, pass rate per dollar.
+
+**Regression details**: Per-card list of which earlier cards' tests broke and what engine change caused it.
 
 ### Leaderboard Format
 
@@ -102,3 +117,4 @@ Category 3: Test Quality
 - **Raw scores only**: No statistical significance tests or confidence intervals. [SETTLED]
 - **Difficulty calibration metric**: Rewards tests in the sweet spot (some agents pass, others don't). [SETTLED]
 - **Self-serving bias tracked**: Self-eval pass rate − cross-eval pass rate. High bias = agent writes easy tests. [SETTLED]
+- **Category 4 (Engine Extension Quality)**: Measures regression rate, engine churn, and mechanic reuse when agents extend the shared engine across cards. [SETTLED]

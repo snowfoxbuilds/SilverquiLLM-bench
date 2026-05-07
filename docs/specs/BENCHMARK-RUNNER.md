@@ -32,32 +32,78 @@ graph TD
 
 ```yaml
 benchmark:
-  name: "magicbench-v1-strixhaven"
+  name: "silverquillm-v1-strixhaven"
   set_code: "SOS"
 model:
-  name: "claude-sonnet-4"
-  provider: "anthropic"
+  name: "deepseek-v4-flash"
+  provider: "openai-compatible"   # or "anthropic", "openai", etc.
+  endpoint: "http://localhost:8080"  # for local llama.cpp servers
   max_context: 200000
   temperature: 0.0
 agent:
-  tool: "opencode"
+  adapter: "opencode"              # one of: opencode | claude_code | aider | pi
   max_test_rounds: 3
   timeout_per_card: 300
   disable_web_search: true
 paths:
-  benchmarks_dir: "./benchmarks/"  # Each set gets benchmarks/{set_code}/
+  benchmarks_dir: "./benchmarks/"
   engine_docs: "./docs/engine_api.md"
   output_dir: "./benchmarks/sos/results/"
 ```
 
+### Multi-Agent Support
+
+The runner supports multiple agent adapters via a pluggable `AgentAdapter` base class. Each adapter translates the runner's prompts and workspace into the agent tool's native interface.
+
+```python
+class AgentAdapter(ABC):
+    """Base class for agent tool adapters."""
+    @abstractmethod
+    def run(self, prompt: str, workspace: Path, timeout: int) -> AgentRunResult: ...
+    @abstractmethod
+    def get_session_log(self) -> str: ...
+```
+
+**Supported adapters (v1):**
+
+| Adapter | Tool | Tool-calling | Notes |
+| --- | --- | --- | --- |
+| `opencode` | OpenCode | Required (OpenAI-compatible) | `opencode run [message]`; config via `opencode.json` |
+| `claude_code` | Claude Code | Native | Anthropic's CLI agent; `claude -p [message]` |
+| `aider` | Aider | Not required (text-based edits) | Best for models without tool-calling (e.g. MiniMax via llama.cpp) |
+| `pi` | Pi ([pi.dev](http://pi.dev/)) | Required | General-purpose coding agent |
+
+The adapter is selected by `agent.adapter` in config. Each adapter captures stdout/stderr and structures it into the postmortem log (see Per-Round Logging below).
+
+### Workspace Model: Persistent Engine per Run
+
+A single benchmark run processes cards **sequentially** with a **shared, writable engine** that accumulates the agent's modifications across cards. Each run starts from the same base engine, so different agents/models are comparable.
+
+**Per-run engine lifecycle:**
+
+1. Run starts → copy `engine/` to a persistent run-level engine directory (writable)
+2. Card 1 workspace created → symlinks or copies the run engine into workspace
+3. Agent implements card 1 → may modify engine files (e.g., add a new mechanic)
+4. Card 1 completes → engine changes are **committed back** to the run-level engine
+5. Card 2 workspace created → starts with the engine as modified by card 1
+6. …repeat for all cards…
+7. Run ends → final engine state saved as an artifact alongside results
+**Why persistent**: Cards in the target set may require mechanics not in the base engine (e.g., Ward, Magecraft). The agent must extend the engine to implement them. A good agent writes **generic mechanics** that work for future cards — not one-off hacks. This measures architectural quality and forward thinking.
+
+**Regression check**: After each card completes, the runner re-runs all previous cards' tests against the modified engine. Any failure = regression. Regressions are recorded per card and penalized in scoring (see [SCORING.md](http://scoring.md/)).
+
+**Card ordering**: Cards are sorted by complexity tier (trivial → simple → medium → complex → expert) so the agent builds up engine capabilities gradually. Within a tier, cards are sorted by collector number for determinism.
+
 ### Agent Context
 
-Files provided to the agent:
+Files provided to the agent in each card's workspace:
 
 - `card_spec.json` — Card data (name, mana cost, type line, oracle text)
 - `engine_api.md` — Game engine API reference
-- `base_classes.py` — Card base classes (read-only)
-- `test_utils.md` — Test utilities documentation (Step 2 only)
+- `engine/` — **Writable** copy of the game engine (persistent across cards within a run)
+- `base_classes.py` — Card base classes (convenience copy from engine/)
+- `test_utils.md` — Test utilities documentation (always available; referenced in Step 2 prompt)
+- `test_utils.py` — Test utilities module (always available; agent is instructed not to write tests in Step 1)
 - `template.py` — Skeleton with standardized class name and imports
 - `rules_overview.md` — Brief MTG rules overview + lookup skill docs
 - `foundations/` — Browsable codebase of Foundations card implementations (read-only, not bulk-loaded)
@@ -66,13 +112,15 @@ Context limit: 200K tokens. Agent manages its own context budget.
 
 Not provided (contamination controls): no target set implementations, no XMage Java source, no internet, no other agents' work.
 
+**Engine modification rules**: The agent may add new files to `engine/` or modify existing ones. The prompt instructs the agent that all previous cards' tests will be re-run after each card, so engine changes must not break existing functionality.
+
 ### Cross-Evaluation Compatibility
 
 Every card uses a standardized class name and module path from `template.py`:
 
 ```python
-from magicbench.engine import *
-from magicbench.cards.base import CardImpl
+from silverquillm.engine import *
+from silverquillm.cards.base import CardImpl
 
 class StrixhavenProdigy(CardImpl):
     """Implementation of Strixhaven Prodigy."""
@@ -84,7 +132,7 @@ The runner swaps implementations by replacing the .py file. Tests import from `c
 ### Step 1: Blind Implementation Prompt
 
 ```javascript
-You are implementing a Magic: The Gathering card for the MagicBench game engine.
+You are implementing a Magic: The Gathering card for the SilverquiLLM-bench game engine.
 
 Card: {card_name}
 Mana Cost: {mana_cost}
@@ -94,12 +142,15 @@ Rules Text: {oracle_text}
 Implement this card by completing the class in template.py.
 You have access to:
 - engine_api.md (game engine API reference)
+- engine/ (game engine source — you may extend it if this card needs mechanics not yet supported)
 - base_classes.py (card base classes)
 - rules_overview.md + rules lookup tool (search MTG rules by keyword/number)
 - foundations/ (browse working card implementations as reference)
 
-Produce a single Python file that implements this card.
-Do not rename the class. Do not write tests. Do not modify any other files.
+Write your implementation to `blind_impl.py`.
+If you need to add or modify engine files, do so — but all previous cards' tests
+will be re-run, so your engine changes must not break existing functionality.
+Do not rename the class. Do not write tests.
 ```
 
 ### Step 2: Test-Informed Implementation Prompt
@@ -119,7 +170,10 @@ Test for:
 - Edge cases (no valid targets, empty board, etc.)
 - Interaction with game rules (stack, priority, state-based actions)
 
-You may also update your implementation if you discover issues.
+Save your updated implementation to `tested_impl.py`.
+Save your tests to `tests.py`.
+You may also modify engine/ files if needed — but all previous cards' tests
+will be re-run, so engine changes must not break existing functionality.
 You have up to 3 rounds to iterate on both tests and code.
 ```
 
@@ -160,9 +214,84 @@ You have up to 3 rounds to iterate on both tests and code.
 ### Contamination Controls
 
 1. **No web access** — OpenCode `deny` permission on webfetch and network commands
-2. **Clean working directory** — Fresh temp directory per card with only allowed files
+2. **Fresh workspace per card** — New temp directory per card, but engine state carries forward within a run
 3. **New set cards** — SOS released 2026-04-24; too new for LLM training data or XMage implementation
-4. **No cross-card leakage** — Context reset between cards
+4. **No cross-agent leakage** — Each agent/model gets its own run with a fresh engine copy. Agents never see other agents' engine modifications or implementations
+5. **Engine regression gate** — After each card, all previous cards' tests are re-run. Engine modifications that break earlier cards are detected and penalized
+### Per-Round Logging & Postmortem
+
+Since agent export tools (e.g. `opencode export`) are unreliable, the runner captures structured logs per round for every card. These logs are the primary source for debugging and postmortem analysis.
+
+**What is captured per round:**
+
+- Agent stdout/stderr (full text, streamed in real-time)
+- Agent thinking/reasoning traces (if the model emits them)
+- Files created or modified in workspace (diff format)
+- Test results (pytest output, pass/fail counts, assertion messages)
+- Timing: round start, agent finish, test finish
+- Token usage (if reported by the agent tool)
+**Postmortem log file** (`postmortem.jsonl`): One JSON line per event, stored per card:
+
+```json
+{"ts": "2026-05-07T10:01:23Z", "round": 1, "phase": "blind", "event": "agent_start", "prompt_hash": "abc123"}
+{"ts": "2026-05-07T10:02:45Z", "round": 1, "phase": "blind", "event": "agent_output", "stream": "stdout", "text": "Thinking: I need to implement..."}
+{"ts": "2026-05-07T10:03:10Z", "round": 1, "phase": "blind", "event": "agent_finish", "exit_code": 0, "runtime_seconds": 107.2}
+{"ts": "2026-05-07T10:03:11Z", "round": 1, "phase": "blind", "event": "file_diff", "path": "card_impl.py", "diff": "+class EagerGlyphmage(Creature):..."}
+{"ts": "2026-05-07T10:03:15Z", "round": 1, "phase": "test", "event": "pytest_result", "passed": 5, "failed": 3, "output": "..."}
+```
+
+**Artifacts per card** (updated layout):
+
+```javascript
+cards/{card_id}/
+├── blind_impl.py
+├── tested_impl.py
+├── tests.py
+├── result.json
+├── postmortem.jsonl          # Full structured log for debugging
+├── agent_thoughts.md         # Extracted reasoning traces (human-readable)
+├── iterations/
+│   ├── round_1/
+│   │   ├── impl.py
+│   │   ├── tests.py
+│   │   └── pytest_output.txt
+│   └── round_2/ ...
+└── audited_tests.py          # Gold-standard tests (if audited)
+```
+
+The `agent_thoughts.md` file is auto-generated from `postmortem.jsonl` by extracting reasoning/thinking blocks from agent output. This gives a human-readable narrative of the agent's approach for each card.
+
+### Agent Setup Questioning
+
+Agents may encounter issues with the workspace setup (missing files, unclear engine API, card spec ambiguities). Rather than silently failing or hallucinating, agents can emit structured **setup questions** via a `setup_questions.json` file in the workspace.
+
+```json
+[
+  {
+    "type": "missing_file",
+    "description": "test_utils.py referenced in prompt but not found in workspace",
+    "severity": "blocking"
+  },
+  {
+    "type": "ambiguous_spec",
+    "description": "Card rules text says 'counter target spell' but engine_api.md has no counter_spell() method",
+    "severity": "warning"
+  },
+  {
+    "type": "engine_gap",
+    "description": "No API for 'exile from graveyard' — only exile() from battlefield exists",
+    "severity": "blocking"
+  }
+]
+```
+
+**Schema fields:**
+
+- `type`: one of `missing_file`, `ambiguous_spec`, `engine_gap`, `mechanic_not_found`, `import_error`, `other`
+- `description`: free-text explanation of the issue
+- `severity`: `blocking` (cannot proceed) or `warning` (proceeded with best guess)
+The runner checks for `setup_questions.json` after each agent run. Blocking questions are logged and the card is marked `status: "setup_error"`. Warning questions are logged in the postmortem but don't halt execution. Aggregated questions across all cards surface systemic issues (e.g. a missing engine method needed by many cards).
+
 ### Error Handling
 
 | Error | Handling |
@@ -242,3 +371,6 @@ The runner tracks per-card and aggregate:
 - **Cost tracking enabled**: Token counts, peak context, and time tracked per card. [SETTLED]
 - **foundations/ as browsable codebase**: Agent can list/read files, not expected to ingest everything. [SETTLED]
 - **Standardized class names**: [template.py](http://template.py/) fixes class name and import path for cross-eval compatibility. [SETTLED]
+- **Multi-agent via adapter pattern**: Pluggable `AgentAdapter` base class; v1 supports OpenCode, Claude Code, Aider, Pi. Config selects adapter. [SETTLED]
+- **Per-round postmortem logging**: `postmortem.jsonl` captures agent output, file diffs, test results, and reasoning traces per round. `agent_thoughts.md` extracted for human review. [SETTLED]
+- **Agent setup questioning**: Agents emit `setup_questions.json` to flag missing files, engine gaps, or ambiguous specs instead of silently failing. [SETTLED]

@@ -4,7 +4,7 @@ Last updated: 2026-04-28
 
 # Project Overview
 
-MagicBench evaluates LLM coding ability by tasking models with implementing MTG cards as Python classes in a custom game engine.
+SilverquiLLM-bench evaluates LLM coding ability by tasking models with implementing MTG cards as Python classes in a custom game engine.
 
 ## Context
 
@@ -23,19 +23,19 @@ Existing coding benchmarks (HumanEval, SWE-bench) don't capture the structured c
 | Parameter | Value |
 | --- | --- |
 | Language | Python |
-| Engine | Python port of XMage (Java, GPL-2.0) |
+| Engine | Python port of XMage (Java, MIT) |
 | Base set | MTG Foundations (~260 cards, ported from XMage) |
 | Target set | Secrets of Strixhaven (SOS, released 2026-04-24) |
-| Agentic tool | OpenCode (permission controls for contamination) |
+| Agentic tool | Pluggable adapters: OpenCode, Claude Code, Aider, Pi (each enforces contamination controls) |
 | Card scope | Full set (all card types) |
 | Context limit | 200K tokens per agent session |
 | Test iteration | Up to 3 rounds of test-informed code updates |
 
 ### Development Phases
 
-**Phase 1 — Engine & Base Set** (COMPLETE)
+**Phase 1 — Engine & Base Set** (IN PROGRESS)
 
-Port XMage rules engine to Python. Implement MTG Foundations as the base set for engine validation and agent reference examples.
+Port XMage rules engine to Python. Implement MTG Foundations as the base set for engine validation and agent reference examples. Core engine systems complete; ~30-40 Foundations cards ported (basic lands, keyword creatures, simple spells, simple permanents). Remaining ~220 Foundations cards are WIP.
 
 **Phase 2 — Benchmark Harness & Prototype**
 
@@ -64,7 +64,7 @@ Three-layer evaluation:
 - **MTG Foundations as base set**: Classic reprints covering all card types; gives agents working examples. [SETTLED]
 - **Secrets of Strixhaven as target**: Released 2026-04-24 (set code SOS); new mechanics (Prepared, Converge, Miracle, Opus) won't be in training data. [SETTLED]
 - **Harness-first development**: Build runner prototype before porting remaining Foundations cards; validate pipeline early with real Strixhaven cards. [SETTLED]
-- **OpenCode as agentic tool**: Permission system enables contamination controls (deny web, restrict files). [SETTLED]
+- **Multi-agent support**: Pluggable adapter pattern supports OpenCode, Claude Code, Aider, Pi. Each adapter enforces contamination controls. [UPDATED]
 - **New set + no web for contamination**: Simple and effective for v1; avoids complex sandboxing. [SETTLED]
 - **Full set scope**: Captures full difficulty distribution; enables per-complexity-tier analysis. [SETTLED]
 - **Three scoring categories**: Blind implementation, implementation with tests, and test quality scored independently. [SETTLED]

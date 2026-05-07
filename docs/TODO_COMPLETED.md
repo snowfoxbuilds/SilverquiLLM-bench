@@ -50,3 +50,19 @@ Branch: `execute-todo-with-subagents/phase2-harness` → `main`
 - [x] **Result recording + output artifacts** (per-run directory structure)
 - [x] **Prototype card selection + engine gap analysis**
 - [x] **Minimal engine extensions for SOS prototype mechanics** (Converge mana color tracking)
+## Completed 2026-05-07
+
+Phase 2.5: CLI Wiring, Contamination Controls & Integration Test (PR #3 — 11 items)
+
+Branch: `execute-todo-with-subagents/phase-2-5-cli-wiring` → `main`
+
+- [x] **Expand ****`_check_violations`**** to cover all protected directories and return structured violations**
+- [x] **Wire enhanced violation checks into both agent run methods**
+- [x] **Add card-spec loading and filtering utility**
+- [x] **Add ****`--cards`****, ****`--prototype`****, and ****`--dry-run`**** flags to ****`benchmark run`**
+- [x] **Wire ****`benchmark run`**** orchestration loop**
+- [x] **Wire ****`benchmark run`**** post-loop: self-eval and summary**
+- [x] **Wire ****`benchmark eval`**** command**
+- [x] **Wire ****`benchmark score`**** command**
+- [x] **Create integration test helpers: mock OpenCode and test fixtures**
+- [x] **Full pipeline integration test with Eager Glyphmage and Ajani's Response**
