@@ -114,3 +114,15 @@ tests/test_setup_questions_bank.py — Validates question bank structure, topic 
 
 ### Implementation
 setup_questions.json — 7 setup questions referencing only agent-workspace-visible files (engine/, test_utils.py, template.py, base_classes.py, foundations/, engine_api.md)
+
+## Item 14: Audit and align tier key naming
+
+### Implementation
+- `silverquillm/card_classifier.py` — Added `complexity_tier` alongside `tier` in classifier JSON output
+- `silverquillm/card_spec.py` — Updated `generate_all_specs` to accept both `complexity_tier` and `tier` from classified data
+- `silverquillm/cli.py` — Updated tier map building and card listing to prefer `complexity_tier` with `tier` fallback
+- `silverquillm/prototype.py` — Added `complexity_tier` to prototype output dicts; updated reader to accept both keys
+- `silverquillm/run_utils.py` — Updated spec tier reads to fall back from `complexity_tier` to `tier`
+- `silverquillm/results.py` — Updated tier extraction to fall back to `tier`; added `tier` to `_IMPL_EXCLUDE`
+- `benchmarks/sos/prototype_cards.json` — Added `complexity_tier` field alongside existing `tier`
+- `benchmarks/sos/data/sos_classified.json` — Added `complexity_tier` field alongside existing `tier` for all entries

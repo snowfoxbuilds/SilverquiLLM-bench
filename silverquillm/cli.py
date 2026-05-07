@@ -76,7 +76,7 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
     click.echo(f"Cards: {len(specs)}")
     for spec in specs:
         name = spec.get("name", "???")
-        tier = spec.get("complexity_tier", "unknown")
+        tier = spec.get("complexity_tier", spec.get("tier", "unknown"))
         click.echo(f"  [{tier}] {name}")
 
     if dry_run:
@@ -352,7 +352,8 @@ def score(results_dir: str, tier_data: str | None, set_code: str) -> None:
 
     # Build collector_number → tier mapping
     tier_map: dict[str, str] = {
-        entry["collector_number"]: entry["tier"] for entry in classified
+        entry["collector_number"]: entry.get("complexity_tier", entry.get("tier", "unknown"))
+        for entry in classified
     }
 
     # Compute scores
@@ -389,7 +390,7 @@ def cards(set_code: str) -> None:
     click.echo(f"Cards in set {set_code}: {len(card_list)}")
     for card in card_list:
         name = card.get("name", "???")
-        tier = card.get("tier", "unknown")
+        tier = card.get("complexity_tier", card.get("tier", "unknown"))
         click.echo(f"  [{tier}] {name}")
 
 

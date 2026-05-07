@@ -236,13 +236,17 @@ def _build_result_record(
     agent = blind_result.get("agent", test_result.get("agent", "unknown"))
     model = blind_result.get("model", test_result.get("model", "unknown"))
     complexity_tier = blind_result.get(
-        "complexity_tier", test_result.get("complexity_tier", "unknown")
+        "complexity_tier",
+        blind_result.get(
+            "tier",
+            test_result.get("complexity_tier", test_result.get("tier", "unknown")),
+        ),
     )
 
     # Build implementation metrics — preserve all keys except large source
     # blobs and internal bookkeeping, so tokens/runtime/peak_context etc.
     # flow through automatically.
-    _IMPL_EXCLUDE = {"impl_source", "tests_source", "agent", "model", "complexity_tier", "iterations"}
+    _IMPL_EXCLUDE = {"impl_source", "tests_source", "agent", "model", "complexity_tier", "tier", "iterations"}
 
     blind_metrics = {
         k: v for k, v in blind_result.items() if k not in _IMPL_EXCLUDE
