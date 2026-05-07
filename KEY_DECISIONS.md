@@ -37,3 +37,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Context**: Previously, each card workspace got a fresh read-only copy of `engine/` from the repo. Agents couldn't modify engine files, and no changes persisted between cards.
 - **Decision**: Run-level engine directory created at run start via `init_run_engine()`. Each card gets a writable copy. After each card, `commit_engine_changes()` merges modifications back. `save_engine_final()` saves the final state as a run artifact. `engine/` removed from `_PROTECTED_DIRS`. `base_classes.py` extracted from run engine dir when available.
 - **Impact**: `agent_session.py`, `cli.py`. Enables agents to extend the engine across cards within a single run.
+
+## 8. Regression test runner design
+- **Context**: After each card's test-informed phase, need to verify earlier cards still work with the current engine state.
+- **Decision**: `run_regressions()` builds fresh temp workspaces per card combining current `run_engine_dir` + card's saved impl/test artifacts. Parses pytest `-v` output for individual `FAILED` test names. Results stored in card's `result.json` with `failed_tests` list. Regression failures fed back to agent if rounds remain.
+- **Reasoning**: Using fresh workspaces avoids stale engine state. Storing individual test names enables precise feedback. Backward-compatible API (optional `run_engine_dir` param).
+- **Impact**: `silverquillm/regression.py` (new module), `agent_session.py`, `cli.py`.

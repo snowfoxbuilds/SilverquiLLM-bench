@@ -138,3 +138,11 @@ setup_questions.json — 7 setup questions referencing only agent-workspace-visi
 - `silverquillm/agent_session.py` — Removed engine from _PROTECTED_DIRS; removed read-only chmod on engine; added run_engine_dir field to AgentSession; added init_run_engine, commit_engine_changes, save_engine_final helpers; engine copy now writable from run_engine_dir or repo; base_classes.py extraction now prefers run_engine_dir/card.py
 - `silverquillm/cli.py` — Wired persistent engine lifecycle into run loop: init_run_engine before loop, pass run_engine_dir to AgentSession, commit_engine_changes after each card, save_engine_final after loop
 - `tests/test_check_violations.py` — Updated tests to use docs/ instead of engine/ as example protected directory since engine is no longer protected
+
+## Item 17: Implement regression test runner
+
+### Tests
+tests/test_regression.py — Tests regression runner dataclasses, pytest parsing, card test execution, aggregation, and feedback prompt generation
+
+### Implementation
+- `silverquillm/regression.py` — New module: CardRegressionResult, CompletedCard, RegressionResult dataclasses; run_regressions runner; regression_feedback_prompt for agent correction
