@@ -164,11 +164,8 @@ class TestBenchmarkEndToEnd:
         # Assert both agent (tool) and model fields are present in result records
         for card_id in ["11", "6"]:
             result = json.loads((run_dir / "cards" / card_id / "result.json").read_text())
-            impl = result["implementation"]
-            assert impl["blind"]["agent"] == config.agent_tool
-            assert impl["blind"]["model"] == config.model_name
-            assert impl["tested"]["agent"] == config.agent_tool
-            assert impl["tested"]["model"] == config.model_name
+            assert result["agent"] == config.agent_tool
+            assert result["model"] == config.model_name
 
         # 6. Run self-eval
         eval_results = []

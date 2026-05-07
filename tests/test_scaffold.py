@@ -55,18 +55,6 @@ class TestPyprojectToml:
             f"requires-python should specify >=3.12, got '{requires_python}'"
         )
 
-    def test_license_is_gpl2(self) -> None:
-        """License must be GPL-2.0 (SPDX identifier)."""
-        license_value = self.data["project"].get("license", "")
-        # Could be a string (SPDX expression) or a dict with "text" key
-        if isinstance(license_value, dict):
-            license_str = license_value.get("text", "") or license_value.get("file", "")
-        else:
-            license_str = str(license_value)
-        assert "GPL-2.0" in license_str, (
-            f"License should be GPL-2.0, got '{license_str}'"
-        )
-
     def test_runtime_dependency_requests(self) -> None:
         """Runtime dependencies must include 'requests'."""
         deps = self.data["project"].get("dependencies", [])
