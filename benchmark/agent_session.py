@@ -48,6 +48,9 @@ __all__ = [
 # Repo root — resolved once at import time
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
+# Directories that agents must never modify
+_PROTECTED_DIRS: tuple[str, ...] = ("engine", "cards", "tests", "benchmark", "benchmarks", "docs")
+
 
 # ---------------------------------------------------------------------------
 # Result dataclasses
@@ -349,7 +352,7 @@ class AgentSession:
         BlindResult
         """
         prompt = blind_implementation_prompt(self.card_spec)
-        engine_snapshot = _snapshot_mtimes(_REPO_ROOT / "engine")
+        protected_snapshot = _snapshot_all_protected(_REPO_ROOT)
         start = time.monotonic()
 
         try:
@@ -395,7 +398,9 @@ class AgentSession:
             )
 
         # Check for violations (writing outside workspace)
-        if _check_violations(workspace, before=engine_snapshot):
+        violations = _check_violations(workspace, before=protected_snapshot)
+        if violations:
+            logger.warning("Violations detected during blind implementation: %s", violations)
             return BlindResult(
                 impl_path=None,
                 tokens=_estimate_tokens(output),
@@ -469,6 +474,8 @@ class AgentSession:
         for round_num in range(1, self.config.max_test_rounds + 1):
             iterations = round_num
 
+            protected_snapshot = _snapshot_all_protected(_REPO_ROOT)
+
             try:
                 output = self._run_opencode(prompt, workspace)
             except subprocess.TimeoutExpired:
@@ -483,10 +490,30 @@ class AgentSession:
                     status="timeout",
                 )
 
+            # Update metrics for this round before checking violations
             round_tokens = _estimate_tokens(output)
             total_tokens += round_tokens
             peak_context = max(peak_context, _estimate_tokens(prompt + output))
             rules_lookups += _count_rules_lookups(output)
+
+            # Check for violations after each agent invocation
+            violations = _check_violations(workspace, before=protected_snapshot)
+            if violations:
+                logger.warning(
+                    "Violations detected during test-informed round %d: %s",
+                    round_num,
+                    violations,
+                )
+                return TestInformedResult(
+                    impl_path=card_impl_path if card_impl_path.exists() else None,
+                    tests_path=workspace / "tests.py" if (workspace / "tests.py").exists() else None,
+                    iterations=iterations,
+                    tokens=total_tokens,
+                    runtime_seconds=time.monotonic() - start,
+                    peak_context=peak_context,
+                    rules_lookups=rules_lookups,
+                    status="violation",
+                )
 
             # Check for test file
             tests_path = workspace / "tests.py"
@@ -627,22 +654,58 @@ def _snapshot_mtimes(root: Path) -> dict[Path, float]:
     return snapshot
 
 
-def _check_violations(workspace: Path, before: dict[Path, float] | None = None) -> bool:
-    """Return True if any files outside *workspace* were modified since *before*.
+def _snapshot_all_protected(repo_root: Path) -> dict[Path, float]:
+    """Snapshot mtimes for all protected directories that exist under *repo_root*."""
+    merged: dict[Path, float] = {}
+    for dirname in _PROTECTED_DIRS:
+        dirpath = repo_root / dirname
+        if dirpath.is_dir():
+            merged.update(_snapshot_mtimes(dirpath))
+    return merged
+
+
+def _check_violations(workspace: Path, before: dict[Path, float] | None = None) -> list[str]:
+    """Return list of violation descriptions for files outside *workspace* that changed.
 
     Compares current mtimes against the *before* snapshot.  If no snapshot is
-    provided, the check cannot detect violations and returns False.
+    provided, the check cannot detect violations and returns an empty list.
     """
     if before is None:
-        return False
-    engine_root = _REPO_ROOT / "engine"
-    after = _snapshot_mtimes(engine_root)
+        return []
+    after = _snapshot_all_protected(_REPO_ROOT)
+    violations: list[str] = []
+    workspace_resolved = workspace.resolve()
     for path, mtime in after.items():
+        # Files inside the workspace are expected to change
+        try:
+            if path.resolve().is_relative_to(workspace_resolved):
+                continue
+        except (OSError, ValueError):
+            pass
         prior = before.get(path)
-        if prior is None or mtime > prior:
-            logger.warning("Contamination violation: %s was modified by agent", path)
-            return True
-    return False
+        if prior is None:
+            # Newly created file
+            desc = f"{path} was created"
+            logger.warning("Contamination violation: %s", desc)
+            violations.append(desc)
+        elif mtime > prior:
+            # Modified file
+            desc = f"{path} was modified"
+            logger.warning("Contamination violation: %s", desc)
+            violations.append(desc)
+    # Check for deletions: files in before but missing from after
+    for path in before:
+        if path in after:
+            continue
+        try:
+            if path.resolve().is_relative_to(workspace_resolved):
+                continue
+        except (OSError, ValueError):
+            pass
+        desc = f"{path} was deleted"
+        logger.warning("Contamination violation: %s", desc)
+        violations.append(desc)
+    return violations
 
 
 # ---------------------------------------------------------------------------

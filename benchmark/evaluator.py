@@ -29,6 +29,7 @@ __all__ = [
     "EvalResult",
     "run_tests",
     "run_self_eval",
+    "run_self_eval_flat",
     "run_cross_eval",
     "run_audited_eval",
 ]
@@ -182,6 +183,68 @@ def run_self_eval(card_dir: Path, agent_name: str) -> EvalResult:
     tests_file = agent_dir / "tests.py"
     blind_impl = agent_dir / "blind_impl.py"
     tested_impl = agent_dir / "tested_impl.py"
+
+    all_errors: list[str] = []
+
+    if blind_impl.exists() and tests_file.exists():
+        bp, bf, bt, be = run_tests(blind_impl, tests_file)
+        all_errors.extend(be)
+    else:
+        bp, bf, bt = 0, 0, 0
+        if not blind_impl.exists():
+            all_errors.append(f"Missing {blind_impl}")
+        if not tests_file.exists():
+            all_errors.append(f"Missing {tests_file}")
+
+    if tested_impl.exists() and tests_file.exists():
+        tp, tf, tt, te = run_tests(tested_impl, tests_file)
+        all_errors.extend(te)
+    else:
+        tp, tf, tt = 0, 0, 0
+        if not tested_impl.exists():
+            all_errors.append(f"Missing {tested_impl}")
+
+    return EvalResult(
+        card_id=card_dir.name,
+        agent=agent_name,
+        eval_type="self",
+        blind_passed=bp,
+        blind_failed=bf,
+        blind_total=bt,
+        tested_passed=tp,
+        tested_failed=tf,
+        tested_total=tt,
+        errors=all_errors,
+    )
+
+
+def run_self_eval_flat(card_dir: Path, agent_name: str) -> EvalResult:
+    """Run self-eval using the flat card directory layout.
+
+    Unlike :func:`run_self_eval` which expects ``{card_dir}/{agent_name}/``
+    subdirectories, this function works with the flat layout produced by
+    :func:`~benchmark.results.save_card_result`::
+
+        card_dir/
+            blind_impl.py
+            tested_impl.py
+            tests.py
+
+    Parameters
+    ----------
+    card_dir:
+        Path to the card directory containing impl and test files directly.
+    agent_name:
+        Name of the agent (used in the returned :class:`EvalResult`).
+
+    Returns
+    -------
+    EvalResult
+        Evaluation outcome for the card.
+    """
+    tests_file = card_dir / "tests.py"
+    blind_impl = card_dir / "blind_impl.py"
+    tested_impl = card_dir / "tested_impl.py"
 
     all_errors: list[str] = []
 

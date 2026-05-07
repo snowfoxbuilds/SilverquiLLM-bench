@@ -4,7 +4,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
 
 ---
 
-- [ ] **Expand ****`_check_violations`**** to cover all protected directories and return structured violations**
+- [x] **Expand ****`_check_violations`**** to cover all protected directories and return structured violations**
   Detail: In `benchmark/agent_session.py`, the current `_check_violations` function only snapshots `engine/` mtimes via `_snapshot_mtimes` and only detects modifications to existing files within `engine/`. It misses new files created outside the workspace and ignores other protected directories.
 
   Changes to `benchmark/agent_session.py`:
@@ -20,7 +20,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
     - Continue to use `logger.warning` for each violation found.
   - Keep `_snapshot_mtimes` unchanged (still used internally).
   - Testability: Unit test with a temp directory — create a "before" snapshot, add a new file to a protected dir and modify an existing one, verify `_check_violations` returns two violation strings. Verify empty list when nothing changed. Verify workspace-internal changes are NOT flagged.
-- [ ] **Wire enhanced violation checks into both agent run methods**
+- [x] **Wire enhanced violation checks into both agent run methods**
   Detail: In `benchmark/agent_session.py`, update `run_blind_implementation` and `run_test_informed` to use the expanded `_check_violations`.
 
   Changes to `run_blind_implementation`:
@@ -36,7 +36,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
   - Place the snapshot+check around each agent invocation, not the whole loop, so per-round violations are detected.
   Testability: Mock `_run_opencode` to create a file in a protected dir (e.g., `engine/hack.py`). Verify `run_blind_implementation` returns `status="violation"`. Verify `run_test_informed` returns `status="violation"` when a protected file is created during a round.
 
-- [ ] **Add card-spec loading and filtering utility**
+- [x] **Add card-spec loading and filtering utility**
   Detail: Create `benchmark/card_loader.py` with functions to load card specs and filter them for CLI use.
 
   File: `benchmark/card_loader.py`
@@ -49,7 +49,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
 
   Testability: Create a temp directory with two `card_spec.json` files. `load_card_specs` finds both. `filter_by_collectors` with one number returns one card. `filter_by_collectors` with unknown number raises `ValueError`.
 
-- [ ] **Add ****`--cards`****, ****`--prototype`****, and ****`--dry-run`**** flags to ****`benchmark run`**
+- [x] **Add ****`--cards`****, ****`--prototype`****, and ****`--dry-run`**** flags to ****`benchmark run`**
   Detail: In `benchmark/cli.py`, extend the `run` command with filtering and validation flags.
 
   Changes to `benchmark/cli.py`:
@@ -70,7 +70,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
   - Remove the existing classified-data loading logic from `run` (card_loader replaces it).
   Testability: `benchmark run --config ... --dry-run` exits 0 and prints card count. `benchmark run --config ... --cards 011 --dry-run` lists only Eager Glyphmage. `--cards` and `--prototype` together produces an error.
 
-- [ ] **Wire ****`benchmark run`**** orchestration loop**
+- [x] **Wire ****`benchmark run`**** orchestration loop**
   Detail: In `benchmark/cli.py`, implement the main benchmark execution loop inside the `run` command after card selection (when `--dry-run` is not set).
 
   The loop must:
@@ -102,7 +102,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
 
   Testability: Mock `AgentSession._run_opencode` to produce a stub `blind_impl.py` in the workspace. Run `benchmark run --config ... --cards 011`. Verify `run_dir/cards/011/result.json` exists with expected structure. Verify `blind_impl.py` file exists in results.
 
-- [ ] **Wire ****`benchmark run`**** post-loop: self-eval and summary**
+- [x] **Wire ****`benchmark run`**** post-loop: self-eval and summary**
   Detail: After the orchestration loop completes in `benchmark/cli.py`, run self-eval on all results and save the run summary.
 
   After the card loop:
@@ -116,7 +116,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
   4. Print summary: total cards run, self-eval pass rates (blind vs tested), elapsed wall-clock time.
   Testability: Create a mock run directory with `blind_impl.py`, `tested_impl.py`, and `tests.py` files. Verify `summary.json` is written with correct `card_count`. Verify self-eval results appear in each card's `result.json`.
 
-- [ ] **Wire ****`benchmark eval`**** command**
+- [x] **Wire ****`benchmark eval`**** command**
   Detail: In `benchmark/cli.py`, implement the `eval` subcommand to run evaluation on existing results.
 
   Changes to `benchmark/cli.py`:
@@ -132,7 +132,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
     7. Print eval summary: cards evaluated, pass rates by eval type.
   Testability: Create a mock results dir with one run containing `blind_impl.py`, `tested_impl.py`, `tests.py`. `benchmark eval --results-dir ...` exits 0, writes `results.json`. With `--audited-tests`, audited eval results appear in the JSON.
 
-- [ ] **Wire ****`benchmark score`**** command**
+- [x] **Wire ****`benchmark score`**** command**
   Detail: In `benchmark/cli.py`, implement the `score` subcommand.
 
   Changes to `benchmark/cli.py`:
@@ -150,7 +150,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
     8. Print paths to written files: `leaderboard.md`, `summary.json`.
   Testability: Create a mock `results_dir` containing `results.json` with eval data. `benchmark score --results-dir ...` prints leaderboard. `leaderboard.md` and `summary.json` are written.
 
-- [ ] **Create integration test helpers: mock OpenCode and test fixtures**
+- [x] **Create integration test helpers: mock OpenCode and test fixtures**
   Detail: Create `tests/benchmark/test_helpers.py` with reusable fixtures for the full-pipeline integration test.
 
   File: `tests/benchmark/test_helpers.py`
@@ -167,7 +167,7 @@ Scope: Wire the existing benchmark modules into a working end-to-end CLI pipelin
 
   Testability: Helpers are importable. `mock_opencode_blind` produces a `.py` file that `compile()`s without `SyntaxError`.
 
-- [ ] **Full pipeline integration test with Eager Glyphmage and Ajani's Response**
+- [x] **Full pipeline integration test with Eager Glyphmage and Ajani's Response**
   Detail: Create `tests/benchmark/test_e2e.py` with a pytest integration test validating the full pipeline.
 
   Test class: `TestBenchmarkEndToEnd` (mark with `@pytest.mark.integration`)
