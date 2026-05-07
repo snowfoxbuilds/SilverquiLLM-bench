@@ -245,6 +245,12 @@ class AgentSession:
                     dpath = Path(root) / dname
                     dpath.chmod(0o555)
             foundations_dst.chmod(0o555)
+        
+
+        # Copy actual test_utils.py so agent can import it
+        test_utils_py = repo_root / "tests" / "test_utils.py"
+        if test_utils_py.exists():
+            shutil.copy2(test_utils_py, workspace / "test_utils.py")
 
         logger.info("Workspace created at %s", workspace)
         return workspace
