@@ -9,8 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from benchmark.agent_session import BlindResult, TestInformedResult
-from benchmark.config import BenchmarkConfig
+from silverquillm.agent_session import BlindResult, TestInformedResult
+from silverquillm.config import BenchmarkConfig
 
 
 def _session_results_to_dicts(

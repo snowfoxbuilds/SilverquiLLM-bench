@@ -4,7 +4,7 @@ Templates use ``str.format_map`` with ``{placeholder}`` substitution.
 No f-strings with complex logic — all prompts are plain template strings.
 """
 
-from benchmark.template_gen import card_name_to_class_name
+from silverquillm.template_gen import card_name_to_class_name
 
 # ---------------------------------------------------------------------------
 # Step 1 — Blind implementation prompt

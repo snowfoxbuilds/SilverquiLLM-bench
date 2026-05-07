@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from benchmark.evaluator import (
+from silverquillm.evaluator import (
     EvalResult,
     _parse_pytest_output,
     run_audited_eval,

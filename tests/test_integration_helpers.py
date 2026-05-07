@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from benchmark.config import BenchmarkConfig
-from benchmark.template_gen import card_name_to_class_name
+from silverquillm.config import BenchmarkConfig
+from silverquillm.template_gen import card_name_to_class_name
 from tests.benchmark.test_helpers import (
     create_test_config,
     mock_opencode_blind,

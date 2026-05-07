@@ -26,16 +26,16 @@ from pathlib import Path
 import pytest
 import yaml
 
-from benchmark.config import BenchmarkConfig
-from benchmark.evaluator import EvalResult
-from benchmark.results import (
+from silverquillm.config import BenchmarkConfig
+from silverquillm.evaluator import EvalResult
+from silverquillm.results import (
     generate_run_name,
     init_results_dir,
     save_aggregates,
     save_card_result,
     save_run_summary,
 )
-from benchmark.scorer import (
+from silverquillm.scorer import (
     AgentCat1Scores,
     AgentCat2Scores,
     Leaderboard,

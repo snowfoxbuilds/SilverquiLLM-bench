@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from benchmark.agent_session import (
+from silverquillm.agent_session import (
     AgentSession,
     BlindResult,
     TestInformedResult,
@@ -33,7 +33,7 @@ from benchmark.agent_session import (
     setup_workspace,
     write_opencode_config,
 )
-from benchmark.config import BenchmarkConfig
+from silverquillm.config import BenchmarkConfig
 
 
 # ---------------------------------------------------------------------------

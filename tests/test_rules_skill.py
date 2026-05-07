@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from benchmark.rules_skill import (
+from silverquillm.rules_skill import (
     build_rules_index,
     download_comprehensive_rules,
     lookup_rule,

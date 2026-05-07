@@ -25,13 +25,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from benchmark.config import BenchmarkConfig
-from benchmark.prompts import (
+from silverquillm.config import BenchmarkConfig
+from silverquillm.prompts import (
     blind_implementation_prompt,
     iteration_feedback_prompt,
     test_informed_prompt,
 )
-from benchmark.template_gen import generate_template
+from silverquillm.template_gen import generate_template
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ __all__ = [
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Directories that agents must never modify
-_PROTECTED_DIRS: tuple[str, ...] = ("engine", "cards", "tests", "benchmark", "benchmarks", "docs")
+_PROTECTED_DIRS: tuple[str, ...] = ("engine", "cards", "tests", "silverquillm", "benchmarks", "docs")
 
 
 # ---------------------------------------------------------------------------

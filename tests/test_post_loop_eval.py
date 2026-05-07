@@ -18,8 +18,8 @@ from unittest.mock import patch
 
 import pytest
 
-from benchmark.evaluator import EvalResult, run_self_eval_flat
-from benchmark.results import save_run_summary
+from silverquillm.evaluator import EvalResult, run_self_eval_flat
+from silverquillm.results import save_run_summary
 
 
 # ---------------------------------------------------------------------------

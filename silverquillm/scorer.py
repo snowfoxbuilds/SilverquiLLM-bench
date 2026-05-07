@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from benchmark.card_classifier import TIER_WEIGHTS
+from silverquillm.card_classifier import TIER_WEIGHTS
 
 logger = logging.getLogger(__name__)
 

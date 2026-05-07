@@ -23,9 +23,9 @@ from typing import Any
 
 import yaml
 
-from benchmark.config import BenchmarkConfig
-from benchmark.evaluator import EvalResult
-from benchmark.scorer import Leaderboard, generate_leaderboard
+from silverquillm.config import BenchmarkConfig
+from silverquillm.evaluator import EvalResult
+from silverquillm.scorer import Leaderboard, generate_leaderboard
 
 __all__ = [
     "generate_run_name",

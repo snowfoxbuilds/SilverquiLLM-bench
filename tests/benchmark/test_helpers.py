@@ -11,8 +11,8 @@ import textwrap
 from pathlib import Path
 from typing import Callable
 
-from benchmark.config import BenchmarkConfig
-from benchmark.template_gen import card_name_to_class_name, _determine_base_class
+from silverquillm.config import BenchmarkConfig
+from silverquillm.template_gen import card_name_to_class_name, _determine_base_class
 
 
 def mock_opencode_blind(card_spec: dict) -> Callable[[str, Path], str]:

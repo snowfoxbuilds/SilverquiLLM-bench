@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import pytest
 
-from benchmark.agent_session import (
+from silverquillm.agent_session import (
     _PROTECTED_DIRS,
     _check_violations,
     _snapshot_all_protected,
@@ -29,7 +29,7 @@ class TestProtectedDirs:
     """Verify the _PROTECTED_DIRS constant covers all required directories."""
 
     def test_contains_all_required_dirs(self):
-        required = {"engine", "cards", "tests", "benchmark", "benchmarks", "docs"}
+        required = {"engine", "cards", "tests", "silverquillm", "benchmarks", "docs"}
         assert set(_PROTECTED_DIRS) == required
 
     def test_is_tuple(self):
@@ -103,7 +103,7 @@ class TestCheckViolationsNoChanges:
 
         before = _snapshot_all_protected(tmp_path)
 
-        with patch("benchmark.agent_session._REPO_ROOT", tmp_path):
+        with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
             result = _check_violations(workspace, before=before)
 
         assert result == []
@@ -139,7 +139,7 @@ class TestCheckViolationsCreatedFiles:
         # Create a new file after the snapshot
         (tmp_path / "engine" / "new_file.py").write_text("injected")
 
-        with patch("benchmark.agent_session._REPO_ROOT", tmp_path):
+        with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
             result = _check_violations(workspace, before=before)
 
         assert len(result) == 1
@@ -157,7 +157,7 @@ class TestCheckViolationsCreatedFiles:
 
         (tmp_path / "cards" / "exploit.py").write_text("bad")
 
-        with patch("benchmark.agent_session._REPO_ROOT", tmp_path):
+        with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
             result = _check_violations(workspace, before=before)
 
         assert any("exploit.py" in v for v in result)
@@ -185,7 +185,7 @@ class TestCheckViolationsModifiedFiles:
         time.sleep(0.05)
         (tmp_path / "engine" / "core.py").write_text("tampered")
 
-        with patch("benchmark.agent_session._REPO_ROOT", tmp_path):
+        with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
             result = _check_violations(workspace, before=before)
 
         assert len(result) == 1
@@ -221,7 +221,7 @@ class TestCheckViolationsWorkspaceExclusion:
         # Also add new file inside workspace
         (workspace / "new.py").write_text("new")
 
-        with patch("benchmark.agent_session._REPO_ROOT", tmp_path):
+        with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
             result = _check_violations(workspace, before=before)
 
         assert result == []
@@ -239,7 +239,7 @@ class TestCheckViolationsWorkspaceExclusion:
         time.sleep(0.05)
         (tmp_path / "engine" / "core.py").write_text("hacked")
 
-        with patch("benchmark.agent_session._REPO_ROOT", tmp_path):
+        with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
             result = _check_violations(workspace, before=before)
 
         assert len(result) == 1
@@ -270,7 +270,7 @@ class TestCheckViolationsMultiple:
         # Create a new file
         (tmp_path / "engine" / "injected.py").write_text("new code")
 
-        with patch("benchmark.agent_session._REPO_ROOT", tmp_path):
+        with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
             result = _check_violations(workspace, before=before)
 
         assert len(result) == 2
@@ -294,7 +294,7 @@ class TestCheckViolationsMultiple:
         (tmp_path / "engine" / "e.py").write_text("modified_x")
         (tmp_path / "cards" / "c.py").write_text("modified_y")
 
-        with patch("benchmark.agent_session._REPO_ROOT", tmp_path):
+        with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
             result = _check_violations(workspace, before=before)
 
         assert len(result) == 2
@@ -322,7 +322,7 @@ class TestCheckViolationsDeletion:
         # Delete the protected file
         protected_file.unlink()
 
-        with patch("benchmark.agent_session._REPO_ROOT", tmp_path):
+        with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
             result = _check_violations(workspace, before=before)
 
         assert len(result) == 1
@@ -345,7 +345,7 @@ class TestCheckViolationsDeletion:
 
         ws_file.unlink()
 
-        with patch("benchmark.agent_session._REPO_ROOT", tmp_path):
+        with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
             result = _check_violations(workspace, before=before)
 
         # No violation since the deleted file is inside workspace

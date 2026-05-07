@@ -14,12 +14,12 @@ from unittest.mock import patch
 
 import pytest
 
-from benchmark.agent_session import AgentSession, BlindResult
-from benchmark.config import BenchmarkConfig
-from benchmark.evaluator import run_self_eval_flat
-from benchmark.results import init_results_dir, save_card_result, save_run_summary
-from benchmark.scorer import Leaderboard, compute_scores, generate_leaderboard
-from benchmark.results import save_aggregates
+from silverquillm.agent_session import AgentSession, BlindResult
+from silverquillm.config import BenchmarkConfig
+from silverquillm.evaluator import run_self_eval_flat
+from silverquillm.results import init_results_dir, save_card_result, save_run_summary
+from silverquillm.scorer import Leaderboard, compute_scores, generate_leaderboard
+from silverquillm.results import save_aggregates
 from tests.benchmark.test_helpers import (
     create_test_config,
     mock_opencode_blind,
@@ -225,7 +225,7 @@ class TestBenchmarkEndToEnd:
         fake_engine = tmp_path / "engine"
         fake_engine.mkdir()
 
-        with patch("benchmark.agent_session._REPO_ROOT", tmp_path):
+        with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
             session = AgentSession(
                 config=config,
                 card_spec=card_spec,

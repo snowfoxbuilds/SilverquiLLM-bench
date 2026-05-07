@@ -13,14 +13,14 @@ from unittest.mock import patch
 
 import pytest
 
-from benchmark.agent_session import (
+from silverquillm.agent_session import (
     AgentSession,
     BlindResult,
     TestInformedResult,
     run_blind,
     run_test_informed,
 )
-from benchmark.config import BenchmarkConfig
+from silverquillm.config import BenchmarkConfig
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +98,7 @@ class TestRunBlindViolationDetection:
             (fake_repo / "engine" / "hack.py").write_text("# hacked\n")
             return "some output"
 
-        with patch("benchmark.agent_session._REPO_ROOT", fake_repo):
+        with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
             session._run_opencode = fake_opencode
             result = session.run_blind_implementation(ws)
 
@@ -116,7 +116,7 @@ class TestRunBlindViolationDetection:
             (fake_repo / "tests" / "existing.py").write_text("# modified\n")
             return "output"
 
-        with patch("benchmark.agent_session._REPO_ROOT", fake_repo):
+        with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
             session._run_opencode = fake_opencode
             result = session.run_blind_implementation(ws)
 
@@ -130,7 +130,7 @@ class TestRunBlindViolationDetection:
             (workspace / "blind_impl.py").write_text("x = 1\n")
             return "output"
 
-        with patch("benchmark.agent_session._REPO_ROOT", fake_repo):
+        with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
             session._run_opencode = fake_opencode
             result = session.run_blind_implementation(ws)
 
@@ -146,7 +146,7 @@ class TestRunBlindViolationDetection:
             (fake_repo / "engine" / "hack.py").write_text("bad\n")
             return "a" * 400  # ~100 tokens
 
-        with patch("benchmark.agent_session._REPO_ROOT", fake_repo):
+        with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
             session._run_opencode = fake_opencode
             result = session.run_blind_implementation(ws)
 
@@ -178,7 +178,7 @@ class TestRunTestInformedViolationDetection:
             (fake_repo / "engine" / "hack.py").write_text("# hacked\n")
             return "output"
 
-        with patch("benchmark.agent_session._REPO_ROOT", fake_repo):
+        with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
             session._run_opencode = fake_opencode
             result = session.run_test_informed(ws, blind_impl)
 
@@ -211,7 +211,7 @@ class TestRunTestInformedViolationDetection:
                 args=[], returncode=1, stdout="FAILED", stderr=""
             )
 
-        with patch("benchmark.agent_session._REPO_ROOT", fake_repo):
+        with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
             session._run_opencode = fake_opencode
             session._run_pytest = fake_pytest
             result = session.run_test_informed(ws, blind_impl)
@@ -234,7 +234,7 @@ class TestRunTestInformedViolationDetection:
                 args=[], returncode=0, stdout="passed", stderr=""
             )
 
-        with patch("benchmark.agent_session._REPO_ROOT", fake_repo):
+        with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
             session._run_opencode = fake_opencode
             session._run_pytest = fake_pytest
             result = session.run_test_informed(ws, blind_impl)
@@ -252,7 +252,7 @@ class TestRunTestInformedViolationDetection:
             (fake_repo / "docs" / "hack.md").write_text("# hacked\n")
             return "output"
 
-        with patch("benchmark.agent_session._REPO_ROOT", fake_repo):
+        with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
             session._run_opencode = fake_opencode
             result = session.run_test_informed(ws, blind_impl)
 
@@ -288,7 +288,7 @@ class TestRunTestInformedViolationDetection:
                 args=[], returncode=0, stdout="passed", stderr=""
             )
 
-        with patch("benchmark.agent_session._REPO_ROOT", fake_repo):
+        with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
             session._run_opencode = fake_opencode
             session._run_pytest = fake_pytest
             result = session.run_test_informed(ws, blind_impl)

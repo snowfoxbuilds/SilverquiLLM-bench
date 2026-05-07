@@ -20,10 +20,10 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from benchmark.agent_session import AgentSession, BlindResult, TestInformedResult
-from benchmark.cli import main
-from benchmark.config import BenchmarkConfig
-from benchmark.run_utils import _session_results_to_dicts
+from silverquillm.agent_session import AgentSession, BlindResult, TestInformedResult
+from silverquillm.cli import main
+from silverquillm.config import BenchmarkConfig
+from silverquillm.run_utils import _session_results_to_dicts
 
 
 # ---------------------------------------------------------------------------

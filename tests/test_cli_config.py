@@ -21,8 +21,8 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from benchmark.cli import main
-from benchmark.config import BenchmarkConfig, load_config
+from silverquillm.cli import main
+from silverquillm.config import BenchmarkConfig, load_config
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

@@ -24,7 +24,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 @pytest.fixture(scope="module")
 def api_doc() -> str:
     """Generate the engine API doc once for all tests."""
-    from benchmark.docs_gen import generate_engine_api_doc
+    from silverquillm.docs_gen import generate_engine_api_doc
 
     return generate_engine_api_doc()
 

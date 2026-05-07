@@ -13,13 +13,13 @@ from pathlib import Path
 
 import click
 
-from benchmark.agent_session import AgentSession
-from benchmark.card_loader import filter_by_collectors, filter_by_prototype, load_card_specs
-from benchmark.config import BenchmarkConfig, load_config
-from benchmark.evaluator import run_self_eval_flat
-from benchmark.results import init_results_dir, save_aggregates, save_card_result, save_run_summary
-from benchmark.scorer import compute_scores, generate_leaderboard
-from benchmark.run_utils import _session_results_to_dicts
+from silverquillm.agent_session import AgentSession
+from silverquillm.card_loader import filter_by_collectors, filter_by_prototype, load_card_specs
+from silverquillm.config import BenchmarkConfig, load_config
+from silverquillm.evaluator import run_self_eval_flat
+from silverquillm.results import init_results_dir, save_aggregates, save_card_result, save_run_summary
+from silverquillm.scorer import compute_scores, generate_leaderboard
+from silverquillm.run_utils import _session_results_to_dicts
 
 
 # Resolve data paths relative to this file's location
@@ -201,7 +201,7 @@ def eval_cmd(results_dir: str, audited_tests: str | None) -> None:
     """Run evaluation on existing results."""
     import yaml
 
-    from benchmark.evaluator import EvalResult, run_self_eval_flat, run_tests
+    from silverquillm.evaluator import EvalResult, run_self_eval_flat, run_tests
 
     results_path = Path(results_dir)
     if not results_path.exists():

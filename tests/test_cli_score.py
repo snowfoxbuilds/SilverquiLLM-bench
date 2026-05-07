@@ -16,7 +16,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from benchmark.cli import main
+from silverquillm.cli import main
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +259,7 @@ class TestScoreCommandEdgeCases:
         default_tier_path.write_text(json.dumps(entries))
 
         # Monkeypatch _BENCHMARKS_DIR so the CLI resolves from our temp dir
-        monkeypatch.setattr("benchmark.cli._BENCHMARKS_DIR", fake_benchmarks)
+        monkeypatch.setattr("silverquillm.cli._BENCHMARKS_DIR", fake_benchmarks)
 
         runner = CliRunner()
         result = runner.invoke(

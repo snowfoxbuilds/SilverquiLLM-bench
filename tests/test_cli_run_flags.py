@@ -19,7 +19,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from benchmark.cli import main
+from silverquillm.cli import main
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

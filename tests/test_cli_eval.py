@@ -19,7 +19,7 @@ from unittest.mock import patch
 import yaml
 from click.testing import CliRunner
 
-from benchmark.cli import main
+from silverquillm.cli import main
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +79,7 @@ def _make_audited_tests(tmp_path: Path) -> Path:
 # We mock run_self_eval_flat and run_tests to avoid actually running pytest subprocesses.
 def _mock_eval_result(card_dir: Path, agent_name: str):
     """Return a fake EvalResult for testing."""
-    from benchmark.evaluator import EvalResult
+    from silverquillm.evaluator import EvalResult
 
     return EvalResult(
         card_id=card_dir.name,
@@ -113,7 +113,7 @@ class TestEvalCommand:
         run_dir = _make_run_dir(tmp_path / "run1")
 
         runner = CliRunner()
-        with patch("benchmark.evaluator.run_self_eval_flat", side_effect=_mock_eval_result):
+        with patch("silverquillm.evaluator.run_self_eval_flat", side_effect=_mock_eval_result):
             result = runner.invoke(main, ["eval", "--results-dir", str(run_dir)])
 
         assert result.exit_code == 0, f"Output: {result.output}\nException: {result.exception}"
@@ -123,7 +123,7 @@ class TestEvalCommand:
         run_dir = _make_run_dir(tmp_path / "run1")
 
         runner = CliRunner()
-        with patch("benchmark.evaluator.run_self_eval_flat", side_effect=_mock_eval_result):
+        with patch("silverquillm.evaluator.run_self_eval_flat", side_effect=_mock_eval_result):
             result = runner.invoke(main, ["eval", "--results-dir", str(run_dir)])
 
         assert result.exit_code == 0, f"Output: {result.output}"
@@ -151,7 +151,7 @@ class TestEvalCommand:
         run_dir = _make_run_dir(tmp_path / "run1", card_ids=["card-abc"])
 
         runner = CliRunner()
-        with patch("benchmark.evaluator.run_self_eval_flat", side_effect=_mock_eval_result):
+        with patch("silverquillm.evaluator.run_self_eval_flat", side_effect=_mock_eval_result):
             result = runner.invoke(main, ["eval", "--results-dir", str(run_dir)])
 
         assert result.exit_code == 0
@@ -169,8 +169,8 @@ class TestEvalCommand:
         audited_file = _make_audited_tests(tmp_path)
 
         runner = CliRunner()
-        with patch("benchmark.evaluator.run_self_eval_flat", side_effect=_mock_eval_result), \
-             patch("benchmark.evaluator.run_tests", side_effect=_mock_run_tests):
+        with patch("silverquillm.evaluator.run_self_eval_flat", side_effect=_mock_eval_result), \
+             patch("silverquillm.evaluator.run_tests", side_effect=_mock_run_tests):
             result = runner.invoke(
                 main,
                 ["eval", "--results-dir", str(run_dir), "--audited-tests", str(audited_file)],
@@ -188,8 +188,8 @@ class TestEvalCommand:
         audited_file = _make_audited_tests(tmp_path)
 
         runner = CliRunner()
-        with patch("benchmark.evaluator.run_self_eval_flat", side_effect=_mock_eval_result), \
-             patch("benchmark.evaluator.run_tests", side_effect=_mock_run_tests):
+        with patch("silverquillm.evaluator.run_self_eval_flat", side_effect=_mock_eval_result), \
+             patch("silverquillm.evaluator.run_tests", side_effect=_mock_run_tests):
             result = runner.invoke(
                 main,
                 ["eval", "--results-dir", str(run_dir), "--audited-tests", str(audited_file)],
@@ -210,7 +210,7 @@ class TestEvalCommand:
         run_dir = _make_run_dir(tmp_path / "run1", card_ids=["card-001", "card-002"])
 
         runner = CliRunner()
-        with patch("benchmark.evaluator.run_self_eval_flat", side_effect=_mock_eval_result):
+        with patch("silverquillm.evaluator.run_self_eval_flat", side_effect=_mock_eval_result):
             result = runner.invoke(main, ["eval", "--results-dir", str(run_dir)])
 
         assert result.exit_code == 0
@@ -222,7 +222,7 @@ class TestEvalCommand:
         run_dir = _make_run_dir(tmp_path / "run1", card_ids=["card-001"])
 
         runner = CliRunner()
-        with patch("benchmark.evaluator.run_self_eval_flat", side_effect=_mock_eval_result):
+        with patch("silverquillm.evaluator.run_self_eval_flat", side_effect=_mock_eval_result):
             result = runner.invoke(main, ["eval", "--results-dir", str(run_dir)])
 
         assert result.exit_code == 0
@@ -235,7 +235,7 @@ class TestEvalCommand:
         run_dir = _make_run_dir(tmp_path / "run1")
 
         runner = CliRunner()
-        with patch("benchmark.evaluator.run_self_eval_flat", side_effect=_mock_eval_result):
+        with patch("silverquillm.evaluator.run_self_eval_flat", side_effect=_mock_eval_result):
             result = runner.invoke(main, ["eval", "--results-dir", str(run_dir)])
 
         assert result.exit_code == 0
@@ -274,7 +274,7 @@ class TestEvalCommand:
         runner = CliRunner()
         # Don't mock run_self_eval_flat — let it handle missing files naturally
         # But we do need to mock run_tests since it would try subprocess
-        with patch("benchmark.evaluator.run_tests", return_value=(0, 0, 0, [])):
+        with patch("silverquillm.evaluator.run_tests", return_value=(0, 0, 0, [])):
             result = runner.invoke(main, ["eval", "--results-dir", str(run_dir)])
 
         # Should exit 0 and produce results (with errors noted)
@@ -290,7 +290,7 @@ class TestEvalCommand:
         run_dir = _make_run_dir(tmp_path / "run1", card_ids=["c1", "c2", "c3"])
 
         runner = CliRunner()
-        with patch("benchmark.evaluator.run_self_eval_flat", side_effect=_mock_eval_result):
+        with patch("silverquillm.evaluator.run_self_eval_flat", side_effect=_mock_eval_result):
             result = runner.invoke(main, ["eval", "--results-dir", str(run_dir)])
 
         assert result.exit_code == 0
@@ -308,7 +308,7 @@ class TestEvalCommand:
         _make_run_dir(parent / "run-2024-02", card_ids=["card-b"])
 
         runner = CliRunner()
-        with patch("benchmark.evaluator.run_self_eval_flat", side_effect=_mock_eval_result):
+        with patch("silverquillm.evaluator.run_self_eval_flat", side_effect=_mock_eval_result):
             result = runner.invoke(main, ["eval", "--results-dir", str(parent)])
 
         assert result.exit_code == 0
