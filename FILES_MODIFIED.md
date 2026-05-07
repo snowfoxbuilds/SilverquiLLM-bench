@@ -67,3 +67,9 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `silverquillm/adapters/aider.py` — Concrete AiderAdapter: wraps aider CLI with --message-file for prompt, --no-auto-commits, checks exit status, auto-registers as "aider"
 - `silverquillm/adapters/__init__.py` — Added import of aider module for auto-registration
 
+## Item 8: Implement PiAdapter
+
+### Implementation
+- `silverquillm/adapters/pi.py` — Concrete PiAdapter: wraps pi CLI with --no-interactive flag, passes prompt via stdin, checks exit status, auto-registers as "pi"
+- `silverquillm/adapters/__init__.py` — Added import of pi module for auto-registration
+
