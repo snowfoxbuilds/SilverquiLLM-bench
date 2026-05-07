@@ -157,3 +157,8 @@ tests/test_regression.py — Tests regression runner dataclasses, pytest parsing
 ### Implementation
 - `silverquillm/agent_session.py` — Added compute_engine_diff() function using difflib for pure-Python unified diffs; handles new/deleted/binary files and empty patches
 - `silverquillm/cli.py` — Imported compute_engine_diff; call it before commit_engine_changes to capture per-card engine diff as engine_diff.patch
+
+## Item 20: Update prompts for engine extensibility
+
+### Implementation
+- `silverquillm/prompts.py` — Updated blind, test-informed, and iteration feedback prompt templates with engine extensibility info (writable engine/, regression re-runs, backward compatibility)

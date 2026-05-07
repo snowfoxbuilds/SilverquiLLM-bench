@@ -11,7 +11,7 @@ from silverquillm.template_gen import card_name_to_class_name
 # ---------------------------------------------------------------------------
 
 _BLIND_IMPLEMENTATION_TEMPLATE = """\
-You are implementing a Magic: The Gathering card for the MagicBench game engine.
+You are implementing a Magic: The Gathering card for the SilverquiLLM-bench game engine.
 
 Card: {card_name}
 Mana Cost: {mana_cost}
@@ -21,13 +21,15 @@ Rules Text: {oracle_text}
 Implement this card by completing the class in template.py.
 You have access to:
 - engine_api.md (game engine API reference)
+- engine/ (game engine source — you may extend it if this card needs mechanics not yet supported)
 - base_classes.py (card base classes)
 - rules_overview.md + rules lookup tool (search MTG rules by keyword/number)
 - foundations/ (browse working card implementations as reference)
 
-Produce a single Python file that implements this card.
 Write your implementation to `blind_impl.py`.
-Do not rename the class. Do not write tests. Do not modify any other files."""
+If you need to add or modify engine files, do so — but all previous cards' tests
+will be re-run, so your engine changes must not break existing functionality.
+Do not rename the class. Do not write tests."""
 
 
 def blind_implementation_prompt(card_spec: dict) -> str:
@@ -73,12 +75,11 @@ Test for:
 - Edge cases (no valid targets, empty board, etc.)
 - Interaction with game rules (stack, priority, state-based actions)
 
-You may also update your implementation if you discover issues.
+Save your updated implementation to `tested_impl.py`.
+Save your tests to `tests.py`.
+You may also modify engine/ files if needed — but all previous cards' tests
+will be re-run, so engine changes must not break existing functionality.
 You have up to {max_rounds} rounds to iterate on both tests and code.
-
-Write your tests to `tests.py`.
-If you update your implementation, save it to `tested_impl.py`.
-Do not modify any other files.
 """
 
 _TEST_INFORMED_FEEDBACK_SECTION = """
@@ -150,7 +151,8 @@ Fix the failing tests or update your implementation, then resubmit both files.
 
 Write your tests to `tests.py`.
 If you update your implementation, save it to `tested_impl.py`.
-Do not modify any other files.
+You may also modify engine/ files if needed — but all previous cards' tests
+will be re-run, so engine changes must not break existing functionality.
 """
 
 
