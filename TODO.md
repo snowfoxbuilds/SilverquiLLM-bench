@@ -12,7 +12,7 @@ Scope: Rename the package to `silverquillm`, refactor config to match the spec's
 - [x] **Implement ****`ClaudeCodeAdapter`** — Create `silverquillm/adapters/claude_code.py` wrapping the `claude` CLI. Handle prompt via stdin/temp file. Wire into factory.
 - [x] **Implement ****`AiderAdapter`** — Create `silverquillm/adapters/aider.py` wrapping the `aider` CLI. Wire into factory.
 - [x] **Implement ****`PiAdapter`** — Create `silverquillm/adapters/pi.py` wrapping the `pi` CLI. Wire into factory.
-- [ ] **Refactor ****`agent_session.py`**** to use ****`AgentAdapter`** — Replace hardcoded `_run_opencode()` with adapter resolved from `config.agent.adapter`. Remove all OpenCode-specific logic from session; it should be adapter-agnostic.
+- [x] **Refactor ****`agent_session.py`**** to use ****`AgentAdapter`** — Replace hardcoded `_run_opencode()` with adapter resolved from `config.agent.adapter`. Remove all OpenCode-specific logic from session; it should be adapter-agnostic.
 - [ ] **Implement postmortem JSONL logging** — After each agent invocation per card, append structured JSON to `<output_dir>/<card>/postmortem.jsonl` (prompt, response, tokens, timing, round, status).
 - [ ] **Implement ****`agent_thoughts.md`**** narrative generation** — After all rounds for a card, generate `<output_dir>/<card>/agent_thoughts.md` summarizing reasoning across rounds.
 - [ ] **Implement setup questions validation** — Create `silverquillm/setup_questions.py`: load `setup_questions.json`, send each to adapter, check answers, abort if validation fails.

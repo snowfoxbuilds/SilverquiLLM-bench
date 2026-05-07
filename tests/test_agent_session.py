@@ -1,11 +1,10 @@
 """Tests for TODO item 11: Agent session manager.
 
 Tests verify:
-- AgentSession dataclass has required fields (card_name, workspace, config, opencode_cfg_path).
+- AgentSession dataclass has required fields (card_name, workspace, config).
 - BlindResult and TestInformedResult dataclasses have expected fields.
 - setup_workspace copies card_spec.json, template.py, engine_api.md, rules_overview.md,
   base_classes.py into the workspace (test_utils.md is injected in run_test_informed).
-- write_opencode_config writes .opencode.yaml pointing at the real engine.
 - run_blind captures blind_impl.py on success, returns no_output when absent.
 - run_test_informed captures impl, injects test_utils.md, returns max_rounds_exhausted on failure.
 - cleanup removes the temp directory.
@@ -31,7 +30,6 @@ from silverquillm.agent_session import (
     run_blind,
     run_test_informed,
     setup_workspace,
-    write_opencode_config,
 )
 from silverquillm.config import AgentConfig, BenchmarkConfig
 
@@ -104,9 +102,6 @@ class TestAgentSessionDataclass:
 
     def test_config_field(self, session, config):
         assert session.config is config
-
-    def test_opencode_cfg_path_none_before_write(self, session):
-        assert session.opencode_cfg_path is None
 
 
 # ---------------------------------------------------------------------------
@@ -183,49 +178,6 @@ class TestSetupWorkspace:
             assert sess.workspace.is_dir()
         finally:
             sess.cleanup()
-
-
-# ---------------------------------------------------------------------------
-# write_opencode_config
-# ---------------------------------------------------------------------------
-
-
-class TestWriteOpencodeConfig:
-    """write_opencode_config must write .opencode.yaml pointing at the real engine."""
-
-    def test_writes_opencode_yaml_file(self, session):
-        session.setup_workspace()
-        cfg_path = write_opencode_config(session)
-        assert cfg_path.exists()
-        assert cfg_path.name == ".opencode.yaml"
-        assert session.opencode_cfg_path == cfg_path
-
-    def test_config_contains_engine_path(self, session):
-        session.setup_workspace()
-        cfg_path = write_opencode_config(session)
-        content = json.loads(cfg_path.read_text())
-        # Must reference the real engine directory
-        engine_ref = content.get("engine_path", content.get("repo_root", ""))
-        assert "engine" in engine_ref
-
-    def test_config_denies_web_and_network(self, session):
-        session.setup_workspace()
-        cfg_path = write_opencode_config(session)
-        content = json.loads(cfg_path.read_text())
-        perms = content.get("permissions", {})
-        assert perms.get("deny_web_fetch") is True
-        assert perms.get("deny_network") is True
-
-    def test_config_allows_engine_read(self, session):
-        session.setup_workspace()
-        cfg_path = write_opencode_config(session)
-        content = json.loads(cfg_path.read_text())
-        allow_read = content.get("permissions", {}).get("allow_read", [])
-        assert any("engine" in p for p in allow_read)
-
-    def test_raises_without_workspace(self, session):
-        with pytest.raises(RuntimeError, match="[Ww]orkspace"):
-            write_opencode_config(session)
 
 
 # ---------------------------------------------------------------------------

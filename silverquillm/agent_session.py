@@ -1,13 +1,16 @@
 """Agent session manager for per-card benchmark runs.
 
-Manages workspace setup, OpenCode configuration, and the two-phase
+Manages workspace setup, agent adapter lifecycle, and the two-phase
 implementation flow (blind → test-informed) with contamination controls.
+
+The agent invocation is delegated to an :class:`~silverquillm.adapters.AgentAdapter`
+resolved from ``config.agent.adapter``.  The session itself is adapter-agnostic.
 
 Public API:
 - ``AgentSession`` — dataclass orchestrating a single card's benchmark run.
 - ``BlindResult`` / ``TestInformedResult`` — result dataclasses.
-- Standalone helpers: ``setup_workspace``, ``write_opencode_config``,
-  ``run_blind``, ``run_test_informed``, ``cleanup``.
+- Standalone helpers: ``setup_workspace``, ``run_blind``,
+  ``run_test_informed``, ``cleanup``.
 """
 
 from __future__ import annotations
@@ -20,11 +23,11 @@ import shutil
 import subprocess
 import tempfile
 import time
-import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from silverquillm.adapters import AgentAdapter, get_adapter
 from silverquillm.config import BenchmarkConfig
 from silverquillm.prompts import (
     blind_implementation_prompt,
@@ -40,7 +43,6 @@ __all__ = [
     "BlindResult",
     "TestInformedResult",
     "setup_workspace",
-    "write_opencode_config",
     "run_blind",
     "run_test_informed",
     "cleanup",
@@ -143,7 +145,7 @@ class AgentSession:
     card_spec: dict[str, Any]
     card_dir: str
     _workspace: Path | None = field(default=None, init=False, repr=False)
-    _opencode_cfg_path: Path | None = field(default=None, init=False, repr=False)
+    _adapter: AgentAdapter | None = field(default=None, init=False, repr=False)
 
     # -- Convenience properties matching TODO contract names ----------------
 
@@ -156,11 +158,6 @@ class AgentSession:
     def workspace(self) -> Path | None:
         """Current workspace path (None before setup)."""
         return self._workspace
-
-    @property
-    def opencode_cfg_path(self) -> Path | None:
-        """Path to the written ``.opencode.yaml`` (None before write)."""
-        return self._opencode_cfg_path
 
     # ------------------------------------------------------------------
     # Workspace setup
@@ -253,112 +250,57 @@ class AgentSession:
             shutil.copy2(test_utils_py, workspace / "test_utils.py")
 
         logger.info("Workspace created at %s", workspace)
+
+        # Initialize and set up the adapter
+        adapter = self._get_adapter()
+        adapter.setup()
+
         return workspace
 
     # ------------------------------------------------------------------
-    # OpenCode configuration
+    # Agent adapter lifecycle
     # ------------------------------------------------------------------
 
-    def configure_opencode(self, workspace: Path) -> dict[str, Any]:
-        """Return OpenCode configuration dict with contamination controls.
-
-        Permissions:
-        - Deny web fetch / network access.
-        - Allow only workspace directory reads/writes.
-
-        Parameters
-        ----------
-        workspace:
-            The workspace directory to scope permissions to.
-
-        Returns
-        -------
-        dict
-            OpenCode-compatible configuration dictionary.
-        """
-        deny_web = self.config.agent.disable_web_search
-        cfg = {
-            "model": self.config.model_name,
-            "provider": self.config.model_provider,
-            "temperature": self.config.temperature,
-            "max_context": self.config.max_context,
-            "working_directory": str(workspace),
-            "repo_root": str(_REPO_ROOT),
-            "engine_path": str(_REPO_ROOT / "engine"),
-            "permissions": {
-                "deny_web_fetch": deny_web,
-                "deny_network": deny_web,
-                "allow_read": [str(workspace), str(_REPO_ROOT / "engine")],
-                "allow_write": [str(workspace)],
-            },
-            "timeout": self.config.agent.timeout_per_card,
-        }
-        return cfg
+    def _get_adapter(self) -> AgentAdapter:
+        """Return the adapter instance, creating it lazily if needed."""
+        if self._adapter is None:
+            self._adapter = get_adapter(self.config)
+        return self._adapter
 
     # ------------------------------------------------------------------
-    # OpenCode invocation (swappable)
+    # Agent invocation (adapter-based)
     # ------------------------------------------------------------------
 
     def _run_opencode(self, prompt: str, workspace: Path) -> str:
-        """Run an OpenCode session with the given prompt.
+        """Run an agent session with the given prompt via the configured adapter.
 
-        This method wraps ``subprocess.run`` and can be monkey-patched or
-        overridden in tests to avoid actual subprocess calls.
+        This method delegates to the :class:`AgentAdapter` resolved from
+        ``config.agent.adapter``.  It can be monkey-patched or overridden
+        in tests to avoid actual subprocess calls.
 
         Parameters
         ----------
         prompt:
-            The full prompt text to send to OpenCode.
+            The full prompt text to send to the agent.
         workspace:
-            Working directory for the subprocess.
+            Working directory for the agent.
 
         Returns
         -------
         str
-            Raw stdout from OpenCode.
+            Raw output from the agent.
 
         Raises
         ------
         subprocess.TimeoutExpired
             When the process exceeds timeout_per_card seconds.
         """
-        config = self.configure_opencode(workspace)
-        config_path = workspace / ".opencode.yaml"
-        # Write as YAML-compatible JSON (valid YAML subset)
-        config_path.write_text(json.dumps(config, indent=2))
-        self._opencode_cfg_path = config_path
-
-        prompt_path = workspace / ".prompt.txt"
-        prompt_path.write_text(prompt)
-
-        process = subprocess.Popen(
-            ["opencode", "run", prompt, "--thinking"],
-            cwd=str(workspace),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+        adapter = self._get_adapter()
+        logger.debug(
+            "Invoking adapter with timeout=%s",
+            self.config.agent.timeout_per_card,
         )
-        stdout_lines = []
-        stderr_lines = []
-
-        # Stream stderr in a background thread (that's where agent activity goes)
-        def stream_stderr():
-            for line in process.stderr:
-                print(f"  [agent:err] {line}", end="", flush=True)
-                stderr_lines.append(line)
-
-        t = threading.Thread(target=stream_stderr, daemon=True)
-        t.start()
-
-        # Stream stdout in main thread
-        for line in process.stdout:
-            print(f"  [agent:out] {line}", end="", flush=True)
-            stdout_lines.append(line)
-
-        t.join(timeout=5)
-        process.wait(timeout=self.config.agent.timeout_per_card)
-
-        return "".join(stdout_lines)
+        return adapter.run(prompt, workspace)
 
     # ------------------------------------------------------------------
     # Step 1 — Blind implementation
@@ -639,7 +581,15 @@ class AgentSession:
     # ------------------------------------------------------------------
 
     def cleanup(self) -> None:
-        """Remove the temporary workspace directory."""
+        """Remove the temporary workspace directory and tear down the adapter."""
+        # Tear down the adapter first
+        if self._adapter is not None:
+            try:
+                self._adapter.teardown()
+            except Exception:  # noqa: BLE001
+                logger.warning("Adapter teardown failed", exc_info=True)
+            self._adapter = None
+
         if self._workspace and self._workspace.exists():
             # Restore write permissions before removal
             for root, dirs, files in os.walk(self._workspace):
@@ -750,21 +700,6 @@ def setup_workspace(card_name: str, config: BenchmarkConfig, card_spec: dict[str
     session = AgentSession(config=config, card_spec=card_spec, card_dir=card_dir)
     session.setup_workspace()
     return session
-
-
-def write_opencode_config(session: AgentSession) -> Path:
-    """Write ``.opencode.yaml`` into the session workspace.
-
-    Returns the path to the written config file.
-    """
-    if session.workspace is None:
-        msg = "Workspace not set up — call setup_workspace first"
-        raise RuntimeError(msg)
-    cfg = session.configure_opencode(session.workspace)
-    cfg_path = session.workspace / ".opencode.yaml"
-    cfg_path.write_text(json.dumps(cfg, indent=2))
-    session._opencode_cfg_path = cfg_path
-    return cfg_path
 
 
 def run_blind(session: AgentSession) -> BlindResult:

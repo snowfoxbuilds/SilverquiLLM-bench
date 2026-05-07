@@ -73,3 +73,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `silverquillm/adapters/pi.py` — Concrete PiAdapter: wraps pi CLI with --no-interactive flag, passes prompt via stdin, checks exit status, auto-registers as "pi"
 - `silverquillm/adapters/__init__.py` — Added import of pi module for auto-registration
 
+
+## Item 9: Refactor agent_session.py to use AgentAdapter
+
+### Tests
+tests/test_agent_session.py — Verifies session dataclass, workspace setup, blind/test-informed runs, cleanup, and standalone helpers
+
+### Implementation
+silverquillm/agent_session.py — Replaced hardcoded OpenCode subprocess logic with adapter-based delegation; added adapter lifecycle (setup/teardown); removed threading import
