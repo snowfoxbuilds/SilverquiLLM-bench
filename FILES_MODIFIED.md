@@ -126,3 +126,8 @@ setup_questions.json — 7 setup questions referencing only agent-workspace-visi
 - `silverquillm/results.py` — Updated tier extraction to fall back to `tier`; added `tier` to `_IMPL_EXCLUDE`
 - `benchmarks/sos/prototype_cards.json` — Added `complexity_tier` field alongside existing `tier`
 - `benchmarks/sos/data/sos_classified.json` — Added `complexity_tier` field alongside existing `tier` for all entries
+
+## Item 15: Fix prompt templates — add explicit output filenames
+
+### Implementation
+- `silverquillm/prompts.py` — No changes needed; filename instructions (blind_impl.py, tested_impl.py, tests.py, resubmit) were already present from initial implementation
