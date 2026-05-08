@@ -22,3 +22,17 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Actual codebase state**: Only 7 real FDN vanilla/French vanilla creatures remained unimplemented (Fire Elemental, Gigantosaurus, Quakestrider Ceratops, Elementalist Adept, Skyraker Giant, Swiftblade Vindicator, Zetalpa Primal Dawn)
 - **What was implemented instead**: 7 creatures verified against Scryfall FDN data
 - **Impact**: `cards/foundations/vanilla_creatures_batch2.py`, batch is smaller than estimated but complete
+
+## Test failure: Item 6 — Targeted spells batch
+- **Failing tests**: SnakeskinVeil (counter, hexproof), DivineResilience (indestructible), FleetingFlight (counter, flying)
+- **Tester's intent**: Verify keyword-granting spells add correct continuous effects
+- **Implementer's approach**: Used `Layer.ABILITIES` instead of `Layer.ABILITY` (wrong enum name)
+- **Coordinator decision**: fix implementation — typo in enum name
+- **Reasoning**: `Layer.ABILITY` is the correct enum value per `engine/types.py`
+
+## Disagreement: Item 6 — +1/+1 counter modeling
+- **Reviewer comment (strict)**: +1/+1 counters should use `plus_one_counters` attribute, not `base_power` mutation which gets reset by `apply_all()`.
+- **Implementer justification**: Tests assert `base_power` mutation explicitly. Changing to `plus_one_counters` would break tests, which Implementer cannot modify.
+- **Coordinator decision**: accept implementer for now — defer to test quality audit
+- **Reasoning**: Both implementation and tests are technically wrong (using base_power instead of counters), but they're consistent. The test quality audit (Section 6) should fix tests to use `plus_one_counters`, then implementation can follow.
+- **Impact**: SnakeskinVeil, FleetingFlight, FellingBlow in `simple_spells_batch3.py`

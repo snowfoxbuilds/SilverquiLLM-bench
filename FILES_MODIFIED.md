@@ -40,3 +40,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `cards/foundations/simple_spells_batch2.py` — 15 new FDN spells: Embrace the Paradox, Rapturous Moment, Wisdom of Ages, Pursue the Past, Seize the Spoils, Group Project, Muse's Encouragement, Visionary's Dance, Antiquities on the Loose, Fractal Anomaly, Snarl Song, Send in the Pest, Withering Curse, Social Snub, Pox Plague
 - `engine/game.py` — Added `cards_drawn_this_turn` tracking in `draw_card()` for Fractal Anomaly counter support
+
+## Item 6: Batch 3 — Simple targeted instants & sorceries
+
+### Tests
+- `tests/cards/test_simple_spells_batch3.py` — 68 tests for 18 targeted FDN spells
+
+### Implementation
+- `cards/foundations/simple_spells_batch3.py` — 18 targeted FDN spells with fizzle-safe on_resolve, create_token() for tokens, controller-filtered get_targets, and power property for damage reads

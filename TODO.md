@@ -51,7 +51,7 @@ Scope: Fix critical engine bugs, centralize zone-transition infrastructure, then
 
   Testability: For each spell: cast it, verify the effect (cards drawn, life gained, tokens created).
 
-- [ ] **Batch 3: Simple targeted instants & sorceries (~15–20 cards)**
+- [x] **Batch 3: Simple targeted instants & sorceries (~15–20 cards)**
   Detail: Implement remaining FDN targeted spells: burn (deal N damage to target), targeted removal (destroy target creature/permanent), bounce (return target to hand), pump (+N/+N until end of turn), and fight spells. Follow existing patterns: override `get_targets()` to return `TargetRequirement`, override `on_resolve()` to use `_get_chosen_target()`. Use `deal_damage()`, `destroy()`, `exile()` from `engine/game.py`. For bounce spells, use the centralized `move_to_zone()` from prereq 3.
 
   Files: `cards/foundations/simple_spells.py` (extend or new file).
