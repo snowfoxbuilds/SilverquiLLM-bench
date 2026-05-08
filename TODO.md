@@ -44,7 +44,7 @@ Scope: Fix critical engine bugs, centralize zone-transition infrastructure, then
 
   Testability: Each creature: instantiate, verify name/cost/power/toughness/keywords match Scryfall data. Integration: cast creature, verify it enters battlefield with correct stats and keywords.
 
-- [ ] **Batch 2: Simple non-targeted instants & sorceries (~15–20 cards)**
+- [x] **Batch 2: Simple non-targeted instants & sorceries (~15–20 cards)**
   Detail: Implement remaining FDN instants and sorceries that don’t target (or target "you"): draw spells, lifegain, token creation, mill, "each player/opponent" effects. Subclass `Instant` or `Sorcery`, override `on_resolve()`. Use `engine/game.py` helpers: `draw_card()`, `create_token()`, `discard()`.
 
   Files: `cards/foundations/simple_spells.py` (extend or new file).

@@ -61,3 +61,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: All zone transitions go through `move_to_zone(game, card, from_zone, to_zone)` in `engine/zones.py`. This includes spell resolution (stack→battlefield/graveyard), destruction, sacrifice, exile, SBA deaths, and bouncing.
 - **Reasoning**: Centralizes event firing, trigger registration/unregistration, and replacement effect consultation. New zone-transition paths (flicker, mill, reanimate) just call `move_to_zone()`.
 - **Impact**: `engine/zones.py`, `engine/casting.py`, `engine/game.py`, `engine/state_based_actions.py`.
+
+## cards_drawn_this_turn tracking in engine
+- **Context**: Fractal Anomaly needs to know how many cards the controller drew this turn.
+- **Decision**: Added `cards_drawn_this_turn` counter increment in `engine/game.py`'s `draw_card()` function using `hasattr` guard.
+- **Reasoning**: Simple, engine-level tracking that any card can query via `getattr(controller, "cards_drawn_this_turn", 0)`.
+- **Impact**: `engine/game.py` (`draw_card`).

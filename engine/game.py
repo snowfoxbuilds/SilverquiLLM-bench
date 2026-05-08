@@ -293,6 +293,11 @@ def draw_card(game: GameState, player: Player) -> Any | None:
     hand = player.zones[Zone.HAND]
     hand.add(card)
 
+    # Track cards drawn this turn
+    if not hasattr(player, "cards_drawn_this_turn"):
+        player.cards_drawn_this_turn = 0
+    player.cards_drawn_this_turn += 1
+
     # Fire trigger (only if game has a trigger_manager — may not during setup)
     if hasattr(game, "trigger_manager"):
         game.trigger_manager.fire_event(

@@ -31,3 +31,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `cards/foundations/vanilla_creatures_batch2.py` — Rewrote to 7 real FDN creatures: Fire Elemental, Gigantosaurus, Quakestrider Ceratops, Elementalist Adept, Skyraker Giant, Swiftblade Vindicator, Zetalpa Primal Dawn
+
+## Item 5: Batch 2 — Simple non-targeted instants & sorceries
+
+### Tests
+- `tests/cards/test_simple_spells_batch2.py` — 63 tests for 15 FDN non-targeted instants/sorceries (draw, lifegain, tokens, each-player effects, registry)
+
+### Implementation
+- `cards/foundations/simple_spells_batch2.py` — 15 new FDN spells: Embrace the Paradox, Rapturous Moment, Wisdom of Ages, Pursue the Past, Seize the Spoils, Group Project, Muse's Encouragement, Visionary's Dance, Antiquities on the Loose, Fractal Anomaly, Snarl Song, Send in the Pest, Withering Curse, Social Snub, Pox Plague
+- `engine/game.py` — Added `cards_drawn_this_turn` tracking in `draw_card()` for Fractal Anomaly counter support
