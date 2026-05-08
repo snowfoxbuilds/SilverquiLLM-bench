@@ -11,3 +11,5 @@ benchmarks/*
 
 # Scryfall cache data
 data/sets/*.json
+.review-venv/
+dist-review/

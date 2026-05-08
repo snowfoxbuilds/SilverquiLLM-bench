@@ -13,14 +13,26 @@ from unittest.mock import patch
 
 import pytest
 
-from benchmark.agent_session import (
+from silverquillm.agent_session import (
     AgentSession,
     BlindResult,
     TestInformedResult,
     run_blind,
     run_test_informed,
 )
-from benchmark.config import BenchmarkConfig
+from silverquillm.config import AgentConfig, BenchmarkConfig
+
+
+# ---------------------------------------------------------------------------
+# Module-level autouse: mock validate_setup
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _mock_validate_setup(monkeypatch):
+    monkeypatch.setattr(
+        "silverquillm.agent_session.validate_setup",
+        lambda *args, **kwargs: True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -36,8 +48,10 @@ def _make_config(**overrides) -> BenchmarkConfig:
         model_provider="test-provider",
         max_context=200_000,
         temperature=0.0,
-        max_test_rounds=3,
-        timeout_per_card=300,
+        agent=AgentConfig(
+            max_test_rounds=3,
+            timeout_per_card=300,
+        ),
     )
     defaults.update(overrides)
     return BenchmarkConfig(**defaults)
@@ -87,19 +101,19 @@ def session(fake_repo):
 class TestRunBlindViolationDetection:
     """run_blind_implementation must detect writes to protected dirs."""
 
-    def test_violation_when_agent_writes_to_engine(self, session, fake_repo):
-        """Agent creating a file in engine/ should result in status='violation'."""
+    def test_violation_when_agent_writes_to_docs(self, session, fake_repo):
+        """Agent creating a file in docs/ should result in status='violation'."""
         ws = session.setup_workspace()
 
         def fake_opencode(prompt, workspace):
             # Agent produces valid output
             (workspace / "blind_impl.py").write_text("x = 1\n")
             # But also writes to a protected directory
-            (fake_repo / "engine" / "hack.py").write_text("# hacked\n")
+            (fake_repo / "docs" / "hack.py").write_text("# hacked\n")
             return "some output"
 
-        with patch("benchmark.agent_session._REPO_ROOT", fake_repo):
-            session._run_opencode = fake_opencode
+        with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
+            session._run_agent = fake_opencode
             result = session.run_blind_implementation(ws)
 
         assert isinstance(result, BlindResult)
@@ -116,8 +130,8 @@ class TestRunBlindViolationDetection:
             (fake_repo / "tests" / "existing.py").write_text("# modified\n")
             return "output"
 
-        with patch("benchmark.agent_session._REPO_ROOT", fake_repo):
-            session._run_opencode = fake_opencode
+        with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
+            session._run_agent = fake_opencode
             result = session.run_blind_implementation(ws)
 
         assert result.status == "violation"
@@ -130,8 +144,8 @@ class TestRunBlindViolationDetection:
             (workspace / "blind_impl.py").write_text("x = 1\n")
             return "output"
 
-        with patch("benchmark.agent_session._REPO_ROOT", fake_repo):
-            session._run_opencode = fake_opencode
+        with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
+            session._run_agent = fake_opencode
             result = session.run_blind_implementation(ws)
 
         assert result.status == "ok"
@@ -143,11 +157,11 @@ class TestRunBlindViolationDetection:
 
         def fake_opencode(prompt, workspace):
             (workspace / "blind_impl.py").write_text("x = 1\n")
-            (fake_repo / "engine" / "hack.py").write_text("bad\n")
+            (fake_repo / "docs" / "hack.py").write_text("bad\n")
             return "a" * 400  # ~100 tokens
 
-        with patch("benchmark.agent_session._REPO_ROOT", fake_repo):
-            session._run_opencode = fake_opencode
+        with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
+            session._run_agent = fake_opencode
             result = session.run_blind_implementation(ws)
 
         assert result.status == "violation"
@@ -175,11 +189,11 @@ class TestRunTestInformedViolationDetection:
         def fake_opencode(prompt, workspace):
             (workspace / "tests.py").write_text("def test_pass(): pass\n")
             # Write to protected dir
-            (fake_repo / "engine" / "hack.py").write_text("# hacked\n")
+            (fake_repo / "docs" / "hack.py").write_text("# hacked\n")
             return "output"
 
-        with patch("benchmark.agent_session._REPO_ROOT", fake_repo):
-            session._run_opencode = fake_opencode
+        with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
+            session._run_agent = fake_opencode
             result = session.run_test_informed(ws, blind_impl)
 
         assert isinstance(result, TestInformedResult)
@@ -211,8 +225,8 @@ class TestRunTestInformedViolationDetection:
                 args=[], returncode=1, stdout="FAILED", stderr=""
             )
 
-        with patch("benchmark.agent_session._REPO_ROOT", fake_repo):
-            session._run_opencode = fake_opencode
+        with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
+            session._run_agent = fake_opencode
             session._run_pytest = fake_pytest
             result = session.run_test_informed(ws, blind_impl)
 
@@ -234,8 +248,8 @@ class TestRunTestInformedViolationDetection:
                 args=[], returncode=0, stdout="passed", stderr=""
             )
 
-        with patch("benchmark.agent_session._REPO_ROOT", fake_repo):
-            session._run_opencode = fake_opencode
+        with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
+            session._run_agent = fake_opencode
             session._run_pytest = fake_pytest
             result = session.run_test_informed(ws, blind_impl)
 
@@ -252,8 +266,8 @@ class TestRunTestInformedViolationDetection:
             (fake_repo / "docs" / "hack.md").write_text("# hacked\n")
             return "output"
 
-        with patch("benchmark.agent_session._REPO_ROOT", fake_repo):
-            session._run_opencode = fake_opencode
+        with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
+            session._run_agent = fake_opencode
             result = session.run_test_informed(ws, blind_impl)
 
         assert result.status == "violation"
@@ -288,8 +302,8 @@ class TestRunTestInformedViolationDetection:
                 args=[], returncode=0, stdout="passed", stderr=""
             )
 
-        with patch("benchmark.agent_session._REPO_ROOT", fake_repo):
-            session._run_opencode = fake_opencode
+        with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
+            session._run_agent = fake_opencode
             session._run_pytest = fake_pytest
             result = session.run_test_informed(ws, blind_impl)
 

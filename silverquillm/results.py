@@ -23,9 +23,9 @@ from typing import Any
 
 import yaml
 
-from benchmark.config import BenchmarkConfig
-from benchmark.evaluator import EvalResult
-from benchmark.scorer import Leaderboard, generate_leaderboard
+from silverquillm.config import BenchmarkConfig
+from silverquillm.evaluator import EvalResult
+from silverquillm.scorer import Leaderboard, generate_leaderboard
 
 __all__ = [
     "generate_run_name",
@@ -115,6 +115,10 @@ def init_results_dir(
         f.name: getattr(config, f.name)
         for f in config.__dataclass_fields__.values()
     }
+    # Convert nested dataclasses (e.g. AgentConfig) to plain dicts for safe YAML
+    for key, val in config_dict.items():
+        if hasattr(val, "__dataclass_fields__"):
+            config_dict[key] = asdict(val)
     config_path = run_dir / "config.yaml"
     config_path.write_text(yaml.dump(config_dict, default_flow_style=False))
 
@@ -232,13 +236,17 @@ def _build_result_record(
     agent = blind_result.get("agent", test_result.get("agent", "unknown"))
     model = blind_result.get("model", test_result.get("model", "unknown"))
     complexity_tier = blind_result.get(
-        "complexity_tier", test_result.get("complexity_tier", "unknown")
+        "complexity_tier",
+        blind_result.get(
+            "tier",
+            test_result.get("complexity_tier", test_result.get("tier", "unknown")),
+        ),
     )
 
     # Build implementation metrics — preserve all keys except large source
     # blobs and internal bookkeeping, so tokens/runtime/peak_context etc.
     # flow through automatically.
-    _IMPL_EXCLUDE = {"impl_source", "tests_source", "agent", "model", "complexity_tier", "iterations"}
+    _IMPL_EXCLUDE = {"impl_source", "tests_source", "agent", "model", "complexity_tier", "tier", "iterations"}
 
     blind_metrics = {
         k: v for k, v in blind_result.items() if k not in _IMPL_EXCLUDE
@@ -518,6 +526,24 @@ def _build_aggregate_summary(
                     "audited_pass_rate": s.audited_pass_rate,
                 }
                 for agent, s in leaderboard.category2.items()
+            },
+            "category3": {
+                agent: {
+                    "audit_survival_rate": s.audit_survival_rate,
+                    "discrimination_score": s.discrimination_score,
+                    "difficulty_calibration": s.difficulty_calibration,
+                    "coverage": s.coverage,
+                }
+                for agent, s in leaderboard.category3.items()
+            },
+            "category4": {
+                agent: {
+                    "regression_rate": s.regression_rate,
+                    "regression_free_streak": s.regression_free_streak,
+                    "engine_churn": s.engine_churn,
+                    "mechanic_reuse_rate": s.mechanic_reuse_rate,
+                }
+                for agent, s in leaderboard.category4.items()
             },
         },
     }

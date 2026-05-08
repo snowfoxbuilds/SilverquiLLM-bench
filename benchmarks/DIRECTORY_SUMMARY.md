@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Namespace package for benchmark data sets. Each subdirectory (`sos/`, etc.) contains card data, generated specs, and result artifacts for a specific MTG set used in benchmarking. The runner code in `benchmark/` is set-agnostic; this directory holds set-specific data.
+Namespace package for benchmark data sets. Each subdirectory (`sos/`, etc.) contains card data, generated specs, and result artifacts for a specific MTG set used in benchmarking. The runner code in `silverquillm/` is set-agnostic; this directory holds set-specific data.
 
 ## Subdirectories
 

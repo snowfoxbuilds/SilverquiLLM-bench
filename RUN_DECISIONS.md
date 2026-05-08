@@ -3,22 +3,15 @@
 Decisions made during this run only. Before the PR, migrate anything worth preserving long-term into `KEY_DECISIONS.md`.
 
 
-## Reviewer enhancement: Item 1 — Deletion detection in _check_violations
-- **Reviewer comment (strict)**: _check_violations doesn't detect deletions of protected files. Deleting protected files is contamination too.
-- **Coordinator decision**: Accept reviewer's suggestion. Add deletion detection.
-- **Reasoning**: The TODO spec only mentions "modified" and "created", but the purpose of the feature is contamination detection. Deletion is a valid contamination vector that should be caught. Small extension that fits the spirit of the feature.
-- **Impact**: benchmark/agent_session.py, tests/test_check_violations.py
+## Spec deviation: Item 8 — PiAdapter CLI interface
+- **Reviewer comment**: The initial implementation used invalid `--no-interactive` and `--model` flags that don't exist in the upstream `pi` CLI.
+- **Coordinator decision**: Fix the adapter to use a minimal, conservative approach — pass prompt as a positional argument since `pi` accepts natural-language queries as argv. Avoid inventing flags. Keep the adapter thin and easy to adjust once the real `pi` CLI docs are verified.
+- **Reasoning**: We don't have verified `pi` CLI documentation. A conservative positional-argument approach is safest.
+- **Impact**: `silverquillm/adapters/pi.py`, `tests/test_pi_adapter.py`
 
-## Spec deviation: Item 3 — load_prototype_cards return type
-- **TODO spec expected**: `load_prototype_cards(prototype_path: str) -> list[dict]` but description says "extract collector numbers, and return them"
-- **Actual decision**: Return `list[str]` (collector numbers), not `list[dict]` (raw prototype entries)
-- **What was implemented**: Changed return type to `list[str]`, extracting collector_number from each entry
-- **Reasoning**: The description "extract collector numbers, and return them" is the intended behavior. The type annotation `list[dict]` is inconsistent with the description. Returning just collector numbers makes the API composable — `filter_by_prototype` can directly pass to `filter_by_collectors`.
-- **Impact**: benchmark/card_loader.py, tests/test_card_loader.py
-
-## Test failure: Item 5 — Wire benchmark run orchestration loop
-- **Failing tests**: test_orchestration_creates_result_json, test_orchestration_prints_progress
-- **Tester's intent**: Verify result.json is created correctly and progress is printed
-- **Implementer's approach**: Passed TestInformedResult.iterations (int) directly to save_card_result
-- **Coordinator decision**: fix implementation — save_card_result expects iterations as a list, _session_results_to_dicts must convert
-- **Reasoning**: The tests match save_card_result's existing contract; the helper function has a type mismatch bug
+## Spec deviation: Item 10 — timing field name
+- **TODO spec expected**: `timing` field in postmortem JSONL
+- **Actual implementation**: `timing_ms` field
+- **Coordinator decision**: Accept `timing_ms` — it's self-documenting about the unit (milliseconds).
+- **Reasoning**: `timing` is ambiguous (seconds? ms?). `timing_ms` is clearer for downstream consumers.
+- **Impact**: `silverquillm/agent_session.py`, `tests/test_postmortem_logging.py`

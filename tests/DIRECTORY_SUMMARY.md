@@ -2,62 +2,73 @@
 
 ## Purpose
 
-Test root directory for the SilverquiLLM-bench project. Contains top-level test files, test utilities, and subdirectories for engine, card, and benchmark integration tests. Uses **pytest** as the test framework with ~1,500+ test functions total.
+Test root directory for the SilverquiLLM-bench project. Contains top-level test files, test utilities, and subdirectories for engine, card, and benchmark integration tests. Uses **pytest** as the test framework with ~1,800+ test functions total.
 
 ## Key Files
 
-| File | Lines | Responsibility |
-|------|-------|---------------|
-| `test_utils.py` | 474 | **Test helper API** — Convenience functions for tests: `create_game()` (wrapper with `DeterministicPlayer`), `set_board_state()` (direct zone/life/mana manipulation), `cast_spell()` (find-in-hand + cast + resolve), `advance_to_phase()` (safe fast-forward), `declare_attackers()` / `declare_blockers()` (name-based combat setup). `TestSetupError` exception. |
-| `conftest.py` | 37 | **pytest config** — `pytest_collection_modifyitems` hook to filter out benchmark functions that get collected as tests; allows `tests/benchmark/` subpackage; registers `integration` marker. |
-| `test_integration.py` | 775 | **End-to-end integration tests** — 9 tests exercising real engine APIs across multiple turns. |
-| `test_scaffold.py` | 179 | **Project scaffold validation** — Verifies pyproject.toml metadata, directory structure, package importability, py.typed markers, ruff config. |
-| `test_phase1_tech_debt.py` | 257 | **Phase 1 tech debt validation** — Python 3.12 target, removed backward-compat aliases, deprecation warnings in cleanup discard. |
-| `test_benchmark_scaffold.py` | 175 | **Benchmark scaffold validation** — Verifies benchmark/ and benchmarks/ package structure, SOS data presence, pyproject config. |
-| `test_card_classifier.py` | 410 | **Card classifier tests** — 24 tests covering tier classification, SOS integration, edge cases. |
-| `test_card_spec.py` | 478 | **Card spec tests** — Spec generation, field validation, all-specs output. |
-| `test_card_loader.py` | — | **Card loader tests** — 14 tests covering load_card_specs, load_prototype_cards, filter_by_collectors, filter_by_prototype. |
-| `test_template_gen.py` | 378 | **Template generator tests** — 49 tests for class name conversion, base class resolution, template compilation/exec. |
-| `test_docs_gen.py` | 235 | **Docs generator tests** — 76 tests for public class/enum/function extraction, token budget, module grouping. |
-| `test_test_utils_doc.py` | 175 | **test_utils documentation tests** — Validates docs/test_utils.md content and accuracy. |
-| `test_rules_skill.py` | 207 | **Rules indexer tests** — 18 tests for download, index, lookup, and rules_overview.md. |
-| `test_cli_config.py` | 301 | **CLI + config tests** — Click CLI subcommands, YAML config loading and validation. |
-| `test_cli_run_flags.py` | — | **CLI run flag tests** — 9 tests for --dry-run, --cards, --prototype, mutual exclusion, error handling. |
-| `test_cli_orchestration.py` | — | **CLI orchestration tests** — 8 tests for run loop, result saving, progress output, skip logic. |
-| `test_cli_eval.py` | — | **CLI eval command tests** — Tests for `benchmark eval` subcommand wiring. |
-| `test_cli_score.py` | — | **CLI score command tests** — Tests for `benchmark score` subcommand wiring. |
-| `test_post_loop_eval.py` | — | **Post-loop eval tests** — Tests for run_self_eval_flat and post-loop evaluation logic. |
-| `test_prompts.py` | 222 | **Prompt template tests** — blind, test-informed, and iteration feedback prompt generation. |
-| `test_agent_session.py` | 444 | **Agent session tests** — 43 tests for dataclass fields, workspace setup, OpenCode config, blind/test-informed phases. |
-| `test_check_violations.py` | — | **Violation detection tests** — 17 tests for protected directory violation checking. |
-| `test_violation_wiring.py` | — | **Violation wiring tests** — Tests for violation checks integrated into agent run methods. |
-| `test_integration_helpers.py` | — | **Integration helper tests** — Tests for run_utils and session result conversion. |
-| `test_evaluator.py` | 424 | **Evaluator tests** — EvalResult dataclass, subprocess test execution, self/cross/audited eval. |
-| `test_scorer.py` | 626 | **Scorer tests** — Score computation, 3-category metrics, leaderboard generation. |
-| `test_results.py` | 656 | **Result recorder tests** — Run naming, directory init, card result saving, summary/aggregate output. |
-| `test_prototype.py` | 511 | **Prototype selection tests** — Per-tier scoring, card selection, gap analysis. |
-| `test_engine_extensions.py` | 422 | **Engine extension tests** — 21 tests for mana color tracking, colors_spent on cast, Converge mechanic. |
-| `__init__.py` | — | Package init. |
+| File | Responsibility |
+|------|---------------|
+| `conftest.py` | **pytest config** — `pytest_collection_modifyitems` hook to filter out benchmark functions that get collected as tests; registers `integration` marker. |
+| `test_utils.py` | **Test helper API** — `create_game()`, `set_board_state()`, `cast_spell()`, `advance_to_phase()`, `declare_attackers()`, `declare_blockers()`. `TestSetupError` exception. |
+| `test_integration.py` | **End-to-end integration tests** — Multi-turn game scenarios. |
+| `test_scaffold.py` | **Project scaffold validation** — pyproject.toml, directory structure, package importability. |
+| `test_benchmark_scaffold.py` | **Benchmark scaffold validation** — Verifies silverquillm/ and benchmarks/ package structure. |
+| `test_package_rename.py` | **Package rename validation** — Confirms `benchmark/` → `silverquillm/` rename. |
+| `test_adapter_base.py` | **Adapter base tests** — AgentAdapter ABC, registry, factory, retry logic. |
+| `test_opencode_adapter.py` | **OpenCode adapter tests** — Subprocess behavior, stdin passing. |
+| `test_claude_code_adapter.py` | **Claude Code adapter tests** — CLI wrapping, --print flag. |
+| `test_aider_adapter.py` | **Aider adapter tests** — --message-file, --no-auto-commits. |
+| `test_pi_adapter.py` | **Pi adapter tests** — --no-interactive, stdin passing. |
+| `test_agent_session.py` | **Agent session tests** — Workspace setup, blind/test-informed phases, adapter lifecycle. |
+| `test_agent_session_adapter.py` | **Session + adapter integration** — Adapter wiring into session. |
+| `test_agent_config.py` | **Agent config tests** — Nested AgentConfig dataclass. |
+| `test_agent_thoughts.py` | **Agent thoughts tests** — Narrative generation from postmortem JSONL. |
+| `test_postmortem_logging.py` | **Postmortem logging tests** — JSONL append, timing, error handling. |
+| `test_config_consumers.py` | **Config consumer tests** — All modules correctly use nested config. |
+| `test_card_classifier.py` | **Card classifier tests** — Tier classification, SOS integration. |
+| `test_card_spec.py` | **Card spec tests** — Spec generation, field validation. |
+| `test_card_loader.py` | **Card loader tests** — Spec loading, filtering. |
+| `test_card_sorting.py` | **Card sorting tests** — Complexity tier sorting. |
+| `test_template_gen.py` | **Template generator tests** — Class name conversion, template compilation. |
+| `test_docs_gen.py` | **Docs generator tests** — AST extraction, token budget. |
+| `test_rules_skill.py` | **Rules indexer tests** — Download, index, lookup. |
+| `test_prompts.py` | **Prompt template tests** — All prompt types. |
+| `test_engine_extensibility_prompts.py` | **Engine extensibility prompt tests** — Extensibility instructions in prompts. |
+| `test_evaluator.py` | **Evaluator tests** — Subprocess test execution, eval scenarios. |
+| `test_scorer.py` | **Scorer tests** — 4-category metrics, leaderboard generation. |
+| `test_cat4_scoring.py` | **Category 4 scoring tests** — Engine extension quality scoring. |
+| `test_results.py` | **Result recorder tests** — Run naming, directory init, artifacts. |
+| `test_regression.py` | **Regression runner tests** — Cross-card validation, feedback prompts. |
+| `test_regression_runner.py` | **Regression runner integration** — End-to-end regression flows. |
+| `test_persistent_engine.py` | **Persistent engine tests** — Engine lifecycle, diffs, commits. |
+| `test_engine_diff.py` | **Engine diff tests** — Diff computation. |
+| `test_prototype.py` | **Prototype selection tests** — Per-tier scoring, gap analysis. |
+| `test_tier_naming.py` | **Tier naming tests** — `tier` / `complexity_tier` key alignment. |
+| `test_prompt_filenames.py` | **Prompt filename tests** — Output filename instructions in prompts. |
+| `test_setup_questions.py` | **Setup questions tests** — Validation logic. |
+| `test_setup_questions_bank.py` | **Setup questions bank tests** — Question bank structure, topic coverage. |
+| `test_cli_config.py` | **CLI + config tests** — Click subcommands, YAML loading. |
+| `test_cli_run_flags.py` | **CLI run flag tests** — --dry-run, --cards, --prototype. |
+| `test_cli_orchestration.py` | **CLI orchestration tests** — Run loop, result saving. |
+| `test_cli_eval.py` | **CLI eval tests** — `benchmark eval` subcommand. |
+| `test_cli_score.py` | **CLI score tests** — `benchmark score` subcommand. |
+| `test_post_loop_eval.py` | **Post-loop eval tests** — `run_self_eval_flat`. |
+| `test_check_violations.py` | **Violation detection tests** — Protected directory checking. |
+| `test_violation_wiring.py` | **Violation wiring tests** — Violation checks in agent runs. |
+| `test_integration_helpers.py` | **Integration helpers tests** — run_utils, result conversion. |
+| `test_engine_extensions.py` | **Engine extension tests** — Converge mana tracking. |
+| `test_phase1_tech_debt.py` | **Tech debt validation** — Python 3.12, removed aliases. |
+| `test_test_utils_doc.py` | **test_utils doc tests** — docs/test_utils.md accuracy. |
 
 ## Subdirectories
 
-- **`engine/`** — Unit tests for all engine modules (~850 tests). See `tests/engine/DIRECTORY_SUMMARY.md`.
-- **`cards/`** — Unit tests for card implementations (~270 tests). See `tests/cards/DIRECTORY_SUMMARY.md`.
-- **`benchmark/`** — Integration tests and helpers for full benchmark pipeline. See below.
-
-### `tests/benchmark/`
-
-| File | Lines | Responsibility |
-|------|-------|---------------|
-| `__init__.py` | — | Package init for benchmark test subpackage. |
-| `test_helpers.py` | 182 | **Integration test helpers** — Mock OpenCode callables (blind + test-informed) and `BenchmarkConfig` factory for integration tests. |
-| `test_e2e.py` | 247 | **E2E integration tests** — Full pipeline tests: `test_full_pipeline_two_cards` and `test_workspace_contamination_detected`. |
+- **`engine/`** — Unit tests for all engine modules. See `tests/engine/DIRECTORY_SUMMARY.md`.
+- **`cards/`** — Unit tests for card implementations. See `tests/cards/DIRECTORY_SUMMARY.md`.
+- **`benchmark/`** — Integration tests and helpers. See `tests/benchmark/DIRECTORY_SUMMARY.md`.
 
 ## Testing Approach
 
-- **Deterministic**: All tests use `DeterministicPlayer` with scripted FIFO choices for full reproducibility.
-- **Unit + Integration**: Each engine module has its own test file; integration tests validate cross-module interactions.
-- **Benchmark tests**: Each `benchmark/` module has a corresponding `test_*.py` file at the tests root level.
-- **E2E integration**: `tests/benchmark/` contains full-pipeline integration tests using mock agent callables.
-- **Conventions**: Test classes named `Test<Feature>`, test methods `test_<behavior>`. Fixtures use `_make_game()`, `_make_player()` patterns.
-- **conftest.py hook**: Filters out benchmark module functions (e.g., `test_informed_prompt`) that pytest would incorrectly collect as test functions; allows `tests/benchmark/` subdirectory; registers `integration` marker.
+- **Deterministic**: All tests use `DeterministicPlayer` with scripted FIFO choices.
+- **Unit + Integration**: Each module has its own test file; integration tests validate cross-module interactions.
+- **Conventions**: Test classes `Test<Feature>`, test methods `test_<behavior>`. Fixtures use `_make_game()`, `_make_player()` patterns.
+- **conftest.py hook**: Filters out benchmark functions that pytest would incorrectly collect as tests.

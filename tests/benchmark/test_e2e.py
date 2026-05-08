@@ -14,12 +14,12 @@ from unittest.mock import patch
 
 import pytest
 
-from benchmark.agent_session import AgentSession, BlindResult
-from benchmark.config import BenchmarkConfig
-from benchmark.evaluator import run_self_eval_flat
-from benchmark.results import init_results_dir, save_card_result, save_run_summary
-from benchmark.scorer import Leaderboard, compute_scores, generate_leaderboard
-from benchmark.results import save_aggregates
+from silverquillm.agent_session import AgentSession, BlindResult
+from silverquillm.config import BenchmarkConfig
+from silverquillm.evaluator import run_self_eval_flat
+from silverquillm.results import init_results_dir, save_card_result, save_run_summary
+from silverquillm.scorer import Leaderboard, compute_scores, generate_leaderboard
+from silverquillm.results import save_aggregates
 from tests.benchmark.test_helpers import (
     create_test_config,
     mock_opencode_blind,
@@ -65,18 +65,18 @@ class TestBenchmarkEndToEnd:
                 card_dir=card_dir,
             )
 
-            # 3b. Monkey-patch _run_opencode
+            # 3b. Monkey-patch _run_agent
             blind_mock = mock_opencode_blind(card_spec)
             test_mock = mock_opencode_test_informed(card_spec)
             call_count = {"n": 0}
 
-            def _patched_run_opencode(prompt: str, workspace: Path, _bm=blind_mock, _tm=test_mock, _cc=call_count) -> str:
+            def _patched_run_agent(prompt: str, workspace: Path, _bm=blind_mock, _tm=test_mock, _cc=call_count) -> str:
                 _cc["n"] += 1
                 if _cc["n"] == 1:
                     return _bm(prompt, workspace)
                 return _tm(prompt, workspace)
 
-            session._run_opencode = _patched_run_opencode  # type: ignore[assignment]
+            session._run_agent = _patched_run_agent  # type: ignore[assignment]
 
             # Also patch _run_pytest to avoid needing 'python' binary
             def _mock_pytest(workspace: Path, tests_path: Path) -> subprocess.CompletedProcess:
@@ -86,8 +86,9 @@ class TestBenchmarkEndToEnd:
 
             session._run_pytest = _mock_pytest  # type: ignore[assignment]
 
-            # 3c. Setup workspace
-            workspace = session.setup_workspace()
+            # 3c. Setup workspace (mock validate_setup to avoid real adapter call)
+            with patch("silverquillm.agent_session.validate_setup", return_value=True):
+                workspace = session.setup_workspace()
 
             # 3d. Assert workspace contents
             assert (workspace / "card_spec.json").exists()
@@ -121,7 +122,7 @@ class TestBenchmarkEndToEnd:
             card_artifacts[card_id] = {
                 "blind_result": {
                     "impl_source": impl_source,
-                    "agent": config.agent_tool,
+                    "agent": config.agent.adapter,
                     "model": config.model_name,
                     "complexity_tier": "simple",
                     "status": blind_result.status,
@@ -132,7 +133,7 @@ class TestBenchmarkEndToEnd:
                 "test_result": {
                     "impl_source": tested_source,
                     "tests_source": tests_source,
-                    "agent": config.agent_tool,
+                    "agent": config.agent.adapter,
                     "model": config.model_name,
                     "complexity_tier": "simple",
                     "status": test_informed_result.status,
@@ -164,7 +165,7 @@ class TestBenchmarkEndToEnd:
         # Assert both agent (tool) and model fields are present in result records
         for card_id in ["11", "6"]:
             result = json.loads((run_dir / "cards" / card_id / "result.json").read_text())
-            assert result["agent"] == config.agent_tool
+            assert result["agent"] == config.agent.adapter
             assert result["model"] == config.model_name
 
         # 6. Run self-eval
@@ -217,15 +218,15 @@ class TestBenchmarkEndToEnd:
         assert (results_dir / "leaderboard.md").exists()
 
     def test_workspace_contamination_detected(self, tmp_path: Path) -> None:
-        """Verify contamination detection when agent writes to engine/."""
+        """Verify contamination detection when agent writes to a protected dir (docs/)."""
         card_spec = _load_card_spec("11")
         config = create_test_config(tmp_path)
         card_dir = str(_CARDS_DIR / "11")
 
-        fake_engine = tmp_path / "engine"
-        fake_engine.mkdir()
+        fake_docs = tmp_path / "docs"
+        fake_docs.mkdir()
 
-        with patch("benchmark.agent_session._REPO_ROOT", tmp_path):
+        with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
             session = AgentSession(
                 config=config,
                 card_spec=card_spec,
@@ -236,10 +237,10 @@ class TestBenchmarkEndToEnd:
 
             def _contaminating_opencode(prompt: str, ws: Path) -> str:
                 (ws / "blind_impl.py").write_text("class Foo: pass\n")
-                (fake_engine / "_test_contamination_marker.py").write_text("# contamination\n")
+                (fake_docs / "_test_contamination_marker.py").write_text("# contamination\n")
                 return "done"
 
-            session._run_opencode = _contaminating_opencode  # type: ignore[assignment]
+            session._run_agent = _contaminating_opencode  # type: ignore[assignment]
 
             result = session.run_blind_implementation(workspace)
             assert result.status == "violation"

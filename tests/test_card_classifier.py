@@ -56,14 +56,14 @@ class TestClassifyCardContract:
     """classify_card must always return a valid tier string."""
 
     def test_returns_string(self) -> None:
-        from benchmark.card_classifier import classify_card
+        from silverquillm.card_classifier import classify_card
 
         card = _make_card(type_line="Creature — Bear", power="2", toughness="2")
         result = classify_card(card)
         assert isinstance(result, str)
 
     def test_returns_valid_tier(self) -> None:
-        from benchmark.card_classifier import classify_card
+        from silverquillm.card_classifier import classify_card
 
         card = _make_card(type_line="Instant", oracle_text="Deal 3 damage to any target.")
         result = classify_card(card)
@@ -79,14 +79,14 @@ class TestClassifyTrivial:
     """Trivial tier: basic lands, vanilla creatures, keyword-only."""
 
     def test_basic_land_is_trivial(self) -> None:
-        from benchmark.card_classifier import classify_card
+        from silverquillm.card_classifier import classify_card
 
         card = _make_card(name="Plains", type_line="Basic Land — Plains", oracle_text="")
         assert classify_card(card) == "trivial"
 
     def test_vanilla_creature_is_trivial(self) -> None:
         """A creature with no oracle text and no keywords is trivial."""
-        from benchmark.card_classifier import classify_card
+        from silverquillm.card_classifier import classify_card
 
         card = _make_card(
             name="Grizzly Bears",
@@ -100,7 +100,7 @@ class TestClassifyTrivial:
 
     def test_single_evergreen_keyword_creature_is_trivial(self) -> None:
         """Creature with just one evergreen keyword and keyword-only oracle."""
-        from benchmark.card_classifier import classify_card
+        from silverquillm.card_classifier import classify_card
 
         card = _make_card(
             name="Flying Creature",
@@ -122,7 +122,7 @@ class TestClassifyExpert:
     """Expert tier: planeswalkers, Miracle."""
 
     def test_planeswalker_is_expert(self) -> None:
-        from benchmark.card_classifier import classify_card
+        from silverquillm.card_classifier import classify_card
 
         card = _make_card(
             name="Test Planeswalker",
@@ -133,7 +133,7 @@ class TestClassifyExpert:
         assert classify_card(card) == "expert"
 
     def test_miracle_card_is_expert(self) -> None:
-        from benchmark.card_classifier import classify_card
+        from silverquillm.card_classifier import classify_card
 
         card = _make_card(
             name="Miracle Spell",
@@ -153,7 +153,7 @@ class TestClassifySimple:
     """Simple tier: single straightforward ability."""
 
     def test_targeted_spell_is_medium(self) -> None:
-        from benchmark.card_classifier import classify_card
+        from silverquillm.card_classifier import classify_card
 
         card = _make_card(
             name="Simple Bolt",
@@ -175,7 +175,7 @@ class TestClassifyComplex:
     """Complex tier: multi-step, replacement effects, modal, SOS mechanics."""
 
     def test_modal_spell_is_complex(self) -> None:
-        from benchmark.card_classifier import classify_card
+        from silverquillm.card_classifier import classify_card
 
         card = _make_card(
             name="Modal Charm",
@@ -186,7 +186,7 @@ class TestClassifyComplex:
         assert classify_card(card) == "complex"
 
     def test_replacement_effect_is_complex(self) -> None:
-        from benchmark.card_classifier import classify_card
+        from silverquillm.card_classifier import classify_card
 
         card = _make_card(
             name="Replacement Card",
@@ -198,7 +198,7 @@ class TestClassifyComplex:
 
     def test_converge_mechanic_is_complex(self) -> None:
         """SOS-specific mechanic 'Converge' should bump to at least complex."""
-        from benchmark.card_classifier import classify_card
+        from silverquillm.card_classifier import classify_card
 
         card = _make_card(
             name="Converge Card",
@@ -221,7 +221,7 @@ class TestClassifySet:
     """classify_set groups cards and writes JSON output."""
 
     def test_groups_all_cards(self) -> None:
-        from benchmark.card_classifier import classify_set
+        from silverquillm.card_classifier import classify_set
 
         cards = [
             _make_card(name="Plains", type_line="Basic Land — Plains"),
@@ -243,7 +243,7 @@ class TestClassifySet:
             assert total == len(cards)
 
     def test_writes_valid_json(self) -> None:
-        from benchmark.card_classifier import classify_set
+        from silverquillm.card_classifier import classify_set
 
         cards = [
             _make_card(name="Plains", type_line="Basic Land — Plains"),
@@ -259,7 +259,7 @@ class TestClassifySet:
             assert len(data) == 2
 
     def test_json_records_have_required_fields(self) -> None:
-        from benchmark.card_classifier import classify_set
+        from silverquillm.card_classifier import classify_set
 
         cards = [_make_card(name="Test", type_line="Instant", oracle_text="Draw a card.")]
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -273,7 +273,7 @@ class TestClassifySet:
             assert record["tier"] in VALID_TIERS
 
     def test_empty_card_list(self) -> None:
-        from benchmark.card_classifier import classify_set
+        from silverquillm.card_classifier import classify_set
 
         with tempfile.TemporaryDirectory() as tmpdir:
             out_path = Path(tmpdir) / "classified.json"
@@ -295,11 +295,11 @@ class TestSOSClassification:
 
     @pytest.fixture()
     def sos_cards(self) -> list[CardMetadata]:
-        from benchmark.card_classifier import load_sos_cards
+        from silverquillm.card_classifier import load_sos_cards
         return load_sos_cards()
 
     def test_every_sos_card_gets_a_tier(self, sos_cards: list[CardMetadata]) -> None:
-        from benchmark.card_classifier import classify_card
+        from silverquillm.card_classifier import classify_card
 
         for card in sos_cards:
             tier = classify_card(card)
@@ -309,7 +309,7 @@ class TestSOSClassification:
 
     def test_no_tier_exceeds_60_percent(self, sos_cards: list[CardMetadata]) -> None:
         """Distribution is non-degenerate: no single tier has >60% of cards."""
-        from benchmark.card_classifier import classify_set
+        from silverquillm.card_classifier import classify_set
 
         with tempfile.TemporaryDirectory() as tmpdir:
             out_path = Path(tmpdir) / "classified.json"
@@ -326,7 +326,7 @@ class TestSOSClassification:
 
     def test_sos_basic_land_is_trivial(self, sos_cards: list[CardMetadata]) -> None:
         """A known SOS basic land (Plains) should classify as trivial."""
-        from benchmark.card_classifier import classify_card
+        from silverquillm.card_classifier import classify_card
 
         plains_cards = [c for c in sos_cards if c.name == "Plains" and "Basic" in c.type_line]
         assert len(plains_cards) >= 1, "SOS data should contain Plains"
@@ -334,7 +334,7 @@ class TestSOSClassification:
 
     def test_sos_planeswalker_is_expert(self, sos_cards: list[CardMetadata]) -> None:
         """A known SOS planeswalker should classify as expert."""
-        from benchmark.card_classifier import classify_card
+        from silverquillm.card_classifier import classify_card
 
         pws = [c for c in sos_cards if "Planeswalker" in c.type_line]
         assert len(pws) >= 1, "SOS data should contain at least one planeswalker"
@@ -345,7 +345,7 @@ class TestSOSClassification:
 
     def test_sos_card_count_matches_data(self, sos_cards: list[CardMetadata]) -> None:
         """classify_set should process all SOS cards."""
-        from benchmark.card_classifier import classify_set
+        from silverquillm.card_classifier import classify_set
 
         with tempfile.TemporaryDirectory() as tmpdir:
             out_path = Path(tmpdir) / "classified.json"
@@ -365,7 +365,7 @@ class TestClassifyEdgeCases:
 
     def test_empty_oracle_text_creature(self) -> None:
         """Creature with completely empty oracle text should be trivial."""
-        from benchmark.card_classifier import classify_card
+        from silverquillm.card_classifier import classify_card
 
         card = _make_card(
             name="Blank Creature",
@@ -378,7 +378,7 @@ class TestClassifyEdgeCases:
 
     def test_card_with_only_reminder_text(self) -> None:
         """Oracle text that's only reminder text in parens should be treated as empty."""
-        from benchmark.card_classifier import classify_card
+        from silverquillm.card_classifier import classify_card
 
         card = _make_card(
             name="Reminder Only",
@@ -394,7 +394,7 @@ class TestClassifyEdgeCases:
 
     def test_all_default_metadata_does_not_crash(self) -> None:
         """CardMetadata with all defaults should not crash classify_card."""
-        from benchmark.card_classifier import classify_card
+        from silverquillm.card_classifier import classify_card
 
         card = CardMetadata()
         result = classify_card(card)
@@ -402,7 +402,7 @@ class TestClassifyEdgeCases:
 
     def test_tier_weights_has_all_tiers(self) -> None:
         """TIER_WEIGHTS should map every valid tier to a positive int."""
-        from benchmark.card_classifier import TIER_WEIGHTS
+        from silverquillm.card_classifier import TIER_WEIGHTS
 
         for tier in VALID_TIERS:
             assert tier in TIER_WEIGHTS

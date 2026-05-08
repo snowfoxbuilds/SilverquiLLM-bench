@@ -152,7 +152,7 @@ def select_prototype_cards(
     tier_map: dict[str, list[str]] = {t: [] for t in TIERS}
     classified_index: dict[str, dict] = {}
     for entry in classified:
-        tier = entry.get("tier", "")
+        tier = entry.get("complexity_tier", entry.get("tier", ""))
         name = entry.get("name", "")
         if tier in tier_map and name:
             tier_map[tier].append(name)
@@ -201,6 +201,7 @@ def select_prototype_cards(
             selected.append(
                 {
                     "name": card["name"],
+                    "complexity_tier": tier,
                     "tier": tier,
                     "rationale": rationale,
                     "collector_number": card.get("collector_number", ""),
@@ -354,7 +355,7 @@ def write_prototype_artifacts(
     lines.append(f"**Cards selected:** {len(cards)}\n\n")
 
     for card in cards:
-        lines.append(f"## {card['name']} ({card['tier']})\n\n")
+        lines.append(f"## {card['name']} ({card.get('complexity_tier', card.get('tier', 'unknown'))})\n\n")
         lines.append(f"- **Type:** {card.get('type_line', 'N/A')}\n")
         lines.append(f"- **Mana cost:** {card.get('mana_cost', 'N/A')}\n")
         oracle = card.get("oracle_text", "")

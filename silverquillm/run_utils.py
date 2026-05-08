@@ -9,8 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from benchmark.agent_session import BlindResult, TestInformedResult
-from benchmark.config import BenchmarkConfig
+from silverquillm.agent_session import BlindResult, TestInformedResult
+from silverquillm.config import BenchmarkConfig
 
 
 def _session_results_to_dicts(
@@ -46,9 +46,9 @@ def _session_results_to_dicts(
         "tokens": blind.tokens,
         "runtime_seconds": blind.runtime_seconds,
         "peak_context": blind.peak_context,
-        "agent": config.agent_tool,
+        "agent": config.agent.adapter,
         "model": config.model_name,
-        "complexity_tier": spec.get("complexity_tier", "unknown"),
+        "complexity_tier": spec.get("complexity_tier", spec.get("tier", "unknown")),
         "impl_source": _read_source(blind.impl_path),
     }
 
@@ -61,9 +61,9 @@ def _session_results_to_dicts(
             "peak_context": tested.peak_context,
             "iterations": tested.iterations,
             "rules_lookups": tested.rules_lookups,
-            "agent": config.agent_tool,
+            "agent": config.agent.adapter,
             "model": config.model_name,
-            "complexity_tier": spec.get("complexity_tier", "unknown"),
+            "complexity_tier": spec.get("complexity_tier", spec.get("tier", "unknown")),
             "impl_source": _read_source(tested.impl_path),
             "tests_source": _read_source(tested.tests_path),
         }

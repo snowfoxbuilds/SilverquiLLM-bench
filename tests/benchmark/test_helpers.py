@@ -11,12 +11,12 @@ import textwrap
 from pathlib import Path
 from typing import Callable
 
-from benchmark.config import BenchmarkConfig
-from benchmark.template_gen import card_name_to_class_name, _determine_base_class
+from silverquillm.config import AgentConfig, BenchmarkConfig
+from silverquillm.template_gen import card_name_to_class_name, _determine_base_class
 
 
 def mock_opencode_blind(card_spec: dict) -> Callable[[str, Path], str]:
-    """Return a mock ``_run_opencode`` that writes a minimal blind implementation.
+    """Return a mock ``_run_agent`` that writes a minimal blind implementation.
 
     The returned callable matches the signature ``(prompt: str, workspace: Path) -> str``.
     It writes a minimal valid Python class to ``workspace/blind_impl.py`` using the
@@ -60,7 +60,7 @@ def mock_opencode_blind(card_spec: dict) -> Callable[[str, Path], str]:
 
 
 def mock_opencode_test_informed(card_spec: dict) -> Callable[[str, Path], str]:
-    """Return a mock ``_run_opencode`` that writes a test-informed implementation.
+    """Return a mock ``_run_agent`` that writes a test-informed implementation.
 
     The returned callable:
     - Copies ``workspace/blind_impl.py`` to ``workspace/tested_impl.py``
@@ -171,10 +171,12 @@ def create_test_config(tmp_path: Path, set_code: str = "sos") -> BenchmarkConfig
         model_provider="test-provider",
         max_context=200_000,
         temperature=0.0,
-        agent_tool="opencode",
-        max_test_rounds=1,
-        timeout_per_card=10,
-        disable_web_search=True,
+        agent=AgentConfig(
+            adapter="opencode",
+            max_test_rounds=1,
+            timeout_per_card=10,
+            disable_web_search=True,
+        ),
         card_specs_dir=str(specs_dir),
         engine_docs_path=str(tmp_path / "engine_docs"),
         template_dir=str(tmp_path / "templates"),

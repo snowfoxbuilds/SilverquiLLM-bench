@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from benchmark.prototype import (
+from silverquillm.prototype import (
     TIERS,
     analyze_engine_gaps,
     select_prototype_cards,

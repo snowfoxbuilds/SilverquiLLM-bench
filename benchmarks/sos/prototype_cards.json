@@ -1,26 +1,29 @@
 [
   {
     "name": "Plains",
+    "complexity_tier": "trivial",
     "tier": "trivial",
-    "rationale": "vanilla creature (no abilities) \u2014 oracle: ({T}: Add {W}.)",
+    "rationale": "vanilla creature (no abilities) — oracle: ({T}: Add {W}.)",
     "collector_number": "267",
-    "type_line": "Basic Land \u2014 Plains",
+    "type_line": "Basic Land — Plains",
     "oracle_text": "({T}: Add {W}.)",
     "mana_cost": ""
   },
   {
     "name": "Eager Glyphmage",
+    "complexity_tier": "simple",
     "tier": "simple",
-    "rationale": "single keyword ability \u2014 oracle: When this creature enters, create a 1/1 white and black Inkling creature token with flying.",
+    "rationale": "single keyword ability — oracle: When this creature enters, create a 1/1 white and black Inkling creature token with flying.",
     "collector_number": "11",
-    "type_line": "Creature \u2014 Cat Cleric",
+    "type_line": "Creature — Cat Cleric",
     "oracle_text": "When this creature enters, create a 1/1 white and black Inkling creature token with flying.",
     "mana_cost": "{3}{W}"
   },
   {
     "name": "Ajani's Response",
+    "complexity_tier": "medium",
     "tier": "medium",
-    "rationale": "targeted spell or multi-ability creature \u2014 oracle: This spell costs {3} less to cast if it targets a tapped creature.\nDestroy target creature.",
+    "rationale": "targeted spell or multi-ability creature — oracle: This spell costs {3} less to cast if it targets a tapped creature.\nDestroy target creature.",
     "collector_number": "6",
     "type_line": "Instant",
     "oracle_text": "This spell costs {3} less to cast if it targets a tapped creature.\nDestroy target creature.",
@@ -28,20 +31,22 @@
   },
   {
     "name": "Rancorous Archaic",
+    "complexity_tier": "complex",
     "tier": "complex",
-    "rationale": "card with a new SOS mechanic (Prepared, Converge, or Opus) \u2014 oracle: Trample, reach\nConverge \u2014 This creature enters with a +1/+1 counter on it for each color of mana spent to cast it.",
+    "rationale": "card with a new SOS mechanic (Prepared, Converge, or Opus) — oracle: Trample, reach\nConverge — This creature enters with a +1/+1 counter on it for each color of mana spent to cast it.",
     "collector_number": "2",
-    "type_line": "Creature \u2014 Avatar",
-    "oracle_text": "Trample, reach\nConverge \u2014 This creature enters with a +1/+1 counter on it for each color of mana spent to cast it.",
+    "type_line": "Creature — Avatar",
+    "oracle_text": "Trample, reach\nConverge — This creature enters with a +1/+1 counter on it for each color of mana spent to cast it.",
     "mana_cost": "{5}"
   },
   {
     "name": "Ral Zarek, Guest Lecturer",
+    "complexity_tier": "expert",
     "tier": "expert",
-    "rationale": "planeswalker or card with Miracle \u2014 oracle: +1: Surveil 2.\n\u22121: Any number of target players each discard a card.\n\u22122: Return target creature card with mana value 3 o",
+    "rationale": "planeswalker or card with Miracle — oracle: +1: Surveil 2.\n−1: Any number of target players each discard a card.\n−2: Return target creature card with mana value 3 o",
     "collector_number": "97",
-    "type_line": "Legendary Planeswalker \u2014 Ral",
-    "oracle_text": "+1: Surveil 2.\n\u22121: Any number of target players each discard a card.\n\u22122: Return target creature card with mana value 3 or less from your graveyard to the battlefield.\n\u22127: Flip five coins. Target opponent skips their next X turns, where X is the number of coins that came up heads.",
+    "type_line": "Legendary Planeswalker — Ral",
+    "oracle_text": "+1: Surveil 2.\n−1: Any number of target players each discard a card.\n−2: Return target creature card with mana value 3 or less from your graveyard to the battlefield.\n−7: Flip five coins. Target opponent skips their next X turns, where X is the number of coins that came up heads.",
     "mana_cost": "{1}{B}{B}"
   }
 ]

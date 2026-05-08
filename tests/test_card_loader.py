@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from benchmark.card_loader import (
+from silverquillm.card_loader import (
     filter_by_collectors,
     filter_by_prototype,
     load_card_specs,

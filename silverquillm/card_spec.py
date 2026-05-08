@@ -139,7 +139,7 @@ def generate_all_specs(set_code: str, output_dir: str) -> list[Path]:
                 f"Re-run the classifier to update classification data."
             )
         tier_info = classified[cn]
-        tier = tier_info["tier"]
+        tier = tier_info.get("complexity_tier", tier_info.get("tier", "unknown"))
 
         meta = _scryfall_to_metadata(raw_card)
         loyalty = raw_card.get("loyalty")

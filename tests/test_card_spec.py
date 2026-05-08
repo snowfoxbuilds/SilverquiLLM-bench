@@ -71,14 +71,14 @@ class TestGenerateCardSpecSchema:
     """generate_card_spec must return a dict with all required schema fields."""
 
     def test_returns_dict(self) -> None:
-        from benchmark.card_spec import generate_card_spec
+        from silverquillm.card_spec import generate_card_spec
 
         card = _make_card()
         result = generate_card_spec(card, "simple")
         assert isinstance(result, dict)
 
     def test_contains_all_schema_fields(self) -> None:
-        from benchmark.card_spec import generate_card_spec
+        from silverquillm.card_spec import generate_card_spec
 
         card = _make_card()
         result = generate_card_spec(card, "medium")
@@ -87,7 +87,7 @@ class TestGenerateCardSpecSchema:
 
     def test_no_extra_fields(self) -> None:
         """Spec dict should only contain the defined schema fields."""
-        from benchmark.card_spec import generate_card_spec
+        from silverquillm.card_spec import generate_card_spec
 
         card = _make_card()
         result = generate_card_spec(card, "simple")
@@ -95,7 +95,7 @@ class TestGenerateCardSpecSchema:
         assert not extra, f"Unexpected extra fields: {extra}"
 
     def test_complexity_tier_matches_input(self) -> None:
-        from benchmark.card_spec import generate_card_spec
+        from silverquillm.card_spec import generate_card_spec
 
         card = _make_card()
         for tier in ("trivial", "simple", "medium", "complex", "expert"):
@@ -112,28 +112,28 @@ class TestGenerateCardSpecValues:
     """Field values are correctly mapped from CardMetadata."""
 
     def test_name_matches(self) -> None:
-        from benchmark.card_spec import generate_card_spec
+        from silverquillm.card_spec import generate_card_spec
 
         card = _make_card(name="Goblin Guide")
         result = generate_card_spec(card, "simple")
         assert result["name"] == "Goblin Guide"
 
     def test_mana_cost_matches(self) -> None:
-        from benchmark.card_spec import generate_card_spec
+        from silverquillm.card_spec import generate_card_spec
 
         card = _make_card(mana_cost_str="{2}{R}")
         result = generate_card_spec(card, "simple")
         assert result["mana_cost"] == "{2}{R}"
 
     def test_type_line_matches(self) -> None:
-        from benchmark.card_spec import generate_card_spec
+        from silverquillm.card_spec import generate_card_spec
 
         card = _make_card(type_line="Enchantment — Aura")
         result = generate_card_spec(card, "medium")
         assert result["type_line"] == "Enchantment — Aura"
 
     def test_colors_is_list(self) -> None:
-        from benchmark.card_spec import generate_card_spec
+        from silverquillm.card_spec import generate_card_spec
 
         card = _make_card(colors=["R", "G"])
         result = generate_card_spec(card, "simple")
@@ -141,7 +141,7 @@ class TestGenerateCardSpecValues:
         assert result["colors"] == ["R", "G"]
 
     def test_keywords_is_list(self) -> None:
-        from benchmark.card_spec import generate_card_spec
+        from silverquillm.card_spec import generate_card_spec
 
         card = _make_card(keywords=["Flying", "Haste"])
         result = generate_card_spec(card, "simple")
@@ -149,14 +149,14 @@ class TestGenerateCardSpecValues:
         assert result["keywords"] == ["Flying", "Haste"]
 
     def test_set_code_matches(self) -> None:
-        from benchmark.card_spec import generate_card_spec
+        from silverquillm.card_spec import generate_card_spec
 
         card = _make_card(set_code="sos")
         result = generate_card_spec(card, "trivial")
         assert result["set_code"] == "sos"
 
     def test_collector_number_matches(self) -> None:
-        from benchmark.card_spec import generate_card_spec
+        from silverquillm.card_spec import generate_card_spec
 
         card = _make_card(collector_number="123")
         result = generate_card_spec(card, "trivial")
@@ -173,7 +173,7 @@ class TestNullabilityRules:
 
     def test_creature_has_non_null_power_toughness(self) -> None:
         """Creature cards must have non-null power and toughness."""
-        from benchmark.card_spec import generate_card_spec
+        from silverquillm.card_spec import generate_card_spec
 
         card = _make_card(
             type_line="Creature — Elf Warrior",
@@ -186,7 +186,7 @@ class TestNullabilityRules:
 
     def test_non_creature_has_null_power_toughness(self) -> None:
         """Non-creature cards should have null power and toughness."""
-        from benchmark.card_spec import generate_card_spec
+        from silverquillm.card_spec import generate_card_spec
 
         card = _make_card(
             type_line="Instant",
@@ -200,7 +200,7 @@ class TestNullabilityRules:
 
     def test_non_planeswalker_has_null_loyalty(self) -> None:
         """Non-planeswalker cards should have null loyalty."""
-        from benchmark.card_spec import generate_card_spec
+        from silverquillm.card_spec import generate_card_spec
 
         card = _make_card(type_line="Creature — Human")
         result = generate_card_spec(card, "simple")
@@ -208,7 +208,7 @@ class TestNullabilityRules:
 
     def test_creature_non_null_fields(self) -> None:
         """All non-nullable fields on a creature should be non-null."""
-        from benchmark.card_spec import generate_card_spec
+        from silverquillm.card_spec import generate_card_spec
 
         card = _make_card(
             name="Test Creature",
@@ -230,7 +230,7 @@ class TestNullabilityRules:
 
     def test_instant_non_null_fields(self) -> None:
         """All non-nullable fields on an instant should be non-null (except power/toughness/loyalty)."""
-        from benchmark.card_spec import generate_card_spec
+        from silverquillm.card_spec import generate_card_spec
 
         card = _make_card(
             name="Lightning Strike",
@@ -259,7 +259,7 @@ class TestSpecJsonSerialization:
     """Spec dicts must be valid JSON-serializable."""
 
     def test_spec_is_json_serializable(self) -> None:
-        from benchmark.card_spec import generate_card_spec
+        from silverquillm.card_spec import generate_card_spec
 
         card = _make_card()
         spec = generate_card_spec(card, "simple")
@@ -268,7 +268,7 @@ class TestSpecJsonSerialization:
         assert isinstance(json_str, str)
 
     def test_spec_roundtrips_through_json(self) -> None:
-        from benchmark.card_spec import generate_card_spec
+        from silverquillm.card_spec import generate_card_spec
 
         card = _make_card(
             name="Roundtrip Card",
@@ -290,7 +290,7 @@ class TestGenerateAllSpecs:
 
     def test_creates_files_for_sos(self) -> None:
         """generate_all_specs should create at least one file for SOS set."""
-        from benchmark.card_spec import generate_all_specs
+        from silverquillm.card_spec import generate_all_specs
 
         with tempfile.TemporaryDirectory() as tmpdir:
             old_cwd = os.getcwd()
@@ -304,7 +304,7 @@ class TestGenerateAllSpecs:
 
     def test_each_file_is_named_card_spec_json(self) -> None:
         """Every output file should be named card_spec.json."""
-        from benchmark.card_spec import generate_all_specs
+        from silverquillm.card_spec import generate_all_specs
 
         with tempfile.TemporaryDirectory() as tmpdir:
             old_cwd = os.getcwd()
@@ -319,7 +319,7 @@ class TestGenerateAllSpecs:
 
     def test_output_path_contains_collector_number(self) -> None:
         """Each file is in a directory named by collector_number."""
-        from benchmark.card_spec import generate_all_specs
+        from silverquillm.card_spec import generate_all_specs
 
         with tempfile.TemporaryDirectory() as tmpdir:
             old_cwd = os.getcwd()
@@ -336,7 +336,7 @@ class TestGenerateAllSpecs:
 
     def test_each_file_is_valid_json(self) -> None:
         """Every generated file should contain valid parseable JSON."""
-        from benchmark.card_spec import generate_all_specs
+        from silverquillm.card_spec import generate_all_specs
 
         with tempfile.TemporaryDirectory() as tmpdir:
             old_cwd = os.getcwd()
@@ -353,7 +353,7 @@ class TestGenerateAllSpecs:
 
     def test_each_file_has_all_schema_fields(self) -> None:
         """Every generated JSON file should have all schema fields."""
-        from benchmark.card_spec import generate_all_specs
+        from silverquillm.card_spec import generate_all_specs
 
         with tempfile.TemporaryDirectory() as tmpdir:
             old_cwd = os.getcwd()
@@ -370,7 +370,7 @@ class TestGenerateAllSpecs:
 
     def test_one_file_per_card(self) -> None:
         """Number of files should match number of cards in SOS data."""
-        from benchmark.card_spec import generate_all_specs
+        from silverquillm.card_spec import generate_all_specs
 
         sos_data_path = REPO_ROOT / "benchmarks" / "sos" / "data" / "sos.json"
         with open(sos_data_path, encoding="utf-8") as f:
@@ -400,7 +400,7 @@ class TestSOSSpecNullability:
     @pytest.fixture()
     def sos_specs(self) -> list[dict]:
         """Generate all SOS specs and return the parsed dicts."""
-        from benchmark.card_spec import generate_all_specs
+        from silverquillm.card_spec import generate_all_specs
 
         with tempfile.TemporaryDirectory() as tmpdir:
             old_cwd = os.getcwd()

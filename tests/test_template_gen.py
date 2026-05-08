@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from benchmark.template_gen import card_name_to_class_name, generate_template
+from silverquillm.template_gen import card_name_to_class_name, generate_template
 
 
 # ---------------------------------------------------------------------------

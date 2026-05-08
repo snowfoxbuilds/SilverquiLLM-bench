@@ -35,13 +35,13 @@ class TestBenchmarkPackageImport:
     """Verify the benchmark runner package is importable."""
 
     def test_import_benchmark_succeeds(self) -> None:
-        """'import benchmark' must succeed without errors."""
-        import benchmark  # noqa: F401
+        """'import silverquillm' must succeed without errors."""
+        import silverquillm  # noqa: F401
 
     def test_benchmark_is_a_package(self) -> None:
         """benchmark/ should be a proper package with __init__.py."""
-        init_path = REPO_ROOT / "benchmark" / "__init__.py"
-        assert init_path.exists(), "benchmark/__init__.py must exist"
+        init_path = REPO_ROOT / "silverquillm" / "__init__.py"
+        assert init_path.exists(), "silverquillm/__init__.py must exist"
 
 
 class TestBenchmarksSosDirectoryStructure:

@@ -13,17 +13,58 @@ from pathlib import Path
 
 import click
 
-from benchmark.agent_session import AgentSession
-from benchmark.card_loader import filter_by_collectors, filter_by_prototype, load_card_specs
-from benchmark.config import BenchmarkConfig, load_config
-from benchmark.evaluator import run_self_eval_flat
-from benchmark.results import init_results_dir, save_aggregates, save_card_result, save_run_summary
-from benchmark.scorer import compute_scores, generate_leaderboard
-from benchmark.run_utils import _session_results_to_dicts
+from silverquillm.agent_session import (
+    AgentSession,
+    commit_engine_changes,
+    compute_engine_diff,
+    init_run_engine,
+    save_engine_final,
+)
+from silverquillm.card_loader import filter_by_collectors, filter_by_prototype, load_card_specs
+from silverquillm.config import BenchmarkConfig, load_config
+from silverquillm.evaluator import run_self_eval_flat
+from silverquillm.results import init_results_dir, save_aggregates, save_card_result, save_run_summary
+from silverquillm.scorer import compute_scores, generate_leaderboard
+from silverquillm.regression import CompletedCard, run_regressions
+from silverquillm.run_utils import _session_results_to_dicts
 
 
 # Resolve data paths relative to this file's location
 _BENCHMARKS_DIR = Path(__file__).resolve().parent.parent / "benchmarks"
+
+# Tier ordering for sequential processing (trivial → expert).
+# Unknown tiers sort last (high sentinel value).
+_TIER_ORDER: dict[str, int] = {
+    "trivial": 0,
+    "simple": 1,
+    "medium": 2,
+    "complex": 3,
+    "expert": 4,
+}
+_UNKNOWN_TIER_SENTINEL = max(_TIER_ORDER.values()) + 1
+
+
+def _sort_cards_by_tier(specs: list[dict]) -> list[dict]:
+    """Sort card specs by complexity tier then collector number.
+
+    Ensures the agent processes simpler cards first, building up engine
+    capabilities gradually.  Within the same tier, cards are sorted by
+    collector number ascending for determinism.  Unknown tiers are placed
+    last.
+    """
+
+    def _sort_key(spec: dict) -> tuple[int, int | float, str]:
+        tier = spec.get("complexity_tier", spec.get("tier", ""))
+        tier_rank = _TIER_ORDER.get(tier, _UNKNOWN_TIER_SENTINEL)
+        collector = spec.get("collector_number", spec.get("number", ""))
+        collector_str = str(collector)
+        try:
+            collector_num: int | float = int(collector_str)
+        except (ValueError, TypeError):
+            collector_num = float("inf")
+        return (tier_rank, collector_num, collector_str)
+
+    return sorted(specs, key=_sort_key)
 
 
 @click.group()
@@ -71,12 +112,15 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
         except (ValueError, FileNotFoundError) as exc:
             raise click.ClickException(f"Prototype filter error: {exc}")
 
+    # Sort cards by complexity tier (trivial → expert), then collector number
+    specs = _sort_cards_by_tier(specs)
+
     # Print summary
     click.echo(f"Config loaded: {cfg.name}")
     click.echo(f"Cards: {len(specs)}")
     for spec in specs:
         name = spec.get("name", "???")
-        tier = spec.get("complexity_tier", "unknown")
+        tier = spec.get("complexity_tier", spec.get("tier", "unknown"))
         click.echo(f"  [{tier}] {name}")
 
     if dry_run:
@@ -87,7 +131,11 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
     run_dir = init_results_dir(cfg)
     total = len(specs)
     failures: list[tuple[str, Exception]] = []
+    completed_cards: list[CompletedCard] = []
     start_time = time.time()
+
+    # Persistent engine: initialise run-level engine directory
+    run_engine_dir = init_run_engine(run_dir)
 
     for i, spec in enumerate(specs, 1):
         card_name = spec.get("name", "???")
@@ -96,7 +144,10 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
 
         session: AgentSession | None = None
         try:
-            session = AgentSession(config=cfg, card_spec=spec, card_dir=card_dir)
+            session = AgentSession(
+                config=cfg, card_spec=spec, card_dir=card_dir,
+                run_engine_dir=run_engine_dir,
+            )
             workspace = session.setup_workspace()
 
             blind_result = session.run_blind_implementation(workspace)
@@ -115,6 +166,37 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
 
             save_card_result(run_dir, collector_number, blind_dict, test_dict)
 
+            # Capture engine diff before committing changes
+            card_results_dir = run_dir / "cards" / str(collector_number)
+            compute_engine_diff(workspace, run_engine_dir, card_results_dir)
+
+            # Commit engine changes back to run-level directory
+            commit_engine_changes(workspace, run_engine_dir)
+
+            # Run regressions against all previously-completed cards
+            if completed_cards:
+                regression_result = run_regressions(
+                    completed_cards,
+                    run_engine_dir=run_engine_dir,
+                )
+                if regression_result.has_failures:
+                    click.echo(
+                        f"[{i}/{total}] {card_name}: "
+                        f"regressions={regression_result.cards_failed}/{regression_result.total_cards} failed",
+                        err=True,
+                    )
+
+            # Record this card as completed for future regression runs
+            tests_path = card_results_dir / "tests.py"
+            impl_path = card_results_dir / "tested_impl.py"
+            if tests_path.exists():
+                completed_cards.append(CompletedCard(
+                    card_id=str(collector_number),
+                    workspace=card_results_dir,
+                    tests_file=tests_path,
+                    impl_file=impl_path if impl_path.exists() else None,
+                ))
+
             blind_status = blind_result.status
             tested_status = tested_result.status if tested_result else "skipped"
             click.echo(
@@ -128,6 +210,9 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
         finally:
             if session is not None:
                 session.cleanup()
+
+    # Save final engine state as a run artifact
+    save_engine_final(run_engine_dir, run_dir)
 
     # --- Post-loop: self-eval and summary ---
     elapsed = time.time() - start_time
@@ -201,7 +286,7 @@ def eval_cmd(results_dir: str, audited_tests: str | None) -> None:
     """Run evaluation on existing results."""
     import yaml
 
-    from benchmark.evaluator import EvalResult, run_self_eval_flat, run_tests
+    from silverquillm.evaluator import EvalResult, run_self_eval_flat, run_tests
 
     results_path = Path(results_dir)
     if not results_path.exists():
@@ -352,7 +437,8 @@ def score(results_dir: str, tier_data: str | None, set_code: str) -> None:
 
     # Build collector_number → tier mapping
     tier_map: dict[str, str] = {
-        entry["collector_number"]: entry["tier"] for entry in classified
+        entry["collector_number"]: entry.get("complexity_tier", entry.get("tier", "unknown"))
+        for entry in classified
     }
 
     # Compute scores
@@ -389,7 +475,7 @@ def cards(set_code: str) -> None:
     click.echo(f"Cards in set {set_code}: {len(card_list)}")
     for card in card_list:
         name = card.get("name", "???")
-        tier = card.get("tier", "unknown")
+        tier = card.get("complexity_tier", card.get("tier", "unknown"))
         click.echo(f"  [{tier}] {name}")
 
 

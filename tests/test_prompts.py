@@ -18,7 +18,7 @@ import re
 
 import pytest
 
-from benchmark.prompts import (
+from silverquillm.prompts import (
     blind_implementation_prompt,
     iteration_feedback_prompt,
     test_informed_prompt,

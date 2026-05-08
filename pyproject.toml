@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-benchmark = "benchmark.cli:main"
+benchmark = "silverquillm.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -27,7 +27,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["engine*", "cards*", "benchmark*", "benchmarks*"]
+include = ["engine*", "cards*", "silverquillm*", "benchmarks*"]
 
 [tool.setuptools.package-data]
 engine = ["py.typed"]

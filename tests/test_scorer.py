@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from benchmark.scorer import (
+from silverquillm.scorer import (
     AgentCat1Scores,
     AgentCat2Scores,
     AgentCat3Scores,
