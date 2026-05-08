@@ -31,24 +31,20 @@ graph TD
 ### Runner Configuration
 
 ```yaml
-benchmark:
-  name: "silverquillm-v1-strixhaven"
-  set_code: "SOS"
-model:
-  name: "deepseek-v4-flash"
-  provider: "openai-compatible"   # or "anthropic", "openai", etc.
-  endpoint: "http://localhost:8080"  # for local llama.cpp servers
-  max_context: 200000
-  temperature: 0.0
+name: "SOS Benchmark Run"
+set_code: "SOS"
+model_name: "claude-sonnet-4-20250514"
+model_provider: "anthropic"
+max_context: 200000
+temperature: 0.0
 agent:
   adapter: "opencode"              # one of: opencode | claude_code | aider | pi
   max_test_rounds: 3
   timeout_per_card: 300
   disable_web_search: true
-paths:
-  benchmarks_dir: "./benchmarks/"
-  engine_docs: "./docs/engine_api.md"
-  output_dir: "./benchmarks/sos/results/"
+card_specs_dir: "benchmarks/sos/cards"
+engine_docs_path: "docs/engine_api.md"
+output_dir: "benchmarks/sos/results"
 ```
 
 ### Multi-Agent Support
@@ -105,9 +101,9 @@ Files provided to the agent in each card's workspace:
 - `test_utils.md` — Test utilities documentation (always available; referenced in Step 2 prompt)
 - `test_utils.py` — Test utilities module (always available; agent is instructed not to write tests in Step 1)
 - `template.py` — Skeleton with standardized class name and imports
-- `rules_overview.md` — Brief MTG rules overview + lookup skill docs
+- `rules_overview.md` — Brief MTG rules overview + best practices for grepping the full rules
+- `comprehensive_rules.txt` — Full MTG comprehensive rules (available for grepping; agents manage their own context budget)
 - `foundations/` — Browsable codebase of Foundations card implementations (read-only, not bulk-loaded)
-- **Rules lookup skill** — Tool to search MTG rules by rule number, keyword, or mechanic
 Context limit: 200K tokens. Agent manages its own context budget.
 
 Not provided (contamination controls): no target set implementations, no XMage Java source, no internet, no other agents' work.
@@ -144,7 +140,8 @@ You have access to:
 - engine_api.md (game engine API reference)
 - engine/ (game engine source — you may extend it if this card needs mechanics not yet supported)
 - base_classes.py (card base classes)
-- rules_overview.md + rules lookup tool (search MTG rules by keyword/number)
+- rules_overview.md (brief rules overview + grep best practices)
+- comprehensive_rules.txt (full rules, available for grepping)
 - foundations/ (browse working card implementations as reference)
 
 Write your implementation to `blind_impl.py`.
@@ -191,13 +188,12 @@ You have up to 3 rounds to iterate on both tests and code.
     "complexity_tier": "medium",
     "implementation": {
         "blind_tokens": {"input": 8200, "output": 4250, "total": 12450},
-        "blind_runtime_seconds": 45.2,
+        "blind_runtime_ms": 45200,
         "blind_peak_context": 52000,
         "tested_tokens": {"input": 18400, "output": 10400, "total": 28800},
-        "tested_runtime_seconds": 120.5,
+        "tested_runtime_ms": 120500,
         "tested_peak_context": 98000,
         "test_iterations": 2,
-        "rules_lookups": 3
     },
     "self_eval": {
         "blind": {"passed": 5, "failed": 3, "total": 8},
@@ -235,7 +231,7 @@ Since agent export tools (e.g. `opencode export`) are unreliable, the runner cap
 ```json
 {"ts": "2026-05-07T10:01:23Z", "round": 1, "phase": "blind", "event": "agent_start", "prompt_hash": "abc123"}
 {"ts": "2026-05-07T10:02:45Z", "round": 1, "phase": "blind", "event": "agent_output", "stream": "stdout", "text": "Thinking: I need to implement..."}
-{"ts": "2026-05-07T10:03:10Z", "round": 1, "phase": "blind", "event": "agent_finish", "exit_code": 0, "runtime_seconds": 107.2}
+{"ts": "2026-05-07T10:03:10Z", "round": 1, "phase": "blind", "event": "agent_finish", "exit_code": 0, "runtime_ms": 107200}
 {"ts": "2026-05-07T10:03:11Z", "round": 1, "phase": "blind", "event": "file_diff", "path": "card_impl.py", "diff": "+class EagerGlyphmage(Creature):..."}
 {"ts": "2026-05-07T10:03:15Z", "round": 1, "phase": "test", "event": "pytest_result", "passed": 5, "failed": 3, "output": "..."}
 ```
@@ -362,12 +358,11 @@ The runner tracks per-card and aggregate:
 
 - **Token counts**: input, output, total (per step and cumulative)
 - **Peak context**: maximum context window usage during session
-- **Time spent**: wall-clock time per step and total
-- **Rules lookups**: number of rules lookup skill invocations
+- **Time spent**: wall-clock time per step and total (stored as milliseconds internally, displayed as seconds in output)
 ## Decisions
 
-- **200K token context limit**: Agent manages own budget; rules via lookup skill, not bulk-loaded. [SETTLED]
-- **Rules as lookup skill**: Rules indexed by section/keyword; agent decides what to look up. [SETTLED]
+- **200K token context limit**: Agent manages own budget; comprehensive rules available for grepping but expensive to bulk-load. [SETTLED]
+- **Rules as greppable file**: Comprehensive rules available in workspace as a file; agent greps for relevant sections. Best-practices doc provided in `rules_overview.md`. Replaces tool-based lookup for adapter fairness. [UPDATED]
 - **Cost tracking enabled**: Token counts, peak context, and time tracked per card. [SETTLED]
 - **foundations/ as browsable codebase**: Agent can list/read files, not expected to ingest everything. [SETTLED]
 - **Standardized class names**: [template.py](http://template.py/) fixes class name and import path for cross-eval compatibility. [SETTLED]

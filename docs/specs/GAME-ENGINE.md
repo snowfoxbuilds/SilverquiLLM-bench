@@ -14,7 +14,7 @@ XMage is the reference open-source Java implementation (28,000+ cards, battle-te
 
 ### Porting Strategy
 
-Source: `github.com/magefree/mage` (Java, GPL-2.0)
+Source: `github.com/magefree/mage` (Java, MIT)
 
 **What to port:**
 
@@ -23,7 +23,7 @@ Source: `github.com/magefree/mage` (Java, GPL-2.0)
 - MTG Foundations cards — ~260 cards as the base set
 **How to port:**
 
-- Preserve XMage's class hierarchy; translate to Pythonic idioms (snake_case, dataclasses, type hints). Requires Python ≥3.12.
+- Preserve XMage's class hierarchy; translate to Pythonic idioms (snake_case, dataclasses, type hints). Requires Python ≥3.12. All project config (`pyproject.toml`, `ruff.toml`) must target 3.12.
 - 1:1 logic mapping — each XMage Java method gets a corresponding Python method
 - Tests alongside port — verify each subsystem and card matches XMage behavior
 - Incremental — port in dependency order: zones → mana → stack → combat → triggers → continuous effects → cards
@@ -51,12 +51,12 @@ Source: `github.com/magefree/mage` (Java, GPL-2.0)
 
 The Foundations card pool is the primary reference set that agents can browse during benchmarking. The initial target is ~260 cards from the MTG Foundations set, but the pool should be **expanded beyond vanilla Foundations** to ensure agents have working examples of diverse mechanics they'll encounter in target sets.
 
-**Core pool (~260 cards):** Direct XMage port of MTG Foundations. Serves as:
+**Core pool (FDN 001–291, limited format cards):** Direct XMage port of MTG Foundations limited format pool. Serves as:
 
 1. Engine validation — all Foundations tests passing = core mechanics correct
 2. Agent reference — agents browse these as working examples during benchmarking
 3. Regression suite — catches engine regressions
-**Expanded pool (target: 350-400 cards):** Add cards from other sets that demonstrate mechanics likely to appear in the target set but absent from Foundations. For Strixhaven (SOS), this includes:
+**Expanded pool (deferred to post-base-set):** Add cards from other sets that demonstrate mechanics likely to appear in the target set but absent from Foundations. Scoped after Base Set is complete and validated. For Strixhaven (SOS), candidates include:
 
 - **Ward** — Not in Foundations; add exemplar cards (e.g. Frost Titan, Iridescent Hornbeetle)
 - **Magecraft** — Strixhaven-specific; add a few simple magecraft cards as reference
@@ -163,8 +163,9 @@ Multiplayer, sideboard/best-of-three, companion/partner, dungeons/Ring, day/nigh
 ## Decisions
 
 - **Port XMage, not build from scratch**: XMage's rules logic is the ground truth. [SETTLED]
-- **Porting scope: Foundations + targeted expansions**: Core set is Foundations (~260 cards). Expanded pool adds 100-150 cards from other sets to cover mechanics needed by the target set. [UPDATED]
-- **MIT license**: SilverquiLLM-bench is open source under MIT, matching XMage's license. [UPDATED]
+- **Porting scope: Foundations limited pool + targeted expansions**: Core set is FDN 001–291 (~291 limited format cards). Expanded pool deferred until base set is complete and validated via Replay Validation. [UPDATED]
+- **Base set validated via Replay Validation**: Engine correctness verified by replaying 17lands MTGA game data and checking game-state checkpoints. Replaces XMage differential testing — MTGA is closer to ground truth and avoids cross-language comparison complexity. [SETTLED]
+- **MIT license**: SilverquiLLM-bench and XMage are both MIT licensed. [SETTLED]
 - **DeterministicPlayer only for v1**: Pre-determined board states, no AI player. StrategyPlayer deferred. [SETTLED]
 - **Foundations card audit deferred to implementation**: Pull card list from Scryfall/MTGJson during Phase 1. [SETTLED]
 - **Engine writable during benchmark runs**: Agents may extend the engine to support new mechanics. Changes persist across cards within a run. Regression tested after each card. [SETTLED]

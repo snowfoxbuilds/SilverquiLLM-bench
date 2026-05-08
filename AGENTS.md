@@ -12,8 +12,8 @@ LLM benchmark that evaluates coding ability by tasking models with implementing 
 - License: MIT (matching XMage)
 - Card implementations: one class per card, subclassing `CardImpl`
 - Tests: pytest with `test_utils` helpers, max 30 per card
-- Three scoring categories: blind implementation, implementation with tests, test quality
-- Development order: Phase 1 (engine) → Phase 2 (harness prototype with real SOS cards) → Phase 3 (full run)
+- Four scoring categories: blind implementation, implementation with tests, test quality, engine extension quality
+- Development order: Phase 1 (engine) → Phase 2 (harness prototype) → Phase 3 (adapters, persistent engine) → Phase 4 (base set completion, pipeline validation) → Phase 5 (scored runs)
 ## Domain Language
 
 See [CONTEXT.md](http://context.md/) for the project's domain glossary.

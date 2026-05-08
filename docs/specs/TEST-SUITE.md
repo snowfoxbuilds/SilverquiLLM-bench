@@ -92,16 +92,22 @@ def declare_blockers(game, blocks) -> None: ...
 | Planeswalkers | 15-25 |
 | Full set (~250-300 cards) | ~2,000-4,000 total |
 
-### Artifacts Per Card Per Agent
+### Artifacts Per Card
+
+Artifacts are scoped per run (one run = one agent/model). Layout matches [BENCHMARK-RUNNER.md](http://benchmark-runner.md/):
 
 ```javascript
-cards/{card_id}/{agent_name}/
+results/{run_name}/cards/{card_id}/
 ├── blind_impl.py
 ├── tested_impl.py
 ├── tests.py
-├── iteration_1/ (tests.py + impl.py)
-├── iteration_2/ ...
-└── iteration_3/ ...
+├── result.json
+├── postmortem.jsonl
+├── agent_thoughts.md
+├── iterations/
+│   ├── round_1/ (impl.py + tests.py + pytest_output.txt)
+│   └── round_2/ ...
+└── audited_tests.py          # Gold-standard tests (if audited)
 ```
 
 ### Test Audit Web Tool
@@ -113,14 +119,12 @@ Web interface for human reviewers to:
 - Select best tests across agents into audited suite
 - Add manual tests for uncovered gaps
 - Export curated suite for final evaluation
-### Differential Testing (Post-Hoc)
+### Replay Validation (Engine Correctness)
 
-Once XMage implements Secrets of Strixhaven:
+Engine correctness is validated by replaying recorded MTGA game data (sourced from 17lands) through the Python engine and verifying game-state checkpoints match recorded outcomes. This replaces the originally planned XMage differential testing — Replay Validation is more valuable because MTGA is WotC's own rules implementation, and cross-language Java↔Python comparison adds complexity without confidence.
 
-1. Convert audited tests to engine-agnostic JSON scenarios
-2. Execute in both Python engine + XMage via Java adapter
-3. Compare final states; flag discrepancies
-4. Validates the audited test suite itself
+The Replay Validation pipeline is built after all FDN 001–291 cards are implemented. First benchmark runs proceed without it as Pipeline Validation Runs.
+
 ## Decisions
 
 - **Agents write their own tests**: Test quality is part of evaluation, not pre-built. [SETTLED]

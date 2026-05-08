@@ -20,7 +20,7 @@ Third evaluation layer: all agents' implementations tested against human-curated
 
 **Base Set**
 
-MTG Foundations card pool (~260 cards targeted, ~30-40 currently ported) serving as engine validation, agent reference examples, and regression suite. Ported from XMage Java source.
+MTG Foundations limited format card pool (FDN 001–291). Serves as engine validation, agent reference examples, and regression suite. Ported from XMage Java source. Engine validated via Replay Validation against 17lands MTGA data.
 
 *Avoid*: "foundation cards" (use "Foundations cards" or "base set")
 
@@ -38,9 +38,9 @@ JSON file (`card_spec.json`) containing a card's name, mana cost, type line, and
 
 **Complexity Tier**
 
-Classification of card difficulty: trivial (1×), simple (2×), medium (3×), complex (4×), expert (5×). Assigned via automated heuristics. Used for weighted scoring.
+Classification of card difficulty: trivial (1×), simple (2×), medium (3×), complex (4×), expert (5×). Assigned via automated heuristics. Used for weighted scoring. Canonical key name in code and JSON is `complexity_tier` (not `tier`).
 
-*Avoid*: "difficulty level"
+*Avoid*: "difficulty level", "tier" (as a standalone key name)
 
 **Contamination**
 
@@ -66,11 +66,23 @@ Cards from non-Foundations sets added to give agents reference examples for mech
 
 *Avoid*: "extra cards", "supplemental cards"
 
+**Pipeline Validation Run**
+
+A benchmark run whose purpose is to validate that the orchestration pipeline works end-to-end (adapter integration, workspace setup, postmortem logging, regression checks, scoring). Not intended to produce meaningful scores — audited tests are not required. Precedes scored benchmark runs.
+
+*Avoid*: "test run" (ambiguous), "dry run" (has a different meaning — `--dry-run` flag)
+
 **Postmortem Log**
 
 Structured JSONL file (`postmortem.jsonl`) capturing agent output, file diffs, test results, and reasoning traces per round per card. Primary source for debugging.
 
 *Avoid*: "debug log", "session log"
+
+**Replay Validation**
+
+Engine correctness check that replays recorded MTGA game actions (sourced from 17lands) through the Python engine and verifies game-state checkpoints (life totals, board state, winner) match the recorded outcomes. Primary validation method for the Base Set. Distinct from cross-engine differential testing.
+
+*Avoid*: "differential testing" (that refers to the deprecated XMage comparison approach)
 
 **Self-Eval**
 
@@ -132,3 +144,5 @@ Clean temp directory created per card containing card-specific files (card_spec,
 - Cross-Eval tests every agent's implementations against every other agent's tests (N×N).
 - The Base Set and Expanded Pool together form the reference codebase agents can browse.
 - A Workspace is created per Card Spec within a run, with a writable reference to the Persistent Engine.
+- The Base Set is validated via Replay Validation against 17lands MTGA data before scored benchmark runs.
+- A Pipeline Validation Run precedes scored benchmark runs to verify the orchestration pipeline.

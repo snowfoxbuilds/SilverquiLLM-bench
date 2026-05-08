@@ -50,6 +50,34 @@ Branch: `execute-todo-with-subagents/phase2-harness` → `main`
 - [x] **Result recording + output artifacts** (per-run directory structure)
 - [x] **Prototype card selection + engine gap analysis**
 - [x] **Minimal engine extensions for SOS prototype mechanics** (Converge mana color tracking)
+## Completed 2026-05-08
+
+Phase 3: Multi-Agent Adapters, Postmortem & Spec Alignment (PR #5 — 22 items)
+
+Branch: `execute-todo-with-subagents/phase3-adapters` → `main`
+
+- [x] **Rename ****`benchmark/`**** package to ****`silverquillm/`**
+- [x] **Refactor ****`BenchmarkConfig`**** to use nested ****`agent:`**** block**
+- [x] **Update all ****`BenchmarkConfig`**** consumers for nested agent config**
+- [x] **Create ****`AgentAdapter`**** abstract base class**
+- [x] **Implement ****`OpenCodeAdapter`**
+- [x] **Implement ****`ClaudeCodeAdapter`**
+- [x] **Implement ****`AiderAdapter`**
+- [x] **Implement ****`PiAdapter`**
+- [x] **Refactor ****`agent_session.py`**** to use ****`AgentAdapter`**
+- [x] **Implement postmortem JSONL logging**
+- [x] **Implement ****`agent_thoughts.md`**** narrative generation**
+- [x] **Implement setup questions validation**
+- [x] **Create ****`setup_questions.json`**** question bank**
+- [x] **Audit and align tier key naming (****`tier`**** vs ****`complexity_tier`****)**
+- [x] **Fix prompt templates: add explicit output filenames**
+- [x] **Implement persistent engine per run**
+- [x] **Implement regression test runner**
+- [x] **Sort cards by complexity tier for sequential processing**
+- [x] **Capture engine diffs as per-card artifacts**
+- [x] **Update prompts to inform agents about engine extensibility**
+- [x] **Add Category 4 scoring: Engine Extension Quality**
+- [x] **Expand Foundations card pool (batch 1: +30 cards)**
 ## Completed 2026-05-07
 
 Phase 2.5: CLI Wiring, Contamination Controls & Integration Test (PR #3 — 11 items)
