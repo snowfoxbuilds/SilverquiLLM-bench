@@ -37,7 +37,7 @@ Scope: Fix critical engine bugs, centralize zone-transition infrastructure, then
 
 ### Card Porting Batches
 
-- [ ] **Batch 1: Remaining vanilla & French vanilla creatures (~25–30 cards)**
+- [x] **Batch 1: Remaining vanilla & French vanilla creatures (~25–30 cards)**
   Detail: Implement all remaining FDN creatures with no abilities (vanilla) or only keyword abilities (French vanilla). These are the simplest cards and require zero engine changes. Use the existing `make_vanilla()` factory in `cards/foundations/simple_creatures.py` for pure-stat creatures. For French vanilla creatures with keywords already supported in `engine/types.py::Keyword` (flying, first strike, double strike, trample, vigilance, reach, deathtouch, lifelink, haste, hexproof, menace, defender, flash, indestructible), use `make_vanilla()` with the `keywords` parameter. Register each with `CardMetadata` including correct Scryfall collector numbers. Cross-reference the Scryfall FDN card list against existing implementations to identify what’s missing.
 
   Files: `cards/foundations/simple_creatures.py` (extend or new file `vanilla_creatures_batch2.py`), `cards/registry.py`.

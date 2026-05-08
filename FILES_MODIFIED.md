@@ -23,3 +23,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `engine/game.py` — Refactored destroy(), sacrifice(), exile() to delegate to move_to_zone()
 - `engine/state_based_actions.py` — Refactored _move_to_graveyard() to delegate to move_to_zone()
 - `engine/casting.py` — Refactored _resolve_spell() to use move_to_zone() for both permanent (STACK→BATTLEFIELD) and non-permanent (STACK→GRAVEYARD) spells
+
+## Item 4: Batch 1 — Remaining vanilla & French vanilla creatures
+
+### Tests
+- `tests/cards/test_vanilla_creatures_batch2.py` — 45 tests for 7 Scryfall-verified FDN creatures (stats, keywords, registry, integration)
+
+### Implementation
+- `cards/foundations/vanilla_creatures_batch2.py` — Rewrote to 7 real FDN creatures: Fire Elemental, Gigantosaurus, Quakestrider Ceratops, Elementalist Adept, Skyraker Giant, Swiftblade Vindicator, Zetalpa Primal Dawn
