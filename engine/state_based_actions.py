@@ -257,7 +257,7 @@ def _sba_aura_unattached(game: GameState) -> bool:
 
     for player in game.players:
         for obj in _battlefield(game, player).get_all():
-            if hasattr(obj, "attached_to") and getattr(obj, "is_aura", True):
+            if hasattr(obj, "attached_to") and getattr(obj, "is_aura", False):
                 target = obj.attached_to
                 if target is None or id(target) not in all_on_battlefield:
                     to_remove.append((player, obj))

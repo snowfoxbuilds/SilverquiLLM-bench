@@ -6,7 +6,7 @@ Scope: Fix critical engine bugs, centralize zone-transition infrastructure, then
 
 ### Prerequisites
 
-- [ ] **Fix ****`is_aura`**** default ****`True`**** in ****`_sba_aura_unattached`**
+- [x] **Fix ****`is_aura`**** default ****`True`**** in ****`_sba_aura_unattached`**
   Detail: In `engine/state_based_actions.py`, the function `_sba_aura_unattached()` contains `getattr(obj, "is_aura", True)`. This means any object with an `attached_to` attribute but no explicit `is_aura` attr (e.g., Equipment cards like Bonesplitter, Swiftfoot Boots) is incorrectly treated as an unattached aura and sacrificed by SBAs. Change the default to `False`: `getattr(obj, "is_aura", False)`. This is a one-line fix but blocks all Equipment cards from functioning correctly.
 
   Files: `engine/state_based_actions.py` (line with `getattr(obj, "is_aura", True)` in `_sba_aura_unattached`).

@@ -85,6 +85,25 @@ def _make_aura(name: str = "Pacifism", attached_to: object | None = None) -> Sim
 
     Unlike creatures, auras have an ``attached_to`` attribute but typically
     no ``toughness`` — so we give them a name and the attachment reference.
+    Sets ``is_aura=True`` so the SBA aura-unattached check recognises it.
+    """
+    return SimpleNamespace(
+        name=name,
+        attached_to=attached_to,
+        supertypes=set(),
+        is_token=False,
+        is_aura=True,
+    )
+
+
+def _make_equipment(
+    name: str = "Bonesplitter",
+    attached_to: object | None = None,
+) -> SimpleNamespace:
+    """Create a mock equipment artifact.
+
+    Equipment has ``attached_to`` but does NOT have ``is_aura`` set,
+    so state-based actions should never treat it as an unattached aura.
     """
     return SimpleNamespace(
         name=name,
@@ -665,3 +684,107 @@ class TestMultipleSBAs:
         # Zero toughness: fragile in graveyard
         assert not _battlefield(game, 0).contains(fragile)
         assert _graveyard(game, 0).contains(fragile)
+
+
+# ===========================================================================
+# Equipment (non-aura) should NOT be sacrificed by aura SBA
+# ===========================================================================
+class TestEquipmentNotTreatedAsAura:
+    """SBA fix: objects with ``attached_to`` but no ``is_aura`` must not be
+    sacrificed by the aura-unattached state-based action.
+
+    This verifies the fix for ``getattr(obj, 'is_aura', True)`` → ``False``.
+    """
+
+    def test_equipped_equipment_stays_on_battlefield(self) -> None:
+        """Equipment attached to a creature on the battlefield must survive SBAs."""
+        game = _make_game()
+        creature = _make_creature(name="Bear", toughness=2)
+        equipment = _make_equipment(name="Bonesplitter", attached_to=creature)
+        _battlefield(game, 0).add(creature)
+        _battlefield(game, 0).add(equipment)
+
+        resolve_state_based_actions(game)
+
+        assert _battlefield(game, 0).contains(equipment), (
+            "Equipment attached to a creature should remain on the battlefield"
+        )
+        assert _battlefield(game, 0).contains(creature)
+
+    def test_unequipped_equipment_stays_on_battlefield(self) -> None:
+        """Equipment sitting on the battlefield with attached_to=None must NOT
+        be treated as an unattached aura and sacrificed."""
+        game = _make_game()
+        equipment = _make_equipment(name="Swiftfoot Boots", attached_to=None)
+        _battlefield(game, 0).add(equipment)
+
+        result = check_state_based_actions(game)
+
+        assert _battlefield(game, 0).contains(equipment), (
+            "Unequipped equipment should remain on the battlefield"
+        )
+
+    def test_equipment_whose_creature_left_battlefield_stays(self) -> None:
+        """If the equipped creature leaves the battlefield, the equipment
+        should stay (it becomes unattached, but SBAs should NOT sacrifice it
+        because it is not an aura)."""
+        game = _make_game()
+        creature = _make_creature(name="Bear", toughness=2)
+        equipment = _make_equipment(name="Whispersilk Cloak", attached_to=creature)
+        # Equipment is on the battlefield, creature is NOT
+        _battlefield(game, 0).add(equipment)
+
+        resolve_state_based_actions(game)
+
+        assert _battlefield(game, 0).contains(equipment), (
+            "Equipment whose creature left should stay on the battlefield"
+        )
+
+    def test_object_with_attached_to_and_is_aura_false_stays(self) -> None:
+        """An object that explicitly sets is_aura=False should not be
+        treated as an unattached aura even if attached_to is None."""
+        game = _make_game()
+        obj = SimpleNamespace(
+            name="CustomArtifact",
+            attached_to=None,
+            supertypes=set(),
+            is_token=False,
+            is_aura=False,
+        )
+        _battlefield(game, 0).add(obj)
+
+        check_state_based_actions(game)
+
+        assert _battlefield(game, 0).contains(obj), (
+            "Object with is_aura=False should not be sacrificed by aura SBA"
+        )
+
+    def test_aura_with_is_aura_true_still_sacrificed_when_unattached(self) -> None:
+        """Ensure the fix didn't break aura handling: an object with
+        is_aura=True and attached_to=None must still go to graveyard."""
+        game = _make_game()
+        aura = _make_aura(name="Holy Strength", attached_to=None)
+        _battlefield(game, 0).add(aura)
+
+        check_state_based_actions(game)
+
+        assert not _battlefield(game, 0).contains(aura), (
+            "Aura with is_aura=True and no attachment should be sacrificed"
+        )
+        assert _graveyard(game, 0).contains(aura)
+
+    def test_aura_with_is_aura_true_and_missing_target_sacrificed(self) -> None:
+        """Aura whose enchanted creature is no longer on the battlefield
+        must still be put into its owner's graveyard."""
+        game = _make_game()
+        dead_creature = _make_creature(name="Bear", toughness=2)
+        aura = _make_aura(name="Pacifism", attached_to=dead_creature)
+        # Aura is on battlefield, creature is NOT
+        _battlefield(game, 0).add(aura)
+
+        resolve_state_based_actions(game)
+
+        assert not _battlefield(game, 0).contains(aura), (
+            "Aura attached to missing creature should be sacrificed"
+        )
+        assert _graveyard(game, 0).contains(aura)
