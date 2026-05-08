@@ -298,7 +298,10 @@ def declare_blockers_step(game: GameState) -> None:
             continue
         targets = target if isinstance(target, list) else [target]
         valid_targets = []
+        max_blocked = getattr(blocker, "_max_attackers_blocked", 1)
         for attacker in targets:
+            if len(valid_targets) >= max_blocked:
+                break
             if attacker in combat.attackers and _can_block(blocker, attacker):
                 valid_targets.append(attacker)
         if valid_targets:

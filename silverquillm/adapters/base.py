@@ -131,9 +131,14 @@ class AgentAdapter(ABC):
     ) -> str:
         """Execute :meth:`run` enforcing a wall-clock *timeout*.
 
-        The base implementation simply delegates to :meth:`run`.  Concrete
-        adapters that need real async timeout enforcement can override this.
+        Uses ``signal.SIGALRM`` on Unix and a ``threading.Timer`` fallback
+        on Windows (which lacks SIGALRM).
         """
+        import sys
+
+        if sys.platform == "win32":
+            return self._run_with_timeout_threading(prompt, workspace, timeout)
+
         import signal
 
         def _handler(signum: int, frame: object) -> None:
@@ -149,6 +154,30 @@ class AgentAdapter(ABC):
             signal.alarm(0)
             signal.signal(signal.SIGALRM, old)
         return result
+
+    def _run_with_timeout_threading(
+        self, prompt: str, workspace: Path, timeout: int
+    ) -> str:
+        """Threading-based timeout fallback used on Windows."""
+        import threading
+
+        result: list[str] = []
+        exc_holder: list[BaseException] = []
+
+        def _target() -> None:
+            try:
+                result.append(self.run(prompt, workspace))
+            except BaseException as exc:  # noqa: BLE001
+                exc_holder.append(exc)
+
+        t = threading.Thread(target=_target, daemon=True)
+        t.start()
+        t.join(timeout)
+        if t.is_alive():
+            raise TimeoutError(f"Agent adapter timed out after {timeout}s")
+        if exc_holder:
+            raise exc_holder[0]
+        return result[0]
 
 
 # ------------------------------------------------------------------

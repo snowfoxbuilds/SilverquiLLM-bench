@@ -301,6 +301,7 @@ class Creature(CardImpl):
         self._cant_block: bool = False
         self._cant_be_blocked: bool = False
         self._cant_activate: bool = False
+        self._max_attackers_blocked: int = 1
 
     @property
     def power(self) -> int:

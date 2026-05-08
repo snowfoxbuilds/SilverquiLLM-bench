@@ -202,12 +202,11 @@ def _activate_regular_ability(
     ability: ActivatedAbilityInstance,
 ) -> None:
     """Activate a regular (non-loyalty) activated ability."""
-    # 1. Timing — mana abilities resolve immediately and bypass timing
-    #    checks entirely.  Regular (non-mana) activated abilities can be
-    #    activated whenever a player has priority (effectively instant
-    #    speed).  Priority enforcement is handled by ``priority_loop``,
-    #    not here.  Only loyalty abilities carry a sorcery-speed
-    #    restriction (see ``_activate_loyalty_ability``).
+    # 1. Check "can't activate" restriction (e.g. Arrest).
+    if getattr(ability.source, "_cant_activate", False):
+        raise AbilityError(
+            "Cannot activate ability — source's activated abilities are suppressed"
+        )
 
     # 2. Pay costs
     cost_paid = ability.cost(game, ability.source)

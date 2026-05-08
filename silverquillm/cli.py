@@ -25,6 +25,7 @@ from silverquillm.config import BenchmarkConfig, load_config
 from silverquillm.evaluator import run_self_eval_flat
 from silverquillm.results import init_results_dir, save_aggregates, save_card_result, save_run_summary
 from silverquillm.scorer import compute_scores, generate_leaderboard
+from silverquillm.regression import CompletedCard, run_regressions
 from silverquillm.run_utils import _session_results_to_dicts
 
 
@@ -130,6 +131,7 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
     run_dir = init_results_dir(cfg)
     total = len(specs)
     failures: list[tuple[str, Exception]] = []
+    completed_cards: list[CompletedCard] = []
     start_time = time.time()
 
     # Persistent engine: initialise run-level engine directory
@@ -170,6 +172,30 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
 
             # Commit engine changes back to run-level directory
             commit_engine_changes(workspace, run_engine_dir)
+
+            # Run regressions against all previously-completed cards
+            if completed_cards:
+                regression_result = run_regressions(
+                    completed_cards,
+                    run_engine_dir=run_engine_dir,
+                )
+                if regression_result.has_failures:
+                    click.echo(
+                        f"[{i}/{total}] {card_name}: "
+                        f"regressions={regression_result.cards_failed}/{regression_result.total_cards} failed",
+                        err=True,
+                    )
+
+            # Record this card as completed for future regression runs
+            tests_path = card_results_dir / "tests.py"
+            impl_path = card_results_dir / "tested_impl.py"
+            if tests_path.exists():
+                completed_cards.append(CompletedCard(
+                    card_id=str(collector_number),
+                    workspace=card_results_dir,
+                    tests_file=tests_path,
+                    impl_file=impl_path if impl_path.exists() else None,
+                ))
 
             blind_status = blind_result.status
             tested_status = tested_result.status if tested_result else "skipped"

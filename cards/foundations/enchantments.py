@@ -261,6 +261,34 @@ class StabWound(Aura):
         )
         self._effect_ref = game.effect_manager.add(effect)
 
+    def register_triggers(self, game: GameState) -> None:
+        from engine.triggers import EventType, TriggerRegistration
+
+        aura_ref = self
+
+        def _condition(game: GameState, data: dict) -> bool:
+            creature = aura_ref.attached_to
+            if creature is None or not _is_on_battlefield(game, creature):
+                return False
+            return getattr(creature, "controller", None) is game.active_player
+
+        def _effect(game: GameState) -> None:
+            creature = aura_ref.attached_to
+            if creature is None or not _is_on_battlefield(game, creature):
+                return
+            controller = getattr(creature, "controller", None)
+            if controller is not None:
+                controller.life -= 2
+
+        controller = getattr(self, "controller", None) or game.active_player
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=EventType.BEGINNING_OF_UPKEEP,
+            condition=_condition,
+            effect=_effect,
+            source=aura_ref,
+            controller=controller,
+        ))
+
 
 # ---------------------------------------------------------------------------
 # Aura lockdown — Arrest
@@ -451,6 +479,7 @@ class BraveTheSands(Enchantment):
             for obj in game.get_battlefield(controller).get_all():
                 if CardType.CREATURE in getattr(obj, "card_types", set()):
                     obj.keywords = obj.keywords | Keyword.VIGILANCE
+                    obj._max_attackers_blocked = 2  # type: ignore[attr-defined]
 
         effect = ContinuousEffect(
             source=enchantment_ref,
