@@ -26,7 +26,7 @@ Scope: Fix critical engine bugs, centralize zone-transition infrastructure, then
 
   Testability: Create a creature with a "when this creature dies" trigger. Deal lethal damage, call `resolve_state_based_actions()`, assert the trigger’s effect was pushed onto the stack.
 
-- [ ] **Centralize zone-transition hooks into ****`move_to_zone()`**
+- [x] **Centralize zone-transition hooks into ****`move_to_zone()`**
   Detail: Trigger registration/unregistration and event firing for zone transitions is duplicated across: `engine/casting.py` (`_resolve_spell` — registers triggers/replacement effects on ETB), `engine/state_based_actions.py` (`_move_to_graveyard` — unregisters on leaving battlefield), `engine/game.py` (`destroy()`, `sacrifice()`, `exile()`, `create_token()` — each independently handles unregistration + event firing). Every new zone-transition path (bounce, flicker, mill, reanimate) would need to duplicate this logic.
 
   Refactor into a centralized `move_to_zone(game, card, from_zone, to_zone)` function. This function should: (1) remove from source zone, (2) add to destination zone, (3) if leaving battlefield: unregister triggers and replacement effects, fire `LEAVES_BATTLEFIELD`, fire `CREATURE_DIES` if applicable, (4) if entering battlefield: call `register_triggers()` and `register_replacement_effects()`, fire `ENTERS_BATTLEFIELD`, (5) consult replacement effects for zone-change redirection (e.g., exile instead of graveyard). Then update all callers in `casting.py`, `state_based_actions.py`, and `game.py` to use this function.

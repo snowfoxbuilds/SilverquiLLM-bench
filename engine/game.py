@@ -19,6 +19,7 @@ from engine.game_state import GameState
 from engine.triggers import EventType
 from engine.turn import run_turn
 from engine.types import Zone
+from engine.zones import move_to_zone
 
 if TYPE_CHECKING:
     from engine.card import CardImpl, Creature
@@ -165,7 +166,7 @@ def deal_damage(game: GameState, source: Any, target: Any, amount: int) -> None:
 def destroy(game: GameState, permanent: Any) -> None:
     """Destroy *permanent* — move it from the battlefield to its owner's graveyard.
 
-    Respects replacement effects via the SBA helper ``_move_to_graveyard``.
+    Respects replacement effects via :func:`move_to_zone`.
     Creatures with the ``INDESTRUCTIBLE`` keyword are not destroyed.
 
     Parameters:
@@ -194,51 +195,19 @@ def destroy(game: GameState, permanent: Any) -> None:
     if not bf.contains(permanent):
         return
 
-    owner = getattr(permanent, "owner", controller)
-
-    # Determine if this is a creature (for event type selection)
+    # Determine the replacement event type based on card type
     from engine.types import CardType
 
     card_types = getattr(permanent, "card_types", set())
     is_creature = CardType.CREATURE in card_types
+    event_type_str = "creature_dies" if is_creature else "permanent_destroyed"
 
-    # Consult replacement effects — use appropriate event type
-    if is_creature:
-        event_type_str = "creature_dies"
-    else:
-        event_type_str = "permanent_destroyed"
-
-    event_data: dict[str, Any] = {
-        "creature" if is_creature else "permanent": permanent,
-        "destination": "graveyard",
-        "controller": controller,
-        "owner": owner,
-    }
-    event_data = game.replacement_manager.apply(game, event_type_str, event_data)
-
-    destination = event_data.get("destination", "graveyard")
-    from engine.state_based_actions import _DESTINATION_ZONE_MAP
-
-    dest_zone = _DESTINATION_ZONE_MAP.get(destination, Zone.GRAVEYARD)
-
-    bf.remove(permanent)
-    owner.zones[dest_zone].add(permanent)
-
-    # Unregister triggers and replacement effects
-    game.trigger_manager.unregister(permanent)
-    game.replacement_manager.unregister(permanent)
-
-    # Fire appropriate triggers based on permanent type
-    if is_creature:
-        game.trigger_manager.fire_event(
-            game,
-            EventType.CREATURE_DIES,
-            {"creature": permanent, "controller": controller, "owner": owner},
-        )
-    game.trigger_manager.fire_event(
+    move_to_zone(
         game,
-        EventType.LEAVES_BATTLEFIELD,
-        {"permanent": permanent, "controller": controller},
+        permanent,
+        Zone.BATTLEFIELD,
+        Zone.GRAVEYARD,
+        replacement_event_type=event_type_str,
     )
 
 
@@ -247,8 +216,8 @@ def sacrifice(game: GameState, player: Player, permanent: Any) -> None:
 
     Sacrificing cannot be prevented by indestructible or regeneration, but
     replacement effects that modify zone changes (e.g. "if this would be
-    put into a graveyard, exile it instead") still apply.  We consult the
-    replacement manager before performing the actual zone move.
+    put into a graveyard, exile it instead") still apply via
+    :func:`move_to_zone`.
 
     Parameters:
         game: The current game state.
@@ -259,46 +228,12 @@ def sacrifice(game: GameState, player: Player, permanent: Any) -> None:
     if not bf.contains(permanent):
         return
 
-    owner = getattr(permanent, "owner", player)
-
-    # Consult replacement effects before the zone move
-    from engine.types import CardType
-
-    card_types = getattr(permanent, "card_types", set())
-    is_creature = CardType.CREATURE in card_types
-
-    event_type_str = "sacrifice"
-    event_data: dict[str, Any] = {
-        "creature" if is_creature else "permanent": permanent,
-        "destination": "graveyard",
-        "controller": player,
-        "owner": owner,
-    }
-    event_data = game.replacement_manager.apply(game, event_type_str, event_data)
-
-    destination = event_data.get("destination", "graveyard")
-    from engine.state_based_actions import _DESTINATION_ZONE_MAP
-
-    dest_zone = _DESTINATION_ZONE_MAP.get(destination, Zone.GRAVEYARD)
-
-    bf.remove(permanent)
-    owner.zones[dest_zone].add(permanent)
-
-    # Unregister triggers and replacement effects
-    game.trigger_manager.unregister(permanent)
-    game.replacement_manager.unregister(permanent)
-
-    # Fire triggers — only creature_dies if it's actually a creature
-    if is_creature:
-        game.trigger_manager.fire_event(
-            game,
-            EventType.CREATURE_DIES,
-            {"creature": permanent, "controller": player, "owner": owner},
-        )
-    game.trigger_manager.fire_event(
+    move_to_zone(
         game,
-        EventType.LEAVES_BATTLEFIELD,
-        {"permanent": permanent, "controller": player},
+        permanent,
+        Zone.BATTLEFIELD,
+        Zone.GRAVEYARD,
+        replacement_event_type="sacrifice",
     )
 
 
@@ -312,45 +247,21 @@ def exile(game: GameState, obj: Any) -> None:
         game: The current game state.
         obj: The game object to exile.
     """
-    owner = getattr(obj, "owner", None)
-    controller = getattr(obj, "controller", owner)
-
-    # Try to find and remove obj from whatever zone it's currently in
-    source_zone = None
-    source_player = None
-    was_on_battlefield = False
-
+    # Find which zone the object is currently in
+    source_zone_type = None
     for player in game.players:
         for zone_type in Zone:
             zone = player.zones[zone_type]
             if zone.contains(obj):
-                source_zone = zone
-                source_player = player
-                was_on_battlefield = zone_type == Zone.BATTLEFIELD
+                source_zone_type = zone_type
                 break
-        if source_zone is not None:
+        if source_zone_type is not None:
             break
 
-    if source_zone is None:
+    if source_zone_type is None:
         return
 
-    if owner is None:
-        owner = source_player
-
-    exile_zone = owner.zones[Zone.EXILE]
-    source_zone.remove(obj)
-    exile_zone.add(obj)
-
-    # If it was on the battlefield, unregister triggers/effects
-    if was_on_battlefield:
-        game.trigger_manager.unregister(obj)
-        game.replacement_manager.unregister(obj)
-
-        game.trigger_manager.fire_event(
-            game,
-            EventType.LEAVES_BATTLEFIELD,
-            {"permanent": obj, "controller": controller},
-        )
+    move_to_zone(game, obj, source_zone_type, Zone.EXILE)
 
 
 def draw_card(game: GameState, player: Player) -> Any | None:
@@ -416,7 +327,8 @@ def create_token(game: GameState, player: Player, token: Any) -> None:
     """Create a token on the battlefield under *player*'s control.
 
     Sets ``is_token = True`` on the token, along with ``owner`` and
-    ``controller``.
+    ``controller``.  Uses :func:`move_to_zone` for entering-battlefield
+    hooks (trigger/replacement-effect registration and ETB event).
 
     Parameters:
         game: The current game state.
@@ -427,6 +339,7 @@ def create_token(game: GameState, player: Player, token: Any) -> None:
     token.owner = player
     token.controller = player
 
+    # Tokens don't come from an existing zone — add directly and fire hooks.
     battlefield = game.get_battlefield(player)
     battlefield.add(token)
 
@@ -437,9 +350,11 @@ def create_token(game: GameState, player: Player, token: Any) -> None:
         token.register_replacement_effects(game)
 
     # Fire enters-battlefield trigger
+    from engine.triggers import EventType as _ET
+
     game.trigger_manager.fire_event(
         game,
-        EventType.ENTERS_BATTLEFIELD,
+        _ET.ENTERS_BATTLEFIELD,
         {"permanent": token, "controller": player},
     )
 
