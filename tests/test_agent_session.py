@@ -209,7 +209,7 @@ class TestRunBlind:
             (workspace / "blind_impl.py").write_text("x = 1\n")
             return "some output from opencode"
 
-        session._run_opencode = fake_opencode
+        session._run_agent = fake_opencode
         result = run_blind(session)
         assert isinstance(result, BlindResult)
         assert result.status == "ok"
@@ -223,7 +223,7 @@ class TestRunBlind:
         def fake_opencode(prompt, workspace):
             return "agent did nothing"
 
-        session._run_opencode = fake_opencode
+        session._run_agent = fake_opencode
         result = run_blind(session)
         assert result.status == "no_output"
         assert result.impl_path is None
@@ -234,7 +234,7 @@ class TestRunBlind:
         def fake_opencode(prompt, workspace):
             raise subprocess.TimeoutExpired(cmd="opencode", timeout=300)
 
-        session._run_opencode = fake_opencode
+        session._run_agent = fake_opencode
         result = run_blind(session)
         assert result.status == "timeout"
         assert result.impl_path is None
@@ -246,7 +246,7 @@ class TestRunBlind:
             (workspace / "blind_impl.py").write_text("def broken(\n")
             return "output"
 
-        session._run_opencode = fake_opencode
+        session._run_agent = fake_opencode
         result = run_blind(session)
         assert result.status == "syntax_error"
 
@@ -261,7 +261,7 @@ class TestRunBlind:
             (workspace / "blind_impl.py").write_text("x = 1\n")
             return "output"
 
-        session._run_opencode = fake_opencode
+        session._run_agent = fake_opencode
         result = run_blind(session)
         assert result.runtime_seconds >= 0
 
@@ -272,7 +272,7 @@ class TestRunBlind:
             (workspace / "blind_impl.py").write_text("x = 1\n")
             return "a" * 400  # ~100 tokens
 
-        session._run_opencode = fake_opencode
+        session._run_agent = fake_opencode
         result = run_blind(session)
         assert result.tokens > 0
 
@@ -305,7 +305,7 @@ class TestRunTestInformed:
                 args=[], returncode=0, stdout="all passed", stderr=""
             )
 
-        session._run_opencode = fake_opencode
+        session._run_agent = fake_opencode
         session._run_pytest = fake_pytest
         session.run_test_informed(ws, blind_impl)
         assert (ws / "test_utils.md").exists()
@@ -324,7 +324,7 @@ class TestRunTestInformed:
                 args=[], returncode=0, stdout="passed", stderr=""
             )
 
-        session._run_opencode = fake_opencode
+        session._run_agent = fake_opencode
         session._run_pytest = fake_pytest
         result = session.run_test_informed(ws, blind_impl)
         assert isinstance(result, TestInformedResult)
@@ -345,7 +345,7 @@ class TestRunTestInformed:
                 args=[], returncode=1, stdout="FAILED", stderr=""
             )
 
-        session._run_opencode = fake_opencode
+        session._run_agent = fake_opencode
         session._run_pytest = fake_pytest
         result = session.run_test_informed(ws, blind_impl)
         assert result.status == "max_rounds_exhausted"
@@ -362,7 +362,7 @@ class TestRunTestInformed:
         def fake_opencode(prompt, workspace):
             raise subprocess.TimeoutExpired(cmd="opencode", timeout=300)
 
-        session._run_opencode = fake_opencode
+        session._run_agent = fake_opencode
         result = session.run_test_informed(ws, blind_impl)
         assert result.status == "timeout"
 
@@ -380,7 +380,7 @@ class TestRunTestInformed:
                 args=[], returncode=0, stdout="passed", stderr=""
             )
 
-        session._run_opencode = fake_opencode
+        session._run_agent = fake_opencode
         session._run_pytest = fake_pytest
         session.run_test_informed(ws, blind_impl)
         assert (ws / "card_impl.py").exists()

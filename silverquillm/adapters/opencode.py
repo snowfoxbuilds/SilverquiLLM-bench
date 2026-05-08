@@ -1,7 +1,7 @@
 """OpenCode agent adapter.
 
 Wraps the ``opencode`` CLI tool as a concrete :class:`AgentAdapter`.
-Ports logic from :func:`silverquillm.agent_session.AgentSession._run_opencode`
+Ports logic from :func:`silverquillm.agent_session.AgentSession._run_agent`
 with the following fixes:
 
 - Removes the invalid ``--thinking`` flag.

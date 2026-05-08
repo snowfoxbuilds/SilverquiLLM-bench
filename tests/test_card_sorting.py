@@ -1,7 +1,7 @@
 """Tests for TODO item 18: Sort cards by complexity tier for sequential processing.
 
 Tests verify:
-- Cards are sorted trivial → simple → moderate → complex → expert.
+- Cards are sorted trivial → simple → medium → complex → expert.
 - Within same tier, cards are sorted by collector number ascending.
 - Unknown/missing tier sorts after expert (last).
 - Empty card list handled correctly.
@@ -33,14 +33,14 @@ def _card(tier: str, number: str) -> dict:
 
 class TestTierOrder:
     def test_contains_all_expected_tiers(self):
-        expected = {"trivial", "simple", "moderate", "complex", "expert"}
+        expected = {"trivial", "simple", "medium", "complex", "expert"}
         assert set(_TIER_ORDER.keys()) == expected
 
     def test_trivial_is_lowest(self):
         assert _TIER_ORDER["trivial"] < _TIER_ORDER["simple"]
 
     def test_ordering_is_monotonically_increasing(self):
-        tiers = ["trivial", "simple", "moderate", "complex", "expert"]
+        tiers = ["trivial", "simple", "medium", "complex", "expert"]
         for a, b in zip(tiers, tiers[1:]):
             assert _TIER_ORDER[a] < _TIER_ORDER[b], f"{a} should sort before {b}"
 
@@ -54,7 +54,7 @@ class TestSortCardsByTier:
         assert _sort_cards_by_tier([]) == []
 
     def test_single_card(self):
-        cards = [_card("moderate", "SQ-042")]
+        cards = [_card("medium", "SQ-042")]
         result = _sort_cards_by_tier(cards)
         assert len(result) == 1
         assert result[0]["collector_number"] == "SQ-042"
@@ -65,17 +65,17 @@ class TestSortCardsByTier:
             _card("trivial", "SQ-002"),
             _card("complex", "SQ-003"),
             _card("simple", "SQ-004"),
-            _card("moderate", "SQ-005"),
+            _card("medium", "SQ-005"),
         ]
         result = _sort_cards_by_tier(cards)
         tiers = [c["complexity_tier"] for c in result]
-        assert tiers == ["trivial", "simple", "moderate", "complex", "expert"]
+        assert tiers == ["trivial", "simple", "medium", "complex", "expert"]
 
     def test_within_tier_sorted_by_collector_number(self):
         cards = [
-            _card("moderate", "SQ-030"),
-            _card("moderate", "SQ-010"),
-            _card("moderate", "SQ-020"),
+            _card("medium", "SQ-030"),
+            _card("medium", "SQ-010"),
+            _card("medium", "SQ-020"),
         ]
         result = _sort_cards_by_tier(cards)
         numbers = [c["collector_number"] for c in result]
@@ -121,10 +121,10 @@ class TestSortCardsByTier:
 
     def test_deterministic_output(self):
         cards = [
-            _card("moderate", "SQ-002"),
+            _card("medium", "SQ-002"),
             _card("trivial", "SQ-001"),
             _card("expert", "SQ-003"),
-            _card("moderate", "SQ-004"),
+            _card("medium", "SQ-004"),
         ]
         results = [_sort_cards_by_tier(list(cards)) for _ in range(10)]
         assert all(r == results[0] for r in results)

@@ -288,7 +288,7 @@ class AgentSession:
     # Agent invocation (adapter-based)
     # ------------------------------------------------------------------
 
-    def _run_opencode(self, prompt: str, workspace: Path) -> str:
+    def _run_agent(self, prompt: str, workspace: Path) -> str:
         """Run an agent session with the given prompt via the configured adapter.
 
         This method delegates to the :class:`AgentAdapter` resolved from
@@ -345,7 +345,7 @@ class AgentSession:
         postmortem_path = _get_postmortem_path(self.config, self.card_name)
 
         try:
-            output = self._run_opencode(prompt, workspace)
+            output = self._run_agent(prompt, workspace)
         except subprocess.TimeoutExpired:
             elapsed = time.monotonic() - start
             if postmortem_path:
@@ -506,7 +506,7 @@ class AgentSession:
 
                 try:
                     round_start = time.monotonic()
-                    output = self._run_opencode(prompt, workspace)
+                    output = self._run_agent(prompt, workspace)
                 except subprocess.TimeoutExpired:
                     round_elapsed = time.monotonic() - round_start
                     if postmortem_path:

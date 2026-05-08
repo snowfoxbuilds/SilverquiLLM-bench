@@ -113,7 +113,7 @@ class TestRunBlindViolationDetection:
             return "some output"
 
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
-            session._run_opencode = fake_opencode
+            session._run_agent = fake_opencode
             result = session.run_blind_implementation(ws)
 
         assert isinstance(result, BlindResult)
@@ -131,7 +131,7 @@ class TestRunBlindViolationDetection:
             return "output"
 
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
-            session._run_opencode = fake_opencode
+            session._run_agent = fake_opencode
             result = session.run_blind_implementation(ws)
 
         assert result.status == "violation"
@@ -145,7 +145,7 @@ class TestRunBlindViolationDetection:
             return "output"
 
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
-            session._run_opencode = fake_opencode
+            session._run_agent = fake_opencode
             result = session.run_blind_implementation(ws)
 
         assert result.status == "ok"
@@ -161,7 +161,7 @@ class TestRunBlindViolationDetection:
             return "a" * 400  # ~100 tokens
 
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
-            session._run_opencode = fake_opencode
+            session._run_agent = fake_opencode
             result = session.run_blind_implementation(ws)
 
         assert result.status == "violation"
@@ -193,7 +193,7 @@ class TestRunTestInformedViolationDetection:
             return "output"
 
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
-            session._run_opencode = fake_opencode
+            session._run_agent = fake_opencode
             result = session.run_test_informed(ws, blind_impl)
 
         assert isinstance(result, TestInformedResult)
@@ -226,7 +226,7 @@ class TestRunTestInformedViolationDetection:
             )
 
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
-            session._run_opencode = fake_opencode
+            session._run_agent = fake_opencode
             session._run_pytest = fake_pytest
             result = session.run_test_informed(ws, blind_impl)
 
@@ -249,7 +249,7 @@ class TestRunTestInformedViolationDetection:
             )
 
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
-            session._run_opencode = fake_opencode
+            session._run_agent = fake_opencode
             session._run_pytest = fake_pytest
             result = session.run_test_informed(ws, blind_impl)
 
@@ -267,7 +267,7 @@ class TestRunTestInformedViolationDetection:
             return "output"
 
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
-            session._run_opencode = fake_opencode
+            session._run_agent = fake_opencode
             result = session.run_test_informed(ws, blind_impl)
 
         assert result.status == "violation"
@@ -303,7 +303,7 @@ class TestRunTestInformedViolationDetection:
             )
 
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
-            session._run_opencode = fake_opencode
+            session._run_agent = fake_opencode
             session._run_pytest = fake_pytest
             result = session.run_test_informed(ws, blind_impl)
 

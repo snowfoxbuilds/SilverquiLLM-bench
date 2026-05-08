@@ -36,7 +36,7 @@ _BENCHMARKS_DIR = Path(__file__).resolve().parent.parent / "benchmarks"
 _TIER_ORDER: dict[str, int] = {
     "trivial": 0,
     "simple": 1,
-    "moderate": 2,
+    "medium": 2,
     "complex": 3,
     "expert": 4,
 }

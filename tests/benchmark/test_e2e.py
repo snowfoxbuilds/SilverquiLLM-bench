@@ -65,18 +65,18 @@ class TestBenchmarkEndToEnd:
                 card_dir=card_dir,
             )
 
-            # 3b. Monkey-patch _run_opencode
+            # 3b. Monkey-patch _run_agent
             blind_mock = mock_opencode_blind(card_spec)
             test_mock = mock_opencode_test_informed(card_spec)
             call_count = {"n": 0}
 
-            def _patched_run_opencode(prompt: str, workspace: Path, _bm=blind_mock, _tm=test_mock, _cc=call_count) -> str:
+            def _patched_run_agent(prompt: str, workspace: Path, _bm=blind_mock, _tm=test_mock, _cc=call_count) -> str:
                 _cc["n"] += 1
                 if _cc["n"] == 1:
                     return _bm(prompt, workspace)
                 return _tm(prompt, workspace)
 
-            session._run_opencode = _patched_run_opencode  # type: ignore[assignment]
+            session._run_agent = _patched_run_agent  # type: ignore[assignment]
 
             # Also patch _run_pytest to avoid needing 'python' binary
             def _mock_pytest(workspace: Path, tests_path: Path) -> subprocess.CompletedProcess:
@@ -240,7 +240,7 @@ class TestBenchmarkEndToEnd:
                 (fake_docs / "_test_contamination_marker.py").write_text("# contamination\n")
                 return "done"
 
-            session._run_opencode = _contaminating_opencode  # type: ignore[assignment]
+            session._run_agent = _contaminating_opencode  # type: ignore[assignment]
 
             result = session.run_blind_implementation(workspace)
             assert result.status == "violation"

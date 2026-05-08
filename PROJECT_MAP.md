@@ -11,70 +11,70 @@ The codebase is ~35,000+ lines across source and tests, with **~1,800+ test func
 ## Architecture
 
 ```
+┌──────────────────────────────────────────────────────────────────┐
+│                       Benchmark Runner                           │
+│  silverquillm/cli.py       — CLI entry point (run/eval/score/cards) │
+│  silverquillm/config.py    — YAML config + nested AgentConfig   │
+│  silverquillm/agent_session.py — workspace + agent lifecycle    │
+│                   │                                  │           │
+│    ┌──────────────▼──────────┐      ┌────────────────▼────────┐ │
+│    │    Card Pipeline        │      │    Eval Pipeline        │ │
+│    │                         │      │                         │ │
+│    │  card_classifier.py     │      │  evaluator.py           │ │
+│    │  card_spec.py           │      │  scorer.py (4 cats)     │ │
+│    │  card_loader.py         │      │  results.py             │ │
+│    │  template_gen.py        │      │  run_utils.py           │ │
+│    │  docs_gen.py            │      │  regression.py          │ │
+│    │  rules_skill.py         │      │                         │ │
+│    │  prompts.py             │      │                         │ │
+│    │  prototype.py           │      │                         │ │
+│    └─────────────────────────┘      └─────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────┘
 
-                     Benchmark Runner                         │
-  silverquillm/cli. CLI entry point (run/eval/score/cards)│py 
-  silverquillm/config.py — YAML config + nested AgentConfig   │
-  silverquillm/agent_session.py — workspace + agent lifecycle  │
+┌──────────────────────────────────────────────────────────────────┐
+│  Agent Adapters (silverquillm/adapters/)                         │
+│                                                                  │
+│  base.py        — AgentAdapter ABC + registry + factory          │
+│  opencode.py    — OpenCode CLI adapter                           │
+│  claude_code.py — Claude Code CLI adapter                        │
+│  aider.py       — Aider CLI adapter                              │
+│  pi.py          — Pi CLI adapter                                 │
+└──────────────────────────────────────────────────────────────────┘
 
-               │                                  │
-    ┌──────────▼──────────┐            ┌──────────▼──────────┐
-    │  Card Pipeline       │            │  Eval Pipeline       │
-    │                      │            │                      │
-    │ card_classifier.py   │            │ evaluator.py         │
-    │ card_spec.py         │            │ scorer.py (4 cats)   │
-    card_loader.py             │ results.py           ││       
-    │ template_gen.py      │            │ run_utils.py         │
-    │ docs_gen.py          │            │ regression.py        │
-    │ rules_skill.py       │            │                      │
-    │ prompts.py           │            │                      │
-    │ prototype.py         │            │                      │
-            └──────────────────────┘    └────────────────
-
-    ┌─────────────────────────────────────────────────────────┐
-    │  Agent Adapters (silverquillm/adapters/)                 │
-    │                                                          │
-    │  base.py — AgentAdapter ABC + registry + factory         │
-    │  opencode.py — OpenCode CLI adapter                      │
-    │  claude_code.py — Claude Code CLI adapter                │
-    │  aider.py — Aider CLI adapter                            │
-    pi.py  │ Pi CLI adapter                                  │ 
-    └─────────────────────────────────────────────────────────┘
-
-
-                        Game Loop                             │
-  engine/game.py — create_game, run_game, helper actions      │
-  engine/turn.py — run_turn, phase/step progression           │
-
-               │                                  │
-            ┌──────────▼──────────┐    ┌──────────▼───
-    │    Core State        │            │   Game Mechanics     │
-    │                      │            │                      │
-    │ game_state.py        │            │ casting.py           │
-    │ player.py            │            │ stack.py             │
-    │ zones.py             │            │ combat.py            │
-    │ mana.py              │            │ abilities.py         │
-    │ types.py             │            │ triggers.py          │
-    │ card.py              │            │ continuous_effects.py │
-    │                      │            │ replacement_effects.py│
-    │                      │            │ state_based_actions.py│
-    └──────────────────────┘            └──────────────────────┘
-               │
-    ┌──────────▼──────────────────────────────────────────────┐
-    │                   Card Layer                             │
-    │                                                          │
-    │ cards/registry.py — CardRegistry + CardMetadata          │
-    │ cards/scryfall.py — Scryfall API fetch + cache           │
-    │ cards/foundations/ — FDN set card implementations (65+)   │
-    │   basic_lands.py — 5 basic lands                         │
-    │   simple_creatures.py — 15 vanilla/French vanilla        │
-    │   simple_spells.py — 10 instants and sorceries           │
-    │   simple_permanents.py — 5 enchantments and artifacts    │
-    │   enchantments.py — 8 enchantments (auras + global)      │
-    │   planeswalkers.py — 4 planeswalkers                     │
-    │   modal_spells.py — 8 modal spells                       │
-    │   artifacts.py — 10 artifacts (mana rocks, equipment)    │
-    └─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                         Game Loop                                │
+│  engine/game.py — create_game, run_game, helper actions          │
+│  engine/turn.py — run_turn, phase/step progression               │
+│                   │                                  │           │
+│    ┌──────────────▼──────────┐      ┌────────────────▼────────┐ │
+│    │    Core State           │      │    Game Mechanics       │ │
+│    │                         │      │                         │ │
+│    │  game_state.py          │      │  casting.py             │ │
+│    │  player.py              │      │  stack.py               │ │
+│    │  zones.py               │      │  combat.py              │ │
+│    │  mana.py                │      │  abilities.py           │ │
+│    │  types.py               │      │  triggers.py            │ │
+│    │  card.py                │      │  continuous_effects.py  │ │
+│    │                         │      │  replacement_effects.py │ │
+│    │                         │      │  state_based_actions.py │ │
+│    └─────────────────────────┘      └─────────────────────────┘ │
+│                   │                                              │
+│    ┌──────────────▼──────────────────────────────────────────┐  │
+│    │                    Card Layer                            │  │
+│    │                                                          │  │
+│    │  cards/registry.py   — CardRegistry + CardMetadata       │  │
+│    │  cards/scryfall.py   — Scryfall API fetch + cache        │  │
+│    │  cards/foundations/  — FDN set card implementations (65+)│  │
+│    │    basic_lands.py        — 5 basic lands                 │  │
+│    │    simple_creatures.py   — 15 vanilla/French vanilla     │  │
+│    │    simple_spells.py      — 10 instants and sorceries     │  │
+│    │    simple_permanents.py  — 5 enchantments and artifacts  │  │
+│    │    enchantments.py       — 8 enchantments (auras+global) │  │
+│    │    planeswalkers.py      — 4 planeswalkers               │  │
+│    │    modal_spells.py       — 8 modal spells                │  │
+│    │    artifacts.py          — 10 artifacts (mana rocks, equip)│ │
+│    └──────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ## Directory Structure

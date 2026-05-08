@@ -16,7 +16,7 @@ from silverquillm.template_gen import card_name_to_class_name, _determine_base_c
 
 
 def mock_opencode_blind(card_spec: dict) -> Callable[[str, Path], str]:
-    """Return a mock ``_run_opencode`` that writes a minimal blind implementation.
+    """Return a mock ``_run_agent`` that writes a minimal blind implementation.
 
     The returned callable matches the signature ``(prompt: str, workspace: Path) -> str``.
     It writes a minimal valid Python class to ``workspace/blind_impl.py`` using the
@@ -60,7 +60,7 @@ def mock_opencode_blind(card_spec: dict) -> Callable[[str, Path], str]:
 
 
 def mock_opencode_test_informed(card_spec: dict) -> Callable[[str, Path], str]:
-    """Return a mock ``_run_opencode`` that writes a test-informed implementation.
+    """Return a mock ``_run_agent`` that writes a test-informed implementation.
 
     The returned callable:
     - Copies ``workspace/blind_impl.py`` to ``workspace/tested_impl.py``

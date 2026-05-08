@@ -693,8 +693,7 @@ def generate_leaderboard(scores: Leaderboard) -> str:
     )
     sorted_cat4 = sorted(
         scores.category4.items(),
-        key=lambda x: (-x[1].regression_rate, x[1].regression_free_streak),
-        reverse=True,
+        key=lambda x: (x[1].regression_rate, -x[1].regression_free_streak),
     )
     for rank, (agent, s) in enumerate(sorted_cat4, 1):
         lines.append(

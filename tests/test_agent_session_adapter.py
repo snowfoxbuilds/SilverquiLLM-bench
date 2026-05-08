@@ -201,28 +201,28 @@ class TestAdapterLifecycle:
 # ---------------------------------------------------------------------------
 
 class TestAdapterInvocation:
-    """_run_opencode delegates to adapter.run(), not subprocess."""
+    """_run_agent delegates to adapter.run(), not subprocess."""
 
-    def test_run_opencode_delegates_to_adapter_run(self, session, tmp_path):
-        """_run_opencode should call adapter.run(prompt, workspace)."""
+    def test_run_agent_delegates_to_adapter_run(self, session, tmp_path):
+        """_run_agent should call adapter.run(prompt, workspace)."""
         adapter = MockAdapter(session.config)
         session._adapter = adapter
         workspace = tmp_path / "ws"
         workspace.mkdir()
-        result = session._run_opencode("hello prompt", workspace)
+        result = session._run_agent("hello prompt", workspace)
         assert result == "mock agent output"
         assert len(adapter.run_calls) == 1
         assert adapter.run_calls[0] == ("hello prompt", workspace)
 
-    def test_run_opencode_does_not_call_subprocess(self, session, tmp_path):
-        """Adapter-based _run_opencode must not use subprocess.run/Popen."""
+    def test_run_agent_does_not_call_subprocess(self, session, tmp_path):
+        """Adapter-based _run_agent must not use subprocess.run/Popen."""
         adapter = MockAdapter(session.config)
         session._adapter = adapter
         workspace = tmp_path / "ws"
         workspace.mkdir()
         with patch("subprocess.run", side_effect=AssertionError("subprocess.run should not be called")), \
              patch("subprocess.Popen", side_effect=AssertionError("Popen should not be called")):
-            session._run_opencode("test", workspace)
+            session._run_agent("test", workspace)
 
     def test_run_blind_uses_adapter(self, session):
         """run_blind_implementation should use the adapter for agent invocation."""
@@ -235,7 +235,7 @@ class TestAdapterInvocation:
         assert len(adapter.run_calls) >= 1
 
     def test_adapter_run_error_propagates(self, session, tmp_path):
-        """If adapter.run() raises, it should propagate from _run_opencode."""
+        """If adapter.run() raises, it should propagate from _run_agent."""
         class FailingAdapter(MockAdapter):
             def run(self, prompt, workspace):
                 raise RuntimeError("agent failed")
@@ -244,7 +244,7 @@ class TestAdapterInvocation:
         workspace = tmp_path / "ws"
         workspace.mkdir()
         with pytest.raises(RuntimeError, match="agent failed"):
-            session._run_opencode("prompt", workspace)
+            session._run_agent("prompt", workspace)
 
 
 # ---------------------------------------------------------------------------
@@ -254,10 +254,10 @@ class TestAdapterInvocation:
 class TestNoHardcodedOpenCode:
     """AgentSession should be adapter-agnostic for invocation."""
 
-    def test_run_opencode_method_delegates_to_adapter(self, session):
-        """_run_opencode body should use adapter.run, not subprocess calls."""
+    def test_run_agent_method_delegates_to_adapter(self, session):
+        """_run_agent body should use adapter.run, not subprocess calls."""
         import silverquillm.agent_session as mod
-        source = inspect.getsource(mod.AgentSession._run_opencode)
+        source = inspect.getsource(mod.AgentSession._run_agent)
         # Must reference the adapter
         assert "self._get_adapter" in source or "adapter.run" in source
         # Must not directly invoke subprocess.run or subprocess.Popen

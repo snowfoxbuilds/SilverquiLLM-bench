@@ -259,12 +259,12 @@ class TestPostmortemDuringBlind:
         workspace.mkdir()
         session._workspace = workspace
 
-        # Make _run_opencode produce output and create blind_impl.py
+        # Make _run_agent produce output and create blind_impl.py
         def fake_run(prompt, ws):
             (ws / "blind_impl.py").write_text("x = 1\n")
             return "agent output"
 
-        monkeypatch.setattr(session, "_run_opencode", fake_run)
+        monkeypatch.setattr(session, "_run_agent", fake_run)
 
         result = session.run_blind_implementation(workspace)
         assert result.status == "ok"
@@ -293,7 +293,7 @@ class TestPostmortemDuringBlind:
         def fake_run(prompt, ws):
             raise subprocess.TimeoutExpired(cmd="agent", timeout=300)
 
-        monkeypatch.setattr(session, "_run_opencode", fake_run)
+        monkeypatch.setattr(session, "_run_agent", fake_run)
 
         result = session.run_blind_implementation(workspace)
         assert result.status == "timeout"
@@ -321,7 +321,7 @@ class TestPostmortemDuringBlind:
             (ws / "blind_impl.py").write_text("x = 1\n")
             return "output"
 
-        monkeypatch.setattr(session, "_run_opencode", fake_run)
+        monkeypatch.setattr(session, "_run_agent", fake_run)
 
         result = session.run_blind_implementation(workspace)
         assert result.status == "ok"
@@ -365,7 +365,7 @@ class TestPostmortemDuringTestInformed:
             (ws / "tests.py").write_text("def test_ok(): pass\n")
             return f"round {call_count} output"
 
-        monkeypatch.setattr(session, "_run_opencode", fake_run)
+        monkeypatch.setattr(session, "_run_agent", fake_run)
 
         # Make _run_pytest return success on first call
         def fake_pytest(ws, tp):
@@ -411,7 +411,7 @@ class TestPostmortemDuringTestInformed:
         def fake_run(prompt, ws):
             raise subprocess.TimeoutExpired(cmd="agent", timeout=300)
 
-        monkeypatch.setattr(session, "_run_opencode", fake_run)
+        monkeypatch.setattr(session, "_run_agent", fake_run)
 
         result = session.run_test_informed(workspace, blind_impl)
         assert result.status == "timeout"

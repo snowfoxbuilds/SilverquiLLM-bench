@@ -527,6 +527,15 @@ def _build_aggregate_summary(
                 }
                 for agent, s in leaderboard.category2.items()
             },
+            "category3": {
+                agent: {
+                    "audit_survival_rate": s.audit_survival_rate,
+                    "discrimination_score": s.discrimination_score,
+                    "difficulty_calibration": s.difficulty_calibration,
+                    "coverage": s.coverage,
+                }
+                for agent, s in leaderboard.category3.items()
+            },
             "category4": {
                 agent: {
                     "regression_rate": s.regression_rate,
