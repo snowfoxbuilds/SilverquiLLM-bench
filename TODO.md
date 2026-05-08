@@ -72,7 +72,7 @@ Scope: Fix critical engine bugs, centralize zone-transition infrastructure, then
 
   Testability: For each: cast/put onto battlefield, verify trigger fires and effect resolves.
 
-- [ ] **Batch 6: Auras (~10–12 cards)**
+- [x] **Batch 6: Auras (~10–12 cards)**
   Detail: Implement remaining FDN auras beyond those already in `enchantments.py`. Depends on prereq 1 (is_aura fix). Follow existing patterns: subclass `Aura`, override `get_targets()`, `on_resolve()` (set `self.attached_to`), register continuous effects via `game.effect_manager.add()`. Cover buff auras (+N/+N), debuff auras (-N/-N), keyword-granting auras, lockdown auras (can’t attack/block). For auras with triggered abilities, also override `register_triggers()`.
 
   Files: `cards/foundations/enchantments.py` (extend or new file).

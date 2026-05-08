@@ -67,3 +67,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Added `cards_drawn_this_turn` counter increment in `engine/game.py`'s `draw_card()` function using `hasattr` guard.
 - **Reasoning**: Simple, engine-level tracking that any card can query via `getattr(controller, "cards_drawn_this_turn", 0)`.
 - **Impact**: `engine/game.py` (`draw_card`).
+
+## ENGINE LIMITATION comment convention
+- **Context**: Several aura cards require engine features that don't exist yet (untap prevention, controller change, name/subtype reset, dynamic mana abilities).
+- **Decision**: Mark such code with `# ENGINE LIMITATION:` comments explaining what's missing and what would be needed.
+- **Reasoning**: These comments serve as a TODO list for future engine work and prevent future contributors from thinking the stubs are complete implementations.
+- **Impact**: Established in `cards/foundations/auras_batch2.py`, applicable project-wide.

@@ -61,3 +61,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `cards/foundations/etb_creatures.py` — 29 FDN ETB creatures: draw (Helpful Hunter, Inspiring Overseer, Cloudblazer, Icewind Elemental), lifegain (Pelakka Wurm, Vampire Spawn), tokens (Prideful Parent, Resolute Reinforcements, Guarded Heir, Dragon Trainer, Regal Caracal, Rapacious Dragon), damage (Skeleton Archer, Viashino Pyromancer), destroy (Reclamation Sage, Meteor Golem), exile (Ambush Wolf, Angel of Finality), bounce (Bigfin Bouncer, Exclusion Mage, Mischievous Pup), graveyard (Vampire Soulcaller, Elvish Regrower, Shipwreck Dowser), counters (Felidar Savior), discard (Burglar Rat, Arbiter of Woe), debuff (Burrog Befuddler, Massacre Wurm)
+
+## Item 9: Batch 6 — Auras
+
+### Tests
+- `tests/cards/test_auras_batch2.py` — 52 tests for all 10 batch-2 auras
+
+### Implementation
+- `cards/foundations/auras_batch2.py` — 10 FDN auras with reviewer fixes: death trigger payload key, add_counter usage, move_to_zone for sacrifice, ENGINE LIMITATION comments for skip_untap/mana ability/name-reset/controller-change

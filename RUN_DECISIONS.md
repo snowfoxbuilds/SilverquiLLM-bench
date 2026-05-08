@@ -42,3 +42,9 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Decision**: Proceed without review. Implementation has 29 ETB creatures, 95 tests all passing.
 - **Reasoning**: Infrastructure error, not a code quality issue. All tests pass. Will be covered by test quality audit.
 - **Impact**: No review feedback for this item.
+
+## Aura engine limitations documented — Item 9
+- **Context**: Reviewer found 9 strict issues with aura implementations. 3 were genuine code bugs (wrong event key, raw zone manipulation, missing add_counter). 6 were engine limitations where proper behavior is impossible without new engine support.
+- **Decision**: Fix the 3 real bugs; document the remaining 6 as ENGINE LIMITATION comments in the code.
+- **Reasoning**: Building untap prevention, controller-change, name/subtype reset, dynamic mana abilities, and targeted ETB triggers are out of scope for a batch card-porting item. Documenting them preserves the knowledge for future engine work.
+- `cards/foundations/auras_batch2.py` **Impact**: all 10 aura cards 
