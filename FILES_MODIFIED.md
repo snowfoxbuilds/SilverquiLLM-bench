@@ -53,3 +53,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `cards/foundations/lands.py` — 13 FDN non-basic lands: 10 gain lands (ETB tapped, gain 1 life, dual-color mana), 3 utility lands with activated abilities (Rogue's Passage unblockable, Soulstone Sanctuary +1/+1 counter, Evolving Wilds fetch). Fixed rarities (uncommon/rare for utility lands).
+
+## Item 8: Batch 5 — Creatures with ETB triggers
+
+### Tests
+- No test files provided by Tester for this item
+
+### Implementation
+- `cards/foundations/etb_creatures.py` — 29 FDN ETB creatures: draw (Helpful Hunter, Inspiring Overseer, Cloudblazer, Icewind Elemental), lifegain (Pelakka Wurm, Vampire Spawn), tokens (Prideful Parent, Resolute Reinforcements, Guarded Heir, Dragon Trainer, Regal Caracal, Rapacious Dragon), damage (Skeleton Archer, Viashino Pyromancer), destroy (Reclamation Sage, Meteor Golem), exile (Ambush Wolf, Angel of Finality), bounce (Bigfin Bouncer, Exclusion Mage, Mischievous Pup), graveyard (Vampire Soulcaller, Elvish Regrower, Shipwreck Dowser), counters (Felidar Savior), discard (Burglar Rat, Arbiter of Woe), debuff (Burrog Befuddler, Massacre Wurm)

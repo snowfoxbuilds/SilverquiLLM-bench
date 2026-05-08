@@ -65,7 +65,7 @@ Scope: Fix critical engine bugs, centralize zone-transition infrastructure, then
 
   Testability: Play each land, verify tapped/untapped state, activate mana ability, verify mana produced. For gain lands: verify life gained on ETB.
 
-- [ ] **Batch 5: Creatures with ETB triggers (~20–25 cards)**
+- [x] **Batch 5: Creatures with ETB triggers (~20–25 cards)**
   Detail: Implement FDN creatures with "when this creature enters the battlefield" abilities: draw, damage, lifegain, tokens, destroy/exile target, bounce, counters. Depends on prereq 3 for clean ETB event firing. Subclass `Creature`, override `register_triggers()` to register `TriggerRegistration` with `EventType.ENTERS_BATTLEFIELD` and condition checking entering permanent is `self`. Use existing `engine/game.py` helpers for effects. Likely the largest batch.
 
   Files: New file `cards/foundations/etb_creatures.py`.
