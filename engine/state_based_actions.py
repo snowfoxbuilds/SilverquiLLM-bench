@@ -13,7 +13,8 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
-from engine.types import Supertype, Zone
+from engine.triggers import EventType
+from engine.types import CardType, Supertype, Zone
 from engine.zones import ZoneContainer
 
 if TYPE_CHECKING:
@@ -72,6 +73,23 @@ def _move_to_graveyard(game: GameState, player: Player, obj: Any) -> None:
 
         bf.remove(obj)
         owner.zones[dest_zone].add(obj)
+
+        # Fire triggered-ability events for the zone change BEFORE
+        # unregistering, so that self-referencing triggers (e.g. "when
+        # this creature dies") are still registered and can match.
+        card_types = getattr(obj, "card_types", set())
+        is_creature = CardType.CREATURE in card_types
+        game.trigger_manager.fire_event(
+            game,
+            EventType.LEAVES_BATTLEFIELD,
+            {"permanent": obj, "controller": player},
+        )
+        if is_creature and dest_zone == Zone.GRAVEYARD:
+            game.trigger_manager.fire_event(
+                game,
+                EventType.CREATURE_DIES,
+                {"creature": obj, "controller": player, "owner": owner},
+            )
 
         # Automatically unregister triggered abilities when leaving the battlefield.
         game.trigger_manager.unregister(obj)
@@ -321,14 +339,37 @@ def check_state_based_actions(game: GameState) -> bool:
 def resolve_state_based_actions(game: GameState) -> bool:
     """Run state-based actions in a loop until no more actions are taken.
 
-    After the loop stabilises, this is where triggered abilities would be
-    checked and placed on the stack (not yet implemented).
+    After each SBA stabilisation pass, any triggered abilities that were
+    queued during processing are left on the stack.  Per MTG rule 704.3,
+    the SBA loop must repeat if new triggers were placed on the stack
+    (because those triggers may cause further SBAs when resolved, and
+    the game state must be fully stable before a player receives priority).
+
+    The outer loop: repeat { run SBA passes until stable; record whether
+    new triggers were pushed onto the stack during those passes } until
+    no SBAs were performed **and** no new triggers were queued.
 
     Returns ``True`` if any SBAs were performed during the entire process,
     ``False`` if the game state was already stable.
     """
     any_performed = False
-    while check_state_based_actions(game):
-        any_performed = True
-    # TODO: check for triggered abilities and put them on the stack
+    while True:
+        # Snapshot the stack size before SBA passes so we can detect new
+        # triggers that were pushed during processing.
+        stack_size_before = len(game.stack._items)
+
+        # Inner loop: run SBA checks until no more actions are taken.
+        sba_this_round = False
+        while check_state_based_actions(game):
+            sba_this_round = True
+            any_performed = True
+
+        # Detect whether any triggers were queued during this round.
+        triggers_queued = len(game.stack._items) > stack_size_before
+
+        # If nothing happened this round (no SBAs and no new triggers),
+        # the game state is fully stable.
+        if not sba_this_round and not triggers_queued:
+            break
+
     return any_performed

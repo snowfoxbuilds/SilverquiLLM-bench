@@ -15,7 +15,7 @@ Scope: Fix critical engine bugs, centralize zone-transition infrastructure, then
 
   Testability: Add a focused test: equip Bonesplitter to a creature, run `resolve_state_based_actions()`, assert the equipment remains on the battlefield.
 
-- [ ] **Wire SBA trigger queueing in ****`resolve_state_based_actions()`**
+- [x] **Wire SBA trigger queueing in ****`resolve_state_based_actions()`**
   Detail: In `engine/state_based_actions.py`, `resolve_state_based_actions()` has a `# TODO: check for triggered abilities and put them on the stack` comment. Per MTG rules 704.3, after each SBA pass that performs actions, any triggered abilities that fired during those actions must be put on the stack before any player receives priority. The SBA loop must repeat until no more SBAs needed AND all pending triggers queued.
 
   Currently, zone-move helpers like `_move_to_graveyard()` call `game.trigger_manager.unregister(obj)` but `CREATURE_DIES` and `LEAVES_BATTLEFIELD` events are NOT fired from within SBAs — they’re only fired in `engine/game.py`’s `destroy()` and `sacrifice()`. Death triggers don’t fire when creatures die via SBAs (lethal damage, zero toughness).
