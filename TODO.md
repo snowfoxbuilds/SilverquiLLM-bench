@@ -58,7 +58,7 @@ Scope: Fix critical engine bugs, centralize zone-transition infrastructure, then
 
   Testability: For each targeted spell: set up a legal target, cast, verify target is affected.
 
-- [ ] **Batch 4: Non-basic lands (~10–15 cards)**
+- [x] **Batch 4: Non-basic lands (~10–15 cards)**
   Detail: Implement FDN non-basic lands: tap lands (ETB tapped, tap for one of two colors), gain lands (ETB tapped, gain 1 life), utility lands (tap for colorless + activated ability). Subclass `Land`. For ETB-tapped lands, use a replacement effect or flag. For dual-color tap lands, override `get_mana_abilities()` to return two `ManaAbility` entries. For gain lands, register an ETB trigger for lifegain. May need to add a simple "enters tapped" mechanic as a flag on the `Land` class or via replacement effect.
 
   Files: New file `cards/foundations/lands.py`.

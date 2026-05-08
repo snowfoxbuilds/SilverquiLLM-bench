@@ -48,3 +48,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `cards/foundations/simple_spells_batch3.py` — 18 targeted FDN spells with fizzle-safe on_resolve, create_token() for tokens, controller-filtered get_targets, and power property for damage reads
+
+## Item 7: Batch 4 — Non-basic lands
+
+### Implementation
+- `cards/foundations/lands.py` — 13 FDN non-basic lands: 10 gain lands (ETB tapped, gain 1 life, dual-color mana), 3 utility lands with activated abilities (Rogue's Passage unblockable, Soulstone Sanctuary +1/+1 counter, Evolving Wilds fetch). Fixed rarities (uncommon/rare for utility lands).
