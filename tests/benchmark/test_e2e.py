@@ -86,8 +86,9 @@ class TestBenchmarkEndToEnd:
 
             session._run_pytest = _mock_pytest  # type: ignore[assignment]
 
-            # 3c. Setup workspace
-            workspace = session.setup_workspace()
+            # 3c. Setup workspace (mock validate_setup to avoid real adapter call)
+            with patch("silverquillm.agent_session.validate_setup", return_value=True):
+                workspace = session.setup_workspace()
 
             # 3d. Assert workspace contents
             assert (workspace / "card_spec.json").exists()
@@ -217,13 +218,13 @@ class TestBenchmarkEndToEnd:
         assert (results_dir / "leaderboard.md").exists()
 
     def test_workspace_contamination_detected(self, tmp_path: Path) -> None:
-        """Verify contamination detection when agent writes to engine/."""
+        """Verify contamination detection when agent writes to a protected dir (docs/)."""
         card_spec = _load_card_spec("11")
         config = create_test_config(tmp_path)
         card_dir = str(_CARDS_DIR / "11")
 
-        fake_engine = tmp_path / "engine"
-        fake_engine.mkdir()
+        fake_docs = tmp_path / "docs"
+        fake_docs.mkdir()
 
         with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
             session = AgentSession(
@@ -236,7 +237,7 @@ class TestBenchmarkEndToEnd:
 
             def _contaminating_opencode(prompt: str, ws: Path) -> str:
                 (ws / "blind_impl.py").write_text("class Foo: pass\n")
-                (fake_engine / "_test_contamination_marker.py").write_text("# contamination\n")
+                (fake_docs / "_test_contamination_marker.py").write_text("# contamination\n")
                 return "done"
 
             session._run_opencode = _contaminating_opencode  # type: ignore[assignment]

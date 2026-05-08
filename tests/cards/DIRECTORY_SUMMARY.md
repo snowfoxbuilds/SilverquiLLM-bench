@@ -2,28 +2,27 @@
 
 ## Purpose
 
-Unit tests for card implementations and the card registry/data pipeline. Contains ~270 test functions covering card attributes, targeting, resolution, registry integration, and Scryfall data parsing.
+Unit tests for all card implementations in `cards/` and `cards/foundations/`. Tests verify card attributes (mana cost, power/toughness, keywords), targeting, resolution effects, registry integration, and game mechanics interactions.
 
 ## Key Files
 
-| File | Tests | Covers |
-|------|-------|--------|
-| `test_registry.py` | 35 | `CardRegistry` register/get/create_instance/list_all, `CardMetadata` construction, duplicate registration, missing card lookup |
-| `test_scryfall.py` | 35 | `fetch_set()` pagination, caching, `_parse_card()` field extraction, rate limiting, error handling (uses mocking) |
-| `test_basic_lands.py` | 30+ | Basic land attributes (supertypes, subtypes), mana abilities, tap-for-mana resolution, `register_basic_lands`, registry metadata |
-| `test_simple_creatures.py` | 34 | Creature stats (power/toughness), keywords, mana costs, `make_vanilla` factory, registry integration, combat behavior |
-| `test_simple_spells.py` | 30+ | Spell attributes, targeting (`get_targets`), resolution (`on_resolve`), `can_cast` guards, registry metadata |
-| `test_simple_permanents.py` | 34 | Aura attachment, continuous effect registration, combat restrictions (Pacifism), P/T modification (Untamed Hunger, Unflinching Courage), mana abilities (Hedron Archive), non-aura enchantments (Goblin Oriflamme), SBA interaction |
+| File | Responsibility |
+|------|---------------|
+| `__init__.py` | Package init. |
+| `test_registry.py` | CardRegistry API — register, get, create_instance, list_all. |
+| `test_scryfall.py` | Scryfall API fetch + parse + caching. |
+| `test_basic_lands.py` | 5 basic lands — tapping, mana production, supertypes. |
+| `test_simple_creatures.py` | 15 creatures — stats, keywords, combat, make_vanilla factory. |
+| `test_simple_spells.py` | 10 instants/sorceries — targeting, resolution, counter spells. |
+| `test_simple_permanents.py` | 5 noncreature permanents — aura attachment, continuous effects, combat restrictions. |
+| `test_enchantments.py` | 8 enchantments — aura buffs, global enchantment effects. |
+| `test_planeswalkers.py` | 4 planeswalkers — loyalty abilities, counter management. |
+| `test_modal_spells.py` | 8 modal spells — mode selection, resolution for each mode. |
+| `test_artifacts.py` | 10 artifacts — mana rocks, equipment attach/detach, utility. |
+| `test_foundations_batch1_integration.py` | Cross-category integration tests for batch 1 cards. |
 
 ## Dependencies
 
-- **`cards/`** — All modules under test: `registry.py`, `scryfall.py`, `cards/foundations/*.py`.
-- **`engine/`** — Engine modules for game state setup: `game_state.py`, `player.py`, `card.py`, `types.py`, `zones.py`.
-- **`tests/test_utils.py`** — Some tests use shared test utilities.
-
-## Testing Approach
-
-- **Card correctness**: Tests verify card attributes match Scryfall data (power, toughness, mana cost, keywords, type line).
-- **Behavioral tests**: Tests for spells and permanents exercise `get_targets()`, `on_resolve()`, `on_cast()` hooks with mock/real game states.
-- **Registry roundtrip**: Tests verify register → lookup → create_instance pipeline produces correct card objects.
-- **Scryfall mocking**: `test_scryfall.py` mocks HTTP calls to avoid real API hits in CI.
+- `tests/test_utils.py` — `create_game`, `set_board_state`, `cast_spell` helpers.
+- `cards/foundations/` — Card classes under test.
+- `engine/` — Game state, casting, combat, continuous effects.

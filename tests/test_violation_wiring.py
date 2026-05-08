@@ -24,6 +24,18 @@ from silverquillm.config import AgentConfig, BenchmarkConfig
 
 
 # ---------------------------------------------------------------------------
+# Module-level autouse: mock validate_setup
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _mock_validate_setup(monkeypatch):
+    monkeypatch.setattr(
+        "silverquillm.agent_session.validate_setup",
+        lambda *args, **kwargs: True,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
@@ -89,15 +101,15 @@ def session(fake_repo):
 class TestRunBlindViolationDetection:
     """run_blind_implementation must detect writes to protected dirs."""
 
-    def test_violation_when_agent_writes_to_engine(self, session, fake_repo):
-        """Agent creating a file in engine/ should result in status='violation'."""
+    def test_violation_when_agent_writes_to_docs(self, session, fake_repo):
+        """Agent creating a file in docs/ should result in status='violation'."""
         ws = session.setup_workspace()
 
         def fake_opencode(prompt, workspace):
             # Agent produces valid output
             (workspace / "blind_impl.py").write_text("x = 1\n")
             # But also writes to a protected directory
-            (fake_repo / "engine" / "hack.py").write_text("# hacked\n")
+            (fake_repo / "docs" / "hack.py").write_text("# hacked\n")
             return "some output"
 
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
@@ -145,7 +157,7 @@ class TestRunBlindViolationDetection:
 
         def fake_opencode(prompt, workspace):
             (workspace / "blind_impl.py").write_text("x = 1\n")
-            (fake_repo / "engine" / "hack.py").write_text("bad\n")
+            (fake_repo / "docs" / "hack.py").write_text("bad\n")
             return "a" * 400  # ~100 tokens
 
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
@@ -177,7 +189,7 @@ class TestRunTestInformedViolationDetection:
         def fake_opencode(prompt, workspace):
             (workspace / "tests.py").write_text("def test_pass(): pass\n")
             # Write to protected dir
-            (fake_repo / "engine" / "hack.py").write_text("# hacked\n")
+            (fake_repo / "docs" / "hack.py").write_text("# hacked\n")
             return "output"
 
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):

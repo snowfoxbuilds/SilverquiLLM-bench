@@ -19,6 +19,18 @@ from silverquillm.config import AgentConfig, BenchmarkConfig
 
 
 # ---------------------------------------------------------------------------
+# Module-level autouse: mock validate_setup to avoid real adapter calls
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _mock_validate_setup(monkeypatch):
+    monkeypatch.setattr(
+        "silverquillm.agent_session.validate_setup",
+        lambda *args, **kwargs: True,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 

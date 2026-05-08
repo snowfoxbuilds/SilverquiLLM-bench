@@ -35,6 +35,20 @@ from silverquillm.config import AgentConfig, BenchmarkConfig
 
 
 # ---------------------------------------------------------------------------
+# Module-level autouse fixture: mock validate_setup so tests don't need
+# a real adapter binary (opencode, etc.) installed.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _mock_validate_setup(monkeypatch):
+    """Prevent setup_workspace from running real adapter setup questions."""
+    monkeypatch.setattr(
+        "silverquillm.agent_session.validate_setup",
+        lambda *args, **kwargs: True,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
