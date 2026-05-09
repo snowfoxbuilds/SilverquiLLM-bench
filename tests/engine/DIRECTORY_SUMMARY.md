@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Unit tests for all engine modules in `engine/`. One test file per engine module, covering types, zones, players, mana, cards, casting, stack, combat, triggers, abilities, continuous effects, replacement effects, state-based actions, game state, and the game loop. ~850+ test functions.
+Unit tests for all engine modules in `engine/`. One test file per engine module, covering types, zones, players, mana, cards, casting, stack, combat, triggers, abilities, continuous effects, replacement effects, state-based actions, game state, and the game loop. ~955 test functions.
 
 ## Key Files
 

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Card registry, data pipeline, and card implementations for the SilverquiLLM MTG engine. Maps card names to implementation classes and metadata, fetches card data from Scryfall, and houses the `foundations/` subdirectory with FDN set card implementations (65+ cards).
+Card registry, data pipeline, and card implementations for the SilverquiLLM MTG engine. Maps card names to implementation classes and metadata, fetches card data from Scryfall, and houses the `foundations/` subdirectory with FDN set card implementations (250+ cards across 20 implementation files).
 
 ## Key Files
 
@@ -22,7 +22,7 @@ Card registry, data pipeline, and card implementations for the SilverquiLLM MTG 
 
 ## Subdirectories
 
-- **`foundations/`** — Card implementations for the MTG Foundations (FDN) set (65+ cards across 7 categories). See `foundations/DIRECTORY_SUMMARY.md`.
+- **`foundations/`** — Card implementations for the MTG Foundations (FDN) set (250+ cards across 20 implementation files). See `foundations/DIRECTORY_SUMMARY.md`.
 
 ## Dependencies
 
@@ -32,4 +32,4 @@ Card registry, data pipeline, and card implementations for the SilverquiLLM MTG 
 
 ## Testing
 
-- Tests in `tests/cards/` — `test_registry.py`, `test_scryfall.py`, plus per-category card tests (8 test files total).
+- Tests in `tests/cards/` — `test_registry.py`, `test_scryfall.py`, plus per-category card tests (25 test files total).
