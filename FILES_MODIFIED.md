@@ -82,3 +82,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `cards/foundations/death_trigger_creatures.py` — 17 FDN creatures with death triggers: token creation (Infestation Sage, Gleaming Barrier, Maalfeld Twins), draw (Solemn Simulacrum, High-Society Hunter), mill/surveil (Crow of Dark Tidings, Wary Thespian), drain/damage (Vengeful Bloodwitch, Midnight Reaper, Garna, Crossway Troublemakers, Kalastria Highborn), graveyard recursion (Driver of the Dead, Infernal Vessel, Nine-Lives Familiar, Fiendish Panda), library (Spinner of Souls)
+
+## Item 12: Activated ability creatures
+
+### Implementation
+- `cards/foundations/activated_creatures.py` — 19 FDN creatures with activated abilities: mana (Llanowar Elves, Elvish Archdruid, Ruby Daring Tracker), tap (Rune-Sealed Wall, Strix Lookout, Axgard Cavalry, Krenko Mob Boss), sacrifice (Cathar Commando, Fanatical Firebrand, Heartfire Immolator, Burnished Hart, Hungry Ghoul), pump (Shivan Dragon, Sower of Chaos, Treetop Snarespinner), other (Spectral Sailor, Scavenging Ooze, Reassembling Skeleton, Mild-Mannered Librarian)

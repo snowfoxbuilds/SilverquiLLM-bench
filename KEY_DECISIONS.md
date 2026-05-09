@@ -73,3 +73,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Mark such code with `# ENGINE LIMITATION:` comments explaining what's missing and what would be needed.
 - **Reasoning**: These comments serve as a TODO list for future engine work and prevent future contributors from thinking the stubs are complete implementations.
 - **Impact**: Established in `cards/foundations/auras_batch2.py`, applicable project-wide.
+
+## ZoneContainer.shuffle() for library shuffling
+- **Context**: Burnished Hart needed to shuffle library after searching. `random.shuffle(list(library))` shuffles a copy, not the zone.
+- **Decision**: Use `library.shuffle()` — ZoneContainer has a built-in shuffle method.
+- **Reasoning**: Discovered during Item 12 review fix.
+- **Impact**: Any card that shuffles a library should use this API.

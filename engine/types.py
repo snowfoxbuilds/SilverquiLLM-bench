@@ -112,6 +112,7 @@ class Keyword(enum.Flag):
     INDESTRUCTIBLE = enum.auto()
     MENACE = enum.auto()
     WARD = enum.auto()
+    PROWESS = enum.auto()
 
 
 # Mapping from pip string to ManaType for parsing

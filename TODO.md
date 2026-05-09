@@ -93,7 +93,7 @@ Scope: Fix critical engine bugs, centralize zone-transition infrastructure, then
 
   Testability: Put on battlefield, kill it (lethal damage or destroy), verify trigger fires. Critical: death via SBA (deal lethal, call `resolve_state_based_actions()`, verify trigger on stack).
 
-- [ ] **Batch 9: Creatures with activated abilities (~15–20 cards)**
+- [x] **Batch 9: Creatures with activated abilities (~15–20 cards)**
   Detail: Implement FDN creatures with activated abilities: tap abilities, sacrifice abilities, mana abilities on creatures, pump abilities. Override `get_activated_abilities()` to return `ActivatedAbility` objects. Use `engine/abilities.py::ActivatedAbilityInstance` and `activate_ability()` for proper stack interaction. Tap abilities check `is_tapped` and set `is_tapped = True`. Sacrifice abilities remove the creature.
 
   Files: New file `cards/foundations/activated_creatures.py`.

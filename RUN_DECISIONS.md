@@ -75,3 +75,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Decision**: Document 4 items as ENGINE LIMITATION (Garna attack branch, Nine-Lives Familiar cast-only ETB, Nine-Lives Familiar delayed return, Kalastria {B} cost)
 - **Reasoning**: These require engine features that don't exist yet, consistent with Item 9 convention
 - **Impact**: `cards/foundations/death_trigger_creatures.py`
+
+## Test failure: Item 12 — Activated ability creatures
+- **Failing tests**: 13 tests across Heartfire Immolator, Cathar Commando, Burnished Hart, Hungry Ghoul, Elvish Archdruid, Krenko, Strix Lookout
+- **Tester's intent**: Verify ability costs, mana production scaling, sacrifice effects
+- **Implementer's approach**: Used non-existent Keyword.PROWESS, ManaPool.pay_generic(), and iterated ZoneContainer directly
+- **Coordinator decision**: fix implementation — tests correctly expose 3 recurring bug patterns
+- **Reasoning**: battlefield.get_all() and ManaCost(generic=N) are established conventions; Keyword.PROWESS needs to either exist or be skipped
