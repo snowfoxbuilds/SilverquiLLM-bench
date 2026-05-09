@@ -214,7 +214,7 @@ Auto-generated from engine source. For agent consumption.
 - **enum `Supertype`** — Card supertypes.  
   Members: `BASIC`, `LEGENDARY`, `SNOW`
 - **enum `Keyword`** — Evergreen keyword abilities (combinable via bitwise OR).  
-  Members: `FLYING`, `FIRST_STRIKE`, `DOUBLE_STRIKE`, `DEATHTOUCH`, `TRAMPLE`, `LIFELINK`, `VIGILANCE`, `REACH`, `HASTE`, `FLASH`, `DEFENDER`, `HEXPROOF`, `INDESTRUCTIBLE`, `MENACE`, `WARD`
+  Members: `FLYING`, `FIRST_STRIKE`, `DOUBLE_STRIKE`, `DEATHTOUCH`, `TRAMPLE`, `LIFELINK`, `VIGILANCE`, `REACH`, `HASTE`, `FLASH`, `DEFENDER`, `HEXPROOF`, `INDESTRUCTIBLE`, `MENACE`, `WARD`, `PROWESS`
 - **dataclass `ManaCost`** — Represents a mana cost.  
   Fields: `generic: int`, `pips: dict[ManaType, int]`, `x_count: int`
 - **dataclass `TargetRequirement`** — Describes a targeting requirement for a spell or ability.  
@@ -234,3 +234,4 @@ Auto-generated from engine source. For agent consumption.
 - **class `Zones`** — Per-player collection mapping each :class:`Zone` to a :class:`ZoneContainer`.  
   - `new_player(cls) -> Zones`
 - `move_zone(obj: Any, from_zone: ZoneContainer, to_zone: ZoneContainer, position: str) -> None` — Move *obj* from *from_zone* to *to_zone*.
+- `move_to_zone(game: GameState, card: Any, from_zone: Zone, to_zone: Zone) -> None` — High-level zone transition with trigger/replacement-effect hooks.

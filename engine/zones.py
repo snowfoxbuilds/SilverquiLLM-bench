@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import random
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from engine.types import Zone
+from engine.types import CardType, Zone
+
+if TYPE_CHECKING:
+    from engine.game_state import GameState
 
 
 class IllegalMoveError(Exception):
@@ -162,3 +165,167 @@ def move_zone(
         to_zone.shuffle()
     else:
         to_zone.add(obj, position=position)
+
+
+# Mapping from replacement-effect destination strings to Zone enum values.
+_DESTINATION_ZONE_MAP: dict[str, Zone] = {
+    "graveyard": Zone.GRAVEYARD,
+    "exile": Zone.EXILE,
+    "hand": Zone.HAND,
+    "library": Zone.LIBRARY,
+}
+
+
+def move_to_zone(
+    game: GameState,
+    card: Any,
+    from_zone: Zone,
+    to_zone: Zone,
+    *,
+    replacement_event_type: str | None = None,
+) -> None:
+    """High-level zone transition with trigger/replacement-effect hooks.
+
+    Centralises the bookkeeping that was previously duplicated across
+    ``destroy()``, ``sacrifice()``, ``exile()``, ``create_token()``,
+    ``_move_to_graveyard()`` (SBAs), and ``_resolve_spell()`` (casting).
+
+    Steps:
+    1. Consult replacement effects for zone-change redirection (if
+       *replacement_event_type* is supplied and the card is leaving the
+       battlefield for the graveyard).  The replacement may change the
+       destination zone (e.g. exile instead of graveyard).
+    2. Remove *card* from the source zone.
+    3. Add *card* to the (possibly redirected) destination zone.
+    4. If leaving the battlefield:
+       a. Fire ``LEAVES_BATTLEFIELD`` event.
+       b. Fire ``CREATURE_DIES`` if the card is a creature **and** the
+          final destination is the graveyard (per KEY_DECISIONS).
+       c. Unregister triggers and replacement effects (fires happen
+          **before** unregister so self-referencing triggers still match).
+    5. If entering the battlefield:
+       a. Register triggers (``register_triggers``) and replacement
+          effects (``register_replacement_effects``).
+       b. Fire ``ENTERS_BATTLEFIELD`` event.
+
+    Parameters:
+        game: The current game state.
+        card: The game object being moved.
+        from_zone: The :class:`Zone` the card is currently in.
+        to_zone: The intended destination :class:`Zone`.
+        replacement_event_type: Optional string passed to the replacement
+            manager (e.g. ``"creature_dies"``, ``"sacrifice"``,
+            ``"permanent_destroyed"``).  When ``None``, no replacement
+            effects are consulted (useful for simple moves like casting
+            resolution or exile-from-graveyard).
+    """
+    from engine.triggers import EventType
+
+    controller = getattr(card, "controller", None)
+    owner = getattr(card, "owner", controller)
+
+    leaving_battlefield = from_zone == Zone.BATTLEFIELD
+    entering_battlefield = to_zone == Zone.BATTLEFIELD
+
+    # --- Determine the source player for zone lookup ---
+    # When leaving the battlefield, use the controller's zone.
+    # For other zones (hand, graveyard, etc.), use the owner's zone.
+    if leaving_battlefield:
+        source_player = controller
+    else:
+        source_player = owner
+
+    # Fallback: search all players for the zone containing the card.
+    # Also triggered when the inferred player's zone doesn't contain the card
+    # (e.g. discarding a card that's in a different player's hand than its owner).
+    if source_player is None or not source_player.zones[from_zone].contains(card):
+        for player in game.players:
+            if player.zones[from_zone].contains(card):
+                source_player = player
+                break
+
+    if source_player is None:
+        return  # Card not found anywhere
+
+    source_container = source_player.zones[from_zone]
+    if not source_container.contains(card):
+        return  # Safety: card not in any player's zone
+
+    if owner is None:
+        owner = source_player
+
+    # --- Replacement effects (zone-change redirection) ---
+    dest_zone = to_zone
+    if replacement_event_type is not None and leaving_battlefield:
+        card_types = getattr(card, "card_types", set())
+        is_creature = CardType.CREATURE in card_types
+
+        event_data: dict[str, Any] = {
+            "creature" if is_creature else "permanent": card,
+            "destination": _ZONE_TO_DESTINATION.get(to_zone, "graveyard"),
+            "controller": controller,
+            "owner": owner,
+        }
+        event_data = game.replacement_manager.apply(
+            game, replacement_event_type, event_data,
+        )
+        destination_str = event_data.get("destination", "graveyard")
+        dest_zone = _DESTINATION_ZONE_MAP.get(destination_str, to_zone)
+
+    # --- Perform the zone move ---
+    source_container.remove(card)
+
+    # Determine the destination player (always the owner for graveyard/exile/hand/library).
+    if entering_battlefield:
+        dest_player = controller if controller is not None else owner
+    else:
+        dest_player = owner
+
+    dest_player.zones[dest_zone].add(card)
+
+    # --- Leaving battlefield hooks ---
+    if leaving_battlefield:
+        card_types = getattr(card, "card_types", set())
+        is_creature = CardType.CREATURE in card_types
+
+        # Fire events BEFORE unregistering (KEY_DECISIONS convention).
+        game.trigger_manager.fire_event(
+            game,
+            EventType.LEAVES_BATTLEFIELD,
+            {"permanent": card, "controller": controller},
+        )
+        if is_creature and dest_zone == Zone.GRAVEYARD:
+            game.trigger_manager.fire_event(
+                game,
+                EventType.CREATURE_DIES,
+                {"creature": card, "controller": controller, "owner": owner},
+            )
+
+        # Now unregister triggers and replacement effects.
+        game.trigger_manager.unregister(card)
+        game.replacement_manager.unregister(card)
+
+    # --- Entering battlefield hooks ---
+    if entering_battlefield:
+        # Fire the ENTERS_BATTLEFIELD event *before* registering the card's
+        # own triggers so that a permanent's ETB trigger does not
+        # retroactively trigger off its own entry.  Other already-registered
+        # triggers that watch for ENTERS_BATTLEFIELD will still fire.
+        game.trigger_manager.fire_event(
+            game,
+            EventType.ENTERS_BATTLEFIELD,
+            {"permanent": card, "controller": controller if controller is not None else owner},
+        )
+        if hasattr(card, "register_triggers"):
+            card.register_triggers(game)
+        if hasattr(card, "register_replacement_effects"):
+            card.register_replacement_effects(game)
+
+
+# Reverse mapping: Zone enum → destination string for replacement events.
+_ZONE_TO_DESTINATION: dict[Zone, str] = {
+    Zone.GRAVEYARD: "graveyard",
+    Zone.EXILE: "exile",
+    Zone.HAND: "hand",
+    Zone.LIBRARY: "library",
+}

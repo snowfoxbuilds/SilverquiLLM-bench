@@ -185,29 +185,22 @@ def _resolve_spell(game: GameState, card: CardImpl, player: Player) -> None:
 
     1. Call ``card.on_resolve(game)``.
     2. Remove the card from the stack zone.
-    3. If the card is a permanent type, move it to the battlefield.
+    3. If the card is a permanent type, move it to the battlefield via
+       :func:`~engine.zones.move_to_zone` (which handles trigger/effect
+       registration and the ETB event).
     4. Otherwise (instant / sorcery), move it to the owner's graveyard.
     """
+    from engine.zones import move_to_zone
+
     card.on_resolve(game)
 
-    # Remove from stack zone
-    stack_zone = player.zones[Zone.STACK]
-    if stack_zone.contains(card):
-        stack_zone.remove(card)
-
     if card.card_types & _PERMANENT_TYPES:
-        game.get_battlefield(player).add(card)
-        # Automatically register triggered abilities when entering the battlefield.
-        if hasattr(card, "register_triggers"):
-            card.register_triggers(game)
-        # Automatically register replacement effects when entering the battlefield.
-        if hasattr(card, "register_replacement_effects"):
-            card.register_replacement_effects(game)
+        # Move from stack to battlefield via move_to_zone, which handles
+        # trigger/replacement-effect registration and ENTERS_BATTLEFIELD event.
+        move_to_zone(game, card, Zone.STACK, Zone.BATTLEFIELD)
     else:
-        # Use card's owner for graveyard (consistent with SBA convention).
-        # Fall back to caster if owner is not set.
-        graveyard_owner = card.owner if card.owner is not None else player
-        game.get_graveyard(graveyard_owner).add(card)
+        # Instant/sorcery: move from stack to graveyard via move_to_zone.
+        move_to_zone(game, card, Zone.STACK, Zone.GRAVEYARD)
 
 
 # ------------------------------------------------------------------
@@ -258,16 +251,15 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
             f"Cannot play land {land_card.name!r} — card not in hand"
         )
 
-    # Move from hand to battlefield
-    battlefield = game.get_battlefield(player)
-    move_zone(land_card, hand, battlefield)
+    # Ensure owner/controller are set so move_to_zone routes correctly.
+    if land_card.owner is None:
+        land_card.owner = player
+    land_card.controller = player
 
-    # Automatically register triggered abilities when entering the battlefield.
-    if hasattr(land_card, "register_triggers"):
-        land_card.register_triggers(game)
-    # Automatically register replacement effects when entering the battlefield.
-    if hasattr(land_card, "register_replacement_effects"):
-        land_card.register_replacement_effects(game)
+    # Move from hand to battlefield via move_to_zone, which fires
+    # ENTERS_BATTLEFIELD and registers triggers/replacement effects.
+    from engine.zones import move_to_zone
+    move_to_zone(game, land_card, Zone.HAND, Zone.BATTLEFIELD)
 
     # Decrement land plays
     player.land_plays_remaining -= 1

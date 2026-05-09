@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Test root directory for the SilverquiLLM-bench project. Contains top-level test files, test utilities, and subdirectories for engine, card, and benchmark integration tests. Uses **pytest** as the test framework with ~1,800+ test functions total.
+Test root directory for the SilverquiLLM-bench project. Contains top-level test files, test utilities, and subdirectories for engine, card, and benchmark integration tests. Uses **pytest** as the test framework with ~3,000+ test functions total across 96 test files.
 
 ## Key Files
 
@@ -63,7 +63,7 @@ Test root directory for the SilverquiLLM-bench project. Contains top-level test 
 ## Subdirectories
 
 - **`engine/`** — Unit tests for all engine modules. See `tests/engine/DIRECTORY_SUMMARY.md`.
-- **`cards/`** — Unit tests for card implementations. See `tests/cards/DIRECTORY_SUMMARY.md`.
+- **`cards/`** — Unit tests for card implementations (25 test files). See `tests/cards/DIRECTORY_SUMMARY.md`.
 - **`benchmark/`** — Integration tests and helpers. See `tests/benchmark/DIRECTORY_SUMMARY.md`.
 
 ## Testing Approach

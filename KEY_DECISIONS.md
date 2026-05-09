@@ -43,3 +43,39 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: `run_regressions()` builds fresh temp workspaces per card combining current `run_engine_dir` + card's saved impl/test artifacts. Parses pytest `-v` output for individual `FAILED` test names. Results stored in card's `result.json` with `failed_tests` list. Regression failures fed back to agent if rounds remain.
 - **Reasoning**: Using fresh workspaces avoids stale engine state. Storing individual test names enables precise feedback. Backward-compatible API (optional `run_engine_dir` param).
 - **Impact**: `silverquillm/regression.py` (new module), `agent_session.py`, `cli.py`.
+
+## SBA event firing order: events before unregister
+- **Context**: `_move_to_graveyard()` in SBAs needs to fire CREATURE_DIES and LEAVES_BATTLEFIELD events. Order relative to trigger unregistration matters.
+- **Decision**: Fire events BEFORE `unregister()` so self-referencing death triggers ("when this creature dies") can match. Gate `CREATURE_DIES` on `dest_zone == Zone.GRAVEYARD` so replacement-effect redirections (to exile/hand) don't incorrectly fire death events.
+- **Reasoning**: MTG rules 603.10 — death triggers use last-known-information and must fire. A creature only "dies" if it reaches the graveyard (not if redirected by replacement effects).
+- **Impact**: `engine/state_based_actions.py` (`_move_to_graveyard`).
+
+## ETB event ordering: fire event before registering triggers
+- **Context**: When a permanent enters the battlefield via `move_to_zone()`, should `ENTERS_BATTLEFIELD` event fire before or after registering the permanent's own triggers?
+- **Decision**: Fire `ENTERS_BATTLEFIELD` BEFORE calling `register_triggers()`. This prevents a permanent's own ETB trigger from retroactively matching its own entry event.
+- **Reasoning**: The permanent's triggers become active after it has fully entered the battlefield, not during the entry process. Other already-registered triggers watching for ETB still fire correctly. This also matches existing test expectations.
+- **Impact**: `engine/zones.py` (`move_to_zone`).
+
+## move_to_zone() is the single entry point for all zone transitions
+- **Context**: Zone transitions were duplicated across casting.py, game.py, and state_based_actions.py.
+- **Decision**: All zone transitions go through `move_to_zone(game, card, from_zone, to_zone)` in `engine/zones.py`. This includes spell resolution (stack→battlefield/graveyard), destruction, sacrifice, exile, SBA deaths, and bouncing.
+- **Reasoning**: Centralizes event firing, trigger registration/unregistration, and replacement effect consultation. New zone-transition paths (flicker, mill, reanimate) just call `move_to_zone()`.
+- **Impact**: `engine/zones.py`, `engine/casting.py`, `engine/game.py`, `engine/state_based_actions.py`.
+
+## cards_drawn_this_turn tracking in engine
+- **Context**: Fractal Anomaly needs to know how many cards the controller drew this turn.
+- **Decision**: Added `cards_drawn_this_turn` counter increment in `engine/game.py`'s `draw_card()` function using `hasattr` guard.
+- **Reasoning**: Simple, engine-level tracking that any card can query via `getattr(controller, "cards_drawn_this_turn", 0)`.
+- **Impact**: `engine/game.py` (`draw_card`).
+
+## ENGINE LIMITATION comment convention
+- **Context**: Several aura cards require engine features that don't exist yet (untap prevention, controller change, name/subtype reset, dynamic mana abilities).
+- **Decision**: Mark such code with `# ENGINE LIMITATION:` comments explaining what's missing and what would be needed.
+- **Reasoning**: These comments serve as a TODO list for future engine work and prevent future contributors from thinking the stubs are complete implementations.
+- **Impact**: Established in `cards/foundations/auras_batch2.py`, applicable project-wide.
+
+## ZoneContainer.shuffle() for library shuffling
+- **Context**: Burnished Hart needed to shuffle library after searching. `random.shuffle(list(library))` shuffles a copy, not the zone.
+- **Decision**: Use `library.shuffle()` — ZoneContainer has a built-in shuffle method.
+- **Reasoning**: Discovered during Item 12 review fix.
+- **Impact**: Any card that shuffles a library should use this API.

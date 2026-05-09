@@ -13,7 +13,8 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
-from engine.types import Supertype, Zone
+from engine.triggers import EventType
+from engine.types import CardType, Supertype, Zone
 from engine.zones import ZoneContainer
 
 if TYPE_CHECKING:
@@ -39,44 +40,21 @@ def _move_to_graveyard(game: GameState, player: Player, obj: Any) -> None:
     """Move *obj* from the battlefield to its owner's graveyard (or a
     replacement destination).
 
-    Before performing the zone change, the :class:`ReplacementManager` is
-    consulted via ``game.replacement_manager.apply()``.  A registered
-    replacement effect (e.g. "if this creature would die, exile it
-    instead") can override the destination zone by setting
-    ``event_data["destination"]`` to ``"exile"`` (or another zone name).
-
-    Per MTG rule §704.5, when a permanent is destroyed or otherwise put
-    into a graveyard by an SBA it goes to its **owner's** graveyard, not
-    the controller's.  We use duck-typing: if *obj* has an ``owner``
-    attribute, the permanent is placed in that player's graveyard;
-    otherwise we fall back to *player* (the controller).
+    Delegates to :func:`~engine.zones.move_to_zone` which handles
+    replacement effects, event firing (``LEAVES_BATTLEFIELD``,
+    ``CREATURE_DIES``), and trigger/effect unregistration.
     """
+    from engine.zones import move_to_zone
+
     bf = _battlefield(game, player)
     if bf.contains(obj):
-        owner = obj.owner if hasattr(obj, "owner") else player
-
-        # --- Replacement effects: consult before deciding destination ---
-        event_data: dict[str, Any] = {
-            "creature": obj,
-            "destination": "graveyard",
-            "controller": player,
-            "owner": owner,
-        }
-        event_data = game.replacement_manager.apply(
-            game, "creature_dies", event_data,
+        move_to_zone(
+            game,
+            obj,
+            Zone.BATTLEFIELD,
+            Zone.GRAVEYARD,
+            replacement_event_type="creature_dies",
         )
-
-        # Determine the actual destination zone from (possibly modified) event_data.
-        destination = event_data.get("destination", "graveyard")
-        dest_zone = _DESTINATION_ZONE_MAP.get(destination, Zone.GRAVEYARD)
-
-        bf.remove(obj)
-        owner.zones[dest_zone].add(obj)
-
-        # Automatically unregister triggered abilities when leaving the battlefield.
-        game.trigger_manager.unregister(obj)
-        # Automatically unregister replacement effects when leaving the battlefield.
-        game.replacement_manager.unregister(obj)
 
 
 # Mapping from replacement-effect destination strings to Zone enum values.
@@ -257,7 +235,7 @@ def _sba_aura_unattached(game: GameState) -> bool:
 
     for player in game.players:
         for obj in _battlefield(game, player).get_all():
-            if hasattr(obj, "attached_to") and getattr(obj, "is_aura", True):
+            if hasattr(obj, "attached_to") and getattr(obj, "is_aura", False):
                 target = obj.attached_to
                 if target is None or id(target) not in all_on_battlefield:
                     to_remove.append((player, obj))
@@ -321,14 +299,37 @@ def check_state_based_actions(game: GameState) -> bool:
 def resolve_state_based_actions(game: GameState) -> bool:
     """Run state-based actions in a loop until no more actions are taken.
 
-    After the loop stabilises, this is where triggered abilities would be
-    checked and placed on the stack (not yet implemented).
+    After each SBA stabilisation pass, any triggered abilities that were
+    queued during processing are left on the stack.  Per MTG rule 704.3,
+    the SBA loop must repeat if new triggers were placed on the stack
+    (because those triggers may cause further SBAs when resolved, and
+    the game state must be fully stable before a player receives priority).
+
+    The outer loop: repeat { run SBA passes until stable; record whether
+    new triggers were pushed onto the stack during those passes } until
+    no SBAs were performed **and** no new triggers were queued.
 
     Returns ``True`` if any SBAs were performed during the entire process,
     ``False`` if the game state was already stable.
     """
     any_performed = False
-    while check_state_based_actions(game):
-        any_performed = True
-    # TODO: check for triggered abilities and put them on the stack
+    while True:
+        # Snapshot the stack size before SBA passes so we can detect new
+        # triggers that were pushed during processing.
+        stack_size_before = len(game.stack)
+
+        # Inner loop: run SBA checks until no more actions are taken.
+        sba_this_round = False
+        while check_state_based_actions(game):
+            sba_this_round = True
+            any_performed = True
+
+        # Detect whether any triggers were queued during this round.
+        triggers_queued = len(game.stack) > stack_size_before
+
+        # If nothing happened this round (no SBAs and no new triggers),
+        # the game state is fully stable.
+        if not sba_this_round and not triggers_queued:
+            break
+
     return any_performed

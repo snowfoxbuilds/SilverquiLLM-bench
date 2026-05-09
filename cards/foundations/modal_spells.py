@@ -75,13 +75,10 @@ def _is_on_battlefield(game: Any, obj: Any) -> bool:
 def _bounce(game: Any, obj: Any) -> None:
     """Return *obj* from the battlefield to its owner's hand."""
     from engine.types import Zone
-    owner = getattr(obj, "owner", None)
+    from engine.zones import move_to_zone
     for player in game.players:
-        bf = game.get_battlefield(player)
-        if bf.contains(obj):
-            bf.remove(obj)
-            target_owner = owner if owner is not None else player
-            target_owner.zones[Zone.HAND].add(obj)
+        if game.get_battlefield(player).contains(obj):
+            move_to_zone(game, obj, Zone.BATTLEFIELD, Zone.HAND)
             return
 
 
