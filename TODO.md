@@ -61,7 +61,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74�
 
 ### SPG Card Implementations
 
-- [ ] **SPG Batch 1: Simple spells and utility creatures (5 cards)**
+- [x] **SPG Batch 1: Simple spells and utility creatures (5 cards)**
   Detail: Implement the simpler Special Guest cards that need minimal or no new engine extensions:
 
   1. **Condemn** (SPG #74) — {W} instant. Put target attacking creature on the bottom of its owner’s library. Its controller gains life equal to its toughness. Needs: target validation (must be attacking), bottom-of-library zone move, life gain based on toughness.

@@ -32,3 +32,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `engine/game_state.py` — Added `extra_turns: list[int]` FIFO queue, `_normal_next_index` for tracking normal rotation independently; modified `advance_phase()` to pop extra turns without advancing normal rotation
 - `tests/engine/test_extra_turns.py` — 9 tests for extra turn granting, FIFO ordering, and normal turn order resumption (3 tests expected to be updated by Tester for inserted-turn semantics)
 
+## Item 5: SPG Batch 1 — Simple spells and utility creatures
+
+### Tests
+- `tests/cards/test_special_guests.py` — Tests for all 5 Special Guest cards and registration
+
+### Implementation
+- `cards/foundations/special_guests.py` — Implemented 5 Special Guest cards; revised: added can_cast guard and attacking validation for Condemn, choose_card API for Grim Tutor, has_kicker flag for Bushwhacker, functional continuous effect apply for Bushwhacker buff, removed hexproof from Paradise Druid base keywords
+

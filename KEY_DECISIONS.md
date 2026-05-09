@@ -108,3 +108,8 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Added `_normal_next_index` to track normal rotation independently. Extra turns pop from FIFO queue without advancing normal rotation. When extras are consumed, normal rotation resumes from `_normal_next_index`.
 - **Reasoning**: Matches MTG rules — "take an extra turn after this one" inserts a turn; normal turn order is unaffected.
 - **Impact**: `engine/game_state.py`, `engine/turn.py`.
+
+## SPG cards: set_code="spg", all in special_guests.py
+- **Context**: Special Guest cards needed a home and metadata convention.
+- **Decision**: All SPG cards live in `cards/foundations/special_guests.py` with `set_code="spg"` in CardMetadata. Registered via `register_special_guests()`.
+- **Impact**: `cards/foundations/special_guests.py`, `cards/registry.py`.
