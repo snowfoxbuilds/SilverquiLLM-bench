@@ -116,7 +116,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74â
 
 ### Validation Runner
 
-- [ ] **Replay executor (state-diff observer mode)**
+- [x] **Replay executor (state-diff observer mode)**
   Detail: Build a `ReplayExecutor` that steps through `GameSnapshot` objects from the parser and validates engine behavior using state-diff comparison:
 
   1. Initialize engine game state from the first `GameStateType_Full` snapshot (players, life totals, opening hands via `grpId` â†’ card mapping)

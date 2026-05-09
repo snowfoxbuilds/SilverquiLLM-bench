@@ -141,3 +141,13 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: When processing diff gameObjects, merge onto existing object using field-by-field `setattr`. New objects created from full dict. `_merge_game_object()` helper handles the mapping.
 - **Reasoning**: Wholesale replacement via `from_dict()` zeros out omitted fields, corrupting state.
 - **Impact**: `silverquillm/replay/state.py`.
+
+## Replay executor: Seat 1 engine API with fallback
+- **Context**: Seat 1 should use engine API for full validation, but some actions (spell casts) can't go through the full engine pipeline in replay mode.
+- **Decision**: Seat 1 uses engine API where feasible (land plays via `play_land()`, deaths via `move_to_zone()`). Falls back to direct zone mutation on engine rejection. Spell casts use direct mutation with correct destination routing (permanents→battlefield, instants/sorceries→graveyard). Stack simulation marked ENGINE LIMITATION.
+- **Impact**: `silverquillm/replay/executor.py`.
+
+## Replay executor: always compare state even on skip
+- **Context**: Phase transitions and parser-missed changes can alter observable state.
+- **Decision**: `execute_step()` always calls `compare_state()` before returning, even for no-action steps.
+- **Impact**: `silverquillm/replay/executor.py`.

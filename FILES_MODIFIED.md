@@ -67,3 +67,12 @@ silverquillm/replay/types.py — Dataclasses for ReplayGame, GameSnapshot, Repla
 silverquillm/replay/state.py — GRE state reconstruction (full/diff merging with sparse gameObject merge), action inference, ObjectTracker for zone transition tracking
 silverquillm/replay/parser.py — High-level parse_replay() function, card ID map loading
 data/replays/sample_replay.json — Synthetic 5-turn replay data with real grpIds for testing
+
+## Item 9: Replay executor (state-diff observer mode)
+
+### Tests
+tests/test_replay_executor.py — 23 tests for ReplayExecutor initialization, step execution, state comparison, seat 1/2 behavior, imports
+
+### Implementation
+silverquillm/replay/executor.py — ReplayExecutor class with state-diff observer mode, seat 1 full validation, seat 2 oracle injection, state comparison (life totals, zone contents, battlefield state)
+silverquillm/replay/__init__.py — Added ReplayExecutor, StateMismatch, StepResult exports
