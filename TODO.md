@@ -32,7 +32,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74�
 
   Testability: Unit test that a card with cost `{4}{R}{R}` and reduction of 3 costs `{1}{R}{R}`. Test reduction can’t go below 0 generic. Test with 0 reduction (full cost).
 
-- [ ] **Protection from qualities (keyword ability)**
+- [x] **Protection from qualities (keyword ability)**
   Detail: Implement "protection from [quality]" keyword. Akroma’s Memorial (SPG #81) grants protection from black and from red. Protection prevents: **D**amage from sources with that quality, **E**nchanting/equipping by permanents with that quality, **B**locking by creatures with that quality, **T**argeting by spells/abilities from sources with that quality (DEBT mnemonic).
 
   Changes needed:

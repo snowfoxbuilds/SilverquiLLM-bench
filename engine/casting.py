@@ -179,6 +179,19 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
             target = player.choose_target(target_specs, spec)
             chosen_targets.append(target)
 
+    # 5b. Protection check — reject targets that have protection from this
+    #     spell (the T in DEBT).
+    from engine.protection import has_protection_from
+
+    for target in chosen_targets:
+        if has_protection_from(target, card):
+            # Rollback: move card from stack zone back to hand
+            stack_zone.remove(card)
+            hand.add(card)
+            raise CastingError(
+                f"Cannot cast {card.name!r} — target has protection from this spell"
+            )
+
     # Store chosen targets on the card so on_resolve() can access them
     # even after the StackObject has been popped from the stack.
     card.chosen_targets = chosen_targets  # type: ignore[attr-defined]

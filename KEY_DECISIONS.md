@@ -91,3 +91,14 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: `get_cost_reduction()` temporarily sets `card.controller = controller` before calling the hook, then restores. `cast_spell()` also sets `card.controller = player` early in the pipeline.
 - **Reasoning**: Belt-and-suspenders — safe for both standalone calls and pipeline usage.
 - **Impact**: `engine/casting.py`.
+
+## Protection from qualities: DEBT integration points
+- **Context**: Protection keyword requires integration at four points (Damage, Enchanting/Equipping, Blocking, Targeting).
+- **Decision**: Protection checks integrated in: `combat.py:_deal_damage()` and `game.py:deal_damage()` for damage; `casting.py:cast_spell()` for targeting (post-target-selection validation); `combat.py` for blocking legality; `state_based_actions.py` for aura/equipment detachment.
+- **Reasoning**: Each DEBT aspect needs enforcement at its actual game mechanic integration point, not just in isolated helpers.
+- **Impact**: `engine/protection.py` (new), `engine/combat.py`, `engine/casting.py`, `engine/game.py`, `engine/state_based_actions.py`.
+
+## Equipment detachment vs aura detachment on protection
+- **Context**: When a creature gains protection from a color, both auras and equipment with that color must detach.
+- **Decision**: Auras go to graveyard (existing behavior). Equipment sets `attached_to = None` but stays on battlefield per MTG rules.
+- **Impact**: `engine/state_based_actions.py`.

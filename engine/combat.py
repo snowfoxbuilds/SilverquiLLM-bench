@@ -126,6 +126,12 @@ def _can_block(blocker: Any, attacker: Any) -> bool:
         if Keyword.FLYING not in blocker_kw and Keyword.REACH not in blocker_kw:
             return False
 
+    # Protection check — attacker with protection from blocker can't be blocked
+    from engine.protection import has_protection_from
+
+    if has_protection_from(attacker, blocker):
+        return False
+
     return True
 
 
@@ -157,8 +163,16 @@ def _deal_damage(
     If *target* is a player, reduces life.
     If *target* is a creature, marks damage on it.
     If *source* has lifelink, the controller gains that much life.
+
+    Protection prevents damage from sources with the protected-from quality.
     """
     if amount <= 0:
+        return
+
+    # Protection prevents damage (D in DEBT).
+    from engine.protection import has_protection_from
+
+    if has_protection_from(target, source):
         return
 
     # Record damage assignment

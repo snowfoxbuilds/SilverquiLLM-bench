@@ -217,12 +217,23 @@ def _sba_token_not_on_battlefield(game: GameState) -> bool:
     return action_taken
 
 
-def _sba_aura_unattached(game: GameState) -> bool:
-    """An Aura not attached to a legal object is put into its owner's graveyard.
+def _attachment_illegal_due_to_protection(obj: Any) -> bool:
+    """Return ``True`` if *obj* (aura or equipment) is illegally attached due to protection."""
+    attached = getattr(obj, "attached_to", None)
+    if attached is None:
+        return False
+    from engine.protection import has_protection_from
+    return has_protection_from(attached, obj)
 
-    An aura is considered illegally attached if:
+
+def _sba_aura_unattached(game: GameState) -> bool:
+    """An Aura or Equipment not attached to a legal object is put into its
+    owner's graveyard.
+
+    An attachment is considered illegally attached if:
     - It has an ``attached_to`` attribute that is ``None``, OR
-    - The object it is attached to is no longer on the battlefield.
+    - The object it is attached to is no longer on the battlefield, OR
+    - The enchanted/equipped permanent has protection from the attachment.
     """
     action_taken = False
     to_remove: list[tuple[Player, Any]] = []
@@ -233,15 +244,30 @@ def _sba_aura_unattached(game: GameState) -> bool:
         for obj in _battlefield(game, player).get_all():
             all_on_battlefield.add(id(obj))
 
+    to_unattach: list[Any] = []  # Equipment just becomes unattached
+
     for player in game.players:
         for obj in _battlefield(game, player).get_all():
-            if hasattr(obj, "attached_to") and getattr(obj, "is_aura", False):
+            is_aura = getattr(obj, "is_aura", False)
+            is_equipment = getattr(obj, "is_equipment", False)
+            if not hasattr(obj, "attached_to"):
+                continue
+            if is_aura:
                 target = obj.attached_to
                 if target is None or id(target) not in all_on_battlefield:
                     to_remove.append((player, obj))
+                elif _attachment_illegal_due_to_protection(obj):
+                    to_remove.append((player, obj))
+            elif is_equipment:
+                target = obj.attached_to
+                if target is not None and _attachment_illegal_due_to_protection(obj):
+                    to_unattach.append(obj)
 
     for player, obj in to_remove:
         _move_to_graveyard(game, player, obj)
+        action_taken = True
+    for obj in to_unattach:
+        obj.attached_to = None
         action_taken = True
     return action_taken
 

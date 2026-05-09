@@ -122,7 +122,12 @@ def deal_damage(game: GameState, source: Any, target: Any, amount: int) -> None:
     if amount <= 0:
         return
 
+    from engine.protection import has_protection_from
     from engine.types import Keyword
+
+    # Protection prevents damage from sources with the protected-from quality.
+    if has_protection_from(target, source):
+        return
 
     if hasattr(target, "life"):
         # Target is a player
