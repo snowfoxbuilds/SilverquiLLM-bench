@@ -12,7 +12,7 @@ Renamed from `benchmark/` to `silverquillm/` during this run.
 |------|---------------|
 | `__init__.py` | Package docstring; marks `silverquillm/` as a Python package. |
 | `config.py` | **Config loader** — `BenchmarkConfig` and nested `AgentConfig` dataclasses; `load_config()` for YAML validation. `AgentConfig` holds adapter name, timeout, max rounds, and feature flags. |
-| `cli.py` | **CLI entry point** — Click-based CLI with `run`, `eval`, `score`, `cards` subcommands. Full orchestration loop with `--cards`, `--prototype`, `--dry-run` flags. Cards sorted by complexity tier. Wires persistent engine lifecycle. Entry point: `benchmark` (pyproject.toml). |
+| `cli.py` | **CLI entry point** — Click-based CLI with `run`, `eval`, `score`, `cards`, `validate` subcommands. Full orchestration loop with `--cards`, `--prototype`, `--dry-run` flags. Cards sorted by complexity tier. Wires persistent engine lifecycle. `validate` subcommand delegates to `silverquillm.replay.cli`. Entry point: `benchmark` (pyproject.toml). |
 | `agent_session.py` | **Agent session manager** — `AgentSession` dataclass managing workspace setup, adapter lifecycle, and the two-phase implementation flow (blind → test-informed) with contamination controls. Postmortem JSONL logging and `agent_thoughts.md` narrative generation. Persistent engine support via `init_run_engine`, `commit_engine_changes`, `save_engine_final`, `compute_engine_diff`. |
 | `card_classifier.py` | **Complexity classifier** — Heuristic-based tier assignment (trivial/simple/medium/complex/advanced). Outputs both `tier` and `complexity_tier` keys. |
 | `card_spec.py` | **Spec generator** — `generate_card_spec()` and `generate_all_specs()` produce per-card JSON spec files with oracle data + complexity tier. |
@@ -32,6 +32,7 @@ Renamed from `benchmark/` to `silverquillm/` during this run.
 ## Subdirectories
 
 - **`adapters/`** — Pluggable agent adapter system. See `silverquillm/adapters/DIRECTORY_SUMMARY.md`.
+- **`replay/`** — 17lands GRE replay parser, executor, and validation pipeline. See `silverquillm/replay/DIRECTORY_SUMMARY.md`.
 
 ## Module Dependency Graph
 
