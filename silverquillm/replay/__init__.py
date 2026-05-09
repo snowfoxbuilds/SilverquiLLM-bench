@@ -13,6 +13,13 @@ from silverquillm.replay.types import (
     ReplayAction,
     ReplayGame,
 )
+from silverquillm.replay.validation import (
+    Divergence,
+    DivergenceType,
+    ValidatingExecutor,
+    ValidationReport,
+    validate_replay,
+)
 
 __all__ = [
     "parse_replay",
@@ -23,4 +30,9 @@ __all__ = [
     "ReplayExecutor",
     "StateMismatch",
     "StepResult",
+    "Divergence",
+    "DivergenceType",
+    "ValidatingExecutor",
+    "ValidationReport",
+    "validate_replay",
 ]

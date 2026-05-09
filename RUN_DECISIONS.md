@@ -22,3 +22,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: Accept implementer — test contract takes priority. The can_cast() guard addresses the core issue (no casting without attackers).
 - **Reasoning**: The TDD rule says tests can't be modified. Raw creature returns satisfy the test assertions. The guard prevents illegal casting.
 - **Impact**: `cards/foundations/special_guests.py` (Condemn class).
+
+## Disagreement: Item 10 — per_card_divergence_rates counts vs rates
+- **Reviewer comment (strict)**: `per_card_divergence_rates` returns raw counts, not rates. The TODO asks for rates (ratio/percentage).
+- **Implementer justification**: Tests assert integer counts; changing to ratios would break 4+ tests. Tests define the contract and Implementer must not modify test files.
+- **Coordinator decision**: Accept reviewer. The TODO spec explicitly says "rates." The Tester will update the affected tests to assert ratios, then the Implementer will fix the implementation.
+- **Reasoning**: The TODO spec is authoritative. "per-card divergence rates" means a ratio (divergences/appearances), not raw counts. The constraint on not modifying tests applies to the Implementer — the coordinator can direct the Tester to update tests.
+- **Impact**: `silverquillm/replay/validation.py`, `tests/test_divergence_detection.py`

@@ -151,3 +151,18 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Context**: Phase transitions and parser-missed changes can alter observable state.
 - **Decision**: `execute_step()` always calls `compare_state()` before returning, even for no-action steps.
 - **Impact**: `silverquillm/replay/executor.py`.
+
+## Divergence detection: wrapper pattern over executor
+- **Context**: Need structured divergence recording without modifying the tested ReplayExecutor.
+- **Decision**: ValidatingExecutor wraps ReplayExecutor, intercepting execute_step() to classify results into Divergence records. Four types: MISSING_CARD, ILLEGAL_ACTION, STATE_MISMATCH, ENGINE_ERROR.
+- **Impact**: `silverquillm/replay/validation.py`.
+
+## Per-card divergence rates are float ratios, not counts
+- **Context**: TODO spec says "per-card divergence rates." Implementer initially returned raw counts.
+- **Decision**: Track card appearances (how many comparisons each grpId participates in) and return divergences/appearances as a float ratio. Fallback rate 1.0 if appearances not tracked.
+- **Impact**: `silverquillm/replay/validation.py`, `tests/test_divergence_detection.py`.
+
+## ILLEGAL_ACTION classification uses StepResult.skipped
+- **Context**: Initial implementation used keyword matching on mismatch descriptions, which is fragile.
+- **Decision**: Primary classification uses StepResult.skipped + skip_reason. Keyword matching kept as fallback.
+- **Impact**: `silverquillm/replay/validation.py`.

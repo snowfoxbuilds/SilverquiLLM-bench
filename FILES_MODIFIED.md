@@ -76,3 +76,12 @@ tests/test_replay_executor.py — 23 tests for ReplayExecutor initialization, st
 ### Implementation
 silverquillm/replay/executor.py — ReplayExecutor class with state-diff observer mode, seat 1 full validation, seat 2 oracle injection, state comparison (life totals, zone contents, battlefield state)
 silverquillm/replay/__init__.py — Added ReplayExecutor, StateMismatch, StepResult exports
+
+## Item 10: Divergence detection and reporting
+
+### Tests
+tests/test_divergence_detection.py — 43 tests for DivergenceType, Divergence, ValidationReport, ValidatingExecutor, validate_replay
+
+### Implementation
+silverquillm/replay/validation.py — DivergenceType enum, Divergence dataclass, ValidationReport, ValidatingExecutor (MISSING_CARD not counted as successful, ILLEGAL_ACTION from skipped/skip_reason + keyword fallback, expected/actual state populated for ENGINE_ERROR/MISSING_CARD)
+silverquillm/replay/__init__.py — Added Divergence, DivergenceType, ValidatingExecutor, ValidationReport, validate_replay exports
