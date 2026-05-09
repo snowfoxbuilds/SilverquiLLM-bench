@@ -107,7 +107,7 @@ Scope: Fix critical engine bugs, centralize zone-transition infrastructure, then
 
   Testability: Cast, verify effect applies. For triggered enchantments: trigger the event, verify it fires.
 
-- [ ] **Batch 11: Remaining artifacts & planeswalkers (~10–15 cards)**
+- [x] **Batch 11: Remaining artifacts & planeswalkers (~10–15 cards)**
   Detail: Implement remaining FDN artifacts (utility artifacts, mana rocks, artifact creatures) and planeswalkers. For artifacts: follow `artifacts.py` patterns. For planeswalkers: subclass `Planeswalker`, set `starting_loyalty`, override `get_loyalty_abilities()` with `LoyaltyAbility` objects. Fully implement loyalty ability effects (not stubs). Set `Supertype.LEGENDARY` and planeswalker subtype.
 
   Files: `cards/foundations/artifacts.py` and `cards/foundations/planeswalkers.py` (extend).

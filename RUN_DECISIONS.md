@@ -94,3 +94,20 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept implementer — ENGINE LIMITATION
 - **Reasoning**: Proper ETB trigger requires engine changes (event data in trigger callbacks) outside batch scope. Continuous effect is a reasonable approximation. Documented in code.
 - **Impact**: `cards/foundations/global_enchantments.py` — Authority of the Consuls
+
+## Test failure: Item 14 — Artifacts & planeswalkers
+- **Failing tests**: SoulGuideLantern exile, Kaito +1, Chandra +2 (2 tests), Vivien +1
+- **Coordinator decision**: fix implementation — tests correctly expose zone API misuse (zones.get() vs zones[Zone.X])
+- **Reasoning**: Consistent pattern of wrong zone access API
+
+## Engine limitations documented — Item 14
+- **Context**: Planeswalkers require emblem system, combat damage triggers, exile-play mechanics, and full copy effects — none exist in the engine.
+- **Decision**: Document 5 items as ENGINE LIMITATION (Kaito combat trigger, Kaito/Vivien emblems, Chandra exile-play, Chandra copy effect). Implement approximations where possible.
+- **Reasoning**: Building these engine features is out of scope for a card-porting batch.
+- **Impact**: `cards/foundations/planeswalkers_batch2.py`, `cards/foundations/artifacts_batch2.py`
+
+## Spec deviation: Item 14 — card count
+- **TODO spec expected**: ~10–15 cards
+- **Actual codebase state**: 30 cards implemented (27 artifacts + 3 planeswalkers)
+- **What was implemented instead**: All remaining FDN artifacts and planeswalkers found via Scryfall
+- **Impact**: More complete FDN coverage than estimated
