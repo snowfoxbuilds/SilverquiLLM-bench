@@ -73,7 +73,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74�
 
   Testability: Per-card unit tests. Condemn: test on attacking creature, verify bottom-of-library + life gain. Grim Tutor: test search + life loss. Bushwhacker: test kicked vs unkicked. Paradise Druid: test hexproof while untapped, loses hexproof when tapped for mana. Bloom Tender: test with various color distributions among controlled permanents.
 
-- [ ] **SPG Batch 2: Complex permanents and spells (5 cards)**
+- [x] **SPG Batch 2: Complex permanents and spells (5 cards)**
   Detail: Implement the mechanically complex Special Guest cards. These depend on the engine extensions from earlier items.
 
   1. **Sphinx’s Tutelage** (SPG #75) — {2}{U} enchantment. Whenever you draw a card, target opponent mills 2. If two nonland cards that share a color were milled this way, repeat this process. {5}{U}: Draw a card, then discard a card. Needs: draw trigger, mill mechanic (top N cards from library → graveyard), repeat-loop logic (check milled cards for shared color among nonlands), activated draw+discard ability.

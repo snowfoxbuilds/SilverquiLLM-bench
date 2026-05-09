@@ -40,3 +40,9 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `cards/foundations/special_guests.py` — Implemented 5 Special Guest cards; revised: added can_cast guard and attacking validation for Condemn, choose_card API for Grim Tutor, has_kicker flag for Bushwhacker, functional continuous effect apply for Bushwhacker buff, removed hexproof from Paradise Druid base keywords
 
+## Item 6: SPG Batch 2 — Complex permanents and spells
+
+### Implementation
+- `cards/foundations/special_guests.py` — Added 5 complex SPG cards (Sphinx's Tutelage, Embercleave, Akroma's Memorial, Temporal Manipulation, Fiend Artisan) with full registration; revised: Embercleave ETB attach via on_resolve() instead of trigger-only, P/T bonus moved to Layer 7c, extracted _do_etb_attach helper
+- `engine/card.py` — Clear protections list in Creature._reset_characteristics() so granted protections don't persist after source leaves
+

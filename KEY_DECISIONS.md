@@ -113,3 +113,19 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Context**: Special Guest cards needed a home and metadata convention.
 - **Decision**: All SPG cards live in `cards/foundations/special_guests.py` with `set_code="spg"` in CardMetadata. Registered via `register_special_guests()`.
 - **Impact**: `cards/foundations/special_guests.py`, `cards/registry.py`.
+
+## ETB effects: use on_resolve() not triggers for same-card ETB
+- **Context**: `register_triggers()` is called AFTER `ENTERS_BATTLEFIELD` fires, so same-card ETB triggers never match during normal resolution.
+- **Decision**: For cards that need to do something when they ETB (like Embercleave auto-attach), perform the action directly in `on_resolve()` rather than relying on a self-ETB trigger.
+- **Reasoning**: Per existing KEY_DECISIONS "ETB event ordering: fire event before registering triggers".
+- **Impact**: Cards with self-ETB effects should use `on_resolve()` pattern.
+
+## Continuous effects: P/T bonuses in Layer 7c, keywords in Layer 6
+- **Context**: Embercleave's +1/+1 was being applied in Layer 6 (ABILITY) which gets overwritten by Layer 7a CDAs.
+- **Decision**: Equipment/aura P/T bonuses go in Layer 7 with SubLayer.MODIFY_PT (7c). Keywords go in Layer 6.
+- **Impact**: Equipment cards with P/T bonuses.
+
+## protections cleared during _reset_characteristics()
+- **Context**: Granted protections persisted after the source left because `_reset_characteristics()` didn't clear them.
+- **Decision**: Added `protections` clearing to `Creature._reset_characteristics()` so protections are properly recalculated each cycle.
+- **Impact**: `engine/card.py`, any card granting protection via continuous effects.

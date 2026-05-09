@@ -315,6 +315,9 @@ class Creature(CardImpl):
         self._cant_be_blocked: bool = False
         self._cant_activate: bool = False
         self._max_attackers_blocked: int = 1
+        # Clear granted protections so they are reapplied by active effects.
+        if hasattr(self, "protections"):
+            self.protections = []
 
     @property
     def power(self) -> int:
