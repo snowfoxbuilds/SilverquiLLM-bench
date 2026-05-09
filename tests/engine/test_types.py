@@ -18,6 +18,7 @@ import pytest
 from engine.types import (
     CardType,
     Color,
+    HybridManaSymbol,
     Keyword,
     ManaCost,
     ManaType,
@@ -418,11 +419,6 @@ class TestManaCostParseInvalid:
         """An unknown symbol like {Z} should raise ValueError."""
         with pytest.raises(ValueError, match="[Uu]nrecogni"):
             ManaCost.parse("{Z}")
-
-    def test_hybrid_mana_not_yet_supported(self) -> None:
-        """Hybrid mana like {W/U} is deferred and should raise ValueError."""
-        with pytest.raises(ValueError):
-            ManaCost.parse("{W/U}")
 
     # --- Malformed-but-tokenizable edge cases (reviewer-requested) ----------
 

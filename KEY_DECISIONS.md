@@ -79,3 +79,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Use `library.shuffle()` — ZoneContainer has a built-in shuffle method.
 - **Reasoning**: Discovered during Item 12 review fix.
 - **Impact**: Any card that shuffles a library should use this API.
+
+## Hybrid mana payment: reserve explicit choices before solving
+- **Context**: `pay()` with hybrid + generic costs could conflict when explicit generic `choices` were provided. Hybrid solver might consume mana the caller reserved for generic.
+- **Decision**: When explicit `choices` are provided, deduct generic mana from the working pool BEFORE running `_solve_hybrid()`. The solver only sees genuinely available mana.
+- **Reasoning**: Prevents the solver from stealing reserved mana. Auto-pay (choices=None) still works as before.
+- **Impact**: `engine/mana.py` (`pay()` method).

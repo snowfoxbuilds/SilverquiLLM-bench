@@ -6,7 +6,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74â
 
 ### Engine Extensions for SPG Cards
 
-- [ ] **Hybrid mana parsing and cost payment**
+- [x] **Hybrid mana parsing and cost payment**
   Detail: Extend `ManaCost.parse()` to handle hybrid mana symbols like `{B/G}`. A hybrid symbol can be paid with either color. Fiend Artisan (SPG #83) costs `{B/G}{B/G}` â€” each symbol payable with black or green.
 
   Changes needed:
