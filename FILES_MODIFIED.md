@@ -46,3 +46,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `cards/foundations/special_guests.py` — Added 5 complex SPG cards (Sphinx's Tutelage, Embercleave, Akroma's Memorial, Temporal Manipulation, Fiend Artisan) with full registration; revised: Embercleave ETB attach via on_resolve() instead of trigger-only, P/T bonus moved to Layer 7c, extracted _do_etb_attach helper
 - `engine/card.py` — Clear protections list in Creature._reset_characteristics() so granted protections don't persist after source leaves
 
+## Item 7: Card ID mapping (grpId → card name)
+
+### Tests
+(no pre-written tests for this item)
+
+### Implementation
+- `data/replays/card_id_map.json` — grpId-to-card-name mapping with 592 entries (582 from Scryfall + 10 synthetic SPG #74-83); revised: added card_name_to_grpIds (plural, list-valued) for duplicate-name disambiguation, synthetic flag on SPG 94700-94709 entries
+- `scripts/build_card_id_map.py` — Script to fetch card data from Scryfall API and build the mapping JSON; revised: reverse map preserves all grpIds via card_name_to_grpIds, synthetic entries flagged with "synthetic": true, error handling on curl/Scryfall API failures
+

@@ -129,3 +129,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Context**: Granted protections persisted after the source left because `_reset_characteristics()` didn't clear them.
 - **Decision**: Added `protections` clearing to `Creature._reset_characteristics()` so protections are properly recalculated each cycle.
 - **Impact**: `engine/card.py`, any card granting protection via continuous effects.
+
+## Card ID mapping: synthetic SPG grpIds marked with "synthetic": true
+- **Context**: SPG cards don't have real Arena grpIds yet. Synthetic IDs (94700-94709) were needed for testing.
+- **Decision**: Synthetic entries marked with `"synthetic": true` flag in the primary mapping. Separate `card_name_to_grpIds` (plural) preserves all printings per card name.
+- **Reasoning**: Consumers can filter synthetics; tests can still resolve SPG cards.
+- **Impact**: `data/replays/card_id_map.json`, `scripts/build_card_id_map.py`.

@@ -89,7 +89,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74�
 
 ### Replay Parsing
 
-- [ ] **Card ID mapping (grpId → card name)**
+- [x] **Card ID mapping (grpId → card name)**
   Detail: Download 17lands FDN card list from [17lands.com/public_datasets](http://17lands.com/public_datasets). Build a `dict[int, str]` mapping `grpId → card_name`. Store as `data/replays/card_id_map.json`. This is required before any replay can be interpreted — the GRE data uses integer `grpId` values for all card references.
 
   Also build a reverse map `card_name → grpId` for test convenience. Include set code and collector number in the mapping for disambiguation.
