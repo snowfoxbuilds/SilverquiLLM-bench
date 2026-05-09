@@ -2,182 +2,104 @@
 
 Appended by each Implementer invocation after it writes its diff. One section per TODO item.
 
-## Item 1: Rename benchmark/ package to silverquillm/
+
+## Item 1: Fix is_aura default True in _sba_aura_unattached
 
 ### Implementation
-- `benchmark/` → `silverquillm/` — Renamed entire package directory
-- `silverquillm/agent_session.py` — Updated imports and `_PROTECTED_DIRS` tuple
-- `silverquillm/cli.py` — Updated all `from benchmark.*` imports to `from silverquillm.*`
-- `silverquillm/results.py` — Updated imports
-- `silverquillm/scorer.py` — Updated imports
-- `silverquillm/prompts.py` — Updated imports
-- `silverquillm/run_utils.py` — Updated imports
-- `pyproject.toml` — Updated package discovery to `silverquillm*` and CLI entry point to `silverquillm.cli:main`
-- `tests/conftest.py` — Updated filter logic from `benchmark` to `silverquillm` directory/module references
-- `tests/test_benchmark_scaffold.py` — Updated `__init__.py` path check to `silverquillm/`
-- `tests/test_check_violations.py` — Updated `_PROTECTED_DIRS` assertion and `patch()` target strings
-- `tests/test_cli_eval.py` — Updated `patch()` target strings from `benchmark.*` to `silverquillm.*`
-- `tests/test_cli_score.py` — Updated `monkeypatch.setattr()` target string
-- `tests/test_violation_wiring.py` — Updated `patch()` target strings
-- `tests/benchmark/test_e2e.py` — Updated imports and `patch()` target strings
-- `tests/*.py` (all test files) — Updated `from benchmark.*` imports to `from silverquillm.*`
+- `engine/state_based_actions.py` — Changed getattr default for is_aura from True to False
 
-## Item 2: Refactor BenchmarkConfig to use nested agent: block
-
-### Implementation
-- `silverquillm/config.py` — Added AgentConfig dataclass; refactored BenchmarkConfig to embed agent: AgentConfig with backward-compat properties and custom __init__
-- `silverquillm/results.py` — Fixed config serialization to convert nested dataclasses to plain dicts for safe YAML output
-- `config.example.yaml` — Updated to use nested agent: block with adapter field
-
-## Item 3: Update all BenchmarkConfig consumers for nested agent config
-
-### Implementation
-- `silverquillm/config.py` — Removed deprecated backward-compat properties and legacy flat kwargs from __init__
-- `silverquillm/run_utils.py` — Migrated config.agent_tool → config.agent.adapter
-- `silverquillm/agent_session.py` — Migrated config.timeout_per_card → config.agent.timeout_per_card, config.max_test_rounds → config.agent.max_test_rounds; wired configure_opencode deny_web_fetch/deny_network from config.agent.disable_web_search
-- `tests/test_agent_config.py` — Removed TestBackwardCompatProperties class and legacy flat kwarg tests
-- `tests/test_agent_session.py` — Updated _make_config to use agent=AgentConfig(...), migrated config.max_test_rounds access
-- `tests/test_cli_config.py` — Migrated all flat accessor assertions to config.agent.* form
-- `tests/test_integration_helpers.py` — Migrated config.timeout_per_card/max_test_rounds to config.agent.*
-- `tests/test_violation_wiring.py` — Updated _make_config to use agent=AgentConfig(...)
-- `tests/benchmark/test_helpers.py` — Updated create_test_config to use agent=AgentConfig(...)
-- `tests/benchmark/test_e2e.py` — Migrated config.agent_tool → config.agent.adapter
-
-## Item 4: Create AgentAdapter abstract base class
-
-### Implementation
-- `silverquillm/adapters/__init__.py` — New package init re-exporting AgentAdapter, get_adapter, register_adapter
-- `silverquillm/adapters/base.py` — AgentAdapter ABC with run/setup/teardown, run_with_retries helper, registry-based get_adapter factory
-
-## Item 5: Implement OpenCodeAdapter
-
-### Implementation
-- `silverquillm/adapters/opencode.py` — Concrete OpenCodeAdapter: wraps opencode CLI, passes prompt via stdin, removes invalid --thinking flag, auto-registers as "opencode"
-- `silverquillm/adapters/__init__.py` — Added import of opencode module for auto-registration
-
-## Item 6: Implement ClaudeCodeAdapter
-
-### Implementation
-- `silverquillm/adapters/claude_code.py` — Concrete ClaudeCodeAdapter: wraps claude CLI with --print flag, passes prompt via stdin, checks exit status, auto-registers as "claude_code"
-- `silverquillm/adapters/__init__.py` — Added import of claude_code module for auto-registration
-
-## Item 7: Implement AiderAdapter
-
-### Implementation
-- `silverquillm/adapters/aider.py` — Concrete AiderAdapter: wraps aider CLI with --message-file for prompt, --no-auto-commits, checks exit status, auto-registers as "aider"
-- `silverquillm/adapters/__init__.py` — Added import of aider module for auto-registration
-
-## Item 8: Implement PiAdapter
-
-### Implementation
-- `silverquillm/adapters/pi.py` — Concrete PiAdapter: wraps pi CLI with --no-interactive flag, passes prompt via stdin, checks exit status, auto-registers as "pi"
-- `silverquillm/adapters/__init__.py` — Added import of pi module for auto-registration
-
-
-## Item 9: Refactor agent_session.py to use AgentAdapter
+## Item 2: Wire SBA trigger queueing in resolve_state_based_actions()
 
 ### Tests
-tests/test_agent_session.py — Verifies session dataclass, workspace setup, blind/test-informed runs, cleanup, and standalone helpers
+- `tests/engine/test_state_based_actions.py` — Existing SBA tests (56 passed, no new test file from tester)
 
 ### Implementation
-silverquillm/agent_session.py — Replaced hardcoded OpenCode subprocess logic with adapter-based delegation; added adapter lifecycle (setup/teardown); removed threading import
+- `engine/state_based_actions.py` — Fire CREATURE_DIES/LEAVES_BATTLEFIELD events in _move_to_graveyard(); add trigger-aware outer loop in resolve_state_based_actions()
 
-## Item 10: Implement postmortem JSONL logging
+## Item 3: Centralize zone-transition hooks into move_to_zone()
+
+### Implementation
+- `engine/zones.py` — Added move_to_zone() function with replacement effects, event firing, and trigger registration/unregistration hooks
+- `engine/game.py` — Refactored destroy(), sacrifice(), exile() to delegate to move_to_zone()
+- `engine/state_based_actions.py` — Refactored _move_to_graveyard() to delegate to move_to_zone()
+- `engine/casting.py` — Refactored _resolve_spell() to use move_to_zone() for both permanent (STACK→BATTLEFIELD) and non-permanent (STACK→GRAVEYARD) spells
+
+## Item 4: Batch 1 — Remaining vanilla & French vanilla creatures
 
 ### Tests
-tests/test_postmortem_logging.py — Tests _append_postmortem helper, blind/test-informed postmortem logging, error handling
+- `tests/cards/test_vanilla_creatures_batch2.py` — 45 tests for 7 Scryfall-verified FDN creatures (stats, keywords, registry, integration)
 
 ### Implementation
-silverquillm/agent_session.py — Added _append_postmortem helper, _get_postmortem_path, wrapped _run_opencode calls with timing and JSONL logging
-tests/test_postmortem_logging.py — Test suite for postmortem JSONL logging feature
+- `cards/foundations/vanilla_creatures_batch2.py` — Rewrote to 7 real FDN creatures: Fire Elemental, Gigantosaurus, Quakestrider Ceratops, Elementalist Adept, Skyraker Giant, Swiftblade Vindicator, Zetalpa Primal Dawn
 
-## Item 11: Implement agent_thoughts.md narrative generation
+## Item 5: Batch 2 — Simple non-targeted instants & sorceries
 
 ### Tests
-(no dedicated test file — verified via existing test suite)
+- `tests/cards/test_simple_spells_batch2.py` — 63 tests for 15 FDN non-targeted instants/sorceries (draw, lifegain, tokens, each-player effects, registry)
 
 ### Implementation
-silverquillm/agent_session.py — Added _generate_agent_thoughts helper that reads postmortem.jsonl and generates agent_thoughts.md; hooked into run_test_informed after all rounds complete
+- `cards/foundations/simple_spells_batch2.py` — 15 new FDN spells: Embrace the Paradox, Rapturous Moment, Wisdom of Ages, Pursue the Past, Seize the Spoils, Group Project, Muse's Encouragement, Visionary's Dance, Antiquities on the Loose, Fractal Anomaly, Snarl Song, Send in the Pest, Withering Curse, Social Snub, Pox Plague
+- `engine/game.py` — Added `cards_drawn_this_turn` tracking in `draw_card()` for Fractal Anomaly counter support
 
-## Item 12: Implement setup questions validation
+## Item 6: Batch 3 — Simple targeted instants & sorceries
 
 ### Tests
-(no dedicated test file — verified via existing test suite)
+- `tests/cards/test_simple_spells_batch3.py` — 68 tests for 18 targeted FDN spells
 
 ### Implementation
-silverquillm/setup_questions.py — New module: load_setup_questions, validate_setup, _check_answer for loading and validating setup questions JSON against adapter responses
+- `cards/foundations/simple_spells_batch3.py` — 18 targeted FDN spells with fizzle-safe on_resolve, create_token() for tokens, controller-filtered get_targets, and power property for damage reads
 
-## Item 13: Create setup_questions.json question bank
+## Item 7: Batch 4 — Non-basic lands
+
+### Implementation
+- `cards/foundations/lands.py` — 13 FDN non-basic lands: 10 gain lands (ETB tapped, gain 1 life, dual-color mana), 3 utility lands with activated abilities (Rogue's Passage unblockable, Soulstone Sanctuary +1/+1 counter, Evolving Wilds fetch). Fixed rarities (uncommon/rare for utility lands).
+
+## Item 8: Batch 5 — Creatures with ETB triggers
 
 ### Tests
-tests/test_setup_questions_bank.py — Validates question bank structure, topic coverage, field quality, and round-trip validation
+- No test files provided by Tester for this item
 
 ### Implementation
-setup_questions.json — 7 setup questions referencing only agent-workspace-visible files (engine/, test_utils.py, template.py, base_classes.py, foundations/, engine_api.md)
+- `cards/foundations/etb_creatures.py` — 29 FDN ETB creatures: draw (Helpful Hunter, Inspiring Overseer, Cloudblazer, Icewind Elemental), lifegain (Pelakka Wurm, Vampire Spawn), tokens (Prideful Parent, Resolute Reinforcements, Guarded Heir, Dragon Trainer, Regal Caracal, Rapacious Dragon), damage (Skeleton Archer, Viashino Pyromancer), destroy (Reclamation Sage, Meteor Golem), exile (Ambush Wolf, Angel of Finality), bounce (Bigfin Bouncer, Exclusion Mage, Mischievous Pup), graveyard (Vampire Soulcaller, Elvish Regrower, Shipwreck Dowser), counters (Felidar Savior), discard (Burglar Rat, Arbiter of Woe), debuff (Burrog Befuddler, Massacre Wurm)
 
-## Item 14: Audit and align tier key naming
-
-### Implementation
-- `silverquillm/card_classifier.py` — Added `complexity_tier` alongside `tier` in classifier JSON output
-- `silverquillm/card_spec.py` — Updated `generate_all_specs` to accept both `complexity_tier` and `tier` from classified data
-- `silverquillm/cli.py` — Updated tier map building and card listing to prefer `complexity_tier` with `tier` fallback
-- `silverquillm/prototype.py` — Added `complexity_tier` to prototype output dicts; updated reader to accept both keys
-- `silverquillm/run_utils.py` — Updated spec tier reads to fall back from `complexity_tier` to `tier`
-- `silverquillm/results.py` — Updated tier extraction to fall back to `tier`; added `tier` to `_IMPL_EXCLUDE`
-- `benchmarks/sos/prototype_cards.json` — Added `complexity_tier` field alongside existing `tier`
-- `benchmarks/sos/data/sos_classified.json` — Added `complexity_tier` field alongside existing `tier` for all entries
-
-## Item 15: Fix prompt templates — add explicit output filenames
-
-### Implementation
-- `silverquillm/prompts.py` — No changes needed; filename instructions (blind_impl.py, tested_impl.py, tests.py, resubmit) were already present from initial implementation
-
-## Item 16: Implement persistent engine per run
-
-### Implementation
-- `silverquillm/agent_session.py` — Removed engine from _PROTECTED_DIRS; removed read-only chmod on engine; added run_engine_dir field to AgentSession; added init_run_engine, commit_engine_changes, save_engine_final helpers; engine copy now writable from run_engine_dir or repo; base_classes.py extraction now prefers run_engine_dir/card.py
-- `silverquillm/cli.py` — Wired persistent engine lifecycle into run loop: init_run_engine before loop, pass run_engine_dir to AgentSession, commit_engine_changes after each card, save_engine_final after loop
-- `tests/test_check_violations.py` — Updated tests to use docs/ instead of engine/ as example protected directory since engine is no longer protected
-
-## Item 17: Implement regression test runner
+## Item 9: Batch 6 — Auras
 
 ### Tests
-tests/test_regression.py — Tests regression runner dataclasses, pytest parsing, card test execution, aggregation, and feedback prompt generation
+- `tests/cards/test_auras_batch2.py` — 52 tests for all 10 batch-2 auras
 
 ### Implementation
-- `silverquillm/regression.py` — New module: CardRegressionResult, CompletedCard, RegressionResult dataclasses; run_regressions runner; regression_feedback_prompt for agent correction
+- `cards/foundations/auras_batch2.py` — 10 FDN auras with reviewer fixes: death trigger payload key, add_counter usage, move_to_zone for sacrifice, ENGINE LIMITATION comments for skip_untap/mana ability/name-reset/controller-change
 
-## Item 18: Sort cards by complexity tier for sequential processing
+## Item 10: Equipment batch
 
-### Implementation
-- `silverquillm/cli.py` — Added _TIER_ORDER constant and _sort_cards_by_tier function; sort specs before orchestration loop by (tier_rank, collector_number)
-
-## Item 19: Capture engine diffs as per-card artifacts
+### Tests
+- `tests/cards/test_equipment.py` — Tests for all 7 equipment cards: metadata, equip, continuous effects, cross-cutting behavior, registry
 
 ### Implementation
-- `silverquillm/agent_session.py` — Added compute_engine_diff() function using difflib for pure-Python unified diffs; handles new/deleted/binary files and empty patches
-- `silverquillm/cli.py` — Imported compute_engine_diff; call it before commit_engine_changes to capture per-card engine diff as engine_diff.patch
+- `cards/foundations/equipment.py` — 7 FDN equipment cards with get_activated_abilities() equip abilities, combat damage trigger (Goldvein Pick), landfall trigger (Adventuring Gear), ETB auto-attach (Celestial Armor)
 
-## Item 20: Update prompts for engine extensibility
-
-### Implementation
-- `silverquillm/prompts.py` — Updated blind, test-informed, and iteration feedback prompt templates with engine extensibility info (writable engine/, regression re-runs, backward compatibility)
-
-## Item 21: Add Category 4 scoring — Engine Extension Quality
+## Item 11: Death trigger creatures
 
 ### Implementation
-- `silverquillm/scorer.py` — Added AgentCat4Scores dataclass, compute_cat4_scores function, Category 4 table in generate_leaderboard, updated Leaderboard to include category4
-- `silverquillm/results.py` — Added category4 data to save_aggregates summary.json output
+- `cards/foundations/death_trigger_creatures.py` — 17 FDN creatures with death triggers: token creation (Infestation Sage, Gleaming Barrier, Maalfeld Twins), draw (Solemn Simulacrum, High-Society Hunter), mill/surveil (Crow of Dark Tidings, Wary Thespian), drain/damage (Vengeful Bloodwitch, Midnight Reaper, Garna, Crossway Troublemakers, Kalastria Highborn), graveyard recursion (Driver of the Dead, Infernal Vessel, Nine-Lives Familiar, Fiendish Panda), library (Spinner of Souls)
 
-## Item 22: Expand Foundations card pool (batch 1: +30 cards)
+## Item 12: Activated ability creatures
 
 ### Implementation
-- `cards/foundations/enchantments.py` — 8 enchantment cards (4 auras, 4 global enchantments) with continuous effects
-- `cards/foundations/planeswalkers.py` — 4 planeswalker cards with loyalty abilities (real effects, no double-counting)
-- `cards/foundations/modal_spells.py` — 8 modal spell cards with Mode definitions and on_resolve() implementations
-- `cards/foundations/artifacts.py` — 10 artifact cards (mana rocks, equipment, utility)
-- `engine/card.py` — Added _cant_be_blocked and _cant_activate to Creature._reset_characteristics()
-- `tests/cards/test_enchantments.py` — Unit tests for enchantment cards
-- `tests/cards/test_planeswalkers.py` — Unit tests for planeswalker cards
-- `tests/cards/test_modal_spells.py` — Unit tests for modal spell cards
-- `tests/cards/test_artifacts.py` — Unit tests for artifact cards
+- `cards/foundations/activated_creatures.py` — 19 FDN creatures with activated abilities: mana (Llanowar Elves, Elvish Archdruid, Ruby Daring Tracker), tap (Rune-Sealed Wall, Strix Lookout, Axgard Cavalry, Krenko Mob Boss), sacrifice (Cathar Commando, Fanatical Firebrand, Heartfire Immolator, Burnished Hart, Hungry Ghoul), pump (Shivan Dragon, Sower of Chaos, Treetop Snarespinner), other (Spectral Sailor, Scavenging Ooze, Reassembling Skeleton, Mild-Mannered Librarian)
+
+## Item 13: Global enchantments
+
+### Implementation
+- `cards/foundations/global_enchantments.py` — 10 FDN non-aura enchantments: anthems (Anthem of Champions, Goblin Oriflamme), keyword-granting (Garruk's Uprising), static (Authority of the Consuls), upkeep trigger (Phyrexian Arena), creature-enters trigger (Impact Tremors), spell-cast triggers (Rite of the Dragoncaller, Painful Quandary), ETB exile-until-leaves (Banishing Light), activated ability (Vampiric Rites)
+
+## Item 14: Remaining artifacts & planeswalkers
+
+### Implementation
+- `cards/foundations/artifacts_batch2.py` — 27 remaining FDN artifacts: mana rocks (Gilded Lotus, Carnelian Orb, Heraldic Banner, Pyromancer's Goggles), utility (Banner of Kinship, Ravenous Amulet, Goblin Firebomb, Feldon's Cane, Soul-Guide Lantern, Sorcerous Spyglass, Mazemind Tome, Expedition Map, Wishclaw Talisman), equipment (Fishing Pole, Pirate's Cutlass), vehicle (Cultivator's Caravan), artifact creatures (Crystal Barricade, Scrawling Crawler, Campus Guide, Juggernaut, Darksteel Colossus, Diamond Mare, Gate Colossus, Steel Hellkite, Three Tree Mascot, Adaptive Automaton, Ramos Dragon Engine)
+- `cards/foundations/planeswalkers_batch2.py` — 3 remaining FDN planeswalkers with fully implemented loyalty abilities: Kaito Cunning Infiltrator (3 loyalty, +1/-2/-9), Chandra Flameshaper (6 loyalty, +2/+1/-4), Vivien Reid (5 loyalty, +1/-3/-8)
+
+## Item 15: Modal/X-cost/complex cards
+
+### Implementation
+- `cards/foundations/complex_spells.py` — 16 remaining complex FDN cards: modal instants (Abrade, Valorous Stance, Goblin Surprise, Deadly Plot), modal sorceries (Slagstorm, Bushwhack, Seeker's Folly), modal ETB creatures (Apothecary Stomper, Charming Prince), X-cost spells (Exsanguinate, Primal Might, Finale of Revelation), kicker spells (Burst Lightning, Into the Roil), kicker creatures (Gnarlid Colony, Gatekeeper of Malakir)

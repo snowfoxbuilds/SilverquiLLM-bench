@@ -6,7 +6,7 @@ SilverquiLLM-bench is a **Magic: The Gathering game engine** built in Python, de
 
 The project includes a **benchmark runner package** (`silverquillm/`) that orchestrates the full evaluation pipeline: classifying cards by complexity, generating specs and prompts for LLM agents, managing agent sessions via pluggable adapters, evaluating implementations, scoring results (4 categories), and recording artifacts. The first benchmark set is **Shadows over Sonnenthal (SOS)** with 368 cards.
 
-The codebase is ~35,000+ lines across source and tests, with **~1,800+ test functions** providing thorough coverage of all engine subsystems and the benchmark pipeline.
+The codebase is ~35,000+ lines across source and tests, with **~3,000+ test functions** providing thorough coverage of all engine subsystems and the benchmark pipeline.
 
 ## Architecture
 
@@ -64,15 +64,28 @@ The codebase is ~35,000+ lines across source and tests, with **~1,800+ test func
 │    │                                                          │  │
 │    │  cards/registry.py   — CardRegistry + CardMetadata       │  │
 │    │  cards/scryfall.py   — Scryfall API fetch + cache        │  │
-│    │  cards/foundations/  — FDN set card implementations (65+)│  │
+│    │  cards/foundations/  — FDN set card implementations (250+)│  │
 │    │    basic_lands.py        — 5 basic lands                 │  │
 │    │    simple_creatures.py   — 15 vanilla/French vanilla     │  │
-│    │    simple_spells.py      — 10 instants and sorceries     │  │
+│    │    vanilla_creatures_batch2.py — 7 batch 2 creatures     │  │
+│    │    simple_spells.py      — 10 instants/sorceries         │  │
+│    │    simple_spells_batch2.py — 15 non-targeted spells      │  │
+│    │    simple_spells_batch3.py — 18 targeted spells           │  │
 │    │    simple_permanents.py  — 5 enchantments and artifacts  │  │
 │    │    enchantments.py       — 8 enchantments (auras+global) │  │
+│    │    auras_batch2.py       — 10 batch 2 auras              │  │
+│    │    global_enchantments.py — 10 non-aura enchantments     │  │
 │    │    planeswalkers.py      — 4 planeswalkers               │  │
+│    │    planeswalkers_batch2.py — 3 batch 2 planeswalkers     │  │
 │    │    modal_spells.py       — 8 modal spells                │  │
-│    │    artifacts.py          — 10 artifacts (mana rocks, equip)│ │
+│    │    complex_spells.py     — 16 modal/X-cost/kicker cards  │  │
+│    │    artifacts.py          — 10 artifacts (mana rocks, eq.)│  │
+│    │    artifacts_batch2.py   — 27 batch 2 artifacts          │  │
+│    │    equipment.py          — 7 equipment cards              │  │
+│    │    lands.py              — 13 non-basic lands             │  │
+│    │    etb_creatures.py      — 29 ETB trigger creatures       │  │
+│    │    death_trigger_creatures.py — 17 death triggers        │  │
+│    │    activated_creatures.py — 19 activated abilities        │  │
 │    └──────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -83,7 +96,7 @@ The codebase is ~35,000+ lines across source and tests, with **~1,800+ test func
 |-----------|---------|-----------|
 | `engine/` | Core game engine (16 modules) | types.py, game_state.py, card.py, game.py, combat.py, mana.py, casting.py |
 | `cards/` | Card registry and data pipeline | registry.py, scryfall.py |
-| `cards/foundations/` | FDN set card implementations (65+ cards, 7 categories) | basic_lands.py, simple_creatures.py, simple_spells.py, simple_permanents.py, enchantments.py, planeswalkers.py, modal_spells.py, artifacts.py |
+| `cards/foundations/` | FDN set card implementations (250+ cards, 20 files) | basic_lands.py, simple_creatures.py, vanilla_creatures_batch2.py, simple_spells.py, simple_spells_batch2.py, simple_spells_batch3.py, simple_permanents.py, enchantments.py, auras_batch2.py, global_enchantments.py, planeswalkers.py, planeswalkers_batch2.py, modal_spells.py, complex_spells.py, artifacts.py, artifacts_batch2.py, equipment.py, lands.py, etb_creatures.py, death_trigger_creatures.py, activated_creatures.py |
 | `silverquillm/` | **Benchmark runner package** (18 modules) | cli.py, config.py, agent_session.py, card_loader.py, card_classifier.py, card_spec.py, template_gen.py, docs_gen.py, rules_skill.py, prompts.py, run_utils.py, evaluator.py, scorer.py, results.py, prototype.py, regression.py, setup_questions.py |
 | `silverquillm/adapters/` | **Agent adapter system** (6 modules) | base.py, opencode.py, claude_code.py, aider.py, pi.py |
 | `benchmarks/` | Benchmark data sets (namespace package) | `__init__.py` |
@@ -91,9 +104,9 @@ The codebase is ~35,000+ lines across source and tests, with **~1,800+ test func
 | `benchmarks/sos/data/` | SOS raw/processed data | sos.json, sos_classified.json, comprehensive_rules.txt, rules_overview.md |
 | `benchmarks/sos/cards/` | Per-card spec directories (368 dirs) | `{n}/card_spec.json` for each card |
 | `benchmarks/sos/results/` | Benchmark run outputs | Per-run isolated directories |
-| `tests/` | Test root + benchmark module tests + utilities | test_utils.py, test_integration.py, conftest.py, 45+ test files |
+| `tests/` | Test root + benchmark module tests + utilities | test_utils.py, test_integration.py, conftest.py, 96 test files |
 | `tests/engine/` | Engine module unit tests (20 test files) | One test file per engine module |
-| `tests/cards/` | Card implementation tests (12 test files) | Per-category + integration tests |
+| `tests/cards/` | Card implementation tests (25 test files) | Per-category + integration tests |
 | `tests/benchmark/` | Integration tests + helpers for full pipeline | test_helpers.py, test_e2e.py |
 | `docs/` | Documentation, specs, agent reference docs | specs/ (6 spec docs), engine_api.md, test_utils.md |
 | `data/` | Runtime data cache | data/sets/ (Scryfall JSON cache) |
@@ -129,6 +142,7 @@ silverquillm/adapters/ (depends on silverquillm/config — wraps external CLI to
 - **DeterministicPlayer**: All tests use scripted player choices (FIFO queue) for reproducibility.
 - **Identity-based zone lookups**: `contains()` / `remove()` use `is` (not `==`) for game object identity.
 - **Auto-registration**: Triggers and replacement effects auto-register when permanents ETB and auto-unregister when they leave.
+- **Centralized zone transitions**: `move_to_zone()` in `zones.py` handles replacement effects, event firing, and trigger registration/unregistration for all zone moves. `destroy()`, `sacrifice()`, `exile()` delegate to it.
 - **Layer system**: Continuous effects reset objects to base characteristics then reapply in layer order (idempotent).
 - **Owner vs. Controller**: Cards always go to owner's graveyard per MTG rules.
 - **Converge support**: `mana.py` tracks `last_payment_colors` and `casting.py` stores `colors_spent`.
@@ -144,14 +158,14 @@ silverquillm/adapters/ (depends on silverquillm/config — wraps external CLI to
 ## Testing
 
 - **Framework**: pytest
-- **Total tests**: ~1,800+ test functions across 55+ test files
+- **Total tests**: ~3,000+ test functions across 96 test files
 - **Test utilities**: `tests/test_utils.py` provides `create_game`, `set_board_state`, `cast_spell`, `advance_to_phase`, `declare_attackers`, `declare_blockers`
 - **Integration tests**: `tests/test_integration.py` runs end-to-end multi-turn game scenarios
 - **Benchmark tests**: Each `silverquillm/` module has a corresponding `tests/test_*.py` file
 - **Adapter tests**: Each adapter has a dedicated test file (`test_*_adapter.py`)
 - **E2E integration tests**: `tests/benchmark/test_e2e.py` runs full-pipeline integration tests with mock agents
 - **Engine extension tests**: `tests/test_engine_extensions.py` covers Converge mana color tracking
-- **Card tests**: 12 test files in `tests/cards/` covering all 65+ card implementations
+- **Card tests**: 25 test files in `tests/cards/` covering all 250+ card implementations
 - **Coverage**: Every engine module, card category, adapter, and runner module has dedicated tests
 - **conftest.py**: Filters out benchmark functions that pytest would incorrectly collect as tests
 

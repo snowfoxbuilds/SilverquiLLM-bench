@@ -55,6 +55,10 @@ class Stack:
         """Return the top object without removing it, or ``None`` if empty."""
         return self._items[-1] if self._items else None
 
+    def __len__(self) -> int:
+        """Return the number of objects on the stack."""
+        return len(self._items)
+
     def is_empty(self) -> bool:
         """Return ``True`` if the stack contains no objects."""
         return len(self._items) == 0
