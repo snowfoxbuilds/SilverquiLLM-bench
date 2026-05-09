@@ -166,3 +166,18 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Context**: Initial implementation used keyword matching on mismatch descriptions, which is fragile.
 - **Decision**: Primary classification uses StepResult.skipped + skip_reason. Keyword matching kept as fallback.
 - **Impact**: `silverquillm/replay/validation.py`.
+
+## CLI validate: divergence_rate is per-game, not per-divergence
+- **Context**: divergence_rate could mean total divergences / games or games_with_divergence / games.
+- **Decision**: Rate is fraction of games that had any divergence (games_with_divergence / games_attempted). This is more meaningful for benchmarking.
+- **Impact**: `silverquillm/replay/cli.py`.
+
+## CLI validate: step_callback and stop_on_first patterns
+- **Context**: --verbose and --stop-on-divergence need per-step interaction during replay execution.
+- **Decision**: Added `step_callback` and `stop_on_first` parameters to `validate_replay()` and `ValidatingExecutor.execute_all()`. Callback receives step index, game state ID, action, and result. stop_on_first breaks the loop after first divergence.
+- **Impact**: `silverquillm/replay/validation.py`, `silverquillm/replay/cli.py`.
+
+## CLI validate: parse failures count as attempted games
+- **Context**: Replays that fail to parse were silently skipped, undercounting games_attempted.
+- **Decision**: Parse failures generate a ValidationReport with a single ENGINE_ERROR divergence, counted in games_attempted and visible in summary.
+- **Impact**: `silverquillm/replay/cli.py`.

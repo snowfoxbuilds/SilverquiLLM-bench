@@ -143,7 +143,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74â
 
   Testability: Introduce a deliberate engine bug (e.g., wrong damage amount), run replay, assert divergence is detected and categorized as STATE_MISMATCH. Test MISSING_CARD detection by removing a card implementation.
 
-- [ ] **CLI: ****`benchmark validate`**** command**
+- [x] **CLI: ****`benchmark validate`**** command**
   Detail: Add `benchmark validate <replay_path_or_dir>` command. Options: `--cards` (filter to replays containing specific cards by name), `--verbose` (show each action and state comparison), `--report` (output JSON report file), `--stop-on-divergence` (halt at first mismatch for debugging). Summary output: games attempted, games completed without divergence, divergence rate, top divergence causes, per-card divergence rates.
 
   Files: Extend `silverquillm/cli.py`, new `silverquillm/replay/cli.py`.

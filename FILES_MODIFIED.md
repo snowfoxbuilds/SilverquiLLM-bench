@@ -85,3 +85,13 @@ tests/test_divergence_detection.py — 43 tests for DivergenceType, Divergence, 
 ### Implementation
 silverquillm/replay/validation.py — DivergenceType enum, Divergence dataclass, ValidationReport, ValidatingExecutor (MISSING_CARD not counted as successful, ILLEGAL_ACTION from skipped/skip_reason + keyword fallback, expected/actual state populated for ENGINE_ERROR/MISSING_CARD)
 silverquillm/replay/__init__.py — Added Divergence, DivergenceType, ValidatingExecutor, ValidationReport, validate_replay exports
+
+## Item 11: CLI `benchmark validate` command
+
+### Tests
+(no pre-written tests for this item)
+
+### Implementation
+silverquillm/replay/cli.py — CLI `validate` command with file/dir support, --cards, --verbose (per-step callback), --report, --stop-on-divergence; fixed divergence_rate to games_with_divergence/games_attempted; parse failures counted as attempted games
+silverquillm/replay/validation.py — Added stop_on_first and step_callback params to execute_all() and validate_replay() for within-replay early exit and verbose output
+silverquillm/cli.py — Imported and registered the `validate` subcommand from `silverquillm.replay.cli`

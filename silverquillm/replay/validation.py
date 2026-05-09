@@ -210,8 +210,18 @@ class ValidatingExecutor:
 
         return result
 
-    def execute_all(self) -> list[StepResult]:
-        """Execute all snapshot transitions and collect divergences."""
+    def execute_all(
+        self,
+        stop_on_first: bool = False,
+        step_callback: Any = None,
+    ) -> list[StepResult]:
+        """Execute all snapshot transitions and collect divergences.
+
+        Args:
+            stop_on_first: If True, stop after the first divergence is recorded.
+            step_callback: Optional callback(step_index, snapshot_id, action_desc, result_desc)
+                called after each step for verbose output.
+        """
         if not self.executor._initialized:
             if self.executor.replay.snapshots:
                 self.executor.initialize(self.executor.replay.snapshots[0])
@@ -225,6 +235,22 @@ class ValidatingExecutor:
             curr = snapshots[i]
             result = self.execute_step(prev, curr)
             results.append(result)
+
+            # Verbose callback
+            if step_callback is not None:
+                actions = curr.actions
+                action_desc = str(actions[0]) if actions else "no-action"
+                if result.mismatches:
+                    result_desc = f"DIVERGED ({len(result.mismatches)} mismatches)"
+                elif result.success:
+                    result_desc = "OK"
+                else:
+                    result_desc = "FAILED"
+                step_callback(i, curr.game_state_id, action_desc, result_desc)
+
+            # Stop on first divergence within this replay
+            if stop_on_first and self.divergences:
+                break
 
         return results
 
@@ -347,16 +373,20 @@ class ValidatingExecutor:
 def validate_replay(
     executor: ReplayExecutor,
     card_id_map: dict[int, str] | None = None,
+    stop_on_first: bool = False,
+    step_callback: Any = None,
 ) -> ValidationReport:
     """Run a full replay validation and return the report.
 
     Args:
         executor: An initialized (or initializable) ReplayExecutor.
         card_id_map: Optional grpId->name map (defaults to executor's map).
+        stop_on_first: If True, halt execution at the first divergence.
+        step_callback: Optional callback for per-step verbose output.
 
     Returns:
         A ValidationReport summarizing all divergences.
     """
     validator = ValidatingExecutor(executor, card_id_map)
-    validator.execute_all()
+    validator.execute_all(stop_on_first=stop_on_first, step_callback=step_callback)
     return validator.report()
