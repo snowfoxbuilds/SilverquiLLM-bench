@@ -98,3 +98,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `cards/foundations/artifacts_batch2.py` — 27 remaining FDN artifacts: mana rocks (Gilded Lotus, Carnelian Orb, Heraldic Banner, Pyromancer's Goggles), utility (Banner of Kinship, Ravenous Amulet, Goblin Firebomb, Feldon's Cane, Soul-Guide Lantern, Sorcerous Spyglass, Mazemind Tome, Expedition Map, Wishclaw Talisman), equipment (Fishing Pole, Pirate's Cutlass), vehicle (Cultivator's Caravan), artifact creatures (Crystal Barricade, Scrawling Crawler, Campus Guide, Juggernaut, Darksteel Colossus, Diamond Mare, Gate Colossus, Steel Hellkite, Three Tree Mascot, Adaptive Automaton, Ramos Dragon Engine)
 - `cards/foundations/planeswalkers_batch2.py` — 3 remaining FDN planeswalkers with fully implemented loyalty abilities: Kaito Cunning Infiltrator (3 loyalty, +1/-2/-9), Chandra Flameshaper (6 loyalty, +2/+1/-4), Vivien Reid (5 loyalty, +1/-3/-8)
+
+## Item 15: Modal/X-cost/complex cards
+
+### Implementation
+- `cards/foundations/complex_spells.py` — 16 remaining complex FDN cards: modal instants (Abrade, Valorous Stance, Goblin Surprise, Deadly Plot), modal sorceries (Slagstorm, Bushwhack, Seeker's Folly), modal ETB creatures (Apothecary Stomper, Charming Prince), X-cost spells (Exsanguinate, Primal Might, Finale of Revelation), kicker spells (Burst Lightning, Into the Roil), kicker creatures (Gnarlid Colony, Gatekeeper of Malakir)

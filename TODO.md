@@ -114,7 +114,7 @@ Scope: Fix critical engine bugs, centralize zone-transition infrastructure, then
 
   Testability: For artifacts: cast, activate abilities, verify effects. For planeswalkers: cast, activate loyalty abilities (verify loyalty changes), verify effects resolve.
 
-- [ ] **Batch 12: Modal spells, X-cost spells, and remaining complex cards (~10–15 cards)**
+- [x] **Batch 12: Modal spells, X-cost spells, and remaining complex cards (~10–15 cards)**
   Detail: Implement any remaining FDN cards: modal choices ("choose one/two"), X-cost spells, kicker, and other complex mechanics. Follow `modal_spells.py` patterns: override `get_modes()`. For X-cost spells, add `x_value` attribute set during casting (may need minor `casting.py` extension to support X in mana costs). For kicker, add `kicked` boolean. This is the catch-all batch for everything not covered above.
 
   Files: `cards/foundations/modal_spells.py` (extend or new file).
