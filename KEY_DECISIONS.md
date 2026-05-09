@@ -85,3 +85,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: When explicit `choices` are provided, deduct generic mana from the working pool BEFORE running `_solve_hybrid()`. The solver only sees genuinely available mana.
 - **Reasoning**: Prevents the solver from stealing reserved mana. Auto-pay (choices=None) still works as before.
 - **Impact**: `engine/mana.py` (`pay()` method).
+
+## Cost reduction: controller must be set before hook
+- **Context**: Cards in hand may not have `controller` set. The cost_reduction hook needs to know the casting player.
+- **Decision**: `get_cost_reduction()` temporarily sets `card.controller = controller` before calling the hook, then restores. `cast_spell()` also sets `card.controller = player` early in the pipeline.
+- **Reasoning**: Belt-and-suspenders — safe for both standalone calls and pipeline usage.
+- **Impact**: `engine/casting.py`.

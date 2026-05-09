@@ -20,7 +20,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74â
 
   Testability: Unit test parsing `{B/G}{B/G}` â†’ correct ManaCost. Test payment with pool containing only black, only green, and mixed. Test that `{W/U}` and other hybrid pairs also work.
 
-- [ ] **Cost reduction during casting**
+- [x] **Cost reduction during casting**
   Detail: Implement a cost-reduction hook in the casting pipeline. Embercleave (SPG #77) costs `{4}{R}{R}` but costs `{1}` less for each attacking creature you control.
 
   Changes needed:

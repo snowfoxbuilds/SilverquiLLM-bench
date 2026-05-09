@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any
 
 from engine.card import CardImpl
 from engine.stack import StackObject
-from engine.types import CardType, Keyword, Phase, Zone
+from engine.types import CardType, Keyword, ManaCost, Phase, Zone
 from engine.zones import move_zone
 
 if TYPE_CHECKING:
@@ -80,6 +80,43 @@ def can_cast_at_instant_speed(card: CardImpl) -> bool:
     if Keyword.FLASH & card.keywords:
         return True
     return False
+
+
+# ------------------------------------------------------------------
+# Cost reduction
+# ------------------------------------------------------------------
+
+def get_cost_reduction(game: GameState, card: CardImpl, controller: Player) -> int:
+    """Return the generic mana reduction for casting *card*.
+
+    Queries ``card.cost_reduction(game)`` and clamps the result so that
+    the generic portion of the mana cost cannot go below 0.
+
+    This is a simplified single-card self-reduction model.  Full MTG
+    cost-reduction interactions (Trinisphere, multiple reductions from
+    different sources) are deferred.
+    """
+    # Ensure card.controller is set so the hook can reference "you" / the
+    # casting player even when the card was never explicitly assigned one.
+    prev_controller = card.controller
+    card.controller = controller
+    raw = card.cost_reduction(game)
+    # Restore previous controller in case the caller doesn't want a
+    # side-effect (get_cost_reduction is a query, not a mutation).
+    card.controller = prev_controller
+    generic = card.mana_cost.generic if card.mana_cost else 0
+    return max(0, min(raw, generic))
+
+
+def _apply_cost_reduction(cost: ManaCost, reduction: int) -> ManaCost:
+    """Return a new :class:`ManaCost` with *reduction* subtracted from generic."""
+    new_generic = max(0, cost.generic - reduction)
+    return ManaCost(
+        generic=new_generic,
+        pips=dict(cost.pips),
+        x_count=cost.x_count,
+        hybrid=list(cost.hybrid),
+    )
 
 
 # ------------------------------------------------------------------
@@ -147,14 +184,23 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     card.chosen_targets = chosen_targets  # type: ignore[attr-defined]
 
     # 6. Mana check / payment (rollback on failure)
-    if not player.mana_pool.can_pay(card.mana_cost):
+    # Ensure the card knows its controller so that cost_reduction() hooks
+    # (e.g. Embercleave counting attacking creatures you control) see the
+    # casting player, even for cards that were added to hand without an
+    # explicit controller assignment.
+    if card.controller is None:
+        card.controller = player
+    reduction = get_cost_reduction(game, card, player)
+    effective_cost = _apply_cost_reduction(card.mana_cost, reduction) if reduction > 0 else card.mana_cost
+
+    if not player.mana_pool.can_pay(effective_cost):
         # Rollback: move card from stack zone back to hand
         stack_zone.remove(card)
         hand.add(card)
         raise CastingError(f"Cannot cast {card.name!r} — insufficient mana")
 
     # TODO: Phase 3 — support player choice for generic mana payment to optimize Converge color count
-    player.mana_pool.pay(card.mana_cost)
+    player.mana_pool.pay(effective_cost)
 
     # Store colors of mana spent on the card for mechanics like Converge
     # that care about the colors used to cast the spell.

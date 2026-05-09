@@ -196,6 +196,19 @@ class CardImpl(GameObject):
         """Return ``True`` if this card can currently be cast."""
         return True
 
+    def cost_reduction(self, game: GameState) -> int:
+        """Return the generic mana reduction for casting this card.
+
+        Override in subclasses to implement cost-reduction mechanics
+        (e.g. Embercleave costs {1} less for each attacking creature).
+        The returned value is clamped so that generic mana cannot go below 0.
+        Only reduces generic mana — colored costs are never reduced.
+
+        Returns:
+            Non-negative integer representing generic mana to subtract.
+        """
+        return 0
+
     def on_cast(self, game: GameState) -> None:
         """Called when the card is cast (before it goes on the stack)."""
 
