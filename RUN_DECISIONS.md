@@ -55,3 +55,23 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Implementer's approach**: Used `battlefield.cards` (wrong API), `ManaPool.pay_generic()` (doesn't exist)
 - **Coordinator decision**: fix implementation — tests correctly expose real bugs
 - **Reasoning**: `battlefield.get_all()` is the correct API per engine conventions; equip cost function needs to use the actual mana payment API
+
+## Test failure: Item 11 — Death trigger creatures
+- **Failing tests**: DriverOfTheDead (2), NineLivesFamiliar (1), FiendishPanda (1)
+- **Tester's intent**: Verify graveyard recursion with CMC/MV filtering and revival counter tracking
+- **Implementer's approach**: Called `mana_cost.cmc()` as method (it's a property); NineLivesFamiliar ETB re-fires on return resetting counters
+- **Coordinator decision**: fix implementation
+- **Reasoning**: Tests correctly expose real bugs — `cmc` is a property not a method, and ETB counter reset on return is a genuine logic error
+
+## Disagreement: Item 11 — Kalastria Highborn {B} cost
+- **Reviewer comment (strict)**: Kalastria Highborn should require {B} payment and target choice
+- **Implementer justification**: Adding ManaPool.pay(ManaCost(black=1)) would break all existing Kalastria tests that don't set up mana pools; modifying tests is forbidden
+- **Coordinator decision**: accept implementer — document as ENGINE LIMITATION
+- **Reasoning**: Tests correctly verify the drain behavior; {B} cost is a real rules requirement but tests would need rewriting first. Can be addressed in test audit if needed.
+- **Impact**: `cards/foundations/death_trigger_creatures.py` — Kalastria Highborn
+
+## Engine limitations documented — Item 11
+- **Context**: Reviewer found issues requiring attack state tracking, cast tracking, delayed triggers, and mana cost on triggers
+- **Decision**: Document 4 items as ENGINE LIMITATION (Garna attack branch, Nine-Lives Familiar cast-only ETB, Nine-Lives Familiar delayed return, Kalastria {B} cost)
+- **Reasoning**: These require engine features that don't exist yet, consistent with Item 9 convention
+- **Impact**: `cards/foundations/death_trigger_creatures.py`

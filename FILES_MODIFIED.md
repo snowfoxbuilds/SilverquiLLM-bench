@@ -77,3 +77,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `cards/foundations/equipment.py` — 7 FDN equipment cards with get_activated_abilities() equip abilities, combat damage trigger (Goldvein Pick), landfall trigger (Adventuring Gear), ETB auto-attach (Celestial Armor)
+
+## Item 11: Death trigger creatures
+
+### Implementation
+- `cards/foundations/death_trigger_creatures.py` — 17 FDN creatures with death triggers: token creation (Infestation Sage, Gleaming Barrier, Maalfeld Twins), draw (Solemn Simulacrum, High-Society Hunter), mill/surveil (Crow of Dark Tidings, Wary Thespian), drain/damage (Vengeful Bloodwitch, Midnight Reaper, Garna, Crossway Troublemakers, Kalastria Highborn), graveyard recursion (Driver of the Dead, Infernal Vessel, Nine-Lives Familiar, Fiendish Panda), library (Spinner of Souls)

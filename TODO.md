@@ -86,7 +86,7 @@ Scope: Fix critical engine bugs, centralize zone-transition infrastructure, then
 
   Testability: Cast, equip to creature, verify bonus. Equip to different creature, verify old creature loses bonus.
 
-- [ ] **Batch 8: Creatures with death triggers (~15–20 cards)**
+- [x] **Batch 8: Creatures with death triggers (~15–20 cards)**
   Detail: Implement FDN creatures with "when this creature dies" abilities. Depends on prereq 2 (SBA trigger queueing). Override `register_triggers()` with `EventType.CREATURE_DIES` and condition `data["creature"] is self`. Effects: draw, damage, tokens, graveyard recursion. Also include "leaves the battlefield" triggers. After prereq 3, `move_to_zone()` handles firing these events consistently.
 
   Files: New file `cards/foundations/death_trigger_creatures.py`.
