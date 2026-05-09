@@ -98,7 +98,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74â
 
   Testability: Map resolves all `grpId` values found in the sample replay JSON (from the [17lands Replay Data Schema](https://www.notion.so/35b6a7adc8ed80978dccdf724213b6f8) page) to valid FDN/SPG card names. No unmapped IDs in the sample data.
 
-- [ ] **17lands GRE JSON parser**
+- [x] **17lands GRE JSON parser**
   Detail: Parse 17lands replay data â€” clean JSON files containing pre-parsed GRE message streams. Format: `{seat_id, opponent_seat_id, events: [...]}` where each event is a `GameStateMessage` with `GameStateType_Full` or `GameStateType_Diff`. See [17lands Replay Data Schema](https://www.notion.so/35b6a7adc8ed80978dccdf724213b6f8) for the full schema.
 
   The parser must:

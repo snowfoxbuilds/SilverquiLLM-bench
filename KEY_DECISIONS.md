@@ -135,3 +135,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Synthetic entries marked with `"synthetic": true` flag in the primary mapping. Separate `card_name_to_grpIds` (plural) preserves all printings per card name.
 - **Reasoning**: Consumers can filter synthetics; tests can still resolve SPG cards.
 - **Impact**: `data/replays/card_id_map.json`, `scripts/build_card_id_map.py`.
+
+## GRE diff gameObjects: merge, don't replace
+- **Context**: GRE diffs can be sparse — only sending changed fields for a gameObject.
+- **Decision**: When processing diff gameObjects, merge onto existing object using field-by-field `setattr`. New objects created from full dict. `_merge_game_object()` helper handles the mapping.
+- **Reasoning**: Wholesale replacement via `from_dict()` zeros out omitted fields, corrupting state.
+- **Impact**: `silverquillm/replay/state.py`.

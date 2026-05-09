@@ -55,3 +55,15 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `data/replays/card_id_map.json` — grpId-to-card-name mapping with 592 entries (582 from Scryfall + 10 synthetic SPG #74-83); revised: added card_name_to_grpIds (plural, list-valued) for duplicate-name disambiguation, synthetic flag on SPG 94700-94709 entries
 - `scripts/build_card_id_map.py` — Script to fetch card data from Scryfall API and build the mapping JSON; revised: reverse map preserves all grpIds via card_name_to_grpIds, synthetic entries flagged with "synthetic": true, error handling on curl/Scryfall API failures
 
+
+## Item 8: 17lands GRE JSON parser
+
+### Tests
+tests/test_replay_parser.py — 39 tests for replay parsing: game setup, opening hands, state reconstruction, land plays, life totals, draws, ObjectIdChanged tracking, API methods
+
+### Implementation
+silverquillm/replay/__init__.py — Package init with public API exports
+silverquillm/replay/types.py — Dataclasses for ReplayGame, GameSnapshot, ReplayAction, GameObject, Zone, Annotation, etc.
+silverquillm/replay/state.py — GRE state reconstruction (full/diff merging with sparse gameObject merge), action inference, ObjectTracker for zone transition tracking
+silverquillm/replay/parser.py — High-level parse_replay() function, card ID map loading
+data/replays/sample_replay.json — Synthetic 5-turn replay data with real grpIds for testing
