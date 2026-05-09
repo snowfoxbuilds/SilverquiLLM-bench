@@ -251,16 +251,15 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
             f"Cannot play land {land_card.name!r} — card not in hand"
         )
 
-    # Move from hand to battlefield
-    battlefield = game.get_battlefield(player)
-    move_zone(land_card, hand, battlefield)
+    # Ensure owner/controller are set so move_to_zone routes correctly.
+    if land_card.owner is None:
+        land_card.owner = player
+    land_card.controller = player
 
-    # Automatically register triggered abilities when entering the battlefield.
-    if hasattr(land_card, "register_triggers"):
-        land_card.register_triggers(game)
-    # Automatically register replacement effects when entering the battlefield.
-    if hasattr(land_card, "register_replacement_effects"):
-        land_card.register_replacement_effects(game)
+    # Move from hand to battlefield via move_to_zone, which fires
+    # ENTERS_BATTLEFIELD and registers triggers/replacement effects.
+    from engine.zones import move_to_zone
+    move_to_zone(game, land_card, Zone.HAND, Zone.BATTLEFIELD)
 
     # Decrement land plays
     player.land_plays_remaining -= 1

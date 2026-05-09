@@ -316,7 +316,7 @@ def resolve_state_based_actions(game: GameState) -> bool:
     while True:
         # Snapshot the stack size before SBA passes so we can detect new
         # triggers that were pushed during processing.
-        stack_size_before = len(game.stack._items)
+        stack_size_before = len(game.stack)
 
         # Inner loop: run SBA checks until no more actions are taken.
         sba_this_round = False
@@ -325,7 +325,7 @@ def resolve_state_based_actions(game: GameState) -> bool:
             any_performed = True
 
         # Detect whether any triggers were queued during this round.
-        triggers_queued = len(game.stack._items) > stack_size_before
+        triggers_queued = len(game.stack) > stack_size_before
 
         # If nothing happened this round (no SBAs and no new triggers),
         # the game state is fully stable.

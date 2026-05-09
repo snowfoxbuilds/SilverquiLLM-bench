@@ -79,13 +79,10 @@ def _is_on_battlefield(game: Any, obj: Any) -> bool:
 
 def _bounce(game: Any, obj: Any) -> None:
     """Return *obj* from the battlefield to its owner's hand."""
-    owner = getattr(obj, "owner", None)
+    from engine.zones import move_to_zone
     for player in game.players:
-        bf = game.get_battlefield(player)
-        if bf.contains(obj):
-            bf.remove(obj)
-            target_owner = owner if owner is not None else player
-            target_owner.zones[Zone.HAND].add(obj)
+        if game.get_battlefield(player).contains(obj):
+            move_to_zone(game, obj, Zone.BATTLEFIELD, Zone.HAND)
             return
 
 
@@ -144,7 +141,7 @@ class Abrade(Instant):
                 destroy(game, target)
 
 
-class ValoroursStance(Instant):
+class ValorousStance(Instant):
     """Valorous Stance — {1}{W} — Choose one.
 
     - Target creature gains indestructible until end of turn.
@@ -188,9 +185,6 @@ class ValoroursStance(Instant):
                     destroy(game, target)
 
 
-# Alias for the typo-proof public API
-ValoroursStance.__name__ = "ValoroursStance"
-ValorousStance = ValoroursStance
 
 
 class GoblinSurprise(Instant):

@@ -345,16 +345,11 @@ def create_token(game: GameState, player: Player, token: Any) -> None:
     token.controller = player
 
     # Tokens don't come from an existing zone — add directly and fire hooks.
+    # Ordering matches move_to_zone: fire ETB *before* registering the token's
+    # own triggers so a token's ETB trigger doesn't self-fire on entry.
     battlefield = game.get_battlefield(player)
     battlefield.add(token)
 
-    # Register triggers/replacement effects if the token supports them
-    if hasattr(token, "register_triggers"):
-        token.register_triggers(game)
-    if hasattr(token, "register_replacement_effects"):
-        token.register_replacement_effects(game)
-
-    # Fire enters-battlefield trigger
     from engine.triggers import EventType as _ET
 
     game.trigger_manager.fire_event(
@@ -362,6 +357,12 @@ def create_token(game: GameState, player: Player, token: Any) -> None:
         _ET.ENTERS_BATTLEFIELD,
         {"permanent": token, "controller": player},
     )
+
+    # Register triggers/replacement effects after the ETB event.
+    if hasattr(token, "register_triggers"):
+        token.register_triggers(game)
+    if hasattr(token, "register_replacement_effects"):
+        token.register_replacement_effects(game)
 
 
 def add_counter(
