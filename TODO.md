@@ -1,122 +1,151 @@
-## Phase 4: Complete the Base Set (FDN 001–291)
+## Phase 5: Replay Validation Pipeline
 
-Scope: Fix critical engine bugs, centralize zone-transition infrastructure, then implement all remaining Foundations limited format cards (~226 cards). This completes the Base Set for Replay Validation and Pipeline Validation Runs.
+Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74–83), build the 17lands GRE JSON replay parser, and build the validation pipeline that replays recorded games against the engine using state-diff comparison in observer mode. See [ADR-003](https://www.notion.so/37a8b903f91b4309a15b91d149a90f7c) for the architectural rationale and [17lands Replay Data Schema](https://www.notion.so/35b6a7adc8ed80978dccdf724213b6f8) for the data format.
 
 ---
 
-### Prerequisites
+### Engine Extensions for SPG Cards
 
-- [x] **Fix ****`is_aura`**** default ****`True`**** in ****`_sba_aura_unattached`**
-  Detail: In `engine/state_based_actions.py`, the function `_sba_aura_unattached()` contains `getattr(obj, "is_aura", True)`. This means any object with an `attached_to` attribute but no explicit `is_aura` attr (e.g., Equipment cards like Bonesplitter, Swiftfoot Boots) is incorrectly treated as an unattached aura and sacrificed by SBAs. Change the default to `False`: `getattr(obj, "is_aura", False)`. This is a one-line fix but blocks all Equipment cards from functioning correctly.
+- [ ] **Hybrid mana parsing and cost payment**
+  Detail: Extend `ManaCost.parse()` to handle hybrid mana symbols like `{B/G}`. A hybrid symbol can be paid with either color. Fiend Artisan (SPG #83) costs `{B/G}{B/G}` — each symbol payable with black or green.
 
-  Files: `engine/state_based_actions.py` (line with `getattr(obj, "is_aura", True)` in `_sba_aura_unattached`).
+  Changes needed:
 
-  Acceptance criteria: Only objects that explicitly set `is_aura = True` (Aura subclasses) are checked for legal attachment. Existing equipment tests (Bonesplitter, Swiftfoot Boots, Whispersilk Cloak) still pass. Existing aura tests (Pacifism, Holy Strength) still correctly send unattached auras to graveyard.
+  - `engine/mana.py`: Update `ManaCost.parse()` regex to recognize `{X/Y}` hybrid symbols
+  - `engine/mana.py`: Update `ManaPool.pay()` to handle hybrid choices (try each option, backtrack if needed)
+  - `engine/types.py`: Add `HybridManaSymbol` type if needed
+  Keep it generic — support any two-color hybrid, not just B/G. Phyrexian mana (`{W/P}`) is NOT needed yet.
 
-  Testability: Add a focused test: equip Bonesplitter to a creature, run `resolve_state_based_actions()`, assert the equipment remains on the battlefield.
+  Reference: Check `KEY_DECISIONS.md` for mana parsing conventions from Phase 1.
 
-- [x] **Wire SBA trigger queueing in ****`resolve_state_based_actions()`**
-  Detail: In `engine/state_based_actions.py`, `resolve_state_based_actions()` has a `# TODO: check for triggered abilities and put them on the stack` comment. Per MTG rules 704.3, after each SBA pass that performs actions, any triggered abilities that fired during those actions must be put on the stack before any player receives priority. The SBA loop must repeat until no more SBAs needed AND all pending triggers queued.
+  Testability: Unit test parsing `{B/G}{B/G}` → correct ManaCost. Test payment with pool containing only black, only green, and mixed. Test that `{W/U}` and other hybrid pairs also work.
 
-  Currently, zone-move helpers like `_move_to_graveyard()` call `game.trigger_manager.unregister(obj)` but `CREATURE_DIES` and `LEAVES_BATTLEFIELD` events are NOT fired from within SBAs — they’re only fired in `engine/game.py`’s `destroy()` and `sacrifice()`. Death triggers don’t fire when creatures die via SBAs (lethal damage, zero toughness).
+- [ ] **Cost reduction during casting**
+  Detail: Implement a cost-reduction hook in the casting pipeline. Embercleave (SPG #77) costs `{4}{R}{R}` but costs `{1}` less for each attacking creature you control.
 
-  Fix: (a) In `_move_to_graveyard()`, fire `EventType.CREATURE_DIES` and `EventType.LEAVES_BATTLEFIELD` events after moving the object. (b) In `resolve_state_based_actions()`, after the SBA loop stabilizes, check if triggers were queued during processing and loop again if so. The outer loop: repeat { run SBA passes until stable; if triggers were put on stack during SBA processing, loop again } until no SBAs performed and no new triggers queued.
+  Changes needed:
 
-  Files: `engine/state_based_actions.py` (`_move_to_graveyard`, `resolve_state_based_actions`).
+  - `engine/casting.py`: Add a `get_cost_reduction(game_state, card, controller)` hook called during cost calculation, before mana payment. Cards override this to return a generic mana reduction amount.
+  - `engine/card.py` or `CardImpl`: Add `cost_reduction(self, game_state) -> int` method (default 0). Embercleave overrides this.
+  - Reduction only applies to generic mana (cannot reduce colored costs below their minimum).
+  Design note: Simplified model — single-card self-reduction only. Full MTG cost reduction (Trinisphere, multiple reductions) deferred.
 
-  Testability: Create a creature with a "when this creature dies" trigger. Deal lethal damage, call `resolve_state_based_actions()`, assert the trigger’s effect was pushed onto the stack.
+  Testability: Unit test that a card with cost `{4}{R}{R}` and reduction of 3 costs `{1}{R}{R}`. Test reduction can’t go below 0 generic. Test with 0 reduction (full cost).
 
-- [x] **Centralize zone-transition hooks into ****`move_to_zone()`**
-  Detail: Trigger registration/unregistration and event firing for zone transitions is duplicated across: `engine/casting.py` (`_resolve_spell` — registers triggers/replacement effects on ETB), `engine/state_based_actions.py` (`_move_to_graveyard` — unregisters on leaving battlefield), `engine/game.py` (`destroy()`, `sacrifice()`, `exile()`, `create_token()` — each independently handles unregistration + event firing). Every new zone-transition path (bounce, flicker, mill, reanimate) would need to duplicate this logic.
+- [ ] **Protection from qualities (keyword ability)**
+  Detail: Implement "protection from [quality]" keyword. Akroma’s Memorial (SPG #81) grants protection from black and from red. Protection prevents: **D**amage from sources with that quality, **E**nchanting/equipping by permanents with that quality, **B**locking by creatures with that quality, **T**argeting by spells/abilities from sources with that quality (DEBT mnemonic).
 
-  Refactor into a centralized `move_to_zone(game, card, from_zone, to_zone)` function. This function should: (1) remove from source zone, (2) add to destination zone, (3) if leaving battlefield: unregister triggers and replacement effects, fire `LEAVES_BATTLEFIELD`, fire `CREATURE_DIES` if applicable, (4) if entering battlefield: call `register_triggers()` and `register_replacement_effects()`, fire `ENTERS_BATTLEFIELD`, (5) consult replacement effects for zone-change redirection (e.g., exile instead of graveyard). Then update all callers in `casting.py`, `state_based_actions.py`, and `game.py` to use this function.
+  Changes needed:
 
-  Files: `engine/zones.py` (add or extend `move_zone`), `engine/casting.py`, `engine/state_based_actions.py`, `engine/game.py`.
+  - `engine/abilities.py` or `engine/keywords.py`: Add `ProtectionAbility(quality)` class. Quality can be a color, card type, or arbitrary predicate.
+  - `engine/combat.py`: Check protection during blocking legality
+  - `engine/targeting.py`: Check protection during target legality
+  - `engine/damage.py`: Apply damage prevention from protected sources
+  - `engine/continuous_effects.py`: Auras/Equipment on protected permanents fall off (SBA)
+  Start with color-based protection only. Framework should be extensible to other qualities later.
 
-  Testability: All existing tests for casting, destruction, sacrifice, and exile must still pass. Add a test that uses `move_to_zone` to bounce a creature with a registered trigger — verify trigger is unregistered and `LEAVES_BATTLEFIELD` fires.
+  Testability: Test creature with protection from red: can’t be targeted by red spells, can’t be blocked by red creatures, doesn’t take damage from red sources, red auras fall off.
 
-### Card Porting Batches
+- [ ] **Extra turns infrastructure (stub)**
+  Detail: Implement "take an extra turn after this one" as a working feature. Temporal Manipulation (SPG #82) is `{3}{U}{U}` sorcery — "Take an extra turn after this one."
 
-- [x] **Batch 1: Remaining vanilla & French vanilla creatures (~25–30 cards)**
-  Detail: Implement all remaining FDN creatures with no abilities (vanilla) or only keyword abilities (French vanilla). These are the simplest cards and require zero engine changes. Use the existing `make_vanilla()` factory in `cards/foundations/simple_creatures.py` for pure-stat creatures. For French vanilla creatures with keywords already supported in `engine/types.py::Keyword` (flying, first strike, double strike, trample, vigilance, reach, deathtouch, lifelink, haste, hexproof, menace, defender, flash, indestructible), use `make_vanilla()` with the `keywords` parameter. Register each with `CardMetadata` including correct Scryfall collector numbers. Cross-reference the Scryfall FDN card list against existing implementations to identify what’s missing.
+  Changes needed:
 
-  Files: `cards/foundations/simple_creatures.py` (extend or new file `vanilla_creatures_batch2.py`), `cards/registry.py`.
+  - `engine/game_state.py`: Add `extra_turns: list[int]` (list of player seat IDs, FIFO queue)
+  - `engine/turn.py`: At end of turn, before passing to next player, check `extra_turns`. If non-empty, pop first entry and give that player the next turn.
+  Mark as ENGINE LIMITATION — complex interactions ("skip your next turn", multiple extra turns from different sources) are not fully handled.
 
-  Testability: Each creature: instantiate, verify name/cost/power/toughness/keywords match Scryfall data. Integration: cast creature, verify it enters battlefield with correct stats and keywords.
+  Testability: Test extra turn is granted after casting. Test normal turn order resumes after extra turn. Test multiple extra turns queue correctly (FIFO).
 
-- [x] **Batch 2: Simple non-targeted instants & sorceries (~15–20 cards)**
-  Detail: Implement remaining FDN instants and sorceries that don’t target (or target "you"): draw spells, lifegain, token creation, mill, "each player/opponent" effects. Subclass `Instant` or `Sorcery`, override `on_resolve()`. Use `engine/game.py` helpers: `draw_card()`, `create_token()`, `discard()`.
+---
 
-  Files: `cards/foundations/simple_spells.py` (extend or new file).
+### SPG Card Implementations
 
-  Testability: For each spell: cast it, verify the effect (cards drawn, life gained, tokens created).
+- [ ] **SPG Batch 1: Simple spells and utility creatures (5 cards)**
+  Detail: Implement the simpler Special Guest cards that need minimal or no new engine extensions:
 
-- [x] **Batch 3: Simple targeted instants & sorceries (~15–20 cards)**
-  Detail: Implement remaining FDN targeted spells: burn (deal N damage to target), targeted removal (destroy target creature/permanent), bounce (return target to hand), pump (+N/+N until end of turn), and fight spells. Follow existing patterns: override `get_targets()` to return `TargetRequirement`, override `on_resolve()` to use `_get_chosen_target()`. Use `deal_damage()`, `destroy()`, `exile()` from `engine/game.py`. For bounce spells, use the centralized `move_to_zone()` from prereq 3.
+  1. **Condemn** (SPG #74) — {W} instant. Put target attacking creature on the bottom of its owner’s library. Its controller gains life equal to its toughness. Needs: target validation (must be attacking), bottom-of-library zone move, life gain based on toughness.
+  2. **Grim Tutor** (SPG #76) — {1}{B}{B} sorcery. Search your library for a card, put it into your hand, then shuffle. You lose 3 life. Needs: library search (player choice), shuffle, life loss. Check if search/shuffle already exists from Phase 4 cards.
+  3. **Goblin Bushwhacker** (SPG #78) — {R} creature 1/1 Goblin Warrior. Kicker {R}. When it enters the battlefield, if it was kicked, creatures you control get +1/+0 and gain haste until end of turn. Kicker exists from Phase 4 Batch 12. Needs: kicked ETB trigger, mass temporary buff + haste grant.
+  4. **Paradise Druid** (SPG #80) — {1}{G} creature 2/1 Elf Druid. Has hexproof as long as it’s untapped. {T}: Add one mana of any color. Needs: conditional hexproof (continuous effect checking `isTapped`), any-color mana ability.
+  5. **Bloom Tender** (SPG #79) — {1}{G} creature 1/1 Elf Druid. {T}: For each color among permanents you control, add one mana of that color. Needs: color-among-permanents scan, multi-color mana production.
+  Files: `cards/foundations/special_guests.py` (all 10 SPG cards in one file).
 
-  Files: `cards/foundations/simple_spells.py` (extend or new file).
+  Testability: Per-card unit tests. Condemn: test on attacking creature, verify bottom-of-library + life gain. Grim Tutor: test search + life loss. Bushwhacker: test kicked vs unkicked. Paradise Druid: test hexproof while untapped, loses hexproof when tapped for mana. Bloom Tender: test with various color distributions among controlled permanents.
 
-  Testability: For each targeted spell: set up a legal target, cast, verify target is affected.
+- [ ] **SPG Batch 2: Complex permanents and spells (5 cards)**
+  Detail: Implement the mechanically complex Special Guest cards. These depend on the engine extensions from earlier items.
 
-- [x] **Batch 4: Non-basic lands (~10–15 cards)**
-  Detail: Implement FDN non-basic lands: tap lands (ETB tapped, tap for one of two colors), gain lands (ETB tapped, gain 1 life), utility lands (tap for colorless + activated ability). Subclass `Land`. For ETB-tapped lands, use a replacement effect or flag. For dual-color tap lands, override `get_mana_abilities()` to return two `ManaAbility` entries. For gain lands, register an ETB trigger for lifegain. May need to add a simple "enters tapped" mechanic as a flag on the `Land` class or via replacement effect.
+  1. **Sphinx’s Tutelage** (SPG #75) — {2}{U} enchantment. Whenever you draw a card, target opponent mills 2. If two nonland cards that share a color were milled this way, repeat this process. {5}{U}: Draw a card, then discard a card. Needs: draw trigger, mill mechanic (top N cards from library → graveyard), repeat-loop logic (check milled cards for shared color among nonlands), activated draw+discard ability.
+  2. **Embercleave** (SPG #77) — {4}{R}{R} legendary artifact — Equipment. Flash. Costs {1} less for each attacking creature you control. ETB: attach to target creature you control. Equipped creature gets +1/+1, double strike, trample. Equip {3}. Depends on: cost reduction extension. Needs: Flash keyword, ETB auto-attach, double strike keyword, equip ability. Check if Flash/double strike already exist.
+  3. **Akroma’s Memorial** (SPG #81) — {7} legendary artifact. Creatures you control have flying, first strike, vigilance, trample, haste, and protection from black and from red. Depends on: protection extension. Needs: mass keyword granting via continuous effect (Layer 6). Most keywords should already exist from Phase 4.
+  4. **Temporal Manipulation** (SPG #82) — {3}{U}{U} sorcery. Take an extra turn after this one. Depends on: extra turns infrastructure. Simple implementation — just calls the extra turn API on resolve.
+  5. **Fiend Artisan** (SPG #83) — {B/G}{B/G} creature */* Nightmare. P/T each equal to number of creature cards in your graveyard. {X}{B/G}, {T}, Sacrifice another creature: Search library for creature with MV ≤ X, put onto battlefield, shuffle. Activate only as a sorcery. Depends on: hybrid mana extension. Needs: characteristic-defining ability (P/T = graveyard count, Layer 7a), activated ability with X cost + hybrid + tap + sacrifice, MV-restricted search, sorcery-speed-only restriction.
+  Files: `cards/foundations/special_guests.py` (same file as Batch 1).
 
-  Files: New file `cards/foundations/lands.py`.
+  Testability: Sphinx’s Tutelage: test draw trigger mills, test repeat loop when colors match, test it stops when colors don’t match, test activated ability. Embercleave: test cost reduction with varying attacker counts, test flash timing, test ETB attach, test double strike + trample on equipped creature. Akroma’s Memorial: test all 6 keywords granted + both protection colors. Temporal Manipulation: test extra turn granted. Fiend Artisan: test P/T tracks graveyard count, test activated ability with various X values, test sorcery-speed restriction.
 
-  Testability: Play each land, verify tapped/untapped state, activate mana ability, verify mana produced. For gain lands: verify life gained on ETB.
+---
 
-- [x] **Batch 5: Creatures with ETB triggers (~20–25 cards)**
-  Detail: Implement FDN creatures with "when this creature enters the battlefield" abilities: draw, damage, lifegain, tokens, destroy/exile target, bounce, counters. Depends on prereq 3 for clean ETB event firing. Subclass `Creature`, override `register_triggers()` to register `TriggerRegistration` with `EventType.ENTERS_BATTLEFIELD` and condition checking entering permanent is `self`. Use existing `engine/game.py` helpers for effects. Likely the largest batch.
+### Replay Parsing
 
-  Files: New file `cards/foundations/etb_creatures.py`.
+- [ ] **Card ID mapping (grpId → card name)**
+  Detail: Download 17lands FDN card list from [17lands.com/public_datasets](http://17lands.com/public_datasets). Build a `dict[int, str]` mapping `grpId → card_name`. Store as `data/replays/card_id_map.json`. This is required before any replay can be interpreted — the GRE data uses integer `grpId` values for all card references.
 
-  Testability: For each: cast/put onto battlefield, verify trigger fires and effect resolves.
+  Also build a reverse map `card_name → grpId` for test convenience. Include set code and collector number in the mapping for disambiguation.
 
-- [x] **Batch 6: Auras (~10–12 cards)**
-  Detail: Implement remaining FDN auras beyond those already in `enchantments.py`. Depends on prereq 1 (is_aura fix). Follow existing patterns: subclass `Aura`, override `get_targets()`, `on_resolve()` (set `self.attached_to`), register continuous effects via `game.effect_manager.add()`. Cover buff auras (+N/+N), debuff auras (-N/-N), keyword-granting auras, lockdown auras (can’t attack/block). For auras with triggered abilities, also override `register_triggers()`.
+  Files: `data/replays/card_id_map.json`, script `scripts/build_card_id_map.py`.
 
-  Files: `cards/foundations/enchantments.py` (extend or new file).
+  Testability: Map resolves all `grpId` values found in the sample replay JSON (from the [17lands Replay Data Schema](https://www.notion.so/35b6a7adc8ed80978dccdf724213b6f8) page) to valid FDN/SPG card names. No unmapped IDs in the sample data.
 
-  Testability: Cast targeting creature, verify attachment and continuous effect. Remove enchanted creature, verify aura goes to graveyard via SBA.
+- [ ] **17lands GRE JSON parser**
+  Detail: Parse 17lands replay data — clean JSON files containing pre-parsed GRE message streams. Format: `{seat_id, opponent_seat_id, events: [...]}` where each event is a `GameStateMessage` with `GameStateType_Full` or `GameStateType_Diff`. See [17lands Replay Data Schema](https://www.notion.so/35b6a7adc8ed80978dccdf724213b6f8) for the full schema.
 
-- [x] **Batch 7: Equipment (~5–8 cards)**
-  Detail: Implement remaining FDN equipment beyond those in `artifacts.py`. Depends on prereq 1. Follow Bonesplitter/Swiftfoot Boots pattern: subclass `Artifact`, add `subtypes={"Equipment"}`, implement equip activated ability, register continuous effects for equipped creature. Cover stat-boosting, keyword-granting, and triggered-ability equipment.
+  The parser must:
 
-  Files: `cards/foundations/artifacts.py` (extend or new file).
+  1. **State reconstruction**: Start from first `GameStateType_Full`, apply diffs sequentially — merge zones by `zoneId`, upsert `gameObjects` by `instanceId`, process `diffDeletedInstanceIds`, manage `persistentAnnotations` and `diffDeletedPersistentAnnotationIds`
+  2. **Action extraction**: From state diffs, infer what happened — land plays (hand → battlefield via `ObjectIdChanged`), spell casts (hand → stack → resolve), draws (library → hand), ability activations (`GameObjectType_Ability` on stack with `parentId`), combat (`turnInfo` step transitions), creature deaths (→ graveyard)
+  3. **Object tracking**: Track cards across zone transitions via `AnnotationType_ObjectIdChanged` (`orig_id` → `new_id`). When a card moves zones, its `instanceId` changes but `grpId` stays the same.
+  4. **Card name resolution**: Map `grpId` → card name using the card ID mapping
+  5. **Output**: Produce a `ReplayGame` object: game setup (players, seats, format, deck info from initial library), ordered list of `GameSnapshot` objects (one per `gameStateId`), game result
+  Files: New module `silverquillm/replay/` with `parser.py`, `types.py` (ReplayGame, GameSnapshot, ReplayAction types), `state.py` (GRE state reconstruction logic).
 
-  Testability: Cast, equip to creature, verify bonus. Equip to different creature, verify old creature loses bonus.
+  Testability: Parse the sample replay data from the schema page. Assert correct game setup (Bo3 limited, seat 1 = user, seat 2 = opponent), correct opening hands (7 cards each), correct land plays on turns 1–5 (fetchland sequence for opponent), correct life totals (20/20 through turn 5). Test that `ObjectIdChanged` annotations correctly track the fetchland: land enters battlefield → ability on stack → land sacrifices to graveyard → Forest enters battlefield tapped.
 
-- [x] **Batch 8: Creatures with death triggers (~15–20 cards)**
-  Detail: Implement FDN creatures with "when this creature dies" abilities. Depends on prereq 2 (SBA trigger queueing). Override `register_triggers()` with `EventType.CREATURE_DIES` and condition `data["creature"] is self`. Effects: draw, damage, tokens, graveyard recursion. Also include "leaves the battlefield" triggers. After prereq 3, `move_to_zone()` handles firing these events consistently.
+---
 
-  Files: New file `cards/foundations/death_trigger_creatures.py`.
+### Validation Runner
 
-  Testability: Put on battlefield, kill it (lethal damage or destroy), verify trigger fires. Critical: death via SBA (deal lethal, call `resolve_state_based_actions()`, verify trigger on stack).
+- [ ] **Replay executor (state-diff observer mode)**
+  Detail: Build a `ReplayExecutor` that steps through `GameSnapshot` objects from the parser and validates engine behavior using state-diff comparison:
 
-- [x] **Batch 9: Creatures with activated abilities (~15–20 cards)**
-  Detail: Implement FDN creatures with activated abilities: tap abilities, sacrifice abilities, mana abilities on creatures, pump abilities. Override `get_activated_abilities()` to return `ActivatedAbility` objects. Use `engine/abilities.py::ActivatedAbilityInstance` and `activate_ability()` for proper stack interaction. Tap abilities check `is_tapped` and set `is_tapped = True`. Sacrifice abilities remove the creature.
+  1. Initialize engine game state from the first `GameStateType_Full` snapshot (players, life totals, opening hands via `grpId` → card mapping)
+  2. For each consecutive snapshot pair, diff zones/objects to extract what changed (the "action")
+  3. **Seat 1 (17lands user):** Full validation — infer the action from the diff (land play, spell cast, combat, etc.), execute it through the engine API (`play_land`, `cast_spell`, `declare_attackers`, etc.), and compare the engine’s resulting state against the next GRE snapshot
+  4. **Seat 2 (opponent):** Oracle injection — observe what they played from public game objects (battlefield/stack), inject those state changes directly into the engine without validating legality from their hidden hand
+  5. Compare engine state vs GRE snapshot at each step: life totals, zone contents (by `grpId`), battlefield permanents (tapped state, P/T), graveyard contents
+  Handle: `grpId` → CardRegistry lookup, `AnnotationType_ObjectIdChanged` for tracking cards across zone transitions, phase/step transitions from `turnInfo` diffs.
 
-  Files: New file `cards/foundations/activated_creatures.py`.
+  Files: `silverquillm/replay/executor.py`.
 
-  Testability: Put on battlefield, activate ability (ensure cost paid), verify effect. For tap abilities: verify can’t activate while tapped or with summoning sickness (unless haste).
+  Testability: Execute a simple replay (few turns, lands + vanilla creatures) against the engine. Assert each step succeeds and engine state matches GRE snapshots.
 
-- [x] **Batch 10: Global enchantments & remaining non-aura enchantments (~8–12 cards)**
-  Detail: Implement remaining FDN non-aura enchantments: anthem effects (your creatures get +N/+N), keyword-granting, triggered ability enchantments ("whenever you cast a spell", "at the beginning of your upkeep"), static-ability enchantments. Follow `enchantments.py` patterns. Use appropriate `Layer`/`SubLayer` for continuous effects.
+- [ ] **Divergence detection and reporting**
+  Detail: When the engine can’t execute a replay action or produces different state, record a `Divergence` with: `gameStateId`, expected state (from GRE snapshot), actual state (from engine), action attempted, and severity:
 
-  Files: `cards/foundations/enchantments.py` (extend or new file).
+  - `MISSING_CARD`: Card `grpId` in replay not implemented in engine
+  - `ILLEGAL_ACTION`: Engine rejects an action that the GRE shows happened
+  - `STATE_MISMATCH`: Engine processes the action but resulting state differs (wrong life total, wrong zone contents, wrong P/T)
+  - `ENGINE_ERROR`: Engine throws an unhandled exception
+  After execution, produce a `ValidationReport`: total snapshots processed, successful comparisons, divergences by type, per-card divergence rates (which `grpId`s are involved in the most divergences), first divergence point (for debugging).
 
-  Testability: Cast, verify effect applies. For triggered enchantments: trigger the event, verify it fires.
+  Files: `silverquillm/replay/validation.py`.
 
-- [x] **Batch 11: Remaining artifacts & planeswalkers (~10–15 cards)**
-  Detail: Implement remaining FDN artifacts (utility artifacts, mana rocks, artifact creatures) and planeswalkers. For artifacts: follow `artifacts.py` patterns. For planeswalkers: subclass `Planeswalker`, set `starting_loyalty`, override `get_loyalty_abilities()` with `LoyaltyAbility` objects. Fully implement loyalty ability effects (not stubs). Set `Supertype.LEGENDARY` and planeswalker subtype.
+  Testability: Introduce a deliberate engine bug (e.g., wrong damage amount), run replay, assert divergence is detected and categorized as STATE_MISMATCH. Test MISSING_CARD detection by removing a card implementation.
 
-  Files: `cards/foundations/artifacts.py` and `cards/foundations/planeswalkers.py` (extend).
+- [ ] **CLI: ****`benchmark validate`**** command**
+  Detail: Add `benchmark validate <replay_path_or_dir>` command. Options: `--cards` (filter to replays containing specific cards by name), `--verbose` (show each action and state comparison), `--report` (output JSON report file), `--stop-on-divergence` (halt at first mismatch for debugging). Summary output: games attempted, games completed without divergence, divergence rate, top divergence causes, per-card divergence rates.
 
-  Testability: For artifacts: cast, activate abilities, verify effects. For planeswalkers: cast, activate loyalty abilities (verify loyalty changes), verify effects resolve.
+  Files: Extend `silverquillm/cli.py`, new `silverquillm/replay/cli.py`.
 
-- [x] **Batch 12: Modal spells, X-cost spells, and remaining complex cards (~10–15 cards)**
-  Detail: Implement any remaining FDN cards: modal choices ("choose one/two"), X-cost spells, kicker, and other complex mechanics. Follow `modal_spells.py` patterns: override `get_modes()`. For X-cost spells, add `x_value` attribute set during casting (may need minor `casting.py` extension to support X in mana costs). For kicker, add `kicked` boolean. This is the catch-all batch for everything not covered above.
-
-  Files: `cards/foundations/modal_spells.py` (extend or new file).
-
-  Testability: For modal: test each mode independently. For X spells: test with different X values. For kicker: test kicked and unkicked.
+  Testability: Run `benchmark validate data/replays/` end-to-end, verify report is generated with expected structure (JSON with games_attempted, divergences, per_card_rates fields).

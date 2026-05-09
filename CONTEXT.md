@@ -20,7 +20,7 @@ Third evaluation layer: all agents' implementations tested against human-curated
 
 **Base Set**
 
-MTG Foundations limited format card pool (FDN 001–291). Serves as engine validation, agent reference examples, and regression suite. Ported from XMage Java source. Engine validated via Replay Validation against 17lands MTGA data.
+MTG Foundations limited format card pool (FDN 001–291 + SPG 074–083 Special Guests). Serves as engine validation, agent reference examples, and regression suite. Ported from XMage Java source. Engine validated via Replay Validation against 17lands GRE JSON data.
 
 *Avoid*: "foundation cards" (use "Foundations cards" or "base set")
 
@@ -80,9 +80,9 @@ Structured JSONL file (`postmortem.jsonl`) capturing agent output, file diffs, t
 
 **Replay Validation**
 
-Engine correctness check that replays recorded MTGA game actions (sourced from 17lands) through the Python engine and verifies game-state checkpoints (life totals, board state, winner) match the recorded outcomes. Primary validation method for the Base Set. Distinct from cross-engine differential testing.
+Engine correctness check that replays 17lands GRE (Game Rules Engine) state streams through the Python engine and verifies full game state at every GRE message boundary. Data source: 17lands pre-parsed GRE JSON — clean JSON files containing `GameStateType_Full` and `GameStateType_Diff` messages with object-level fidelity (zones, gameObjects by `grpId`/`instanceId`, life totals, annotations). Execution model: **observer mode** with state-diff comparison — seat 1 (17lands user) fully validated, seat 2 (opponent) actions oracle-injected from public game objects. Single parser, single format. See [17lands Replay Data Schema](https://www.notion.so/35b6a7adc8ed80978dccdf724213b6f8) and [ADR-003](https://www.notion.so/37a8b903f91b4309a15b91d149a90f7c).
 
-*Avoid*: "differential testing" (that refers to the deprecated XMage comparison approach)
+*Avoid*: "differential testing" (deprecated XMage approach), "checkpoint validation" (we do full state comparison, not just EOT checkpoints), "aggregate CSV" (that's a different 17lands dataset)
 
 **Self-Eval**
 
@@ -144,5 +144,5 @@ Clean temp directory created per card containing card-specific files (card_spec,
 - Cross-Eval tests every agent's implementations against every other agent's tests (N×N).
 - The Base Set and Expanded Pool together form the reference codebase agents can browse.
 - A Workspace is created per Card Spec within a run, with a writable reference to the Persistent Engine.
-- The Base Set is validated via Replay Validation against 17lands MTGA data before scored benchmark runs.
+- The Base Set (FDN 001–291 + SPG 074–083) is validated via Replay Validation against 17lands GRE JSON data before scored benchmark runs.
 - A Pipeline Validation Run precedes scored benchmark runs to verify the orchestration pipeline.

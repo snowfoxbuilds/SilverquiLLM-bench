@@ -30,7 +30,14 @@ All specs, code, and agent instructions use these terms exactly.
 | `docs/specs/TEST-SUITE.md` | Multi-phase evaluation architecture, cross-evaluation, and test audit |
 | `docs/specs/BENCHMARK-RUNNER.md` | Orchestration harness, agent prompts, contamination controls |
 | `docs/specs/SCORING.md` | Three scoring categories, metrics, and leaderboard format |
+| `docs/specs/17LANDS-REPLAY-SCHEMA.md` | GRE JSON replay format: events, gameStateMessage, zones, gameObjects, annotations, parsing strategy |
 
 ## ADRs
 
-No ADRs created yet. Major architectural decisions are documented in spec Decisions sections.
+Architectural decisions are documented under the ADRs page:
+
+| ADR | Summary |
+| --- | --- |
+| `docs/adr/ADR-001` | SQLite-based card data over Scryfall API |
+| `docs/adr/ADR-002` | Per-card unit tests over differential testing during porting |
+| `docs/adr/ADR-003` | Replay Validation over differential testing — 17lands GRE JSON, observer mode, full state-diff comparison |

@@ -50,6 +50,27 @@ Branch: `execute-todo-with-subagents/phase2-harness` → `main`
 - [x] **Result recording + output artifacts** (per-run directory structure)
 - [x] **Prototype card selection + engine gap analysis**
 - [x] **Minimal engine extensions for SOS prototype mechanics** (Converge mana color tracking)
+## Completed 2026-05-09
+
+Phase 4: Complete the Base Set — FDN 001–291 (PR #6 — 15 items, ~191 cards, 3,786 tests)
+
+Branch: `execute-todo-with-subagents/phase4-base-set` → `main`
+
+- [x] **Fix ****`is_aura`**** default ****`True`**** → ****`False`**
+- [x] **Wire SBA trigger queueing**
+- [x] **Centralize zone-transition hooks into ****`move_to_zone()`**
+- [x] **Batch 1: Remaining vanilla & French vanilla creatures (7 cards)**
+- [x] **Batch 2: Simple non-targeted instants & sorceries (15 cards)**
+- [x] **Batch 3: Simple targeted instants & sorceries (18 cards)**
+- [x] **Batch 4: Non-basic lands (13 cards)**
+- [x] **Batch 5: Creatures with ETB triggers (29 cards)**
+- [x] **Batch 6: Auras (10 cards)**
+- [x] **Batch 7: Equipment (7 cards)**
+- [x] **Batch 8: Creatures with death triggers (17 cards)**
+- [x] **Batch 9: Creatures with activated abilities (19 cards)**
+- [x] **Batch 10: Global enchantments (10 cards)**
+- [x] **Batch 11: Remaining artifacts & planeswalkers (27 artifacts + 3 planeswalkers)**
+- [x] **Batch 12: Modal spells, X-cost spells, kicker (16 cards)**
 ## Completed 2026-05-08
 
 Phase 3: Multi-Agent Adapters, Postmortem & Spec Alignment (PR #5 — 22 items)
