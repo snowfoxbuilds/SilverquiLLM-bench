@@ -220,8 +220,8 @@ class TestKeyword:
     def test_member_exists(self, name: str) -> None:
         assert name in Keyword.__members__
 
-    def test_exactly_fifteen_members(self) -> None:
-        assert len(Keyword) == 15
+    def test_exactly_sixteen_members(self) -> None:
+        assert len(Keyword) == 16
 
     def test_bitwise_or_composition(self) -> None:
         """Combining keywords with | should produce a valid Keyword flag value."""
