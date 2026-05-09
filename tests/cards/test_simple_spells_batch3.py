@@ -619,9 +619,10 @@ class TestSnakeskinVeil:
         set_board_state(game, 0, hand=[spell], mana={ManaType.GREEN: 1})
         cast_spell(game, 0, "Snakeskin Veil", targets=[creature])
 
-        # +1/+1 counter is applied immediately (not via effect manager)
-        assert creature.base_power == 3
-        assert creature.base_toughness == 3
+        # +1/+1 counter increments plus_one_counters; power/toughness reflect it
+        assert creature.plus_one_counters == 1
+        assert creature.power == 3
+        assert creature.toughness == 3
 
     def test_grants_hexproof(self) -> None:
         game = _make_game()
@@ -719,8 +720,9 @@ class TestFleetingFlight:
         set_board_state(game, 0, hand=[spell], mana={ManaType.WHITE: 1})
         cast_spell(game, 0, "Fleeting Flight", targets=[creature])
 
-        assert creature.base_power == 3
-        assert creature.base_toughness == 3
+        assert creature.plus_one_counters == 1
+        assert creature.power == 3
+        assert creature.toughness == 3
 
     def test_grants_flying(self) -> None:
         game = _make_game()
@@ -813,8 +815,9 @@ class TestFellingBlow:
         spell.on_resolve(game)
 
         # +1/+1 counter first
-        assert my_creature.base_power == 4  # 3 + 1
-        assert my_creature.base_toughness == 4  # 3 + 1
+        assert my_creature.plus_one_counters == 1
+        assert my_creature.power == 4  # 3 + 1
+        assert my_creature.toughness == 4  # 3 + 1
         # Then deals damage = new power
         assert their_creature.damage_marked == 4
 

@@ -321,11 +321,7 @@ def discard(game: GameState, player: Player, card: Any) -> None:
     if not hand.contains(card):
         return
 
-    owner = getattr(card, "owner", player)
-    graveyard = owner.zones[Zone.GRAVEYARD]
-
-    hand.remove(card)
-    graveyard.add(card)
+    move_to_zone(game, card, Zone.HAND, Zone.GRAVEYARD)
 
 
 def create_token(game: GameState, player: Player, token: Any) -> None:

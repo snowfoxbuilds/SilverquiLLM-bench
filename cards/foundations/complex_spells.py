@@ -40,6 +40,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature, Instant, Mode, Sorcery
+from engine.continuous_effects import (
+    ContinuousEffect,
+    DURATION_END_OF_TURN,
+    Layer,
+    SubLayer,
+)
 from engine.types import CardType, Keyword, ManaCost, Zone
 
 if TYPE_CHECKING:
@@ -222,9 +228,21 @@ class GoblinSurprise(Instant):
         if controller is None:
             return
         if mode == 0:
-            for obj in game.get_battlefield(controller).get_all():
-                if CardType.CREATURE in getattr(obj, "card_types", set()):
-                    obj.base_power = getattr(obj, "base_power", 0) + 2
+            spell_ref = self
+            controller_ref = controller
+
+            def _apply_pump(game: GameState) -> None:
+                for obj in game.get_battlefield(controller_ref).get_all():
+                    if CardType.CREATURE in getattr(obj, "card_types", set()):
+                        obj.base_power += 2
+
+            game.effect_manager.add(ContinuousEffect(
+                source=spell_ref,
+                layer=Layer.POWER_TOUGHNESS,
+                sublayer=SubLayer.MODIFY_PT,
+                apply=_apply_pump,
+                duration=DURATION_END_OF_TURN,
+            ))
         elif mode == 1:
             from engine.game import create_token
             for _ in range(2):
@@ -437,13 +455,23 @@ class SeekersFolly(Sorcery):
                     if cards:
                         discard(game, target, cards[0])
         elif mode == 1:
-            for player in game.players:
-                if player is controller:
-                    continue
-                for obj in game.get_battlefield(player).get_all():
-                    if CardType.CREATURE in getattr(obj, "card_types", set()):
-                        obj.base_power = getattr(obj, "base_power", 0) - 1
-                        obj.base_toughness = getattr(obj, "base_toughness", 0) - 1
+            spell_ref = self
+            opponents = [p for p in game.players if p is not controller]
+
+            def _apply_shrink(game: GameState) -> None:
+                for opponent in opponents:
+                    for obj in game.get_battlefield(opponent).get_all():
+                        if CardType.CREATURE in getattr(obj, "card_types", set()):
+                            obj.base_power -= 1
+                            obj.base_toughness -= 1
+
+            game.effect_manager.add(ContinuousEffect(
+                source=spell_ref,
+                layer=Layer.POWER_TOUGHNESS,
+                sublayer=SubLayer.MODIFY_PT,
+                apply=_apply_shrink,
+                duration=DURATION_END_OF_TURN,
+            ))
 
 
 # ===========================================================================

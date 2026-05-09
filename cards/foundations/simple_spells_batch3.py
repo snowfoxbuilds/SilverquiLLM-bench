@@ -706,9 +706,10 @@ class SnakeskinVeil(Instant):
         if not still_valid:
             return
 
-        # +1/+1 counter
-        target.base_power += 1
-        target.base_toughness += 1
+        # +1/+1 counter via plus_one_counters (not base_power mutation)
+        if hasattr(target, "plus_one_counters"):
+            target.plus_one_counters += 1
+            target._original_plus_one_counters = target.plus_one_counters  # type: ignore[attr-defined]
 
         creature_ref = target
 
@@ -1021,9 +1022,10 @@ class FellingBlow(Sorcery):
         if not source_valid:
             return
 
-        # +1/+1 counter
-        source_creature.base_power += 1
-        source_creature.base_toughness += 1
+        # +1/+1 counter via plus_one_counters (not base_power mutation)
+        if hasattr(source_creature, "plus_one_counters"):
+            source_creature.plus_one_counters += 1
+            source_creature._original_plus_one_counters = source_creature.plus_one_counters  # type: ignore[attr-defined]
 
         if target_valid:
             power = getattr(source_creature, "power", getattr(source_creature, "base_power", 0))
@@ -1087,9 +1089,10 @@ class FleetingFlight(Instant):
         if not still_valid:
             return
 
-        # +1/+1 counter
-        target.base_power += 1
-        target.base_toughness += 1
+        # +1/+1 counter via plus_one_counters (not base_power mutation)
+        if hasattr(target, "plus_one_counters"):
+            target.plus_one_counters += 1
+            target._original_plus_one_counters = target.plus_one_counters  # type: ignore[attr-defined]
 
         creature_ref = target
 

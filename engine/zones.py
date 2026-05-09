@@ -236,7 +236,9 @@ def move_to_zone(
         source_player = owner
 
     # Fallback: search all players for the zone containing the card.
-    if source_player is None:
+    # Also triggered when the inferred player's zone doesn't contain the card
+    # (e.g. discarding a card that's in a different player's hand than its owner).
+    if source_player is None or not source_player.zones[from_zone].contains(card):
         for player in game.players:
             if player.zones[from_zone].contains(card):
                 source_player = player
@@ -247,7 +249,7 @@ def move_to_zone(
 
     source_container = source_player.zones[from_zone]
     if not source_container.contains(card):
-        return  # Safety: card not in the expected source zone
+        return  # Safety: card not in any player's zone
 
     if owner is None:
         owner = source_player

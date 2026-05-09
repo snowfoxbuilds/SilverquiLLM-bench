@@ -390,6 +390,7 @@ class TestGoblinSurpriseResolve:
         spell.controller = alice
         spell.chosen_mode = 0
         spell.on_resolve(game)
+        game.effect_manager.apply_all(game)
 
         assert bear.base_power == 4
 
@@ -498,6 +499,7 @@ class TestSeekersFollyResolve:
         spell.controller = alice
         spell.chosen_mode = 1
         spell.on_resolve(game)
+        game.effect_manager.apply_all(game)
 
         assert orc.base_power == 2
         assert orc.base_toughness == 2
