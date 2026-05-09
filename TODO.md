@@ -100,7 +100,7 @@ Scope: Fix critical engine bugs, centralize zone-transition infrastructure, then
 
   Testability: Put on battlefield, activate ability (ensure cost paid), verify effect. For tap abilities: verify can’t activate while tapped or with summoning sickness (unless haste).
 
-- [ ] **Batch 10: Global enchantments & remaining non-aura enchantments (~8–12 cards)**
+- [x] **Batch 10: Global enchantments & remaining non-aura enchantments (~8–12 cards)**
   Detail: Implement remaining FDN non-aura enchantments: anthem effects (your creatures get +N/+N), keyword-granting, triggered ability enchantments ("whenever you cast a spell", "at the beginning of your upkeep"), static-ability enchantments. Follow `enchantments.py` patterns. Use appropriate `Layer`/`SubLayer` for continuous effects.
 
   Files: `cards/foundations/enchantments.py` (extend or new file).

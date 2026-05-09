@@ -82,3 +82,15 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Implementer's approach**: Used non-existent Keyword.PROWESS, ManaPool.pay_generic(), and iterated ZoneContainer directly
 - **Coordinator decision**: fix implementation — tests correctly expose 3 recurring bug patterns
 - **Reasoning**: battlefield.get_all() and ManaCost(generic=N) are established conventions; Keyword.PROWESS needs to either exist or be skipped
+
+## Test failure: Item 13 — Global enchantments
+- **Failing tests**: VampiricRites sacrifice() call signature
+- **Coordinator decision**: fix implementation — test correctly exposes wrong function signature
+- **Reasoning**: sacrifice() requires player arg; implementation is missing it
+
+## Disagreement: Item 13 — Authority of the Consuls tapping mechanism
+- **Reviewer comment (strict)**: Convert continuous effect to ETB trigger to avoid retroactive tapping
+- **Implementer justification**: Trigger effect callbacks receive only (game: GameState), not event data — can't identify which creature entered. Tests also rely on continuous effect pattern.
+- **Coordinator decision**: accept implementer — ENGINE LIMITATION
+- **Reasoning**: Proper ETB trigger requires engine changes (event data in trigger callbacks) outside batch scope. Continuous effect is a reasonable approximation. Documented in code.
+- **Impact**: `cards/foundations/global_enchantments.py` — Authority of the Consuls

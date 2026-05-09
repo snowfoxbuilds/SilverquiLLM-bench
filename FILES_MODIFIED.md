@@ -87,3 +87,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `cards/foundations/activated_creatures.py` — 19 FDN creatures with activated abilities: mana (Llanowar Elves, Elvish Archdruid, Ruby Daring Tracker), tap (Rune-Sealed Wall, Strix Lookout, Axgard Cavalry, Krenko Mob Boss), sacrifice (Cathar Commando, Fanatical Firebrand, Heartfire Immolator, Burnished Hart, Hungry Ghoul), pump (Shivan Dragon, Sower of Chaos, Treetop Snarespinner), other (Spectral Sailor, Scavenging Ooze, Reassembling Skeleton, Mild-Mannered Librarian)
+
+## Item 13: Global enchantments
+
+### Implementation
+- `cards/foundations/global_enchantments.py` — 10 FDN non-aura enchantments: anthems (Anthem of Champions, Goblin Oriflamme), keyword-granting (Garruk's Uprising), static (Authority of the Consuls), upkeep trigger (Phyrexian Arena), creature-enters trigger (Impact Tremors), spell-cast triggers (Rite of the Dragoncaller, Painful Quandary), ETB exile-until-leaves (Banishing Light), activated ability (Vampiric Rites)
