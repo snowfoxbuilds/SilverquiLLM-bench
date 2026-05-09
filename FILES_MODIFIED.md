@@ -69,3 +69,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `cards/foundations/auras_batch2.py` — 10 FDN auras with reviewer fixes: death trigger payload key, add_counter usage, move_to_zone for sacrifice, ENGINE LIMITATION comments for skip_untap/mana ability/name-reset/controller-change
+
+## Item 10: Equipment batch
+
+### Tests
+- `tests/cards/test_equipment.py` — Tests for all 7 equipment cards: metadata, equip, continuous effects, cross-cutting behavior, registry
+
+### Implementation
+- `cards/foundations/equipment.py` — 7 FDN equipment cards with get_activated_abilities() equip abilities, combat damage trigger (Goldvein Pick), landfall trigger (Adventuring Gear), ETB auto-attach (Celestial Armor)

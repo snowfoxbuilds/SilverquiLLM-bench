@@ -48,3 +48,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Decision**: Fix the 3 real bugs; document the remaining 6 as ENGINE LIMITATION comments in the code.
 - **Reasoning**: Building untap prevention, controller-change, name/subtype reset, dynamic mana abilities, and targeted ETB triggers are out of scope for a batch card-porting item. Documenting them preserves the knowledge for future engine work.
 - `cards/foundations/auras_batch2.py` **Impact**: all 10 aura cards 
+
+## Test failure: Item 10 — Equipment batch
+- **Failing tests**: 3 Celestial Armor ETB tests, 1 equip ability cost test
+- **Tester's intent**: Verify ETB auto-attach and equip mana cost payment
+- **Implementer's approach**: Used `battlefield.cards` (wrong API), `ManaPool.pay_generic()` (doesn't exist)
+- **Coordinator decision**: fix implementation — tests correctly expose real bugs
+- **Reasoning**: `battlefield.get_all()` is the correct API per engine conventions; equip cost function needs to use the actual mana payment API

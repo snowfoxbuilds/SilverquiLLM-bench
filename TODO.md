@@ -79,7 +79,7 @@ Scope: Fix critical engine bugs, centralize zone-transition infrastructure, then
 
   Testability: Cast targeting creature, verify attachment and continuous effect. Remove enchanted creature, verify aura goes to graveyard via SBA.
 
-- [ ] **Batch 7: Equipment (~5–8 cards)**
+- [x] **Batch 7: Equipment (~5–8 cards)**
   Detail: Implement remaining FDN equipment beyond those in `artifacts.py`. Depends on prereq 1. Follow Bonesplitter/Swiftfoot Boots pattern: subclass `Artifact`, add `subtypes={"Equipment"}`, implement equip activated ability, register continuous effects for equipped creature. Cover stat-boosting, keyword-granting, and triggered-ability equipment.
 
   Files: `cards/foundations/artifacts.py` (extend or new file).
