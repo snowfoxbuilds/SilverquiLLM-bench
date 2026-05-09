@@ -46,7 +46,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74�
 
   Testability: Test creature with protection from red: can’t be targeted by red spells, can’t be blocked by red creatures, doesn’t take damage from red sources, red auras fall off.
 
-- [ ] **Extra turns infrastructure (stub)**
+- [x] **Extra turns infrastructure (stub)**
   Detail: Implement "take an extra turn after this one" as a working feature. Temporal Manipulation (SPG #82) is `{3}{U}{U}` sorcery — "Take an extra turn after this one."
 
   Changes needed:

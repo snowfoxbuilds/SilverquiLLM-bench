@@ -102,3 +102,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Context**: When a creature gains protection from a color, both auras and equipment with that color must detach.
 - **Decision**: Auras go to graveyard (existing behavior). Equipment sets `attached_to = None` but stays on battlefield per MTG rules.
 - **Impact**: `engine/state_based_actions.py`.
+
+## Extra turns: insertion semantics with independent normal rotation
+- **Context**: Extra turns must be truly inserted, not replacements for the next normal turn.
+- **Decision**: Added `_normal_next_index` to track normal rotation independently. Extra turns pop from FIFO queue without advancing normal rotation. When extras are consumed, normal rotation resumes from `_normal_next_index`.
+- **Reasoning**: Matches MTG rules — "take an extra turn after this one" inserts a turn; normal turn order is unaffected.
+- **Impact**: `engine/game_state.py`, `engine/turn.py`.

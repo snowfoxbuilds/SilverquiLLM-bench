@@ -26,3 +26,9 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `engine/state_based_actions.py` — Extended _sba_aura_unattached() to detach auras and equipment from permanents with protection from them
 - `tests/engine/test_protection.py` — 34 tests covering DEBT mnemonic (damage, enchanting, blocking, targeting)
 
+## Item 4: Extra turns infrastructure (stub)
+
+### Implementation
+- `engine/game_state.py` — Added `extra_turns: list[int]` FIFO queue, `_normal_next_index` for tracking normal rotation independently; modified `advance_phase()` to pop extra turns without advancing normal rotation
+- `tests/engine/test_extra_turns.py` — 9 tests for extra turn granting, FIFO ordering, and normal turn order resumption (3 tests expected to be updated by Tester for inserted-turn semantics)
+
