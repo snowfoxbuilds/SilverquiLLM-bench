@@ -31,6 +31,7 @@ Auto-generated from engine source. For agent consumption.
   - `reset_id_counter(cls) -> None`
 - **class `CardImpl`** — Abstract base for all card implementations.  
   - `can_cast(game: GameState) -> bool`  
+  - `cost_reduction(game: GameState) -> int`  
   - `on_cast(game: GameState) -> None`  
   - `on_resolve(game: GameState) -> None`  
   - `get_targets(game: GameState) -> list[Any]`  
@@ -39,6 +40,7 @@ Auto-generated from engine source. For agent consumption.
   - `get_activated_abilities() -> list[ActivatedAbility]`  
   - `get_modes() -> list[Mode]`
 - **class `Creature`** — A creature card.  
+  - `counters() -> dict[str, int]`  
   - `power() -> int`  
   - `toughness() -> int`
 - **class `Instant`** — An instant spell — no extra fields beyond CardImpl.
@@ -61,6 +63,7 @@ Auto-generated from engine source. For agent consumption.
 - **class `CastingError`** — Raised when a spell cast or land play is illegal.
 - `is_sorcery_speed(game: GameState, player: Player) -> bool` — Return ``True`` if sorcery-speed timing is met for *player*.
 - `can_cast_at_instant_speed(card: CardImpl) -> bool` — Return ``True`` if *card* may be cast at instant speed.
+- `get_cost_reduction(game: GameState, card: CardImpl, controller: Player) -> int` — Return the generic mana reduction for casting *card*.
 - `cast_spell(game: GameState, player: Player, card: CardImpl) -> None` — Cast *card* from *player*'s hand.
 - `play_land(game: GameState, player: Player, land_card: CardImpl) -> None` — Play *land_card* from *player*'s hand onto the battlefield.
 
@@ -149,6 +152,14 @@ Auto-generated from engine source. For agent consumption.
   - `assign_damage_order(attackers_or_blockers: Any) -> list[Any]`  
   - `choose_card(cards: Any, description: str) -> Any`
 
+### protection
+
+- `get_colors(obj: Any) -> set[Color]` — Return the set of colours of *obj*.
+- **dataclass `ProtectionAbility`** — Represents a 'protection from [quality]' ability.  
+  Fields: `quality: Any`, `predicate: Callable[[Any], bool] | None`
+- `get_protections(obj: Any) -> list[ProtectionAbility]` — Return the list of :class:`ProtectionAbility` on *obj*, or ``[]``.
+- `has_protection_from(permanent: Any, source: Any) -> bool` — Return ``True`` if *permanent* has protection from *source*.
+
 ### replacement_effects
 
 - **dataclass `ReplacementEffect`** — Describes a single replacement effect.  
@@ -215,8 +226,10 @@ Auto-generated from engine source. For agent consumption.
   Members: `BASIC`, `LEGENDARY`, `SNOW`
 - **enum `Keyword`** — Evergreen keyword abilities (combinable via bitwise OR).  
   Members: `FLYING`, `FIRST_STRIKE`, `DOUBLE_STRIKE`, `DEATHTOUCH`, `TRAMPLE`, `LIFELINK`, `VIGILANCE`, `REACH`, `HASTE`, `FLASH`, `DEFENDER`, `HEXPROOF`, `INDESTRUCTIBLE`, `MENACE`, `WARD`, `PROWESS`
+- **dataclass `HybridManaSymbol`** — A hybrid mana symbol that can be paid with either of two colors.  
+  Fields: `option_a: ManaType`, `option_b: ManaType`
 - **dataclass `ManaCost`** — Represents a mana cost.  
-  Fields: `generic: int`, `pips: dict[ManaType, int]`, `x_count: int`
+  Fields: `generic: int`, `pips: dict[ManaType, int]`, `x_count: int`, `hybrid: list[HybridManaSymbol]`
 - **dataclass `TargetRequirement`** — Describes a targeting requirement for a spell or ability.  
   Fields: `filter_fn: Callable[..., Any]`, `description: str`, `zone: Zone`
 

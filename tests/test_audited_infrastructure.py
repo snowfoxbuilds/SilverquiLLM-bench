@@ -328,11 +328,12 @@ class TestSOSConftestBehavior:
         error_mod = sos._make_error_module("stubs not available")
         assert "sos_conftest" in error_mod.__file__
 
-    def test_sos_replaces_fdn_synthetic_when_stubs_absent(self) -> None:
-        """SOS conftest must replace FDN synthetic card_impl with error module.
+    def test_sos_replaces_fdn_synthetic_with_sos_stubs(self) -> None:
+        """SOS conftest must replace FDN synthetic card_impl with SOS stub module.
 
-        Prevents SOS tests from accidentally using FDN card_impl and getting
-        confusing FDN-specific AttributeErrors.
+        Prevents SOS tests from accidentally using FDN card_impl. Since stubs
+        are now available (Item 6), the conftest installs a proper stub-based
+        card_impl instead of an error module.
         """
         original = sys.modules.get("card_impl")
         try:
@@ -352,9 +353,11 @@ class TestSOSConftestBehavior:
             current = sys.modules.get("card_impl")
             assert current is not None
             assert current.__file__ != "<synthetic:fdn_conftest>", (
-                "SOS conftest must replace FDN synthetic card_impl when stubs absent"
+                "SOS conftest must replace FDN synthetic card_impl"
             )
-            with pytest.raises(ImportError):
+            # The installed module is now stub-based, so unknown card names
+            # raise AttributeError (not ImportError).
+            with pytest.raises(AttributeError):
                 current.__getattr__("AnyCard")
         finally:
             if original is not None:

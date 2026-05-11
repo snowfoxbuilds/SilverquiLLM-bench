@@ -260,14 +260,15 @@ class TestFetchSosDataWorkflow:
         """A cache that already has SOA + SPG cards should be returned without re-fetching.
 
         After item 2, a fresh cache must include exactly 10 SPG cards (cn 149–158)
-        in addition to 65 SOA cards. A cache missing the SPG subset is stale.
+        in addition to 65 SOA cards. After item 3, SOS base must be exactly CN 1-271.
+        A cache missing any subset is stale.
         """
         import benchmarks.sos.fetch_data as mod
         from benchmarks.sos.fetch_data import _normalize_card
 
-        # Build a complete cache with SOS, SOA, and SPG
+        # Build a complete cache with SOS (cn 1-271), SOA, and SPG
         complete = (
-            [_normalize_card(c) for c in self._sos_raw_cards(10)]
+            [_normalize_card(c) for c in self._sos_raw_cards(271)]
             + [_normalize_card(c) for c in self._soa_raw_cards(65)]
             + [_normalize_card(c) for c in self._spg_raw_cards()]
         )
@@ -287,7 +288,7 @@ class TestFetchSosDataWorkflow:
 
         # Should return cached data without calling fetch_scryfall_query
         mock_fetch_query.assert_not_called()
-        assert len(result) == 85  # 10 SOS + 65 SOA + 10 SPG
+        assert len(result) == 346  # 271 SOS + 65 SOA + 10 SPG
 
 
 # ---------------------------------------------------------------------------
