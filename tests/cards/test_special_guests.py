@@ -258,6 +258,7 @@ class TestGoblinBushwhacker:
         _place_on_battlefield(game, bush, p1)
 
         _simulate_etb(game, bush, p1)
+        game.effect_manager.apply_all(game)
 
         # Bear should get +1/+0
         assert bear.base_power == 3
@@ -296,6 +297,7 @@ class TestGoblinBushwhacker:
         _place_on_battlefield(game, bush, p1)
 
         _simulate_etb(game, bush, p1)
+        game.effect_manager.apply_all(game)
 
         assert Keyword.HASTE in creature.keywords
 

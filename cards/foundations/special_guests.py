@@ -40,7 +40,7 @@ from engine.continuous_effects import (
     Layer,
     SubLayer,
 )
-from engine.types import CardType, Color, Keyword, ManaCost, ManaType, Supertype, Zone
+from engine.types import CardType, Color, HybridManaSymbol, Keyword, ManaCost, ManaType, Supertype, Zone
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -155,9 +155,9 @@ class Condemn(Instant):
         toughness = getattr(target, "toughness", 0)
         owner = getattr(target, "owner", controller)
 
+        # BYPASS: move_to_zone doesn't support position="bottom", so we handle
+        # the zone transition manually here.
         # Move to bottom of owner's library
-        # We do a manual zone move since move_to_zone doesn't support
-        # position="bottom". Remove from battlefield, add to bottom of library.
         for player in game.players:
             bf = game.get_battlefield(player)
             if bf.contains(target):
@@ -297,12 +297,7 @@ class GoblinBushwhacker(Creature):
                 if CardType.CREATURE in getattr(c, "card_types", set())
             ]
 
-            # Apply immediately for current state
-            for creature in creatures:
-                creature.base_power += 1
-                creature.keywords = creature.keywords | Keyword.HASTE
-
-            # Register a continuous effect that re-applies during recalculation
+            # Register a continuous effect applied at end-of-turn cleanup
             affected = list(creatures)
 
             def _apply(game_state: Any) -> None:
@@ -1004,26 +999,14 @@ class FiendArtisan(Creature):
 
             x_value = getattr(src, "_x_value", 0)
 
-            # Pay {X} generic + {B/G} hybrid (simplified: try B then G)
-            # Build the cost: X generic + 1 hybrid {B/G}
-            total_generic = x_value
-            # Try paying 1 black or 1 green for the hybrid portion
-            hybrid_paid = False
-            if controller.mana_pool.get(ManaType.BLACK) >= 1:
-                if controller.mana_pool.total() >= total_generic + 1:
-                    controller.mana_pool.pay(ManaCost(pips={ManaType.BLACK: 1}))
-                    hybrid_paid = True
-            if not hybrid_paid and controller.mana_pool.get(ManaType.GREEN) >= 1:
-                if controller.mana_pool.total() >= total_generic + 1:
-                    controller.mana_pool.pay(ManaCost(pips={ManaType.GREEN: 1}))
-                    hybrid_paid = True
-            if not hybrid_paid:
+            # Pay {X}{B/G} using the hybrid mana infrastructure
+            hybrid_cost = ManaCost(
+                generic=x_value,
+                hybrid=[HybridManaSymbol(option_a=ManaType.BLACK, option_b=ManaType.GREEN)],
+            )
+            if not controller.mana_pool.can_pay(hybrid_cost):
                 return False
-
-            if controller.mana_pool.total() < total_generic:
-                return False
-            if total_generic > 0:
-                controller.mana_pool.pay(ManaCost(generic=total_generic))
+            controller.mana_pool.pay(hybrid_cost)
 
             # Tap
             src.is_tapped = True

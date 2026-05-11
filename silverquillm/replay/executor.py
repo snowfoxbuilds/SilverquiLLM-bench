@@ -751,8 +751,14 @@ class ReplayExecutor:
                 self._engine_cards[action.instance_id] = card
 
         elif action.action_type == "draw":
-            # Opponent draws — create a placeholder card
-            card = self._create_card(action.grp_id, player)
+            # Opponent draws — move from library to hand if possible
+            library = player.zones[Zone.LIBRARY]
+            lib_card = self._find_card_by_grp_id(library.get_all(), action.grp_id)
+            if lib_card is not None:
+                library.remove(lib_card)
+                card = lib_card
+            else:
+                card = self._create_card(action.grp_id, player)
             player.zones[Zone.HAND].add(card)
 
             if action.instance_id:

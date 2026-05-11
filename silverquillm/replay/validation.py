@@ -357,8 +357,8 @@ class ValidatingExecutor:
         summary: dict[str, Any] = {"game_state_id": snapshot.game_state_id}
         if hasattr(snapshot, "players") and snapshot.players:
             summary["players"] = [
-                {"seat_id": getattr(p, "seat_id", None), "life": getattr(p, "life_total", None)}
-                for p in snapshot.players
+                {"seat_id": p.seat_id, "life": p.life_total}
+                for p in snapshot.players.values()
             ]
         if hasattr(snapshot, "zones") and snapshot.zones:
             summary["zone_count"] = len(snapshot.zones)
