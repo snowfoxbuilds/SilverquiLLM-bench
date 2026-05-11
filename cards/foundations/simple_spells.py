@@ -409,10 +409,16 @@ def _counter_spell(game: GameState, stack_obj: Any) -> None:
     # Remove the stack object from the stack.
     # The stack stores items internally; we need to find and remove it.
     stack_items = game.stack._items  # noqa: SLF001 — internal access needed
+    found = False
     for i, item in enumerate(stack_items):
         if item is stack_obj:
             stack_items.pop(i)
+            found = True
             break
+
+    # If the target was not on the stack, fizzle — do nothing.
+    if not found:
+        return
 
     # Move the card from the stack zone to the owner's graveyard.
     controller = stack_obj.controller

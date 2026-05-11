@@ -166,6 +166,12 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: Audited stubs should not make nonzero-cost cards free; preserving mana value is more useful for tests than omitting unsupported symbols.
 - **Impact**: `scripts/generate_audited_stubs.py`, generated `cards/stubs/sos_stubs.py`.
 
+## Damage wording: "deals damage" is one-way, "fight" is mutual
+- **Context**: Felling Blow adds a +1/+1 counter, then says that creature deals damage equal to its power to an opponent's creature.
+- **Decision**: Implement one-way damage for "deals damage" wording; only cards that use "fight" should deal reciprocal damage.
+- **Reasoning**: MTG's fight keyword implies mutual damage, while one-way damage effects do not.
+- **Impact**: `cards/foundations/simple_spells_batch3.py`, audited tests for fight-like spell wording.
+
 ## Replay executor: Seat 1 engine API with fallback
 - **Context**: Seat 1 should use engine API for full validation, but some actions (spell casts) can't go through the full engine pipeline in replay mode.
 - **Decision**: Seat 1 uses engine API where feasible (land plays via `play_land()`, deaths via `move_to_zone()`). Falls back to direct zone mutation on engine rejection. Spell casts use direct mutation with correct destination routing (permanents→battlefield, instants/sorceries→graveyard). Stack simulation marked ENGINE LIMITATION.

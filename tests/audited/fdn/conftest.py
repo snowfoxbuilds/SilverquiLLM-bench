@@ -38,6 +38,14 @@ _COLLECTOR_DIR_OVERRIDES: dict[str, str] = {
     "003": "Swamp",
     "004": "Mountain",
     "005": "Forest",
+    # Collector-number collisions — use explicit overrides to resolve.
+    # CN 7: AntiquitiesOnTheLoose (simple_spells_batch2) collides with
+    # CrystalBarricade (artifacts_batch2).  Directory "7" → in-scope sorcery.
+    "7": "Antiquities on the Loose",
+    # CN 105: FellingBlow (simple_spells_batch3) collides with
+    # WitheringCurse (simple_spells_batch2).  Directory "105" stays
+    # WitheringCurse (already existing tests); "105b" → FellingBlow.
+    "105b": "Felling Blow",
 }
 
 # All FDN register_* functions.
@@ -126,9 +134,12 @@ def _build_collector_maps(
         if meta.collector_number:
             cn_to_entry[meta.collector_number] = (impl_class, card_name)
 
-    # Merge explicit overrides for cards with missing collector_number
+    # Merge explicit overrides — always take precedence over registry
+    # mappings.  This resolves collector-number collisions where two
+    # different cards share the same CN (e.g. CN 7: AntiquitiesOnTheLoose
+    # vs CrystalBarricade).
     for collector_dir, card_name in _COLLECTOR_DIR_OVERRIDES.items():
-        if collector_dir not in cn_to_entry and card_name in name_to_class:
+        if card_name in name_to_class:
             cn_to_entry[collector_dir] = (name_to_class[card_name], card_name)
 
     return cn_to_entry, classname_to_class

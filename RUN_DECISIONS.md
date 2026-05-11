@@ -71,3 +71,24 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept reviewer; require test revision.
 - **Reasoning**: The TODO explicitly requires behavior coverage for land untapping, vanilla casting/combat, and each French-vanilla keyword.
 - **Impact**: `tests/audited/fdn/*/tests.py` for Batch 1 card directories. Tester revisions added land untap tests, vanilla casting/combat behavior, and French-vanilla keyword behavior including trample and indestructible coverage.
+
+## Disagreement: FDN Batch 2 audited spell coverage gaps
+- **Reviewer comment (strict)**: Several in-scope spells are missing entirely or lack important mode, targeting, counterspell, token, sacrifice/life, and X>=10 behavior coverage.
+- **Implementer justification**: Initial batch created broad per-card spell coverage but skipped collector collisions and some branches.
+- **Coordinator decision**: accept reviewer; require test revision.
+- **Reasoning**: The TODO requires per-card audited tests for all in-scope simple instants/sorceries and independent coverage for modal/kicker/X-cost behavior.
+- **Impact**: `tests/audited/fdn/*/tests.py` for Batch 2 spell directories and potentially FDN audited conftest collector mapping for collision handling.
+
+## Test failure: Item 8 — Felling Blow and counterspell fizzle behavior
+- **Failing tests**: `TestFellingBlowResolution::test_adds_plus_one_counter_to_own_creature`, `TestFellingBlowResolution::test_own_creature_takes_fight_damage`, `TestEssenceScatterResolution::test_fizzle_when_target_gone`, `TestCancelResolution::test_fizzle_when_target_gone`
+- **Tester's intent**: Felling Blow should add the +1/+1 counter before fight damage, and counterspells resolving against missing stack targets should fizzle without moving the missing target card to graveyard.
+- **Implementer's approach**: Existing spell implementations do not satisfy the stricter audited behavior assertions.
+- **Coordinator decision**: partial: fix implementation for the counter and counterspell fizzle behavior, but fix the Felling Blow test that incorrectly expected reciprocal fight damage.
+- **Reasoning**: Felling Blow's text is one-way damage after adding the counter, not a fight. The counter and target-damage assertions are valid; reciprocal source damage is not. Counterspell fizzle assertions align with the TODO's resolution/fizzle coverage.
+
+## Disagreement: Felling Blow one-way damage semantics
+- **Reviewer comment (strict)**: Felling Blow should not deal reciprocal damage to the source creature, and the audited test should not enforce mutual fight damage.
+- **Implementer justification**: The first implementation fix followed the strengthened test expectation for mutual fight damage.
+- **Coordinator decision**: accept reviewer; fix implementation and test.
+- **Reasoning**: The card's rules text says the source creature deals damage to the opponent's creature; it does not say those creatures fight.
+- **Impact**: `cards/foundations/simple_spells_batch3.py`, `tests/audited/fdn/105b/tests.py`.

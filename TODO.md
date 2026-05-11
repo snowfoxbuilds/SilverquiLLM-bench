@@ -135,7 +135,7 @@ Key engine conventions to be aware of (from `KEY_DECISIONS.md`):
 
   Testability: All tests pass against the current engine. Every card in the batch has a corresponding test file.
 
-- [ ] **FDN audited tests: Batch 2 — Simple instants and sorceries (~60 cards)**
+- [x] **FDN audited tests: Batch 2 — Simple instants and sorceries (~60 cards)**
   Detail: Write per-card test files for all simple instants and sorceries from FDN (batches 1–3 from Phase 4 implementation files).
 
   Test coverage per card:
