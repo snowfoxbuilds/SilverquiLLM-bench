@@ -41,3 +41,15 @@ tests/test_sos_regenerated_artifacts.py — 26 tests for 346-card pool integrity
 - `README.md` — Card count references already at 346
 - `PROJECT_MAP.md` — Card count references already at 346
 - `benchmarks/sos/DIRECTORY_SUMMARY.md` — Already at 346
+
+## Item 5: Create per-card audited test directory structure and conftest.py
+
+### Implementation
+- `pyproject.toml` — Added `python_files`, `addopts = "--import-mode=importlib"` for tests.py support in subdirs
+- `tests/audited/__init__.py` — Package init for audited tests root
+- `tests/audited/fdn/__init__.py` — Package init for FDN audited tests
+- `tests/audited/fdn/conftest.py` — Per-card card_impl injection using collector-directory detection and CardRegistry class-name mapping
+- `tests/audited/fdn/001/__init__.py` — Package init for Plains card test directory
+- `tests/audited/fdn/001/tests.py` — Sample FDN audited test (5 tests for Plains via card_impl import)
+- `tests/audited/sos/__init__.py` — Package init for SOS audited tests
+- `tests/audited/sos/conftest.py` — Per-card card_impl injection from cards.stubs.sos_stubs via register_sos_stubs(registry) with collector-directory detection; replaces existing card_impl with SOS error module when stubs absent

@@ -154,6 +154,12 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: Collector-number-only directories collide across sets and can overwrite specs.
 - **Impact**: `benchmarks/sos/cards/`, `silverquillm/card_spec.py`; generated non-SOS spec directories may need force-adding because benchmark artifact paths are ignored by default.
 
+## Audited test card_impl injection is per collector directory
+- **Context**: Per-card audited tests import from a synthetic `card_impl` module during development, but the evaluator can provide an explicit `card_impl.py`.
+- **Decision**: Audited conftests detect the current `tests/audited/<set>/<collector>/` directory and expose only that card's implementation class through `card_impl`. Wrong-card imports raise clear errors. SOS subset directories use set-prefixed collector keys such as `soa_1` and `spg_149`.
+- **Reasoning**: Global registry fallbacks can make wrong-card tests pass and hide broken collector mappings.
+- **Impact**: `tests/audited/fdn/conftest.py`, `tests/audited/sos/conftest.py`; future audited tests should live under the correct collector directory and import only the class for that card.
+
 ## Replay executor: Seat 1 engine API with fallback
 - **Context**: Seat 1 should use engine API for full validation, but some actions (spell casts) can't go through the full engine pipeline in replay mode.
 - **Decision**: Seat 1 uses engine API where feasible (land plays via `play_land()`, deaths via `move_to_zone()`). Falls back to direct zone mutation on engine rejection. Spell casts use direct mutation with correct destination routing (permanents→battlefield, instants/sorceries→graveyard). Stack simulation marked ENGINE LIMITATION.

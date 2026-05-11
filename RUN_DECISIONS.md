@@ -43,3 +43,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept reviewer; require final implementation revision.
 - **Reasoning**: Once the pool is fixed at 346 cards, all fixed subsets need exact collector-number validation for stale caches.
 - **Impact**: `benchmarks/sos/fetch_data.py`; this reinforces the exact fixed-subset cache convention already in `KEY_DECISIONS.md`.
+
+## Disagreement: Per-card audited conftest isolation
+- **Reviewer comment (strict)**: FDN/SOS conftests still expose global registry fallbacks and do not reliably select the card under test from the per-card collector directory, including zero-padded FDN directories and set-prefixed SOS directories.
+- **Implementer justification**: Initial fixes added collector lookup but retained broad class-name fallbacks for compatibility.
+- **Coordinator decision**: accept reviewer; require final implementation revision.
+- **Reasoning**: The audited-test contract requires one `card_impl` per collector directory. Global fallbacks can make wrong-card tests pass and hide broken directory mappings.
+- **Impact**: `tests/audited/fdn/conftest.py`, `tests/audited/sos/conftest.py`, `tests/test_audited_infrastructure.py`.

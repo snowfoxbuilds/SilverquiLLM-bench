@@ -50,7 +50,7 @@ See `CONTEXT.md` for domain vocabulary (Draft Set, Card Pool, Audited Eval). See
 
 ### Audited Test Infrastructure
 
-- [ ] **Create per-card audited test directory structure and **[**conftest.py**](http://conftest.py/)
+- [x] **Create per-card audited test directory structure and **[**conftest.py**](http://conftest.py/)
   Detail: Set up the directory structure for audited tests following the per-card convention settled in [TEST-SUITE.md](http://test-suite.md/). Each card gets its own directory with a `tests.py` file that imports from `card_impl`. A `conftest.py` at each set level handles the `card_impl` module injection.
 
   Directory structure:
