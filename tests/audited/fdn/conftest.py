@@ -42,6 +42,8 @@ _COLLECTOR_DIR_OVERRIDES: dict[str, str] = {
     # CN 7: AntiquitiesOnTheLoose (simple_spells_batch2) collides with
     # CrystalBarricade (artifacts_batch2).  Directory "7" → in-scope sorcery.
     "7": "Antiquities on the Loose",
+    # CN 7 collision — use "7b" for Crystal Barricade.
+    "7b": "Crystal Barricade",
     # CN 105: FellingBlow (simple_spells_batch3) collides with
     # WitheringCurse (simple_spells_batch2).  Directory "105" stays
     # WitheringCurse (already existing tests); "105b" → FellingBlow.
@@ -58,6 +60,36 @@ _COLLECTOR_DIR_OVERRIDES: dict[str, str] = {
     # MildManneredLibrarian (activated_creatures).  Directory "228" stays
     # Social Snub; "228b" → Mild-Mannered Librarian.
     "228b": "Mild-Mannered Librarian",
+    # CN 129: SeizeTheSpoils (simple_spells_batch2) collides with
+    # LeylineAxe (equipment).  Directory "129" stays Seize the Spoils;
+    # "129b" → Leyline Axe.
+    "129b": "Leyline Axe",
+    # --- Synthetic directories for cards without collector_number in registry ---
+    # Artifacts (from artifacts.py with empty collector_number)
+    "800": "Sol Ring",
+    "801": "Arcane Signet",
+    "802": "Mind Stone",
+    "803": "Bonesplitter",
+    "804": "Swiftfoot Boots",
+    "805": "Whispersilk Cloak",
+    "806": "Mask of Memory",
+    "807": "Altar of the Brood",
+    "808": "Elixir of Immortality",
+    "809": "Relic of Progenitus",
+    # Enchantments (from enchantments.py with empty collector_number)
+    "810": "Holy Strength",
+    "811": "Unholy Strength",
+    "812": "Stab Wound",
+    "813": "Arrest",
+    "814": "Glorious Anthem",
+    "815": "Dictate of Heliod",
+    "816": "Brave the Sands",
+    "817": "Levitation",
+    # Planeswalkers (from planeswalkers.py with empty collector_number)
+    "818": "Ajani, Caller of the Pride",
+    "819": "Chandra, Torch of Defiance",
+    "820": "Liliana, Dreadhorde General",
+    "821": "Nissa, Worldwaker",
 }
 
 # All FDN register_* functions.

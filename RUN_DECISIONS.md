@@ -99,3 +99,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept reviewer; require test revision.
 - **Reasoning**: The TODO explicitly requires observable activated ability costs/effects and death trigger behavior/conditions where practical.
 - **Impact**: `tests/audited/fdn/*/tests.py` for Batch 3 card directories.
+
+## Disagreement: FDN Batch 4 audited permanent coverage gaps
+- **Reviewer comment (strict)**: Crystal Barricade was missing; aura SBA detach, equipment activation/death persistence, artifact activated abilities, planeswalker loyalty/legend-rule behavior, and global enchantment leave-battlefield behavior needed stronger tests.
+- **Implementer justification**: Initial batch prioritized broad per-card coverage and static assertions for some cards.
+- **Coordinator decision**: accept reviewer; require test revision.
+- **Reasoning**: The TODO explicitly calls for behavioral coverage across these permanent classes where engine-supported, not only per-card file presence.
+- **Impact**: `tests/audited/fdn/*/tests.py` for Batch 4 card directories and `tests/audited/fdn/conftest.py`.

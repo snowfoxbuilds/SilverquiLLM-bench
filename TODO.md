@@ -168,7 +168,7 @@ Key engine conventions to be aware of (from `KEY_DECISIONS.md`):
 
   Testability: All tests pass against the current engine.
 
-- [ ] **FDN audited tests: Batch 4 — Enchantments, equipment, artifacts, and planeswalkers (~70 cards)**
+- [x] **FDN audited tests: Batch 4 — Enchantments, equipment, artifacts, and planeswalkers (~70 cards)**
   Detail: Write per-card test files for all auras (~10), global enchantments (~10), equipment (~7), artifacts (~27+), and planeswalkers (~3) from FDN.
 
   Auras: Attachment legality, SBA detach when target is invalid, enchant effect application, stacking multiple auras.

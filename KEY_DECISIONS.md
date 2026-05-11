@@ -174,9 +174,15 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 
 ## FDN audited collector collisions use suffix directories
 - **Context**: Some FDN registry entries share collector numbers while per-card audited tests require one directory per implementation.
-- **Decision**: Use suffixed collector directories such as `105b`, `61b`, `219b`, and `228b` with explicit conftest overrides for colliding cards.
+- **Decision**: Use suffixed collector directories such as `105b`, `61b`, `219b`, `228b`, `7b`, and `129b` with explicit conftest overrides for colliding cards.
 - **Reasoning**: This preserves per-card isolation without overwriting the canonical numeric directory for the other card.
 - **Impact**: `tests/audited/fdn/conftest.py`, audited test directories for colliding FDN cards.
+
+## FDN audited synthetic directories reserve 800-821
+- **Context**: Some FDN card implementations lack collector numbers in registry metadata, but per-card audited tests still require stable collector-directory keys.
+- **Decision**: Reserve synthetic FDN audited directories `800`-`821` for cards from `enchantments.py`, `artifacts.py`, and `planeswalkers.py` with empty collector numbers, using explicit conftest overrides.
+- **Reasoning**: Stable synthetic keys preserve per-card isolation until registry metadata can provide real collector numbers.
+- **Impact**: `tests/audited/fdn/conftest.py`, `tests/audited/fdn/800`-`tests/audited/fdn/821`.
 
 ## Replay executor: Seat 1 engine API with fallback
 - **Context**: Seat 1 should use engine API for full validation, but some actions (spell casts) can't go through the full engine pipeline in replay mode.
