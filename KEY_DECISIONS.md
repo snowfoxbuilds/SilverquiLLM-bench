@@ -166,6 +166,12 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: Audited stubs should not make nonzero-cost cards free; preserving mana value is more useful for tests than omitting unsupported symbols.
 - **Impact**: `scripts/generate_audited_stubs.py`, generated `cards/stubs/sos_stubs.py`.
 
+## SOS audited behavior tests may fail against stubs
+- **Context**: SOS audited tests run against generated stubs during repository development, but stubs intentionally include only basic card attributes and no oracle behavior.
+- **Decision**: Keep meaningful behavior tests for SOS cards even when they fail against stubs. Treat import, syntax, collection, and basic-attribute failures as test/setup bugs; treat missing oracle behavior failures as expected stub failures.
+- **Reasoning**: Audited tests define the contract for benchmarked agent implementations. Watering down behavior tests to pass stubs would remove the signals the evaluation suite is meant to provide.
+- **Impact**: `tests/audited/sos/`; future SOS audited batches should document expected stub failures rather than weakening behavior assertions.
+
 ## Damage wording: "deals damage" is one-way, "fight" is mutual
 - **Context**: Felling Blow adds a +1/+1 counter, then says that creature deals damage equal to its power to an opponent's creature.
 - **Decision**: Implement one-way damage for "deals damage" wording; only cards that use "fight" should deal reciprocal damage.

@@ -119,3 +119,17 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Actual codebase state**: The current CardRegistry exposes 264 unique registered FDN/SPG card implementations after loading the foundations registry modules.
 - **What was implemented instead**: Created/verified one audited test directory for every registered FDN/SPG implementation, reaching 264/264 registry-backed coverage.
 - **Impact**: `tests/audited/fdn/`, `tests/audited/fdn/conftest.py`; future additions to the FDN registry must add corresponding audited tests.
+
+## Test failure: Item 12 — SOS audited tests Batch 1 expected stub failures
+- **Failing tests**: 20 ability behavior tests fail against SOS stubs after revision; no import, syntax, collection, or basic-attribute errors.
+- **Tester's intent**: Keep behavior assertions for simple SOS cards that define the audited contract for real implementations, including `on_resolve`, triggers, activated abilities, token creation, draw, mill, discard, sacrifice, and search behavior.
+- **Implementer's approach**: Created the full trivial/simple file set and initially reported one expected stub failure; Tester rewrote weak tests into stronger behavior checks and then fixed reviewer-identified setup/spec issues.
+- **Coordinator decision**: accept tests and proceed with expected stub failures documented.
+- **Reasoning**: The TODO explicitly states SOS tests run against stubs and most ability tests may fail because stubs only provide basic attributes. Removing those assertions would undermine audited evaluation quality.
+
+## Disagreement: SOS Batch 1 audited test setup/spec correctness
+- **Reviewer comment (strict)**: Twelve simple-card tests had wrong expectations or incomplete setup, including missing X values, wrong searched card types, wrong tutor destination, missing sacrifice preconditions, and test-count violations.
+- **Implementer justification**: Initial and first Tester rewrite prioritized broad meaningful behavior checks but some assertions did not exactly match the card specs.
+- **Coordinator decision**: accept reviewer; require test revision.
+- **Reasoning**: Expected stub failures are acceptable only when the audited test describes correct oracle behavior with valid setup. Tests that would fail a correct implementation must be fixed.
+- **Impact**: `tests/audited/sos/50`, `158`, `184`, `202`, `249`, `soa_25`, `soa_33`, `soa_34`, `soa_35`, `soa_48`, `soa_49`, `soa_62`.

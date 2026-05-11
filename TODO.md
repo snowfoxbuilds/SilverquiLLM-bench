@@ -218,7 +218,7 @@ For each card, the Implementer should:
 4. Tests will execute against stub classes during development (stubs only have basic attributes, so ability tests will fail — this is expected and correct)
 These tests are designed to be **plug-and-play** with any agent's implementation via the evaluator's `card_impl` swap mechanism. They are the "audited eval" column in the cross-evaluation matrix.
 
-- [ ] **SOS audited tests: Batch 1 — Trivial and simple complexity cards**
+- [x] **SOS audited tests: Batch 1 — Trivial and simple complexity cards**
   Detail: Write per-card test files for all SOS Draft Set cards classified as `trivial` or `simple` in `sos_classified.json`. These are the cards agents should get right — vanilla/French vanilla creatures, simple targeted spells, basic enchantments.
 
   Test count per card: 2–5 for trivial, 5–8 for simple.
