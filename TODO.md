@@ -187,7 +187,7 @@ Key engine conventions to be aware of (from `KEY_DECISIONS.md`):
 
   Testability: All tests pass against the current engine.
 
-- [ ] **FDN audited tests: Batch 5 — Non-basic lands, SPG cards, and remaining cards (~76 cards)**
+- [x] **FDN audited tests: Batch 5 — Non-basic lands, SPG cards, and remaining cards (~76 cards)**
   Detail: Write per-card test files for non-basic lands (~13), SPG Special Guests (074–083, 10 cards), and any remaining FDN cards not covered in Batches 1–4.
 
   Non-basic lands: Test enters-tapped (if applicable), activated abilities, mana production (color/amount), special abilities.

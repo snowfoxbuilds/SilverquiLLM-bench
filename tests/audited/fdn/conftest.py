@@ -64,6 +64,18 @@ _COLLECTOR_DIR_OVERRIDES: dict[str, str] = {
     # LeylineAxe (equipment).  Directory "129" stays Seize the Spoils;
     # "129b" → Leyline Axe.
     "129b": "Leyline Axe",
+    # CN 75: VampireSoulcaller (death_trigger_creatures) collides with
+    # SphinxsTutelage (special_guests SPG).  Directory "75" stays
+    # Vampire Soulcaller; "75b" → Sphinx's Tutelage.
+    "75b": "Sphinx's Tutelage",
+    # CN 76: VengefulBloodwitch (death_trigger_creatures) collides with
+    # GrimTutor (special_guests SPG).  Directory "76" stays
+    # Vengeful Bloodwitch; "76b" → Grim Tutor.
+    "76b": "Grim Tutor",
+    # CN 81: ChandraFlameshaper (planeswalkers_batch2) collides with
+    # AkromasMemorial (special_guests SPG).  Directory "81" stays
+    # Chandra, Flameshaper; "81b" → Akroma's Memorial.
+    "81b": "Akroma's Memorial",
     # --- Synthetic directories for cards without collector_number in registry ---
     # Artifacts (from artifacts.py with empty collector_number)
     "800": "Sol Ring",
@@ -90,6 +102,15 @@ _COLLECTOR_DIR_OVERRIDES: dict[str, str] = {
     "819": "Chandra, Torch of Defiance",
     "820": "Liliana, Dreadhorde General",
     "821": "Nissa, Worldwaker",
+    # Modal/complex spells (from modal_spells.py with empty collector_number)
+    "822": "Abzan Charm",
+    "823": "Boros Charm",
+    "824": "Prismari Command",
+    "825": "Sublime Epiphany",
+    "826": "Dromoka's Command",
+    "827": "Austere Command",
+    "828": "Collective Brutality",
+    "829": "Inscription of Insight",
 }
 
 # All FDN register_* functions.

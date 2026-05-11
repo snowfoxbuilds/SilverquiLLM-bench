@@ -106,3 +106,16 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept reviewer; require test revision.
 - **Reasoning**: The TODO explicitly calls for behavioral coverage across these permanent classes where engine-supported, not only per-card file presence.
 - **Impact**: `tests/audited/fdn/*/tests.py` for Batch 4 card directories and `tests/audited/fdn/conftest.py`.
+
+## Disagreement: FDN Batch 5 audited SPG/remaining coverage gaps
+- **Reviewer comment (strict)**: Condemn, Sphinx's Tutelage, Paradise Druid, Akroma's Memorial, Fiend Artisan, remaining modal spells, and remaining complex creatures needed observable behavior assertions instead of metadata or registration-only checks.
+- **Implementer justification**: Initial batch prioritized completing full registry coverage and used lighter tests for some complex remaining cards.
+- **Coordinator decision**: accept reviewer; require test revision.
+- **Reasoning**: The TODO specifically calls out SPG cards as complex Phase 5 coverage and requires remaining cards to have meaningful per-card audited behavior checks where engine-supported.
+- **Impact**: `tests/audited/fdn/74`, `75b`, `80`, `81b`, `83`, `822`-`829`, `99`, `133`, `224`, `568`, `713`.
+
+## Spec deviation: Item 11 — FDN audited test file count
+- **TODO spec expected**: 301 FDN audited test files for FDN 001-291 plus SPG 074-083.
+- **Actual codebase state**: The current CardRegistry exposes 264 unique registered FDN/SPG card implementations after loading the foundations registry modules.
+- **What was implemented instead**: Created/verified one audited test directory for every registered FDN/SPG implementation, reaching 264/264 registry-backed coverage.
+- **Impact**: `tests/audited/fdn/`, `tests/audited/fdn/conftest.py`; future additions to the FDN registry must add corresponding audited tests.
