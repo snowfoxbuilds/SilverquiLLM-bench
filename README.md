@@ -24,7 +24,7 @@ The key insight: by using cards from the **newest MTG set** (not yet in training
 
 ## Current Benchmark Set
 
-**Shadows over Sonnenthal (SOS)** — 368 cards, released 2026-04-24. Cards are classified into 5 complexity tiers based on keyword count, ability types, and rules text complexity.
+**Shadows over Sonnenthal (SOS)** — 346 cards (271 SOS base + 65 SOA Mystical Archives + 10 SPG Special Guests), released 2026-04-24. Cards are classified into 5 complexity tiers based on keyword count, ability types, and rules text complexity.
 
 ## Project Structure
 
@@ -32,7 +32,7 @@ The key insight: by using cards from the **newest MTG set** (not yet in training
 engine/              Core MTG rules engine (types, game state, combat, stack, etc.)
 cards/               Card registry, Scryfall data pipeline, Foundations set implementations
 benchmark/           Benchmark runner package (CLI, agent sessions, eval, scoring)
-benchmarks/sos/      SOS benchmark set (368 card specs, classified data, results)
+benchmarks/sos/      SOS benchmark set (346 card specs, classified data, results)
 tests/               ~1,400+ test functions across 35+ files
 docs/                Specs, engine API reference, design docs
 ```
@@ -71,7 +71,7 @@ benchmark run --config config.yaml --cards 011,006
 # Run on prototype card subset
 benchmark run --config config.yaml --prototype
 
-# Full run (all 368 cards)
+# Full run (all 346 cards)
 benchmark run --config config.yaml
 ```
 

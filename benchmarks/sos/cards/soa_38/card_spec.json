@@ -1,0 +1,19 @@
+{
+  "name": "Big Score",
+  "mana_cost": "{3}{R}",
+  "type_line": "Instant",
+  "oracle_text": "As an additional cost to cast this spell, discard a card.\nDraw two cards and create two Treasure tokens. (They're artifacts with \"{T}, Sacrifice this token: Add one mana of any color.\")",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Treasure"
+  ],
+  "rarity": "rare",
+  "set_code": "soa",
+  "collector_number": "38",
+  "complexity_tier": "medium"
+}

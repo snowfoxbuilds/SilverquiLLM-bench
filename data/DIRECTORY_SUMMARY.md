@@ -8,7 +8,7 @@ Runtime data directory for cached API responses and replay validation data.
 
 | Directory | Responsibility |
 |-----------|---------------|
-| `sets/` | Scryfall JSON cache — cached card data fetched by `cards/scryfall.py`. |
+| `sets/` | Scryfall JSON cache — cached card data fetched by `cards/scryfall.py`. Includes `sos.json` (full set), `soa_cn1-65.json` (65 SOA Mystical Archives cards), and `spg_cn149-158.json` (10 SPG Special Guest cards). |
 | `replays/` | Replay validation data — card ID mappings and sample replay files. |
 
 ## Key Files
@@ -27,8 +27,10 @@ Runtime data directory for cached API responses and replay validation data.
 
 ```
 data/
-├── sets/                    — Scryfall JSON cache
+├── sets/                        — Scryfall JSON cache
+│   ├── soa_cn1-65.json          — SOA Mystical Archives subset (65 cards)
+│   └── spg_cn149-158.json       — SPG Special Guest subset (10 cards)
 └── replays/
-    ├── card_id_map.json     — grpId ↔ card name mapping
-    └── sample_replay.json   — Synthetic test replay data
+    ├── card_id_map.json         — grpId ↔ card name mapping
+    └── sample_replay.json       — Synthetic test replay data
 ```

@@ -1,0 +1,17 @@
+{
+  "name": "Magus of the Library",
+  "mana_cost": "{G}{G}",
+  "type_line": "Creature — Human Wizard",
+  "oracle_text": "{T}: Add {C}.\n{T}: Draw a card. Activate only if you have exactly seven cards in hand.",
+  "power": "1",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [],
+  "rarity": "mythic",
+  "set_code": "spg",
+  "collector_number": "154",
+  "complexity_tier": "medium"
+}

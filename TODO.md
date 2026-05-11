@@ -8,7 +8,7 @@ See `CONTEXT.md` for domain vocabulary (Draft Set, Card Pool, Audited Eval). See
 
 ### SOS Draft Set Card Pool
 
-- [ ] **Include Mystical Archives (SOA set, cn 1–65)**
+- [x] **Include Mystical Archives (SOA set, cn 1–65)**
   Detail: The SOS Draft Set includes 65 Mystical Archive cards from the SOA set (collector numbers 1–65). These are currently missing from `fetch_data.py`. Update the Scryfall fetch to also pull `e:soa cn>=1 cn<=65`. Reference: [Scryfall SOA search](https://scryfall.com/search?order=set&q=e%3Asoa%20cn%E2%89%A51%20cn%E2%89%A465&unique=prints).
 
   Changes needed:
@@ -17,7 +17,7 @@ See `CONTEXT.md` for domain vocabulary (Draft Set, Card Pool, Audited Eval). See
   - Ensure `card_classifier.py` and `card_spec.py` handle multi-set card pools (cards with `set_code="soa"` alongside `set_code="sos"`).
   Testability: After fetch, `sos.json` contains cards with `set_code="soa"` and collector numbers 1–65. Count should be exactly 65 SOA cards.
 
-- [ ] **Include Special Guests (SPG set, cn 149–158)**
+- [x] **Include Special Guests (SPG set, cn 149–158)**
   Detail: The SOS Draft Set includes 10 Special Guest cards from the SPG set (collector numbers 149–158). These are currently missing from `fetch_data.py`. Update the Scryfall fetch to also pull `e:spg cn>=149 cn<=158`. Reference: [Scryfall SPG search](https://scryfall.com/search?order=set&q=e%3Aspg%20cn%E2%89%A5149%20cn%E2%89%A4158&unique=prints).
 
   Changes needed:
@@ -26,7 +26,7 @@ See `CONTEXT.md` for domain vocabulary (Draft Set, Card Pool, Audited Eval). See
   - These are distinct from the FDN Special Guests (SPG 074–083) already implemented in Phase 5.
   Testability: After fetch, `sos.json` contains 10 cards with `set_code="spg"` and collector numbers 149–158.
 
-- [ ] **Enforce SOS base set draft cutoff at collector number 271**
+- [x] **Enforce SOS base set draft cutoff at collector number 271**
   Detail: SOS base set cards with collector number > 271 are alternate-art reprints / duplicates and should be excluded from the Draft Set. Update `fetch_data.py` to filter out SOS cards (`set_code="sos"`) with `int(collector_number) > 271`.
 
   Changes needed:
@@ -35,7 +35,7 @@ See `CONTEXT.md` for domain vocabulary (Draft Set, Card Pool, Audited Eval). See
   - The final card pool should be: SOS base (≤271) + SOA (1–65) + SPG (149–158) = **346 cards total**.
   Testability: No card in `sos.json` has `set_code="sos"` and `int(collector_number) > 271`. Total card count = 346.
 
-- [ ] **Re-run classification and spec generation on updated card pool**
+- [x] **Re-run classification and spec generation on updated card pool**
   Detail: After updating `sos.json`, re-run the card classifier and card spec generator to produce updated `sos_classified.json` and per-card spec directories.
 
   Changes needed:
@@ -50,7 +50,7 @@ See `CONTEXT.md` for domain vocabulary (Draft Set, Card Pool, Audited Eval). See
 
 ### Audited Test Infrastructure
 
-- [ ] **Create per-card audited test directory structure and **[**conftest.py**](http://conftest.py/)
+- [x] **Create per-card audited test directory structure and **[**conftest.py**](http://conftest.py/)
   Detail: Set up the directory structure for audited tests following the per-card convention settled in [TEST-SUITE.md](http://test-suite.md/). Each card gets its own directory with a `tests.py` file that imports from `card_impl`. A `conftest.py` at each set level handles the `card_impl` module injection.
 
   Directory structure:
@@ -81,7 +81,7 @@ tests/audited/
 
   Testability: Create one sample FDN test file (e.g., `tests/audited/fdn/001/tests.py` for Plains) and verify that `pytest tests/audited/fdn/001/` runs and the test can `from card_impl import Plains`.
 
-- [ ] **Generate SOS stub card classes from card specs**
+- [x] **Generate SOS stub card classes from card specs**
   Detail: Auto-generate minimal stub implementations for all 346 SOS Draft Set cards. Stubs let audited tests execute and produce meaningful assertion failures ("wrong P/T", "no trigger fired") rather than `KeyError` crashes from `CardRegistry.create_instance()`.
 
   Changes needed:
@@ -120,7 +120,7 @@ Key engine conventions to be aware of (from `KEY_DECISIONS.md`):
 - Identity-based zone lookups: `contains()` / `remove()` use `is` (not `==`)
 - `cards_drawn_this_turn` counter tracks per-turn card draws
 - ENGINE LIMITATION comments document known gaps — don't write tests that exercise documented limitations
-- [ ] **FDN audited tests: Batch 1 — Basic lands and vanilla/French vanilla creatures (~30 cards)**
+- [x] **FDN audited tests: Batch 1 — Basic lands and vanilla/French vanilla creatures (~30 cards)**
   Detail: Write per-card test files for all 5 basic lands (Plains, Island, Swamp, Mountain, Forest) and ~25 vanilla/French vanilla creatures from FDN.
 
   Basic lands: Test tapping for correct mana color, untapping on untap step, and that they enter untapped.
@@ -135,7 +135,7 @@ Key engine conventions to be aware of (from `KEY_DECISIONS.md`):
 
   Testability: All tests pass against the current engine. Every card in the batch has a corresponding test file.
 
-- [ ] **FDN audited tests: Batch 2 — Simple instants and sorceries (~60 cards)**
+- [x] **FDN audited tests: Batch 2 — Simple instants and sorceries (~60 cards)**
   Detail: Write per-card test files for all simple instants and sorceries from FDN (batches 1–3 from Phase 4 implementation files).
 
   Test coverage per card:
@@ -151,7 +151,7 @@ Key engine conventions to be aware of (from `KEY_DECISIONS.md`):
 
   Testability: All tests pass against the current engine.
 
-- [ ] **FDN audited tests: Batch 3 — Creatures with triggers and activated abilities (~65 cards)**
+- [x] **FDN audited tests: Batch 3 — Creatures with triggers and activated abilities (~65 cards)**
   Detail: Write per-card test files for all ETB trigger creatures (~29), death trigger creatures (~17), and activated ability creatures (~19) from FDN.
 
   ETB triggers: Test trigger firing on entry, trigger conditions ("if"/"when"/"may"), trigger with valid/no valid targets, interaction with bounce (re-entry → retrigger), blink effects.
@@ -168,7 +168,7 @@ Key engine conventions to be aware of (from `KEY_DECISIONS.md`):
 
   Testability: All tests pass against the current engine.
 
-- [ ] **FDN audited tests: Batch 4 — Enchantments, equipment, artifacts, and planeswalkers (~70 cards)**
+- [x] **FDN audited tests: Batch 4 — Enchantments, equipment, artifacts, and planeswalkers (~70 cards)**
   Detail: Write per-card test files for all auras (~10), global enchantments (~10), equipment (~7), artifacts (~27+), and planeswalkers (~3) from FDN.
 
   Auras: Attachment legality, SBA detach when target is invalid, enchant effect application, stacking multiple auras.
@@ -187,7 +187,7 @@ Key engine conventions to be aware of (from `KEY_DECISIONS.md`):
 
   Testability: All tests pass against the current engine.
 
-- [ ] **FDN audited tests: Batch 5 — Non-basic lands, SPG cards, and remaining cards (~76 cards)**
+- [x] **FDN audited tests: Batch 5 — Non-basic lands, SPG cards, and remaining cards (~76 cards)**
   Detail: Write per-card test files for non-basic lands (~13), SPG Special Guests (074–083, 10 cards), and any remaining FDN cards not covered in Batches 1–4.
 
   Non-basic lands: Test enters-tapped (if applicable), activated abilities, mana production (color/amount), special abilities.
@@ -218,7 +218,7 @@ For each card, the Implementer should:
 4. Tests will execute against stub classes during development (stubs only have basic attributes, so ability tests will fail — this is expected and correct)
 These tests are designed to be **plug-and-play** with any agent's implementation via the evaluator's `card_impl` swap mechanism. They are the "audited eval" column in the cross-evaluation matrix.
 
-- [ ] **SOS audited tests: Batch 1 — Trivial and simple complexity cards**
+- [x] **SOS audited tests: Batch 1 — Trivial and simple complexity cards**
   Detail: Write per-card test files for all SOS Draft Set cards classified as `trivial` or `simple` in `sos_classified.json`. These are the cards agents should get right — vanilla/French vanilla creatures, simple targeted spells, basic enchantments.
 
   Test count per card: 2–5 for trivial, 5–8 for simple.
@@ -231,7 +231,7 @@ These tests are designed to be **plug-and-play** with any agent's implementation
 
   Testability: Tests are syntactically valid and importable. Tests run against stub classes (most ability tests will fail as expected — stubs have correct attributes but no ability logic). Verify every trivial/simple card has a test file.
 
-- [ ] **SOS audited tests: Batch 2 — Moderate complexity cards**
+- [x] **SOS audited tests: Batch 2 — Moderate complexity cards**
   Detail: Write per-card test files for all SOS Draft Set cards classified as `moderate` in `sos_classified.json`. These cards have multiple abilities, conditional triggers, or keyword interactions.
 
   Test count per card: 8–15.
@@ -248,7 +248,7 @@ These tests are designed to be **plug-and-play** with any agent's implementation
 
   Testability: Same as Batch 1 — syntactically valid, importable, expected failures against stubs.
 
-- [ ] **SOS audited tests: Batch 3 — Complex and extreme complexity cards**
+- [x] **SOS audited tests: Batch 3 — Complex and extreme complexity cards**
   Detail: Write per-card test files for all SOS Draft Set cards classified as `complex` or `extreme` in `sos_classified.json`. These are the true benchmark differentiators — multi-step resolution, state-dependent behavior, unusual interactions.
 
   Test count per card: 10–25.
@@ -269,7 +269,7 @@ These tests are designed to be **plug-and-play** with any agent's implementation
 
 ### Pipeline & Documentation
 
-- [ ] **Wire per-card audited tests into the evaluation pipeline**
+- [x] **Wire per-card audited tests into the evaluation pipeline**
   Detail: Update the evaluator and CLI to discover and run per-card audited test files instead of a single monolithic test file.
 
   Current state: `benchmark eval --audited-tests` accepts a single file path. The evaluator runs that one file against all cards.

@@ -320,6 +320,16 @@ class Creature(CardImpl):
             self.protections = []
 
     @property
+    def counters(self) -> dict[str, int]:
+        """Return a dict-like view of counters on this creature."""
+        result: dict[str, int] = {}
+        if self.plus_one_counters > 0:
+            result["+1/+1"] = self.plus_one_counters
+        if self.minus_one_counters > 0:
+            result["-1/-1"] = self.minus_one_counters
+        return result
+
+    @property
     def power(self) -> int:
         """Current power including counter modifications."""
         return self.base_power + self.plus_one_counters - self.minus_one_counters

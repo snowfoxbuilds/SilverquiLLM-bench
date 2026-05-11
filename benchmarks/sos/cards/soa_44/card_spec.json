@@ -1,0 +1,17 @@
+{
+  "name": "Jeska's Will",
+  "mana_cost": "{2}{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "Choose one. If you control a commander as you cast this spell, you may choose both instead.\n• Add {R} for each card in target opponent's hand.\n• Exile the top three cards of your library. You may play them this turn.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "mythic",
+  "set_code": "soa",
+  "collector_number": "44",
+  "complexity_tier": "complex"
+}

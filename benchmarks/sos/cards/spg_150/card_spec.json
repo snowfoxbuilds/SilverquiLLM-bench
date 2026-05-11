@@ -1,0 +1,19 @@
+{
+  "name": "Archmage Emeritus",
+  "mana_cost": "{2}{U}{U}",
+  "type_line": "Creature — Human Wizard",
+  "oracle_text": "Magecraft — Whenever you cast or copy an instant or sorcery spell, draw a card.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Magecraft"
+  ],
+  "rarity": "mythic",
+  "set_code": "spg",
+  "collector_number": "150",
+  "complexity_tier": "simple"
+}

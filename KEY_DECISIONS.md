@@ -142,6 +142,78 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: Wholesale replacement via `from_dict()` zeros out omitted fields, corrupting state.
 - **Impact**: `silverquillm/replay/state.py`.
 
+## Exact Scryfall subset cache validation
+- **Context**: SOS Draft Set composition pulls fixed collector-number subsets from related sets, such as SOA Mystical Archives and SPG Special Guests, without needing or representing the full source set.
+- **Decision**: Cache collector-number subset queries in query-specific files (for example `soa_cn1-65.json` or `spg_cn149-158.json`) rather than generic whole-set cache names like `soa.json`. Freshness checks for fixed Draft Set subsets use exact sorted collector-number equality: one row for every expected collector number, no gaps, duplicates, or extra rows.
+- **Reasoning**: Generic cache names can read unrelated full-set data or overwrite caches other callers expect to contain the full set. Presence/count-only checks can return stale or corrupted pools that violate the fixed 346-card SOS Draft Set invariant.
+- **Impact**: `benchmarks/sos/fetch_data.py`; future Scryfall subset fetches should use query-specific cache names and exact subset validation.
+
+## SOS specs use set-prefixed directories for multi-set collisions
+- **Context**: The SOS Draft Set now combines SOS, SOA, and SPG cards whose collector numbers overlap.
+- **Decision**: Per-card SOS benchmark specs use plain numeric directories for base SOS cards and set-prefixed directories such as `soa_1` and `spg_149` for non-SOS cards.
+- **Reasoning**: Collector-number-only directories collide across sets and can overwrite specs.
+- **Impact**: `benchmarks/sos/cards/`, `silverquillm/card_spec.py`; generated non-SOS spec directories may need force-adding because benchmark artifact paths are ignored by default.
+
+## Audited test card_impl injection is per collector directory
+- **Context**: Per-card audited tests import from a synthetic `card_impl` module during development, but the evaluator can provide an explicit `card_impl.py`.
+- **Decision**: Audited conftests detect the current `tests/audited/<set>/<collector>/` directory and expose only that card's implementation class through `card_impl`. Wrong-card imports raise clear errors. SOS subset directories use set-prefixed collector keys such as `soa_1` and `spg_149`.
+- **Reasoning**: Global registry fallbacks can make wrong-card tests pass and hide broken collector mappings.
+- **Impact**: `tests/audited/fdn/conftest.py`, `tests/audited/sos/conftest.py`; future audited tests should live under the correct collector directory and import only the class for that card.
+
+## SOS audited stubs approximate unsupported mana symbols
+- **Context**: The SOS audited stub generator must preserve basic mana attributes even when the engine cannot represent every Magic mana symbol exactly.
+- **Decision**: Supported simple hybrid symbols use the engine's hybrid mana representation. Unsupported hybrid-like symbols are approximated without dropping the whole cost: two-brid symbols such as `{2/R}` become generic `{2}`, and Phyrexian symbols such as `{B/P}` become the colored pip.
+- **Reasoning**: Audited stubs should not make nonzero-cost cards free; preserving mana value is more useful for tests than omitting unsupported symbols.
+- **Impact**: `scripts/generate_audited_stubs.py`, generated `cards/stubs/sos_stubs.py`.
+
+## SOS audited behavior tests may fail against stubs
+- **Context**: SOS audited tests run against generated stubs during repository development, but stubs intentionally include only basic card attributes and no oracle behavior.
+- **Decision**: Keep meaningful behavior tests for SOS cards even when they fail against stubs. Treat import, syntax, collection, and basic-attribute failures as test/setup bugs; treat missing oracle behavior failures as expected stub failures.
+- **Reasoning**: Audited tests define the contract for benchmarked agent implementations. Watering down behavior tests to pass stubs would remove the signals the evaluation suite is meant to provide.
+- **Impact**: `tests/audited/sos/`; future SOS audited batches should document expected stub failures rather than weakening behavior assertions.
+
+## SOS moderate TODO tier maps to classifier `medium`
+- **Context**: Phase 6 TODO prose uses "moderate" complexity, while `benchmarks/sos/data/sos_classified.json` stores the corresponding classifier value as `medium`.
+- **Decision**: Treat TODO "moderate" as `complexity_tier == "medium"` when selecting SOS audited Batch 2 cards.
+- **Reasoning**: The repository data uses `medium`; using the prose label literally would miss every intended card.
+- **Impact**: `tests/audited/sos/` Batch 2 coverage and future SOS tier-based tooling.
+
+## SOS extreme TODO tier maps to classifier `expert`
+- **Context**: Phase 6 TODO prose uses "extreme" complexity, while `benchmarks/sos/data/sos_classified.json` stores the highest classifier value as `expert`.
+- **Decision**: Treat TODO "complex and extreme" as `complexity_tier in {"complex", "expert"}` when selecting SOS audited Batch 3 cards.
+- **Reasoning**: The repository data has no `extreme` tier; using `expert` covers all remaining high-complexity cards and completes 346/346 coverage.
+- **Impact**: `tests/audited/sos/` Batch 3 coverage and future SOS tier-based tooling.
+
+## Per-card audited eval persists to card result.json
+- **Context**: `benchmark eval --audited-dir` runs audited tests per card, and downstream scoring reads audited data from each card's `result.json`.
+- **Decision**: Per-card audited CLI runs write results both to the flat run-level `results.json` and to each card's nested `result.json` under `audited_eval.blind`, `audited_eval.tested`, and top-level `audited_eval.errors`.
+- **Reasoning**: Keeping the existing per-card result shape avoids scorer/results changes and ensures missing implementation/test errors are visible to downstream consumers.
+- **Impact**: `silverquillm/cli.py`, `silverquillm/evaluator.py`, `tests/test_audited_per_card.py`.
+
+## Damage wording: "deals damage" is one-way, "fight" is mutual
+- **Context**: Felling Blow adds a +1/+1 counter, then says that creature deals damage equal to its power to an opponent's creature.
+- **Decision**: Implement one-way damage for "deals damage" wording; only cards that use "fight" should deal reciprocal damage.
+- **Reasoning**: MTG's fight keyword implies mutual damage, while one-way damage effects do not.
+- **Impact**: `cards/foundations/simple_spells_batch3.py`, audited tests for fight-like spell wording.
+
+## FDN audited collector collisions use suffix directories
+- **Context**: Some FDN registry entries share collector numbers while per-card audited tests require one directory per implementation.
+- **Decision**: Use suffixed collector directories such as `105b`, `61b`, `219b`, `228b`, `7b`, `129b`, `75b`, `76b`, and `81b` with explicit conftest overrides for colliding cards.
+- **Reasoning**: This preserves per-card isolation without overwriting the canonical numeric directory for the other card.
+- **Impact**: `tests/audited/fdn/conftest.py`, audited test directories for colliding FDN cards.
+
+## FDN audited synthetic directories reserve 800-829
+- **Context**: Some FDN card implementations lack collector numbers in registry metadata, but per-card audited tests still require stable collector-directory keys.
+- **Decision**: Reserve synthetic FDN audited directories `800`-`829` for cards with empty collector numbers in registry metadata, using explicit conftest overrides.
+- **Reasoning**: Stable synthetic keys preserve per-card isolation until registry metadata can provide real collector numbers.
+- **Impact**: `tests/audited/fdn/conftest.py`, `tests/audited/fdn/800`-`tests/audited/fdn/829`.
+
+## FDN audited coverage is scoped to registered CardRegistry entries
+- **Context**: The Phase 6 TODO text describes 301 FDN Draft Set cards, but the current codebase CardRegistry exposes 264 unique FDN/SPG implementations after all FDN audited batches.
+- **Decision**: Treat audited FDN coverage completeness as one test directory per registered FDN/SPG card implementation in the current registry, documenting the 264/264 state until the missing implementations are added.
+- **Reasoning**: Audited tests cannot target implementations that are not registered; forcing 301 directories would create unmapped or duplicate test fixtures.
+- **Impact**: `tests/audited/fdn/`, `tests/audited/fdn/conftest.py`, future FDN registry expansion must add corresponding audited tests.
+
 ## Replay executor: Seat 1 engine API with fallback
 - **Context**: Seat 1 should use engine API for full validation, but some actions (spell casts) can't go through the full engine pipeline in replay mode.
 - **Decision**: Seat 1 uses engine API where feasible (land plays via `play_land()`, deaths via `move_to_zone()`). Falls back to direct zone mutation on engine rejection. Spell casts use direct mutation with correct destination routing (permanents→battlefield, instants/sorceries→graveyard). Stack simulation marked ENGINE LIMITATION.

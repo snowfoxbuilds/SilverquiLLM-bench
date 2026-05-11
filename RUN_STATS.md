@@ -2,42 +2,57 @@
 
 **Skill**: execute-todo-with-subagents
 **Reviewer model**: GPT-5.4 (via `Reviewer` custom agent)
-**Started**: 2026-05-09T18:06:09Z
-**Finished**: 2026-05-09T20:59:57Z
-**Total duration**: 173m 48s
-**Total duration (seconds)**: 10428
+**Started**: 2026-05-11T06:27:14Z
+**Finished**: 2026-05-11T14:55:44Z
+**Total duration**: 8h 28m 30s
+**Total duration (seconds)**: 30510
 
 ## Summary
-- TODO items completed: 11
-- Items requiring test dispute: 2 (Item 4: extra turns semantics, Item 5: enum mismatches)
-- Items requiring review revision: 11 (all items had at least 1 strict comment)
-- Items with coordinator arbitration: 2 (Item 5: Condemn get_targets return type, Item 10: per_card_divergence_rates counts vs rates)
-- Commits: 14 (11 items + dir summaries + test audit + initial setup)
-- RUN_DECISIONS entries: 5
-- KEY_DECISIONS entries added: ~18
-- Test quality audit: 11 added, 0 fixed, 0 deleted
-- Test suite result: passing (4148 pass, 1 pre-existing unrelated failure)
+
+- TODO items completed: 15
+- Items requiring test dispute: 3
+- Items requiring review revision: 14
+- Items with coordinator arbitration: 15
+- Commits: 19 after this file is committed
+- RUN_DECISIONS entries: 24
+- KEY_DECISIONS entries added: 12
+- Test quality audit: 0 added, 5 fixed, 0 deleted
+- Test suite result: non-audited and FDN audited tests passing; SOS audited tests collect and run with expected stub-behavior failures only
 
 ## Tokens (subagents)
-- Total Tester tokens: null (token counts not observable via task tool)
+
+- Total Tester tokens: null
 - Total Implementer tokens: null
 - Total Reviewer tokens: null
 - Total across all subagents: null
 - Coordinator tokens: null
 
+Token counts were not exposed by the subagent orchestration layer. Durations below are aggregated from `/tmp/execute-todo-with-subagents-phase6-20260511-062714/run-stats.md`.
+
 ## Per-item breakdown
+
 | TODO item | Implementer | Tester | Reviewer | Test disputes | Review revisions | Duration (s) |
 |-----------|-------------|--------|----------|---------------|------------------|--------------|
-| Item 1: Hybrid mana | 184+91s | 126s | 115s | 0 | 1 | 516 |
-| Item 2: Cost reduction | 215+90s | 171s | 150s | 0 | 1 | 626 |
-| Item 3: Protection | 253+208s | 185s | 109s | 0 | 1 | 755 |
-| Item 4: Extra turns | 115+111s | 135+106s | 150s | 1 | 1 | 617 |
-| Item 5: SPG Batch 1 | 267+66+277s | 147s | 240s | 1 | 1 | 997 |
-| Item 6: SPG Batch 2 | 351+241s | 226s | 175s | 0 | 1 | 993 |
-| Item 7: Card ID map | 270+158s | 107s | 141s | 0 | 1 | 676 |
-| Item 8: GRE parser | 405+74s | 128s | 117s | 0 | 1 | 724 |
-| Item 9: Replay executor | 303+157s | 205s | 100s | 0 | 1 | 765 |
-| Item 10: Divergence | 143+168+107s | 143+105s | 96s | 0 | 2 | 762 |
-| Item 11: CLI validate | 154+123s | 146s | 101s | 0 | 1 | 524 |
-| Dir summaries | 399s | — | — | — | — | 399 |
-| Test audit | — | 336s | — | — | — | 336 |
+| Item 1: Include Mystical Archives | null | null | null | 0 | 2 | 854 |
+| Item 2: Include Special Guests | null | null | null | 1 | 2 | 1101 |
+| Item 3: Enforce SOS base cutoff | null | null | null | 0 | 2 | 677 |
+| Item 4: Regenerate SOS classification/specs | null | null | null | 0 | 1 | 1105 |
+| Item 5: Per-card audited test infrastructure | null | null | null | 0 | 2 | 2288 |
+| Item 6: Generate SOS stub card classes | null | null | null | 1 | 2 | 1758 |
+| Item 7: FDN audited tests batch 1 | null | null | null | 0 | 2 | 1474 |
+| Item 8: FDN audited tests batch 2 | null | null | null | 1 | 2 | 3042 |
+| Item 9: FDN audited tests batch 3 | null | null | null | 0 | 1 | 1889 |
+| Item 10: FDN audited tests batch 4 | null | null | null | 0 | 1 | 2502 |
+| Item 11: FDN audited tests batch 5 | null | null | null | 0 | 1 | 1925 |
+| Item 12: SOS audited tests batch 1 | null | null | null | 0 | 1 | 1819 |
+| Item 13: SOS audited tests batch 2 | null | null | null | 0 | 1 | 2181 |
+| Item 14: SOS audited tests batch 3 | null | null | null | 0 | 1 | 1827 |
+| Item 15: Wire per-card audited eval | null | null | null | 0 | 1 | 882 |
+| Dir summaries | null | - | - | - | - | 185 |
+| Test audit | - | null | - | - | - | 534 |
+
+## Validation snapshot
+
+- Non-audited suite: 4359 passed
+- FDN audited suite: 1487 passed
+- SOS audited suite: 2995 passed, 994 expected failures against intentionally behavior-empty stubs

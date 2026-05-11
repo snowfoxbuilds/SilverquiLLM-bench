@@ -1,0 +1,17 @@
+{
+  "name": "Subterranean Tremors",
+  "mana_cost": "{X}{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "Subterranean Tremors deals X damage to each creature without flying. If X is 4 or more, destroy all artifacts. If X is 8 or more, create an 8/8 red Lizard creature token.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "mythic",
+  "set_code": "soa",
+  "collector_number": "48",
+  "complexity_tier": "simple"
+}

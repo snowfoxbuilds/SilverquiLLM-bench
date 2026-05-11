@@ -1,0 +1,19 @@
+{
+  "name": "Prismatic Ending",
+  "mana_cost": "{X}{W}",
+  "type_line": "Sorcery",
+  "oracle_text": "Converge — Exile target nonland permanent if its mana value is less than or equal to the number of colors of mana spent to cast this spell.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Converge"
+  ],
+  "rarity": "rare",
+  "set_code": "soa",
+  "collector_number": "7",
+  "complexity_tier": "complex"
+}

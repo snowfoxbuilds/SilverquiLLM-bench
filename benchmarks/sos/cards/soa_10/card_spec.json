@@ -1,0 +1,19 @@
+{
+  "name": "Requisition Raid",
+  "mana_cost": "{W}",
+  "type_line": "Sorcery",
+  "oracle_text": "Spree (Choose one or more additional costs.)\n+ {1} — Destroy target artifact.\n+ {1} — Destroy target enchantment.\n+ {1} — Put a +1/+1 counter on each creature target player controls.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Spree"
+  ],
+  "rarity": "uncommon",
+  "set_code": "soa",
+  "collector_number": "10",
+  "complexity_tier": "complex"
+}

@@ -230,6 +230,7 @@ def classify_set(
         result[tier].append(card)
         json_records.append({
             "name": card.name,
+            "set_code": card.set_code,
             "collector_number": card.collector_number,
             "complexity_tier": tier,
             "tier": tier,

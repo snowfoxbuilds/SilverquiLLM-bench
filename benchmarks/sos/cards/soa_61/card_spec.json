@@ -1,0 +1,20 @@
+{
+  "name": "Bring to Light",
+  "mana_cost": "{3}{G}{U}",
+  "type_line": "Sorcery",
+  "oracle_text": "Converge — Search your library for a creature, instant, or sorcery card with mana value less than or equal to the number of colors of mana spent to cast this spell, exile that card, then shuffle. You may cast that card without paying its mana cost.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "G",
+    "U"
+  ],
+  "keywords": [
+    "Converge"
+  ],
+  "rarity": "rare",
+  "set_code": "soa",
+  "collector_number": "61",
+  "complexity_tier": "complex"
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Living End",
+  "mana_cost": "",
+  "type_line": "Sorcery",
+  "oracle_text": "Suspend 3—{2}{B}{B}\nEach player exiles all creature cards from their graveyard, then sacrifices all creatures they control, then puts all cards they exiled this way onto the battlefield.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Suspend"
+  ],
+  "rarity": "mythic",
+  "set_code": "soa",
+  "collector_number": "30",
+  "complexity_tier": "medium"
+}

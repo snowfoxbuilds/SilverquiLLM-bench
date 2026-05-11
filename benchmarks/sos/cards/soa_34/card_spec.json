@@ -1,0 +1,17 @@
+{
+  "name": "Stargaze",
+  "mana_cost": "{X}{B}{B}",
+  "type_line": "Sorcery",
+  "oracle_text": "Look at twice X cards from the top of your library. Put X cards from among them into your hand and the rest into your graveyard. You lose X life.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "soa",
+  "collector_number": "34",
+  "complexity_tier": "simple"
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Deduce",
+  "mana_cost": "{1}{U}",
+  "type_line": "Instant",
+  "oracle_text": "Draw a card. Investigate. (Create a Clue token. It's an artifact with \"{2}, Sacrifice this token: Draw a card.\")",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Investigate"
+  ],
+  "rarity": "uncommon",
+  "set_code": "soa",
+  "collector_number": "16",
+  "complexity_tier": "simple"
+}

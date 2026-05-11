@@ -14,14 +14,14 @@ Renamed from `benchmark/` to `silverquillm/` during this run.
 | `config.py` | **Config loader** — `BenchmarkConfig` and nested `AgentConfig` dataclasses; `load_config()` for YAML validation. `AgentConfig` holds adapter name, timeout, max rounds, and feature flags. |
 | `cli.py` | **CLI entry point** — Click-based CLI with `run`, `eval`, `score`, `cards`, `validate` subcommands. Full orchestration loop with `--cards`, `--prototype`, `--dry-run` flags. Cards sorted by complexity tier. Wires persistent engine lifecycle. `validate` subcommand delegates to `silverquillm.replay.cli`. Entry point: `benchmark` (pyproject.toml). |
 | `agent_session.py` | **Agent session manager** — `AgentSession` dataclass managing workspace setup, adapter lifecycle, and the two-phase implementation flow (blind → test-informed) with contamination controls. Postmortem JSONL logging and `agent_thoughts.md` narrative generation. Persistent engine support via `init_run_engine`, `commit_engine_changes`, `save_engine_final`, `compute_engine_diff`. |
-| `card_classifier.py` | **Complexity classifier** — Heuristic-based tier assignment (trivial/simple/medium/complex/advanced). Outputs both `tier` and `complexity_tier` keys. |
-| `card_spec.py` | **Spec generator** — `generate_card_spec()` and `generate_all_specs()` produce per-card JSON spec files with oracle data + complexity tier. |
+| `card_classifier.py` | **Complexity classifier** — Heuristic-based tier assignment (trivial/simple/medium/complex/advanced). Outputs both `tier` and `complexity_tier` keys. Includes `set_code` field in output. |
+| `card_spec.py` | **Spec generator** — `generate_card_spec()` and `generate_all_specs()` produce per-card JSON spec files with oracle data + complexity tier. Composite key lookup for multi-set collision avoidance with set_code-prefixed output dirs. |
 | `card_loader.py` | **Card-spec loading & filtering** — `load_card_specs()`, `load_prototype_cards()`, `filter_by_collectors()`, `filter_by_prototype()`. |
 | `template_gen.py` | **Template generator** — `card_name_to_class_name()`, `resolve_base_class()`, `compile_template()` / `render_template()` for card stubs. |
 | `docs_gen.py` | **Engine API doc generator** — AST-based extraction from `engine/` producing `docs/engine_api.md` (~5,000 token budget). |
 | `rules_skill.py` | **Rules indexer** — Downloads, parses, indexes MTG comprehensive rules; provides keyword/section lookup. |
 | `prompts.py` | **Prompt templates** — `blind_prompt()`, `test_informed_prompt()`, `iteration_feedback_prompt()` with engine extensibility instructions. Uses `str.format_map`. |
-| `evaluator.py` | **Evaluation runner** — `EvalResult`, `run_tests()` (subprocess pytest), `run_self_eval()`, `run_cross_eval()`, `run_audited_eval()`. |
+| `evaluator.py` | **Evaluation runner** — `EvalResult`, `run_tests()` (subprocess pytest), `run_self_eval()`, `run_cross_eval()`, `run_audited_eval()`. Supports `--audited-dir` for per-card audited test directories. |
 | `scorer.py` | **Scoring calculator** — 4-category scoring: Blind, Tested, Audited, Engine Extension Quality. `Leaderboard` dataclass, `generate_leaderboard()`. |
 | `results.py` | **Result recorder** — Per-run directory isolation. `generate_run_name()`, `init_results_dir()`, `save_card_result()`, `save_run_summary()`, `save_aggregates()` with category4. |
 | `run_utils.py` | **Run orchestration helpers** — `_session_results_to_dicts()` for converting session results to dicts. |

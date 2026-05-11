@@ -8,7 +8,7 @@ Namespace package for benchmark data sets. Each subdirectory (`sos/`, etc.) cont
 
 | Directory | Purpose |
 |-----------|---------|
-| `sos/` | Shadows over Sonnenthal (SOS) benchmark set — 368 cards. See `benchmarks/sos/DIRECTORY_SUMMARY.md`. |
+| `sos/` | Shadows over Sonnenthal (SOS) benchmark set — 346 cards (271 SOS base + 65 SOA + 10 SPG). See `benchmarks/sos/DIRECTORY_SUMMARY.md`. |
 
 ## Convention
 

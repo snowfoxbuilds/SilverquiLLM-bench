@@ -1248,11 +1248,17 @@ def _counter_spell(game: GameState, stack_obj: Any) -> None:
 
     card = stack_obj.source
 
+    # Check if the stack object is actually on the stack; if not, fizzle.
     stack_items = game.stack._items  # noqa: SLF001
+    found = False
     for i, item in enumerate(stack_items):
         if item is stack_obj:
             stack_items.pop(i)
+            found = True
             break
+
+    if not found:
+        return
 
     controller = stack_obj.controller
     owner = getattr(card, "owner", controller)
