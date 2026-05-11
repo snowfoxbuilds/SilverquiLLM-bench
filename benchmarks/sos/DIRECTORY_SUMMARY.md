@@ -9,7 +9,7 @@ Benchmark data and artifacts for the **Shadows over Sonnenthal (SOS)** Draft Set
 | Path | Responsibility |
 |------|---------------|
 | `__init__.py` | Package init for SOS benchmark set. |
-| `fetch_data.py` | SOS data fetcher — downloads from Scryfall, normalizes card fields. |
+| `fetch_data.py` | SOS data fetcher — downloads SOS base (cn 1-271), SOA (cn 1-65), and SPG (cn 149-158) from Scryfall. `SOS_BASE_MAX_COLLECTOR_NUMBER=271` cutoff. Stale cache invalidation, merge into sos.json, set breakdown logging. |
 | `prototype_cards.json` | 5 prototype cards (one per complexity tier) with both `tier` and `complexity_tier` fields. |
 | `prototype_gaps.md` | Engine gap analysis — documents missing engine features for prototype cards. |
 

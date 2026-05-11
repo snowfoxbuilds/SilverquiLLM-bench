@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Test root directory for the SilverquiLLM-bench project. Contains top-level test files, test utilities, and subdirectories for engine, card, and benchmark integration tests. Uses **pytest** as the test framework with ~3,200+ test functions total across 100+ test files.
+Test root directory for the SilverquiLLM-bench project. Contains top-level test files, test utilities, and subdirectories for engine, card, benchmark integration, and per-card audited tests. Uses **pytest** as the test framework with ~3,200+ test functions total across 100+ test files, plus hundreds of per-card audited test files under `audited/`.
 
 ## Key Files
 
@@ -53,7 +53,10 @@ Test root directory for the SilverquiLLM-bench project. Contains top-level test 
 | `test_cli_eval.py` | **CLI eval tests** — `benchmark eval` subcommand. |
 | `test_cli_score.py` | **CLI score tests** — `benchmark score` subcommand. |
 | `test_post_loop_eval.py` | **Post-loop eval tests** — `run_self_eval_flat`. |
-| `test_check_violations.py` | **Violation detection tests** — Protected directory checking. |
+| `test_sos_base_cutoff.py` | **SOS base cutoff tests** — 13 tests for SOS base cutoff at cn 271, cache freshness, total count 346. |
+| `test_sos_stubs.py` | **SOS stub tests** — 346-card registration, attribute derivation, colors, no auto-load, deterministic generation, conftest integration. |
+| `test_sos_regenerated_artifacts.py` | **SOS artifact regeneration tests** — 26 tests for 346-card pool integrity, classification, specs, docs. |
+| `test_audited_per_card.py` | **Audited per-card test runner** — Parametrized per-card test discovery and execution. |
 | `test_violation_wiring.py` | **Violation wiring tests** — Violation checks in agent runs. |
 | `test_replay_parser.py` | **Replay parser tests** — 39 tests for GRE JSON parsing: game setup, opening hands, state reconstruction, land plays, life totals, draws, ObjectIdChanged tracking. |
 | `test_replay_executor.py` | **Replay executor tests** — 23 tests for ReplayExecutor initialization, step execution, state comparison, seat 1/2 behavior. |
@@ -68,6 +71,7 @@ Test root directory for the SilverquiLLM-bench project. Contains top-level test 
 - **`engine/`** — Unit tests for all engine modules. See `tests/engine/DIRECTORY_SUMMARY.md`.
 - **`cards/`** — Unit tests for card implementations (25 test files). See `tests/cards/DIRECTORY_SUMMARY.md`.
 - **`benchmark/`** — Integration tests and helpers. See `tests/benchmark/DIRECTORY_SUMMARY.md`.
+- **`audited/`** — Per-card audited test directories. Contains `fdn/` (260+ FDN card test dirs) and `sos/` (346 SOS Draft Set card test dirs with SOA/SPG subsets). Each card has a numbered directory with `tests.py`. Conftest files inject `card_impl` fixtures via `CardRegistry` class-name mapping.
 
 ## Testing Approach
 
