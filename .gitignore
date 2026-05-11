@@ -6,6 +6,7 @@ dist/
 build/
 *.pyc
 config.yaml
+replay_page*
 
 benchmarks/*
 
@@ -13,3 +14,4 @@ benchmarks/*
 data/sets/*.json
 .review-venv/
 dist-review/
+data/replays/*

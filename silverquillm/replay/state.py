@@ -361,6 +361,66 @@ def infer_actions(
                     details={"parent_id": obj.parent_id},
                 ))
 
+    # Ability resolutions: GameObjectType_Ability was on stack in prev but is gone in curr
+    prev_zone_types: dict[int, str] = {z.zone_id: z.type for z in prev.zones.values()}
+    for iid, obj in prev.game_objects.items():
+        if (
+            obj.type == "GameObjectType_Ability"
+            and iid not in curr.game_objects
+            and prev_zone_types.get(obj.zone_id, "") == "ZoneType_Stack"
+        ):
+            source_name = card_names.get(obj.object_source_grp_id or 0, "")
+            actions.append(ReplayAction(
+                action_type="ability_resolution",
+                turn_number=turn,
+                active_player=active,
+                player_seat_id=obj.controller_seat_id,
+                card_name=source_name,
+                grp_id=obj.object_source_grp_id or 0,
+                instance_id=iid,
+                source_zone="ZoneType_Stack",
+                dest_zone="",
+                details={"parent_id": obj.parent_id},
+            ))
+
+    # Auto-resolved abilities (created & deleted in same diff): detect via annotations
+    # AnnotationType_ResolveTrigger / AnnotationType_TriggerAbility point to ability objects
+    # that never persisted long enough to appear in prev or curr game_objects.
+    _detected_ability_iids: set[int] = {
+        a.instance_id
+        for a in actions
+        if a.action_type in ("ability_activation", "ability_resolution")
+    }
+    for ann in curr.annotations:
+        if not (
+            "AnnotationType_ResolveTrigger" in ann.type
+            or "AnnotationType_TriggerAbility" in ann.type
+        ):
+            continue
+        affector_id = ann.affector_id
+        if affector_id in _detected_ability_iids:
+            continue
+        # Look up the ability object from prev (most likely) or curr
+        ability_obj = prev.game_objects.get(affector_id) or curr.game_objects.get(affector_id)
+        if ability_obj is None or ability_obj.type != "GameObjectType_Ability":
+            continue
+        source_name = card_names.get(ability_obj.object_source_grp_id or 0, "")
+        if not source_name:
+            continue
+        actions.append(ReplayAction(
+            action_type="ability_resolution",
+            turn_number=turn,
+            active_player=active,
+            player_seat_id=ability_obj.controller_seat_id,
+            card_name=source_name,
+            grp_id=ability_obj.object_source_grp_id or 0,
+            instance_id=affector_id,
+            source_zone="",
+            dest_zone="",
+            details={"parent_id": ability_obj.parent_id},
+        ))
+        _detected_ability_iids.add(affector_id)
+
     # Combat phase detection
     prev_step = prev.turn_info.step
     curr_step = curr.turn_info.step

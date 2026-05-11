@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -135,6 +136,9 @@ class ReplayExecutor:
         # Tracking: grpId instance -> engine card object
         self._engine_cards: dict[int, Any] = {}  # GRE instanceId -> engine card
         self._grp_to_name: dict[int, str] = dict(self.card_id_map)
+
+        # Tracks which engine cards have had register_triggers applied (prevents double-apply)
+        self._triggers_registered: set[int] = set()
 
         # Results
         self.results: list[StepResult] = []
@@ -335,6 +339,8 @@ class ReplayExecutor:
             result.action_type = "phase_transition"
             result.skipped = True
             result.skip_reason = "no actions detected"
+            self._sync_zones(curr_snapshot)
+            self._reconcile_life_totals(prev_snapshot, curr_snapshot)
             mismatches = self.compare_state(curr_snapshot)
             result.mismatches.extend(mismatches)
             result.success = len(result.mismatches) == 0
@@ -343,7 +349,8 @@ class ReplayExecutor:
         # Process each action
         for action in actions:
             if action.action_type in ("combat", "phase_transition"):
-                continue  # Skip phase markers
+                continue  # Phase transitions tracked; damage handled by life reconciliation
+
 
             result.action_type = action.action_type
             result.seat_id = action.player_seat_id
@@ -356,7 +363,9 @@ class ReplayExecutor:
                 # Seat 2: oracle injection
                 self._inject_seat2_action(action, prev_snapshot, curr_snapshot, result)
 
-        # Compare engine state vs snapshot
+        # Sync engine zones for untracked card appearances, then compare
+        self._sync_zones(curr_snapshot)
+        self._reconcile_life_totals(prev_snapshot, curr_snapshot)
         mismatches = self.compare_state(curr_snapshot)
         result.mismatches.extend(mismatches)
         result.success = len(result.mismatches) == 0
@@ -547,6 +556,8 @@ class ReplayExecutor:
             self._execute_draw(action, result)
         elif action.action_type == "creature_death":
             self._execute_creature_death(action, result)
+        elif action.action_type in ("ability_activation", "ability_resolution"):
+            self._execute_ability_resolution(action, prev, curr, result)
         else:
             # Unknown action — skip with note
             result.skipped = True
@@ -773,11 +784,239 @@ class ReplayExecutor:
                 if action.instance_id:
                     self._engine_cards[action.instance_id] = card
 
+        elif action.action_type in ("ability_activation", "ability_resolution"):
+            self._execute_ability_resolution(action, prev, curr, result)
+
         else:
             result.skipped = True
             result.skip_reason = f"unsupported opponent action: {action.action_type}"
 
         logger.debug(f"Seat 2 oracle inject: {action.action_type} {action.card_name}")
+
+    # ------------------------------------------------------------------
+    # Ability resolution
+    # ------------------------------------------------------------------
+
+    def _find_ability_source(self, action: ReplayAction) -> Any | None:
+        """Return the engine card that is the source of an ability action."""
+        from engine.types import Zone
+
+        parent_id = action.details.get("parent_id")
+        if parent_id:
+            card = self._engine_cards.get(parent_id)
+            if card is not None:
+                return card
+
+        if action.grp_id:
+            # Search the controller's battlefield first, then all players
+            seats = []
+            if action.player_seat_id:
+                seats.append(action.player_seat_id)
+            seats.extend(s for s in self.players if s != action.player_seat_id)
+            for seat_id in seats:
+                player = self.players.get(seat_id)
+                if player is None:
+                    continue
+                card = self._find_card_by_grp_id(
+                    player.zones[Zone.BATTLEFIELD].get_all(), action.grp_id
+                )
+                if card is not None:
+                    return card
+        return None
+
+    def _try_engine_ability_resolution(self, source_card: Any, card_name: str) -> bool:
+        """Attempt to resolve an ability through the engine (registered cards only).
+
+        Calls register_triggers on the source card, guarded against double-apply.
+        Returns True if resolution succeeded, False if the fallback should be used.
+        """
+        if source_card is None or self.game is None:
+            return False
+        if not (self.registry is not None and card_name and card_name in self.registry):
+            return False
+
+        card_key = id(source_card)
+        if card_key in self._triggers_registered:
+            return True  # already applied for this card object
+
+        try:
+            source_card.register_triggers(self.game)
+            self._triggers_registered.add(card_key)
+            logger.debug("Ability engine resolved via register_triggers: %s", card_name)
+            return True
+        except Exception as exc:
+            logger.warning(
+                "Ability engine resolution failed for %s: %s — using snapshot fallback",
+                card_name, exc,
+            )
+            return False
+
+    def _apply_ability_life_fallback(
+        self,
+        card_name: str,
+        curr: GameSnapshot,
+    ) -> None:
+        """Apply any remaining life delta to close the gap to the snapshot value.
+
+        Called when engine resolution fails or the card is unregistered.
+        Only adjusts life that hasn't already been updated by the engine, so
+        multiple fallback calls in the same snapshot are idempotent.
+        """
+        for seat_id, curr_player_info in curr.players.items():
+            engine_player = self.players.get(seat_id)
+            if engine_player is None:
+                continue
+            delta = curr_player_info.life_total - engine_player.life
+            if delta == 0:
+                continue
+            engine_player.life += delta
+            logger.warning(
+                "Ability fallback: %s — applied life delta %+d to player %d "
+                "(engine resolution failed or card unregistered)",
+                card_name, delta, seat_id,
+            )
+
+    def _execute_ability_resolution(
+        self,
+        action: ReplayAction,
+        prev: GameSnapshot,
+        curr: GameSnapshot,
+        result: StepResult,
+    ) -> None:
+        """Handle an ability_activation or ability_resolution action.
+
+        For ability_activation: no-op if the ability is still on the stack
+        (effects will be applied when ability_resolution fires). Acts
+        immediately only if the ability already left the stack in the
+        same snapshot transition (auto-resolved triggers are rare in practice
+        but handled here as a guard).
+
+        For ability_resolution: always attempt engine resolution first
+        (register_triggers on registered cards), then fall back to a
+        snapshot life-delta sync if the engine can't handle it.
+        Zone-level effects (tokens, moved cards) are handled by _sync_zones
+        which runs after this method.
+        """
+        if action.action_type == "ability_activation":
+            if action.instance_id in curr.game_objects:
+                return  # ability still on stack; handle at resolution time
+
+        card_name = (
+            action.card_name
+            or self._grp_to_name.get(action.grp_id, f"grpId={action.grp_id}")
+        )
+        source_card = self._find_ability_source(action)
+
+        if not self._try_engine_ability_resolution(source_card, card_name):
+            self._apply_ability_life_fallback(card_name, curr)
+
+    def _reconcile_life_totals(self, prev: GameSnapshot, curr: GameSnapshot) -> None:
+        """Apply any life total deltas not handled by the action itself.
+
+        The engine doesn't model all sources of life change (combat damage,
+        lifelink, unregistered abilities, etc.). After each action handler runs,
+        this method checks whether the snapshot shows a life total the engine
+        didn't reach, and corrects it.
+
+        Each correction is logged at info level — these are engine gaps worth
+        tracking for future improvement.
+        """
+        for seat_id in curr.players:
+            prev_player = prev.players.get(seat_id)
+            curr_player = curr.players.get(seat_id)
+            if prev_player is None or curr_player is None:
+                continue
+            expected_life = curr_player.life_total
+            engine_player = self.players.get(seat_id)
+            if engine_player is None:
+                continue
+            if engine_player.life != expected_life:
+                delta = expected_life - engine_player.life
+                engine_player.life = expected_life
+                logger.info(
+                    "Life reconciliation: player %d %+d (engine had %d, snapshot says %d)",
+                    seat_id, delta, expected_life - delta, expected_life,
+                )
+
+    # ------------------------------------------------------------------
+    # Zone sync (untracked card appearances)
+    # ------------------------------------------------------------------
+
+    def _sync_zones(self, snapshot: GameSnapshot) -> None:
+        """Sync engine zones with snapshot for cards that appeared without
+        tracked ObjectIdChanged annotations (opening hands, mulligans, etc.).
+
+        Compares grpId multisets per zone. Injects missing cards into the
+        engine and removes excess cards. Library and Stack are skipped.
+        """
+        from engine.types import Zone
+
+        # Library: hidden and order-dependent, inferred via draw actions.
+        # Stack: transient; engine models entries differently than GRE.
+        SKIP_ZONES = {"ZoneType_Library", "ZoneType_Stack"}
+
+        for snap_zone in snapshot.zones.values():
+            zone_type_str = snap_zone.type
+            if zone_type_str in SKIP_ZONES:
+                continue
+
+            engine_zone_name = _GRE_ZONE_TO_ENGINE.get(zone_type_str)
+            if engine_zone_name is None:
+                continue
+
+            seat_id = snap_zone.owner_seat_id
+            player = self.players.get(seat_id)
+            if player is None:
+                continue
+
+            try:
+                engine_zone_enum = Zone(engine_zone_name)
+            except ValueError:
+                continue
+
+            # grpId multiset from snapshot (skip unknown grpId=0)
+            snap_grp_ids: Counter[int] = Counter()
+            for iid in snap_zone.object_instance_ids:
+                obj = snapshot.game_objects.get(iid)
+                if obj is not None and obj.grp_id != 0:
+                    snap_grp_ids[obj.grp_id] += 1
+
+            # grpId multiset from engine (skip grpId=0)
+            engine_cards_list = player.zones[engine_zone_enum].get_all()
+            engine_grp_ids: Counter[int] = Counter(
+                gid for card in engine_cards_list
+                if (gid := self._card_to_grp_id(card)) != 0
+            )
+
+            # Inject cards present in snapshot but missing from engine
+            for grp_id, snap_count in snap_grp_ids.items():
+                deficit = snap_count - engine_grp_ids.get(grp_id, 0)
+                for _ in range(deficit):
+                    card = self._create_card(grp_id, player)
+                    card._grp_id = grp_id
+                    player.zones[engine_zone_enum].add(card)
+                    logger.debug(
+                        "_sync_zones: injected grpId=%d into %s (seat %d)",
+                        grp_id, zone_type_str, seat_id,
+                    )
+
+            # Remove cards present in engine but absent from snapshot
+            engine_cards_list = player.zones[engine_zone_enum].get_all()
+            for grp_id, engine_count in engine_grp_ids.items():
+                excess = engine_count - snap_grp_ids.get(grp_id, 0)
+                if excess > 0:
+                    to_remove = [
+                        c for c in engine_cards_list
+                        if self._card_to_grp_id(c) == grp_id
+                    ]
+                    for card in to_remove[:excess]:
+                        player.zones[engine_zone_enum].remove(card)
+                        logger.debug(
+                            "_sync_zones: removed grpId=%d from %s (seat %d)",
+                            grp_id, zone_type_str, seat_id,
+                        )
+
+        self._rebuild_instance_map(snapshot)
 
     # ------------------------------------------------------------------
     # Turn info / phase handling

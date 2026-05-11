@@ -31,12 +31,26 @@ def _make_verbose_callback():
     return callback
 
 
+def _is_replay_file(path: Path) -> bool:
+    """Return True if this JSON file is a game replay (not metadata)."""
+    name = path.name
+    return (
+        name != "card_id_map.json"
+        and name != "event_details.json"
+        and not name.endswith("_info.json")
+    )
+
+
 def _collect_replay_files(path: Path) -> list[Path]:
-    """Collect replay JSON files from a path (file or directory)."""
+    """Collect replay JSON files from a path (file or directory).
+
+    Searches recursively so that a set directory like data/replays/fdn
+    finds replays nested under per-draft subdirectories.
+    """
     if path.is_file():
         return [path]
     elif path.is_dir():
-        return sorted(path.glob("*.json"))
+        return sorted(f for f in path.rglob("*.json") if _is_replay_file(f))
     return []
 
 
@@ -180,11 +194,6 @@ def validate(
 
     # Collect replay files
     replay_files = _collect_replay_files(path)
-    # Filter out non-replay JSON files (like card_id_map.json)
-    replay_files = [
-        f for f in replay_files
-        if f.name != "card_id_map.json"
-    ]
 
     if not replay_files:
         raise click.ClickException(f"No replay JSON files found at: {replay_path}")
