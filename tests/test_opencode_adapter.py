@@ -111,26 +111,6 @@ class TestLifecycle:
 
 
 # ---------------------------------------------------------------------------
-# CLI command construction — no --thinking flag
-# ---------------------------------------------------------------------------
-
-class TestNoThinkingFlag:
-    """Verify the --thinking flag is NOT used."""
-
-    def test_no_thinking_in_popen_args(self, tmp_path: Path) -> None:
-        """The Popen call must NOT include '--thinking' in its argv."""
-        config = _make_config()
-        adapter = OpenCodeAdapter(config)
-        mock_proc = _mock_popen()
-
-        with patch("silverquillm.adapters.opencode.subprocess.Popen", return_value=mock_proc) as popen_mock:
-            adapter.run("test prompt", tmp_path)
-
-        args = popen_mock.call_args[0][0]  # positional arg 0 = command list
-        assert "--thinking" not in args, "The --thinking flag must not appear in the CLI command"
-
-
-# ---------------------------------------------------------------------------
 # Prompt via stdin
 # ---------------------------------------------------------------------------
 

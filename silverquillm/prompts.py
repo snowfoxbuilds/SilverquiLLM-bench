@@ -27,7 +27,6 @@ You have access to:
 - foundations/ (browse working card implementations as reference)
 - card_spec.json (contains details on the cards you are implementing)
 - template.py (contains the starter template for your card implementation)
-- test_utils.py (you are not asked to write tests yet)
 
 Write your implementation to `blind_impl.py`.
 If you need to add or modify engine files, do so — but all previous cards' tests
