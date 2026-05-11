@@ -151,7 +151,7 @@ Key engine conventions to be aware of (from `KEY_DECISIONS.md`):
 
   Testability: All tests pass against the current engine.
 
-- [ ] **FDN audited tests: Batch 3 — Creatures with triggers and activated abilities (~65 cards)**
+- [x] **FDN audited tests: Batch 3 — Creatures with triggers and activated abilities (~65 cards)**
   Detail: Write per-card test files for all ETB trigger creatures (~29), death trigger creatures (~17), and activated ability creatures (~19) from FDN.
 
   ETB triggers: Test trigger firing on entry, trigger conditions ("if"/"when"/"may"), trigger with valid/no valid targets, interaction with bounce (re-entry → retrigger), blink effects.

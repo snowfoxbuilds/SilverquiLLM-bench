@@ -92,3 +92,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept reviewer; fix implementation and test.
 - **Reasoning**: The card's rules text says the source creature deals damage to the opponent's creature; it does not say those creatures fight.
 - **Impact**: `cards/foundations/simple_spells_batch3.py`, `tests/audited/fdn/105b/tests.py`.
+
+## Disagreement: FDN Batch 3 audited trigger and activated coverage gaps
+- **Reviewer comment (strict)**: Several activated-ability tests only assert ability presence, and several death-trigger tests are tautological/no-assertion or test the wrong trigger condition.
+- **Implementer justification**: Initial batch prioritized broad per-card file coverage and basic behavior smoke tests.
+- **Coordinator decision**: accept reviewer; require test revision.
+- **Reasoning**: The TODO explicitly requires observable activated ability costs/effects and death trigger behavior/conditions where practical.
+- **Impact**: `tests/audited/fdn/*/tests.py` for Batch 3 card directories.

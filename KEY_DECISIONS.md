@@ -172,6 +172,12 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: MTG's fight keyword implies mutual damage, while one-way damage effects do not.
 - **Impact**: `cards/foundations/simple_spells_batch3.py`, audited tests for fight-like spell wording.
 
+## FDN audited collector collisions use suffix directories
+- **Context**: Some FDN registry entries share collector numbers while per-card audited tests require one directory per implementation.
+- **Decision**: Use suffixed collector directories such as `105b`, `61b`, `219b`, and `228b` with explicit conftest overrides for colliding cards.
+- **Reasoning**: This preserves per-card isolation without overwriting the canonical numeric directory for the other card.
+- **Impact**: `tests/audited/fdn/conftest.py`, audited test directories for colliding FDN cards.
+
 ## Replay executor: Seat 1 engine API with fallback
 - **Context**: Seat 1 should use engine API for full validation, but some actions (spell casts) can't go through the full engine pipeline in replay mode.
 - **Decision**: Seat 1 uses engine API where feasible (land plays via `play_land()`, deaths via `move_to_zone()`). Falls back to direct zone mutation on engine rejection. Spell casts use direct mutation with correct destination routing (permanents→battlefield, instants/sorceries→graveyard). Stack simulation marked ENGINE LIMITATION.

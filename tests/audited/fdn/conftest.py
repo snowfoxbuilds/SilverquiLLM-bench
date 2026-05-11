@@ -46,6 +46,18 @@ _COLLECTOR_DIR_OVERRIDES: dict[str, str] = {
     # WitheringCurse (simple_spells_batch2).  Directory "105" stays
     # WitheringCurse (already existing tests); "105b" → FellingBlow.
     "105b": "Felling Blow",
+    # CN 61: Muse's Encouragement (simple_spells_batch2) collides with
+    # HighSocietyHunter (death_trigger_creatures).  Directory "61" stays
+    # Muse's Encouragement; "61b" → High-Society Hunter.
+    "61b": "High-Society Hunter",
+    # CN 219: Rapturous Moment (simple_spells_batch2) collides with
+    # ElvishArchdruid (activated_creatures).  Directory "219" stays
+    # Rapturous Moment; "219b" → Elvish Archdruid.
+    "219b": "Elvish Archdruid",
+    # CN 228: Social Snub (simple_spells_batch2) collides with
+    # MildManneredLibrarian (activated_creatures).  Directory "228" stays
+    # Social Snub; "228b" → Mild-Mannered Librarian.
+    "228b": "Mild-Mannered Librarian",
 }
 
 # All FDN register_* functions.
