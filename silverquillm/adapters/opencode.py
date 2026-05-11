@@ -97,7 +97,7 @@ class OpenCodeAdapter(AgentAdapter):
 
         # Launch opencode — no --thinking flag, prompt via stdin
         process = subprocess.Popen(
-            ["opencode", "run"],
+            ["opencode", "run", "--thinking"],
             cwd=str(workspace),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,

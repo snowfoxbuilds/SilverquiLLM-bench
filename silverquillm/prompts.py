@@ -25,6 +25,9 @@ You have access to:
 - base_classes.py (card base classes)
 - rules_overview.md + rules lookup tool (search MTG rules by keyword/number)
 - foundations/ (browse working card implementations as reference)
+- card_spec.json (contains details on the cards you are implementing)
+- template.py (contains the starter template for your card implementation)
+- test_utils.py (you are not asked to write tests yet)
 
 Write your implementation to `blind_impl.py`.
 If you need to add or modify engine files, do so — but all previous cards' tests
@@ -74,6 +77,16 @@ Test for:
 - Core abilities working correctly
 - Edge cases (no valid targets, empty board, etc.)
 - Interaction with game rules (stack, priority, state-based actions)
+
+You have access to:
+- engine_api.md (game engine API reference)
+- engine/ (game engine source — you may extend it if this card needs mechanics not yet supported)
+- base_classes.py (card base classes)
+- rules_overview.md + rules lookup tool (search MTG rules by keyword/number)
+- foundations/ (browse working card implementations as reference)
+- card_spec.json (contains details on the cards you are implementing)
+- template.py (contains the starter template for your card implementation)
+- test_utils.py (you are not asked to write tests yet)
 
 Save your updated implementation to `tested_impl.py`.
 Save your tests to `tests.py`.
