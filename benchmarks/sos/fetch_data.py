@@ -138,7 +138,16 @@ def fetch_sos_data(*, force: bool = False) -> list[dict[str, Any]]:
         soa_count = sum(
             1 for c in cached if c.get("set_code", c.get("set", "")) == "soa"
         )
-        if soa_count >= 65:
+        spg_rows = [
+            c for c in cached
+            if c.get("set_code", c.get("set", "")) == "spg"
+        ]
+        spg_cns = [int(c.get("collector_number", 0)) for c in spg_rows]
+        if (
+            soa_count >= 65
+            and len(spg_rows) == 10
+            and sorted(spg_cns) == list(range(149, 159))
+        ):
             return cached
         # Stale cache — fall through to rebuild
 
@@ -178,8 +187,49 @@ def fetch_sos_data(*, force: bool = False) -> list[dict[str, Any]]:
         with open(soa_cache, "w", encoding="utf-8") as f:
             json.dump(soa_raw, f, indent=2)
 
-    # Merge SOS + SOA cards
+    # Fetch Special Guest cards from SPG set (collector numbers 149–158).
+    # These are part of the SOS Draft Set but live in the SPG Scryfall set.
+    # Distinct from FDN Special Guests (SPG 074–083) added in Phase 5.
+    spg_cache = _REPO_ROOT / "data" / "sets" / "spg_cn149-158.json"
+    if force and spg_cache.exists():
+        spg_cache.unlink()
+    if spg_cache.exists() and not force:
+        with open(spg_cache, encoding="utf-8") as f:
+            spg_raw: list[dict[str, Any]] = json.load(f)
+        # Validate collector-number range and de-duplicate cached data
+        seen_cns: dict[int, dict[str, Any]] = {}
+        for c in spg_raw:
+            cn = int(c.get("collector_number", 0))
+            if 149 <= cn <= 158 and cn not in seen_cns:
+                seen_cns[cn] = c
+        spg_raw = list(seen_cns.values())
+        # Verify completeness — exactly one card for each cn 149-158
+        if set(seen_cns.keys()) != set(range(149, 159)):
+            # Incomplete cache — refetch
+            spg_query = "e%3Aspg+cn%3E%3D149+cn%3C%3D158"
+            spg_raw, _ = fetch_scryfall_query(spg_query, set_code="spg")
+            spg_raw = [
+                c for c in spg_raw
+                if 149 <= int(c.get("collector_number", 0)) <= 158
+            ]
+            with open(spg_cache, "w", encoding="utf-8") as f:
+                json.dump(spg_raw, f, indent=2)
+    else:
+        spg_query = "e%3Aspg+cn%3E%3D149+cn%3C%3D158"
+        spg_raw, _ = fetch_scryfall_query(spg_query, set_code="spg")
+        # Filter to ensure only cn 149–158 (defensive, mirrors cache validation)
+        spg_raw = [
+            c for c in spg_raw
+            if 149 <= int(c.get("collector_number", 0)) <= 158
+        ]
+        # Cache the SPG subset for future runs
+        spg_cache.parent.mkdir(parents=True, exist_ok=True)
+        with open(spg_cache, "w", encoding="utf-8") as f:
+            json.dump(spg_raw, f, indent=2)
+
+    # Merge SOS + SOA + SPG cards
     raw_cards.extend(soa_raw)
+    raw_cards.extend(spg_raw)
 
     # Normalize
     normalized = [_normalize_card(c) for c in raw_cards]

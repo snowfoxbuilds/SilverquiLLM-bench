@@ -244,15 +244,32 @@ class TestFetchSosDataWorkflow:
             "expected 65 SOA cards after rebuild"
         )
 
+    @staticmethod
+    def _spg_raw_cards() -> list[dict[str, Any]]:
+        """Build 10 SPG Special Guest cards for cn 149–158."""
+        return [
+            _make_raw_scryfall_card(
+                name=f"SPG Guest {i}",
+                set_code="spg",
+                collector_number=str(i),
+            )
+            for i in range(149, 159)
+        ]
+
     def test_fresh_cache_with_soa_returns_cached(self, tmp_path: Path) -> None:
-        """A cache that already has 65 SOA cards should be returned without re-fetching."""
+        """A cache that already has SOA + SPG cards should be returned without re-fetching.
+
+        After item 2, a fresh cache must include exactly 10 SPG cards (cn 149–158)
+        in addition to 65 SOA cards. A cache missing the SPG subset is stale.
+        """
         import benchmarks.sos.fetch_data as mod
         from benchmarks.sos.fetch_data import _normalize_card
 
-        # Build a complete cache with both SOS and SOA
+        # Build a complete cache with SOS, SOA, and SPG
         complete = (
             [_normalize_card(c) for c in self._sos_raw_cards(10)]
             + [_normalize_card(c) for c in self._soa_raw_cards(65)]
+            + [_normalize_card(c) for c in self._spg_raw_cards()]
         )
         output_path = tmp_path / "sos.json"
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -270,7 +287,7 @@ class TestFetchSosDataWorkflow:
 
         # Should return cached data without calling fetch_scryfall_query
         mock_fetch_query.assert_not_called()
-        assert len(result) == 75
+        assert len(result) == 85  # 10 SOS + 65 SOA + 10 SPG
 
 
 # ---------------------------------------------------------------------------

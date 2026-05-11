@@ -144,7 +144,7 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 
 ## Query-specific Scryfall subset caches
 - **Context**: SOS Draft Set composition pulls collector-number subsets from related sets, such as SOA Mystical Archives, without needing or representing the full source set.
-- **Decision**: Cache collector-number subset queries in query-specific files (for example `soa_cn1-65.json`) rather than generic whole-set cache names like `soa.json`, and validate/filter cached subset data before merging.
+- **Decision**: Cache collector-number subset queries in query-specific files (for example `soa_cn1-65.json` or `spg_cn149-158.json`) rather than generic whole-set cache names like `soa.json`, and validate/filter cached subset data before merging. For fixed Draft Set subsets, cache freshness requires the exact expected collector-number set with no duplicates or extra rows.
 - **Reasoning**: A generic cache name can either read unrelated full-set data or overwrite a cache other callers expect to contain the full set.
 - **Impact**: `benchmarks/sos/fetch_data.py`; future Scryfall subset fetches should use query-specific cache names.
 

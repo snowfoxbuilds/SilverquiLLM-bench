@@ -17,7 +17,7 @@ See `CONTEXT.md` for domain vocabulary (Draft Set, Card Pool, Audited Eval). See
   - Ensure `card_classifier.py` and `card_spec.py` handle multi-set card pools (cards with `set_code="soa"` alongside `set_code="sos"`).
   Testability: After fetch, `sos.json` contains cards with `set_code="soa"` and collector numbers 1–65. Count should be exactly 65 SOA cards.
 
-- [ ] **Include Special Guests (SPG set, cn 149–158)**
+- [x] **Include Special Guests (SPG set, cn 149–158)**
   Detail: The SOS Draft Set includes 10 Special Guest cards from the SPG set (collector numbers 149–158). These are currently missing from `fetch_data.py`. Update the Scryfall fetch to also pull `e:spg cn>=149 cn<=158`. Reference: [Scryfall SPG search](https://scryfall.com/search?order=set&q=e%3Aspg%20cn%E2%89%A5149%20cn%E2%89%A4158&unique=prints).
 
   Changes needed:
