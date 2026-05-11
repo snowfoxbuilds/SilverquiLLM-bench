@@ -142,11 +142,11 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: Wholesale replacement via `from_dict()` zeros out omitted fields, corrupting state.
 - **Impact**: `silverquillm/replay/state.py`.
 
-## Query-specific Scryfall subset caches
-- **Context**: SOS Draft Set composition pulls collector-number subsets from related sets, such as SOA Mystical Archives, without needing or representing the full source set.
-- **Decision**: Cache collector-number subset queries in query-specific files (for example `soa_cn1-65.json` or `spg_cn149-158.json`) rather than generic whole-set cache names like `soa.json`, and validate/filter cached subset data before merging. For fixed Draft Set subsets, cache freshness requires the exact expected collector-number set with no duplicates or extra rows.
-- **Reasoning**: A generic cache name can either read unrelated full-set data or overwrite a cache other callers expect to contain the full set.
-- **Impact**: `benchmarks/sos/fetch_data.py`; future Scryfall subset fetches should use query-specific cache names.
+## Exact Scryfall subset cache validation
+- **Context**: SOS Draft Set composition pulls fixed collector-number subsets from related sets, such as SOA Mystical Archives and SPG Special Guests, without needing or representing the full source set.
+- **Decision**: Cache collector-number subset queries in query-specific files (for example `soa_cn1-65.json` or `spg_cn149-158.json`) rather than generic whole-set cache names like `soa.json`. Freshness checks for fixed Draft Set subsets use exact sorted collector-number equality: one row for every expected collector number, no gaps, duplicates, or extra rows.
+- **Reasoning**: Generic cache names can read unrelated full-set data or overwrite caches other callers expect to contain the full set. Presence/count-only checks can return stale or corrupted pools that violate the fixed 346-card SOS Draft Set invariant.
+- **Impact**: `benchmarks/sos/fetch_data.py`; future Scryfall subset fetches should use query-specific cache names and exact subset validation.
 
 ## Replay executor: Seat 1 engine API with fallback
 - **Context**: Seat 1 should use engine API for full validation, but some actions (spell casts) can't go through the full engine pipeline in replay mode.

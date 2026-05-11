@@ -29,3 +29,17 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Implementer's approach**: Item 2 correctly expanded cache freshness requirements to require the exact SPG 149-158 subset as well.
 - **Coordinator decision**: fix tests
 - **Reasoning**: After item 2, a cache with SOA but no SPG is intentionally stale. The prior test fixture must include the SPG subset to keep testing the fresh-cache short-circuit behavior.
+
+## Disagreement: Enforce SOS base set draft cutoff at collector number 271
+- **Reviewer comment (strict)**: Cached `sos.json` freshness should verify the complete SOS base collector-number set, not only absence of SOS collector numbers above 271.
+- **Implementer justification**: Initial implementation filtered fresh fetches and rejected caches with above-cutoff SOS cards, but did not reject truncated SOS caches.
+- **Coordinator decision**: accept reviewer; require implementation revision.
+- **Reasoning**: The TODO requires final pool count 346, which implies 271 SOS base cards. A truncated cache with no above-cutoff cards would violate the count while passing absence-only validation.
+- **Impact**: `benchmarks/sos/fetch_data.py`.
+
+## Disagreement: SOS Draft Set exact output-cache freshness
+- **Reviewer comment (strict)**: Cached `sos.json` freshness must validate the SOA subset exactly, not only `>=65` SOA rows, otherwise duplicate or extra SOA rows can make the final pool exceed 346.
+- **Implementer justification**: The previous item 3 revision preserved the older SOA `>=65` check while tightening SOS and SPG.
+- **Coordinator decision**: accept reviewer; require final implementation revision.
+- **Reasoning**: Once the pool is fixed at 346 cards, all fixed subsets need exact collector-number validation for stale caches.
+- **Impact**: `benchmarks/sos/fetch_data.py`; this reinforces the exact fixed-subset cache convention already in `KEY_DECISIONS.md`.

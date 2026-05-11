@@ -26,7 +26,7 @@ See `CONTEXT.md` for domain vocabulary (Draft Set, Card Pool, Audited Eval). See
   - These are distinct from the FDN Special Guests (SPG 074–083) already implemented in Phase 5.
   Testability: After fetch, `sos.json` contains 10 cards with `set_code="spg"` and collector numbers 149–158.
 
-- [ ] **Enforce SOS base set draft cutoff at collector number 271**
+- [x] **Enforce SOS base set draft cutoff at collector number 271**
   Detail: SOS base set cards with collector number > 271 are alternate-art reprints / duplicates and should be excluded from the Draft Set. Update `fetch_data.py` to filter out SOS cards (`set_code="sos"`) with `int(collector_number) > 271`.
 
   Changes needed:

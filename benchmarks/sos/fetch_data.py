@@ -46,6 +46,10 @@ TRACKED_TYPES = [
 #: New SOS mechanics to search for in oracle text.
 NEW_MECHANICS = ["Prepared", "Converge", "Miracle", "Opus"]
 
+#: Maximum collector number for SOS base set cards in the Draft Set.
+#: Cards with collector_number > 271 are alternate-art reprints / duplicates.
+SOS_BASE_MAX_COLLECTOR_NUMBER = 271
+
 
 def _normalize_card(card_json: dict[str, Any]) -> dict[str, Any]:
     """Normalize a raw Scryfall card JSON object.
@@ -135,18 +139,33 @@ def fetch_sos_data(*, force: bool = False) -> list[dict[str, Any]]:
     if not force and OUTPUT_PATH.exists():
         with open(OUTPUT_PATH, encoding="utf-8") as f:
             cached = json.load(f)
-        soa_count = sum(
-            1 for c in cached if c.get("set_code", c.get("set", "")) == "soa"
-        )
+        # Validate SOA subset: exactly one card for each collector number 1-65.
+        soa_cns = [
+            int(c.get("collector_number", 0))
+            for c in cached
+            if c.get("set_code", c.get("set", "")) == "soa"
+        ]
+        soa_complete = sorted(soa_cns) == list(range(1, 66))
         spg_rows = [
             c for c in cached
             if c.get("set_code", c.get("set", "")) == "spg"
         ]
         spg_cns = [int(c.get("collector_number", 0)) for c in spg_rows]
+        # Validate SOS base-set completeness: exactly one card for each
+        # collector number 1-271, no duplicates, none above the cutoff.
+        sos_cns = [
+            int(c.get("collector_number", 0))
+            for c in cached
+            if c.get("set_code", c.get("set", "")) == "sos"
+        ]
+        sos_complete = sorted(sos_cns) == list(
+            range(1, SOS_BASE_MAX_COLLECTOR_NUMBER + 1)
+        )
         if (
-            soa_count >= 65
+            soa_complete
             and len(spg_rows) == 10
             and sorted(spg_cns) == list(range(149, 159))
+            and sos_complete
         ):
             return cached
         # Stale cache — fall through to rebuild
@@ -162,6 +181,13 @@ def fetch_sos_data(*, force: bool = False) -> list[dict[str, Any]]:
     # Read the raw Scryfall cache to get raw JSON (not CardMetadata)
     with open(raw_cache, encoding="utf-8") as f:
         raw_cards: list[dict[str, Any]] = json.load(f)
+
+    # Filter SOS base set to collector number <= 271 (draft cutoff).
+    # Cards above 271 are alternate-art reprints / duplicates.
+    raw_cards = [
+        c for c in raw_cards
+        if int(c.get("collector_number", 0)) <= SOS_BASE_MAX_COLLECTOR_NUMBER
+    ]
 
     # Fetch Mystical Archive cards from SOA set (collector numbers 1–65).
     # These are part of the SOS Draft Set but live in a separate Scryfall set.
