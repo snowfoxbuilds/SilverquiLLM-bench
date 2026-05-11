@@ -86,9 +86,8 @@ class TestBenchmarkEndToEnd:
 
             session._run_pytest = _mock_pytest  # type: ignore[assignment]
 
-            # 3c. Setup workspace (mock validate_setup to avoid real adapter call)
-            with patch("silverquillm.agent_session.validate_setup", return_value=True):
-                workspace = session.setup_workspace()
+            # 3c. Setup workspace
+            workspace = session.setup_workspace()
 
             # 3d. Assert workspace contents
             assert (workspace / "card_spec.json").exists()

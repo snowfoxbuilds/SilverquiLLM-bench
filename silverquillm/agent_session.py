@@ -15,6 +15,7 @@ Public API:
 
 from __future__ import annotations
 
+import datetime
 import difflib
 import json
 import logging
@@ -29,7 +30,6 @@ from pathlib import Path
 from typing import Any
 
 from silverquillm.adapters import AgentAdapter, get_adapter
-from silverquillm.setup_questions import validate_setup
 from silverquillm.config import BenchmarkConfig
 from silverquillm.prompts import (
     blind_implementation_prompt,
@@ -46,6 +46,7 @@ __all__ = [
     "TestInformedResult",
     "_append_postmortem",
     "_generate_agent_thoughts",
+    "append_raw_log",
     "init_run_engine",
     "commit_engine_changes",
     "compute_engine_diff",
@@ -264,14 +265,6 @@ class AgentSession:
         adapter = self._get_adapter()
         adapter.setup()
 
-        # Validate adapter with setup questions (if file exists)
-        setup_q_path = repo_root / "setup_questions.json"
-        if setup_q_path.exists():
-            if not validate_setup(adapter, setup_q_path, workspace):
-                raise RuntimeError(
-                    "Adapter failed setup-questions validation; aborting run."
-                )
-
         return workspace
 
     # ------------------------------------------------------------------
@@ -343,6 +336,7 @@ class AgentSession:
         start = time.monotonic()
 
         postmortem_path = _get_postmortem_path(self.config, self.card_name)
+        raw_log_path = _get_raw_log_path(self.config)
 
         try:
             output = self._run_agent(prompt, workspace)
@@ -358,6 +352,8 @@ class AgentSession:
                     round_num=1,
                     status="error",
                 )
+            if raw_log_path:
+                append_raw_log(raw_log_path, self.card_name, "blind", 1, prompt, "TimeoutExpired")
             return BlindResult(
                 impl_path=None,
                 tokens=0,
@@ -367,16 +363,19 @@ class AgentSession:
             )
         except Exception as exc:
             elapsed = time.monotonic() - start
+            response_text = f"{type(exc).__name__}: {exc}"
             if postmortem_path:
                 _append_postmortem(
                     postmortem_path=postmortem_path,
                     prompt=prompt,
-                    response=f"{type(exc).__name__}: {exc}",
+                    response=response_text,
                     tokens=None,
                     timing_ms=elapsed * 1000,
                     round_num=1,
                     status="error",
                 )
+            if raw_log_path:
+                append_raw_log(raw_log_path, self.card_name, "blind", 1, prompt, response_text)
             raise
 
         elapsed = time.monotonic() - start
@@ -392,6 +391,8 @@ class AgentSession:
                 round_num=1,
                 status="success",
             )
+        if raw_log_path:
+            append_raw_log(raw_log_path, self.card_name, "blind", 1, prompt, output)
 
         # Look for implementation file produced by the agent
         impl_path = workspace / "blind_impl.py"
@@ -491,6 +492,7 @@ class AgentSession:
         start = time.monotonic()
 
         postmortem_path = _get_postmortem_path(self.config, self.card_name)
+        raw_log_path = _get_raw_log_path(self.config)
 
         prompt = test_informed_prompt(
             self.card_spec,
@@ -519,6 +521,8 @@ class AgentSession:
                             round_num=round_num,
                             status="error",
                         )
+                    if raw_log_path:
+                        append_raw_log(raw_log_path, self.card_name, "test_informed", round_num, prompt, "TimeoutExpired")
                     return TestInformedResult(
                         impl_path=card_impl_path if card_impl_path.exists() else None,
                         tests_path=workspace / "tests.py" if (workspace / "tests.py").exists() else None,
@@ -531,16 +535,19 @@ class AgentSession:
                     )
                 except Exception as exc:
                     round_elapsed = time.monotonic() - round_start
+                    response_text = f"{type(exc).__name__}: {exc}"
                     if postmortem_path:
                         _append_postmortem(
                             postmortem_path=postmortem_path,
                             prompt=prompt,
-                            response=f"{type(exc).__name__}: {exc}",
+                            response=response_text,
                             tokens=None,
                             timing_ms=round_elapsed * 1000,
                             round_num=round_num,
                             status="error",
                         )
+                    if raw_log_path:
+                        append_raw_log(raw_log_path, self.card_name, "test_informed", round_num, prompt, response_text)
                     raise
 
                 # Update metrics for this round before checking violations
@@ -574,6 +581,8 @@ class AgentSession:
                             status="success",
                             tests_passing=False,
                         )
+                    if raw_log_path:
+                        append_raw_log(raw_log_path, self.card_name, "test_informed", round_num, prompt, output)
                     return TestInformedResult(
                         impl_path=card_impl_path if card_impl_path.exists() else None,
                         tests_path=workspace / "tests.py" if (workspace / "tests.py").exists() else None,
@@ -607,6 +616,8 @@ class AgentSession:
                                 round_num=round_num,
                                 status="success",
                             )
+                        if raw_log_path:
+                            append_raw_log(raw_log_path, self.card_name, "test_informed", round_num, prompt, output)
                         prompt = test_informed_prompt(
                             self.card_spec,
                             round_num=round_num + 1,
@@ -637,6 +648,8 @@ class AgentSession:
                         status="success",
                         tests_passing=round_tests_passing,
                     )
+                if raw_log_path:
+                    append_raw_log(raw_log_path, self.card_name, "test_informed", round_num, prompt, output)
 
                 if tests_passed:
                     break
@@ -811,6 +824,41 @@ def _get_postmortem_path(config: BenchmarkConfig, card_name: str) -> Path | None
     if not config.output_dir:
         return None
     return Path(config.output_dir) / card_name / "postmortem.jsonl"
+
+
+def _get_raw_log_path(config: BenchmarkConfig) -> Path | None:
+    """Return the run-level raw_agent_log.jsonl path, or None if output_dir is not set."""
+    if not config.output_dir:
+        return None
+    return Path(config.output_dir) / "raw_agent_log.jsonl"
+
+
+def append_raw_log(
+    run_log_path: Path,
+    card_name: str,
+    phase: str,
+    round_num: int,
+    prompt: str,
+    response: str,
+) -> None:
+    """Append a JSON line to the run-level raw agent log.
+
+    Unlike postmortem.jsonl, responses are never truncated — this is the
+    authoritative full-output record for the entire run.
+    """
+    entry: dict[str, Any] = {
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        ),
+        "card_name": card_name,
+        "phase": phase,
+        "round": round_num,
+        "prompt": prompt,
+        "response": response,
+    }
+    run_log_path.parent.mkdir(parents=True, exist_ok=True)
+    with run_log_path.open("a") as f:
+        f.write(json.dumps(entry) + "\n")
 
 
 # ---------------------------------------------------------------------------

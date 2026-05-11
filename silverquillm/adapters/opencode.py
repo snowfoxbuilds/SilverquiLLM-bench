@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import threading
 from pathlib import Path
 
@@ -118,6 +119,8 @@ class OpenCodeAdapter(AgentAdapter):
             assert process.stderr is not None
             for line in process.stderr:
                 stderr_lines.append(line)
+                sys.stderr.write(f"\033[2;36m{line}\033[0m")
+                sys.stderr.flush()
 
         t = threading.Thread(target=_stream_stderr, daemon=True)
         t.start()
@@ -126,6 +129,8 @@ class OpenCodeAdapter(AgentAdapter):
         assert process.stdout is not None
         for line in process.stdout:
             stdout_lines.append(line)
+            sys.stderr.write(f"\033[36m{line}\033[0m")
+            sys.stderr.flush()
 
         t.join(timeout=5)
         process.wait(timeout=self.config.agent.timeout_per_card)

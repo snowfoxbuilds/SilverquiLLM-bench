@@ -30,6 +30,34 @@ from silverquillm.replay.cli import validate as validate_cmd
 from silverquillm.run_utils import _session_results_to_dicts
 
 
+# ---------------------------------------------------------------------------
+# ANSI color helpers
+# ---------------------------------------------------------------------------
+
+_BOLD = "\033[1m"
+_GREEN = "\033[32m"
+_YELLOW = "\033[33m"
+_RED = "\033[31m"
+_CYAN = "\033[36m"
+_DIM = "\033[2m"
+_RESET = "\033[0m"
+
+
+def _sys(msg: str) -> str:
+    """Format a system message (bold green)."""
+    return f"{_BOLD}{_GREEN}{msg}{_RESET}"
+
+
+def _err(msg: str) -> str:
+    """Format an error message (bold red)."""
+    return f"{_BOLD}{_RED}{msg}{_RESET}"
+
+
+def _warn(msg: str) -> str:
+    """Format a warning message (yellow)."""
+    return f"{_YELLOW}{msg}{_RESET}"
+
+
 # Resolve data paths relative to this file's location
 _BENCHMARKS_DIR = Path(__file__).resolve().parent.parent / "benchmarks"
 
@@ -100,7 +128,7 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
         raise click.ClickException(f"Card specs directory not found: {specs_dir}")
 
     if not specs:
-        click.echo(f"No card specs found in {specs_dir}", err=True)
+        click.echo(_err(f"No card specs found in {specs_dir}"), err=True)
         raise SystemExit(1)
 
     # Apply filters
@@ -121,15 +149,15 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
     specs = _sort_cards_by_tier(specs)
 
     # Print summary
-    click.echo(f"Config loaded: {cfg.name}")
-    click.echo(f"Cards: {len(specs)}")
+    click.echo(_sys(f"Config loaded: {cfg.name}"))
+    click.echo(_sys(f"Cards: {len(specs)}"))
     for spec in specs:
         name = spec.get("name", "???")
         tier = spec.get("complexity_tier", spec.get("tier", "unknown"))
-        click.echo(f"  [{tier}] {name}")
+        click.echo(_sys(f"  [{tier}] {name}"))
 
     if dry_run:
-        click.echo(f"Dry run complete. {len(specs)} cards selected.")
+        click.echo(_sys(f"Dry run complete. {len(specs)} cards selected."))
         return
 
     # --- Orchestration loop ---
@@ -186,8 +214,10 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
                 )
                 if regression_result.has_failures:
                     click.echo(
-                        f"[{i}/{total}] {card_name}: "
-                        f"regressions={regression_result.cards_failed}/{regression_result.total_cards} failed",
+                        _warn(
+                            f"[{i}/{total}] {card_name}: "
+                            f"regressions={regression_result.cards_failed}/{regression_result.total_cards} failed"
+                        ),
                         err=True,
                     )
 
@@ -205,12 +235,12 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
             blind_status = blind_result.status
             tested_status = tested_result.status if tested_result else "skipped"
             click.echo(
-                f"[{i}/{total}] {card_name}: blind={blind_status}, tested={tested_status}"
+                _sys(f"[{i}/{total}] {card_name}: blind={blind_status}, tested={tested_status}")
             )
         except Exception as exc:  # noqa: BLE001
             failures.append((card_name, exc))
             click.echo(
-                f"[{i}/{total}] {card_name}: error={exc!r}", err=True
+                _err(f"[{i}/{total}] {card_name}: error={exc!r}"), err=True
             )
         finally:
             if session is not None:
@@ -263,24 +293,24 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
     tested_passed = sum(r.get("self_eval", {}).get("tested", {}).get("passed", 0) for r in all_results)
     tested_total_tests = sum(r.get("self_eval", {}).get("tested", {}).get("total", 0) for r in all_results)
 
-    click.echo(f"\n--- Run Summary ---")
-    click.echo(f"Cards run: {len(all_results)}")
+    click.echo(_sys(f"\n--- Run Summary ---"))
+    click.echo(_sys(f"Cards run: {len(all_results)}"))
     if blind_total_tests > 0:
         blind_rate = blind_passed / blind_total_tests * 100
-        click.echo(f"Self-eval blind pass rate: {blind_passed}/{blind_total_tests} ({blind_rate:.1f}%)")
+        click.echo(_sys(f"Self-eval blind pass rate: {blind_passed}/{blind_total_tests} ({blind_rate:.1f}%)"))
     else:
-        click.echo(f"Self-eval blind pass rate: 0/0 (N/A)")
+        click.echo(_sys(f"Self-eval blind pass rate: 0/0 (N/A)"))
     if tested_total_tests > 0:
         tested_rate = tested_passed / tested_total_tests * 100
-        click.echo(f"Self-eval tested pass rate: {tested_passed}/{tested_total_tests} ({tested_rate:.1f}%)")
+        click.echo(_sys(f"Self-eval tested pass rate: {tested_passed}/{tested_total_tests} ({tested_rate:.1f}%)"))
     else:
-        click.echo(f"Self-eval tested pass rate: 0/0 (N/A)")
-    click.echo(f"Elapsed time: {elapsed:.1f}s")
+        click.echo(_sys(f"Self-eval tested pass rate: 0/0 (N/A)"))
+    click.echo(_sys(f"Elapsed time: {elapsed:.1f}s"))
 
     if failures:
-        click.echo(f"\n{len(failures)} card(s) failed:", err=True)
+        click.echo(_err(f"\n{len(failures)} card(s) failed:"), err=True)
         for name, exc in failures:
-            click.echo(f"  {name}: {exc!r}", err=True)
+            click.echo(_err(f"  {name}: {exc!r}"), err=True)
         raise SystemExit(1)
 
 
@@ -448,8 +478,8 @@ def eval_cmd(results_dir: str, audited_tests: str | None, audited_dir: str | Non
     output_file.write_text(json.dumps(all_eval_results, indent=2, default=str))
 
     # Step 7: Print eval summary
-    click.echo(f"\n--- Eval Summary ---")
-    click.echo(f"Cards evaluated: {total_cards}")
+    click.echo(_sys(f"\n--- Eval Summary ---"))
+    click.echo(_sys(f"Cards evaluated: {total_cards}"))
 
     # Pass rates by eval type
     by_type: dict[str, list[dict]] = {}
@@ -465,17 +495,17 @@ def eval_cmd(results_dir: str, audited_tests: str | None, audited_dir: str | Non
 
         if blind_total > 0:
             blind_rate = blind_passed / blind_total * 100
-            click.echo(f"  [{eval_type}] blind: {blind_passed}/{blind_total} ({blind_rate:.1f}%)")
+            click.echo(_sys(f"  [{eval_type}] blind: {blind_passed}/{blind_total} ({blind_rate:.1f}%)"))
         else:
-            click.echo(f"  [{eval_type}] blind: 0/0 (N/A)")
+            click.echo(_sys(f"  [{eval_type}] blind: 0/0 (N/A)"))
 
         if tested_total > 0:
             tested_rate = tested_passed / tested_total * 100
-            click.echo(f"  [{eval_type}] tested: {tested_passed}/{tested_total} ({tested_rate:.1f}%)")
+            click.echo(_sys(f"  [{eval_type}] tested: {tested_passed}/{tested_total} ({tested_rate:.1f}%)"))
         else:
-            click.echo(f"  [{eval_type}] tested: 0/0 (N/A)")
+            click.echo(_sys(f"  [{eval_type}] tested: 0/0 (N/A)"))
 
-    click.echo(f"Results saved to: {output_file}")
+    click.echo(_sys(f"Results saved to: {output_file}"))
 
 
 @main.command()
@@ -521,8 +551,8 @@ def score(results_dir: str, tier_data: str | None, set_code: str) -> None:
     save_aggregates(results_path, run_dirs, scores)
 
     # Print paths to written files
-    click.echo(f"Written: {results_path / 'leaderboard.md'}")
-    click.echo(f"Written: {results_path / 'summary.json'}")
+    click.echo(_sys(f"Written: {results_path / 'leaderboard.md'}"))
+    click.echo(_sys(f"Written: {results_path / 'summary.json'}"))
 
 
 @main.command()
@@ -532,17 +562,17 @@ def cards(set_code: str) -> None:
     data_file = _BENCHMARKS_DIR / set_code.lower() / "data" / f"{set_code.lower()}_classified.json"
 
     if not data_file.exists():
-        click.echo(f"No classified data found for set '{set_code}' at {data_file}", err=True)
+        click.echo(_err(f"No classified data found for set '{set_code}' at {data_file}"), err=True)
         raise SystemExit(1)
 
     with open(data_file) as f:
         card_list = json.load(f)
 
-    click.echo(f"Cards in set {set_code}: {len(card_list)}")
+    click.echo(_sys(f"Cards in set {set_code}: {len(card_list)}"))
     for card in card_list:
         name = card.get("name", "???")
         tier = card.get("complexity_tier", card.get("tier", "unknown"))
-        click.echo(f"  [{tier}] {name}")
+        click.echo(_sys(f"  [{tier}] {name}"))
 
 
 if __name__ == "__main__":

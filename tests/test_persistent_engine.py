@@ -93,8 +93,7 @@ class TestProtectedDirs:
 # ---------------------------------------------------------------------------
 
 class TestEngineWritable:
-    @patch("silverquillm.agent_session.validate_setup", return_value=True)
-    def test_engine_files_are_writable_in_workspace(self, mock_validate, config, fake_card_dir, tmp_path):
+    def test_engine_files_are_writable_in_workspace(self, config, fake_card_dir, tmp_path):
         """Engine files copied to workspace should be writable (not read-only)."""
         # Create a fake run engine dir with a file
         run_engine = tmp_path / "run_engine"
@@ -162,8 +161,7 @@ class TestInitRunEngine:
 # ---------------------------------------------------------------------------
 
 class TestWorkspaceEngineFromRunEngine:
-    @patch("silverquillm.agent_session.validate_setup", return_value=True)
-    def test_workspace_uses_run_engine_dir(self, mock_validate, config, fake_card_dir, tmp_path):
+    def test_workspace_uses_run_engine_dir(self, config, fake_card_dir, tmp_path):
         """When run_engine_dir is set, workspace engine/ should come from it."""
         run_engine = tmp_path / "run_engine"
         run_engine.mkdir()
