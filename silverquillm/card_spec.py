@@ -79,10 +79,23 @@ def _load_scryfall_cards(data_path: Path) -> list[dict[str, Any]]:
 
 
 def _load_classified(data_path: Path) -> dict[str, dict[str, Any]]:
-    """Load classified data keyed by collector_number."""
+    """Load classified data keyed by ``set_code:collector_number``.
+
+    Falls back to collector_number-only keys when ``set_code`` is absent
+    (backward compatibility with older classified data).
+    """
     with open(data_path, encoding="utf-8") as f:
         items: list[dict[str, Any]] = json.load(f)
-    return {item["collector_number"]: item for item in items}
+    result: dict[str, dict[str, Any]] = {}
+    for item in items:
+        cn = item["collector_number"]
+        sc = item.get("set_code", "")
+        # Composite key for multi-set pools
+        if sc:
+            result[f"{sc}:{cn}"] = item
+        # Also store plain cn key for backward compat / single-set pools
+        result[cn] = item
+    return result
 
 
 def _scryfall_to_metadata(card: dict[str, Any]) -> CardMetadata:
@@ -132,13 +145,16 @@ def generate_all_specs(set_code: str, output_dir: str) -> list[Path]:
 
     for raw_card in scryfall_cards:
         cn = raw_card.get("collector_number", "")
-        if cn not in classified:
+        sc = raw_card.get("set", raw_card.get("set_code", ""))
+        # Try composite key first (multi-set pools), then plain cn
+        composite_key = f"{sc}:{cn}" if sc else cn
+        tier_info = classified.get(composite_key) or classified.get(cn)
+        if tier_info is None:
             raise KeyError(
                 f"Card collector_number {cn!r} ({raw_card.get('name', '?')}) "
                 f"not found in {set_code}_classified.json. "
                 f"Re-run the classifier to update classification data."
             )
-        tier_info = classified[cn]
         tier = tier_info.get("complexity_tier", tier_info.get("tier", "unknown"))
 
         meta = _scryfall_to_metadata(raw_card)
@@ -146,7 +162,11 @@ def generate_all_specs(set_code: str, output_dir: str) -> list[Path]:
 
         spec = generate_card_spec(meta, tier, loyalty=loyalty)
 
-        card_dir = out / cn
+        # Use set_code prefix for multi-set pools to avoid collector number
+        # collisions (e.g. SOS #1 vs SOA #1).  For single-set pools where
+        # sc matches the top-level set_code, use plain cn for backward compat.
+        dir_name = f"{sc}_{cn}" if sc and sc != set_code else cn
+        card_dir = out / dir_name
         card_dir.mkdir(parents=True, exist_ok=True)
         spec_path = card_dir / "card_spec.json"
         with open(spec_path, "w", encoding="utf-8") as f:

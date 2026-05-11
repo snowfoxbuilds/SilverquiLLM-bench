@@ -142,6 +142,12 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: Wholesale replacement via `from_dict()` zeros out omitted fields, corrupting state.
 - **Impact**: `silverquillm/replay/state.py`.
 
+## Query-specific Scryfall subset caches
+- **Context**: SOS Draft Set composition pulls collector-number subsets from related sets, such as SOA Mystical Archives, without needing or representing the full source set.
+- **Decision**: Cache collector-number subset queries in query-specific files (for example `soa_cn1-65.json`) rather than generic whole-set cache names like `soa.json`, and validate/filter cached subset data before merging.
+- **Reasoning**: A generic cache name can either read unrelated full-set data or overwrite a cache other callers expect to contain the full set.
+- **Impact**: `benchmarks/sos/fetch_data.py`; future Scryfall subset fetches should use query-specific cache names.
+
 ## Replay executor: Seat 1 engine API with fallback
 - **Context**: Seat 1 should use engine API for full validation, but some actions (spell casts) can't go through the full engine pipeline in replay mode.
 - **Decision**: Seat 1 uses engine API where feasible (land plays via `play_land()`, deaths via `move_to_zone()`). Falls back to direct zone mutation on engine rejection. Spell casts use direct mutation with correct destination routing (permanents→battlefield, instants/sorceries→graveyard). Stack simulation marked ENGINE LIMITATION.

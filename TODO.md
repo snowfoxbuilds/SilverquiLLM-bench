@@ -8,7 +8,7 @@ See `CONTEXT.md` for domain vocabulary (Draft Set, Card Pool, Audited Eval). See
 
 ### SOS Draft Set Card Pool
 
-- [ ] **Include Mystical Archives (SOA set, cn 1–65)**
+- [x] **Include Mystical Archives (SOA set, cn 1–65)**
   Detail: The SOS Draft Set includes 65 Mystical Archive cards from the SOA set (collector numbers 1–65). These are currently missing from `fetch_data.py`. Update the Scryfall fetch to also pull `e:soa cn>=1 cn<=65`. Reference: [Scryfall SOA search](https://scryfall.com/search?order=set&q=e%3Asoa%20cn%E2%89%A51%20cn%E2%89%A465&unique=prints).
 
   Changes needed:

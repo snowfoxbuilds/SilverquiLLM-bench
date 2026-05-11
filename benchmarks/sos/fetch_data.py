@@ -25,7 +25,7 @@ from typing import Any
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
-from cards.scryfall import fetch_set  # noqa: E402
+from cards.scryfall import fetch_set, fetch_scryfall_query  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +69,8 @@ def _normalize_card(card_json: dict[str, Any]) -> dict[str, Any]:
     normalized["mana_cost_str"] = _str("mana_cost_str", "mana_cost")
     normalized["type_line"] = card_json.get("type_line", "")
     normalized["oracle_text"] = _str("oracle_text")
+    # Ensure set_code is always present at top level for multi-set pools
+    normalized["set_code"] = card_json.get("set", card_json.get("set_code", ""))
     return normalized
 
 
@@ -76,6 +78,15 @@ def _log_stats(cards: list[dict[str, Any]]) -> None:
     """Log summary statistics for the fetched card data."""
     logger.info("=== SOS Fetch Stats ===")
     logger.info("Total cards: %d", len(cards))
+
+    # Set breakdown (SOS vs SOA)
+    set_counts: Counter[str] = Counter()
+    for card in cards:
+        set_counts[card.get("set_code", card.get("set", "unknown"))] += 1
+    if len(set_counts) > 1:
+        logger.info("Set breakdown:")
+        for sc, count in set_counts.most_common():
+            logger.info("  %s: %d", sc.upper(), count)
 
     # Type breakdown
     type_counts: Counter[str] = Counter()
@@ -118,10 +129,18 @@ def fetch_sos_data(*, force: bool = False) -> list[dict[str, Any]]:
     Returns:
         List of normalized card JSON dicts.
     """
-    # If already cached locally and not forcing, just read it
+    # If already cached locally and not forcing, check whether the cache
+    # includes SOA cards.  Old caches only contain SOS cards and must be
+    # rebuilt so the merged pool is complete.
     if not force and OUTPUT_PATH.exists():
         with open(OUTPUT_PATH, encoding="utf-8") as f:
-            return json.load(f)
+            cached = json.load(f)
+        soa_count = sum(
+            1 for c in cached if c.get("set_code", c.get("set", "")) == "soa"
+        )
+        if soa_count >= 65:
+            return cached
+        # Stale cache — fall through to rebuild
 
     # Use the existing scryfall fetch (which has its own cache layer).
     # When forcing, delete the raw cache first so fetch_set re-fetches from
@@ -134,6 +153,33 @@ def fetch_sos_data(*, force: bool = False) -> list[dict[str, Any]]:
     # Read the raw Scryfall cache to get raw JSON (not CardMetadata)
     with open(raw_cache, encoding="utf-8") as f:
         raw_cards: list[dict[str, Any]] = json.load(f)
+
+    # Fetch Mystical Archive cards from SOA set (collector numbers 1–65).
+    # These are part of the SOS Draft Set but live in a separate Scryfall set.
+    # Use a query-specific cache file so we never collide with a full-set
+    # ``data/sets/soa.json`` cache that other callers may create/expect.
+    soa_cache = _REPO_ROOT / "data" / "sets" / "soa_cn1-65.json"
+    if force and soa_cache.exists():
+        soa_cache.unlink()
+    if soa_cache.exists() and not force:
+        with open(soa_cache, encoding="utf-8") as f:
+            soa_raw: list[dict[str, Any]] = json.load(f)
+        # Always enforce the collector-number range even on cached data,
+        # guarding against a manually edited or corrupted cache file.
+        soa_raw = [
+            c for c in soa_raw
+            if 1 <= int(c.get("collector_number", 0)) <= 65
+        ]
+    else:
+        soa_query = "e%3Asoa+cn%3E%3D1+cn%3C%3D65"
+        soa_raw, _ = fetch_scryfall_query(soa_query, set_code="soa")
+        # Cache the SOA subset for future runs
+        soa_cache.parent.mkdir(parents=True, exist_ok=True)
+        with open(soa_cache, "w", encoding="utf-8") as f:
+            json.dump(soa_raw, f, indent=2)
+
+    # Merge SOS + SOA cards
+    raw_cards.extend(soa_raw)
 
     # Normalize
     normalized = [_normalize_card(c) for c in raw_cards]

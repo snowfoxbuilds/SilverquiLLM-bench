@@ -120,6 +120,41 @@ def _parse_card(card_json: dict[str, Any], set_code: str = "") -> CardMetadata:
 # Public API
 # ---------------------------------------------------------------------------
 
+def fetch_scryfall_query(
+    query: str,
+    *,
+    set_code: str = "",
+) -> tuple[list[dict[str, Any]], list[CardMetadata]]:
+    """Fetch cards matching a Scryfall search *query*.
+
+    Unlike :func:`fetch_set`, this does **not** use or update the local
+    cache.  It is intended for targeted queries (e.g. collector-number
+    ranges within a specific set).
+
+    Args:
+        query: A URL-encoded Scryfall search query string
+            (e.g. ``"e%3Asoa+cn%3E%3D1+cn%3C%3D65"``).
+        set_code: Fallback set code if the card JSON lacks a ``set`` field.
+
+    Returns:
+        A tuple of ``(raw_card_dicts, parsed_card_metadata)``.
+    """
+    all_cards: list[dict[str, Any]] = []
+    url: str | None = f"{SCRYFALL_SEARCH_URL}?order=set&q={query}&unique=prints"
+
+    while url is not None:
+        data = _fetch_json(url)
+        all_cards.extend(data.get("data", []))
+        if data.get("has_more", False) and data.get("next_page"):
+            url = data["next_page"]
+            time.sleep(REQUEST_DELAY)
+        else:
+            url = None
+
+    parsed = [_parse_card(c, set_code=set_code) for c in all_cards]
+    return all_cards, parsed
+
+
 def fetch_set(
     set_code: str,
     *,
