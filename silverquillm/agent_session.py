@@ -424,7 +424,11 @@ class AgentSession:
             )
 
         # Check for violations (writing outside workspace)
-        violations = _check_violations(workspace, before=protected_snapshot)
+        violations = _check_violations(
+            workspace,
+            before=protected_snapshot,
+            output_dir=Path(self.config.output_dir) if self.config.output_dir else None,
+        )
         if violations:
             logger.warning("Violations detected during blind implementation: %s", violations)
             return BlindResult(
@@ -562,7 +566,11 @@ class AgentSession:
                 round_tests_passing: bool | None = None
 
                 # Check for violations after each agent invocation
-                violations = _check_violations(workspace, before=protected_snapshot)
+                violations = _check_violations(
+                    workspace,
+                    before=protected_snapshot,
+                    output_dir=Path(self.config.output_dir) if self.config.output_dir else None,
+                )
                 if violations:
                     logger.warning(
                         "Violations detected during test-informed round %d: %s",
@@ -1059,21 +1067,26 @@ def _snapshot_all_protected(repo_root: Path) -> dict[Path, float]:
     return merged
 
 
-def _check_violations(workspace: Path, before: dict[Path, float] | None = None) -> list[str]:
+def _check_violations(workspace: Path, before: dict[Path, float] | None = None, output_dir: Path | None = None) -> list[str]:
     """Return list of violation descriptions for files outside *workspace* that changed.
 
     Compares current mtimes against the *before* snapshot.  If no snapshot is
     provided, the check cannot detect violations and returns an empty list.
+    Files under *output_dir* are excluded — the runner itself writes legitimate
+    log files there and those are not agent contamination.
     """
     if before is None:
         return []
     after = _snapshot_all_protected(_REPO_ROOT)
     violations: list[str] = []
     workspace_resolved = workspace.resolve()
+    output_resolved = output_dir.resolve() if output_dir else None
     for path, mtime in after.items():
         # Files inside the workspace are expected to change
         try:
             if path.resolve().is_relative_to(workspace_resolved):
+                continue
+            if output_resolved and path.resolve().is_relative_to(output_resolved):
                 continue
         except (OSError, ValueError):
             pass
@@ -1094,6 +1107,8 @@ def _check_violations(workspace: Path, before: dict[Path, float] | None = None) 
             continue
         try:
             if path.resolve().is_relative_to(workspace_resolved):
+                continue
+            if output_resolved and path.resolve().is_relative_to(output_resolved):
                 continue
         except (OSError, ValueError):
             pass
