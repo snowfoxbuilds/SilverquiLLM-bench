@@ -178,6 +178,12 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: The repository data uses `medium`; using the prose label literally would miss every intended card.
 - **Impact**: `tests/audited/sos/` Batch 2 coverage and future SOS tier-based tooling.
 
+## SOS extreme TODO tier maps to classifier `expert`
+- **Context**: Phase 6 TODO prose uses "extreme" complexity, while `benchmarks/sos/data/sos_classified.json` stores the highest classifier value as `expert`.
+- **Decision**: Treat TODO "complex and extreme" as `complexity_tier in {"complex", "expert"}` when selecting SOS audited Batch 3 cards.
+- **Reasoning**: The repository data has no `extreme` tier; using `expert` covers all remaining high-complexity cards and completes 346/346 coverage.
+- **Impact**: `tests/audited/sos/` Batch 3 coverage and future SOS tier-based tooling.
+
 ## Damage wording: "deals damage" is one-way, "fight" is mutual
 - **Context**: Felling Blow adds a +1/+1 counter, then says that creature deals damage equal to its power to an opponent's creature.
 - **Decision**: Implement one-way damage for "deals damage" wording; only cards that use "fight" should deal reciprocal damage.

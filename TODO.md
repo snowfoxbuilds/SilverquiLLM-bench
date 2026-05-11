@@ -248,7 +248,7 @@ These tests are designed to be **plug-and-play** with any agent's implementation
 
   Testability: Same as Batch 1 — syntactically valid, importable, expected failures against stubs.
 
-- [ ] **SOS audited tests: Batch 3 — Complex and extreme complexity cards**
+- [x] **SOS audited tests: Batch 3 — Complex and extreme complexity cards**
   Detail: Write per-card test files for all SOS Draft Set cards classified as `complex` or `extreme` in `sos_classified.json`. These are the true benchmark differentiators — multi-step resolution, state-dependent behavior, unusual interactions.
 
   Test count per card: 10–25.

@@ -147,3 +147,17 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept reviewer; require batch-wide test revision.
 - **Reasoning**: Expected stub failures are acceptable, but tests must still assert correct observable behavior and must not count no-op or tautological checks toward the 8-15 requirement.
 - **Impact**: `tests/audited/sos/*/tests.py` for Item 13 medium-card directories.
+
+## Test failure: Item 14 — SOS audited tests Batch 3 expected stub failures
+- **Failing tests**: Ability, edge, and interaction tests fail against SOS stubs for card-specific behavior such as ETB effects, attack triggers, converge scaling, infusion conditions, opus triggers, and spell resolution.
+- **Tester's intent**: Keep complex/expert behavior assertions as the audited contract for real implementations while ensuring no collection/import errors.
+- **Implementer's approach**: Created 140 complex/expert test files and the Tester rewrote generated placeholders into oracle-derived assertions.
+- **Coordinator decision**: accept tests and proceed with expected stub failures documented.
+- **Reasoning**: SOS stubs intentionally omit oracle behavior. The audited complex/expert tests should expose those gaps and preserve benchmark signal.
+
+## Disagreement: SOS Batch 3 generated placeholder quality
+- **Reviewer comment (strict)**: Generated complex/expert tests still contained unconditional `pytest.fail` placeholders, inherited-method `hasattr` checks, no-assertion try/except paths, and generic fixture interaction tests.
+- **Implementer justification**: Initial generation prioritized complete 346/346 coverage and broad category scaffolding across 140 complex cards.
+- **Coordinator decision**: accept reviewer; require batch-wide test revision.
+- **Reasoning**: Placeholder failures would fail even correct implementations, and inherited/generic assertions do not test the card oracle. Expected stub failures must come from meaningful state assertions, not placeholders.
+- **Impact**: `tests/audited/sos/*/tests.py` for Item 14 complex/expert directories.

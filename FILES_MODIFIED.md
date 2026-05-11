@@ -415,3 +415,287 @@ tests/test_sos_regenerated_artifacts.py — 26 tests for 346-card pool integrity
 ### Implementation
 - `tests/audited/sos/{collector_key}/tests.py` (×156) — Per-card audited test files for all 156 moderate-complexity SOS Draft Set cards
 - `tests/audited/sos/{collector_key}/__init__.py` (×156) — Package init files for test directories
+
+## Item 14: SOS audited tests Batch 3 — Complex and extreme complexity cards
+
+### Implementation
+- `tests/audited/sos/1/tests.py` — Audited tests for complex/expert card 1
+- `tests/audited/sos/1/__init__.py` — Package init for test directory
+- `tests/audited/sos/102/tests.py` — Audited tests for complex/expert card 102
+- `tests/audited/sos/102/__init__.py` — Package init for test directory
+- `tests/audited/sos/105/tests.py` — Audited tests for complex/expert card 105
+- `tests/audited/sos/105/__init__.py` — Package init for test directory
+- `tests/audited/sos/107/tests.py` — Audited tests for complex/expert card 107
+- `tests/audited/sos/107/__init__.py` — Package init for test directory
+- `tests/audited/sos/108/tests.py` — Audited tests for complex/expert card 108
+- `tests/audited/sos/108/__init__.py` — Package init for test directory
+- `tests/audited/sos/109/tests.py` — Audited tests for complex/expert card 109
+- `tests/audited/sos/109/__init__.py` — Package init for test directory
+- `tests/audited/sos/111/tests.py` — Audited tests for complex/expert card 111
+- `tests/audited/sos/111/__init__.py` — Package init for test directory
+- `tests/audited/sos/113/tests.py` — Audited tests for complex/expert card 113
+- `tests/audited/sos/113/__init__.py` — Package init for test directory
+- `tests/audited/sos/114/tests.py` — Audited tests for complex/expert card 114
+- `tests/audited/sos/114/__init__.py` — Package init for test directory
+- `tests/audited/sos/117/tests.py` — Audited tests for complex/expert card 117
+- `tests/audited/sos/117/__init__.py` — Package init for test directory
+- `tests/audited/sos/12/tests.py` — Audited tests for complex/expert card 12
+- `tests/audited/sos/12/__init__.py` — Package init for test directory
+- `tests/audited/sos/120/tests.py` — Audited tests for complex/expert card 120
+- `tests/audited/sos/120/__init__.py` — Package init for test directory
+- `tests/audited/sos/122/tests.py` — Audited tests for complex/expert card 122
+- `tests/audited/sos/122/__init__.py` — Package init for test directory
+- `tests/audited/sos/123/tests.py` — Audited tests for complex/expert card 123
+- `tests/audited/sos/123/__init__.py` — Package init for test directory
+- `tests/audited/sos/124/tests.py` — Audited tests for complex/expert card 124
+- `tests/audited/sos/124/__init__.py` — Package init for test directory
+- `tests/audited/sos/125/tests.py` — Audited tests for complex/expert card 125
+- `tests/audited/sos/125/__init__.py` — Package init for test directory
+- `tests/audited/sos/126/tests.py` — Audited tests for complex/expert card 126
+- `tests/audited/sos/126/__init__.py` — Package init for test directory
+- `tests/audited/sos/13/tests.py` — Audited tests for complex/expert card 13
+- `tests/audited/sos/13/__init__.py` — Package init for test directory
+- `tests/audited/sos/130/tests.py` — Audited tests for complex/expert card 130
+- `tests/audited/sos/130/__init__.py` — Package init for test directory
+- `tests/audited/sos/131/tests.py` — Audited tests for complex/expert card 131
+- `tests/audited/sos/131/__init__.py` — Package init for test directory
+- `tests/audited/sos/132/tests.py` — Audited tests for complex/expert card 132
+- `tests/audited/sos/132/__init__.py` — Package init for test directory
+- `tests/audited/sos/133/tests.py` — Audited tests for complex/expert card 133
+- `tests/audited/sos/133/__init__.py` — Package init for test directory
+- `tests/audited/sos/134/tests.py` — Audited tests for complex/expert card 134
+- `tests/audited/sos/134/__init__.py` — Package init for test directory
+- `tests/audited/sos/14/tests.py` — Audited tests for complex/expert card 14
+- `tests/audited/sos/14/__init__.py` — Package init for test directory
+- `tests/audited/sos/140/tests.py` — Audited tests for complex/expert card 140
+- `tests/audited/sos/140/__init__.py` — Package init for test directory
+- `tests/audited/sos/145/tests.py` — Audited tests for complex/expert card 145
+- `tests/audited/sos/145/__init__.py` — Package init for test directory
+- `tests/audited/sos/148/tests.py` — Audited tests for complex/expert card 148
+- `tests/audited/sos/148/__init__.py` — Package init for test directory
+- `tests/audited/sos/149/tests.py` — Audited tests for complex/expert card 149
+- `tests/audited/sos/149/__init__.py` — Package init for test directory
+- `tests/audited/sos/150/tests.py` — Audited tests for complex/expert card 150
+- `tests/audited/sos/150/__init__.py` — Package init for test directory
+- `tests/audited/sos/152/tests.py` — Audited tests for complex/expert card 152
+- `tests/audited/sos/152/__init__.py` — Package init for test directory
+- `tests/audited/sos/160/tests.py` — Audited tests for complex/expert card 160
+- `tests/audited/sos/160/__init__.py` — Package init for test directory
+- `tests/audited/sos/161/tests.py` — Audited tests for complex/expert card 161
+- `tests/audited/sos/161/__init__.py` — Package init for test directory
+- `tests/audited/sos/162/tests.py` — Audited tests for complex/expert card 162
+- `tests/audited/sos/162/__init__.py` — Package init for test directory
+- `tests/audited/sos/163/tests.py` — Audited tests for complex/expert card 163
+- `tests/audited/sos/163/__init__.py` — Package init for test directory
+- `tests/audited/sos/166/tests.py` — Audited tests for complex/expert card 166
+- `tests/audited/sos/166/__init__.py` — Package init for test directory
+- `tests/audited/sos/168/tests.py` — Audited tests for complex/expert card 168
+- `tests/audited/sos/168/__init__.py` — Package init for test directory
+- `tests/audited/sos/169/tests.py` — Audited tests for complex/expert card 169
+- `tests/audited/sos/169/__init__.py` — Package init for test directory
+- `tests/audited/sos/170/tests.py` — Audited tests for complex/expert card 170
+- `tests/audited/sos/170/__init__.py` — Package init for test directory
+- `tests/audited/sos/175/tests.py` — Audited tests for complex/expert card 175
+- `tests/audited/sos/175/__init__.py` — Package init for test directory
+- `tests/audited/sos/178/tests.py` — Audited tests for complex/expert card 178
+- `tests/audited/sos/178/__init__.py` — Package init for test directory
+- `tests/audited/sos/180/tests.py` — Audited tests for complex/expert card 180
+- `tests/audited/sos/180/__init__.py` — Package init for test directory
+- `tests/audited/sos/182/tests.py` — Audited tests for complex/expert card 182
+- `tests/audited/sos/182/__init__.py` — Package init for test directory
+- `tests/audited/sos/183/tests.py` — Audited tests for complex/expert card 183
+- `tests/audited/sos/183/__init__.py` — Package init for test directory
+- `tests/audited/sos/185/tests.py` — Audited tests for complex/expert card 185
+- `tests/audited/sos/185/__init__.py` — Package init for test directory
+- `tests/audited/sos/189/tests.py` — Audited tests for complex/expert card 189
+- `tests/audited/sos/189/__init__.py` — Package init for test directory
+- `tests/audited/sos/19/tests.py` — Audited tests for complex/expert card 19
+- `tests/audited/sos/19/__init__.py` — Package init for test directory
+- `tests/audited/sos/190/tests.py` — Audited tests for complex/expert card 190
+- `tests/audited/sos/190/__init__.py` — Package init for test directory
+- `tests/audited/sos/194/tests.py` — Audited tests for complex/expert card 194
+- `tests/audited/sos/194/__init__.py` — Package init for test directory
+- `tests/audited/sos/198/tests.py` — Audited tests for complex/expert card 198
+- `tests/audited/sos/198/__init__.py` — Package init for test directory
+- `tests/audited/sos/199/tests.py` — Audited tests for complex/expert card 199
+- `tests/audited/sos/199/__init__.py` — Package init for test directory
+- `tests/audited/sos/2/tests.py` — Audited tests for complex/expert card 2
+- `tests/audited/sos/2/__init__.py` — Package init for test directory
+- `tests/audited/sos/200/tests.py` — Audited tests for complex/expert card 200
+- `tests/audited/sos/200/__init__.py` — Package init for test directory
+- `tests/audited/sos/201/tests.py` — Audited tests for complex/expert card 201
+- `tests/audited/sos/201/__init__.py` — Package init for test directory
+- `tests/audited/sos/205/tests.py` — Audited tests for complex/expert card 205
+- `tests/audited/sos/205/__init__.py` — Package init for test directory
+- `tests/audited/sos/206/tests.py` — Audited tests for complex/expert card 206
+- `tests/audited/sos/206/__init__.py` — Package init for test directory
+- `tests/audited/sos/21/tests.py` — Audited tests for complex/expert card 21
+- `tests/audited/sos/21/__init__.py` — Package init for test directory
+- `tests/audited/sos/211/tests.py` — Audited tests for complex/expert card 211
+- `tests/audited/sos/211/__init__.py` — Package init for test directory
+- `tests/audited/sos/212/tests.py` — Audited tests for complex/expert card 212
+- `tests/audited/sos/212/__init__.py` — Package init for test directory
+- `tests/audited/sos/214/tests.py` — Audited tests for complex/expert card 214
+- `tests/audited/sos/214/__init__.py` — Package init for test directory
+- `tests/audited/sos/215/tests.py` — Audited tests for complex/expert card 215
+- `tests/audited/sos/215/__init__.py` — Package init for test directory
+- `tests/audited/sos/217/tests.py` — Audited tests for complex/expert card 217
+- `tests/audited/sos/217/__init__.py` — Package init for test directory
+- `tests/audited/sos/218/tests.py` — Audited tests for complex/expert card 218
+- `tests/audited/sos/218/__init__.py` — Package init for test directory
+- `tests/audited/sos/223/tests.py` — Audited tests for complex/expert card 223
+- `tests/audited/sos/223/__init__.py` — Package init for test directory
+- `tests/audited/sos/224/tests.py` — Audited tests for complex/expert card 224
+- `tests/audited/sos/224/__init__.py` — Package init for test directory
+- `tests/audited/sos/225/tests.py` — Audited tests for complex/expert card 225
+- `tests/audited/sos/225/__init__.py` — Package init for test directory
+- `tests/audited/sos/229/tests.py` — Audited tests for complex/expert card 229
+- `tests/audited/sos/229/__init__.py` — Package init for test directory
+- `tests/audited/sos/23/tests.py` — Audited tests for complex/expert card 23
+- `tests/audited/sos/23/__init__.py` — Package init for test directory
+- `tests/audited/sos/231/tests.py` — Audited tests for complex/expert card 231
+- `tests/audited/sos/231/__init__.py` — Package init for test directory
+- `tests/audited/sos/237/tests.py` — Audited tests for complex/expert card 237
+- `tests/audited/sos/237/__init__.py` — Package init for test directory
+- `tests/audited/sos/238/tests.py` — Audited tests for complex/expert card 238
+- `tests/audited/sos/238/__init__.py` — Package init for test directory
+- `tests/audited/sos/24/tests.py` — Audited tests for complex/expert card 24
+- `tests/audited/sos/24/__init__.py` — Package init for test directory
+- `tests/audited/sos/243/tests.py` — Audited tests for complex/expert card 243
+- `tests/audited/sos/243/__init__.py` — Package init for test directory
+- `tests/audited/sos/244/tests.py` — Audited tests for complex/expert card 244
+- `tests/audited/sos/244/__init__.py` — Package init for test directory
+- `tests/audited/sos/245/tests.py` — Audited tests for complex/expert card 245
+- `tests/audited/sos/245/__init__.py` — Package init for test directory
+- `tests/audited/sos/247/tests.py` — Audited tests for complex/expert card 247
+- `tests/audited/sos/247/__init__.py` — Package init for test directory
+- `tests/audited/sos/252/tests.py` — Audited tests for complex/expert card 252
+- `tests/audited/sos/252/__init__.py` — Package init for test directory
+- `tests/audited/sos/255/tests.py` — Audited tests for complex/expert card 255
+- `tests/audited/sos/255/__init__.py` — Package init for test directory
+- `tests/audited/sos/256/tests.py` — Audited tests for complex/expert card 256
+- `tests/audited/sos/256/__init__.py` — Package init for test directory
+- `tests/audited/sos/257/tests.py` — Audited tests for complex/expert card 257
+- `tests/audited/sos/257/__init__.py` — Package init for test directory
+- `tests/audited/sos/258/tests.py` — Audited tests for complex/expert card 258
+- `tests/audited/sos/258/__init__.py` — Package init for test directory
+- `tests/audited/sos/259/tests.py` — Audited tests for complex/expert card 259
+- `tests/audited/sos/259/__init__.py` — Package init for test directory
+- `tests/audited/sos/261/tests.py` — Audited tests for complex/expert card 261
+- `tests/audited/sos/261/__init__.py` — Package init for test directory
+- `tests/audited/sos/262/tests.py` — Audited tests for complex/expert card 262
+- `tests/audited/sos/262/__init__.py` — Package init for test directory
+- `tests/audited/sos/266/tests.py` — Audited tests for complex/expert card 266
+- `tests/audited/sos/266/__init__.py` — Package init for test directory
+- `tests/audited/sos/27/tests.py` — Audited tests for complex/expert card 27
+- `tests/audited/sos/27/__init__.py` — Package init for test directory
+- `tests/audited/sos/28/tests.py` — Audited tests for complex/expert card 28
+- `tests/audited/sos/28/__init__.py` — Package init for test directory
+- `tests/audited/sos/3/tests.py` — Audited tests for complex/expert card 3
+- `tests/audited/sos/3/__init__.py` — Package init for test directory
+- `tests/audited/sos/30/tests.py` — Audited tests for complex/expert card 30
+- `tests/audited/sos/30/__init__.py` — Package init for test directory
+- `tests/audited/sos/33/tests.py` — Audited tests for complex/expert card 33
+- `tests/audited/sos/33/__init__.py` — Package init for test directory
+- `tests/audited/sos/4/tests.py` — Audited tests for complex/expert card 4
+- `tests/audited/sos/4/__init__.py` — Package init for test directory
+- `tests/audited/sos/40/tests.py` — Audited tests for complex/expert card 40
+- `tests/audited/sos/40/__init__.py` — Package init for test directory
+- `tests/audited/sos/42/tests.py` — Audited tests for complex/expert card 42
+- `tests/audited/sos/42/__init__.py` — Package init for test directory
+- `tests/audited/sos/44/tests.py` — Audited tests for complex/expert card 44
+- `tests/audited/sos/44/__init__.py` — Package init for test directory
+- `tests/audited/sos/45/tests.py` — Audited tests for complex/expert card 45
+- `tests/audited/sos/45/__init__.py` — Package init for test directory
+- `tests/audited/sos/46/tests.py` — Audited tests for complex/expert card 46
+- `tests/audited/sos/46/__init__.py` — Package init for test directory
+- `tests/audited/sos/48/tests.py` — Audited tests for complex/expert card 48
+- `tests/audited/sos/48/__init__.py` — Package init for test directory
+- `tests/audited/sos/49/tests.py` — Audited tests for complex/expert card 49
+- `tests/audited/sos/49/__init__.py` — Package init for test directory
+- `tests/audited/sos/5/tests.py` — Audited tests for complex/expert card 5
+- `tests/audited/sos/5/__init__.py` — Package init for test directory
+- `tests/audited/sos/52/tests.py` — Audited tests for complex/expert card 52
+- `tests/audited/sos/52/__init__.py` — Package init for test directory
+- `tests/audited/sos/53/tests.py` — Audited tests for complex/expert card 53
+- `tests/audited/sos/53/__init__.py` — Package init for test directory
+- `tests/audited/sos/55/tests.py` — Audited tests for complex/expert card 55
+- `tests/audited/sos/55/__init__.py` — Package init for test directory
+- `tests/audited/sos/56/tests.py` — Audited tests for complex/expert card 56
+- `tests/audited/sos/56/__init__.py` — Package init for test directory
+- `tests/audited/sos/60/tests.py` — Audited tests for complex/expert card 60
+- `tests/audited/sos/60/__init__.py` — Package init for test directory
+- `tests/audited/sos/64/tests.py` — Audited tests for complex/expert card 64
+- `tests/audited/sos/64/__init__.py` — Package init for test directory
+- `tests/audited/sos/67/tests.py` — Audited tests for complex/expert card 67
+- `tests/audited/sos/67/__init__.py` — Package init for test directory
+- `tests/audited/sos/68/tests.py` — Audited tests for complex/expert card 68
+- `tests/audited/sos/68/__init__.py` — Package init for test directory
+- `tests/audited/sos/69/tests.py` — Audited tests for complex/expert card 69
+- `tests/audited/sos/69/__init__.py` — Package init for test directory
+- `tests/audited/sos/7/tests.py` — Audited tests for complex/expert card 7
+- `tests/audited/sos/7/__init__.py` — Package init for test directory
+- `tests/audited/sos/70/tests.py` — Audited tests for complex/expert card 70
+- `tests/audited/sos/70/__init__.py` — Package init for test directory
+- `tests/audited/sos/72/tests.py` — Audited tests for complex/expert card 72
+- `tests/audited/sos/72/__init__.py` — Package init for test directory
+- `tests/audited/sos/73/tests.py` — Audited tests for complex/expert card 73
+- `tests/audited/sos/73/__init__.py` — Package init for test directory
+- `tests/audited/sos/76/tests.py` — Audited tests for complex/expert card 76
+- `tests/audited/sos/76/__init__.py` — Package init for test directory
+- `tests/audited/sos/79/tests.py` — Audited tests for complex/expert card 79
+- `tests/audited/sos/79/__init__.py` — Package init for test directory
+- `tests/audited/sos/8/tests.py` — Audited tests for complex/expert card 8
+- `tests/audited/sos/8/__init__.py` — Package init for test directory
+- `tests/audited/sos/80/tests.py` — Audited tests for complex/expert card 80
+- `tests/audited/sos/80/__init__.py` — Package init for test directory
+- `tests/audited/sos/85/tests.py` — Audited tests for complex/expert card 85
+- `tests/audited/sos/85/__init__.py` — Package init for test directory
+- `tests/audited/sos/88/tests.py` — Audited tests for complex/expert card 88
+- `tests/audited/sos/88/__init__.py` — Package init for test directory
+- `tests/audited/sos/91/tests.py` — Audited tests for complex/expert card 91
+- `tests/audited/sos/91/__init__.py` — Package init for test directory
+- `tests/audited/sos/93/tests.py` — Audited tests for complex/expert card 93
+- `tests/audited/sos/93/__init__.py` — Package init for test directory
+- `tests/audited/sos/97/tests.py` — Audited tests for complex/expert card 97
+- `tests/audited/sos/97/__init__.py` — Package init for test directory
+- `tests/audited/sos/98/tests.py` — Audited tests for complex/expert card 98
+- `tests/audited/sos/98/__init__.py` — Package init for test directory
+- `tests/audited/sos/99/tests.py` — Audited tests for complex/expert card 99
+- `tests/audited/sos/99/__init__.py` — Package init for test directory
+- `tests/audited/sos/soa_1/tests.py` — Audited tests for complex/expert card soa_1
+- `tests/audited/sos/soa_1/__init__.py` — Package init for test directory
+- `tests/audited/sos/soa_10/tests.py` — Audited tests for complex/expert card soa_10
+- `tests/audited/sos/soa_10/__init__.py` — Package init for test directory
+- `tests/audited/sos/soa_12/tests.py` — Audited tests for complex/expert card soa_12
+- `tests/audited/sos/soa_12/__init__.py` — Package init for test directory
+- `tests/audited/sos/soa_2/tests.py` — Audited tests for complex/expert card soa_2
+- `tests/audited/sos/soa_2/__init__.py` — Package init for test directory
+- `tests/audited/sos/soa_32/tests.py` — Audited tests for complex/expert card soa_32
+- `tests/audited/sos/soa_32/__init__.py` — Package init for test directory
+- `tests/audited/sos/soa_37/tests.py` — Audited tests for complex/expert card soa_37
+- `tests/audited/sos/soa_37/__init__.py` — Package init for test directory
+- `tests/audited/sos/soa_39/tests.py` — Audited tests for complex/expert card soa_39
+- `tests/audited/sos/soa_39/__init__.py` — Package init for test directory
+- `tests/audited/sos/soa_41/tests.py` — Audited tests for complex/expert card soa_41
+- `tests/audited/sos/soa_41/__init__.py` — Package init for test directory
+- `tests/audited/sos/soa_44/tests.py` — Audited tests for complex/expert card soa_44
+- `tests/audited/sos/soa_44/__init__.py` — Package init for test directory
+- `tests/audited/sos/soa_47/tests.py` — Audited tests for complex/expert card soa_47
+- `tests/audited/sos/soa_47/__init__.py` — Package init for test directory
+- `tests/audited/sos/soa_55/tests.py` — Audited tests for complex/expert card soa_55
+- `tests/audited/sos/soa_55/__init__.py` — Package init for test directory
+- `tests/audited/sos/soa_60/tests.py` — Audited tests for complex/expert card soa_60
+- `tests/audited/sos/soa_60/__init__.py` — Package init for test directory
+- `tests/audited/sos/soa_61/tests.py` — Audited tests for complex/expert card soa_61
+- `tests/audited/sos/soa_61/__init__.py` — Package init for test directory
+- `tests/audited/sos/soa_7/tests.py` — Audited tests for complex/expert card soa_7
+- `tests/audited/sos/soa_7/__init__.py` — Package init for test directory
+- `tests/audited/sos/spg_155/tests.py` — Audited tests for complex/expert card spg_155
+- `tests/audited/sos/spg_155/__init__.py` — Package init for test directory
+- `tests/audited/sos/spg_156/tests.py` — Audited tests for complex/expert card spg_156
+- `tests/audited/sos/spg_156/__init__.py` — Package init for test directory
+- `tests/audited/sos/spg_157/tests.py` — Audited tests for complex/expert card spg_157
+- `tests/audited/sos/spg_157/__init__.py` — Package init for test directory
+- `tests/audited/sos/spg_158/tests.py` — Audited tests for complex/expert card spg_158
+- `tests/audited/sos/spg_158/__init__.py` — Package init for test directory
