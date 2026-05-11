@@ -307,6 +307,15 @@ def _make_card_impl_module(
 # Module-level injection — runs at conftest load time (before test collection)
 # ---------------------------------------------------------------------------
 
+# Known limitation: this writes to the global sys.modules["card_impl"] at
+# conftest load time.  If both FDN and SOS conftests are loaded in the same
+# pytest process (e.g. `pytest tests/audited/`), the SOS conftest loads after
+# FDN's and overwrites this synthetic module with its own.  This is intentional
+# and handled correctly: _has_explicit_card_impl() treats any module whose
+# __file__ starts with "<synthetic:" as non-explicit, so SOS always overwrites
+# FDN's synthetic.  Each per-card test directory is isolated by
+# _detect_collector_dir() so tests only resolve their own card's class.
+# If a third audited set is added, its conftest must follow the same pattern.
 if not _has_explicit_card_impl():
     _fdn_registry = _build_registry()
     _cn_to_entry, _classname_to_class = _build_collector_maps(_fdn_registry)

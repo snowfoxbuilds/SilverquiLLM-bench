@@ -226,6 +226,14 @@ def _make_error_module(msg: str) -> types.ModuleType:
 # Module-level injection — runs at conftest load time (before test collection)
 # ---------------------------------------------------------------------------
 
+# Known limitation: this writes to the global sys.modules["card_impl"] at
+# conftest load time, overwriting FDN's synthetic module when both conftests
+# are loaded in the same pytest process.  This is intentional: SOS loads after
+# FDN (pytest processes deeper directories last), and _has_explicit_card_impl()
+# correctly treats FDN's "<synthetic:fdn_conftest>" module as non-explicit.
+# Each per-card test is isolated via _detect_collector_dir() so tests only
+# resolve their own card's stub class.  If a third audited set is added, its
+# conftest must follow the same pattern and load after SOS.
 if not _has_explicit_card_impl():
     try:
         _cn_to_entry, _classname_to_class = _load_sos_stubs_and_build_registry()

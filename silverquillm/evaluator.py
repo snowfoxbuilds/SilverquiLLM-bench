@@ -404,6 +404,15 @@ def run_audited_eval_per_card(
     ``tests.py`` is copied alongside it so that ``from card_impl import …``
     resolves correctly.
 
+    The audited conftest (``{audited_dir}/conftest.py``) is also copied into
+    the flat temp directory.  The conftest's synthetic ``card_impl`` injection
+    is intentionally bypassed here: because ``card_impl.py`` is always present
+    on ``PYTHONPATH``, ``_has_explicit_card_impl()`` returns ``True`` and the
+    conftest skips injection.  If the conftest were copied without a real
+    ``card_impl.py`` present, ``_detect_collector_dir()`` would fail (the flat
+    temp dir has no ``audited/<set>/<cn>/`` path structure).  This invariant is
+    enforced by the assertion below.
+
     Parameters
     ----------
     impl_path:
@@ -431,8 +440,13 @@ def run_audited_eval_per_card(
     try:
         tmp = Path(tmp_dir)
 
-        # Copy impl as card_impl.py
+        # Copy impl as card_impl.py — MUST happen before conftest is copied so
+        # _has_explicit_card_impl() returns True and the conftest skips injection.
         shutil.copy2(impl_path, tmp / "card_impl.py")
+        assert (tmp / "card_impl.py").exists(), (
+            "card_impl.py must be present before conftest is copied; "
+            "the conftest relies on its presence to skip synthetic injection"
+        )
 
         # Copy the per-card tests.py into the temp directory
         shutil.copy2(tests_file, tmp / "tests.py")
