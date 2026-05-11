@@ -1,0 +1,19 @@
+{
+  "name": "Winds of Abandon",
+  "mana_cost": "{1}{W}",
+  "type_line": "Sorcery",
+  "oracle_text": "Exile target creature you don't control. For each creature exiled this way, its controller searches their library for a basic land card. Those players put those cards onto the battlefield tapped, then shuffle.\nOverload {4}{W}{W} (You may cast this spell for its overload cost. If you do, change \"target\" in its text to \"each.\")",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Overload"
+  ],
+  "rarity": "mythic",
+  "set_code": "soa",
+  "collector_number": "12",
+  "complexity_tier": "complex"
+}

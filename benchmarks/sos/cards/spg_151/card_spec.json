@@ -1,0 +1,17 @@
+{
+  "name": "Murmuring Mystic",
+  "mana_cost": "{3}{U}",
+  "type_line": "Creature — Human Wizard",
+  "oracle_text": "Whenever you cast an instant or sorcery spell, create a 1/1 blue Bird Illusion creature token with flying.",
+  "power": "1",
+  "toughness": "5",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "mythic",
+  "set_code": "spg",
+  "collector_number": "151",
+  "complexity_tier": "simple"
+}

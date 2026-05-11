@@ -35,7 +35,7 @@ See `CONTEXT.md` for domain vocabulary (Draft Set, Card Pool, Audited Eval). See
   - The final card pool should be: SOS base (≤271) + SOA (1–65) + SPG (149–158) = **346 cards total**.
   Testability: No card in `sos.json` has `set_code="sos"` and `int(collector_number) > 271`. Total card count = 346.
 
-- [ ] **Re-run classification and spec generation on updated card pool**
+- [x] **Re-run classification and spec generation on updated card pool**
   Detail: After updating `sos.json`, re-run the card classifier and card spec generator to produce updated `sos_classified.json` and per-card spec directories.
 
   Changes needed:

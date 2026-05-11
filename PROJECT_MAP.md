@@ -4,7 +4,7 @@
 
 SilverquiLLM-bench is a **Magic: The Gathering game engine** built in Python, designed as a benchmark for evaluating LLM coding capabilities. The engine implements core MTG rules (comprehensive rules §100–§700+) for two-player games using cards from the **Foundations (FDN)** set.
 
-The project includes a **benchmark runner package** (`silverquillm/`) that orchestrates the full evaluation pipeline: classifying cards by complexity, generating specs and prompts for LLM agents, managing agent sessions via pluggable adapters, evaluating implementations, scoring results (4 categories), and recording artifacts. The first benchmark set is **Shadows over Sonnenthal (SOS)** with 368 cards.
+The project includes a **benchmark runner package** (`silverquillm/`) that orchestrates the full evaluation pipeline: classifying cards by complexity, generating specs and prompts for LLM agents, managing agent sessions via pluggable adapters, evaluating implementations, scoring results (4 categories), and recording artifacts. The first benchmark set is **Shadows over Sonnenthal (SOS)** with 346 cards (271 SOS base + 65 SOA Mystical Archives + 10 SPG Special Guests).
 
 The project also includes a **replay validation pipeline** (`silverquillm/replay/`) that parses 17lands GRE replay data from real MTG Arena games and validates the engine's behavior against ground-truth game state snapshots, detecting divergences where the engine differs from the official game client.
 
@@ -125,9 +125,9 @@ The codebase is ~40,000+ lines across source and tests, with **~3,200+ test func
 | `silverquillm/adapters/` | [Completed] | **Agent adapter system** (6 modules) | [silverquillm/adapters/DIRECTORY_SUMMARY.md](silverquillm/adapters/DIRECTORY_SUMMARY.md) |
 | `silverquillm/replay/` | [Completed] | **Replay validation pipeline** (7 modules) | [silverquillm/replay/DIRECTORY_SUMMARY.md](silverquillm/replay/DIRECTORY_SUMMARY.md) |
 | `benchmarks/` | [Completed] | Benchmark data sets (namespace package) | [benchmarks/DIRECTORY_SUMMARY.md](benchmarks/DIRECTORY_SUMMARY.md) |
-| `benchmarks/sos/` | [Completed] | SOS benchmark set (368 cards) | [benchmarks/sos/DIRECTORY_SUMMARY.md](benchmarks/sos/DIRECTORY_SUMMARY.md) |
+| `benchmarks/sos/` | [Completed] | SOS benchmark set (346 cards) | [benchmarks/sos/DIRECTORY_SUMMARY.md](benchmarks/sos/DIRECTORY_SUMMARY.md) |
 | `benchmarks/sos/data/` | [Completed] | SOS raw/processed data | (covered in sos/ summary) |
-| `benchmarks/sos/cards/` | [Completed] | Per-card spec directories (368 dirs) | (covered in sos/ summary) |
+| `benchmarks/sos/cards/` | [Completed] | Per-card spec directories (346 dirs) | (covered in sos/ summary) |
 | `benchmarks/sos/results/` | [Completed] | Benchmark run outputs | (covered in sos/ summary) |
 | `data/` | [Completed] | Runtime data cache + replay data | [data/DIRECTORY_SUMMARY.md](data/DIRECTORY_SUMMARY.md) |
 | `data/replays/` | [Completed] | Card ID mapping + sample replays | (covered in data/ summary) |

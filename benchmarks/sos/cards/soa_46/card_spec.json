@@ -1,0 +1,17 @@
+{
+  "name": "Pyretic Ritual",
+  "mana_cost": "{1}{R}",
+  "type_line": "Instant",
+  "oracle_text": "Add {R}{R}{R}.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "soa",
+  "collector_number": "46",
+  "complexity_tier": "simple"
+}

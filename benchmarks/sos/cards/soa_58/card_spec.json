@@ -1,0 +1,17 @@
+{
+  "name": "Shared Roots",
+  "mana_cost": "{1}{G}",
+  "type_line": "Sorcery — Lesson",
+  "oracle_text": "Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "soa",
+  "collector_number": "58",
+  "complexity_tier": "simple"
+}

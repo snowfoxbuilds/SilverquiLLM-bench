@@ -1,0 +1,19 @@
+{
+  "name": "Monstrous Rage",
+  "mana_cost": "{R}",
+  "type_line": "Instant",
+  "oracle_text": "Target creature gets +2/+0 until end of turn. Create a Monster Role token attached to it. (If you control another Role on it, put that one into the graveyard. Enchanted creature gets +1/+1 and has trample.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Role token"
+  ],
+  "rarity": "uncommon",
+  "set_code": "soa",
+  "collector_number": "45",
+  "complexity_tier": "medium"
+}

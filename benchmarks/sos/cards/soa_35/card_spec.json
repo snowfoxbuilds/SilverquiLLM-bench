@@ -1,0 +1,17 @@
+{
+  "name": "Vampiric Tutor",
+  "mana_cost": "{B}",
+  "type_line": "Instant",
+  "oracle_text": "Search your library for a card, then shuffle and put that card on top. You lose 2 life.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "mythic",
+  "set_code": "soa",
+  "collector_number": "35",
+  "complexity_tier": "simple"
+}

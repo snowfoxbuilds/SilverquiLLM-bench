@@ -1,0 +1,17 @@
+{
+  "name": "Smallpox",
+  "mana_cost": "{B}{B}",
+  "type_line": "Sorcery",
+  "oracle_text": "Each player loses 1 life, discards a card, sacrifices a creature of their choice, then sacrifices a land of their choice.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "soa",
+  "collector_number": "33",
+  "complexity_tier": "simple"
+}

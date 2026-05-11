@@ -1,0 +1,17 @@
+{
+  "name": "Repel Calamity",
+  "mana_cost": "{1}{W}",
+  "type_line": "Instant",
+  "oracle_text": "Destroy target creature with power or toughness 4 or greater.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "soa",
+  "collector_number": "8",
+  "complexity_tier": "medium"
+}

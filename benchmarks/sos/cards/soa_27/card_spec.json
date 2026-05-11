@@ -1,0 +1,17 @@
+{
+  "name": "Culling the Weak",
+  "mana_cost": "{B}",
+  "type_line": "Instant",
+  "oracle_text": "As an additional cost to cast this spell, sacrifice a creature.\nAdd {B}{B}{B}{B}.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "soa",
+  "collector_number": "27",
+  "complexity_tier": "medium"
+}

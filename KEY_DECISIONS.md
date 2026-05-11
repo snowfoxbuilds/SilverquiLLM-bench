@@ -148,6 +148,12 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: Generic cache names can read unrelated full-set data or overwrite caches other callers expect to contain the full set. Presence/count-only checks can return stale or corrupted pools that violate the fixed 346-card SOS Draft Set invariant.
 - **Impact**: `benchmarks/sos/fetch_data.py`; future Scryfall subset fetches should use query-specific cache names and exact subset validation.
 
+## SOS specs use set-prefixed directories for multi-set collisions
+- **Context**: The SOS Draft Set now combines SOS, SOA, and SPG cards whose collector numbers overlap.
+- **Decision**: Per-card SOS benchmark specs use plain numeric directories for base SOS cards and set-prefixed directories such as `soa_1` and `spg_149` for non-SOS cards.
+- **Reasoning**: Collector-number-only directories collide across sets and can overwrite specs.
+- **Impact**: `benchmarks/sos/cards/`, `silverquillm/card_spec.py`; generated non-SOS spec directories may need force-adding because benchmark artifact paths are ignored by default.
+
 ## Replay executor: Seat 1 engine API with fallback
 - **Context**: Seat 1 should use engine API for full validation, but some actions (spell casts) can't go through the full engine pipeline in replay mode.
 - **Decision**: Seat 1 uses engine API where feasible (land plays via `play_land()`, deaths via `move_to_zone()`). Falls back to direct zone mutation on engine rejection. Spell casts use direct mutation with correct destination routing (permanents→battlefield, instants/sorceries→graveyard). Stack simulation marked ENGINE LIMITATION.
