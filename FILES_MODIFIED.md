@@ -409,3 +409,9 @@ tests/test_sos_regenerated_artifacts.py — 26 tests for 346-card pool integrity
 - `tests/audited/sos/soa_64/tests.py` — Audited tests for Expressive Iteration (sorcery, top 3 split)
 - `tests/audited/sos/spg_150/tests.py` — Audited tests for Archmage Emeritus (creature, magecraft draw)
 - `tests/audited/sos/spg_151/tests.py` — Audited tests for Murmuring Mystic (creature, spell-cast token)
+
+## Item 13: SOS audited tests Batch 2 — Moderate complexity cards
+
+### Implementation
+- `tests/audited/sos/{collector_key}/tests.py` (×156) — Per-card audited test files for all 156 moderate-complexity SOS Draft Set cards
+- `tests/audited/sos/{collector_key}/__init__.py` (×156) — Package init files for test directories

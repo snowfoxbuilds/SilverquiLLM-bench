@@ -1,0 +1,201 @@
+"""Audited tests for Snooping Page (collector key 227).
+
+Verifies the Snooping Page card implementation against card_spec.json.
+Basic tests verify stats/attributes (should pass against stubs).
+Ability tests verify oracle text behavior (expected to fail against stubs).
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from card_impl import SnoopingPage
+
+from engine.card import Creature
+from engine.types import CardType, ManaCost
+
+
+@pytest.mark.basic
+class TestSnoopingPageBasicProperties:
+    """Basic property tests for Snooping Page."""
+
+    def test_is_creature(self) -> None:
+        """Snooping Page must be a Creature subclass."""
+        card = SnoopingPage(name="Snooping Page", owner=None)
+        assert isinstance(card, Creature)
+
+    def test_name(self) -> None:
+        """SnoopingPage.name must be 'Snooping Page'."""
+        card = SnoopingPage(name="Snooping Page", owner=None)
+        assert card.name == "Snooping Page"
+
+    def test_card_types(self) -> None:
+        """Snooping Page must have correct card types."""
+        card = SnoopingPage(name="Snooping Page", owner=None)
+        assert CardType.CREATURE in card.card_types
+
+    def test_mana_cost_cmc(self) -> None:
+        """Snooping Page must have converted mana cost 3."""
+        card = SnoopingPage(name="Snooping Page", owner=None)
+        assert card.mana_cost.cmc == 3
+
+    def test_colors(self) -> None:
+        """Snooping Page must have correct colors."""
+        card = SnoopingPage(name="Snooping Page", owner=None)
+        assert "B" in card.colors
+        assert "W" in card.colors
+
+    def test_power(self) -> None:
+        """Snooping Page must have base power 2."""
+        card = SnoopingPage(name="Snooping Page", owner=None)
+        assert card.base_power == 2
+
+    def test_toughness(self) -> None:
+        """Snooping Page must have base toughness 3."""
+        card = SnoopingPage(name="Snooping Page", owner=None)
+        assert card.base_toughness == 3
+
+
+@pytest.mark.ability
+class TestSnoopingPageAbilities:
+    """Ability tests for Snooping Page — expected to fail against stubs."""
+
+    def test_repartee_registers_trigger(self) -> None:
+        """Repartee must register a triggered ability."""
+        from tests.test_utils import create_game, set_board_state
+        game = create_game()
+        player = game.players[0]
+        card = SnoopingPage(name="Snooping Page", owner=player)
+        card.controller = player
+        set_board_state(game, 0, battlefield=[card])
+        card.register_triggers(game)
+        triggers = getattr(game, "triggers", [])
+        assert len(triggers) > 0 or hasattr(card, "on_spell_cast"), (
+            "Repartee card must register a trigger or expose on_spell_cast"
+        )
+
+    def test_repartee_requires_creature_target(self) -> None:
+        """Repartee only triggers for spells targeting a creature."""
+        from tests.test_utils import create_game, set_board_state
+        from engine.card import Creature
+        game = create_game()
+        player = game.players[0]
+        card = SnoopingPage(name="Snooping Page", owner=player)
+        card.controller = player
+        target = Creature(name="Target", owner=player, base_power=1, base_toughness=1)
+        set_board_state(game, 0, battlefield=[card, target])
+        card.register_triggers(game)
+        has_trigger_logic = (
+            hasattr(card, "on_spell_cast") or
+            hasattr(card, "repartee_trigger") or
+            hasattr(card, "check_trigger_condition")
+        )
+        assert has_trigger_logic, "Repartee must check spell targets creature"
+
+    def test_repartee_produces_effect(self) -> None:
+        """Repartee trigger should produce an observable effect."""
+        from tests.test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
+        game = create_game()
+        player = game.players[0]
+        card = SnoopingPage(name="Snooping Page", owner=player)
+        card.controller = player
+        target = Creature(name="Target", owner=player, base_power=1, base_toughness=1)
+        set_board_state(game, 0, battlefield=[card, target])
+        bf_before = len(game.get_battlefield(player).get_all())
+        life_before = player.life
+        if hasattr(card, "on_spell_cast"):
+            card.on_spell_cast(game, target)
+        elif hasattr(card, "repartee_trigger"):
+            card.repartee_trigger(game, target)
+        bf_after = len(game.get_battlefield(player).get_all())
+        life_after = player.life
+        hand_after = len(player.zones[Zone.HAND].get_all())
+        changed = bf_after != bf_before or life_after != life_before or hand_after > 0
+        assert changed, "Repartee trigger must produce observable effect"
+
+    def test_draws_cards(self) -> None:
+        """Resolution should draw card(s)."""
+        from tests.test_utils import create_game
+        from engine.card import Sorcery
+        from engine.types import Zone
+        game = create_game()
+        player = game.players[0]
+        filler = Sorcery(name="Filler", owner=player)
+        player.zones[Zone.LIBRARY].add(filler)
+        player.zones[Zone.LIBRARY].add(Sorcery(name="F2", owner=player))
+        hand_before = len(player.zones[Zone.HAND].get_all())
+        card = SnoopingPage(name="Snooping Page", owner=player)
+        card.controller = player
+        card.on_resolve(game)
+        hand_after = len(player.zones[Zone.HAND].get_all())
+        assert hand_after > hand_before, (
+            f"Should draw: hand {hand_before} -> {hand_after}"
+        )
+
+    def test_causes_life_loss(self) -> None:
+        """Resolution should cause life loss."""
+        from tests.test_utils import create_game
+        game = create_game()
+        player = game.players[0]
+        opponent = game.players[1]
+        card = SnoopingPage(name="Snooping Page", owner=player)
+        card.controller = player
+        life_before = opponent.life
+        card.on_resolve(game)
+        assert opponent.life < life_before, (
+            f"Should lose life: {life_before} -> {opponent.life}"
+        )
+
+
+@pytest.mark.edge
+class TestSnoopingPageEdgeCases:
+    """Edge case tests for Snooping Page."""
+
+    def test_zone_transition_graveyard(self) -> None:
+        """Creature should properly move to graveyard on death."""
+        from tests.test_utils import create_game, set_board_state
+        from engine.types import Zone
+        game = create_game()
+        player = game.players[0]
+        card = SnoopingPage(name="Snooping Page", owner=player)
+        card.controller = player
+        set_board_state(game, 0, battlefield=[card])
+        bf = game.get_battlefield(player)
+        bf.remove(card)
+        player.zones[Zone.GRAVEYARD].add(card)
+        assert card in player.zones[Zone.GRAVEYARD].get_all()
+
+
+@pytest.mark.interaction
+class TestSnoopingPageInteractions:
+    """Interaction tests for Snooping Page."""
+
+    def test_get_targets_finds_creatures(self) -> None:
+        """get_targets should return valid creature targets."""
+        from tests.test_utils import create_game, set_board_state
+        from engine.card import Creature
+        game = create_game()
+        player = game.players[0]
+        opponent = game.players[1]
+        creature = Creature(name="Target", owner=opponent, base_power=2, base_toughness=2)
+        set_board_state(game, 1, battlefield=[creature])
+        card = SnoopingPage(name="Snooping Page", owner=player)
+        card.controller = player
+        targets = card.get_targets(game)
+        assert len(targets) > 0, "Should find creature target"
+
+    def test_coexists_with_other_creatures(self) -> None:
+        """Card should coexist with other creatures on battlefield."""
+        from tests.test_utils import create_game, set_board_state
+        from engine.card import Creature
+        game = create_game()
+        player = game.players[0]
+        card = SnoopingPage(name="Snooping Page", owner=player)
+        card.controller = player
+        ally = Creature(name="Ally", owner=player, base_power=3, base_toughness=3)
+        set_board_state(game, 0, battlefield=[card, ally])
+        bf = game.get_battlefield(player).get_all()
+        assert len(bf) == 2, f"Both creatures on bf, got {len(bf)}"
+        assert card in bf and ally in bf

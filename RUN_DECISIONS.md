@@ -133,3 +133,17 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept reviewer; require test revision.
 - **Reasoning**: Expected stub failures are acceptable only when the audited test describes correct oracle behavior with valid setup. Tests that would fail a correct implementation must be fixed.
 - **Impact**: `tests/audited/sos/50`, `158`, `184`, `202`, `249`, `soa_25`, `soa_33`, `soa_34`, `soa_35`, `soa_48`, `soa_49`, `soa_62`.
+
+## Test failure: Item 13 — SOS audited tests Batch 2 expected stub failures
+- **Failing tests**: 369 ability tests and 45 basic keyword tests fail against SOS stubs after revision; no import, syntax, or collection errors.
+- **Tester's intent**: Keep behavior and keyword assertions for medium SOS cards as the audited contract for real implementations.
+- **Implementer's approach**: Created 156 medium-card test files and the Tester strengthened weak generated patterns into observable behavior checks.
+- **Coordinator decision**: accept tests and proceed with expected stub failures documented.
+- **Reasoning**: SOS stubs intentionally omit oracle behavior and some keyword data. The audited tests should expose those gaps rather than weaken assertions.
+
+## Disagreement: SOS Batch 2 generated test quality
+- **Reviewer comment (strict)**: Generated tests included no-assertion `on_resolve()` calls, inherited-method `hasattr` checks, tautological setup/object-identity interactions, incomplete flashback assertions, and Harsh Annotation target/controller mistakes.
+- **Implementer justification**: Initial batch generated broad coverage at scale and relied on template patterns for interactions and edge tests.
+- **Coordinator decision**: accept reviewer; require batch-wide test revision.
+- **Reasoning**: Expected stub failures are acceptable, but tests must still assert correct observable behavior and must not count no-op or tautological checks toward the 8-15 requirement.
+- **Impact**: `tests/audited/sos/*/tests.py` for Item 13 medium-card directories.

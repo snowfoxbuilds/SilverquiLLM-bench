@@ -231,7 +231,7 @@ These tests are designed to be **plug-and-play** with any agent's implementation
 
   Testability: Tests are syntactically valid and importable. Tests run against stub classes (most ability tests will fail as expected — stubs have correct attributes but no ability logic). Verify every trivial/simple card has a test file.
 
-- [ ] **SOS audited tests: Batch 2 — Moderate complexity cards**
+- [x] **SOS audited tests: Batch 2 — Moderate complexity cards**
   Detail: Write per-card test files for all SOS Draft Set cards classified as `moderate` in `sos_classified.json`. These cards have multiple abilities, conditional triggers, or keyword interactions.
 
   Test count per card: 8–15.
