@@ -269,7 +269,7 @@ These tests are designed to be **plug-and-play** with any agent's implementation
 
 ### Pipeline & Documentation
 
-- [ ] **Wire per-card audited tests into the evaluation pipeline**
+- [x] **Wire per-card audited tests into the evaluation pipeline**
   Detail: Update the evaluator and CLI to discover and run per-card audited test files instead of a single monolithic test file.
 
   Current state: `benchmark eval --audited-tests` accepts a single file path. The evaluator runs that one file against all cards.

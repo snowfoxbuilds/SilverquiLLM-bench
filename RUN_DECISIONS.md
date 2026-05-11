@@ -161,3 +161,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept reviewer; require batch-wide test revision.
 - **Reasoning**: Placeholder failures would fail even correct implementations, and inherited/generic assertions do not test the card oracle. Expected stub failures must come from meaningful state assertions, not placeholders.
 - **Impact**: `tests/audited/sos/*/tests.py` for Item 14 complex/expert directories.
+
+## Disagreement: Per-card audited eval result persistence
+- **Reviewer comment (strict)**: `--audited-dir` wrote only flat run-level results and skipped the evaluator helper's missing-implementation path due to CLI pre-checks.
+- **Implementer justification**: Initial implementation reused the existing flat eval result append flow and avoided calling per-card eval when implementation files were absent.
+- **Coordinator decision**: accept reviewer; require implementation revision.
+- **Reasoning**: The TODO target explicitly requires per-card `result.json` updates, and missing implementations should be recorded as audited errors rather than silently omitted.
+- **Impact**: `silverquillm/cli.py`, `tests/test_audited_per_card.py`.

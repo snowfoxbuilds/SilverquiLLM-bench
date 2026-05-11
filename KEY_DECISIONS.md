@@ -184,6 +184,12 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: The repository data has no `extreme` tier; using `expert` covers all remaining high-complexity cards and completes 346/346 coverage.
 - **Impact**: `tests/audited/sos/` Batch 3 coverage and future SOS tier-based tooling.
 
+## Per-card audited eval persists to card result.json
+- **Context**: `benchmark eval --audited-dir` runs audited tests per card, and downstream scoring reads audited data from each card's `result.json`.
+- **Decision**: Per-card audited CLI runs write results both to the flat run-level `results.json` and to each card's nested `result.json` under `audited_eval.blind`, `audited_eval.tested`, and top-level `audited_eval.errors`.
+- **Reasoning**: Keeping the existing per-card result shape avoids scorer/results changes and ensures missing implementation/test errors are visible to downstream consumers.
+- **Impact**: `silverquillm/cli.py`, `silverquillm/evaluator.py`, `tests/test_audited_per_card.py`.
+
 ## Damage wording: "deals damage" is one-way, "fight" is mutual
 - **Context**: Felling Blow adds a +1/+1 counter, then says that creature deals damage equal to its power to an opponent's creature.
 - **Decision**: Implement one-way damage for "deals damage" wording; only cards that use "fight" should deal reciprocal damage.

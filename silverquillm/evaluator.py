@@ -32,6 +32,7 @@ __all__ = [
     "run_self_eval_flat",
     "run_cross_eval",
     "run_audited_eval",
+    "run_audited_eval_per_card",
 ]
 
 # ---------------------------------------------------------------------------
@@ -386,3 +387,87 @@ def run_audited_eval(
             )
         )
     return results
+
+
+def run_audited_eval_per_card(
+    impl_path: Path,
+    card_id: str,
+    audited_dir: Path,
+    timeout: int = 60,
+) -> tuple[int, int, int, list[str]]:
+    """Run per-card audited tests against an implementation.
+
+    Discovers the audited test file at ``{audited_dir}/{card_id}/tests.py``
+    and runs it against *impl_path* in an isolated temp directory.
+
+    The implementation is copied as ``card_impl.py`` and the per-card
+    ``tests.py`` is copied alongside it so that ``from card_impl import …``
+    resolves correctly.
+
+    Parameters
+    ----------
+    impl_path:
+        Path to the agent's implementation file (e.g. ``tested_impl.py``).
+    card_id:
+        The collector number / key used to locate the per-card test directory.
+    audited_dir:
+        Root directory containing per-card subdirectories with ``tests.py``.
+    timeout:
+        Subprocess timeout in seconds.
+
+    Returns
+    -------
+    tuple of (passed, failed, total, errors)
+        Same shape as :func:`run_tests`.
+    """
+    tests_file = audited_dir / card_id / "tests.py"
+    if not tests_file.exists():
+        return 0, 0, 0, [f"No audited tests found at {tests_file}"]
+
+    if not impl_path.exists():
+        return 0, 0, 0, [f"Missing implementation: {impl_path}"]
+
+    tmp_dir = tempfile.mkdtemp(prefix="eval_percard_")
+    try:
+        tmp = Path(tmp_dir)
+
+        # Copy impl as card_impl.py
+        shutil.copy2(impl_path, tmp / "card_impl.py")
+
+        # Copy the per-card tests.py into the temp directory
+        shutil.copy2(tests_file, tmp / "tests.py")
+
+        # Also copy conftest.py from audited_dir if present (for shared fixtures)
+        conftest = audited_dir / "conftest.py"
+        if conftest.exists():
+            shutil.copy2(conftest, tmp / "conftest.py")
+
+        # Run pytest on the copied tests.py in the temp directory
+        env = dict(__import__("os").environ)
+        existing = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = str(tmp) + (":" + existing if existing else "")
+
+        cmd = [
+            sys.executable,
+            "-m",
+            "pytest",
+            str(tmp / "tests.py"),
+            "--tb=short",
+            "-q",
+            "--no-header",
+        ]
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env=env,
+            )
+            combined = result.stdout + "\n" + result.stderr
+        except subprocess.TimeoutExpired:
+            return 0, 0, 0, [f"Timeout after {timeout}s"]
+
+        return _parse_pytest_output(combined)
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)

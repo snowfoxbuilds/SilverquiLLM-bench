@@ -287,11 +287,12 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
 @main.command("eval")
 @click.option("--results-dir", required=True, help="Path to results directory.")
 @click.option("--audited-tests", default=None, type=click.Path(exists=True), help="Path to gold-standard test file.")
-def eval_cmd(results_dir: str, audited_tests: str | None) -> None:
+@click.option("--audited-dir", default=None, type=click.Path(exists=True), help="Path to per-card audited test directory.")
+def eval_cmd(results_dir: str, audited_tests: str | None, audited_dir: str | None) -> None:
     """Run evaluation on existing results."""
     import yaml
 
-    from silverquillm.evaluator import EvalResult, run_self_eval_flat, run_tests
+    from silverquillm.evaluator import EvalResult, run_audited_eval_per_card, run_self_eval_flat, run_tests
 
     results_path = Path(results_dir)
     if not results_path.exists():
@@ -373,6 +374,66 @@ def eval_cmd(results_dir: str, audited_tests: str | None) -> None:
                     errors=all_errors,
                 )
                 all_eval_results.append(asdict(audited_result))
+
+            # Step 5b: If --audited-dir provided, run per-card audited eval
+            if audited_dir:
+                audited_dir_path = Path(audited_dir)
+                card_id = card_path.name
+                blind_impl = card_path / "blind_impl.py"
+                tested_impl = card_path / "tested_impl.py"
+
+                all_errors_pc: list[str] = []
+
+                # Always call run_audited_eval_per_card so missing impls
+                # are reported as audited errors (not silently skipped).
+                bp, bf, bt, be = run_audited_eval_per_card(
+                    blind_impl, card_id, audited_dir_path
+                )
+                all_errors_pc.extend(be)
+
+                tp, tf, tt, te = run_audited_eval_per_card(
+                    tested_impl, card_id, audited_dir_path
+                )
+                all_errors_pc.extend(te)
+
+                audited_result = EvalResult(
+                    card_id=card_id,
+                    agent=agent_name,
+                    eval_type="audited",
+                    blind_passed=bp,
+                    blind_failed=bf,
+                    blind_total=bt,
+                    tested_passed=tp,
+                    tested_failed=tf,
+                    tested_total=tt,
+                    errors=all_errors_pc,
+                )
+                all_eval_results.append(asdict(audited_result))
+
+                # Also record in per-card result.json under audited_eval
+                card_result_json = card_path / "result.json"
+                if card_result_json.exists():
+                    card_record = json.loads(card_result_json.read_text())
+                else:
+                    card_record = {}
+                card_record["audited_eval"] = {
+                    "blind": {
+                        "passed": bp,
+                        "failed": bf,
+                        "total": bt,
+                        "errors": be,
+                    },
+                    "tested": {
+                        "passed": tp,
+                        "failed": tf,
+                        "total": tt,
+                        "errors": te,
+                    },
+                    "errors": all_errors_pc,
+                }
+                card_result_json.write_text(
+                    json.dumps(card_record, indent=2, default=str)
+                )
 
     # Step 6: Deduplicate by (agent, card_id, eval_type), keeping the last entry
     # (latest run wins since run_dirs are sorted by name/timestamp).

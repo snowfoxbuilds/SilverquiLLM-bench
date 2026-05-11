@@ -699,3 +699,13 @@ tests/test_sos_regenerated_artifacts.py — 26 tests for 346-card pool integrity
 - `tests/audited/sos/spg_157/__init__.py` — Package init for test directory
 - `tests/audited/sos/spg_158/tests.py` — Audited tests for complex/expert card spg_158
 - `tests/audited/sos/spg_158/__init__.py` — Package init for test directory
+
+## Item 15: Wire per-card audited tests into the evaluation pipeline
+
+### Tests
+- `tests/test_audited_per_card.py` — Unit and CLI integration tests for per-card audited eval discovery and execution
+
+### Implementation
+- `silverquillm/evaluator.py` — Added run_audited_eval_per_card() for per-card test discovery and isolated execution
+- `silverquillm/cli.py` — Added --audited-dir CLI option wiring per-card audited eval into the eval command loop
+- `tests/test_audited_per_card.py` — New test file covering per-card evaluator and CLI integration
