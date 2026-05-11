@@ -120,7 +120,7 @@ Key engine conventions to be aware of (from `KEY_DECISIONS.md`):
 - Identity-based zone lookups: `contains()` / `remove()` use `is` (not `==`)
 - `cards_drawn_this_turn` counter tracks per-turn card draws
 - ENGINE LIMITATION comments document known gaps — don't write tests that exercise documented limitations
-- [ ] **FDN audited tests: Batch 1 — Basic lands and vanilla/French vanilla creatures (~30 cards)**
+- [x] **FDN audited tests: Batch 1 — Basic lands and vanilla/French vanilla creatures (~30 cards)**
   Detail: Write per-card test files for all 5 basic lands (Plains, Island, Swamp, Mountain, Forest) and ~25 vanilla/French vanilla creatures from FDN.
 
   Basic lands: Test tapping for correct mana color, untapping on untap step, and that they enter untapped.

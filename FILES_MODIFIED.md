@@ -64,3 +64,33 @@ tests/test_sos_regenerated_artifacts.py — 26 tests for 346-card pool integrity
 - `cards/stubs/__init__.py` — Package init for stub card implementations
 - `cards/stubs/sos_stubs.py` — Auto-generated 346 stub classes with hybrid mana, planeswalker loyalty, Vehicle P/T, colors, and register_sos_stubs(registry)
 - `tests/audited/sos/conftest.py` — SOS conftest restricts plain numeric collector keys to base SOS cards only; SOA/SPG use set-prefixed keys
+
+## Item 7: FDN audited tests Batch 1 — Basic lands and vanilla/French vanilla creatures
+
+### Implementation
+- `tests/audited/fdn/002/tests.py` — Audited tests for Island (basic land, mana production)
+- `tests/audited/fdn/003/tests.py` — Audited tests for Swamp (basic land, mana production)
+- `tests/audited/fdn/004/tests.py` — Audited tests for Mountain (basic land, mana production)
+- `tests/audited/fdn/005/tests.py` — Audited tests for Forest (basic land, mana production)
+- `tests/audited/fdn/150/tests.py` — Audited tests for Aegis Turtle (vanilla 0/5)
+- `tests/audited/fdn/146/tests.py` — Audited tests for Savannah Lions (vanilla 2/1)
+- `tests/audited/fdn/552/tests.py` — Audited tests for Bear Cub (vanilla 2/2)
+- `tests/audited/fdn/548/tests.py` — Audited tests for Swab Goblin (vanilla 2/2)
+- `tests/audited/fdn/522/tests.py` — Audited tests for Highborn Vampire (vanilla 4/3)
+- `tests/audited/fdn/538/tests.py` — Audited tests for Fire Elemental (vanilla 5/4)
+- `tests/audited/fdn/718/tests.py` — Audited tests for Gigantosaurus (vanilla 10/10)
+- `tests/audited/fdn/110/tests.py` — Audited tests for Quakestrider Ceratops (vanilla 12/8)
+- `tests/audited/fdn/734/tests.py` — Audited tests for Healer's Hawk (flying + lifelink)
+- `tests/audited/fdn/491/tests.py` — Audited tests for Bishop's Soldier (lifelink)
+- `tests/audited/fdn/498/tests.py` — Audited tests for Leonin Skyhunter (flying)
+- `tests/audited/fdn/559/tests.py` — Audited tests for Thornweald Archer (reach + deathtouch)
+- `tests/audited/fdn/543/tests.py` — Audited tests for Raging Redcap (double strike)
+- `tests/audited/fdn/191/tests.py` — Audited tests for Brazen Scourge (haste)
+- `tests/audited/fdn/757/tests.py` — Audited tests for Vampire Nighthawk (flying + deathtouch + lifelink)
+- `tests/audited/fdn/556/tests.py` — Audited tests for Magnigoth Sentry (reach)
+- `tests/audited/fdn/740/tests.py` — Audited tests for Serra Angel (flying + vigilance)
+- `tests/audited/fdn/558/tests.py` — Audited tests for Tajuru Pathwarden (vigilance + trample)
+- `tests/audited/fdn/36/tests.py` — Audited tests for Elementalist Adept (flash)
+- `tests/audited/fdn/547/tests.py` — Audited tests for Skyraker Giant (reach)
+`tests/audited/fdn/246/tests.py` - Audited tests for Swiftblade Vindicator (double strike + vigilance + trample) 
+- `tests/audited/fdn/584/tests.py` — Audited tests for Zetalpa, Primal Dawn (5 keywords)

@@ -64,3 +64,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Implementer's approach**: The final revision preserved simple hybrid symbols but still missed unsupported hybrid-like symbols.
 - **Coordinator decision**: fix implementation
 - **Reasoning**: The TODO requires basic mana attributes from Scryfall data; preserving a nonzero mana value for unsupported special symbols is better than silently making the card free.
+
+## Disagreement: FDN Batch 1 audited behavior coverage
+- **Reviewer comment (strict)**: Basic lands lack untap tests, vanilla creatures lack casting/combat tests, and French-vanilla cards only assert keyword flags rather than exercising keyword behavior.
+- **Implementer justification**: Initial batch prioritized broad per-card file coverage and static correctness across the card list.
+- **Coordinator decision**: accept reviewer; require test revision.
+- **Reasoning**: The TODO explicitly requires behavior coverage for land untapping, vanilla casting/combat, and each French-vanilla keyword.
+- **Impact**: `tests/audited/fdn/*/tests.py` for Batch 1 card directories. Tester revisions added land untap tests, vanilla casting/combat behavior, and French-vanilla keyword behavior including trample and indestructible coverage.
