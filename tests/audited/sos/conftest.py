@@ -103,10 +103,11 @@ def _load_sos_stubs_and_build_registry() -> tuple:
         if meta.collector_number:
             cn = meta.collector_number
             set_code = (meta.set_code or "").lower()
-            # Map by plain collector number
-            cn_to_entry[cn] = (impl_class, card_name)
-            # Also map by set-prefixed directory name for subsets
-            # (e.g. set_code="soa", collector_number="1" → "soa_1")
+            # Only base SOS cards get plain numeric keys to avoid
+            # SOA/SPG collector numbers overwriting SOS mappings.
+            if set_code == "sos" or not set_code:
+                cn_to_entry[cn] = (impl_class, card_name)
+            # SOA/SPG cards get only set-prefixed keys (e.g. "soa_1", "spg_149")
             if set_code and set_code != "sos":
                 prefixed = f"{set_code}_{cn}"
                 cn_to_entry[prefixed] = (impl_class, card_name)

@@ -53,3 +53,14 @@ tests/test_sos_regenerated_artifacts.py — 26 tests for 346-card pool integrity
 - `tests/audited/fdn/001/tests.py` — Sample FDN audited test (5 tests for Plains via card_impl import)
 - `tests/audited/sos/__init__.py` — Package init for SOS audited tests
 - `tests/audited/sos/conftest.py` — Per-card card_impl injection from cards.stubs.sos_stubs via register_sos_stubs(registry) with collector-directory detection; replaces existing card_impl with SOS error module when stubs absent
+
+## Item 6: Generate SOS stub card classes from card specs
+
+### Tests
+- `tests/test_sos_stubs.py` — Validates 346-card registration, attribute derivation, colors, no auto-load, deterministic generation, conftest integration
+
+### Implementation
+- `scripts/generate_audited_stubs.py` — Generator script that reads sos.json and produces stub classes with colors, hybrid mana support, planeswalker loyalty, and P/T for all cards (incl. Vehicles)
+- `cards/stubs/__init__.py` — Package init for stub card implementations
+- `cards/stubs/sos_stubs.py` — Auto-generated 346 stub classes with hybrid mana, planeswalker loyalty, Vehicle P/T, colors, and register_sos_stubs(registry)
+- `tests/audited/sos/conftest.py` — SOS conftest restricts plain numeric collector keys to base SOS cards only; SOA/SPG use set-prefixed keys

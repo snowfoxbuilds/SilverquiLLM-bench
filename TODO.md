@@ -81,7 +81,7 @@ tests/audited/
 
   Testability: Create one sample FDN test file (e.g., `tests/audited/fdn/001/tests.py` for Plains) and verify that `pytest tests/audited/fdn/001/` runs and the test can `from card_impl import Plains`.
 
-- [ ] **Generate SOS stub card classes from card specs**
+- [x] **Generate SOS stub card classes from card specs**
   Detail: Auto-generate minimal stub implementations for all 346 SOS Draft Set cards. Stubs let audited tests execute and produce meaningful assertion failures ("wrong P/T", "no trigger fired") rather than `KeyError` crashes from `CardRegistry.create_instance()`.
 
   Changes needed:

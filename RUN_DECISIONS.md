@@ -50,3 +50,17 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept reviewer; require final implementation revision.
 - **Reasoning**: The audited-test contract requires one `card_impl` per collector directory. Global fallbacks can make wrong-card tests pass and hide broken directory mappings.
 - **Impact**: `tests/audited/fdn/conftest.py`, `tests/audited/sos/conftest.py`, `tests/test_audited_infrastructure.py`.
+
+## Disagreement: SOS stub basic attribute completeness
+- **Reviewer comment (strict)**: Generated SOS stubs lose hybrid mana costs, omit planeswalker loyalty, and omit P/T for vehicles/noncreature cards with printed power/toughness.
+- **Implementer justification**: Initial stubs focused on common base classes and treated unsupported mana symbols conservatively.
+- **Coordinator decision**: accept reviewer; require final implementation revision.
+- **Reasoning**: The TODO explicitly requires basic attributes from Scryfall data. Hybrid mana, loyalty, and vehicle P/T are basic printed attributes and audited tests should fail on behavior gaps rather than incorrect basics.
+- **Impact**: `scripts/generate_audited_stubs.py`, `cards/stubs/sos_stubs.py`, `tests/test_sos_stubs.py`.
+
+## Test failure: Item 6 — Unsupported hybrid mana should not zero CMC
+- **Failing tests**: `test_unsupported_hybrid_does_not_zero_cmc`
+- **Tester's intent**: A card with two-brid mana such as `{2/R}` must not collapse the entire generated mana cost to empty/CMC 0.
+- **Implementer's approach**: The final revision preserved simple hybrid symbols but still missed unsupported hybrid-like symbols.
+- **Coordinator decision**: fix implementation
+- **Reasoning**: The TODO requires basic mana attributes from Scryfall data; preserving a nonzero mana value for unsupported special symbols is better than silently making the card free.

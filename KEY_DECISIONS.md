@@ -160,6 +160,12 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: Global registry fallbacks can make wrong-card tests pass and hide broken collector mappings.
 - **Impact**: `tests/audited/fdn/conftest.py`, `tests/audited/sos/conftest.py`; future audited tests should live under the correct collector directory and import only the class for that card.
 
+## SOS audited stubs approximate unsupported mana symbols
+- **Context**: The SOS audited stub generator must preserve basic mana attributes even when the engine cannot represent every Magic mana symbol exactly.
+- **Decision**: Supported simple hybrid symbols use the engine's hybrid mana representation. Unsupported hybrid-like symbols are approximated without dropping the whole cost: two-brid symbols such as `{2/R}` become generic `{2}`, and Phyrexian symbols such as `{B/P}` become the colored pip.
+- **Reasoning**: Audited stubs should not make nonzero-cost cards free; preserving mana value is more useful for tests than omitting unsupported symbols.
+- **Impact**: `scripts/generate_audited_stubs.py`, generated `cards/stubs/sos_stubs.py`.
+
 ## Replay executor: Seat 1 engine API with fallback
 - **Context**: Seat 1 should use engine API for full validation, but some actions (spell casts) can't go through the full engine pipeline in replay mode.
 - **Decision**: Seat 1 uses engine API where feasible (land plays via `play_land()`, deaths via `move_to_zone()`). Falls back to direct zone mutation on engine rejection. Spell casts use direct mutation with correct destination routing (permanents→battlefield, instants/sorceries→graveyard). Stack simulation marked ENGINE LIMITATION.
