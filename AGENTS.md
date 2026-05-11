@@ -6,14 +6,14 @@ LLM benchmark that evaluates coding ability by tasking models with implementing 
 
 - Language: Python ≥3.12 (per KEY_DECISIONS #2)
 - Engine: Python port of XMage (Java, MIT)
-- Base set: MTG Foundations (~260 cards ported from XMage)
-- Target benchmark set: Secrets of Strixhaven (SOS, released 2026-04-24)
+- Base set: FDN Draft Set (301 cards: FDN 001–291 + SPG 074–083)
+- Benchmark Draft Set: SOS Draft Set (346 cards: SOS ≤271 + SOA 1–65 + SPG 149–158, released 2026-04-24)
 - Agentic tools: Pluggable adapters (OpenCode, Claude Code, Aider, Pi)
 - License: MIT (matching XMage)
 - Card implementations: one class per card, subclassing `CardImpl`
 - Tests: pytest with `test_utils` helpers, max 30 per card
 - Four scoring categories: blind implementation, implementation with tests, test quality, engine extension quality
-- Development order: Phase 1 (engine) → Phase 2 (harness prototype) → Phase 3 (adapters, persistent engine) → Phase 4 (base set completion, pipeline validation) → Phase 5 (scored runs)
+- Development order: Phase 1 (engine) → Phase 2 (harness prototype) → Phase 3 (adapters, persistent engine) → Phase 4 (base set completion) → Phase 5 (replay validation pipeline) → Phase 6 (SOS Draft Set completion & audited test suites)
 ## Domain Language
 
 See [CONTEXT.md](http://context.md/) for the project's domain glossary.

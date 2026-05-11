@@ -47,7 +47,7 @@ Source: `github.com/magefree/mage` (Java, MIT)
 
 **Continuous Effects & Layers**: 7-layer system (copy → control → text → type → color → ability → P/T). Timestamp ordering within layers.
 
-### Base Set: MTG Foundations (Expanded)
+### Base Set: MTG Foundations Draft Set
 
 The Foundations card pool is the primary reference set that agents can browse during benchmarking. The initial target is ~260 cards from the MTG Foundations set, but the pool should be **expanded beyond vanilla Foundations** to ensure agents have working examples of diverse mechanics they'll encounter in target sets.
 
@@ -56,22 +56,8 @@ The Foundations card pool is the primary reference set that agents can browse du
 1. Engine validation — all Foundations tests passing = core mechanics correct
 2. Agent reference — agents browse these as working examples during benchmarking
 3. Regression suite — catches engine regressions
-**Expanded pool (deferred to post-base-set):** Add cards from other sets that demonstrate mechanics likely to appear in the target set but absent from Foundations. Scoped after Base Set is complete and validated. For Strixhaven (SOS), candidates include:
+~~**Expanded pool**~~ *(dropped — see Decisions)*: Originally planned to add reference cards for mechanics absent from Foundations. Dropped because agents are expected to implement new mechanics from scratch using oracle text and comprehensive rules. This is a better benchmark signal — it tests whether agents can handle novel mechanics, not just pattern-match.
 
-- **Ward** — Not in Foundations; add exemplar cards (e.g. Frost Titan, Iridescent Hornbeetle)
-- **Magecraft** — Strixhaven-specific; add a few simple magecraft cards as reference
-- **Learn/Lesson** — Strixhaven-specific exile-to-hand mechanic
-- **Modal double-faced cards (MDFCs)** — Add Zendikar/Strixhaven MDFCs if engine supports them
-- **Copy spells** — Storm, Fork-type effects for magecraft interaction testing
-- **Exile-matters** — Cards that exile from graveyard, foretell, etc.
-The expanded pool is curated per target set. Cards are selected based on the classified card specs: scan the target set's mechanics, identify which ones lack Foundations examples, and add 5-10 exemplar cards per gap from older sets.
-
-**Selection criteria for expanded cards:**
-
-- Must have a working XMage implementation to port from
-- Prefer simpler cards that cleanly demonstrate the mechanic
-- Avoid cards that require un-ported engine features
-- Each expanded card gets the same treatment as Foundations: ported implementation + tests
 ### Game State API (Draft)
 
 ```python
@@ -163,9 +149,15 @@ Multiplayer, sideboard/best-of-three, companion/partner, dungeons/Ring, day/nigh
 ## Decisions
 
 - **Port XMage, not build from scratch**: XMage's rules logic is the ground truth. [SETTLED]
-- **Porting scope: Foundations limited pool + targeted expansions**: Core set is FDN 001–291 (~291 limited format cards). Expanded pool deferred until base set is complete and validated via Replay Validation. [UPDATED]
+- **Porting scope: Foundations Draft Set only**: Core set is the FDN Draft Set (FDN 001–291 + SPG 074–083 = 301 cards). No Expanded Pool — agents implement new mechanics from scratch. [UPDATED]
 - **Base set validated via Replay Validation**: Engine correctness verified by replaying 17lands MTGA game data and checking game-state checkpoints. Replaces XMage differential testing — MTGA is closer to ground truth and avoids cross-language comparison complexity. [SETTLED]
 - **MIT license**: SilverquiLLM-bench and XMage are both MIT licensed. [SETTLED]
 - **DeterministicPlayer only for v1**: Pre-determined board states, no AI player. StrategyPlayer deferred. [SETTLED]
 - **Foundations card audit deferred to implementation**: Pull card list from Scryfall/MTGJson during Phase 1. [SETTLED]
 - **Engine writable during benchmark runs**: Agents may extend the engine to support new mechanics. Changes persist across cards within a run. Regression tested after each card. [SETTLED]
+- **Expanded Pool dropped**: Agents implement new mechanics from scratch using oracle text + comprehensive rules. No curated reference implementations for target set mechanics. [SETTLED]
+- **Grilling 2026-05-10: Self-ETB effects use ****`on_resolve()`****, not triggers**: `register_triggers()` fires AFTER the ETB event, so self-ETB triggers never match during normal resolution. Cards with self-ETB effects (e.g., Embercleave auto-attach) perform the action directly in `on_resolve()`. [SETTLED]
+- **Grilling 2026-05-10: P/T bonuses in Layer 7c, keywords in Layer 6**: Equipment/aura P/T bonuses use Layer 7 SubLayer.MODIFY_PT (7c). Keywords use Layer 6. Prevents CDAs (Layer 7a) from overwriting P/T bonuses. [SETTLED]
+- **Grilling 2026-05-10: Protections cleared during ****`_reset_characteristics()`**: Protection is a continuous effect reapplied each layer pass, not a sticky attribute. [SETTLED]
+- **Grilling 2026-05-10: Hybrid mana — deduct generic before solving hybrid**: When explicit `choices` provided, deduct generic mana from pool BEFORE `_solve_hybrid()` to prevent solver stealing reserved mana. [SETTLED]
+- **Grilling 2026-05-10: Cost reduction — controller set before hook**: `get_cost_reduction()` temporarily sets `card.controller = controller` before calling the hook, then restores. `cast_spell()` also sets controller early. [SETTLED]

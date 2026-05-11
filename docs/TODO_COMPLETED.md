@@ -99,6 +99,23 @@ Branch: `execute-todo-with-subagents/phase3-adapters` → `main`
 - [x] **Update prompts to inform agents about engine extensibility**
 - [x] **Add Category 4 scoring: Engine Extension Quality**
 - [x] **Expand Foundations card pool (batch 1: +30 cards)**
+## Completed 2026-05-10
+
+Phase 5: Replay Validation Pipeline (PR #7 — 11 items, 10 SPG cards, replay parser + validator)
+
+Branch: `execute-todo-with-subagents/phase5-replay-validation` → `main`
+
+- [x] **Hybrid mana parsing and cost payment**
+- [x] **Cost reduction during casting**
+- [x] **Protection from qualities (keyword ability)**
+- [x] **Extra turns infrastructure (stub)**
+- [x] **SPG Batch 1: Simple spells and utility creatures (5 cards)** — Condemn, Grim Tutor, Goblin Bushwhacker, Paradise Druid, Bloom Tender
+- [x] **SPG Batch 2: Complex permanents and spells (5 cards)** — Sphinx's Tutelage, Embercleave, Akroma's Memorial, Temporal Manipulation, Fiend Artisan
+- [x] **Card ID mapping (grpId → card name)**
+- [x] **17lands GRE JSON parser**
+- [x] **Replay executor (state-diff observer mode)**
+- [x] **Divergence detection and reporting**
+- [x] **CLI: ****`benchmark validate`**** command**
 ## Completed 2026-05-07
 
 Phase 2.5: CLI Wiring, Contamination Controls & Integration Test (PR #3 — 11 items)

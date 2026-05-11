@@ -14,13 +14,13 @@ Pluggable interface (`AgentAdapter` base class) that translates the runner's pro
 
 **Audited Eval**
 
-Third evaluation layer: all agents' implementations tested against human-curated gold-standard tests. The authoritative measure of correctness.
+Third evaluation layer: all agents' implementations tested against gold-standard tests. Tests are LLM-drafted, then failure-reviewed by a human — failures during benchmark runs are reviewed and corrected by hand; passing tests are accepted as-is. The authoritative measure of correctness.
 
 *Avoid*: "gold eval", "human eval"
 
 **Base Set**
 
-MTG Foundations limited format card pool (FDN 001–291 + SPG 074–083 Special Guests). Serves as engine validation, agent reference examples, and regression suite. Ported from XMage Java source. Engine validated via Replay Validation against 17lands GRE JSON data.
+The FDN Draft Set: MTG Foundations limited format card pool (FDN 001–291 + SPG 074–083 Special Guests). Serves as engine validation, agent reference examples, and regression suite. Ported from XMage Java source. Engine validated via Replay Validation against 17lands GRE JSON data.
 
 *Avoid*: "foundation cards" (use "Foundations cards" or "base set")
 
@@ -42,6 +42,12 @@ Classification of card difficulty: trivial (1×), simple (2×), medium (3×), co
 
 *Avoid*: "difficulty level", "tier" (as a standalone key name)
 
+**Card Pool**
+
+Synonym for Draft Set when referring to the set of cards included in a benchmark. The SOS Card Pool = SOS Draft Set.
+
+*Avoid*: "target set" (deprecated — was ambiguous about whether it meant a single Scryfall set code or the full draft pool)
+
 **Contamination**
 
 When an LLM has seen target card implementations in its training data, invalidating the benchmark. Controlled via new set selection, no web access, and clean workspaces.
@@ -54,17 +60,23 @@ Second evaluation layer: each agent's code tested against every other agent's te
 
 *Avoid*: "cross-validation" (overloaded ML term)
 
+**Draft Set**
+
+All cards contained in draft booster packs for a given MTG release. A Draft Set may span multiple Scryfall set codes. The SOS Draft Set = SOS base (cn ≤271) + SOA Mystical Archives (cn 1–65) + SPG Special Guests (cn 149–158). The FDN Draft Set = FDN 001–291 + SPG 074–083. Draft Set defines the card pool for Replay Validation because 17lands replays are from draft games.
+
+*Avoid*: "target set" (deprecated), "set" alone (ambiguous — could mean a single Scryfall set code)
+
 **DeterministicPlayer**
 
 Test player with scripted actions for reproducible game state setup. All benchmark tests use this — no AI decision-making in v1.
 
 *Avoid*: "test player", "mock player"
 
-**Expanded Pool**
+**Expanded Pool** *(deprecated — dropped)*
 
-Cards from non-Foundations sets added to give agents reference examples for mechanics absent from Foundations (e.g., Ward, Magecraft for Strixhaven). Curated per target set.
+Originally planned: cards from non-Foundations sets added as reference examples for mechanics absent from Foundations. Dropped — agents implement new mechanics from scratch using oracle text + comprehensive rules. Better benchmark signal.
 
-*Avoid*: "extra cards", "supplemental cards"
+*Avoid*: using this term — it no longer applies
 
 **Pipeline Validation Run**
 
@@ -96,11 +108,11 @@ Structured JSON file (`setup_questions.json`) agents emit to flag workspace issu
 
 *Avoid*: "error report"
 
-**Target Set**
+**Target Set** *(deprecated — use Draft Set)*
 
-The new MTG set whose cards agents must implement. For v1: Secrets of Strixhaven (set code SOS, released 2026-04-24). Chosen for contamination resistance.
+Formerly: the new MTG set whose cards agents must implement. Replaced by Draft Set because the benchmark card pool spans multiple Scryfall set codes (SOS + SOA + SPG), not a single set. For v1 the target Draft Set is SOS (released 2026-04-24).
 
-*Avoid*: "benchmark set" (ambiguous with base set)
+*Avoid*: using this term in new code or specs — use "Draft Set" or "Card Pool" instead
 
 **Test-Informed Implementation**
 
@@ -142,7 +154,10 @@ Clean temp directory created per card containing card-specific files (card_spec,
 - Each card may produce Engine Extensions that persist to subsequent cards' workspaces.
 - After each card, a Regression Check re-runs all previous cards' tests against the current Persistent Engine.
 - Cross-Eval tests every agent's implementations against every other agent's tests (N×N).
-- The Base Set and Expanded Pool together form the reference codebase agents can browse.
+- The Base Set forms the reference codebase agents can browse. No Expanded Pool — agents implement new mechanics from scratch.
+- A Draft Set may span multiple Scryfall set codes (e.g., SOS + SOA + SPG).
+- Draft Set defines the card pool for Replay Validation (17lands replays are draft games).
+- Audited tests follow a uniform per-card structure: `tests/audited/{set_code}/{collector_number}/tests.py`, importing from `card_impl`. Reusable across any set.
 - A Workspace is created per Card Spec within a run, with a writable reference to the Persistent Engine.
 - The Base Set (FDN 001–291 + SPG 074–083) is validated via Replay Validation against 17lands GRE JSON data before scored benchmark runs.
 - A Pipeline Validation Run precedes scored benchmark runs to verify the orchestration pipeline.
