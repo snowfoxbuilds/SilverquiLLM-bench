@@ -2,104 +2,96 @@
 
 Appended by each Implementer invocation after it writes its diff. One section per TODO item.
 
-
-## Item 1: Fix is_aura default True in _sba_aura_unattached
+## Item 1: Hybrid mana parsing and cost payment
 
 ### Implementation
-- `engine/state_based_actions.py` — Changed getattr default for is_aura from True to False
+- `engine/types.py` — Added HybridManaSymbol dataclass, updated ManaCost with hybrid field and parse() to handle {X/Y} tokens
+- `engine/mana.py` — Updated ManaPool.can_pay() and pay() with backtracking hybrid symbol resolution; fixed pay() to reserve explicit generic choices before hybrid solving
+- `tests/engine/test_types.py` — Removed thin hybrid test (covered by test_hybrid_mana.py)
 
-## Item 2: Wire SBA trigger queueing in resolve_state_based_actions()
+## Item 2: Cost reduction during casting
+
+### Implementation
+- `engine/card.py` — Added `cost_reduction(game) -> int` hook method to CardImpl (default 0)
+- `engine/casting.py` — Added `get_cost_reduction()` and `_apply_cost_reduction()` functions; integrated into `cast_spell()` before mana payment
+- `tests/engine/test_cost_reduction.py` — Tests for cost reduction clamping, application, and cast_spell integration
+
+## Item 3: Protection from qualities (keyword ability)
+
+### Implementation
+- `engine/protection.py` — New module: ProtectionAbility class, get_colors(), has_protection_from(), and DEBT helper functions
+- `engine/combat.py` — Added protection check in _can_block() and _deal_damage() to prevent blocking and combat damage from protected-from sources
+- `engine/casting.py` — Added protection check in cast_spell() to reject targets with protection from the spell (T in DEBT)
+- `engine/game.py` — Added protection check in deal_damage() to prevent damage from protected-from sources
+- `engine/state_based_actions.py` — Extended _sba_aura_unattached() to detach auras and equipment from permanents with protection from them
+- `tests/engine/test_protection.py` — 34 tests covering DEBT mnemonic (damage, enchanting, blocking, targeting)
+
+## Item 4: Extra turns infrastructure (stub)
+
+### Implementation
+- `engine/game_state.py` — Added `extra_turns: list[int]` FIFO queue, `_normal_next_index` for tracking normal rotation independently; modified `advance_phase()` to pop extra turns without advancing normal rotation
+- `tests/engine/test_extra_turns.py` — 9 tests for extra turn granting, FIFO ordering, and normal turn order resumption (3 tests expected to be updated by Tester for inserted-turn semantics)
+
+## Item 5: SPG Batch 1 — Simple spells and utility creatures
 
 ### Tests
-- `tests/engine/test_state_based_actions.py` — Existing SBA tests (56 passed, no new test file from tester)
+- `tests/cards/test_special_guests.py` — Tests for all 5 Special Guest cards and registration
 
 ### Implementation
-- `engine/state_based_actions.py` — Fire CREATURE_DIES/LEAVES_BATTLEFIELD events in _move_to_graveyard(); add trigger-aware outer loop in resolve_state_based_actions()
+- `cards/foundations/special_guests.py` — Implemented 5 Special Guest cards; revised: added can_cast guard and attacking validation for Condemn, choose_card API for Grim Tutor, has_kicker flag for Bushwhacker, functional continuous effect apply for Bushwhacker buff, removed hexproof from Paradise Druid base keywords
 
-## Item 3: Centralize zone-transition hooks into move_to_zone()
+## Item 6: SPG Batch 2 — Complex permanents and spells
 
 ### Implementation
-- `engine/zones.py` — Added move_to_zone() function with replacement effects, event firing, and trigger registration/unregistration hooks
-- `engine/game.py` — Refactored destroy(), sacrifice(), exile() to delegate to move_to_zone()
-- `engine/state_based_actions.py` — Refactored _move_to_graveyard() to delegate to move_to_zone()
-- `engine/casting.py` — Refactored _resolve_spell() to use move_to_zone() for both permanent (STACK→BATTLEFIELD) and non-permanent (STACK→GRAVEYARD) spells
+- `cards/foundations/special_guests.py` — Added 5 complex SPG cards (Sphinx's Tutelage, Embercleave, Akroma's Memorial, Temporal Manipulation, Fiend Artisan) with full registration; revised: Embercleave ETB attach via on_resolve() instead of trigger-only, P/T bonus moved to Layer 7c, extracted _do_etb_attach helper
+- `engine/card.py` — Clear protections list in Creature._reset_characteristics() so granted protections don't persist after source leaves
 
-## Item 4: Batch 1 — Remaining vanilla & French vanilla creatures
+## Item 7: Card ID mapping (grpId → card name)
 
 ### Tests
-- `tests/cards/test_vanilla_creatures_batch2.py` — 45 tests for 7 Scryfall-verified FDN creatures (stats, keywords, registry, integration)
+(no pre-written tests for this item)
 
 ### Implementation
-- `cards/foundations/vanilla_creatures_batch2.py` — Rewrote to 7 real FDN creatures: Fire Elemental, Gigantosaurus, Quakestrider Ceratops, Elementalist Adept, Skyraker Giant, Swiftblade Vindicator, Zetalpa Primal Dawn
+- `data/replays/card_id_map.json` — grpId-to-card-name mapping with 592 entries (582 from Scryfall + 10 synthetic SPG #74-83); revised: added card_name_to_grpIds (plural, list-valued) for duplicate-name disambiguation, synthetic flag on SPG 94700-94709 entries
+- `scripts/build_card_id_map.py` — Script to fetch card data from Scryfall API and build the mapping JSON; revised: reverse map preserves all grpIds via card_name_to_grpIds, synthetic entries flagged with "synthetic": true, error handling on curl/Scryfall API failures
 
-## Item 5: Batch 2 — Simple non-targeted instants & sorceries
+
+## Item 8: 17lands GRE JSON parser
 
 ### Tests
-- `tests/cards/test_simple_spells_batch2.py` — 63 tests for 15 FDN non-targeted instants/sorceries (draw, lifegain, tokens, each-player effects, registry)
+tests/test_replay_parser.py — 39 tests for replay parsing: game setup, opening hands, state reconstruction, land plays, life totals, draws, ObjectIdChanged tracking, API methods
 
 ### Implementation
-- `cards/foundations/simple_spells_batch2.py` — 15 new FDN spells: Embrace the Paradox, Rapturous Moment, Wisdom of Ages, Pursue the Past, Seize the Spoils, Group Project, Muse's Encouragement, Visionary's Dance, Antiquities on the Loose, Fractal Anomaly, Snarl Song, Send in the Pest, Withering Curse, Social Snub, Pox Plague
-- `engine/game.py` — Added `cards_drawn_this_turn` tracking in `draw_card()` for Fractal Anomaly counter support
+silverquillm/replay/__init__.py — Package init with public API exports
+silverquillm/replay/types.py — Dataclasses for ReplayGame, GameSnapshot, ReplayAction, GameObject, Zone, Annotation, etc.
+silverquillm/replay/state.py — GRE state reconstruction (full/diff merging with sparse gameObject merge), action inference, ObjectTracker for zone transition tracking
+silverquillm/replay/parser.py — High-level parse_replay() function, card ID map loading
+data/replays/sample_replay.json — Synthetic 5-turn replay data with real grpIds for testing
 
-## Item 6: Batch 3 — Simple targeted instants & sorceries
+## Item 9: Replay executor (state-diff observer mode)
 
 ### Tests
-- `tests/cards/test_simple_spells_batch3.py` — 68 tests for 18 targeted FDN spells
+tests/test_replay_executor.py — 23 tests for ReplayExecutor initialization, step execution, state comparison, seat 1/2 behavior, imports
 
 ### Implementation
-- `cards/foundations/simple_spells_batch3.py` — 18 targeted FDN spells with fizzle-safe on_resolve, create_token() for tokens, controller-filtered get_targets, and power property for damage reads
+silverquillm/replay/executor.py — ReplayExecutor class with state-diff observer mode, seat 1 full validation, seat 2 oracle injection, state comparison (life totals, zone contents, battlefield state)
+silverquillm/replay/__init__.py — Added ReplayExecutor, StateMismatch, StepResult exports
 
-## Item 7: Batch 4 — Non-basic lands
-
-### Implementation
-- `cards/foundations/lands.py` — 13 FDN non-basic lands: 10 gain lands (ETB tapped, gain 1 life, dual-color mana), 3 utility lands with activated abilities (Rogue's Passage unblockable, Soulstone Sanctuary +1/+1 counter, Evolving Wilds fetch). Fixed rarities (uncommon/rare for utility lands).
-
-## Item 8: Batch 5 — Creatures with ETB triggers
+## Item 10: Divergence detection and reporting
 
 ### Tests
-- No test files provided by Tester for this item
+tests/test_divergence_detection.py — 43 tests for DivergenceType, Divergence, ValidationReport, ValidatingExecutor, validate_replay
 
 ### Implementation
-- `cards/foundations/etb_creatures.py` — 29 FDN ETB creatures: draw (Helpful Hunter, Inspiring Overseer, Cloudblazer, Icewind Elemental), lifegain (Pelakka Wurm, Vampire Spawn), tokens (Prideful Parent, Resolute Reinforcements, Guarded Heir, Dragon Trainer, Regal Caracal, Rapacious Dragon), damage (Skeleton Archer, Viashino Pyromancer), destroy (Reclamation Sage, Meteor Golem), exile (Ambush Wolf, Angel of Finality), bounce (Bigfin Bouncer, Exclusion Mage, Mischievous Pup), graveyard (Vampire Soulcaller, Elvish Regrower, Shipwreck Dowser), counters (Felidar Savior), discard (Burglar Rat, Arbiter of Woe), debuff (Burrog Befuddler, Massacre Wurm)
+silverquillm/replay/validation.py — DivergenceType enum, Divergence dataclass, ValidationReport, ValidatingExecutor (MISSING_CARD not counted as successful, ILLEGAL_ACTION from skipped/skip_reason + keyword fallback, expected/actual state populated for ENGINE_ERROR/MISSING_CARD)
+silverquillm/replay/__init__.py — Added Divergence, DivergenceType, ValidatingExecutor, ValidationReport, validate_replay exports
 
-## Item 9: Batch 6 — Auras
+## Item 11: CLI `benchmark validate` command
 
 ### Tests
-- `tests/cards/test_auras_batch2.py` — 52 tests for all 10 batch-2 auras
+(no pre-written tests for this item)
 
 ### Implementation
-- `cards/foundations/auras_batch2.py` — 10 FDN auras with reviewer fixes: death trigger payload key, add_counter usage, move_to_zone for sacrifice, ENGINE LIMITATION comments for skip_untap/mana ability/name-reset/controller-change
-
-## Item 10: Equipment batch
-
-### Tests
-- `tests/cards/test_equipment.py` — Tests for all 7 equipment cards: metadata, equip, continuous effects, cross-cutting behavior, registry
-
-### Implementation
-- `cards/foundations/equipment.py` — 7 FDN equipment cards with get_activated_abilities() equip abilities, combat damage trigger (Goldvein Pick), landfall trigger (Adventuring Gear), ETB auto-attach (Celestial Armor)
-
-## Item 11: Death trigger creatures
-
-### Implementation
-- `cards/foundations/death_trigger_creatures.py` — 17 FDN creatures with death triggers: token creation (Infestation Sage, Gleaming Barrier, Maalfeld Twins), draw (Solemn Simulacrum, High-Society Hunter), mill/surveil (Crow of Dark Tidings, Wary Thespian), drain/damage (Vengeful Bloodwitch, Midnight Reaper, Garna, Crossway Troublemakers, Kalastria Highborn), graveyard recursion (Driver of the Dead, Infernal Vessel, Nine-Lives Familiar, Fiendish Panda), library (Spinner of Souls)
-
-## Item 12: Activated ability creatures
-
-### Implementation
-- `cards/foundations/activated_creatures.py` — 19 FDN creatures with activated abilities: mana (Llanowar Elves, Elvish Archdruid, Ruby Daring Tracker), tap (Rune-Sealed Wall, Strix Lookout, Axgard Cavalry, Krenko Mob Boss), sacrifice (Cathar Commando, Fanatical Firebrand, Heartfire Immolator, Burnished Hart, Hungry Ghoul), pump (Shivan Dragon, Sower of Chaos, Treetop Snarespinner), other (Spectral Sailor, Scavenging Ooze, Reassembling Skeleton, Mild-Mannered Librarian)
-
-## Item 13: Global enchantments
-
-### Implementation
-- `cards/foundations/global_enchantments.py` — 10 FDN non-aura enchantments: anthems (Anthem of Champions, Goblin Oriflamme), keyword-granting (Garruk's Uprising), static (Authority of the Consuls), upkeep trigger (Phyrexian Arena), creature-enters trigger (Impact Tremors), spell-cast triggers (Rite of the Dragoncaller, Painful Quandary), ETB exile-until-leaves (Banishing Light), activated ability (Vampiric Rites)
-
-## Item 14: Remaining artifacts & planeswalkers
-
-### Implementation
-- `cards/foundations/artifacts_batch2.py` — 27 remaining FDN artifacts: mana rocks (Gilded Lotus, Carnelian Orb, Heraldic Banner, Pyromancer's Goggles), utility (Banner of Kinship, Ravenous Amulet, Goblin Firebomb, Feldon's Cane, Soul-Guide Lantern, Sorcerous Spyglass, Mazemind Tome, Expedition Map, Wishclaw Talisman), equipment (Fishing Pole, Pirate's Cutlass), vehicle (Cultivator's Caravan), artifact creatures (Crystal Barricade, Scrawling Crawler, Campus Guide, Juggernaut, Darksteel Colossus, Diamond Mare, Gate Colossus, Steel Hellkite, Three Tree Mascot, Adaptive Automaton, Ramos Dragon Engine)
-- `cards/foundations/planeswalkers_batch2.py` — 3 remaining FDN planeswalkers with fully implemented loyalty abilities: Kaito Cunning Infiltrator (3 loyalty, +1/-2/-9), Chandra Flameshaper (6 loyalty, +2/+1/-4), Vivien Reid (5 loyalty, +1/-3/-8)
-
-## Item 15: Modal/X-cost/complex cards
-
-### Implementation
-- `cards/foundations/complex_spells.py` — 16 remaining complex FDN cards: modal instants (Abrade, Valorous Stance, Goblin Surprise, Deadly Plot), modal sorceries (Slagstorm, Bushwhack, Seeker's Folly), modal ETB creatures (Apothecary Stomper, Charming Prince), X-cost spells (Exsanguinate, Primal Might, Finale of Revelation), kicker spells (Burst Lightning, Into the Roil), kicker creatures (Gnarlid Colony, Gatekeeper of Malakir)
+silverquillm/replay/cli.py — CLI `validate` command with file/dir support, --cards, --verbose (per-step callback), --report, --stop-on-divergence; fixed divergence_rate to games_with_divergence/games_attempted; parse failures counted as attempted games
+silverquillm/replay/validation.py — Added stop_on_first and step_callback params to execute_all() and validate_replay() for within-replay early exit and verbose output
+silverquillm/cli.py — Imported and registered the `validate` subcommand from `silverquillm.replay.cli`

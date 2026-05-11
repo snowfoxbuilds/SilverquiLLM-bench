@@ -6,7 +6,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74�
 
 ### Engine Extensions for SPG Cards
 
-- [ ] **Hybrid mana parsing and cost payment**
+- [x] **Hybrid mana parsing and cost payment**
   Detail: Extend `ManaCost.parse()` to handle hybrid mana symbols like `{B/G}`. A hybrid symbol can be paid with either color. Fiend Artisan (SPG #83) costs `{B/G}{B/G}` — each symbol payable with black or green.
 
   Changes needed:
@@ -20,7 +20,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74�
 
   Testability: Unit test parsing `{B/G}{B/G}` → correct ManaCost. Test payment with pool containing only black, only green, and mixed. Test that `{W/U}` and other hybrid pairs also work.
 
-- [ ] **Cost reduction during casting**
+- [x] **Cost reduction during casting**
   Detail: Implement a cost-reduction hook in the casting pipeline. Embercleave (SPG #77) costs `{4}{R}{R}` but costs `{1}` less for each attacking creature you control.
 
   Changes needed:
@@ -32,7 +32,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74�
 
   Testability: Unit test that a card with cost `{4}{R}{R}` and reduction of 3 costs `{1}{R}{R}`. Test reduction can’t go below 0 generic. Test with 0 reduction (full cost).
 
-- [ ] **Protection from qualities (keyword ability)**
+- [x] **Protection from qualities (keyword ability)**
   Detail: Implement "protection from [quality]" keyword. Akroma’s Memorial (SPG #81) grants protection from black and from red. Protection prevents: **D**amage from sources with that quality, **E**nchanting/equipping by permanents with that quality, **B**locking by creatures with that quality, **T**argeting by spells/abilities from sources with that quality (DEBT mnemonic).
 
   Changes needed:
@@ -46,7 +46,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74�
 
   Testability: Test creature with protection from red: can’t be targeted by red spells, can’t be blocked by red creatures, doesn’t take damage from red sources, red auras fall off.
 
-- [ ] **Extra turns infrastructure (stub)**
+- [x] **Extra turns infrastructure (stub)**
   Detail: Implement "take an extra turn after this one" as a working feature. Temporal Manipulation (SPG #82) is `{3}{U}{U}` sorcery — "Take an extra turn after this one."
 
   Changes needed:
@@ -61,7 +61,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74�
 
 ### SPG Card Implementations
 
-- [ ] **SPG Batch 1: Simple spells and utility creatures (5 cards)**
+- [x] **SPG Batch 1: Simple spells and utility creatures (5 cards)**
   Detail: Implement the simpler Special Guest cards that need minimal or no new engine extensions:
 
   1. **Condemn** (SPG #74) — {W} instant. Put target attacking creature on the bottom of its owner’s library. Its controller gains life equal to its toughness. Needs: target validation (must be attacking), bottom-of-library zone move, life gain based on toughness.
@@ -73,7 +73,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74�
 
   Testability: Per-card unit tests. Condemn: test on attacking creature, verify bottom-of-library + life gain. Grim Tutor: test search + life loss. Bushwhacker: test kicked vs unkicked. Paradise Druid: test hexproof while untapped, loses hexproof when tapped for mana. Bloom Tender: test with various color distributions among controlled permanents.
 
-- [ ] **SPG Batch 2: Complex permanents and spells (5 cards)**
+- [x] **SPG Batch 2: Complex permanents and spells (5 cards)**
   Detail: Implement the mechanically complex Special Guest cards. These depend on the engine extensions from earlier items.
 
   1. **Sphinx’s Tutelage** (SPG #75) — {2}{U} enchantment. Whenever you draw a card, target opponent mills 2. If two nonland cards that share a color were milled this way, repeat this process. {5}{U}: Draw a card, then discard a card. Needs: draw trigger, mill mechanic (top N cards from library → graveyard), repeat-loop logic (check milled cards for shared color among nonlands), activated draw+discard ability.
@@ -89,7 +89,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74�
 
 ### Replay Parsing
 
-- [ ] **Card ID mapping (grpId → card name)**
+- [x] **Card ID mapping (grpId → card name)**
   Detail: Download 17lands FDN card list from [17lands.com/public_datasets](http://17lands.com/public_datasets). Build a `dict[int, str]` mapping `grpId → card_name`. Store as `data/replays/card_id_map.json`. This is required before any replay can be interpreted — the GRE data uses integer `grpId` values for all card references.
 
   Also build a reverse map `card_name → grpId` for test convenience. Include set code and collector number in the mapping for disambiguation.
@@ -98,7 +98,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74�
 
   Testability: Map resolves all `grpId` values found in the sample replay JSON (from the [17lands Replay Data Schema](https://www.notion.so/35b6a7adc8ed80978dccdf724213b6f8) page) to valid FDN/SPG card names. No unmapped IDs in the sample data.
 
-- [ ] **17lands GRE JSON parser**
+- [x] **17lands GRE JSON parser**
   Detail: Parse 17lands replay data — clean JSON files containing pre-parsed GRE message streams. Format: `{seat_id, opponent_seat_id, events: [...]}` where each event is a `GameStateMessage` with `GameStateType_Full` or `GameStateType_Diff`. See [17lands Replay Data Schema](https://www.notion.so/35b6a7adc8ed80978dccdf724213b6f8) for the full schema.
 
   The parser must:
@@ -116,7 +116,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74�
 
 ### Validation Runner
 
-- [ ] **Replay executor (state-diff observer mode)**
+- [x] **Replay executor (state-diff observer mode)**
   Detail: Build a `ReplayExecutor` that steps through `GameSnapshot` objects from the parser and validates engine behavior using state-diff comparison:
 
   1. Initialize engine game state from the first `GameStateType_Full` snapshot (players, life totals, opening hands via `grpId` → card mapping)
@@ -143,7 +143,7 @@ Scope: Implement engine extensions and the 10 FDN Special Guests cards (SPG #74�
 
   Testability: Introduce a deliberate engine bug (e.g., wrong damage amount), run replay, assert divergence is detected and categorized as STATE_MISMATCH. Test MISSING_CARD detection by removing a card implementation.
 
-- [ ] **CLI: ****`benchmark validate`**** command**
+- [x] **CLI: ****`benchmark validate`**** command**
   Detail: Add `benchmark validate <replay_path_or_dir>` command. Options: `--cards` (filter to replays containing specific cards by name), `--verbose` (show each action and state comparison), `--report` (output JSON report file), `--stop-on-divergence` (halt at first mismatch for debugging). Summary output: games attempted, games completed without divergence, divergence rate, top divergence causes, per-card divergence rates.
 
   Files: Extend `silverquillm/cli.py`, new `silverquillm/replay/cli.py`.

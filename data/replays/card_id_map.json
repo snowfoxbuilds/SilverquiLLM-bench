@@ -1,0 +1,7672 @@
+{
+  "source": "scryfall_api",
+  "description": "grpId (Arena card ID) to card name mapping for FDN and SPG sets",
+  "grpId_to_card": {
+    "93901": {
+      "card_name": "Abrade",
+      "set_code": "FDN",
+      "collector_number": "188"
+    },
+    "93767": {
+      "card_name": "Abyssal Harvester",
+      "set_code": "FDN",
+      "collector_number": "54"
+    },
+    "93637": {
+      "card_name": "Adamant Will",
+      "set_code": "FDN",
+      "collector_number": "488"
+    },
+    "94151": {
+      "card_name": "Adaptive Automaton",
+      "set_code": "FDN",
+      "collector_number": "723"
+    },
+    "93962": {
+      "card_name": "Adventuring Gear",
+      "set_code": "FDN",
+      "collector_number": "249"
+    },
+    "93863": {
+      "card_name": "Aegis Turtle",
+      "set_code": "FDN",
+      "collector_number": "150"
+    },
+    "93864": {
+      "card_name": "Aetherize",
+      "set_code": "FDN",
+      "collector_number": "151"
+    },
+    "93924": {
+      "card_name": "Affectionate Indrik",
+      "set_code": "FDN",
+      "collector_number": "211"
+    },
+    "93700": {
+      "card_name": "Aggressive Mammoth",
+      "set_code": "FDN",
+      "collector_number": "551"
+    },
+    "93847": {
+      "card_name": "Ajani, Caller of the Pride",
+      "set_code": "FDN",
+      "collector_number": "134"
+    },
+    "93848": {
+      "card_name": "Ajani's Pridemate",
+      "set_code": "FDN",
+      "collector_number": "135"
+    },
+    "93828": {
+      "card_name": "Alesha, Who Laughs at Fate",
+      "set_code": "FDN",
+      "collector_number": "115"
+    },
+    "93811": {
+      "card_name": "Ambush Wolf",
+      "set_code": "FDN",
+      "collector_number": "98"
+    },
+    "93638": {
+      "card_name": "Ancestor Dragon",
+      "set_code": "FDN",
+      "collector_number": "489"
+    },
+    "93993": {
+      "card_name": "Angelic Destiny",
+      "set_code": "FDN",
+      "collector_number": "565"
+    },
+    "93639": {
+      "card_name": "Angelic Edict",
+      "set_code": "FDN",
+      "collector_number": "490"
+    },
+    "93849": {
+      "card_name": "Angel of Finality",
+      "set_code": "FDN",
+      "collector_number": "136"
+    },
+    "94134": {
+      "card_name": "Angel of Vitality",
+      "set_code": "FDN",
+      "collector_number": "706"
+    },
+    "93873": {
+      "card_name": "An Offer You Can't Refuse",
+      "set_code": "FDN",
+      "collector_number": "160"
+    },
+    "93829": {
+      "card_name": "Anthem of Champions",
+      "set_code": "FDN",
+      "collector_number": "116"
+    },
+    "93812": {
+      "card_name": "Apothecary Stomper",
+      "set_code": "FDN",
+      "collector_number": "99"
+    },
+    "93715": {
+      "card_name": "Arahbo, the First Fang",
+      "set_code": "FDN",
+      "collector_number": "2"
+    },
+    "93768": {
+      "card_name": "Arbiter of Woe",
+      "set_code": "FDN",
+      "collector_number": "55"
+    },
+    "93742": {
+      "card_name": "Arcane Epiphany",
+      "set_code": "FDN",
+      "collector_number": "29"
+    },
+    "94013": {
+      "card_name": "Arcanis the Omnipotent",
+      "set_code": "FDN",
+      "collector_number": "585"
+    },
+    "93743": {
+      "card_name": "Archmage of Runes",
+      "set_code": "FDN",
+      "collector_number": "30"
+    },
+    "93994": {
+      "card_name": "Archway Angel",
+      "set_code": "FDN",
+      "collector_number": "566"
+    },
+    "93716": {
+      "card_name": "Armasaur Guide",
+      "set_code": "FDN",
+      "collector_number": "3"
+    },
+    "93830": {
+      "card_name": "Ashroot Animist",
+      "set_code": "FDN",
+      "collector_number": "117"
+    },
+    "94079": {
+      "card_name": "Aurelia, the Warleader",
+      "set_code": "FDN",
+      "collector_number": "651"
+    },
+    "93850": {
+      "card_name": "Authority of the Consuls",
+      "set_code": "FDN",
+      "collector_number": "137"
+    },
+    "93902": {
+      "card_name": "Axgard Cavalry",
+      "set_code": "FDN",
+      "collector_number": "189"
+    },
+    "94080": {
+      "card_name": "Ayli, Eternal Pilgrim",
+      "set_code": "FDN",
+      "collector_number": "652"
+    },
+    "94111": {
+      "card_name": "Azorius Guildgate",
+      "set_code": "FDN",
+      "collector_number": "683"
+    },
+    "93882": {
+      "card_name": "Bake into a Pie",
+      "set_code": "FDN",
+      "collector_number": "169"
+    },
+    "94046": {
+      "card_name": "Ball Lightning",
+      "set_code": "FDN",
+      "collector_number": "618"
+    },
+    "93995": {
+      "card_name": "Ballyrush Banneret",
+      "set_code": "FDN",
+      "collector_number": "567"
+    },
+    "93950": {
+      "card_name": "Balmor, Battlemage Captain",
+      "set_code": "FDN",
+      "collector_number": "237"
+    },
+    "93851": {
+      "card_name": "Banishing Light",
+      "set_code": "FDN",
+      "collector_number": "138"
+    },
+    "93840": {
+      "card_name": "Banner of Kinship",
+      "set_code": "FDN",
+      "collector_number": "127"
+    },
+    "94097": {
+      "card_name": "Basilisk Collar",
+      "set_code": "FDN",
+      "collector_number": "669"
+    },
+    "93682": {
+      "card_name": "Battle-Rattle Shaman",
+      "set_code": "FDN",
+      "collector_number": "533"
+    },
+    "93791": {
+      "card_name": "Battlesong Berserker",
+      "set_code": "FDN",
+      "collector_number": "78"
+    },
+    "93701": {
+      "card_name": "Bear Cub",
+      "set_code": "FDN",
+      "collector_number": "552"
+    },
+    "93813": {
+      "card_name": "Beast-Kin Ranger",
+      "set_code": "FDN",
+      "collector_number": "100"
+    },
+    "93744": {
+      "card_name": "Bigfin Bouncer",
+      "set_code": "FDN",
+      "collector_number": "31"
+    },
+    "93769": {
+      "card_name": "Billowing Shriekmass",
+      "set_code": "FDN",
+      "collector_number": "56"
+    },
+    "93702": {
+      "card_name": "Biogenic Upgrade",
+      "set_code": "FDN",
+      "collector_number": "553"
+    },
+    "93640": {
+      "card_name": "Bishop's Soldier",
+      "set_code": "FDN",
+      "collector_number": "491"
+    },
+    "93925": {
+      "card_name": "Bite Down",
+      "set_code": "FDN",
+      "collector_number": "212"
+    },
+    "93926": {
+      "card_name": "Blanchwood Armor",
+      "set_code": "FDN",
+      "collector_number": "213"
+    },
+    "93770": {
+      "card_name": "Blasphemous Edict",
+      "set_code": "FDN",
+      "collector_number": "57"
+    },
+    "93972": {
+      "card_name": "Bloodfell Caves",
+      "set_code": "FDN",
+      "collector_number": "259"
+    },
+    "93771": {
+      "card_name": "Bloodthirsty Conqueror",
+      "set_code": "FDN",
+      "collector_number": "58"
+    },
+    "93665": {
+      "card_name": "Bloodtithe Collector",
+      "set_code": "FDN",
+      "collector_number": "516"
+    },
+    "93973": {
+      "card_name": "Blossoming Sands",
+      "set_code": "FDN",
+      "collector_number": "260"
+    },
+    "94047": {
+      "card_name": "Bolt Bend",
+      "set_code": "FDN",
+      "collector_number": "619"
+    },
+    "93792": {
+      "card_name": "Boltwave",
+      "set_code": "FDN",
+      "collector_number": "79"
+    },
+    "94149": {
+      "card_name": "Boros Charm",
+      "set_code": "FDN",
+      "collector_number": "721"
+    },
+    "94112": {
+      "card_name": "Boros Guildgate",
+      "set_code": "FDN",
+      "collector_number": "684"
+    },
+    "93903": {
+      "card_name": "Brass's Bounty",
+      "set_code": "FDN",
+      "collector_number": "190"
+    },
+    "93904": {
+      "card_name": "Brazen Scourge",
+      "set_code": "FDN",
+      "collector_number": "191"
+    },
+    "93865": {
+      "card_name": "Brineborn Cutthroat",
+      "set_code": "FDN",
+      "collector_number": "152"
+    },
+    "93927": {
+      "card_name": "Broken Wings",
+      "set_code": "FDN",
+      "collector_number": "214"
+    },
+    "93793": {
+      "card_name": "Bulk Up",
+      "set_code": "FDN",
+      "collector_number": "80"
+    },
+    "93883": {
+      "card_name": "Burglar Rat",
+      "set_code": "FDN",
+      "collector_number": "170"
+    },
+    "93963": {
+      "card_name": "Burnished Hart",
+      "set_code": "FDN",
+      "collector_number": "250"
+    },
+    "93653": {
+      "card_name": "Burrog Befuddler",
+      "set_code": "FDN",
+      "collector_number": "504"
+    },
+    "93905": {
+      "card_name": "Burst Lightning",
+      "set_code": "FDN",
+      "collector_number": "192"
+    },
+    "93928": {
+      "card_name": "Bushwhack",
+      "set_code": "FDN",
+      "collector_number": "215"
+    },
+    "93814": {
+      "card_name": "Cackling Prowler",
+      "set_code": "FDN",
+      "collector_number": "101"
+    },
+    "93964": {
+      "card_name": "Campus Guide",
+      "set_code": "FDN",
+      "collector_number": "251"
+    },
+    "93654": {
+      "card_name": "Cancel",
+      "set_code": "FDN",
+      "collector_number": "505"
+    },
+    "94187": {
+      "card_name": "Carnelian Orb of Dragonkind",
+      "set_code": "FDN",
+      "collector_number": "534"
+    },
+    "93717": {
+      "card_name": "Cat Collector",
+      "set_code": "FDN",
+      "collector_number": "4"
+    },
+    "93852": {
+      "card_name": "Cathar Commando",
+      "set_code": "FDN",
+      "collector_number": "139"
+    },
+    "93718": {
+      "card_name": "Celestial Armor",
+      "set_code": "FDN",
+      "collector_number": "5"
+    },
+    "93666": {
+      "card_name": "Cemetery Recruitment",
+      "set_code": "FDN",
+      "collector_number": "517"
+    },
+    "93745": {
+      "card_name": "Cephalid Inkmage",
+      "set_code": "FDN",
+      "collector_number": "32"
+    },
+    "93794": {
+      "card_name": "Chandra, Flameshaper",
+      "set_code": "FDN",
+      "collector_number": "81"
+    },
+    "93996": {
+      "card_name": "Charming Prince",
+      "set_code": "FDN",
+      "collector_number": "568"
+    },
+    "94014": {
+      "card_name": "Chart a Course",
+      "set_code": "FDN",
+      "collector_number": "586"
+    },
+    "94063": {
+      "card_name": "Circuitous Route",
+      "set_code": "FDN",
+      "collector_number": "635"
+    },
+    "93719": {
+      "card_name": "Claws Out",
+      "set_code": "FDN",
+      "collector_number": "6"
+    },
+    "93746": {
+      "card_name": "Clinquant Skymage",
+      "set_code": "FDN",
+      "collector_number": "33"
+    },
+    "94081": {
+      "card_name": "Cloudblazer",
+      "set_code": "FDN",
+      "collector_number": "653"
+    },
+    "94137": {
+      "card_name": "Confiscate",
+      "set_code": "FDN",
+      "collector_number": "709"
+    },
+    "93951": {
+      "card_name": "Consuming Aberration",
+      "set_code": "FDN",
+      "collector_number": "238"
+    },
+    "93655": {
+      "card_name": "Corsair Captain",
+      "set_code": "FDN",
+      "collector_number": "506"
+    },
+    "93795": {
+      "card_name": "Courageous Goblin",
+      "set_code": "FDN",
+      "collector_number": "82"
+    },
+    "93796": {
+      "card_name": "Crackling Cyclops",
+      "set_code": "FDN",
+      "collector_number": "83"
+    },
+    "94048": {
+      "card_name": "Crash Through",
+      "set_code": "FDN",
+      "collector_number": "620"
+    },
+    "94113": {
+      "card_name": "Crawling Barrens",
+      "set_code": "FDN",
+      "collector_number": "685"
+    },
+    "93667": {
+      "card_name": "Crossway Troublemakers",
+      "set_code": "FDN",
+      "collector_number": "518"
+    },
+    "93668": {
+      "card_name": "Crow of Dark Tidings",
+      "set_code": "FDN",
+      "collector_number": "519"
+    },
+    "93997": {
+      "card_name": "Crusader of Odric",
+      "set_code": "FDN",
+      "collector_number": "569"
+    },
+    "93772": {
+      "card_name": "Crypt Feaster",
+      "set_code": "FDN",
+      "collector_number": "59"
+    },
+    "94114": {
+      "card_name": "Cryptic Caves",
+      "set_code": "FDN",
+      "collector_number": "686"
+    },
+    "93720": {
+      "card_name": "Crystal Barricade",
+      "set_code": "FDN",
+      "collector_number": "7"
+    },
+    "94098": {
+      "card_name": "Cultivator's Caravan",
+      "set_code": "FDN",
+      "collector_number": "670"
+    },
+    "93747": {
+      "card_name": "Curator of Destinies",
+      "set_code": "FDN",
+      "collector_number": "34"
+    },
+    "94099": {
+      "card_name": "Darksteel Colossus",
+      "set_code": "FDN",
+      "collector_number": "671"
+    },
+    "93721": {
+      "card_name": "Dauntless Veteran",
+      "set_code": "FDN",
+      "collector_number": "8"
+    },
+    "93998": {
+      "card_name": "Dawnwing Marshal",
+      "set_code": "FDN",
+      "collector_number": "570"
+    },
+    "93853": {
+      "card_name": "Day of Judgment",
+      "set_code": "FDN",
+      "collector_number": "140"
+    },
+    "93722": {
+      "card_name": "Dazzling Angel",
+      "set_code": "FDN",
+      "collector_number": "9"
+    },
+    "94082": {
+      "card_name": "Deadly Brew",
+      "set_code": "FDN",
+      "collector_number": "654"
+    },
+    "93669": {
+      "card_name": "Deadly Plot",
+      "set_code": "FDN",
+      "collector_number": "520"
+    },
+    "93641": {
+      "card_name": "Deadly Riposte",
+      "set_code": "FDN",
+      "collector_number": "492"
+    },
+    "93670": {
+      "card_name": "Death Baron",
+      "set_code": "FDN",
+      "collector_number": "521"
+    },
+    "94029": {
+      "card_name": "Deathmark",
+      "set_code": "FDN",
+      "collector_number": "601"
+    },
+    "94115": {
+      "card_name": "Demolition Field",
+      "set_code": "FDN",
+      "collector_number": "687"
+    },
+    "94030": {
+      "card_name": "Demonic Pact",
+      "set_code": "FDN",
+      "collector_number": "602"
+    },
+    "94031": {
+      "card_name": "Desecration Demon",
+      "set_code": "FDN",
+      "collector_number": "603"
+    },
+    "93999": {
+      "card_name": "Devout Decree",
+      "set_code": "FDN",
+      "collector_number": "571"
+    },
+    "94100": {
+      "card_name": "Diamond Mare",
+      "set_code": "FDN",
+      "collector_number": "672"
+    },
+    "94015": {
+      "card_name": "Dictate of Kruphix",
+      "set_code": "FDN",
+      "collector_number": "587"
+    },
+    "94116": {
+      "card_name": "Dimir Guildgate",
+      "set_code": "FDN",
+      "collector_number": "688"
+    },
+    "93884": {
+      "card_name": "Diregraf Ghoul",
+      "set_code": "FDN",
+      "collector_number": "171"
+    },
+    "94000": {
+      "card_name": "Disenchant",
+      "set_code": "FDN",
+      "collector_number": "572"
+    },
+    "93974": {
+      "card_name": "Dismal Backwater",
+      "set_code": "FDN",
+      "collector_number": "261"
+    },
+    "94016": {
+      "card_name": "Dive Down",
+      "set_code": "FDN",
+      "collector_number": "588"
+    },
+    "93723": {
+      "card_name": "Divine Resilience",
+      "set_code": "FDN",
+      "collector_number": "10"
+    },
+    "93929": {
+      "card_name": "Doubling Season",
+      "set_code": "FDN",
+      "collector_number": "216"
+    },
+    "93684": {
+      "card_name": "Dragon Fodder",
+      "set_code": "FDN",
+      "collector_number": "535"
+    },
+    "93685": {
+      "card_name": "Dragonlord's Servant",
+      "set_code": "FDN",
+      "collector_number": "536"
+    },
+    "94049": {
+      "card_name": "Dragon Mage",
+      "set_code": "FDN",
+      "collector_number": "621"
+    },
+    "94050": {
+      "card_name": "Dragonmaster Outcast",
+      "set_code": "FDN",
+      "collector_number": "622"
+    },
+    "93797": {
+      "card_name": "Dragon Trainer",
+      "set_code": "FDN",
+      "collector_number": "84"
+    },
+    "93748": {
+      "card_name": "Drake Hatcher",
+      "set_code": "FDN",
+      "collector_number": "35"
+    },
+    "93906": {
+      "card_name": "Drakuseth, Maw of Flames",
+      "set_code": "FDN",
+      "collector_number": "193"
+    },
+    "94032": {
+      "card_name": "Dread Summons",
+      "set_code": "FDN",
+      "collector_number": "604"
+    },
+    "93831": {
+      "card_name": "Dreadwing Scavenger",
+      "set_code": "FDN",
+      "collector_number": "118"
+    },
+    "94033": {
+      "card_name": "Driver of the Dead",
+      "set_code": "FDN",
+      "collector_number": "605"
+    },
+    "94083": {
+      "card_name": "Drogskol Reaver",
+      "set_code": "FDN",
+      "collector_number": "655"
+    },
+    "93686": {
+      "card_name": "Dropkick Bomber",
+      "set_code": "FDN",
+      "collector_number": "537"
+    },
+    "93703": {
+      "card_name": "Druid of the Cowl",
+      "set_code": "FDN",
+      "collector_number": "554"
+    },
+    "94084": {
+      "card_name": "Dryad Militant",
+      "set_code": "FDN",
+      "collector_number": "656"
+    },
+    "94034": {
+      "card_name": "Duress",
+      "set_code": "FDN",
+      "collector_number": "606"
+    },
+    "93930": {
+      "card_name": "Dwynen, Gilt-Leaf Daen",
+      "set_code": "FDN",
+      "collector_number": "217"
+    },
+    "93931": {
+      "card_name": "Dwynen's Elite",
+      "set_code": "FDN",
+      "collector_number": "218"
+    },
+    "93815": {
+      "card_name": "Eager Trufflesnout",
+      "set_code": "FDN",
+      "collector_number": "102"
+    },
+    "93885": {
+      "card_name": "Eaten Alive",
+      "set_code": "FDN",
+      "collector_number": "172"
+    },
+    "93656": {
+      "card_name": "Eaten by Piranhas",
+      "set_code": "FDN",
+      "collector_number": "507"
+    },
+    "93798": {
+      "card_name": "Electroduplicate",
+      "set_code": "FDN",
+      "collector_number": "85"
+    },
+    "93749": {
+      "card_name": "Elementalist Adept",
+      "set_code": "FDN",
+      "collector_number": "36"
+    },
+    "93832": {
+      "card_name": "Elenda, Saint of Dusk",
+      "set_code": "FDN",
+      "collector_number": "119"
+    },
+    "93816": {
+      "card_name": "Elfsworn Giant",
+      "set_code": "FDN",
+      "collector_number": "103"
+    },
+    "93642": {
+      "card_name": "Elspeth's Smite",
+      "set_code": "FDN",
+      "collector_number": "493"
+    },
+    "93932": {
+      "card_name": "Elvish Archdruid",
+      "set_code": "FDN",
+      "collector_number": "219"
+    },
+    "93817": {
+      "card_name": "Elvish Regrower",
+      "set_code": "FDN",
+      "collector_number": "104"
+    },
+    "93952": {
+      "card_name": "Empyrean Eagle",
+      "set_code": "FDN",
+      "collector_number": "239"
+    },
+    "94085": {
+      "card_name": "Enigma Drake",
+      "set_code": "FDN",
+      "collector_number": "657"
+    },
+    "93750": {
+      "card_name": "Erudite Wizard",
+      "set_code": "FDN",
+      "collector_number": "37"
+    },
+    "93866": {
+      "card_name": "Essence Scatter",
+      "set_code": "FDN",
+      "collector_number": "153"
+    },
+    "93907": {
+      "card_name": "Etali, Primal Storm",
+      "set_code": "FDN",
+      "collector_number": "194"
+    },
+    "93975": {
+      "card_name": "Evolving Wilds",
+      "set_code": "FDN",
+      "collector_number": "262"
+    },
+    "93657": {
+      "card_name": "Exclusion Mage",
+      "set_code": "FDN",
+      "collector_number": "508"
+    },
+    "93724": {
+      "card_name": "Exemplar of Light",
+      "set_code": "FDN",
+      "collector_number": "11"
+    },
+    "94152": {
+      "card_name": "Expedition Map",
+      "set_code": "FDN",
+      "collector_number": "724"
+    },
+    "93886": {
+      "card_name": "Exsanguinate",
+      "set_code": "FDN",
+      "collector_number": "173"
+    },
+    "93867": {
+      "card_name": "Extravagant Replication",
+      "set_code": "FDN",
+      "collector_number": "154"
+    },
+    "93751": {
+      "card_name": "Faebloom Trick",
+      "set_code": "FDN",
+      "collector_number": "38"
+    },
+    "93887": {
+      "card_name": "Fake Your Own Death",
+      "set_code": "FDN",
+      "collector_number": "174"
+    },
+    "93908": {
+      "card_name": "Fanatical Firebrand",
+      "set_code": "FDN",
+      "collector_number": "195"
+    },
+    "94140": {
+      "card_name": "Feed the Swarm",
+      "set_code": "FDN",
+      "collector_number": "712"
+    },
+    "94101": {
+      "card_name": "Feldon's Cane",
+      "set_code": "FDN",
+      "collector_number": "673"
+    },
+    "94001": {
+      "card_name": "Felidar Cub",
+      "set_code": "FDN",
+      "collector_number": "573"
+    },
+    "94002": {
+      "card_name": "Felidar Retreat",
+      "set_code": "FDN",
+      "collector_number": "574"
+    },
+    "93725": {
+      "card_name": "Felidar Savior",
+      "set_code": "FDN",
+      "collector_number": "12"
+    },
+    "93818": {
+      "card_name": "Felling Blow",
+      "set_code": "FDN",
+      "collector_number": "105"
+    },
+    "93833": {
+      "card_name": "Fiendish Panda",
+      "set_code": "FDN",
+      "collector_number": "120"
+    },
+    "94064": {
+      "card_name": "Fierce Empath",
+      "set_code": "FDN",
+      "collector_number": "636"
+    },
+    "93799": {
+      "card_name": "Fiery Annihilation",
+      "set_code": "FDN",
+      "collector_number": "86"
+    },
+    "94017": {
+      "card_name": "Finale of Revelation",
+      "set_code": "FDN",
+      "collector_number": "589"
+    },
+    "93909": {
+      "card_name": "Firebrand Archer",
+      "set_code": "FDN",
+      "collector_number": "196"
+    },
+    "93687": {
+      "card_name": "Fire Elemental",
+      "set_code": "FDN",
+      "collector_number": "538"
+    },
+    "94102": {
+      "card_name": "Fireshrieker",
+      "set_code": "FDN",
+      "collector_number": "674"
+    },
+    "93910": {
+      "card_name": "Firespitter Whelp",
+      "set_code": "FDN",
+      "collector_number": "197"
+    },
+    "93841": {
+      "card_name": "Fishing Pole",
+      "set_code": "FDN",
+      "collector_number": "128"
+    },
+    "93911": {
+      "card_name": "Flamewake Phoenix",
+      "set_code": "FDN",
+      "collector_number": "198"
+    },
+    "94018": {
+      "card_name": "Flashfreeze",
+      "set_code": "FDN",
+      "collector_number": "590"
+    },
+    "93868": {
+      "card_name": "Fleeting Distraction",
+      "set_code": "FDN",
+      "collector_number": "155"
+    },
+    "93726": {
+      "card_name": "Fleeting Flight",
+      "set_code": "FDN",
+      "collector_number": "13"
+    },
+    "94019": {
+      "card_name": "Fog Bank",
+      "set_code": "FDN",
+      "collector_number": "591"
+    },
+    "95199": {
+      "card_name": "Forest",
+      "set_code": "FDN",
+      "collector_number": "280"
+    },
+    "95200": {
+      "card_name": "Forest",
+      "set_code": "FDN",
+      "collector_number": "281"
+    },
+    "95189": {
+      "card_name": "Forest",
+      "set_code": "FDN",
+      "collector_number": "290"
+    },
+    "95190": {
+      "card_name": "Forest",
+      "set_code": "FDN",
+      "collector_number": "291"
+    },
+    "93912": {
+      "card_name": "Frenzied Goblin",
+      "set_code": "FDN",
+      "collector_number": "199"
+    },
+    "94003": {
+      "card_name": "Fumigate",
+      "set_code": "FDN",
+      "collector_number": "575"
+    },
+    "94065": {
+      "card_name": "Fynn, the Fangbearer",
+      "set_code": "FDN",
+      "collector_number": "637"
+    },
+    "94086": {
+      "card_name": "Garna, Bloodfist of Keld",
+      "set_code": "FDN",
+      "collector_number": "658"
+    },
+    "93933": {
+      "card_name": "Garruk's Uprising",
+      "set_code": "FDN",
+      "collector_number": "220"
+    },
+    "94103": {
+      "card_name": "Gate Colossus",
+      "set_code": "FDN",
+      "collector_number": "675"
+    },
+    "94141": {
+      "card_name": "Gatekeeper of Malakir",
+      "set_code": "FDN",
+      "collector_number": "713"
+    },
+    "94020": {
+      "card_name": "Gateway Sneak",
+      "set_code": "FDN",
+      "collector_number": "592"
+    },
+    "93934": {
+      "card_name": "Genesis Wave",
+      "set_code": "FDN",
+      "collector_number": "221"
+    },
+    "93935": {
+      "card_name": "Ghalta, Primal Hunger",
+      "set_code": "FDN",
+      "collector_number": "222"
+    },
+    "94051": {
+      "card_name": "Ghitu Lavarunner",
+      "set_code": "FDN",
+      "collector_number": "623"
+    },
+    "93854": {
+      "card_name": "Giada, Font of Hope",
+      "set_code": "FDN",
+      "collector_number": "141"
+    },
+    "94052": {
+      "card_name": "Giant Cindermaw",
+      "set_code": "FDN",
+      "collector_number": "624"
+    },
+    "93936": {
+      "card_name": "Giant Growth",
+      "set_code": "FDN",
+      "collector_number": "223"
+    },
+    "94146": {
+      "card_name": "Gigantosaurus",
+      "set_code": "FDN",
+      "collector_number": "718"
+    },
+    "94153": {
+      "card_name": "Gilded Lotus",
+      "set_code": "FDN",
+      "collector_number": "725"
+    },
+    "93965": {
+      "card_name": "Gleaming Barrier",
+      "set_code": "FDN",
+      "collector_number": "252"
+    },
+    "94066": {
+      "card_name": "Gnarlback Rhino",
+      "set_code": "FDN",
+      "collector_number": "638"
+    },
+    "94188": {
+      "card_name": "Gnarlid Colony",
+      "set_code": "FDN",
+      "collector_number": "224"
+    },
+    "93800": {
+      "card_name": "Goblin Boarders",
+      "set_code": "FDN",
+      "collector_number": "87"
+    },
+    "93711": {
+      "card_name": "Goblin Firebomb",
+      "set_code": "FDN",
+      "collector_number": "562"
+    },
+    "93801": {
+      "card_name": "Goblin Negotiation",
+      "set_code": "FDN",
+      "collector_number": "88"
+    },
+    "93688": {
+      "card_name": "Goblin Oriflamme",
+      "set_code": "FDN",
+      "collector_number": "539"
+    },
+    "93689": {
+      "card_name": "Goblin Smuggler",
+      "set_code": "FDN",
+      "collector_number": "540"
+    },
+    "93913": {
+      "card_name": "Goblin Surprise",
+      "set_code": "FDN",
+      "collector_number": "200"
+    },
+    "93966": {
+      "card_name": "Goldvein Pick",
+      "set_code": "FDN",
+      "collector_number": "253"
+    },
+    "94117": {
+      "card_name": "Golgari Guildgate",
+      "set_code": "FDN",
+      "collector_number": "689"
+    },
+    "93953": {
+      "card_name": "Good-Fortune Unicorn",
+      "set_code": "FDN",
+      "collector_number": "240"
+    },
+    "93802": {
+      "card_name": "Gorehorn Raider",
+      "set_code": "FDN",
+      "collector_number": "89"
+    },
+    "93752": {
+      "card_name": "Grappling Kraken",
+      "set_code": "FDN",
+      "collector_number": "39"
+    },
+    "94143": {
+      "card_name": "Gratuitous Violence",
+      "set_code": "FDN",
+      "collector_number": "715"
+    },
+    "93938": {
+      "card_name": "Grow from the Ashes",
+      "set_code": "FDN",
+      "collector_number": "225"
+    },
+    "94118": {
+      "card_name": "Gruul Guildgate",
+      "set_code": "FDN",
+      "collector_number": "690"
+    },
+    "93727": {
+      "card_name": "Guarded Heir",
+      "set_code": "FDN",
+      "collector_number": "14"
+    },
+    "93773": {
+      "card_name": "Gutless Plunderer",
+      "set_code": "FDN",
+      "collector_number": "60"
+    },
+    "94144": {
+      "card_name": "Guttersnipe",
+      "set_code": "FDN",
+      "collector_number": "716"
+    },
+    "94087": {
+      "card_name": "Halana and Alena, Partners",
+      "set_code": "FDN",
+      "collector_number": "659"
+    },
+    "94021": {
+      "card_name": "Harbinger of the Tides",
+      "set_code": "FDN",
+      "collector_number": "593"
+    },
+    "93728": {
+      "card_name": "Hare Apparent",
+      "set_code": "FDN",
+      "collector_number": "15"
+    },
+    "94053": {
+      "card_name": "Harmless Offering",
+      "set_code": "FDN",
+      "collector_number": "625"
+    },
+    "93855": {
+      "card_name": "Healer's Hawk",
+      "set_code": "FDN",
+      "collector_number": "142"
+    },
+    "93914": {
+      "card_name": "Heartfire Immolator",
+      "set_code": "FDN",
+      "collector_number": "201"
+    },
+    "94154": {
+      "card_name": "Hedron Archive",
+      "set_code": "FDN",
+      "collector_number": "726"
+    },
+    "93729": {
+      "card_name": "Helpful Hunter",
+      "set_code": "FDN",
+      "collector_number": "16"
+    },
+    "93967": {
+      "card_name": "Heraldic Banner",
+      "set_code": "FDN",
+      "collector_number": "254"
+    },
+    "93730": {
+      "card_name": "Herald of Eternal Dawn",
+      "set_code": "FDN",
+      "collector_number": "17"
+    },
+    "93643": {
+      "card_name": "Herald of Faith",
+      "set_code": "FDN",
+      "collector_number": "494"
+    },
+    "94067": {
+      "card_name": "Heroes' Bane",
+      "set_code": "FDN",
+      "collector_number": "639"
+    },
+    "93954": {
+      "card_name": "Heroic Reinforcements",
+      "set_code": "FDN",
+      "collector_number": "241"
+    },
+    "93888": {
+      "card_name": "Hero's Downfall",
+      "set_code": "FDN",
+      "collector_number": "175"
+    },
+    "93915": {
+      "card_name": "Hidetsugu's Second Rite",
+      "set_code": "FDN",
+      "collector_number": "202"
+    },
+    "93671": {
+      "card_name": "Highborn Vampire",
+      "set_code": "FDN",
+      "collector_number": "522"
+    },
+    "93753": {
+      "card_name": "High Fae Trickster",
+      "set_code": "FDN",
+      "collector_number": "40"
+    },
+    "93774": {
+      "card_name": "High-Society Hunter",
+      "set_code": "FDN",
+      "collector_number": "61"
+    },
+    "93636": {
+      "card_name": "Hinterland Sanctifier",
+      "set_code": "FDN",
+      "collector_number": "730"
+    },
+    "94054": {
+      "card_name": "Hoarding Dragon",
+      "set_code": "FDN",
+      "collector_number": "626"
+    },
+    "93754": {
+      "card_name": "Homunculus Horde",
+      "set_code": "FDN",
+      "collector_number": "41"
+    },
+    "93775": {
+      "card_name": "Hungry Ghoul",
+      "set_code": "FDN",
+      "collector_number": "62"
+    },
+    "93755": {
+      "card_name": "Icewind Elemental",
+      "set_code": "FDN",
+      "collector_number": "42"
+    },
+    "94088": {
+      "card_name": "Immersturm Predator",
+      "set_code": "FDN",
+      "collector_number": "660"
+    },
+    "94145": {
+      "card_name": "Impact Tremors",
+      "set_code": "FDN",
+      "collector_number": "717"
+    },
+    "94147": {
+      "card_name": "Imperious Perfect",
+      "set_code": "FDN",
+      "collector_number": "719"
+    },
+    "93869": {
+      "card_name": "Imprisoned in the Moon",
+      "set_code": "FDN",
+      "collector_number": "156"
+    },
+    "93803": {
+      "card_name": "Incinerating Blast",
+      "set_code": "FDN",
+      "collector_number": "90"
+    },
+    "93776": {
+      "card_name": "Infernal Vessel",
+      "set_code": "FDN",
+      "collector_number": "63"
+    },
+    "93777": {
+      "card_name": "Infestation Sage",
+      "set_code": "FDN",
+      "collector_number": "64"
+    },
+    "93644": {
+      "card_name": "Ingenious Leonin",
+      "set_code": "FDN",
+      "collector_number": "495"
+    },
+    "93756": {
+      "card_name": "Inspiration from Beyond",
+      "set_code": "FDN",
+      "collector_number": "43"
+    },
+    "93939": {
+      "card_name": "Inspiring Call",
+      "set_code": "FDN",
+      "collector_number": "226"
+    },
+    "93645": {
+      "card_name": "Inspiring Overseer",
+      "set_code": "FDN",
+      "collector_number": "496"
+    },
+    "93731": {
+      "card_name": "Inspiring Paladin",
+      "set_code": "FDN",
+      "collector_number": "18"
+    },
+    "93658": {
+      "card_name": "Into the Roil",
+      "set_code": "FDN",
+      "collector_number": "509"
+    },
+    "93916": {
+      "card_name": "Involuntary Employment",
+      "set_code": "FDN",
+      "collector_number": "203"
+    },
+    "95193": {
+      "card_name": "Island",
+      "set_code": "FDN",
+      "collector_number": "274"
+    },
+    "95194": {
+      "card_name": "Island",
+      "set_code": "FDN",
+      "collector_number": "275"
+    },
+    "95183": {
+      "card_name": "Island",
+      "set_code": "FDN",
+      "collector_number": "284"
+    },
+    "95184": {
+      "card_name": "Island",
+      "set_code": "FDN",
+      "collector_number": "285"
+    },
+    "94119": {
+      "card_name": "Izzet Guildgate",
+      "set_code": "FDN",
+      "collector_number": "691"
+    },
+    "93646": {
+      "card_name": "Jazal Goldmane",
+      "set_code": "FDN",
+      "collector_number": "497"
+    },
+    "93704": {
+      "card_name": "Joraga Invocation",
+      "set_code": "FDN",
+      "collector_number": "555"
+    },
+    "93732": {
+      "card_name": "Joust Through",
+      "set_code": "FDN",
+      "collector_number": "19"
+    },
+    "93968": {
+      "card_name": "Juggernaut",
+      "set_code": "FDN",
+      "collector_number": "255"
+    },
+    "93976": {
+      "card_name": "Jungle Hollow",
+      "set_code": "FDN",
+      "collector_number": "263"
+    },
+    "93757": {
+      "card_name": "Kaito, Cunning Infiltrator",
+      "set_code": "FDN",
+      "collector_number": "44"
+    },
+    "94035": {
+      "card_name": "Kalastria Highborn",
+      "set_code": "FDN",
+      "collector_number": "607"
+    },
+    "93690": {
+      "card_name": "Kargan Dragonrider",
+      "set_code": "FDN",
+      "collector_number": "541"
+    },
+    "93804": {
+      "card_name": "Kellan, Planar Trailblazer",
+      "set_code": "FDN",
+      "collector_number": "91"
+    },
+    "93691": {
+      "card_name": "Kindled Fury",
+      "set_code": "FDN",
+      "collector_number": "542"
+    },
+    "93758": {
+      "card_name": "Kiora, the Rising Tide",
+      "set_code": "FDN",
+      "collector_number": "45"
+    },
+    "93659": {
+      "card_name": "Kitesail Corsair",
+      "set_code": "FDN",
+      "collector_number": "510"
+    },
+    "94004": {
+      "card_name": "Knight of Grace",
+      "set_code": "FDN",
+      "collector_number": "576"
+    },
+    "94036": {
+      "card_name": "Knight of Malice",
+      "set_code": "FDN",
+      "collector_number": "608"
+    },
+    "93834": {
+      "card_name": "Koma, World-Eater",
+      "set_code": "FDN",
+      "collector_number": "121"
+    },
+    "93917": {
+      "card_name": "Krenko, Mob Boss",
+      "set_code": "FDN",
+      "collector_number": "204"
+    },
+    "93835": {
+      "card_name": "Kykar, Zephyr Awakener",
+      "set_code": "FDN",
+      "collector_number": "122"
+    },
+    "94055": {
+      "card_name": "Lathliss, Dragon Queen",
+      "set_code": "FDN",
+      "collector_number": "627"
+    },
+    "93955": {
+      "card_name": "Lathril, Blade of the Elves",
+      "set_code": "FDN",
+      "collector_number": "242"
+    },
+    "93647": {
+      "card_name": "Leonin Skyhunter",
+      "set_code": "FDN",
+      "collector_number": "498"
+    },
+    "93648": {
+      "card_name": "Leonin Vanguard",
+      "set_code": "FDN",
+      "collector_number": "499"
+    },
+    "93842": {
+      "card_name": "Leyline Axe",
+      "set_code": "FDN",
+      "collector_number": "129"
+    },
+    "93870": {
+      "card_name": "Lightshell Duo",
+      "set_code": "FDN",
+      "collector_number": "157"
+    },
+    "93889": {
+      "card_name": "Liliana, Dreadhorde General",
+      "set_code": "FDN",
+      "collector_number": "176"
+    },
+    "94005": {
+      "card_name": "Linden, the Steadfast Queen",
+      "set_code": "FDN",
+      "collector_number": "577"
+    },
+    "93940": {
+      "card_name": "Llanowar Elves",
+      "set_code": "FDN",
+      "collector_number": "227"
+    },
+    "93819": {
+      "card_name": "Loot, Exuberant Explorer",
+      "set_code": "FDN",
+      "collector_number": "106"
+    },
+    "93733": {
+      "card_name": "Luminous Rebuke",
+      "set_code": "FDN",
+      "collector_number": "20"
+    },
+    "93759": {
+      "card_name": "Lunar Insight",
+      "set_code": "FDN",
+      "collector_number": "46"
+    },
+    "94135": {
+      "card_name": "Lyra Dawnbringer",
+      "set_code": "FDN",
+      "collector_number": "707"
+    },
+    "93672": {
+      "card_name": "Maalfeld Twins",
+      "set_code": "FDN",
+      "collector_number": "523"
+    },
+    "93890": {
+      "card_name": "Macabre Waltz",
+      "set_code": "FDN",
+      "collector_number": "177"
+    },
+    "94089": {
+      "card_name": "Maelstrom Pulse",
+      "set_code": "FDN",
+      "collector_number": "661"
+    },
+    "93705": {
+      "card_name": "Magnigoth Sentry",
+      "set_code": "FDN",
+      "collector_number": "556"
+    },
+    "94136": {
+      "card_name": "Make a Stand",
+      "set_code": "FDN",
+      "collector_number": "708"
+    },
+    "93856": {
+      "card_name": "Make Your Move",
+      "set_code": "FDN",
+      "collector_number": "143"
+    },
+    "93891": {
+      "card_name": "Marauding Blight-Priest",
+      "set_code": "FDN",
+      "collector_number": "178"
+    },
+    "94142": {
+      "card_name": "Massacre Wurm",
+      "set_code": "FDN",
+      "collector_number": "714"
+    },
+    "94104": {
+      "card_name": "Mazemind Tome",
+      "set_code": "FDN",
+      "collector_number": "676"
+    },
+    "94155": {
+      "card_name": "Maze's End",
+      "set_code": "FDN",
+      "collector_number": "727"
+    },
+    "94006": {
+      "card_name": "Mentor of the Meek",
+      "set_code": "FDN",
+      "collector_number": "578"
+    },
+    "93969": {
+      "card_name": "Meteor Golem",
+      "set_code": "FDN",
+      "collector_number": "256"
+    },
+    "93871": {
+      "card_name": "Micromancer",
+      "set_code": "FDN",
+      "collector_number": "158"
+    },
+    "94037": {
+      "card_name": "Midnight Reaper",
+      "set_code": "FDN",
+      "collector_number": "609"
+    },
+    "93778": {
+      "card_name": "Midnight Snack",
+      "set_code": "FDN",
+      "collector_number": "65"
+    },
+    "93941": {
+      "card_name": "Mild-Mannered Librarian",
+      "set_code": "FDN",
+      "collector_number": "228"
+    },
+    "94056": {
+      "card_name": "Mindsparker",
+      "set_code": "FDN",
+      "collector_number": "628"
+    },
+    "93760": {
+      "card_name": "Mischievous Mystic",
+      "set_code": "FDN",
+      "collector_number": "47"
+    },
+    "93857": {
+      "card_name": "Mischievous Pup",
+      "set_code": "FDN",
+      "collector_number": "144"
+    },
+    "93872": {
+      "card_name": "Mocking Sprite",
+      "set_code": "FDN",
+      "collector_number": "159"
+    },
+    "94068": {
+      "card_name": "Mold Adder",
+      "set_code": "FDN",
+      "collector_number": "640"
+    },
+    "93673": {
+      "card_name": "Moment of Craving",
+      "set_code": "FDN",
+      "collector_number": "524"
+    },
+    "93649": {
+      "card_name": "Moment of Triumph",
+      "set_code": "FDN",
+      "collector_number": "500"
+    },
+    "94090": {
+      "card_name": "Mortify",
+      "set_code": "FDN",
+      "collector_number": "662"
+    },
+    "93820": {
+      "card_name": "Mossborn Hydra",
+      "set_code": "FDN",
+      "collector_number": "107"
+    },
+    "95197": {
+      "card_name": "Mountain",
+      "set_code": "FDN",
+      "collector_number": "278"
+    },
+    "95198": {
+      "card_name": "Mountain",
+      "set_code": "FDN",
+      "collector_number": "279"
+    },
+    "95187": {
+      "card_name": "Mountain",
+      "set_code": "FDN",
+      "collector_number": "288"
+    },
+    "95188": {
+      "card_name": "Mountain",
+      "set_code": "FDN",
+      "collector_number": "289"
+    },
+    "93956": {
+      "card_name": "Muldrotha, the Gravetide",
+      "set_code": "FDN",
+      "collector_number": "243"
+    },
+    "94038": {
+      "card_name": "Myojin of Night's Reach",
+      "set_code": "FDN",
+      "collector_number": "610"
+    },
+    "94022": {
+      "card_name": "Mystical Teachings",
+      "set_code": "FDN",
+      "collector_number": "594"
+    },
+    "93660": {
+      "card_name": "Mystic Archaeologist",
+      "set_code": "FDN",
+      "collector_number": "511"
+    },
+    "93821": {
+      "card_name": "Needletooth Pack",
+      "set_code": "FDN",
+      "collector_number": "108"
+    },
+    "94138": {
+      "card_name": "Negate",
+      "set_code": "FDN",
+      "collector_number": "710"
+    },
+    "93942": {
+      "card_name": "Nessian Hornbeetle",
+      "set_code": "FDN",
+      "collector_number": "229"
+    },
+    "93706": {
+      "card_name": "New Horizons",
+      "set_code": "FDN",
+      "collector_number": "557"
+    },
+    "93779": {
+      "card_name": "Nine-Lives Familiar",
+      "set_code": "FDN",
+      "collector_number": "66"
+    },
+    "93836": {
+      "card_name": "Niv-Mizzet, Visionary",
+      "set_code": "FDN",
+      "collector_number": "123"
+    },
+    "94039": {
+      "card_name": "Nullpriest of Oblivion",
+      "set_code": "FDN",
+      "collector_number": "611"
+    },
+    "94057": {
+      "card_name": "Obliterating Bolt",
+      "set_code": "FDN",
+      "collector_number": "629"
+    },
+    "93674": {
+      "card_name": "Offer Immortality",
+      "set_code": "FDN",
+      "collector_number": "525"
+    },
+    "93874": {
+      "card_name": "Omniscience",
+      "set_code": "FDN",
+      "collector_number": "161"
+    },
+    "93661": {
+      "card_name": "Opt",
+      "set_code": "FDN",
+      "collector_number": "512"
+    },
+    "94069": {
+      "card_name": "Ordeal of Nylea",
+      "set_code": "FDN",
+      "collector_number": "641"
+    },
+    "94120": {
+      "card_name": "Orzhov Guildgate",
+      "set_code": "FDN",
+      "collector_number": "692"
+    },
+    "93943": {
+      "card_name": "Overrun",
+      "set_code": "FDN",
+      "collector_number": "230"
+    },
+    "94091": {
+      "card_name": "Ovika, Enigma Goliath",
+      "set_code": "FDN",
+      "collector_number": "663"
+    },
+    "93650": {
+      "card_name": "Pacifism",
+      "set_code": "FDN",
+      "collector_number": "501"
+    },
+    "93892": {
+      "card_name": "Painful Quandary",
+      "set_code": "FDN",
+      "collector_number": "179"
+    },
+    "94148": {
+      "card_name": "Pelakka Wurm",
+      "set_code": "FDN",
+      "collector_number": "720"
+    },
+    "93837": {
+      "card_name": "Perforating Artist",
+      "set_code": "FDN",
+      "collector_number": "124"
+    },
+    "93893": {
+      "card_name": "Phyrexian Arena",
+      "set_code": "FDN",
+      "collector_number": "180"
+    },
+    "93894": {
+      "card_name": "Pilfer",
+      "set_code": "FDN",
+      "collector_number": "181"
+    },
+    "93712": {
+      "card_name": "Pirate's Cutlass",
+      "set_code": "FDN",
+      "collector_number": "563"
+    },
+    "95191": {
+      "card_name": "Plains",
+      "set_code": "FDN",
+      "collector_number": "272"
+    },
+    "95192": {
+      "card_name": "Plains",
+      "set_code": "FDN",
+      "collector_number": "273"
+    },
+    "95181": {
+      "card_name": "Plains",
+      "set_code": "FDN",
+      "collector_number": "282"
+    },
+    "95182": {
+      "card_name": "Plains",
+      "set_code": "FDN",
+      "collector_number": "283"
+    },
+    "93651": {
+      "card_name": "Prayer of Binding",
+      "set_code": "FDN",
+      "collector_number": "502"
+    },
+    "94070": {
+      "card_name": "Predator Ooze",
+      "set_code": "FDN",
+      "collector_number": "642"
+    },
+    "93822": {
+      "card_name": "Preposterous Proportions",
+      "set_code": "FDN",
+      "collector_number": "109"
+    },
+    "93734": {
+      "card_name": "Prideful Parent",
+      "set_code": "FDN",
+      "collector_number": "21"
+    },
+    "94071": {
+      "card_name": "Primal Might",
+      "set_code": "FDN",
+      "collector_number": "643"
+    },
+    "94092": {
+      "card_name": "Prime Speaker Zegana",
+      "set_code": "FDN",
+      "collector_number": "664"
+    },
+    "94072": {
+      "card_name": "Primeval Bounty",
+      "set_code": "FDN",
+      "collector_number": "644"
+    },
+    "93957": {
+      "card_name": "Progenitus",
+      "set_code": "FDN",
+      "collector_number": "244"
+    },
+    "94040": {
+      "card_name": "Pulse Tracker",
+      "set_code": "FDN",
+      "collector_number": "612"
+    },
+    "94105": {
+      "card_name": "Pyromancer's Goggles",
+      "set_code": "FDN",
+      "collector_number": "677"
+    },
+    "93823": {
+      "card_name": "Quakestrider Ceratops",
+      "set_code": "FDN",
+      "collector_number": "110"
+    },
+    "93843": {
+      "card_name": "Quick-Draw Katana",
+      "set_code": "FDN",
+      "collector_number": "130"
+    },
+    "93662": {
+      "card_name": "Quick Study",
+      "set_code": "FDN",
+      "collector_number": "513"
+    },
+    "93824": {
+      "card_name": "Quilled Greatwurm",
+      "set_code": "FDN",
+      "collector_number": "111"
+    },
+    "93692": {
+      "card_name": "Raging Redcap",
+      "set_code": "FDN",
+      "collector_number": "543"
+    },
+    "93735": {
+      "card_name": "Raise the Past",
+      "set_code": "FDN",
+      "collector_number": "22"
+    },
+    "94121": {
+      "card_name": "Rakdos Guildgate",
+      "set_code": "FDN",
+      "collector_number": "693"
+    },
+    "94106": {
+      "card_name": "Ramos, Dragon Engine",
+      "set_code": "FDN",
+      "collector_number": "678"
+    },
+    "94073": {
+      "card_name": "Rampaging Baloths",
+      "set_code": "FDN",
+      "collector_number": "645"
+    },
+    "93693": {
+      "card_name": "Rapacious Dragon",
+      "set_code": "FDN",
+      "collector_number": "544"
+    },
+    "93844": {
+      "card_name": "Ravenous Amulet",
+      "set_code": "FDN",
+      "collector_number": "131"
+    },
+    "94058": {
+      "card_name": "Ravenous Giant",
+      "set_code": "FDN",
+      "collector_number": "630"
+    },
+    "93895": {
+      "card_name": "Reassembling Skeleton",
+      "set_code": "FDN",
+      "collector_number": "182"
+    },
+    "93944": {
+      "card_name": "Reclamation Sage",
+      "set_code": "FDN",
+      "collector_number": "231"
+    },
+    "94059": {
+      "card_name": "Redcap Gutter-Dweller",
+      "set_code": "FDN",
+      "collector_number": "631"
+    },
+    "93761": {
+      "card_name": "Refute",
+      "set_code": "FDN",
+      "collector_number": "48"
+    },
+    "94007": {
+      "card_name": "Regal Caracal",
+      "set_code": "FDN",
+      "collector_number": "579"
+    },
+    "94008": {
+      "card_name": "Release the Dogs",
+      "set_code": "FDN",
+      "collector_number": "580"
+    },
+    "93858": {
+      "card_name": "Resolute Reinforcements",
+      "set_code": "FDN",
+      "collector_number": "145"
+    },
+    "93780": {
+      "card_name": "Revenge of the Rats",
+      "set_code": "FDN",
+      "collector_number": "67"
+    },
+    "93896": {
+      "card_name": "Rise of the Dark Realms",
+      "set_code": "FDN",
+      "collector_number": "183"
+    },
+    "94139": {
+      "card_name": "Rite of Replication",
+      "set_code": "FDN",
+      "collector_number": "711"
+    },
+    "93805": {
+      "card_name": "Rite of the Dragoncaller",
+      "set_code": "FDN",
+      "collector_number": "92"
+    },
+    "94023": {
+      "card_name": "River's Rebuke",
+      "set_code": "FDN",
+      "collector_number": "595"
+    },
+    "93977": {
+      "card_name": "Rogue's Passage",
+      "set_code": "FDN",
+      "collector_number": "264"
+    },
+    "93958": {
+      "card_name": "Ruby, Daring Tracker",
+      "set_code": "FDN",
+      "collector_number": "245"
+    },
+    "93978": {
+      "card_name": "Rugged Highlands",
+      "set_code": "FDN",
+      "collector_number": "265"
+    },
+    "93875": {
+      "card_name": "Run Away Together",
+      "set_code": "FDN",
+      "collector_number": "162"
+    },
+    "93897": {
+      "card_name": "Rune-Scarred Demon",
+      "set_code": "FDN",
+      "collector_number": "184"
+    },
+    "93762": {
+      "card_name": "Rune-Sealed Wall",
+      "set_code": "FDN",
+      "collector_number": "49"
+    },
+    "94041": {
+      "card_name": "Sanguine Indulgence",
+      "set_code": "FDN",
+      "collector_number": "613"
+    },
+    "93781": {
+      "card_name": "Sanguine Syphoner",
+      "set_code": "FDN",
+      "collector_number": "68"
+    },
+    "94093": {
+      "card_name": "Savage Ventmaw",
+      "set_code": "FDN",
+      "collector_number": "665"
+    },
+    "93859": {
+      "card_name": "Savannah Lions",
+      "set_code": "FDN",
+      "collector_number": "146"
+    },
+    "93945": {
+      "card_name": "Scavenging Ooze",
+      "set_code": "FDN",
+      "collector_number": "232"
+    },
+    "93694": {
+      "card_name": "Scorching Dragonfire",
+      "set_code": "FDN",
+      "collector_number": "545"
+    },
+    "93979": {
+      "card_name": "Scoured Barrens",
+      "set_code": "FDN",
+      "collector_number": "266"
+    },
+    "93845": {
+      "card_name": "Scrawling Crawler",
+      "set_code": "FDN",
+      "collector_number": "132"
+    },
+    "93806": {
+      "card_name": "Searslicer Goblin",
+      "set_code": "FDN",
+      "collector_number": "93"
+    },
+    "93980": {
+      "card_name": "Secluded Courtyard",
+      "set_code": "FDN",
+      "collector_number": "267"
+    },
+    "93782": {
+      "card_name": "Seeker's Folly",
+      "set_code": "FDN",
+      "collector_number": "69"
+    },
+    "93918": {
+      "card_name": "Seismic Rupture",
+      "set_code": "FDN",
+      "collector_number": "205"
+    },
+    "93695": {
+      "card_name": "Seize the Spoils",
+      "set_code": "FDN",
+      "collector_number": "546"
+    },
+    "94122": {
+      "card_name": "Selesnya Guildgate",
+      "set_code": "FDN",
+      "collector_number": "694"
+    },
+    "93876": {
+      "card_name": "Self-Reflection",
+      "set_code": "FDN",
+      "collector_number": "163"
+    },
+    "93860": {
+      "card_name": "Serra Angel",
+      "set_code": "FDN",
+      "collector_number": "147"
+    },
+    "94024": {
+      "card_name": "Shipwreck Dowser",
+      "set_code": "FDN",
+      "collector_number": "596"
+    },
+    "93919": {
+      "card_name": "Shivan Dragon",
+      "set_code": "FDN",
+      "collector_number": "206"
+    },
+    "94123": {
+      "card_name": "Simic Guildgate",
+      "set_code": "FDN",
+      "collector_number": "695"
+    },
+    "93714": {
+      "card_name": "Sire of Seven Deaths",
+      "set_code": "FDN",
+      "collector_number": "1"
+    },
+    "93675": {
+      "card_name": "Skeleton Archer",
+      "set_code": "FDN",
+      "collector_number": "526"
+    },
+    "93736": {
+      "card_name": "Skyknight Squire",
+      "set_code": "FDN",
+      "collector_number": "23"
+    },
+    "93696": {
+      "card_name": "Skyraker Giant",
+      "set_code": "FDN",
+      "collector_number": "547"
+    },
+    "93763": {
+      "card_name": "Skyship Buccaneer",
+      "set_code": "FDN",
+      "collector_number": "50"
+    },
+    "93920": {
+      "card_name": "Slagstorm",
+      "set_code": "FDN",
+      "collector_number": "207"
+    },
+    "93807": {
+      "card_name": "Slumbering Cerberus",
+      "set_code": "FDN",
+      "collector_number": "94"
+    },
+    "93946": {
+      "card_name": "Snakeskin Veil",
+      "set_code": "FDN",
+      "collector_number": "233"
+    },
+    "93970": {
+      "card_name": "Solemn Simulacrum",
+      "set_code": "FDN",
+      "collector_number": "257"
+    },
+    "94107": {
+      "card_name": "Sorcerous Spyglass",
+      "set_code": "FDN",
+      "collector_number": "679"
+    },
+    "94108": {
+      "card_name": "Soul-Guide Lantern",
+      "set_code": "FDN",
+      "collector_number": "680"
+    },
+    "93783": {
+      "card_name": "Soul-Shackled Zombie",
+      "set_code": "FDN",
+      "collector_number": "70"
+    },
+    "93846": {
+      "card_name": "Soulstone Sanctuary",
+      "set_code": "FDN",
+      "collector_number": "133"
+    },
+    "93808": {
+      "card_name": "Sower of Chaos",
+      "set_code": "FDN",
+      "collector_number": "95"
+    },
+    "93877": {
+      "card_name": "Spectral Sailor",
+      "set_code": "FDN",
+      "collector_number": "164"
+    },
+    "93764": {
+      "card_name": "Sphinx of Forgotten Lore",
+      "set_code": "FDN",
+      "collector_number": "51"
+    },
+    "94025": {
+      "card_name": "Sphinx of the Final Word",
+      "set_code": "FDN",
+      "collector_number": "597"
+    },
+    "93825": {
+      "card_name": "Spinner of Souls",
+      "set_code": "FDN",
+      "collector_number": "112"
+    },
+    "93921": {
+      "card_name": "Spitfire Lagac",
+      "set_code": "FDN",
+      "collector_number": "208"
+    },
+    "94074": {
+      "card_name": "Springbloom Druid",
+      "set_code": "FDN",
+      "collector_number": "646"
+    },
+    "93737": {
+      "card_name": "Squad Rallier",
+      "set_code": "FDN",
+      "collector_number": "24"
+    },
+    "93784": {
+      "card_name": "Stab",
+      "set_code": "FDN",
+      "collector_number": "71"
+    },
+    "93663": {
+      "card_name": "Starlight Snare",
+      "set_code": "FDN",
+      "collector_number": "514"
+    },
+    "94009": {
+      "card_name": "Stasis Snare",
+      "set_code": "FDN",
+      "collector_number": "581"
+    },
+    "94109": {
+      "card_name": "Steel Hellkite",
+      "set_code": "FDN",
+      "collector_number": "681"
+    },
+    "93664": {
+      "card_name": "Storm Fleet Spy",
+      "set_code": "FDN",
+      "collector_number": "515"
+    },
+    "93765": {
+      "card_name": "Strix Lookout",
+      "set_code": "FDN",
+      "collector_number": "52"
+    },
+    "93861": {
+      "card_name": "Stroke of Midnight",
+      "set_code": "FDN",
+      "collector_number": "148"
+    },
+    "93898": {
+      "card_name": "Stromkirk Bloodthief",
+      "set_code": "FDN",
+      "collector_number": "185"
+    },
+    "94060": {
+      "card_name": "Stromkirk Noble",
+      "set_code": "FDN",
+      "collector_number": "632"
+    },
+    "93809": {
+      "card_name": "Strongbox Raider",
+      "set_code": "FDN",
+      "collector_number": "96"
+    },
+    "93738": {
+      "card_name": "Sun-Blessed Healer",
+      "set_code": "FDN",
+      "collector_number": "25"
+    },
+    "93922": {
+      "card_name": "Sure Strike",
+      "set_code": "FDN",
+      "collector_number": "209"
+    },
+    "94075": {
+      "card_name": "Surrak, the Hunt Caller",
+      "set_code": "FDN",
+      "collector_number": "647"
+    },
+    "93676": {
+      "card_name": "Suspicious Shambler",
+      "set_code": "FDN",
+      "collector_number": "527"
+    },
+    "93697": {
+      "card_name": "Swab Goblin",
+      "set_code": "FDN",
+      "collector_number": "548"
+    },
+    "95195": {
+      "card_name": "Swamp",
+      "set_code": "FDN",
+      "collector_number": "276"
+    },
+    "95196": {
+      "card_name": "Swamp",
+      "set_code": "FDN",
+      "collector_number": "277"
+    },
+    "95185": {
+      "card_name": "Swamp",
+      "set_code": "FDN",
+      "collector_number": "286"
+    },
+    "95186": {
+      "card_name": "Swamp",
+      "set_code": "FDN",
+      "collector_number": "287"
+    },
+    "93959": {
+      "card_name": "Swiftblade Vindicator",
+      "set_code": "FDN",
+      "collector_number": "246"
+    },
+    "93971": {
+      "card_name": "Swiftfoot Boots",
+      "set_code": "FDN",
+      "collector_number": "258"
+    },
+    "93981": {
+      "card_name": "Swiftwater Cliffs",
+      "set_code": "FDN",
+      "collector_number": "268"
+    },
+    "93826": {
+      "card_name": "Sylvan Scavenging",
+      "set_code": "FDN",
+      "collector_number": "113"
+    },
+    "94010": {
+      "card_name": "Syr Alin, the Lion's Claw",
+      "set_code": "FDN",
+      "collector_number": "582"
+    },
+    "93707": {
+      "card_name": "Tajuru Pathwarden",
+      "set_code": "FDN",
+      "collector_number": "558"
+    },
+    "93960": {
+      "card_name": "Tatyova, Benthic Druid",
+      "set_code": "FDN",
+      "collector_number": "247"
+    },
+    "94061": {
+      "card_name": "Taurean Mauler",
+      "set_code": "FDN",
+      "collector_number": "633"
+    },
+    "94094": {
+      "card_name": "Teach by Example",
+      "set_code": "FDN",
+      "collector_number": "666"
+    },
+    "94026": {
+      "card_name": "Tempest Djinn",
+      "set_code": "FDN",
+      "collector_number": "598"
+    },
+    "94124": {
+      "card_name": "Temple of Abandon",
+      "set_code": "FDN",
+      "collector_number": "696"
+    },
+    "94125": {
+      "card_name": "Temple of Deceit",
+      "set_code": "FDN",
+      "collector_number": "697"
+    },
+    "94126": {
+      "card_name": "Temple of Enlightenment",
+      "set_code": "FDN",
+      "collector_number": "698"
+    },
+    "94127": {
+      "card_name": "Temple of Epiphany",
+      "set_code": "FDN",
+      "collector_number": "699"
+    },
+    "94128": {
+      "card_name": "Temple of Malady",
+      "set_code": "FDN",
+      "collector_number": "700"
+    },
+    "94129": {
+      "card_name": "Temple of Malice",
+      "set_code": "FDN",
+      "collector_number": "701"
+    },
+    "94130": {
+      "card_name": "Temple of Mystery",
+      "set_code": "FDN",
+      "collector_number": "702"
+    },
+    "94131": {
+      "card_name": "Temple of Plenty",
+      "set_code": "FDN",
+      "collector_number": "703"
+    },
+    "94132": {
+      "card_name": "Temple of Silence",
+      "set_code": "FDN",
+      "collector_number": "704"
+    },
+    "94133": {
+      "card_name": "Temple of Triumph",
+      "set_code": "FDN",
+      "collector_number": "705"
+    },
+    "93698": {
+      "card_name": "Terror of Mount Velus",
+      "set_code": "FDN",
+      "collector_number": "549"
+    },
+    "93878": {
+      "card_name": "Think Twice",
+      "set_code": "FDN",
+      "collector_number": "165"
+    },
+    "93708": {
+      "card_name": "Thornweald Archer",
+      "set_code": "FDN",
+      "collector_number": "559"
+    },
+    "93982": {
+      "card_name": "Thornwood Falls",
+      "set_code": "FDN",
+      "collector_number": "269"
+    },
+    "93961": {
+      "card_name": "Thousand-Year Storm",
+      "set_code": "FDN",
+      "collector_number": "248"
+    },
+    "93709": {
+      "card_name": "Thrashing Brontodon",
+      "set_code": "FDN",
+      "collector_number": "560"
+    },
+    "94110": {
+      "card_name": "Three Tree Mascot",
+      "set_code": "FDN",
+      "collector_number": "682"
+    },
+    "93923": {
+      "card_name": "Thrill of Possibility",
+      "set_code": "FDN",
+      "collector_number": "210"
+    },
+    "93879": {
+      "card_name": "Time Stop",
+      "set_code": "FDN",
+      "collector_number": "166"
+    },
+    "93785": {
+      "card_name": "Tinybones, Bauble Burglar",
+      "set_code": "FDN",
+      "collector_number": "72"
+    },
+    "93880": {
+      "card_name": "Tolarian Terror",
+      "set_code": "FDN",
+      "collector_number": "167"
+    },
+    "93786": {
+      "card_name": "Tragic Banshee",
+      "set_code": "FDN",
+      "collector_number": "73"
+    },
+    "93983": {
+      "card_name": "Tranquil Cove",
+      "set_code": "FDN",
+      "collector_number": "270"
+    },
+    "93827": {
+      "card_name": "Treetop Snarespinner",
+      "set_code": "FDN",
+      "collector_number": "114"
+    },
+    "94042": {
+      "card_name": "Tribute to Hunger",
+      "set_code": "FDN",
+      "collector_number": "614"
+    },
+    "94095": {
+      "card_name": "Trygon Predator",
+      "set_code": "FDN",
+      "collector_number": "667"
+    },
+    "93739": {
+      "card_name": "Twinblade Blessing",
+      "set_code": "FDN",
+      "collector_number": "26"
+    },
+    "93652": {
+      "card_name": "Twinblade Paladin",
+      "set_code": "FDN",
+      "collector_number": "503"
+    },
+    "93810": {
+      "card_name": "Twinflame Tyrant",
+      "set_code": "FDN",
+      "collector_number": "97"
+    },
+    "93713": {
+      "card_name": "Uncharted Haven",
+      "set_code": "FDN",
+      "collector_number": "564"
+    },
+    "93766": {
+      "card_name": "Uncharted Voyage",
+      "set_code": "FDN",
+      "collector_number": "53"
+    },
+    "93677": {
+      "card_name": "Undying Malice",
+      "set_code": "FDN",
+      "collector_number": "528"
+    },
+    "94150": {
+      "card_name": "Unflinching Courage",
+      "set_code": "FDN",
+      "collector_number": "722"
+    },
+    "94027": {
+      "card_name": "Unsummon",
+      "set_code": "FDN",
+      "collector_number": "599"
+    },
+    "93678": {
+      "card_name": "Untamed Hunger",
+      "set_code": "FDN",
+      "collector_number": "529"
+    },
+    "93740": {
+      "card_name": "Valkyrie's Call",
+      "set_code": "FDN",
+      "collector_number": "27"
+    },
+    "94011": {
+      "card_name": "Valorous Stance",
+      "set_code": "FDN",
+      "collector_number": "583"
+    },
+    "93787": {
+      "card_name": "Vampire Gourmand",
+      "set_code": "FDN",
+      "collector_number": "74"
+    },
+    "93679": {
+      "card_name": "Vampire Interloper",
+      "set_code": "FDN",
+      "collector_number": "530"
+    },
+    "93680": {
+      "card_name": "Vampire Neonate",
+      "set_code": "FDN",
+      "collector_number": "531"
+    },
+    "93899": {
+      "card_name": "Vampire Nighthawk",
+      "set_code": "FDN",
+      "collector_number": "186"
+    },
+    "93788": {
+      "card_name": "Vampire Soulcaller",
+      "set_code": "FDN",
+      "collector_number": "75"
+    },
+    "93681": {
+      "card_name": "Vampire Spawn",
+      "set_code": "FDN",
+      "collector_number": "532"
+    },
+    "94043": {
+      "card_name": "Vampiric Rites",
+      "set_code": "FDN",
+      "collector_number": "615"
+    },
+    "93741": {
+      "card_name": "Vanguard Seraph",
+      "set_code": "FDN",
+      "collector_number": "28"
+    },
+    "93789": {
+      "card_name": "Vengeful Bloodwitch",
+      "set_code": "FDN",
+      "collector_number": "76"
+    },
+    "94076": {
+      "card_name": "Venom Connoisseur",
+      "set_code": "FDN",
+      "collector_number": "648"
+    },
+    "94062": {
+      "card_name": "Viashino Pyromancer",
+      "set_code": "FDN",
+      "collector_number": "634"
+    },
+    "94044": {
+      "card_name": "Vile Entomber",
+      "set_code": "FDN",
+      "collector_number": "616"
+    },
+    "93947": {
+      "card_name": "Vivien Reid",
+      "set_code": "FDN",
+      "collector_number": "234"
+    },
+    "94077": {
+      "card_name": "Vizier of the Menagerie",
+      "set_code": "FDN",
+      "collector_number": "649"
+    },
+    "93699": {
+      "card_name": "Volley Veteran",
+      "set_code": "FDN",
+      "collector_number": "550"
+    },
+    "94028": {
+      "card_name": "Voracious Greatshark",
+      "set_code": "FDN",
+      "collector_number": "600"
+    },
+    "93838": {
+      "card_name": "Wardens of the Cycle",
+      "set_code": "FDN",
+      "collector_number": "125"
+    },
+    "93948": {
+      "card_name": "Wary Thespian",
+      "set_code": "FDN",
+      "collector_number": "235"
+    },
+    "94078": {
+      "card_name": "Wildborn Preserver",
+      "set_code": "FDN",
+      "collector_number": "650"
+    },
+    "93710": {
+      "card_name": "Wildheart Invoker",
+      "set_code": "FDN",
+      "collector_number": "561"
+    },
+    "93949": {
+      "card_name": "Wildwood Scourge",
+      "set_code": "FDN",
+      "collector_number": "236"
+    },
+    "94096": {
+      "card_name": "Wilt-Leaf Liege",
+      "set_code": "FDN",
+      "collector_number": "668"
+    },
+    "93984": {
+      "card_name": "Wind-Scarred Crag",
+      "set_code": "FDN",
+      "collector_number": "271"
+    },
+    "94045": {
+      "card_name": "Wishclaw Talisman",
+      "set_code": "FDN",
+      "collector_number": "617"
+    },
+    "93881": {
+      "card_name": "Witness Protection",
+      "set_code": "FDN",
+      "collector_number": "168"
+    },
+    "93862": {
+      "card_name": "Youthful Valkyrie",
+      "set_code": "FDN",
+      "collector_number": "149"
+    },
+    "94012": {
+      "card_name": "Zetalpa, Primal Dawn",
+      "set_code": "FDN",
+      "collector_number": "584"
+    },
+    "93839": {
+      "card_name": "Zimone, Paradox Sculptor",
+      "set_code": "FDN",
+      "collector_number": "126"
+    },
+    "93900": {
+      "card_name": "Zombify",
+      "set_code": "FDN",
+      "collector_number": "187"
+    },
+    "93790": {
+      "card_name": "Zul Ashur, Lich Lord",
+      "set_code": "FDN",
+      "collector_number": "77"
+    },
+    "90652": {
+      "card_name": "Brazen Borrower // Petty Theft",
+      "set_code": "SPG",
+      "collector_number": "30"
+    },
+    "92411": {
+      "card_name": "Collected Company",
+      "set_code": "SPG",
+      "collector_number": "72"
+    },
+    "88918": {
+      "card_name": "Crashing Footfalls",
+      "set_code": "SPG",
+      "collector_number": "25"
+    },
+    "92407": {
+      "card_name": "Damnation",
+      "set_code": "SPG",
+      "collector_number": "68"
+    },
+    "90660": {
+      "card_name": "Desert",
+      "set_code": "SPG",
+      "collector_number": "37"
+    },
+    "90654": {
+      "card_name": "Desertion",
+      "set_code": "SPG",
+      "collector_number": "31"
+    },
+    "91171": {
+      "card_name": "Dismember",
+      "set_code": "SPG",
+      "collector_number": "41"
+    },
+    "88920": {
+      "card_name": "Drown in the Loch",
+      "set_code": "SPG",
+      "collector_number": "27"
+    },
+    "91168": {
+      "card_name": "Endurance",
+      "set_code": "SPG",
+      "collector_number": "48"
+    },
+    "91173": {
+      "card_name": "Expressive Iteration",
+      "set_code": "SPG",
+      "collector_number": "43"
+    },
+    "92405": {
+      "card_name": "Expropriate",
+      "set_code": "SPG",
+      "collector_number": "66"
+    },
+    "88913": {
+      "card_name": "Fabricate",
+      "set_code": "SPG",
+      "collector_number": "20"
+    },
+    "88921": {
+      "card_name": "Field of the Dead",
+      "set_code": "SPG",
+      "collector_number": "28"
+    },
+    "91877": {
+      "card_name": "Frogmite",
+      "set_code": "SPG",
+      "collector_number": "61"
+    },
+    "91167": {
+      "card_name": "Fury",
+      "set_code": "SPG",
+      "collector_number": "47"
+    },
+    "88917": {
+      "card_name": "Gamble",
+      "set_code": "SPG",
+      "collector_number": "24"
+    },
+    "88912": {
+      "card_name": "Ghostly Prison",
+      "set_code": "SPG",
+      "collector_number": "19"
+    },
+    "91166": {
+      "card_name": "Grief",
+      "set_code": "SPG",
+      "collector_number": "46"
+    },
+    "92403": {
+      "card_name": "Hallowed Haunting",
+      "set_code": "SPG",
+      "collector_number": "64"
+    },
+    "91874": {
+      "card_name": "Kindred Charge",
+      "set_code": "SPG",
+      "collector_number": "58"
+    },
+    "91871": {
+      "card_name": "Ledger Shredder",
+      "set_code": "SPG",
+      "collector_number": "55"
+    },
+    "92409": {
+      "card_name": "Maddening Hex",
+      "set_code": "SPG",
+      "collector_number": "70"
+    },
+    "90655": {
+      "card_name": "Morbid Opportunist",
+      "set_code": "SPG",
+      "collector_number": "32"
+    },
+    "90658": {
+      "card_name": "Mystic Snake",
+      "set_code": "SPG",
+      "collector_number": "35"
+    },
+    "90659": {
+      "card_name": "Notion Thief",
+      "set_code": "SPG",
+      "collector_number": "36"
+    },
+    "92412": {
+      "card_name": "Noxious Revival",
+      "set_code": "SPG",
+      "collector_number": "73"
+    },
+    "91172": {
+      "card_name": "Persist",
+      "set_code": "SPG",
+      "collector_number": "42"
+    },
+    "92406": {
+      "card_name": "Phantasmal Image",
+      "set_code": "SPG",
+      "collector_number": "67"
+    },
+    "90656": {
+      "card_name": "Port Razer",
+      "set_code": "SPG",
+      "collector_number": "33"
+    },
+    "91170": {
+      "card_name": "Prismatic Ending",
+      "set_code": "SPG",
+      "collector_number": "40"
+    },
+    "90661": {
+      "card_name": "Prismatic Vista",
+      "set_code": "SPG",
+      "collector_number": "38"
+    },
+    "91872": {
+      "card_name": "Rat Colony",
+      "set_code": "SPG",
+      "collector_number": "56"
+    },
+    "91873": {
+      "card_name": "Relentless Rats",
+      "set_code": "SPG",
+      "collector_number": "57"
+    },
+    "92408": {
+      "card_name": "Sacrifice",
+      "set_code": "SPG",
+      "collector_number": "69"
+    },
+    "90657": {
+      "card_name": "Scapeshift",
+      "set_code": "SPG",
+      "collector_number": "34"
+    },
+    "91879": {
+      "card_name": "Secluded Courtyard",
+      "set_code": "SPG",
+      "collector_number": "63"
+    },
+    "88914": {
+      "card_name": "Show and Tell",
+      "set_code": "SPG",
+      "collector_number": "21"
+    },
+    "91164": {
+      "card_name": "Solitude",
+      "set_code": "SPG",
+      "collector_number": "44"
+    },
+    "92404": {
+      "card_name": "Soul Warden",
+      "set_code": "SPG",
+      "collector_number": "65"
+    },
+    "90651": {
+      "card_name": "Stoneforge Mystic",
+      "set_code": "SPG",
+      "collector_number": "29"
+    },
+    "91165": {
+      "card_name": "Subtlety",
+      "set_code": "SPG",
+      "collector_number": "45"
+    },
+    "91878": {
+      "card_name": "Sword of Fire and Ice",
+      "set_code": "SPG",
+      "collector_number": "62"
+    },
+    "91870": {
+      "card_name": "Swords to Plowshares",
+      "set_code": "SPG",
+      "collector_number": "54"
+    },
+    "91875": {
+      "card_name": "Sylvan Tutor",
+      "set_code": "SPG",
+      "collector_number": "59"
+    },
+    "91169": {
+      "card_name": "Thought-Knot Seer",
+      "set_code": "SPG",
+      "collector_number": "39"
+    },
+    "88919": {
+      "card_name": "Tireless Tracker",
+      "set_code": "SPG",
+      "collector_number": "26"
+    },
+    "91876": {
+      "card_name": "Toski, Bearer of Secrets",
+      "set_code": "SPG",
+      "collector_number": "60"
+    },
+    "88915": {
+      "card_name": "Tragic Slip",
+      "set_code": "SPG",
+      "collector_number": "22"
+    },
+    "92413": {
+      "card_name": "Unholy Heat",
+      "set_code": "SPG",
+      "collector_number": "71"
+    },
+    "88916": {
+      "card_name": "Victimize",
+      "set_code": "SPG",
+      "collector_number": "23"
+    },
+    "94700": {
+      "card_name": "Condemn",
+      "set_code": "SPG",
+      "collector_number": "74",
+      "synthetic": true
+    },
+    "94701": {
+      "card_name": "Sphinx's Tutelage",
+      "set_code": "SPG",
+      "collector_number": "75",
+      "synthetic": true
+    },
+    "94702": {
+      "card_name": "Grim Tutor",
+      "set_code": "SPG",
+      "collector_number": "76",
+      "synthetic": true
+    },
+    "94703": {
+      "card_name": "Embercleave",
+      "set_code": "SPG",
+      "collector_number": "77",
+      "synthetic": true
+    },
+    "94704": {
+      "card_name": "Goblin Bushwhacker",
+      "set_code": "SPG",
+      "collector_number": "78",
+      "synthetic": true
+    },
+    "94705": {
+      "card_name": "Bloom Tender",
+      "set_code": "SPG",
+      "collector_number": "79",
+      "synthetic": true
+    },
+    "94706": {
+      "card_name": "Paradise Druid",
+      "set_code": "SPG",
+      "collector_number": "80",
+      "synthetic": true
+    },
+    "94707": {
+      "card_name": "Akroma's Memorial",
+      "set_code": "SPG",
+      "collector_number": "81",
+      "synthetic": true
+    },
+    "94708": {
+      "card_name": "Temporal Manipulation",
+      "set_code": "SPG",
+      "collector_number": "82",
+      "synthetic": true
+    },
+    "94709": {
+      "card_name": "Fiend Artisan",
+      "set_code": "SPG",
+      "collector_number": "83",
+      "synthetic": true
+    }
+  },
+  "card_name_to_grpId": {
+    "Abrade": 93901,
+    "Abyssal Harvester": 93767,
+    "Adamant Will": 93637,
+    "Adaptive Automaton": 94151,
+    "Adventuring Gear": 93962,
+    "Aegis Turtle": 93863,
+    "Aetherize": 93864,
+    "Affectionate Indrik": 93924,
+    "Aggressive Mammoth": 93700,
+    "Ajani, Caller of the Pride": 93847,
+    "Ajani's Pridemate": 93848,
+    "Alesha, Who Laughs at Fate": 93828,
+    "Ambush Wolf": 93811,
+    "Ancestor Dragon": 93638,
+    "Angelic Destiny": 93993,
+    "Angelic Edict": 93639,
+    "Angel of Finality": 93849,
+    "Angel of Vitality": 94134,
+    "An Offer You Can't Refuse": 93873,
+    "Anthem of Champions": 93829,
+    "Apothecary Stomper": 93812,
+    "Arahbo, the First Fang": 93715,
+    "Arbiter of Woe": 93768,
+    "Arcane Epiphany": 93742,
+    "Arcanis the Omnipotent": 94013,
+    "Archmage of Runes": 93743,
+    "Archway Angel": 93994,
+    "Armasaur Guide": 93716,
+    "Ashroot Animist": 93830,
+    "Aurelia, the Warleader": 94079,
+    "Authority of the Consuls": 93850,
+    "Axgard Cavalry": 93902,
+    "Ayli, Eternal Pilgrim": 94080,
+    "Azorius Guildgate": 94111,
+    "Bake into a Pie": 93882,
+    "Ball Lightning": 94046,
+    "Ballyrush Banneret": 93995,
+    "Balmor, Battlemage Captain": 93950,
+    "Banishing Light": 93851,
+    "Banner of Kinship": 93840,
+    "Basilisk Collar": 94097,
+    "Battle-Rattle Shaman": 93682,
+    "Battlesong Berserker": 93791,
+    "Bear Cub": 93701,
+    "Beast-Kin Ranger": 93813,
+    "Bigfin Bouncer": 93744,
+    "Billowing Shriekmass": 93769,
+    "Biogenic Upgrade": 93702,
+    "Bishop's Soldier": 93640,
+    "Bite Down": 93925,
+    "Blanchwood Armor": 93926,
+    "Blasphemous Edict": 93770,
+    "Bloodfell Caves": 93972,
+    "Bloodthirsty Conqueror": 93771,
+    "Bloodtithe Collector": 93665,
+    "Blossoming Sands": 93973,
+    "Bolt Bend": 94047,
+    "Boltwave": 93792,
+    "Boros Charm": 94149,
+    "Boros Guildgate": 94112,
+    "Brass's Bounty": 93903,
+    "Brazen Scourge": 93904,
+    "Brineborn Cutthroat": 93865,
+    "Broken Wings": 93927,
+    "Bulk Up": 93793,
+    "Burglar Rat": 93883,
+    "Burnished Hart": 93963,
+    "Burrog Befuddler": 93653,
+    "Burst Lightning": 93905,
+    "Bushwhack": 93928,
+    "Cackling Prowler": 93814,
+    "Campus Guide": 93964,
+    "Cancel": 93654,
+    "Carnelian Orb of Dragonkind": 94187,
+    "Cat Collector": 93717,
+    "Cathar Commando": 93852,
+    "Celestial Armor": 93718,
+    "Cemetery Recruitment": 93666,
+    "Cephalid Inkmage": 93745,
+    "Chandra, Flameshaper": 93794,
+    "Charming Prince": 93996,
+    "Chart a Course": 94014,
+    "Circuitous Route": 94063,
+    "Claws Out": 93719,
+    "Clinquant Skymage": 93746,
+    "Cloudblazer": 94081,
+    "Confiscate": 94137,
+    "Consuming Aberration": 93951,
+    "Corsair Captain": 93655,
+    "Courageous Goblin": 93795,
+    "Crackling Cyclops": 93796,
+    "Crash Through": 94048,
+    "Crawling Barrens": 94113,
+    "Crossway Troublemakers": 93667,
+    "Crow of Dark Tidings": 93668,
+    "Crusader of Odric": 93997,
+    "Crypt Feaster": 93772,
+    "Cryptic Caves": 94114,
+    "Crystal Barricade": 93720,
+    "Cultivator's Caravan": 94098,
+    "Curator of Destinies": 93747,
+    "Darksteel Colossus": 94099,
+    "Dauntless Veteran": 93721,
+    "Dawnwing Marshal": 93998,
+    "Day of Judgment": 93853,
+    "Dazzling Angel": 93722,
+    "Deadly Brew": 94082,
+    "Deadly Plot": 93669,
+    "Deadly Riposte": 93641,
+    "Death Baron": 93670,
+    "Deathmark": 94029,
+    "Demolition Field": 94115,
+    "Demonic Pact": 94030,
+    "Desecration Demon": 94031,
+    "Devout Decree": 93999,
+    "Diamond Mare": 94100,
+    "Dictate of Kruphix": 94015,
+    "Dimir Guildgate": 94116,
+    "Diregraf Ghoul": 93884,
+    "Disenchant": 94000,
+    "Dismal Backwater": 93974,
+    "Dive Down": 94016,
+    "Divine Resilience": 93723,
+    "Doubling Season": 93929,
+    "Dragon Fodder": 93684,
+    "Dragonlord's Servant": 93685,
+    "Dragon Mage": 94049,
+    "Dragonmaster Outcast": 94050,
+    "Dragon Trainer": 93797,
+    "Drake Hatcher": 93748,
+    "Drakuseth, Maw of Flames": 93906,
+    "Dread Summons": 94032,
+    "Dreadwing Scavenger": 93831,
+    "Driver of the Dead": 94033,
+    "Drogskol Reaver": 94083,
+    "Dropkick Bomber": 93686,
+    "Druid of the Cowl": 93703,
+    "Dryad Militant": 94084,
+    "Duress": 94034,
+    "Dwynen, Gilt-Leaf Daen": 93930,
+    "Dwynen's Elite": 93931,
+    "Eager Trufflesnout": 93815,
+    "Eaten Alive": 93885,
+    "Eaten by Piranhas": 93656,
+    "Electroduplicate": 93798,
+    "Elementalist Adept": 93749,
+    "Elenda, Saint of Dusk": 93832,
+    "Elfsworn Giant": 93816,
+    "Elspeth's Smite": 93642,
+    "Elvish Archdruid": 93932,
+    "Elvish Regrower": 93817,
+    "Empyrean Eagle": 93952,
+    "Enigma Drake": 94085,
+    "Erudite Wizard": 93750,
+    "Essence Scatter": 93866,
+    "Etali, Primal Storm": 93907,
+    "Evolving Wilds": 93975,
+    "Exclusion Mage": 93657,
+    "Exemplar of Light": 93724,
+    "Expedition Map": 94152,
+    "Exsanguinate": 93886,
+    "Extravagant Replication": 93867,
+    "Faebloom Trick": 93751,
+    "Fake Your Own Death": 93887,
+    "Fanatical Firebrand": 93908,
+    "Feed the Swarm": 94140,
+    "Feldon's Cane": 94101,
+    "Felidar Cub": 94001,
+    "Felidar Retreat": 94002,
+    "Felidar Savior": 93725,
+    "Felling Blow": 93818,
+    "Fiendish Panda": 93833,
+    "Fierce Empath": 94064,
+    "Fiery Annihilation": 93799,
+    "Finale of Revelation": 94017,
+    "Firebrand Archer": 93909,
+    "Fire Elemental": 93687,
+    "Fireshrieker": 94102,
+    "Firespitter Whelp": 93910,
+    "Fishing Pole": 93841,
+    "Flamewake Phoenix": 93911,
+    "Flashfreeze": 94018,
+    "Fleeting Distraction": 93868,
+    "Fleeting Flight": 93726,
+    "Fog Bank": 94019,
+    "Forest": 95199,
+    "Frenzied Goblin": 93912,
+    "Fumigate": 94003,
+    "Fynn, the Fangbearer": 94065,
+    "Garna, Bloodfist of Keld": 94086,
+    "Garruk's Uprising": 93933,
+    "Gate Colossus": 94103,
+    "Gatekeeper of Malakir": 94141,
+    "Gateway Sneak": 94020,
+    "Genesis Wave": 93934,
+    "Ghalta, Primal Hunger": 93935,
+    "Ghitu Lavarunner": 94051,
+    "Giada, Font of Hope": 93854,
+    "Giant Cindermaw": 94052,
+    "Giant Growth": 93936,
+    "Gigantosaurus": 94146,
+    "Gilded Lotus": 94153,
+    "Gleaming Barrier": 93965,
+    "Gnarlback Rhino": 94066,
+    "Gnarlid Colony": 94188,
+    "Goblin Boarders": 93800,
+    "Goblin Firebomb": 93711,
+    "Goblin Negotiation": 93801,
+    "Goblin Oriflamme": 93688,
+    "Goblin Smuggler": 93689,
+    "Goblin Surprise": 93913,
+    "Goldvein Pick": 93966,
+    "Golgari Guildgate": 94117,
+    "Good-Fortune Unicorn": 93953,
+    "Gorehorn Raider": 93802,
+    "Grappling Kraken": 93752,
+    "Gratuitous Violence": 94143,
+    "Grow from the Ashes": 93938,
+    "Gruul Guildgate": 94118,
+    "Guarded Heir": 93727,
+    "Gutless Plunderer": 93773,
+    "Guttersnipe": 94144,
+    "Halana and Alena, Partners": 94087,
+    "Harbinger of the Tides": 94021,
+    "Hare Apparent": 93728,
+    "Harmless Offering": 94053,
+    "Healer's Hawk": 93855,
+    "Heartfire Immolator": 93914,
+    "Hedron Archive": 94154,
+    "Helpful Hunter": 93729,
+    "Heraldic Banner": 93967,
+    "Herald of Eternal Dawn": 93730,
+    "Herald of Faith": 93643,
+    "Heroes' Bane": 94067,
+    "Heroic Reinforcements": 93954,
+    "Hero's Downfall": 93888,
+    "Hidetsugu's Second Rite": 93915,
+    "Highborn Vampire": 93671,
+    "High Fae Trickster": 93753,
+    "High-Society Hunter": 93774,
+    "Hinterland Sanctifier": 93636,
+    "Hoarding Dragon": 94054,
+    "Homunculus Horde": 93754,
+    "Hungry Ghoul": 93775,
+    "Icewind Elemental": 93755,
+    "Immersturm Predator": 94088,
+    "Impact Tremors": 94145,
+    "Imperious Perfect": 94147,
+    "Imprisoned in the Moon": 93869,
+    "Incinerating Blast": 93803,
+    "Infernal Vessel": 93776,
+    "Infestation Sage": 93777,
+    "Ingenious Leonin": 93644,
+    "Inspiration from Beyond": 93756,
+    "Inspiring Call": 93939,
+    "Inspiring Overseer": 93645,
+    "Inspiring Paladin": 93731,
+    "Into the Roil": 93658,
+    "Involuntary Employment": 93916,
+    "Island": 95193,
+    "Izzet Guildgate": 94119,
+    "Jazal Goldmane": 93646,
+    "Joraga Invocation": 93704,
+    "Joust Through": 93732,
+    "Juggernaut": 93968,
+    "Jungle Hollow": 93976,
+    "Kaito, Cunning Infiltrator": 93757,
+    "Kalastria Highborn": 94035,
+    "Kargan Dragonrider": 93690,
+    "Kellan, Planar Trailblazer": 93804,
+    "Kindled Fury": 93691,
+    "Kiora, the Rising Tide": 93758,
+    "Kitesail Corsair": 93659,
+    "Knight of Grace": 94004,
+    "Knight of Malice": 94036,
+    "Koma, World-Eater": 93834,
+    "Krenko, Mob Boss": 93917,
+    "Kykar, Zephyr Awakener": 93835,
+    "Lathliss, Dragon Queen": 94055,
+    "Lathril, Blade of the Elves": 93955,
+    "Leonin Skyhunter": 93647,
+    "Leonin Vanguard": 93648,
+    "Leyline Axe": 93842,
+    "Lightshell Duo": 93870,
+    "Liliana, Dreadhorde General": 93889,
+    "Linden, the Steadfast Queen": 94005,
+    "Llanowar Elves": 93940,
+    "Loot, Exuberant Explorer": 93819,
+    "Luminous Rebuke": 93733,
+    "Lunar Insight": 93759,
+    "Lyra Dawnbringer": 94135,
+    "Maalfeld Twins": 93672,
+    "Macabre Waltz": 93890,
+    "Maelstrom Pulse": 94089,
+    "Magnigoth Sentry": 93705,
+    "Make a Stand": 94136,
+    "Make Your Move": 93856,
+    "Marauding Blight-Priest": 93891,
+    "Massacre Wurm": 94142,
+    "Mazemind Tome": 94104,
+    "Maze's End": 94155,
+    "Mentor of the Meek": 94006,
+    "Meteor Golem": 93969,
+    "Micromancer": 93871,
+    "Midnight Reaper": 94037,
+    "Midnight Snack": 93778,
+    "Mild-Mannered Librarian": 93941,
+    "Mindsparker": 94056,
+    "Mischievous Mystic": 93760,
+    "Mischievous Pup": 93857,
+    "Mocking Sprite": 93872,
+    "Mold Adder": 94068,
+    "Moment of Craving": 93673,
+    "Moment of Triumph": 93649,
+    "Mortify": 94090,
+    "Mossborn Hydra": 93820,
+    "Mountain": 95197,
+    "Muldrotha, the Gravetide": 93956,
+    "Myojin of Night's Reach": 94038,
+    "Mystical Teachings": 94022,
+    "Mystic Archaeologist": 93660,
+    "Needletooth Pack": 93821,
+    "Negate": 94138,
+    "Nessian Hornbeetle": 93942,
+    "New Horizons": 93706,
+    "Nine-Lives Familiar": 93779,
+    "Niv-Mizzet, Visionary": 93836,
+    "Nullpriest of Oblivion": 94039,
+    "Obliterating Bolt": 94057,
+    "Offer Immortality": 93674,
+    "Omniscience": 93874,
+    "Opt": 93661,
+    "Ordeal of Nylea": 94069,
+    "Orzhov Guildgate": 94120,
+    "Overrun": 93943,
+    "Ovika, Enigma Goliath": 94091,
+    "Pacifism": 93650,
+    "Painful Quandary": 93892,
+    "Pelakka Wurm": 94148,
+    "Perforating Artist": 93837,
+    "Phyrexian Arena": 93893,
+    "Pilfer": 93894,
+    "Pirate's Cutlass": 93712,
+    "Plains": 95191,
+    "Prayer of Binding": 93651,
+    "Predator Ooze": 94070,
+    "Preposterous Proportions": 93822,
+    "Prideful Parent": 93734,
+    "Primal Might": 94071,
+    "Prime Speaker Zegana": 94092,
+    "Primeval Bounty": 94072,
+    "Progenitus": 93957,
+    "Pulse Tracker": 94040,
+    "Pyromancer's Goggles": 94105,
+    "Quakestrider Ceratops": 93823,
+    "Quick-Draw Katana": 93843,
+    "Quick Study": 93662,
+    "Quilled Greatwurm": 93824,
+    "Raging Redcap": 93692,
+    "Raise the Past": 93735,
+    "Rakdos Guildgate": 94121,
+    "Ramos, Dragon Engine": 94106,
+    "Rampaging Baloths": 94073,
+    "Rapacious Dragon": 93693,
+    "Ravenous Amulet": 93844,
+    "Ravenous Giant": 94058,
+    "Reassembling Skeleton": 93895,
+    "Reclamation Sage": 93944,
+    "Redcap Gutter-Dweller": 94059,
+    "Refute": 93761,
+    "Regal Caracal": 94007,
+    "Release the Dogs": 94008,
+    "Resolute Reinforcements": 93858,
+    "Revenge of the Rats": 93780,
+    "Rise of the Dark Realms": 93896,
+    "Rite of Replication": 94139,
+    "Rite of the Dragoncaller": 93805,
+    "River's Rebuke": 94023,
+    "Rogue's Passage": 93977,
+    "Ruby, Daring Tracker": 93958,
+    "Rugged Highlands": 93978,
+    "Run Away Together": 93875,
+    "Rune-Scarred Demon": 93897,
+    "Rune-Sealed Wall": 93762,
+    "Sanguine Indulgence": 94041,
+    "Sanguine Syphoner": 93781,
+    "Savage Ventmaw": 94093,
+    "Savannah Lions": 93859,
+    "Scavenging Ooze": 93945,
+    "Scorching Dragonfire": 93694,
+    "Scoured Barrens": 93979,
+    "Scrawling Crawler": 93845,
+    "Searslicer Goblin": 93806,
+    "Secluded Courtyard": 93980,
+    "Seeker's Folly": 93782,
+    "Seismic Rupture": 93918,
+    "Seize the Spoils": 93695,
+    "Selesnya Guildgate": 94122,
+    "Self-Reflection": 93876,
+    "Serra Angel": 93860,
+    "Shipwreck Dowser": 94024,
+    "Shivan Dragon": 93919,
+    "Simic Guildgate": 94123,
+    "Sire of Seven Deaths": 93714,
+    "Skeleton Archer": 93675,
+    "Skyknight Squire": 93736,
+    "Skyraker Giant": 93696,
+    "Skyship Buccaneer": 93763,
+    "Slagstorm": 93920,
+    "Slumbering Cerberus": 93807,
+    "Snakeskin Veil": 93946,
+    "Solemn Simulacrum": 93970,
+    "Sorcerous Spyglass": 94107,
+    "Soul-Guide Lantern": 94108,
+    "Soul-Shackled Zombie": 93783,
+    "Soulstone Sanctuary": 93846,
+    "Sower of Chaos": 93808,
+    "Spectral Sailor": 93877,
+    "Sphinx of Forgotten Lore": 93764,
+    "Sphinx of the Final Word": 94025,
+    "Spinner of Souls": 93825,
+    "Spitfire Lagac": 93921,
+    "Springbloom Druid": 94074,
+    "Squad Rallier": 93737,
+    "Stab": 93784,
+    "Starlight Snare": 93663,
+    "Stasis Snare": 94009,
+    "Steel Hellkite": 94109,
+    "Storm Fleet Spy": 93664,
+    "Strix Lookout": 93765,
+    "Stroke of Midnight": 93861,
+    "Stromkirk Bloodthief": 93898,
+    "Stromkirk Noble": 94060,
+    "Strongbox Raider": 93809,
+    "Sun-Blessed Healer": 93738,
+    "Sure Strike": 93922,
+    "Surrak, the Hunt Caller": 94075,
+    "Suspicious Shambler": 93676,
+    "Swab Goblin": 93697,
+    "Swamp": 95195,
+    "Swiftblade Vindicator": 93959,
+    "Swiftfoot Boots": 93971,
+    "Swiftwater Cliffs": 93981,
+    "Sylvan Scavenging": 93826,
+    "Syr Alin, the Lion's Claw": 94010,
+    "Tajuru Pathwarden": 93707,
+    "Tatyova, Benthic Druid": 93960,
+    "Taurean Mauler": 94061,
+    "Teach by Example": 94094,
+    "Tempest Djinn": 94026,
+    "Temple of Abandon": 94124,
+    "Temple of Deceit": 94125,
+    "Temple of Enlightenment": 94126,
+    "Temple of Epiphany": 94127,
+    "Temple of Malady": 94128,
+    "Temple of Malice": 94129,
+    "Temple of Mystery": 94130,
+    "Temple of Plenty": 94131,
+    "Temple of Silence": 94132,
+    "Temple of Triumph": 94133,
+    "Terror of Mount Velus": 93698,
+    "Think Twice": 93878,
+    "Thornweald Archer": 93708,
+    "Thornwood Falls": 93982,
+    "Thousand-Year Storm": 93961,
+    "Thrashing Brontodon": 93709,
+    "Three Tree Mascot": 94110,
+    "Thrill of Possibility": 93923,
+    "Time Stop": 93879,
+    "Tinybones, Bauble Burglar": 93785,
+    "Tolarian Terror": 93880,
+    "Tragic Banshee": 93786,
+    "Tranquil Cove": 93983,
+    "Treetop Snarespinner": 93827,
+    "Tribute to Hunger": 94042,
+    "Trygon Predator": 94095,
+    "Twinblade Blessing": 93739,
+    "Twinblade Paladin": 93652,
+    "Twinflame Tyrant": 93810,
+    "Uncharted Haven": 93713,
+    "Uncharted Voyage": 93766,
+    "Undying Malice": 93677,
+    "Unflinching Courage": 94150,
+    "Unsummon": 94027,
+    "Untamed Hunger": 93678,
+    "Valkyrie's Call": 93740,
+    "Valorous Stance": 94011,
+    "Vampire Gourmand": 93787,
+    "Vampire Interloper": 93679,
+    "Vampire Neonate": 93680,
+    "Vampire Nighthawk": 93899,
+    "Vampire Soulcaller": 93788,
+    "Vampire Spawn": 93681,
+    "Vampiric Rites": 94043,
+    "Vanguard Seraph": 93741,
+    "Vengeful Bloodwitch": 93789,
+    "Venom Connoisseur": 94076,
+    "Viashino Pyromancer": 94062,
+    "Vile Entomber": 94044,
+    "Vivien Reid": 93947,
+    "Vizier of the Menagerie": 94077,
+    "Volley Veteran": 93699,
+    "Voracious Greatshark": 94028,
+    "Wardens of the Cycle": 93838,
+    "Wary Thespian": 93948,
+    "Wildborn Preserver": 94078,
+    "Wildheart Invoker": 93710,
+    "Wildwood Scourge": 93949,
+    "Wilt-Leaf Liege": 94096,
+    "Wind-Scarred Crag": 93984,
+    "Wishclaw Talisman": 94045,
+    "Witness Protection": 93881,
+    "Youthful Valkyrie": 93862,
+    "Zetalpa, Primal Dawn": 94012,
+    "Zimone, Paradox Sculptor": 93839,
+    "Zombify": 93900,
+    "Zul Ashur, Lich Lord": 93790,
+    "Brazen Borrower // Petty Theft": 90652,
+    "Collected Company": 92411,
+    "Crashing Footfalls": 88918,
+    "Damnation": 92407,
+    "Desert": 90660,
+    "Desertion": 90654,
+    "Dismember": 91171,
+    "Drown in the Loch": 88920,
+    "Endurance": 91168,
+    "Expressive Iteration": 91173,
+    "Expropriate": 92405,
+    "Fabricate": 88913,
+    "Field of the Dead": 88921,
+    "Frogmite": 91877,
+    "Fury": 91167,
+    "Gamble": 88917,
+    "Ghostly Prison": 88912,
+    "Grief": 91166,
+    "Hallowed Haunting": 92403,
+    "Kindred Charge": 91874,
+    "Ledger Shredder": 91871,
+    "Maddening Hex": 92409,
+    "Morbid Opportunist": 90655,
+    "Mystic Snake": 90658,
+    "Notion Thief": 90659,
+    "Noxious Revival": 92412,
+    "Persist": 91172,
+    "Phantasmal Image": 92406,
+    "Port Razer": 90656,
+    "Prismatic Ending": 91170,
+    "Prismatic Vista": 90661,
+    "Rat Colony": 91872,
+    "Relentless Rats": 91873,
+    "Sacrifice": 92408,
+    "Scapeshift": 90657,
+    "Show and Tell": 88914,
+    "Solitude": 91164,
+    "Soul Warden": 92404,
+    "Stoneforge Mystic": 90651,
+    "Subtlety": 91165,
+    "Sword of Fire and Ice": 91878,
+    "Swords to Plowshares": 91870,
+    "Sylvan Tutor": 91875,
+    "Thought-Knot Seer": 91169,
+    "Tireless Tracker": 88919,
+    "Toski, Bearer of Secrets": 91876,
+    "Tragic Slip": 88915,
+    "Unholy Heat": 92413,
+    "Victimize": 88916,
+    "Condemn": 94700,
+    "Sphinx's Tutelage": 94701,
+    "Grim Tutor": 94702,
+    "Embercleave": 94703,
+    "Goblin Bushwhacker": 94704,
+    "Bloom Tender": 94705,
+    "Paradise Druid": 94706,
+    "Akroma's Memorial": 94707,
+    "Temporal Manipulation": 94708,
+    "Fiend Artisan": 94709
+  },
+  "card_name_to_grpIds": {
+    "Abrade": [
+      {
+        "grpId": 93901,
+        "set_code": "FDN",
+        "collector_number": "188"
+      }
+    ],
+    "Abyssal Harvester": [
+      {
+        "grpId": 93767,
+        "set_code": "FDN",
+        "collector_number": "54"
+      }
+    ],
+    "Adamant Will": [
+      {
+        "grpId": 93637,
+        "set_code": "FDN",
+        "collector_number": "488"
+      }
+    ],
+    "Adaptive Automaton": [
+      {
+        "grpId": 94151,
+        "set_code": "FDN",
+        "collector_number": "723"
+      }
+    ],
+    "Adventuring Gear": [
+      {
+        "grpId": 93962,
+        "set_code": "FDN",
+        "collector_number": "249"
+      }
+    ],
+    "Aegis Turtle": [
+      {
+        "grpId": 93863,
+        "set_code": "FDN",
+        "collector_number": "150"
+      }
+    ],
+    "Aetherize": [
+      {
+        "grpId": 93864,
+        "set_code": "FDN",
+        "collector_number": "151"
+      }
+    ],
+    "Affectionate Indrik": [
+      {
+        "grpId": 93924,
+        "set_code": "FDN",
+        "collector_number": "211"
+      }
+    ],
+    "Aggressive Mammoth": [
+      {
+        "grpId": 93700,
+        "set_code": "FDN",
+        "collector_number": "551"
+      }
+    ],
+    "Ajani, Caller of the Pride": [
+      {
+        "grpId": 93847,
+        "set_code": "FDN",
+        "collector_number": "134"
+      }
+    ],
+    "Ajani's Pridemate": [
+      {
+        "grpId": 93848,
+        "set_code": "FDN",
+        "collector_number": "135"
+      }
+    ],
+    "Alesha, Who Laughs at Fate": [
+      {
+        "grpId": 93828,
+        "set_code": "FDN",
+        "collector_number": "115"
+      }
+    ],
+    "Ambush Wolf": [
+      {
+        "grpId": 93811,
+        "set_code": "FDN",
+        "collector_number": "98"
+      }
+    ],
+    "Ancestor Dragon": [
+      {
+        "grpId": 93638,
+        "set_code": "FDN",
+        "collector_number": "489"
+      }
+    ],
+    "Angelic Destiny": [
+      {
+        "grpId": 93993,
+        "set_code": "FDN",
+        "collector_number": "565"
+      }
+    ],
+    "Angelic Edict": [
+      {
+        "grpId": 93639,
+        "set_code": "FDN",
+        "collector_number": "490"
+      }
+    ],
+    "Angel of Finality": [
+      {
+        "grpId": 93849,
+        "set_code": "FDN",
+        "collector_number": "136"
+      }
+    ],
+    "Angel of Vitality": [
+      {
+        "grpId": 94134,
+        "set_code": "FDN",
+        "collector_number": "706"
+      }
+    ],
+    "An Offer You Can't Refuse": [
+      {
+        "grpId": 93873,
+        "set_code": "FDN",
+        "collector_number": "160"
+      }
+    ],
+    "Anthem of Champions": [
+      {
+        "grpId": 93829,
+        "set_code": "FDN",
+        "collector_number": "116"
+      }
+    ],
+    "Apothecary Stomper": [
+      {
+        "grpId": 93812,
+        "set_code": "FDN",
+        "collector_number": "99"
+      }
+    ],
+    "Arahbo, the First Fang": [
+      {
+        "grpId": 93715,
+        "set_code": "FDN",
+        "collector_number": "2"
+      }
+    ],
+    "Arbiter of Woe": [
+      {
+        "grpId": 93768,
+        "set_code": "FDN",
+        "collector_number": "55"
+      }
+    ],
+    "Arcane Epiphany": [
+      {
+        "grpId": 93742,
+        "set_code": "FDN",
+        "collector_number": "29"
+      }
+    ],
+    "Arcanis the Omnipotent": [
+      {
+        "grpId": 94013,
+        "set_code": "FDN",
+        "collector_number": "585"
+      }
+    ],
+    "Archmage of Runes": [
+      {
+        "grpId": 93743,
+        "set_code": "FDN",
+        "collector_number": "30"
+      }
+    ],
+    "Archway Angel": [
+      {
+        "grpId": 93994,
+        "set_code": "FDN",
+        "collector_number": "566"
+      }
+    ],
+    "Armasaur Guide": [
+      {
+        "grpId": 93716,
+        "set_code": "FDN",
+        "collector_number": "3"
+      }
+    ],
+    "Ashroot Animist": [
+      {
+        "grpId": 93830,
+        "set_code": "FDN",
+        "collector_number": "117"
+      }
+    ],
+    "Aurelia, the Warleader": [
+      {
+        "grpId": 94079,
+        "set_code": "FDN",
+        "collector_number": "651"
+      }
+    ],
+    "Authority of the Consuls": [
+      {
+        "grpId": 93850,
+        "set_code": "FDN",
+        "collector_number": "137"
+      }
+    ],
+    "Axgard Cavalry": [
+      {
+        "grpId": 93902,
+        "set_code": "FDN",
+        "collector_number": "189"
+      }
+    ],
+    "Ayli, Eternal Pilgrim": [
+      {
+        "grpId": 94080,
+        "set_code": "FDN",
+        "collector_number": "652"
+      }
+    ],
+    "Azorius Guildgate": [
+      {
+        "grpId": 94111,
+        "set_code": "FDN",
+        "collector_number": "683"
+      }
+    ],
+    "Bake into a Pie": [
+      {
+        "grpId": 93882,
+        "set_code": "FDN",
+        "collector_number": "169"
+      }
+    ],
+    "Ball Lightning": [
+      {
+        "grpId": 94046,
+        "set_code": "FDN",
+        "collector_number": "618"
+      }
+    ],
+    "Ballyrush Banneret": [
+      {
+        "grpId": 93995,
+        "set_code": "FDN",
+        "collector_number": "567"
+      }
+    ],
+    "Balmor, Battlemage Captain": [
+      {
+        "grpId": 93950,
+        "set_code": "FDN",
+        "collector_number": "237"
+      }
+    ],
+    "Banishing Light": [
+      {
+        "grpId": 93851,
+        "set_code": "FDN",
+        "collector_number": "138"
+      }
+    ],
+    "Banner of Kinship": [
+      {
+        "grpId": 93840,
+        "set_code": "FDN",
+        "collector_number": "127"
+      }
+    ],
+    "Basilisk Collar": [
+      {
+        "grpId": 94097,
+        "set_code": "FDN",
+        "collector_number": "669"
+      }
+    ],
+    "Battle-Rattle Shaman": [
+      {
+        "grpId": 93682,
+        "set_code": "FDN",
+        "collector_number": "533"
+      }
+    ],
+    "Battlesong Berserker": [
+      {
+        "grpId": 93791,
+        "set_code": "FDN",
+        "collector_number": "78"
+      }
+    ],
+    "Bear Cub": [
+      {
+        "grpId": 93701,
+        "set_code": "FDN",
+        "collector_number": "552"
+      }
+    ],
+    "Beast-Kin Ranger": [
+      {
+        "grpId": 93813,
+        "set_code": "FDN",
+        "collector_number": "100"
+      }
+    ],
+    "Bigfin Bouncer": [
+      {
+        "grpId": 93744,
+        "set_code": "FDN",
+        "collector_number": "31"
+      }
+    ],
+    "Billowing Shriekmass": [
+      {
+        "grpId": 93769,
+        "set_code": "FDN",
+        "collector_number": "56"
+      }
+    ],
+    "Biogenic Upgrade": [
+      {
+        "grpId": 93702,
+        "set_code": "FDN",
+        "collector_number": "553"
+      }
+    ],
+    "Bishop's Soldier": [
+      {
+        "grpId": 93640,
+        "set_code": "FDN",
+        "collector_number": "491"
+      }
+    ],
+    "Bite Down": [
+      {
+        "grpId": 93925,
+        "set_code": "FDN",
+        "collector_number": "212"
+      }
+    ],
+    "Blanchwood Armor": [
+      {
+        "grpId": 93926,
+        "set_code": "FDN",
+        "collector_number": "213"
+      }
+    ],
+    "Blasphemous Edict": [
+      {
+        "grpId": 93770,
+        "set_code": "FDN",
+        "collector_number": "57"
+      }
+    ],
+    "Bloodfell Caves": [
+      {
+        "grpId": 93972,
+        "set_code": "FDN",
+        "collector_number": "259"
+      }
+    ],
+    "Bloodthirsty Conqueror": [
+      {
+        "grpId": 93771,
+        "set_code": "FDN",
+        "collector_number": "58"
+      }
+    ],
+    "Bloodtithe Collector": [
+      {
+        "grpId": 93665,
+        "set_code": "FDN",
+        "collector_number": "516"
+      }
+    ],
+    "Blossoming Sands": [
+      {
+        "grpId": 93973,
+        "set_code": "FDN",
+        "collector_number": "260"
+      }
+    ],
+    "Bolt Bend": [
+      {
+        "grpId": 94047,
+        "set_code": "FDN",
+        "collector_number": "619"
+      }
+    ],
+    "Boltwave": [
+      {
+        "grpId": 93792,
+        "set_code": "FDN",
+        "collector_number": "79"
+      }
+    ],
+    "Boros Charm": [
+      {
+        "grpId": 94149,
+        "set_code": "FDN",
+        "collector_number": "721"
+      }
+    ],
+    "Boros Guildgate": [
+      {
+        "grpId": 94112,
+        "set_code": "FDN",
+        "collector_number": "684"
+      }
+    ],
+    "Brass's Bounty": [
+      {
+        "grpId": 93903,
+        "set_code": "FDN",
+        "collector_number": "190"
+      }
+    ],
+    "Brazen Scourge": [
+      {
+        "grpId": 93904,
+        "set_code": "FDN",
+        "collector_number": "191"
+      }
+    ],
+    "Brineborn Cutthroat": [
+      {
+        "grpId": 93865,
+        "set_code": "FDN",
+        "collector_number": "152"
+      }
+    ],
+    "Broken Wings": [
+      {
+        "grpId": 93927,
+        "set_code": "FDN",
+        "collector_number": "214"
+      }
+    ],
+    "Bulk Up": [
+      {
+        "grpId": 93793,
+        "set_code": "FDN",
+        "collector_number": "80"
+      }
+    ],
+    "Burglar Rat": [
+      {
+        "grpId": 93883,
+        "set_code": "FDN",
+        "collector_number": "170"
+      }
+    ],
+    "Burnished Hart": [
+      {
+        "grpId": 93963,
+        "set_code": "FDN",
+        "collector_number": "250"
+      }
+    ],
+    "Burrog Befuddler": [
+      {
+        "grpId": 93653,
+        "set_code": "FDN",
+        "collector_number": "504"
+      }
+    ],
+    "Burst Lightning": [
+      {
+        "grpId": 93905,
+        "set_code": "FDN",
+        "collector_number": "192"
+      }
+    ],
+    "Bushwhack": [
+      {
+        "grpId": 93928,
+        "set_code": "FDN",
+        "collector_number": "215"
+      }
+    ],
+    "Cackling Prowler": [
+      {
+        "grpId": 93814,
+        "set_code": "FDN",
+        "collector_number": "101"
+      }
+    ],
+    "Campus Guide": [
+      {
+        "grpId": 93964,
+        "set_code": "FDN",
+        "collector_number": "251"
+      }
+    ],
+    "Cancel": [
+      {
+        "grpId": 93654,
+        "set_code": "FDN",
+        "collector_number": "505"
+      }
+    ],
+    "Carnelian Orb of Dragonkind": [
+      {
+        "grpId": 94187,
+        "set_code": "FDN",
+        "collector_number": "534"
+      }
+    ],
+    "Cat Collector": [
+      {
+        "grpId": 93717,
+        "set_code": "FDN",
+        "collector_number": "4"
+      }
+    ],
+    "Cathar Commando": [
+      {
+        "grpId": 93852,
+        "set_code": "FDN",
+        "collector_number": "139"
+      }
+    ],
+    "Celestial Armor": [
+      {
+        "grpId": 93718,
+        "set_code": "FDN",
+        "collector_number": "5"
+      }
+    ],
+    "Cemetery Recruitment": [
+      {
+        "grpId": 93666,
+        "set_code": "FDN",
+        "collector_number": "517"
+      }
+    ],
+    "Cephalid Inkmage": [
+      {
+        "grpId": 93745,
+        "set_code": "FDN",
+        "collector_number": "32"
+      }
+    ],
+    "Chandra, Flameshaper": [
+      {
+        "grpId": 93794,
+        "set_code": "FDN",
+        "collector_number": "81"
+      }
+    ],
+    "Charming Prince": [
+      {
+        "grpId": 93996,
+        "set_code": "FDN",
+        "collector_number": "568"
+      }
+    ],
+    "Chart a Course": [
+      {
+        "grpId": 94014,
+        "set_code": "FDN",
+        "collector_number": "586"
+      }
+    ],
+    "Circuitous Route": [
+      {
+        "grpId": 94063,
+        "set_code": "FDN",
+        "collector_number": "635"
+      }
+    ],
+    "Claws Out": [
+      {
+        "grpId": 93719,
+        "set_code": "FDN",
+        "collector_number": "6"
+      }
+    ],
+    "Clinquant Skymage": [
+      {
+        "grpId": 93746,
+        "set_code": "FDN",
+        "collector_number": "33"
+      }
+    ],
+    "Cloudblazer": [
+      {
+        "grpId": 94081,
+        "set_code": "FDN",
+        "collector_number": "653"
+      }
+    ],
+    "Confiscate": [
+      {
+        "grpId": 94137,
+        "set_code": "FDN",
+        "collector_number": "709"
+      }
+    ],
+    "Consuming Aberration": [
+      {
+        "grpId": 93951,
+        "set_code": "FDN",
+        "collector_number": "238"
+      }
+    ],
+    "Corsair Captain": [
+      {
+        "grpId": 93655,
+        "set_code": "FDN",
+        "collector_number": "506"
+      }
+    ],
+    "Courageous Goblin": [
+      {
+        "grpId": 93795,
+        "set_code": "FDN",
+        "collector_number": "82"
+      }
+    ],
+    "Crackling Cyclops": [
+      {
+        "grpId": 93796,
+        "set_code": "FDN",
+        "collector_number": "83"
+      }
+    ],
+    "Crash Through": [
+      {
+        "grpId": 94048,
+        "set_code": "FDN",
+        "collector_number": "620"
+      }
+    ],
+    "Crawling Barrens": [
+      {
+        "grpId": 94113,
+        "set_code": "FDN",
+        "collector_number": "685"
+      }
+    ],
+    "Crossway Troublemakers": [
+      {
+        "grpId": 93667,
+        "set_code": "FDN",
+        "collector_number": "518"
+      }
+    ],
+    "Crow of Dark Tidings": [
+      {
+        "grpId": 93668,
+        "set_code": "FDN",
+        "collector_number": "519"
+      }
+    ],
+    "Crusader of Odric": [
+      {
+        "grpId": 93997,
+        "set_code": "FDN",
+        "collector_number": "569"
+      }
+    ],
+    "Crypt Feaster": [
+      {
+        "grpId": 93772,
+        "set_code": "FDN",
+        "collector_number": "59"
+      }
+    ],
+    "Cryptic Caves": [
+      {
+        "grpId": 94114,
+        "set_code": "FDN",
+        "collector_number": "686"
+      }
+    ],
+    "Crystal Barricade": [
+      {
+        "grpId": 93720,
+        "set_code": "FDN",
+        "collector_number": "7"
+      }
+    ],
+    "Cultivator's Caravan": [
+      {
+        "grpId": 94098,
+        "set_code": "FDN",
+        "collector_number": "670"
+      }
+    ],
+    "Curator of Destinies": [
+      {
+        "grpId": 93747,
+        "set_code": "FDN",
+        "collector_number": "34"
+      }
+    ],
+    "Darksteel Colossus": [
+      {
+        "grpId": 94099,
+        "set_code": "FDN",
+        "collector_number": "671"
+      }
+    ],
+    "Dauntless Veteran": [
+      {
+        "grpId": 93721,
+        "set_code": "FDN",
+        "collector_number": "8"
+      }
+    ],
+    "Dawnwing Marshal": [
+      {
+        "grpId": 93998,
+        "set_code": "FDN",
+        "collector_number": "570"
+      }
+    ],
+    "Day of Judgment": [
+      {
+        "grpId": 93853,
+        "set_code": "FDN",
+        "collector_number": "140"
+      }
+    ],
+    "Dazzling Angel": [
+      {
+        "grpId": 93722,
+        "set_code": "FDN",
+        "collector_number": "9"
+      }
+    ],
+    "Deadly Brew": [
+      {
+        "grpId": 94082,
+        "set_code": "FDN",
+        "collector_number": "654"
+      }
+    ],
+    "Deadly Plot": [
+      {
+        "grpId": 93669,
+        "set_code": "FDN",
+        "collector_number": "520"
+      }
+    ],
+    "Deadly Riposte": [
+      {
+        "grpId": 93641,
+        "set_code": "FDN",
+        "collector_number": "492"
+      }
+    ],
+    "Death Baron": [
+      {
+        "grpId": 93670,
+        "set_code": "FDN",
+        "collector_number": "521"
+      }
+    ],
+    "Deathmark": [
+      {
+        "grpId": 94029,
+        "set_code": "FDN",
+        "collector_number": "601"
+      }
+    ],
+    "Demolition Field": [
+      {
+        "grpId": 94115,
+        "set_code": "FDN",
+        "collector_number": "687"
+      }
+    ],
+    "Demonic Pact": [
+      {
+        "grpId": 94030,
+        "set_code": "FDN",
+        "collector_number": "602"
+      }
+    ],
+    "Desecration Demon": [
+      {
+        "grpId": 94031,
+        "set_code": "FDN",
+        "collector_number": "603"
+      }
+    ],
+    "Devout Decree": [
+      {
+        "grpId": 93999,
+        "set_code": "FDN",
+        "collector_number": "571"
+      }
+    ],
+    "Diamond Mare": [
+      {
+        "grpId": 94100,
+        "set_code": "FDN",
+        "collector_number": "672"
+      }
+    ],
+    "Dictate of Kruphix": [
+      {
+        "grpId": 94015,
+        "set_code": "FDN",
+        "collector_number": "587"
+      }
+    ],
+    "Dimir Guildgate": [
+      {
+        "grpId": 94116,
+        "set_code": "FDN",
+        "collector_number": "688"
+      }
+    ],
+    "Diregraf Ghoul": [
+      {
+        "grpId": 93884,
+        "set_code": "FDN",
+        "collector_number": "171"
+      }
+    ],
+    "Disenchant": [
+      {
+        "grpId": 94000,
+        "set_code": "FDN",
+        "collector_number": "572"
+      }
+    ],
+    "Dismal Backwater": [
+      {
+        "grpId": 93974,
+        "set_code": "FDN",
+        "collector_number": "261"
+      }
+    ],
+    "Dive Down": [
+      {
+        "grpId": 94016,
+        "set_code": "FDN",
+        "collector_number": "588"
+      }
+    ],
+    "Divine Resilience": [
+      {
+        "grpId": 93723,
+        "set_code": "FDN",
+        "collector_number": "10"
+      }
+    ],
+    "Doubling Season": [
+      {
+        "grpId": 93929,
+        "set_code": "FDN",
+        "collector_number": "216"
+      }
+    ],
+    "Dragon Fodder": [
+      {
+        "grpId": 93684,
+        "set_code": "FDN",
+        "collector_number": "535"
+      }
+    ],
+    "Dragonlord's Servant": [
+      {
+        "grpId": 93685,
+        "set_code": "FDN",
+        "collector_number": "536"
+      }
+    ],
+    "Dragon Mage": [
+      {
+        "grpId": 94049,
+        "set_code": "FDN",
+        "collector_number": "621"
+      }
+    ],
+    "Dragonmaster Outcast": [
+      {
+        "grpId": 94050,
+        "set_code": "FDN",
+        "collector_number": "622"
+      }
+    ],
+    "Dragon Trainer": [
+      {
+        "grpId": 93797,
+        "set_code": "FDN",
+        "collector_number": "84"
+      }
+    ],
+    "Drake Hatcher": [
+      {
+        "grpId": 93748,
+        "set_code": "FDN",
+        "collector_number": "35"
+      }
+    ],
+    "Drakuseth, Maw of Flames": [
+      {
+        "grpId": 93906,
+        "set_code": "FDN",
+        "collector_number": "193"
+      }
+    ],
+    "Dread Summons": [
+      {
+        "grpId": 94032,
+        "set_code": "FDN",
+        "collector_number": "604"
+      }
+    ],
+    "Dreadwing Scavenger": [
+      {
+        "grpId": 93831,
+        "set_code": "FDN",
+        "collector_number": "118"
+      }
+    ],
+    "Driver of the Dead": [
+      {
+        "grpId": 94033,
+        "set_code": "FDN",
+        "collector_number": "605"
+      }
+    ],
+    "Drogskol Reaver": [
+      {
+        "grpId": 94083,
+        "set_code": "FDN",
+        "collector_number": "655"
+      }
+    ],
+    "Dropkick Bomber": [
+      {
+        "grpId": 93686,
+        "set_code": "FDN",
+        "collector_number": "537"
+      }
+    ],
+    "Druid of the Cowl": [
+      {
+        "grpId": 93703,
+        "set_code": "FDN",
+        "collector_number": "554"
+      }
+    ],
+    "Dryad Militant": [
+      {
+        "grpId": 94084,
+        "set_code": "FDN",
+        "collector_number": "656"
+      }
+    ],
+    "Duress": [
+      {
+        "grpId": 94034,
+        "set_code": "FDN",
+        "collector_number": "606"
+      }
+    ],
+    "Dwynen, Gilt-Leaf Daen": [
+      {
+        "grpId": 93930,
+        "set_code": "FDN",
+        "collector_number": "217"
+      }
+    ],
+    "Dwynen's Elite": [
+      {
+        "grpId": 93931,
+        "set_code": "FDN",
+        "collector_number": "218"
+      }
+    ],
+    "Eager Trufflesnout": [
+      {
+        "grpId": 93815,
+        "set_code": "FDN",
+        "collector_number": "102"
+      }
+    ],
+    "Eaten Alive": [
+      {
+        "grpId": 93885,
+        "set_code": "FDN",
+        "collector_number": "172"
+      }
+    ],
+    "Eaten by Piranhas": [
+      {
+        "grpId": 93656,
+        "set_code": "FDN",
+        "collector_number": "507"
+      }
+    ],
+    "Electroduplicate": [
+      {
+        "grpId": 93798,
+        "set_code": "FDN",
+        "collector_number": "85"
+      }
+    ],
+    "Elementalist Adept": [
+      {
+        "grpId": 93749,
+        "set_code": "FDN",
+        "collector_number": "36"
+      }
+    ],
+    "Elenda, Saint of Dusk": [
+      {
+        "grpId": 93832,
+        "set_code": "FDN",
+        "collector_number": "119"
+      }
+    ],
+    "Elfsworn Giant": [
+      {
+        "grpId": 93816,
+        "set_code": "FDN",
+        "collector_number": "103"
+      }
+    ],
+    "Elspeth's Smite": [
+      {
+        "grpId": 93642,
+        "set_code": "FDN",
+        "collector_number": "493"
+      }
+    ],
+    "Elvish Archdruid": [
+      {
+        "grpId": 93932,
+        "set_code": "FDN",
+        "collector_number": "219"
+      }
+    ],
+    "Elvish Regrower": [
+      {
+        "grpId": 93817,
+        "set_code": "FDN",
+        "collector_number": "104"
+      }
+    ],
+    "Empyrean Eagle": [
+      {
+        "grpId": 93952,
+        "set_code": "FDN",
+        "collector_number": "239"
+      }
+    ],
+    "Enigma Drake": [
+      {
+        "grpId": 94085,
+        "set_code": "FDN",
+        "collector_number": "657"
+      }
+    ],
+    "Erudite Wizard": [
+      {
+        "grpId": 93750,
+        "set_code": "FDN",
+        "collector_number": "37"
+      }
+    ],
+    "Essence Scatter": [
+      {
+        "grpId": 93866,
+        "set_code": "FDN",
+        "collector_number": "153"
+      }
+    ],
+    "Etali, Primal Storm": [
+      {
+        "grpId": 93907,
+        "set_code": "FDN",
+        "collector_number": "194"
+      }
+    ],
+    "Evolving Wilds": [
+      {
+        "grpId": 93975,
+        "set_code": "FDN",
+        "collector_number": "262"
+      }
+    ],
+    "Exclusion Mage": [
+      {
+        "grpId": 93657,
+        "set_code": "FDN",
+        "collector_number": "508"
+      }
+    ],
+    "Exemplar of Light": [
+      {
+        "grpId": 93724,
+        "set_code": "FDN",
+        "collector_number": "11"
+      }
+    ],
+    "Expedition Map": [
+      {
+        "grpId": 94152,
+        "set_code": "FDN",
+        "collector_number": "724"
+      }
+    ],
+    "Exsanguinate": [
+      {
+        "grpId": 93886,
+        "set_code": "FDN",
+        "collector_number": "173"
+      }
+    ],
+    "Extravagant Replication": [
+      {
+        "grpId": 93867,
+        "set_code": "FDN",
+        "collector_number": "154"
+      }
+    ],
+    "Faebloom Trick": [
+      {
+        "grpId": 93751,
+        "set_code": "FDN",
+        "collector_number": "38"
+      }
+    ],
+    "Fake Your Own Death": [
+      {
+        "grpId": 93887,
+        "set_code": "FDN",
+        "collector_number": "174"
+      }
+    ],
+    "Fanatical Firebrand": [
+      {
+        "grpId": 93908,
+        "set_code": "FDN",
+        "collector_number": "195"
+      }
+    ],
+    "Feed the Swarm": [
+      {
+        "grpId": 94140,
+        "set_code": "FDN",
+        "collector_number": "712"
+      }
+    ],
+    "Feldon's Cane": [
+      {
+        "grpId": 94101,
+        "set_code": "FDN",
+        "collector_number": "673"
+      }
+    ],
+    "Felidar Cub": [
+      {
+        "grpId": 94001,
+        "set_code": "FDN",
+        "collector_number": "573"
+      }
+    ],
+    "Felidar Retreat": [
+      {
+        "grpId": 94002,
+        "set_code": "FDN",
+        "collector_number": "574"
+      }
+    ],
+    "Felidar Savior": [
+      {
+        "grpId": 93725,
+        "set_code": "FDN",
+        "collector_number": "12"
+      }
+    ],
+    "Felling Blow": [
+      {
+        "grpId": 93818,
+        "set_code": "FDN",
+        "collector_number": "105"
+      }
+    ],
+    "Fiendish Panda": [
+      {
+        "grpId": 93833,
+        "set_code": "FDN",
+        "collector_number": "120"
+      }
+    ],
+    "Fierce Empath": [
+      {
+        "grpId": 94064,
+        "set_code": "FDN",
+        "collector_number": "636"
+      }
+    ],
+    "Fiery Annihilation": [
+      {
+        "grpId": 93799,
+        "set_code": "FDN",
+        "collector_number": "86"
+      }
+    ],
+    "Finale of Revelation": [
+      {
+        "grpId": 94017,
+        "set_code": "FDN",
+        "collector_number": "589"
+      }
+    ],
+    "Firebrand Archer": [
+      {
+        "grpId": 93909,
+        "set_code": "FDN",
+        "collector_number": "196"
+      }
+    ],
+    "Fire Elemental": [
+      {
+        "grpId": 93687,
+        "set_code": "FDN",
+        "collector_number": "538"
+      }
+    ],
+    "Fireshrieker": [
+      {
+        "grpId": 94102,
+        "set_code": "FDN",
+        "collector_number": "674"
+      }
+    ],
+    "Firespitter Whelp": [
+      {
+        "grpId": 93910,
+        "set_code": "FDN",
+        "collector_number": "197"
+      }
+    ],
+    "Fishing Pole": [
+      {
+        "grpId": 93841,
+        "set_code": "FDN",
+        "collector_number": "128"
+      }
+    ],
+    "Flamewake Phoenix": [
+      {
+        "grpId": 93911,
+        "set_code": "FDN",
+        "collector_number": "198"
+      }
+    ],
+    "Flashfreeze": [
+      {
+        "grpId": 94018,
+        "set_code": "FDN",
+        "collector_number": "590"
+      }
+    ],
+    "Fleeting Distraction": [
+      {
+        "grpId": 93868,
+        "set_code": "FDN",
+        "collector_number": "155"
+      }
+    ],
+    "Fleeting Flight": [
+      {
+        "grpId": 93726,
+        "set_code": "FDN",
+        "collector_number": "13"
+      }
+    ],
+    "Fog Bank": [
+      {
+        "grpId": 94019,
+        "set_code": "FDN",
+        "collector_number": "591"
+      }
+    ],
+    "Forest": [
+      {
+        "grpId": 95199,
+        "set_code": "FDN",
+        "collector_number": "280"
+      },
+      {
+        "grpId": 95200,
+        "set_code": "FDN",
+        "collector_number": "281"
+      },
+      {
+        "grpId": 95189,
+        "set_code": "FDN",
+        "collector_number": "290"
+      },
+      {
+        "grpId": 95190,
+        "set_code": "FDN",
+        "collector_number": "291"
+      }
+    ],
+    "Frenzied Goblin": [
+      {
+        "grpId": 93912,
+        "set_code": "FDN",
+        "collector_number": "199"
+      }
+    ],
+    "Fumigate": [
+      {
+        "grpId": 94003,
+        "set_code": "FDN",
+        "collector_number": "575"
+      }
+    ],
+    "Fynn, the Fangbearer": [
+      {
+        "grpId": 94065,
+        "set_code": "FDN",
+        "collector_number": "637"
+      }
+    ],
+    "Garna, Bloodfist of Keld": [
+      {
+        "grpId": 94086,
+        "set_code": "FDN",
+        "collector_number": "658"
+      }
+    ],
+    "Garruk's Uprising": [
+      {
+        "grpId": 93933,
+        "set_code": "FDN",
+        "collector_number": "220"
+      }
+    ],
+    "Gate Colossus": [
+      {
+        "grpId": 94103,
+        "set_code": "FDN",
+        "collector_number": "675"
+      }
+    ],
+    "Gatekeeper of Malakir": [
+      {
+        "grpId": 94141,
+        "set_code": "FDN",
+        "collector_number": "713"
+      }
+    ],
+    "Gateway Sneak": [
+      {
+        "grpId": 94020,
+        "set_code": "FDN",
+        "collector_number": "592"
+      }
+    ],
+    "Genesis Wave": [
+      {
+        "grpId": 93934,
+        "set_code": "FDN",
+        "collector_number": "221"
+      }
+    ],
+    "Ghalta, Primal Hunger": [
+      {
+        "grpId": 93935,
+        "set_code": "FDN",
+        "collector_number": "222"
+      }
+    ],
+    "Ghitu Lavarunner": [
+      {
+        "grpId": 94051,
+        "set_code": "FDN",
+        "collector_number": "623"
+      }
+    ],
+    "Giada, Font of Hope": [
+      {
+        "grpId": 93854,
+        "set_code": "FDN",
+        "collector_number": "141"
+      }
+    ],
+    "Giant Cindermaw": [
+      {
+        "grpId": 94052,
+        "set_code": "FDN",
+        "collector_number": "624"
+      }
+    ],
+    "Giant Growth": [
+      {
+        "grpId": 93936,
+        "set_code": "FDN",
+        "collector_number": "223"
+      }
+    ],
+    "Gigantosaurus": [
+      {
+        "grpId": 94146,
+        "set_code": "FDN",
+        "collector_number": "718"
+      }
+    ],
+    "Gilded Lotus": [
+      {
+        "grpId": 94153,
+        "set_code": "FDN",
+        "collector_number": "725"
+      }
+    ],
+    "Gleaming Barrier": [
+      {
+        "grpId": 93965,
+        "set_code": "FDN",
+        "collector_number": "252"
+      }
+    ],
+    "Gnarlback Rhino": [
+      {
+        "grpId": 94066,
+        "set_code": "FDN",
+        "collector_number": "638"
+      }
+    ],
+    "Gnarlid Colony": [
+      {
+        "grpId": 94188,
+        "set_code": "FDN",
+        "collector_number": "224"
+      }
+    ],
+    "Goblin Boarders": [
+      {
+        "grpId": 93800,
+        "set_code": "FDN",
+        "collector_number": "87"
+      }
+    ],
+    "Goblin Firebomb": [
+      {
+        "grpId": 93711,
+        "set_code": "FDN",
+        "collector_number": "562"
+      }
+    ],
+    "Goblin Negotiation": [
+      {
+        "grpId": 93801,
+        "set_code": "FDN",
+        "collector_number": "88"
+      }
+    ],
+    "Goblin Oriflamme": [
+      {
+        "grpId": 93688,
+        "set_code": "FDN",
+        "collector_number": "539"
+      }
+    ],
+    "Goblin Smuggler": [
+      {
+        "grpId": 93689,
+        "set_code": "FDN",
+        "collector_number": "540"
+      }
+    ],
+    "Goblin Surprise": [
+      {
+        "grpId": 93913,
+        "set_code": "FDN",
+        "collector_number": "200"
+      }
+    ],
+    "Goldvein Pick": [
+      {
+        "grpId": 93966,
+        "set_code": "FDN",
+        "collector_number": "253"
+      }
+    ],
+    "Golgari Guildgate": [
+      {
+        "grpId": 94117,
+        "set_code": "FDN",
+        "collector_number": "689"
+      }
+    ],
+    "Good-Fortune Unicorn": [
+      {
+        "grpId": 93953,
+        "set_code": "FDN",
+        "collector_number": "240"
+      }
+    ],
+    "Gorehorn Raider": [
+      {
+        "grpId": 93802,
+        "set_code": "FDN",
+        "collector_number": "89"
+      }
+    ],
+    "Grappling Kraken": [
+      {
+        "grpId": 93752,
+        "set_code": "FDN",
+        "collector_number": "39"
+      }
+    ],
+    "Gratuitous Violence": [
+      {
+        "grpId": 94143,
+        "set_code": "FDN",
+        "collector_number": "715"
+      }
+    ],
+    "Grow from the Ashes": [
+      {
+        "grpId": 93938,
+        "set_code": "FDN",
+        "collector_number": "225"
+      }
+    ],
+    "Gruul Guildgate": [
+      {
+        "grpId": 94118,
+        "set_code": "FDN",
+        "collector_number": "690"
+      }
+    ],
+    "Guarded Heir": [
+      {
+        "grpId": 93727,
+        "set_code": "FDN",
+        "collector_number": "14"
+      }
+    ],
+    "Gutless Plunderer": [
+      {
+        "grpId": 93773,
+        "set_code": "FDN",
+        "collector_number": "60"
+      }
+    ],
+    "Guttersnipe": [
+      {
+        "grpId": 94144,
+        "set_code": "FDN",
+        "collector_number": "716"
+      }
+    ],
+    "Halana and Alena, Partners": [
+      {
+        "grpId": 94087,
+        "set_code": "FDN",
+        "collector_number": "659"
+      }
+    ],
+    "Harbinger of the Tides": [
+      {
+        "grpId": 94021,
+        "set_code": "FDN",
+        "collector_number": "593"
+      }
+    ],
+    "Hare Apparent": [
+      {
+        "grpId": 93728,
+        "set_code": "FDN",
+        "collector_number": "15"
+      }
+    ],
+    "Harmless Offering": [
+      {
+        "grpId": 94053,
+        "set_code": "FDN",
+        "collector_number": "625"
+      }
+    ],
+    "Healer's Hawk": [
+      {
+        "grpId": 93855,
+        "set_code": "FDN",
+        "collector_number": "142"
+      }
+    ],
+    "Heartfire Immolator": [
+      {
+        "grpId": 93914,
+        "set_code": "FDN",
+        "collector_number": "201"
+      }
+    ],
+    "Hedron Archive": [
+      {
+        "grpId": 94154,
+        "set_code": "FDN",
+        "collector_number": "726"
+      }
+    ],
+    "Helpful Hunter": [
+      {
+        "grpId": 93729,
+        "set_code": "FDN",
+        "collector_number": "16"
+      }
+    ],
+    "Heraldic Banner": [
+      {
+        "grpId": 93967,
+        "set_code": "FDN",
+        "collector_number": "254"
+      }
+    ],
+    "Herald of Eternal Dawn": [
+      {
+        "grpId": 93730,
+        "set_code": "FDN",
+        "collector_number": "17"
+      }
+    ],
+    "Herald of Faith": [
+      {
+        "grpId": 93643,
+        "set_code": "FDN",
+        "collector_number": "494"
+      }
+    ],
+    "Heroes' Bane": [
+      {
+        "grpId": 94067,
+        "set_code": "FDN",
+        "collector_number": "639"
+      }
+    ],
+    "Heroic Reinforcements": [
+      {
+        "grpId": 93954,
+        "set_code": "FDN",
+        "collector_number": "241"
+      }
+    ],
+    "Hero's Downfall": [
+      {
+        "grpId": 93888,
+        "set_code": "FDN",
+        "collector_number": "175"
+      }
+    ],
+    "Hidetsugu's Second Rite": [
+      {
+        "grpId": 93915,
+        "set_code": "FDN",
+        "collector_number": "202"
+      }
+    ],
+    "Highborn Vampire": [
+      {
+        "grpId": 93671,
+        "set_code": "FDN",
+        "collector_number": "522"
+      }
+    ],
+    "High Fae Trickster": [
+      {
+        "grpId": 93753,
+        "set_code": "FDN",
+        "collector_number": "40"
+      }
+    ],
+    "High-Society Hunter": [
+      {
+        "grpId": 93774,
+        "set_code": "FDN",
+        "collector_number": "61"
+      }
+    ],
+    "Hinterland Sanctifier": [
+      {
+        "grpId": 93636,
+        "set_code": "FDN",
+        "collector_number": "730"
+      }
+    ],
+    "Hoarding Dragon": [
+      {
+        "grpId": 94054,
+        "set_code": "FDN",
+        "collector_number": "626"
+      }
+    ],
+    "Homunculus Horde": [
+      {
+        "grpId": 93754,
+        "set_code": "FDN",
+        "collector_number": "41"
+      }
+    ],
+    "Hungry Ghoul": [
+      {
+        "grpId": 93775,
+        "set_code": "FDN",
+        "collector_number": "62"
+      }
+    ],
+    "Icewind Elemental": [
+      {
+        "grpId": 93755,
+        "set_code": "FDN",
+        "collector_number": "42"
+      }
+    ],
+    "Immersturm Predator": [
+      {
+        "grpId": 94088,
+        "set_code": "FDN",
+        "collector_number": "660"
+      }
+    ],
+    "Impact Tremors": [
+      {
+        "grpId": 94145,
+        "set_code": "FDN",
+        "collector_number": "717"
+      }
+    ],
+    "Imperious Perfect": [
+      {
+        "grpId": 94147,
+        "set_code": "FDN",
+        "collector_number": "719"
+      }
+    ],
+    "Imprisoned in the Moon": [
+      {
+        "grpId": 93869,
+        "set_code": "FDN",
+        "collector_number": "156"
+      }
+    ],
+    "Incinerating Blast": [
+      {
+        "grpId": 93803,
+        "set_code": "FDN",
+        "collector_number": "90"
+      }
+    ],
+    "Infernal Vessel": [
+      {
+        "grpId": 93776,
+        "set_code": "FDN",
+        "collector_number": "63"
+      }
+    ],
+    "Infestation Sage": [
+      {
+        "grpId": 93777,
+        "set_code": "FDN",
+        "collector_number": "64"
+      }
+    ],
+    "Ingenious Leonin": [
+      {
+        "grpId": 93644,
+        "set_code": "FDN",
+        "collector_number": "495"
+      }
+    ],
+    "Inspiration from Beyond": [
+      {
+        "grpId": 93756,
+        "set_code": "FDN",
+        "collector_number": "43"
+      }
+    ],
+    "Inspiring Call": [
+      {
+        "grpId": 93939,
+        "set_code": "FDN",
+        "collector_number": "226"
+      }
+    ],
+    "Inspiring Overseer": [
+      {
+        "grpId": 93645,
+        "set_code": "FDN",
+        "collector_number": "496"
+      }
+    ],
+    "Inspiring Paladin": [
+      {
+        "grpId": 93731,
+        "set_code": "FDN",
+        "collector_number": "18"
+      }
+    ],
+    "Into the Roil": [
+      {
+        "grpId": 93658,
+        "set_code": "FDN",
+        "collector_number": "509"
+      }
+    ],
+    "Involuntary Employment": [
+      {
+        "grpId": 93916,
+        "set_code": "FDN",
+        "collector_number": "203"
+      }
+    ],
+    "Island": [
+      {
+        "grpId": 95193,
+        "set_code": "FDN",
+        "collector_number": "274"
+      },
+      {
+        "grpId": 95194,
+        "set_code": "FDN",
+        "collector_number": "275"
+      },
+      {
+        "grpId": 95183,
+        "set_code": "FDN",
+        "collector_number": "284"
+      },
+      {
+        "grpId": 95184,
+        "set_code": "FDN",
+        "collector_number": "285"
+      }
+    ],
+    "Izzet Guildgate": [
+      {
+        "grpId": 94119,
+        "set_code": "FDN",
+        "collector_number": "691"
+      }
+    ],
+    "Jazal Goldmane": [
+      {
+        "grpId": 93646,
+        "set_code": "FDN",
+        "collector_number": "497"
+      }
+    ],
+    "Joraga Invocation": [
+      {
+        "grpId": 93704,
+        "set_code": "FDN",
+        "collector_number": "555"
+      }
+    ],
+    "Joust Through": [
+      {
+        "grpId": 93732,
+        "set_code": "FDN",
+        "collector_number": "19"
+      }
+    ],
+    "Juggernaut": [
+      {
+        "grpId": 93968,
+        "set_code": "FDN",
+        "collector_number": "255"
+      }
+    ],
+    "Jungle Hollow": [
+      {
+        "grpId": 93976,
+        "set_code": "FDN",
+        "collector_number": "263"
+      }
+    ],
+    "Kaito, Cunning Infiltrator": [
+      {
+        "grpId": 93757,
+        "set_code": "FDN",
+        "collector_number": "44"
+      }
+    ],
+    "Kalastria Highborn": [
+      {
+        "grpId": 94035,
+        "set_code": "FDN",
+        "collector_number": "607"
+      }
+    ],
+    "Kargan Dragonrider": [
+      {
+        "grpId": 93690,
+        "set_code": "FDN",
+        "collector_number": "541"
+      }
+    ],
+    "Kellan, Planar Trailblazer": [
+      {
+        "grpId": 93804,
+        "set_code": "FDN",
+        "collector_number": "91"
+      }
+    ],
+    "Kindled Fury": [
+      {
+        "grpId": 93691,
+        "set_code": "FDN",
+        "collector_number": "542"
+      }
+    ],
+    "Kiora, the Rising Tide": [
+      {
+        "grpId": 93758,
+        "set_code": "FDN",
+        "collector_number": "45"
+      }
+    ],
+    "Kitesail Corsair": [
+      {
+        "grpId": 93659,
+        "set_code": "FDN",
+        "collector_number": "510"
+      }
+    ],
+    "Knight of Grace": [
+      {
+        "grpId": 94004,
+        "set_code": "FDN",
+        "collector_number": "576"
+      }
+    ],
+    "Knight of Malice": [
+      {
+        "grpId": 94036,
+        "set_code": "FDN",
+        "collector_number": "608"
+      }
+    ],
+    "Koma, World-Eater": [
+      {
+        "grpId": 93834,
+        "set_code": "FDN",
+        "collector_number": "121"
+      }
+    ],
+    "Krenko, Mob Boss": [
+      {
+        "grpId": 93917,
+        "set_code": "FDN",
+        "collector_number": "204"
+      }
+    ],
+    "Kykar, Zephyr Awakener": [
+      {
+        "grpId": 93835,
+        "set_code": "FDN",
+        "collector_number": "122"
+      }
+    ],
+    "Lathliss, Dragon Queen": [
+      {
+        "grpId": 94055,
+        "set_code": "FDN",
+        "collector_number": "627"
+      }
+    ],
+    "Lathril, Blade of the Elves": [
+      {
+        "grpId": 93955,
+        "set_code": "FDN",
+        "collector_number": "242"
+      }
+    ],
+    "Leonin Skyhunter": [
+      {
+        "grpId": 93647,
+        "set_code": "FDN",
+        "collector_number": "498"
+      }
+    ],
+    "Leonin Vanguard": [
+      {
+        "grpId": 93648,
+        "set_code": "FDN",
+        "collector_number": "499"
+      }
+    ],
+    "Leyline Axe": [
+      {
+        "grpId": 93842,
+        "set_code": "FDN",
+        "collector_number": "129"
+      }
+    ],
+    "Lightshell Duo": [
+      {
+        "grpId": 93870,
+        "set_code": "FDN",
+        "collector_number": "157"
+      }
+    ],
+    "Liliana, Dreadhorde General": [
+      {
+        "grpId": 93889,
+        "set_code": "FDN",
+        "collector_number": "176"
+      }
+    ],
+    "Linden, the Steadfast Queen": [
+      {
+        "grpId": 94005,
+        "set_code": "FDN",
+        "collector_number": "577"
+      }
+    ],
+    "Llanowar Elves": [
+      {
+        "grpId": 93940,
+        "set_code": "FDN",
+        "collector_number": "227"
+      }
+    ],
+    "Loot, Exuberant Explorer": [
+      {
+        "grpId": 93819,
+        "set_code": "FDN",
+        "collector_number": "106"
+      }
+    ],
+    "Luminous Rebuke": [
+      {
+        "grpId": 93733,
+        "set_code": "FDN",
+        "collector_number": "20"
+      }
+    ],
+    "Lunar Insight": [
+      {
+        "grpId": 93759,
+        "set_code": "FDN",
+        "collector_number": "46"
+      }
+    ],
+    "Lyra Dawnbringer": [
+      {
+        "grpId": 94135,
+        "set_code": "FDN",
+        "collector_number": "707"
+      }
+    ],
+    "Maalfeld Twins": [
+      {
+        "grpId": 93672,
+        "set_code": "FDN",
+        "collector_number": "523"
+      }
+    ],
+    "Macabre Waltz": [
+      {
+        "grpId": 93890,
+        "set_code": "FDN",
+        "collector_number": "177"
+      }
+    ],
+    "Maelstrom Pulse": [
+      {
+        "grpId": 94089,
+        "set_code": "FDN",
+        "collector_number": "661"
+      }
+    ],
+    "Magnigoth Sentry": [
+      {
+        "grpId": 93705,
+        "set_code": "FDN",
+        "collector_number": "556"
+      }
+    ],
+    "Make a Stand": [
+      {
+        "grpId": 94136,
+        "set_code": "FDN",
+        "collector_number": "708"
+      }
+    ],
+    "Make Your Move": [
+      {
+        "grpId": 93856,
+        "set_code": "FDN",
+        "collector_number": "143"
+      }
+    ],
+    "Marauding Blight-Priest": [
+      {
+        "grpId": 93891,
+        "set_code": "FDN",
+        "collector_number": "178"
+      }
+    ],
+    "Massacre Wurm": [
+      {
+        "grpId": 94142,
+        "set_code": "FDN",
+        "collector_number": "714"
+      }
+    ],
+    "Mazemind Tome": [
+      {
+        "grpId": 94104,
+        "set_code": "FDN",
+        "collector_number": "676"
+      }
+    ],
+    "Maze's End": [
+      {
+        "grpId": 94155,
+        "set_code": "FDN",
+        "collector_number": "727"
+      }
+    ],
+    "Mentor of the Meek": [
+      {
+        "grpId": 94006,
+        "set_code": "FDN",
+        "collector_number": "578"
+      }
+    ],
+    "Meteor Golem": [
+      {
+        "grpId": 93969,
+        "set_code": "FDN",
+        "collector_number": "256"
+      }
+    ],
+    "Micromancer": [
+      {
+        "grpId": 93871,
+        "set_code": "FDN",
+        "collector_number": "158"
+      }
+    ],
+    "Midnight Reaper": [
+      {
+        "grpId": 94037,
+        "set_code": "FDN",
+        "collector_number": "609"
+      }
+    ],
+    "Midnight Snack": [
+      {
+        "grpId": 93778,
+        "set_code": "FDN",
+        "collector_number": "65"
+      }
+    ],
+    "Mild-Mannered Librarian": [
+      {
+        "grpId": 93941,
+        "set_code": "FDN",
+        "collector_number": "228"
+      }
+    ],
+    "Mindsparker": [
+      {
+        "grpId": 94056,
+        "set_code": "FDN",
+        "collector_number": "628"
+      }
+    ],
+    "Mischievous Mystic": [
+      {
+        "grpId": 93760,
+        "set_code": "FDN",
+        "collector_number": "47"
+      }
+    ],
+    "Mischievous Pup": [
+      {
+        "grpId": 93857,
+        "set_code": "FDN",
+        "collector_number": "144"
+      }
+    ],
+    "Mocking Sprite": [
+      {
+        "grpId": 93872,
+        "set_code": "FDN",
+        "collector_number": "159"
+      }
+    ],
+    "Mold Adder": [
+      {
+        "grpId": 94068,
+        "set_code": "FDN",
+        "collector_number": "640"
+      }
+    ],
+    "Moment of Craving": [
+      {
+        "grpId": 93673,
+        "set_code": "FDN",
+        "collector_number": "524"
+      }
+    ],
+    "Moment of Triumph": [
+      {
+        "grpId": 93649,
+        "set_code": "FDN",
+        "collector_number": "500"
+      }
+    ],
+    "Mortify": [
+      {
+        "grpId": 94090,
+        "set_code": "FDN",
+        "collector_number": "662"
+      }
+    ],
+    "Mossborn Hydra": [
+      {
+        "grpId": 93820,
+        "set_code": "FDN",
+        "collector_number": "107"
+      }
+    ],
+    "Mountain": [
+      {
+        "grpId": 95197,
+        "set_code": "FDN",
+        "collector_number": "278"
+      },
+      {
+        "grpId": 95198,
+        "set_code": "FDN",
+        "collector_number": "279"
+      },
+      {
+        "grpId": 95187,
+        "set_code": "FDN",
+        "collector_number": "288"
+      },
+      {
+        "grpId": 95188,
+        "set_code": "FDN",
+        "collector_number": "289"
+      }
+    ],
+    "Muldrotha, the Gravetide": [
+      {
+        "grpId": 93956,
+        "set_code": "FDN",
+        "collector_number": "243"
+      }
+    ],
+    "Myojin of Night's Reach": [
+      {
+        "grpId": 94038,
+        "set_code": "FDN",
+        "collector_number": "610"
+      }
+    ],
+    "Mystical Teachings": [
+      {
+        "grpId": 94022,
+        "set_code": "FDN",
+        "collector_number": "594"
+      }
+    ],
+    "Mystic Archaeologist": [
+      {
+        "grpId": 93660,
+        "set_code": "FDN",
+        "collector_number": "511"
+      }
+    ],
+    "Needletooth Pack": [
+      {
+        "grpId": 93821,
+        "set_code": "FDN",
+        "collector_number": "108"
+      }
+    ],
+    "Negate": [
+      {
+        "grpId": 94138,
+        "set_code": "FDN",
+        "collector_number": "710"
+      }
+    ],
+    "Nessian Hornbeetle": [
+      {
+        "grpId": 93942,
+        "set_code": "FDN",
+        "collector_number": "229"
+      }
+    ],
+    "New Horizons": [
+      {
+        "grpId": 93706,
+        "set_code": "FDN",
+        "collector_number": "557"
+      }
+    ],
+    "Nine-Lives Familiar": [
+      {
+        "grpId": 93779,
+        "set_code": "FDN",
+        "collector_number": "66"
+      }
+    ],
+    "Niv-Mizzet, Visionary": [
+      {
+        "grpId": 93836,
+        "set_code": "FDN",
+        "collector_number": "123"
+      }
+    ],
+    "Nullpriest of Oblivion": [
+      {
+        "grpId": 94039,
+        "set_code": "FDN",
+        "collector_number": "611"
+      }
+    ],
+    "Obliterating Bolt": [
+      {
+        "grpId": 94057,
+        "set_code": "FDN",
+        "collector_number": "629"
+      }
+    ],
+    "Offer Immortality": [
+      {
+        "grpId": 93674,
+        "set_code": "FDN",
+        "collector_number": "525"
+      }
+    ],
+    "Omniscience": [
+      {
+        "grpId": 93874,
+        "set_code": "FDN",
+        "collector_number": "161"
+      }
+    ],
+    "Opt": [
+      {
+        "grpId": 93661,
+        "set_code": "FDN",
+        "collector_number": "512"
+      }
+    ],
+    "Ordeal of Nylea": [
+      {
+        "grpId": 94069,
+        "set_code": "FDN",
+        "collector_number": "641"
+      }
+    ],
+    "Orzhov Guildgate": [
+      {
+        "grpId": 94120,
+        "set_code": "FDN",
+        "collector_number": "692"
+      }
+    ],
+    "Overrun": [
+      {
+        "grpId": 93943,
+        "set_code": "FDN",
+        "collector_number": "230"
+      }
+    ],
+    "Ovika, Enigma Goliath": [
+      {
+        "grpId": 94091,
+        "set_code": "FDN",
+        "collector_number": "663"
+      }
+    ],
+    "Pacifism": [
+      {
+        "grpId": 93650,
+        "set_code": "FDN",
+        "collector_number": "501"
+      }
+    ],
+    "Painful Quandary": [
+      {
+        "grpId": 93892,
+        "set_code": "FDN",
+        "collector_number": "179"
+      }
+    ],
+    "Pelakka Wurm": [
+      {
+        "grpId": 94148,
+        "set_code": "FDN",
+        "collector_number": "720"
+      }
+    ],
+    "Perforating Artist": [
+      {
+        "grpId": 93837,
+        "set_code": "FDN",
+        "collector_number": "124"
+      }
+    ],
+    "Phyrexian Arena": [
+      {
+        "grpId": 93893,
+        "set_code": "FDN",
+        "collector_number": "180"
+      }
+    ],
+    "Pilfer": [
+      {
+        "grpId": 93894,
+        "set_code": "FDN",
+        "collector_number": "181"
+      }
+    ],
+    "Pirate's Cutlass": [
+      {
+        "grpId": 93712,
+        "set_code": "FDN",
+        "collector_number": "563"
+      }
+    ],
+    "Plains": [
+      {
+        "grpId": 95191,
+        "set_code": "FDN",
+        "collector_number": "272"
+      },
+      {
+        "grpId": 95192,
+        "set_code": "FDN",
+        "collector_number": "273"
+      },
+      {
+        "grpId": 95181,
+        "set_code": "FDN",
+        "collector_number": "282"
+      },
+      {
+        "grpId": 95182,
+        "set_code": "FDN",
+        "collector_number": "283"
+      }
+    ],
+    "Prayer of Binding": [
+      {
+        "grpId": 93651,
+        "set_code": "FDN",
+        "collector_number": "502"
+      }
+    ],
+    "Predator Ooze": [
+      {
+        "grpId": 94070,
+        "set_code": "FDN",
+        "collector_number": "642"
+      }
+    ],
+    "Preposterous Proportions": [
+      {
+        "grpId": 93822,
+        "set_code": "FDN",
+        "collector_number": "109"
+      }
+    ],
+    "Prideful Parent": [
+      {
+        "grpId": 93734,
+        "set_code": "FDN",
+        "collector_number": "21"
+      }
+    ],
+    "Primal Might": [
+      {
+        "grpId": 94071,
+        "set_code": "FDN",
+        "collector_number": "643"
+      }
+    ],
+    "Prime Speaker Zegana": [
+      {
+        "grpId": 94092,
+        "set_code": "FDN",
+        "collector_number": "664"
+      }
+    ],
+    "Primeval Bounty": [
+      {
+        "grpId": 94072,
+        "set_code": "FDN",
+        "collector_number": "644"
+      }
+    ],
+    "Progenitus": [
+      {
+        "grpId": 93957,
+        "set_code": "FDN",
+        "collector_number": "244"
+      }
+    ],
+    "Pulse Tracker": [
+      {
+        "grpId": 94040,
+        "set_code": "FDN",
+        "collector_number": "612"
+      }
+    ],
+    "Pyromancer's Goggles": [
+      {
+        "grpId": 94105,
+        "set_code": "FDN",
+        "collector_number": "677"
+      }
+    ],
+    "Quakestrider Ceratops": [
+      {
+        "grpId": 93823,
+        "set_code": "FDN",
+        "collector_number": "110"
+      }
+    ],
+    "Quick-Draw Katana": [
+      {
+        "grpId": 93843,
+        "set_code": "FDN",
+        "collector_number": "130"
+      }
+    ],
+    "Quick Study": [
+      {
+        "grpId": 93662,
+        "set_code": "FDN",
+        "collector_number": "513"
+      }
+    ],
+    "Quilled Greatwurm": [
+      {
+        "grpId": 93824,
+        "set_code": "FDN",
+        "collector_number": "111"
+      }
+    ],
+    "Raging Redcap": [
+      {
+        "grpId": 93692,
+        "set_code": "FDN",
+        "collector_number": "543"
+      }
+    ],
+    "Raise the Past": [
+      {
+        "grpId": 93735,
+        "set_code": "FDN",
+        "collector_number": "22"
+      }
+    ],
+    "Rakdos Guildgate": [
+      {
+        "grpId": 94121,
+        "set_code": "FDN",
+        "collector_number": "693"
+      }
+    ],
+    "Ramos, Dragon Engine": [
+      {
+        "grpId": 94106,
+        "set_code": "FDN",
+        "collector_number": "678"
+      }
+    ],
+    "Rampaging Baloths": [
+      {
+        "grpId": 94073,
+        "set_code": "FDN",
+        "collector_number": "645"
+      }
+    ],
+    "Rapacious Dragon": [
+      {
+        "grpId": 93693,
+        "set_code": "FDN",
+        "collector_number": "544"
+      }
+    ],
+    "Ravenous Amulet": [
+      {
+        "grpId": 93844,
+        "set_code": "FDN",
+        "collector_number": "131"
+      }
+    ],
+    "Ravenous Giant": [
+      {
+        "grpId": 94058,
+        "set_code": "FDN",
+        "collector_number": "630"
+      }
+    ],
+    "Reassembling Skeleton": [
+      {
+        "grpId": 93895,
+        "set_code": "FDN",
+        "collector_number": "182"
+      }
+    ],
+    "Reclamation Sage": [
+      {
+        "grpId": 93944,
+        "set_code": "FDN",
+        "collector_number": "231"
+      }
+    ],
+    "Redcap Gutter-Dweller": [
+      {
+        "grpId": 94059,
+        "set_code": "FDN",
+        "collector_number": "631"
+      }
+    ],
+    "Refute": [
+      {
+        "grpId": 93761,
+        "set_code": "FDN",
+        "collector_number": "48"
+      }
+    ],
+    "Regal Caracal": [
+      {
+        "grpId": 94007,
+        "set_code": "FDN",
+        "collector_number": "579"
+      }
+    ],
+    "Release the Dogs": [
+      {
+        "grpId": 94008,
+        "set_code": "FDN",
+        "collector_number": "580"
+      }
+    ],
+    "Resolute Reinforcements": [
+      {
+        "grpId": 93858,
+        "set_code": "FDN",
+        "collector_number": "145"
+      }
+    ],
+    "Revenge of the Rats": [
+      {
+        "grpId": 93780,
+        "set_code": "FDN",
+        "collector_number": "67"
+      }
+    ],
+    "Rise of the Dark Realms": [
+      {
+        "grpId": 93896,
+        "set_code": "FDN",
+        "collector_number": "183"
+      }
+    ],
+    "Rite of Replication": [
+      {
+        "grpId": 94139,
+        "set_code": "FDN",
+        "collector_number": "711"
+      }
+    ],
+    "Rite of the Dragoncaller": [
+      {
+        "grpId": 93805,
+        "set_code": "FDN",
+        "collector_number": "92"
+      }
+    ],
+    "River's Rebuke": [
+      {
+        "grpId": 94023,
+        "set_code": "FDN",
+        "collector_number": "595"
+      }
+    ],
+    "Rogue's Passage": [
+      {
+        "grpId": 93977,
+        "set_code": "FDN",
+        "collector_number": "264"
+      }
+    ],
+    "Ruby, Daring Tracker": [
+      {
+        "grpId": 93958,
+        "set_code": "FDN",
+        "collector_number": "245"
+      }
+    ],
+    "Rugged Highlands": [
+      {
+        "grpId": 93978,
+        "set_code": "FDN",
+        "collector_number": "265"
+      }
+    ],
+    "Run Away Together": [
+      {
+        "grpId": 93875,
+        "set_code": "FDN",
+        "collector_number": "162"
+      }
+    ],
+    "Rune-Scarred Demon": [
+      {
+        "grpId": 93897,
+        "set_code": "FDN",
+        "collector_number": "184"
+      }
+    ],
+    "Rune-Sealed Wall": [
+      {
+        "grpId": 93762,
+        "set_code": "FDN",
+        "collector_number": "49"
+      }
+    ],
+    "Sanguine Indulgence": [
+      {
+        "grpId": 94041,
+        "set_code": "FDN",
+        "collector_number": "613"
+      }
+    ],
+    "Sanguine Syphoner": [
+      {
+        "grpId": 93781,
+        "set_code": "FDN",
+        "collector_number": "68"
+      }
+    ],
+    "Savage Ventmaw": [
+      {
+        "grpId": 94093,
+        "set_code": "FDN",
+        "collector_number": "665"
+      }
+    ],
+    "Savannah Lions": [
+      {
+        "grpId": 93859,
+        "set_code": "FDN",
+        "collector_number": "146"
+      }
+    ],
+    "Scavenging Ooze": [
+      {
+        "grpId": 93945,
+        "set_code": "FDN",
+        "collector_number": "232"
+      }
+    ],
+    "Scorching Dragonfire": [
+      {
+        "grpId": 93694,
+        "set_code": "FDN",
+        "collector_number": "545"
+      }
+    ],
+    "Scoured Barrens": [
+      {
+        "grpId": 93979,
+        "set_code": "FDN",
+        "collector_number": "266"
+      }
+    ],
+    "Scrawling Crawler": [
+      {
+        "grpId": 93845,
+        "set_code": "FDN",
+        "collector_number": "132"
+      }
+    ],
+    "Searslicer Goblin": [
+      {
+        "grpId": 93806,
+        "set_code": "FDN",
+        "collector_number": "93"
+      }
+    ],
+    "Secluded Courtyard": [
+      {
+        "grpId": 93980,
+        "set_code": "FDN",
+        "collector_number": "267"
+      },
+      {
+        "grpId": 91879,
+        "set_code": "SPG",
+        "collector_number": "63"
+      }
+    ],
+    "Seeker's Folly": [
+      {
+        "grpId": 93782,
+        "set_code": "FDN",
+        "collector_number": "69"
+      }
+    ],
+    "Seismic Rupture": [
+      {
+        "grpId": 93918,
+        "set_code": "FDN",
+        "collector_number": "205"
+      }
+    ],
+    "Seize the Spoils": [
+      {
+        "grpId": 93695,
+        "set_code": "FDN",
+        "collector_number": "546"
+      }
+    ],
+    "Selesnya Guildgate": [
+      {
+        "grpId": 94122,
+        "set_code": "FDN",
+        "collector_number": "694"
+      }
+    ],
+    "Self-Reflection": [
+      {
+        "grpId": 93876,
+        "set_code": "FDN",
+        "collector_number": "163"
+      }
+    ],
+    "Serra Angel": [
+      {
+        "grpId": 93860,
+        "set_code": "FDN",
+        "collector_number": "147"
+      }
+    ],
+    "Shipwreck Dowser": [
+      {
+        "grpId": 94024,
+        "set_code": "FDN",
+        "collector_number": "596"
+      }
+    ],
+    "Shivan Dragon": [
+      {
+        "grpId": 93919,
+        "set_code": "FDN",
+        "collector_number": "206"
+      }
+    ],
+    "Simic Guildgate": [
+      {
+        "grpId": 94123,
+        "set_code": "FDN",
+        "collector_number": "695"
+      }
+    ],
+    "Sire of Seven Deaths": [
+      {
+        "grpId": 93714,
+        "set_code": "FDN",
+        "collector_number": "1"
+      }
+    ],
+    "Skeleton Archer": [
+      {
+        "grpId": 93675,
+        "set_code": "FDN",
+        "collector_number": "526"
+      }
+    ],
+    "Skyknight Squire": [
+      {
+        "grpId": 93736,
+        "set_code": "FDN",
+        "collector_number": "23"
+      }
+    ],
+    "Skyraker Giant": [
+      {
+        "grpId": 93696,
+        "set_code": "FDN",
+        "collector_number": "547"
+      }
+    ],
+    "Skyship Buccaneer": [
+      {
+        "grpId": 93763,
+        "set_code": "FDN",
+        "collector_number": "50"
+      }
+    ],
+    "Slagstorm": [
+      {
+        "grpId": 93920,
+        "set_code": "FDN",
+        "collector_number": "207"
+      }
+    ],
+    "Slumbering Cerberus": [
+      {
+        "grpId": 93807,
+        "set_code": "FDN",
+        "collector_number": "94"
+      }
+    ],
+    "Snakeskin Veil": [
+      {
+        "grpId": 93946,
+        "set_code": "FDN",
+        "collector_number": "233"
+      }
+    ],
+    "Solemn Simulacrum": [
+      {
+        "grpId": 93970,
+        "set_code": "FDN",
+        "collector_number": "257"
+      }
+    ],
+    "Sorcerous Spyglass": [
+      {
+        "grpId": 94107,
+        "set_code": "FDN",
+        "collector_number": "679"
+      }
+    ],
+    "Soul-Guide Lantern": [
+      {
+        "grpId": 94108,
+        "set_code": "FDN",
+        "collector_number": "680"
+      }
+    ],
+    "Soul-Shackled Zombie": [
+      {
+        "grpId": 93783,
+        "set_code": "FDN",
+        "collector_number": "70"
+      }
+    ],
+    "Soulstone Sanctuary": [
+      {
+        "grpId": 93846,
+        "set_code": "FDN",
+        "collector_number": "133"
+      }
+    ],
+    "Sower of Chaos": [
+      {
+        "grpId": 93808,
+        "set_code": "FDN",
+        "collector_number": "95"
+      }
+    ],
+    "Spectral Sailor": [
+      {
+        "grpId": 93877,
+        "set_code": "FDN",
+        "collector_number": "164"
+      }
+    ],
+    "Sphinx of Forgotten Lore": [
+      {
+        "grpId": 93764,
+        "set_code": "FDN",
+        "collector_number": "51"
+      }
+    ],
+    "Sphinx of the Final Word": [
+      {
+        "grpId": 94025,
+        "set_code": "FDN",
+        "collector_number": "597"
+      }
+    ],
+    "Spinner of Souls": [
+      {
+        "grpId": 93825,
+        "set_code": "FDN",
+        "collector_number": "112"
+      }
+    ],
+    "Spitfire Lagac": [
+      {
+        "grpId": 93921,
+        "set_code": "FDN",
+        "collector_number": "208"
+      }
+    ],
+    "Springbloom Druid": [
+      {
+        "grpId": 94074,
+        "set_code": "FDN",
+        "collector_number": "646"
+      }
+    ],
+    "Squad Rallier": [
+      {
+        "grpId": 93737,
+        "set_code": "FDN",
+        "collector_number": "24"
+      }
+    ],
+    "Stab": [
+      {
+        "grpId": 93784,
+        "set_code": "FDN",
+        "collector_number": "71"
+      }
+    ],
+    "Starlight Snare": [
+      {
+        "grpId": 93663,
+        "set_code": "FDN",
+        "collector_number": "514"
+      }
+    ],
+    "Stasis Snare": [
+      {
+        "grpId": 94009,
+        "set_code": "FDN",
+        "collector_number": "581"
+      }
+    ],
+    "Steel Hellkite": [
+      {
+        "grpId": 94109,
+        "set_code": "FDN",
+        "collector_number": "681"
+      }
+    ],
+    "Storm Fleet Spy": [
+      {
+        "grpId": 93664,
+        "set_code": "FDN",
+        "collector_number": "515"
+      }
+    ],
+    "Strix Lookout": [
+      {
+        "grpId": 93765,
+        "set_code": "FDN",
+        "collector_number": "52"
+      }
+    ],
+    "Stroke of Midnight": [
+      {
+        "grpId": 93861,
+        "set_code": "FDN",
+        "collector_number": "148"
+      }
+    ],
+    "Stromkirk Bloodthief": [
+      {
+        "grpId": 93898,
+        "set_code": "FDN",
+        "collector_number": "185"
+      }
+    ],
+    "Stromkirk Noble": [
+      {
+        "grpId": 94060,
+        "set_code": "FDN",
+        "collector_number": "632"
+      }
+    ],
+    "Strongbox Raider": [
+      {
+        "grpId": 93809,
+        "set_code": "FDN",
+        "collector_number": "96"
+      }
+    ],
+    "Sun-Blessed Healer": [
+      {
+        "grpId": 93738,
+        "set_code": "FDN",
+        "collector_number": "25"
+      }
+    ],
+    "Sure Strike": [
+      {
+        "grpId": 93922,
+        "set_code": "FDN",
+        "collector_number": "209"
+      }
+    ],
+    "Surrak, the Hunt Caller": [
+      {
+        "grpId": 94075,
+        "set_code": "FDN",
+        "collector_number": "647"
+      }
+    ],
+    "Suspicious Shambler": [
+      {
+        "grpId": 93676,
+        "set_code": "FDN",
+        "collector_number": "527"
+      }
+    ],
+    "Swab Goblin": [
+      {
+        "grpId": 93697,
+        "set_code": "FDN",
+        "collector_number": "548"
+      }
+    ],
+    "Swamp": [
+      {
+        "grpId": 95195,
+        "set_code": "FDN",
+        "collector_number": "276"
+      },
+      {
+        "grpId": 95196,
+        "set_code": "FDN",
+        "collector_number": "277"
+      },
+      {
+        "grpId": 95185,
+        "set_code": "FDN",
+        "collector_number": "286"
+      },
+      {
+        "grpId": 95186,
+        "set_code": "FDN",
+        "collector_number": "287"
+      }
+    ],
+    "Swiftblade Vindicator": [
+      {
+        "grpId": 93959,
+        "set_code": "FDN",
+        "collector_number": "246"
+      }
+    ],
+    "Swiftfoot Boots": [
+      {
+        "grpId": 93971,
+        "set_code": "FDN",
+        "collector_number": "258"
+      }
+    ],
+    "Swiftwater Cliffs": [
+      {
+        "grpId": 93981,
+        "set_code": "FDN",
+        "collector_number": "268"
+      }
+    ],
+    "Sylvan Scavenging": [
+      {
+        "grpId": 93826,
+        "set_code": "FDN",
+        "collector_number": "113"
+      }
+    ],
+    "Syr Alin, the Lion's Claw": [
+      {
+        "grpId": 94010,
+        "set_code": "FDN",
+        "collector_number": "582"
+      }
+    ],
+    "Tajuru Pathwarden": [
+      {
+        "grpId": 93707,
+        "set_code": "FDN",
+        "collector_number": "558"
+      }
+    ],
+    "Tatyova, Benthic Druid": [
+      {
+        "grpId": 93960,
+        "set_code": "FDN",
+        "collector_number": "247"
+      }
+    ],
+    "Taurean Mauler": [
+      {
+        "grpId": 94061,
+        "set_code": "FDN",
+        "collector_number": "633"
+      }
+    ],
+    "Teach by Example": [
+      {
+        "grpId": 94094,
+        "set_code": "FDN",
+        "collector_number": "666"
+      }
+    ],
+    "Tempest Djinn": [
+      {
+        "grpId": 94026,
+        "set_code": "FDN",
+        "collector_number": "598"
+      }
+    ],
+    "Temple of Abandon": [
+      {
+        "grpId": 94124,
+        "set_code": "FDN",
+        "collector_number": "696"
+      }
+    ],
+    "Temple of Deceit": [
+      {
+        "grpId": 94125,
+        "set_code": "FDN",
+        "collector_number": "697"
+      }
+    ],
+    "Temple of Enlightenment": [
+      {
+        "grpId": 94126,
+        "set_code": "FDN",
+        "collector_number": "698"
+      }
+    ],
+    "Temple of Epiphany": [
+      {
+        "grpId": 94127,
+        "set_code": "FDN",
+        "collector_number": "699"
+      }
+    ],
+    "Temple of Malady": [
+      {
+        "grpId": 94128,
+        "set_code": "FDN",
+        "collector_number": "700"
+      }
+    ],
+    "Temple of Malice": [
+      {
+        "grpId": 94129,
+        "set_code": "FDN",
+        "collector_number": "701"
+      }
+    ],
+    "Temple of Mystery": [
+      {
+        "grpId": 94130,
+        "set_code": "FDN",
+        "collector_number": "702"
+      }
+    ],
+    "Temple of Plenty": [
+      {
+        "grpId": 94131,
+        "set_code": "FDN",
+        "collector_number": "703"
+      }
+    ],
+    "Temple of Silence": [
+      {
+        "grpId": 94132,
+        "set_code": "FDN",
+        "collector_number": "704"
+      }
+    ],
+    "Temple of Triumph": [
+      {
+        "grpId": 94133,
+        "set_code": "FDN",
+        "collector_number": "705"
+      }
+    ],
+    "Terror of Mount Velus": [
+      {
+        "grpId": 93698,
+        "set_code": "FDN",
+        "collector_number": "549"
+      }
+    ],
+    "Think Twice": [
+      {
+        "grpId": 93878,
+        "set_code": "FDN",
+        "collector_number": "165"
+      }
+    ],
+    "Thornweald Archer": [
+      {
+        "grpId": 93708,
+        "set_code": "FDN",
+        "collector_number": "559"
+      }
+    ],
+    "Thornwood Falls": [
+      {
+        "grpId": 93982,
+        "set_code": "FDN",
+        "collector_number": "269"
+      }
+    ],
+    "Thousand-Year Storm": [
+      {
+        "grpId": 93961,
+        "set_code": "FDN",
+        "collector_number": "248"
+      }
+    ],
+    "Thrashing Brontodon": [
+      {
+        "grpId": 93709,
+        "set_code": "FDN",
+        "collector_number": "560"
+      }
+    ],
+    "Three Tree Mascot": [
+      {
+        "grpId": 94110,
+        "set_code": "FDN",
+        "collector_number": "682"
+      }
+    ],
+    "Thrill of Possibility": [
+      {
+        "grpId": 93923,
+        "set_code": "FDN",
+        "collector_number": "210"
+      }
+    ],
+    "Time Stop": [
+      {
+        "grpId": 93879,
+        "set_code": "FDN",
+        "collector_number": "166"
+      }
+    ],
+    "Tinybones, Bauble Burglar": [
+      {
+        "grpId": 93785,
+        "set_code": "FDN",
+        "collector_number": "72"
+      }
+    ],
+    "Tolarian Terror": [
+      {
+        "grpId": 93880,
+        "set_code": "FDN",
+        "collector_number": "167"
+      }
+    ],
+    "Tragic Banshee": [
+      {
+        "grpId": 93786,
+        "set_code": "FDN",
+        "collector_number": "73"
+      }
+    ],
+    "Tranquil Cove": [
+      {
+        "grpId": 93983,
+        "set_code": "FDN",
+        "collector_number": "270"
+      }
+    ],
+    "Treetop Snarespinner": [
+      {
+        "grpId": 93827,
+        "set_code": "FDN",
+        "collector_number": "114"
+      }
+    ],
+    "Tribute to Hunger": [
+      {
+        "grpId": 94042,
+        "set_code": "FDN",
+        "collector_number": "614"
+      }
+    ],
+    "Trygon Predator": [
+      {
+        "grpId": 94095,
+        "set_code": "FDN",
+        "collector_number": "667"
+      }
+    ],
+    "Twinblade Blessing": [
+      {
+        "grpId": 93739,
+        "set_code": "FDN",
+        "collector_number": "26"
+      }
+    ],
+    "Twinblade Paladin": [
+      {
+        "grpId": 93652,
+        "set_code": "FDN",
+        "collector_number": "503"
+      }
+    ],
+    "Twinflame Tyrant": [
+      {
+        "grpId": 93810,
+        "set_code": "FDN",
+        "collector_number": "97"
+      }
+    ],
+    "Uncharted Haven": [
+      {
+        "grpId": 93713,
+        "set_code": "FDN",
+        "collector_number": "564"
+      }
+    ],
+    "Uncharted Voyage": [
+      {
+        "grpId": 93766,
+        "set_code": "FDN",
+        "collector_number": "53"
+      }
+    ],
+    "Undying Malice": [
+      {
+        "grpId": 93677,
+        "set_code": "FDN",
+        "collector_number": "528"
+      }
+    ],
+    "Unflinching Courage": [
+      {
+        "grpId": 94150,
+        "set_code": "FDN",
+        "collector_number": "722"
+      }
+    ],
+    "Unsummon": [
+      {
+        "grpId": 94027,
+        "set_code": "FDN",
+        "collector_number": "599"
+      }
+    ],
+    "Untamed Hunger": [
+      {
+        "grpId": 93678,
+        "set_code": "FDN",
+        "collector_number": "529"
+      }
+    ],
+    "Valkyrie's Call": [
+      {
+        "grpId": 93740,
+        "set_code": "FDN",
+        "collector_number": "27"
+      }
+    ],
+    "Valorous Stance": [
+      {
+        "grpId": 94011,
+        "set_code": "FDN",
+        "collector_number": "583"
+      }
+    ],
+    "Vampire Gourmand": [
+      {
+        "grpId": 93787,
+        "set_code": "FDN",
+        "collector_number": "74"
+      }
+    ],
+    "Vampire Interloper": [
+      {
+        "grpId": 93679,
+        "set_code": "FDN",
+        "collector_number": "530"
+      }
+    ],
+    "Vampire Neonate": [
+      {
+        "grpId": 93680,
+        "set_code": "FDN",
+        "collector_number": "531"
+      }
+    ],
+    "Vampire Nighthawk": [
+      {
+        "grpId": 93899,
+        "set_code": "FDN",
+        "collector_number": "186"
+      }
+    ],
+    "Vampire Soulcaller": [
+      {
+        "grpId": 93788,
+        "set_code": "FDN",
+        "collector_number": "75"
+      }
+    ],
+    "Vampire Spawn": [
+      {
+        "grpId": 93681,
+        "set_code": "FDN",
+        "collector_number": "532"
+      }
+    ],
+    "Vampiric Rites": [
+      {
+        "grpId": 94043,
+        "set_code": "FDN",
+        "collector_number": "615"
+      }
+    ],
+    "Vanguard Seraph": [
+      {
+        "grpId": 93741,
+        "set_code": "FDN",
+        "collector_number": "28"
+      }
+    ],
+    "Vengeful Bloodwitch": [
+      {
+        "grpId": 93789,
+        "set_code": "FDN",
+        "collector_number": "76"
+      }
+    ],
+    "Venom Connoisseur": [
+      {
+        "grpId": 94076,
+        "set_code": "FDN",
+        "collector_number": "648"
+      }
+    ],
+    "Viashino Pyromancer": [
+      {
+        "grpId": 94062,
+        "set_code": "FDN",
+        "collector_number": "634"
+      }
+    ],
+    "Vile Entomber": [
+      {
+        "grpId": 94044,
+        "set_code": "FDN",
+        "collector_number": "616"
+      }
+    ],
+    "Vivien Reid": [
+      {
+        "grpId": 93947,
+        "set_code": "FDN",
+        "collector_number": "234"
+      }
+    ],
+    "Vizier of the Menagerie": [
+      {
+        "grpId": 94077,
+        "set_code": "FDN",
+        "collector_number": "649"
+      }
+    ],
+    "Volley Veteran": [
+      {
+        "grpId": 93699,
+        "set_code": "FDN",
+        "collector_number": "550"
+      }
+    ],
+    "Voracious Greatshark": [
+      {
+        "grpId": 94028,
+        "set_code": "FDN",
+        "collector_number": "600"
+      }
+    ],
+    "Wardens of the Cycle": [
+      {
+        "grpId": 93838,
+        "set_code": "FDN",
+        "collector_number": "125"
+      }
+    ],
+    "Wary Thespian": [
+      {
+        "grpId": 93948,
+        "set_code": "FDN",
+        "collector_number": "235"
+      }
+    ],
+    "Wildborn Preserver": [
+      {
+        "grpId": 94078,
+        "set_code": "FDN",
+        "collector_number": "650"
+      }
+    ],
+    "Wildheart Invoker": [
+      {
+        "grpId": 93710,
+        "set_code": "FDN",
+        "collector_number": "561"
+      }
+    ],
+    "Wildwood Scourge": [
+      {
+        "grpId": 93949,
+        "set_code": "FDN",
+        "collector_number": "236"
+      }
+    ],
+    "Wilt-Leaf Liege": [
+      {
+        "grpId": 94096,
+        "set_code": "FDN",
+        "collector_number": "668"
+      }
+    ],
+    "Wind-Scarred Crag": [
+      {
+        "grpId": 93984,
+        "set_code": "FDN",
+        "collector_number": "271"
+      }
+    ],
+    "Wishclaw Talisman": [
+      {
+        "grpId": 94045,
+        "set_code": "FDN",
+        "collector_number": "617"
+      }
+    ],
+    "Witness Protection": [
+      {
+        "grpId": 93881,
+        "set_code": "FDN",
+        "collector_number": "168"
+      }
+    ],
+    "Youthful Valkyrie": [
+      {
+        "grpId": 93862,
+        "set_code": "FDN",
+        "collector_number": "149"
+      }
+    ],
+    "Zetalpa, Primal Dawn": [
+      {
+        "grpId": 94012,
+        "set_code": "FDN",
+        "collector_number": "584"
+      }
+    ],
+    "Zimone, Paradox Sculptor": [
+      {
+        "grpId": 93839,
+        "set_code": "FDN",
+        "collector_number": "126"
+      }
+    ],
+    "Zombify": [
+      {
+        "grpId": 93900,
+        "set_code": "FDN",
+        "collector_number": "187"
+      }
+    ],
+    "Zul Ashur, Lich Lord": [
+      {
+        "grpId": 93790,
+        "set_code": "FDN",
+        "collector_number": "77"
+      }
+    ],
+    "Brazen Borrower // Petty Theft": [
+      {
+        "grpId": 90652,
+        "set_code": "SPG",
+        "collector_number": "30"
+      }
+    ],
+    "Collected Company": [
+      {
+        "grpId": 92411,
+        "set_code": "SPG",
+        "collector_number": "72"
+      }
+    ],
+    "Crashing Footfalls": [
+      {
+        "grpId": 88918,
+        "set_code": "SPG",
+        "collector_number": "25"
+      }
+    ],
+    "Damnation": [
+      {
+        "grpId": 92407,
+        "set_code": "SPG",
+        "collector_number": "68"
+      }
+    ],
+    "Desert": [
+      {
+        "grpId": 90660,
+        "set_code": "SPG",
+        "collector_number": "37"
+      }
+    ],
+    "Desertion": [
+      {
+        "grpId": 90654,
+        "set_code": "SPG",
+        "collector_number": "31"
+      }
+    ],
+    "Dismember": [
+      {
+        "grpId": 91171,
+        "set_code": "SPG",
+        "collector_number": "41"
+      }
+    ],
+    "Drown in the Loch": [
+      {
+        "grpId": 88920,
+        "set_code": "SPG",
+        "collector_number": "27"
+      }
+    ],
+    "Endurance": [
+      {
+        "grpId": 91168,
+        "set_code": "SPG",
+        "collector_number": "48"
+      }
+    ],
+    "Expressive Iteration": [
+      {
+        "grpId": 91173,
+        "set_code": "SPG",
+        "collector_number": "43"
+      }
+    ],
+    "Expropriate": [
+      {
+        "grpId": 92405,
+        "set_code": "SPG",
+        "collector_number": "66"
+      }
+    ],
+    "Fabricate": [
+      {
+        "grpId": 88913,
+        "set_code": "SPG",
+        "collector_number": "20"
+      }
+    ],
+    "Field of the Dead": [
+      {
+        "grpId": 88921,
+        "set_code": "SPG",
+        "collector_number": "28"
+      }
+    ],
+    "Frogmite": [
+      {
+        "grpId": 91877,
+        "set_code": "SPG",
+        "collector_number": "61"
+      }
+    ],
+    "Fury": [
+      {
+        "grpId": 91167,
+        "set_code": "SPG",
+        "collector_number": "47"
+      }
+    ],
+    "Gamble": [
+      {
+        "grpId": 88917,
+        "set_code": "SPG",
+        "collector_number": "24"
+      }
+    ],
+    "Ghostly Prison": [
+      {
+        "grpId": 88912,
+        "set_code": "SPG",
+        "collector_number": "19"
+      }
+    ],
+    "Grief": [
+      {
+        "grpId": 91166,
+        "set_code": "SPG",
+        "collector_number": "46"
+      }
+    ],
+    "Hallowed Haunting": [
+      {
+        "grpId": 92403,
+        "set_code": "SPG",
+        "collector_number": "64"
+      }
+    ],
+    "Kindred Charge": [
+      {
+        "grpId": 91874,
+        "set_code": "SPG",
+        "collector_number": "58"
+      }
+    ],
+    "Ledger Shredder": [
+      {
+        "grpId": 91871,
+        "set_code": "SPG",
+        "collector_number": "55"
+      }
+    ],
+    "Maddening Hex": [
+      {
+        "grpId": 92409,
+        "set_code": "SPG",
+        "collector_number": "70"
+      }
+    ],
+    "Morbid Opportunist": [
+      {
+        "grpId": 90655,
+        "set_code": "SPG",
+        "collector_number": "32"
+      }
+    ],
+    "Mystic Snake": [
+      {
+        "grpId": 90658,
+        "set_code": "SPG",
+        "collector_number": "35"
+      }
+    ],
+    "Notion Thief": [
+      {
+        "grpId": 90659,
+        "set_code": "SPG",
+        "collector_number": "36"
+      }
+    ],
+    "Noxious Revival": [
+      {
+        "grpId": 92412,
+        "set_code": "SPG",
+        "collector_number": "73"
+      }
+    ],
+    "Persist": [
+      {
+        "grpId": 91172,
+        "set_code": "SPG",
+        "collector_number": "42"
+      }
+    ],
+    "Phantasmal Image": [
+      {
+        "grpId": 92406,
+        "set_code": "SPG",
+        "collector_number": "67"
+      }
+    ],
+    "Port Razer": [
+      {
+        "grpId": 90656,
+        "set_code": "SPG",
+        "collector_number": "33"
+      }
+    ],
+    "Prismatic Ending": [
+      {
+        "grpId": 91170,
+        "set_code": "SPG",
+        "collector_number": "40"
+      }
+    ],
+    "Prismatic Vista": [
+      {
+        "grpId": 90661,
+        "set_code": "SPG",
+        "collector_number": "38"
+      }
+    ],
+    "Rat Colony": [
+      {
+        "grpId": 91872,
+        "set_code": "SPG",
+        "collector_number": "56"
+      }
+    ],
+    "Relentless Rats": [
+      {
+        "grpId": 91873,
+        "set_code": "SPG",
+        "collector_number": "57"
+      }
+    ],
+    "Sacrifice": [
+      {
+        "grpId": 92408,
+        "set_code": "SPG",
+        "collector_number": "69"
+      }
+    ],
+    "Scapeshift": [
+      {
+        "grpId": 90657,
+        "set_code": "SPG",
+        "collector_number": "34"
+      }
+    ],
+    "Show and Tell": [
+      {
+        "grpId": 88914,
+        "set_code": "SPG",
+        "collector_number": "21"
+      }
+    ],
+    "Solitude": [
+      {
+        "grpId": 91164,
+        "set_code": "SPG",
+        "collector_number": "44"
+      }
+    ],
+    "Soul Warden": [
+      {
+        "grpId": 92404,
+        "set_code": "SPG",
+        "collector_number": "65"
+      }
+    ],
+    "Stoneforge Mystic": [
+      {
+        "grpId": 90651,
+        "set_code": "SPG",
+        "collector_number": "29"
+      }
+    ],
+    "Subtlety": [
+      {
+        "grpId": 91165,
+        "set_code": "SPG",
+        "collector_number": "45"
+      }
+    ],
+    "Sword of Fire and Ice": [
+      {
+        "grpId": 91878,
+        "set_code": "SPG",
+        "collector_number": "62"
+      }
+    ],
+    "Swords to Plowshares": [
+      {
+        "grpId": 91870,
+        "set_code": "SPG",
+        "collector_number": "54"
+      }
+    ],
+    "Sylvan Tutor": [
+      {
+        "grpId": 91875,
+        "set_code": "SPG",
+        "collector_number": "59"
+      }
+    ],
+    "Thought-Knot Seer": [
+      {
+        "grpId": 91169,
+        "set_code": "SPG",
+        "collector_number": "39"
+      }
+    ],
+    "Tireless Tracker": [
+      {
+        "grpId": 88919,
+        "set_code": "SPG",
+        "collector_number": "26"
+      }
+    ],
+    "Toski, Bearer of Secrets": [
+      {
+        "grpId": 91876,
+        "set_code": "SPG",
+        "collector_number": "60"
+      }
+    ],
+    "Tragic Slip": [
+      {
+        "grpId": 88915,
+        "set_code": "SPG",
+        "collector_number": "22"
+      }
+    ],
+    "Unholy Heat": [
+      {
+        "grpId": 92413,
+        "set_code": "SPG",
+        "collector_number": "71"
+      }
+    ],
+    "Victimize": [
+      {
+        "grpId": 88916,
+        "set_code": "SPG",
+        "collector_number": "23"
+      }
+    ],
+    "Condemn": [
+      {
+        "grpId": 94700,
+        "set_code": "SPG",
+        "collector_number": "74"
+      }
+    ],
+    "Sphinx's Tutelage": [
+      {
+        "grpId": 94701,
+        "set_code": "SPG",
+        "collector_number": "75"
+      }
+    ],
+    "Grim Tutor": [
+      {
+        "grpId": 94702,
+        "set_code": "SPG",
+        "collector_number": "76"
+      }
+    ],
+    "Embercleave": [
+      {
+        "grpId": 94703,
+        "set_code": "SPG",
+        "collector_number": "77"
+      }
+    ],
+    "Goblin Bushwhacker": [
+      {
+        "grpId": 94704,
+        "set_code": "SPG",
+        "collector_number": "78"
+      }
+    ],
+    "Bloom Tender": [
+      {
+        "grpId": 94705,
+        "set_code": "SPG",
+        "collector_number": "79"
+      }
+    ],
+    "Paradise Druid": [
+      {
+        "grpId": 94706,
+        "set_code": "SPG",
+        "collector_number": "80"
+      }
+    ],
+    "Akroma's Memorial": [
+      {
+        "grpId": 94707,
+        "set_code": "SPG",
+        "collector_number": "81"
+      }
+    ],
+    "Temporal Manipulation": [
+      {
+        "grpId": 94708,
+        "set_code": "SPG",
+        "collector_number": "82"
+      }
+    ],
+    "Fiend Artisan": [
+      {
+        "grpId": 94709,
+        "set_code": "SPG",
+        "collector_number": "83"
+      }
+    ]
+  },
+  "_synthetic_ids": {
+    "description": "SPG #74-83 arena_ids are synthetic (not from Scryfall). Real Arena grpIds should replace these when available from 17lands data. Entries in grpId_to_card with \"synthetic\": true are these placeholders.",
+    "range": "94700-94709"
+  }
+}

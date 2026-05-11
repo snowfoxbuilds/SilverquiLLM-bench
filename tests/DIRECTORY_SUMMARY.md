@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Test root directory for the SilverquiLLM-bench project. Contains top-level test files, test utilities, and subdirectories for engine, card, and benchmark integration tests. Uses **pytest** as the test framework with ~3,000+ test functions total across 96 test files.
+Test root directory for the SilverquiLLM-bench project. Contains top-level test files, test utilities, and subdirectories for engine, card, and benchmark integration tests. Uses **pytest** as the test framework with ~3,200+ test functions total across 100+ test files.
 
 ## Key Files
 
@@ -55,6 +55,9 @@ Test root directory for the SilverquiLLM-bench project. Contains top-level test 
 | `test_post_loop_eval.py` | **Post-loop eval tests** — `run_self_eval_flat`. |
 | `test_check_violations.py` | **Violation detection tests** — Protected directory checking. |
 | `test_violation_wiring.py` | **Violation wiring tests** — Violation checks in agent runs. |
+| `test_replay_parser.py` | **Replay parser tests** — 39 tests for GRE JSON parsing: game setup, opening hands, state reconstruction, land plays, life totals, draws, ObjectIdChanged tracking. |
+| `test_replay_executor.py` | **Replay executor tests** — 23 tests for ReplayExecutor initialization, step execution, state comparison, seat 1/2 behavior. |
+| `test_divergence_detection.py` | **Divergence detection tests** — 43 tests for DivergenceType, Divergence, ValidationReport, ValidatingExecutor, validate_replay. |
 | `test_integration_helpers.py` | **Integration helpers tests** — run_utils, result conversion. |
 | `test_engine_extensions.py` | **Engine extension tests** — Converge mana tracking. |
 | `test_phase1_tech_debt.py` | **Tech debt validation** — Python 3.12, removed aliases. |

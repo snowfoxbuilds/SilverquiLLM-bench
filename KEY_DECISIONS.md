@@ -79,3 +79,105 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Use `library.shuffle()` — ZoneContainer has a built-in shuffle method.
 - **Reasoning**: Discovered during Item 12 review fix.
 - **Impact**: Any card that shuffles a library should use this API.
+
+## Hybrid mana payment: reserve explicit choices before solving
+- **Context**: `pay()` with hybrid + generic costs could conflict when explicit generic `choices` were provided. Hybrid solver might consume mana the caller reserved for generic.
+- **Decision**: When explicit `choices` are provided, deduct generic mana from the working pool BEFORE running `_solve_hybrid()`. The solver only sees genuinely available mana.
+- **Reasoning**: Prevents the solver from stealing reserved mana. Auto-pay (choices=None) still works as before.
+- **Impact**: `engine/mana.py` (`pay()` method).
+
+## Cost reduction: controller must be set before hook
+- **Context**: Cards in hand may not have `controller` set. The cost_reduction hook needs to know the casting player.
+- **Decision**: `get_cost_reduction()` temporarily sets `card.controller = controller` before calling the hook, then restores. `cast_spell()` also sets `card.controller = player` early in the pipeline.
+- **Reasoning**: Belt-and-suspenders — safe for both standalone calls and pipeline usage.
+- **Impact**: `engine/casting.py`.
+
+## Protection from qualities: DEBT integration points
+- **Context**: Protection keyword requires integration at four points (Damage, Enchanting/Equipping, Blocking, Targeting).
+- **Decision**: Protection checks integrated in: `combat.py:_deal_damage()` and `game.py:deal_damage()` for damage; `casting.py:cast_spell()` for targeting (post-target-selection validation); `combat.py` for blocking legality; `state_based_actions.py` for aura/equipment detachment.
+- **Reasoning**: Each DEBT aspect needs enforcement at its actual game mechanic integration point, not just in isolated helpers.
+- **Impact**: `engine/protection.py` (new), `engine/combat.py`, `engine/casting.py`, `engine/game.py`, `engine/state_based_actions.py`.
+
+## Equipment detachment vs aura detachment on protection
+- **Context**: When a creature gains protection from a color, both auras and equipment with that color must detach.
+- **Decision**: Auras go to graveyard (existing behavior). Equipment sets `attached_to = None` but stays on battlefield per MTG rules.
+- **Impact**: `engine/state_based_actions.py`.
+
+## Extra turns: insertion semantics with independent normal rotation
+- **Context**: Extra turns must be truly inserted, not replacements for the next normal turn.
+- **Decision**: Added `_normal_next_index` to track normal rotation independently. Extra turns pop from FIFO queue without advancing normal rotation. When extras are consumed, normal rotation resumes from `_normal_next_index`.
+- **Reasoning**: Matches MTG rules — "take an extra turn after this one" inserts a turn; normal turn order is unaffected.
+- **Impact**: `engine/game_state.py`, `engine/turn.py`.
+
+## SPG cards: set_code="spg", all in special_guests.py
+- **Context**: Special Guest cards needed a home and metadata convention.
+- **Decision**: All SPG cards live in `cards/foundations/special_guests.py` with `set_code="spg"` in CardMetadata. Registered via `register_special_guests()`.
+- **Impact**: `cards/foundations/special_guests.py`, `cards/registry.py`.
+
+## ETB effects: use on_resolve() not triggers for same-card ETB
+- **Context**: `register_triggers()` is called AFTER `ENTERS_BATTLEFIELD` fires, so same-card ETB triggers never match during normal resolution.
+- **Decision**: For cards that need to do something when they ETB (like Embercleave auto-attach), perform the action directly in `on_resolve()` rather than relying on a self-ETB trigger.
+- **Reasoning**: Per existing KEY_DECISIONS "ETB event ordering: fire event before registering triggers".
+- **Impact**: Cards with self-ETB effects should use `on_resolve()` pattern.
+
+## Continuous effects: P/T bonuses in Layer 7c, keywords in Layer 6
+- **Context**: Embercleave's +1/+1 was being applied in Layer 6 (ABILITY) which gets overwritten by Layer 7a CDAs.
+- **Decision**: Equipment/aura P/T bonuses go in Layer 7 with SubLayer.MODIFY_PT (7c). Keywords go in Layer 6.
+- **Impact**: Equipment cards with P/T bonuses.
+
+## protections cleared during _reset_characteristics()
+- **Context**: Granted protections persisted after the source left because `_reset_characteristics()` didn't clear them.
+- **Decision**: Added `protections` clearing to `Creature._reset_characteristics()` so protections are properly recalculated each cycle.
+- **Impact**: `engine/card.py`, any card granting protection via continuous effects.
+
+## Card ID mapping: synthetic SPG grpIds marked with "synthetic": true
+- **Context**: SPG cards don't have real Arena grpIds yet. Synthetic IDs (94700-94709) were needed for testing.
+- **Decision**: Synthetic entries marked with `"synthetic": true` flag in the primary mapping. Separate `card_name_to_grpIds` (plural) preserves all printings per card name.
+- **Reasoning**: Consumers can filter synthetics; tests can still resolve SPG cards.
+- **Impact**: `data/replays/card_id_map.json`, `scripts/build_card_id_map.py`.
+
+## GRE diff gameObjects: merge, don't replace
+- **Context**: GRE diffs can be sparse — only sending changed fields for a gameObject.
+- **Decision**: When processing diff gameObjects, merge onto existing object using field-by-field `setattr`. New objects created from full dict. `_merge_game_object()` helper handles the mapping.
+- **Reasoning**: Wholesale replacement via `from_dict()` zeros out omitted fields, corrupting state.
+- **Impact**: `silverquillm/replay/state.py`.
+
+## Replay executor: Seat 1 engine API with fallback
+- **Context**: Seat 1 should use engine API for full validation, but some actions (spell casts) can't go through the full engine pipeline in replay mode.
+- **Decision**: Seat 1 uses engine API where feasible (land plays via `play_land()`, deaths via `move_to_zone()`). Falls back to direct zone mutation on engine rejection. Spell casts use direct mutation with correct destination routing (permanents→battlefield, instants/sorceries→graveyard). Stack simulation marked ENGINE LIMITATION.
+- **Impact**: `silverquillm/replay/executor.py`.
+
+## Replay executor: always compare state even on skip
+- **Context**: Phase transitions and parser-missed changes can alter observable state.
+- **Decision**: `execute_step()` always calls `compare_state()` before returning, even for no-action steps.
+- **Impact**: `silverquillm/replay/executor.py`.
+
+## Divergence detection: wrapper pattern over executor
+- **Context**: Need structured divergence recording without modifying the tested ReplayExecutor.
+- **Decision**: ValidatingExecutor wraps ReplayExecutor, intercepting execute_step() to classify results into Divergence records. Four types: MISSING_CARD, ILLEGAL_ACTION, STATE_MISMATCH, ENGINE_ERROR.
+- **Impact**: `silverquillm/replay/validation.py`.
+
+## Per-card divergence rates are float ratios, not counts
+- **Context**: TODO spec says "per-card divergence rates." Implementer initially returned raw counts.
+- **Decision**: Track card appearances (how many comparisons each grpId participates in) and return divergences/appearances as a float ratio. Fallback rate 1.0 if appearances not tracked.
+- **Impact**: `silverquillm/replay/validation.py`, `tests/test_divergence_detection.py`.
+
+## ILLEGAL_ACTION classification uses StepResult.skipped
+- **Context**: Initial implementation used keyword matching on mismatch descriptions, which is fragile.
+- **Decision**: Primary classification uses StepResult.skipped + skip_reason. Keyword matching kept as fallback.
+- **Impact**: `silverquillm/replay/validation.py`.
+
+## CLI validate: divergence_rate is per-game, not per-divergence
+- **Context**: divergence_rate could mean total divergences / games or games_with_divergence / games.
+- **Decision**: Rate is fraction of games that had any divergence (games_with_divergence / games_attempted). This is more meaningful for benchmarking.
+- **Impact**: `silverquillm/replay/cli.py`.
+
+## CLI validate: step_callback and stop_on_first patterns
+- **Context**: --verbose and --stop-on-divergence need per-step interaction during replay execution.
+- **Decision**: Added `step_callback` and `stop_on_first` parameters to `validate_replay()` and `ValidatingExecutor.execute_all()`. Callback receives step index, game state ID, action, and result. stop_on_first breaks the loop after first divergence.
+- **Impact**: `silverquillm/replay/validation.py`, `silverquillm/replay/cli.py`.
+
+## CLI validate: parse failures count as attempted games
+- **Context**: Replays that fail to parse were silently skipped, undercounting games_attempted.
+- **Decision**: Parse failures generate a ValidationReport with a single ENGINE_ERROR divergence, counted in games_attempted and visible in summary.
+- **Impact**: `silverquillm/replay/cli.py`.

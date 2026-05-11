@@ -128,6 +128,21 @@ _PIP_MAP: dict[str, ManaType] = {
 # Regex to tokenize a mana cost string like "{2}{W}{U}" or "{X}{X}{R}"
 _MANA_TOKEN_RE = re.compile(r"\{([^}]+)\}")
 
+# Regex to detect hybrid mana tokens like "B/G", "W/U", etc.
+_HYBRID_RE = re.compile(r"^([WUBRGC])/([WUBRGC])$")
+
+
+@dataclass(frozen=True)
+class HybridManaSymbol:
+    """A hybrid mana symbol that can be paid with either of two colors.
+
+    For example, ``{B/G}`` is represented as
+    ``HybridManaSymbol(option_a=ManaType.BLACK, option_b=ManaType.GREEN)``.
+    """
+
+    option_a: ManaType
+    option_b: ManaType
+
 
 @dataclass(frozen=True)
 class ManaCost:
@@ -137,16 +152,21 @@ class ManaCost:
         generic: The generic (numerical) component of the cost.
         pips: Mapping of colored/colorless mana pips to their counts.
         x_count: Number of {X} symbols in the cost.
+        hybrid: List of hybrid mana symbols that can be paid with either option.
     """
 
     generic: int = 0
     pips: dict[ManaType, int] = field(default_factory=dict)
     x_count: int = 0
+    hybrid: list[HybridManaSymbol] = field(default_factory=list)
 
     @property
     def cmc(self) -> int:
-        """Converted mana cost (total mana value, treating X as 0)."""
-        return self.generic + sum(self.pips.values())
+        """Converted mana cost (total mana value, treating X as 0).
+
+        Each hybrid symbol contributes 1 to the CMC.
+        """
+        return self.generic + sum(self.pips.values()) + len(self.hybrid)
 
     @classmethod
     def parse(cls, cost_str: str) -> ManaCost:
@@ -175,6 +195,7 @@ class ManaCost:
         generic = 0
         pips: dict[ManaType, int] = {}
         x_count = 0
+        hybrid: list[HybridManaSymbol] = []
 
         for token in tokens:
             upper = token.upper()
@@ -184,20 +205,34 @@ class ManaCost:
                 mana_type = _PIP_MAP[upper]
                 pips[mana_type] = pips.get(mana_type, 0) + 1
             else:
-                # Try to parse as a number (generic mana)
-                try:
-                    value = int(token)
-                except ValueError:
-                    raise ValueError(
-                        f"Unrecognised mana symbol {token!r} in cost string {cost_str!r}"
-                    ) from None
-                if value < 0:
-                    raise ValueError(
-                        f"Negative generic mana {token!r} in cost string {cost_str!r}"
+                # Check for hybrid mana like "B/G"
+                hybrid_match = _HYBRID_RE.match(upper)
+                if hybrid_match:
+                    a_str, b_str = hybrid_match.group(1), hybrid_match.group(2)
+                    if a_str not in _PIP_MAP or b_str not in _PIP_MAP:
+                        raise ValueError(
+                            f"Unrecognised mana symbol {token!r} in cost string {cost_str!r}"
+                        )
+                    hybrid.append(
+                        HybridManaSymbol(
+                            option_a=_PIP_MAP[a_str], option_b=_PIP_MAP[b_str]
+                        )
                     )
-                generic += value
+                else:
+                    # Try to parse as a number (generic mana)
+                    try:
+                        value = int(token)
+                    except ValueError:
+                        raise ValueError(
+                            f"Unrecognised mana symbol {token!r} in cost string {cost_str!r}"
+                        ) from None
+                    if value < 0:
+                        raise ValueError(
+                            f"Negative generic mana {token!r} in cost string {cost_str!r}"
+                        )
+                    generic += value
 
-        return cls(generic=generic, pips=pips, x_count=x_count)
+        return cls(generic=generic, pips=pips, x_count=x_count, hybrid=hybrid)
 
 
 @dataclass

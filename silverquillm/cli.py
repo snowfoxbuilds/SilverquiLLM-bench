@@ -26,6 +26,7 @@ from silverquillm.evaluator import run_self_eval_flat
 from silverquillm.results import init_results_dir, save_aggregates, save_card_result, save_run_summary
 from silverquillm.scorer import compute_scores, generate_leaderboard
 from silverquillm.regression import CompletedCard, run_regressions
+from silverquillm.replay.cli import validate as validate_cmd
 from silverquillm.run_utils import _session_results_to_dicts
 
 
@@ -70,6 +71,10 @@ def _sort_cards_by_tier(specs: list[dict]) -> list[dict]:
 @click.group()
 def main() -> None:
     """SilverquiLLM benchmark runner."""
+
+
+# Register the validate subcommand from silverquillm.replay.cli
+main.add_command(validate_cmd)
 
 
 @main.command()

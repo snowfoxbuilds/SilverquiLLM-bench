@@ -72,6 +72,15 @@ class GameState:
         self.combat_state: CombatState = CombatState()
         self.is_game_over: bool = False
         self.winner: Player | None = None
+        # ENGINE LIMITATION: Extra turns queue (FIFO of player seat indices).
+        # Complex interactions ('skip your next turn', multiple extra turns
+        # from different sources) are not fully handled.
+        self.extra_turns: list[int] = []
+        # Tracks normal turn rotation independently of extra turns.
+        # Extra turns are truly *inserted* — they don't advance the
+        # normal rotation.  When extras are exhausted the game picks up
+        # from _normal_next_index.
+        self._normal_next_index: int = 1
 
     # ------------------------------------------------------------------
     # Player properties
@@ -138,7 +147,15 @@ class GameState:
         else:
             # End of turn — wrap around.
             self.turn_number += 1
-            self.active_player_index = 1 - self.active_player_index
+            if self.extra_turns:
+                # ENGINE LIMITATION: Extra turns queue (FIFO). Pop the
+                # next player seat index; that player gets the next turn.
+                # Normal rotation is NOT advanced — extra turns are
+                # inserted before the normal next turn.
+                self.active_player_index = self.extra_turns.pop(0)
+            else:
+                self.active_player_index = self._normal_next_index
+                self._normal_next_index = 1 - self._normal_next_index
             self.priority_player_index = self.active_player_index
             self.phase = _TURN_SEQUENCE[0][0]
             self.step = _TURN_SEQUENCE[0][1]

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Unit tests for all card implementations in `cards/` and `cards/foundations/`. Tests verify card attributes (mana cost, power/toughness, keywords), targeting, resolution effects, registry integration, and game mechanics interactions. **25 test files** covering 250+ card implementations.
+Unit tests for all card implementations in `cards/` and `cards/foundations/`. Tests verify card attributes (mana cost, power/toughness, keywords), targeting, resolution effects, registry integration, and game mechanics interactions. **26 test files** covering 260+ card implementations.
 
 ## Key Files
 
@@ -33,6 +33,7 @@ Unit tests for all card implementations in `cards/` and `cards/foundations/`. Te
 | `test_etb_creatures.py` | 29 ETB trigger creatures — draw, tokens, damage, destroy, exile, bounce. |
 | `test_death_trigger_creatures.py` | 17 death trigger creatures — tokens, draw, drain, recursion. |
 | `test_activated_creatures.py` | 19 activated ability creatures — mana, tap, sacrifice, pump. |
+| `test_special_guests.py` | 10 Special Guest (SPG) cards — Condemn, Grim Tutor, Paradise Druid, Bushwhacker, Sphinx's Tutelage, Embercleave, Akroma's Memorial, Temporal Manipulation, Fiend Artisan, and registry. |
 | `test_foundations_batch1_integration.py` | Cross-category integration tests for batch 1 cards. |
 
 ## Dependencies

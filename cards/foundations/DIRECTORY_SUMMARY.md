@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Card implementations for the **Magic: The Gathering Foundations (FDN)** set. Contains **250+ playable cards** across 20 implementation files covering all major card categories: basic lands, vanilla/French vanilla creatures, instants/sorceries (simple, targeted, modal, complex), enchantments (auras + global), artifacts, equipment, planeswalkers, ETB/death/activated-ability creatures, non-basic lands, and X-cost/kicker/modal cards. All cards verified against Scryfall data.
+Card implementations for the **Magic: The Gathering Foundations (FDN)** set. Contains **260+ playable cards** across 21 implementation files covering all major card categories: basic lands, vanilla/French vanilla creatures, instants/sorceries (simple, targeted, modal, complex), enchantments (auras + global), artifacts, equipment, planeswalkers, ETB/death/activated-ability creatures, non-basic lands, X-cost/kicker/modal cards, and Special Guest (SPG) cards. All cards verified against Scryfall data.
 
 ## Key Files
 
@@ -30,6 +30,8 @@ Card implementations for the **Magic: The Gathering Foundations (FDN)** set. Con
 | `etb_creatures.py` | **29 FDN ETB creatures**: draw, lifegain, tokens, damage, destroy, exile, bounce, graveyard recursion, counters, discard, debuff triggers. |
 | `death_trigger_creatures.py` | **17 FDN creatures with death triggers**: token creation, draw, mill/surveil, drain/damage, graveyard recursion, library effects. |
 | `activated_creatures.py` | **19 FDN creatures with activated abilities**: mana (Llanowar Elves, Elvish Archdruid), tap abilities (Krenko Mob Boss), sacrifice abilities (Cathar Commando), pump abilities (Shivan Dragon), other (Spectral Sailor, Scavenging Ooze, Reassembling Skeleton). |
+
+| `special_guests.py` | **10 Special Guest (SPG) cards**: Condemn, Grim Tutor, Paradise Druid, Goblin Bushwhacker (kicker), Sphinx's Tutelage (mill trigger), Embercleave (flash, ETB attach, P/T bonus), Akroma's Memorial (keyword anthem), Temporal Manipulation (extra turn), Fiend Artisan (sacrifice-search). `register_special_guests(registry)`. |
 
 ## Important Classes / Functions
 
@@ -85,4 +87,5 @@ Card implementations for the **Magic: The Gathering Foundations (FDN)** set. Con
 - `tests/cards/test_etb_creatures.py` — ETB trigger creatures.
 - `tests/cards/test_death_trigger_creatures.py` — Death trigger creatures.
 - `tests/cards/test_activated_creatures.py` — Activated ability creatures.
+- `tests/cards/test_special_guests.py` — 10 Special Guest cards and registration.
 - `tests/cards/test_foundations_batch1_integration.py` — Cross-category integration tests.

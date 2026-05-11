@@ -1,0 +1,1447 @@
+{
+  "_synthetic": true,
+  "_description": "Synthetic test data for replay parser testing. Not real game data.",
+  "seat_id": 1,
+  "opponent_seat_id": 2,
+  "events": [
+    {
+      "_timestamp": null,
+      "type": "GREMessageType_GameStateMessage",
+      "systemSeatIds": [
+        1,
+        2
+      ],
+      "msgId": 1,
+      "gameStateId": 1,
+      "gameStateMessage": {
+        "type": "GameStateType_Full",
+        "gameStateId": 1,
+        "prevGameStateId": 0,
+        "gameInfo": {
+          "matchID": "test-match-001",
+          "gameNumber": 1,
+          "stage": "GameStage_Start",
+          "type": "GameType_Duel",
+          "variant": "GameVariant_Normal",
+          "matchState": "MatchState_GameInProgress",
+          "matchWinCondition": "MatchWinCondition_Best2of3",
+          "superFormat": "SuperFormat_Limited",
+          "mulliganType": "MulliganType_London",
+          "deckConstraintInfo": {
+            "minDeckSize": 40,
+            "maxDeckSize": 250,
+            "maxSideboardSize": 250
+          }
+        },
+        "players": [
+          {
+            "lifeTotal": 20,
+            "systemSeatNumber": 1,
+            "status": "PlayerStatus_InGame",
+            "maxHandSize": 7,
+            "controllerSeatId": 1
+          },
+          {
+            "lifeTotal": 20,
+            "systemSeatNumber": 2,
+            "status": "PlayerStatus_InGame",
+            "maxHandSize": 7,
+            "controllerSeatId": 2
+          }
+        ],
+        "turnInfo": {},
+        "zones": [
+          {
+            "zoneId": 31,
+            "type": "ZoneType_Hand",
+            "ownerSeatId": 1,
+            "objectInstanceIds": [
+              101,
+              102,
+              103,
+              104,
+              105,
+              106,
+              107
+            ]
+          },
+          {
+            "zoneId": 32,
+            "type": "ZoneType_Hand",
+            "ownerSeatId": 2,
+            "objectInstanceIds": [
+              201,
+              202,
+              203,
+              204,
+              205,
+              206,
+              207
+            ]
+          },
+          {
+            "zoneId": 33,
+            "type": "ZoneType_Library",
+            "ownerSeatId": 1,
+            "objectInstanceIds": [
+              108,
+              109,
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123,
+              124,
+              125,
+              126,
+              127,
+              128,
+              129,
+              130,
+              131,
+              132,
+              133,
+              134,
+              135,
+              136,
+              137,
+              138,
+              139,
+              140
+            ]
+          },
+          {
+            "zoneId": 34,
+            "type": "ZoneType_Library",
+            "ownerSeatId": 2,
+            "objectInstanceIds": [
+              208,
+              209,
+              210,
+              211,
+              212,
+              213,
+              214,
+              215,
+              216,
+              217,
+              218,
+              219,
+              220,
+              221,
+              222,
+              223,
+              224,
+              225,
+              226,
+              227,
+              228,
+              229,
+              230,
+              231,
+              232,
+              233,
+              234,
+              235,
+              236,
+              237,
+              238,
+              239,
+              240
+            ]
+          },
+          {
+            "zoneId": 28,
+            "type": "ZoneType_Battlefield",
+            "ownerSeatId": 0,
+            "objectInstanceIds": []
+          },
+          {
+            "zoneId": 27,
+            "type": "ZoneType_Stack",
+            "ownerSeatId": 0,
+            "objectInstanceIds": []
+          },
+          {
+            "zoneId": 35,
+            "type": "ZoneType_Graveyard",
+            "ownerSeatId": 1,
+            "objectInstanceIds": []
+          },
+          {
+            "zoneId": 36,
+            "type": "ZoneType_Graveyard",
+            "ownerSeatId": 2,
+            "objectInstanceIds": []
+          },
+          {
+            "zoneId": 29,
+            "type": "ZoneType_Exile",
+            "ownerSeatId": 0,
+            "objectInstanceIds": []
+          },
+          {
+            "zoneId": 30,
+            "type": "ZoneType_Limbo",
+            "ownerSeatId": 0,
+            "objectInstanceIds": []
+          }
+        ],
+        "gameObjects": [
+          {
+            "instanceId": 101,
+            "grpId": 95197,
+            "type": "GameObjectType_Card",
+            "zoneId": 31,
+            "ownerSeatId": 1,
+            "controllerSeatId": 1,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Mountain"
+            ],
+            "visibility": "Visibility_Private",
+            "viewers": [
+              1
+            ]
+          },
+          {
+            "instanceId": 102,
+            "grpId": 95197,
+            "type": "GameObjectType_Card",
+            "zoneId": 31,
+            "ownerSeatId": 1,
+            "controllerSeatId": 1,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Mountain"
+            ],
+            "visibility": "Visibility_Private",
+            "viewers": [
+              1
+            ]
+          },
+          {
+            "instanceId": 103,
+            "grpId": 95191,
+            "type": "GameObjectType_Card",
+            "zoneId": 31,
+            "ownerSeatId": 1,
+            "controllerSeatId": 1,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Plains"
+            ],
+            "visibility": "Visibility_Private",
+            "viewers": [
+              1
+            ]
+          },
+          {
+            "instanceId": 104,
+            "grpId": 95191,
+            "type": "GameObjectType_Card",
+            "zoneId": 31,
+            "ownerSeatId": 1,
+            "controllerSeatId": 1,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Plains"
+            ],
+            "visibility": "Visibility_Private",
+            "viewers": [
+              1
+            ]
+          },
+          {
+            "instanceId": 105,
+            "grpId": 93859,
+            "type": "GameObjectType_Card",
+            "zoneId": 31,
+            "ownerSeatId": 1,
+            "controllerSeatId": 1,
+            "cardTypes": [
+              "CardType_Creature"
+            ],
+            "subtypes": [
+              "SubType_Cat"
+            ],
+            "color": [
+              "CardColor_White"
+            ],
+            "power": {
+              "value": 2
+            },
+            "toughness": {
+              "value": 1
+            },
+            "visibility": "Visibility_Private",
+            "viewers": [
+              1
+            ]
+          },
+          {
+            "instanceId": 106,
+            "grpId": 95197,
+            "type": "GameObjectType_Card",
+            "zoneId": 31,
+            "ownerSeatId": 1,
+            "controllerSeatId": 1,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Mountain"
+            ],
+            "visibility": "Visibility_Private",
+            "viewers": [
+              1
+            ]
+          },
+          {
+            "instanceId": 107,
+            "grpId": 95197,
+            "type": "GameObjectType_Card",
+            "zoneId": 31,
+            "ownerSeatId": 1,
+            "controllerSeatId": 1,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Mountain"
+            ],
+            "visibility": "Visibility_Private",
+            "viewers": [
+              1
+            ]
+          },
+          {
+            "instanceId": 201,
+            "grpId": 95199,
+            "type": "GameObjectType_Card",
+            "zoneId": 32,
+            "ownerSeatId": 2,
+            "controllerSeatId": 2,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Forest"
+            ],
+            "visibility": "Visibility_Private",
+            "viewers": [
+              2
+            ]
+          },
+          {
+            "instanceId": 202,
+            "grpId": 95199,
+            "type": "GameObjectType_Card",
+            "zoneId": 32,
+            "ownerSeatId": 2,
+            "controllerSeatId": 2,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Forest"
+            ],
+            "visibility": "Visibility_Private",
+            "viewers": [
+              2
+            ]
+          },
+          {
+            "instanceId": 203,
+            "grpId": 95195,
+            "type": "GameObjectType_Card",
+            "zoneId": 32,
+            "ownerSeatId": 2,
+            "controllerSeatId": 2,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Swamp"
+            ],
+            "visibility": "Visibility_Private",
+            "viewers": [
+              2
+            ]
+          },
+          {
+            "instanceId": 204,
+            "grpId": 95195,
+            "type": "GameObjectType_Card",
+            "zoneId": 32,
+            "ownerSeatId": 2,
+            "controllerSeatId": 2,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Swamp"
+            ],
+            "visibility": "Visibility_Private",
+            "viewers": [
+              2
+            ]
+          },
+          {
+            "instanceId": 205,
+            "grpId": 93940,
+            "type": "GameObjectType_Card",
+            "zoneId": 32,
+            "ownerSeatId": 2,
+            "controllerSeatId": 2,
+            "cardTypes": [
+              "CardType_Creature"
+            ],
+            "subtypes": [
+              "SubType_Elf",
+              "SubType_Druid"
+            ],
+            "color": [
+              "CardColor_Green"
+            ],
+            "power": {
+              "value": 1
+            },
+            "toughness": {
+              "value": 1
+            },
+            "visibility": "Visibility_Private",
+            "viewers": [
+              2
+            ]
+          },
+          {
+            "instanceId": 206,
+            "grpId": 95199,
+            "type": "GameObjectType_Card",
+            "zoneId": 32,
+            "ownerSeatId": 2,
+            "controllerSeatId": 2,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Forest"
+            ],
+            "visibility": "Visibility_Private",
+            "viewers": [
+              2
+            ]
+          },
+          {
+            "instanceId": 207,
+            "grpId": 95199,
+            "type": "GameObjectType_Card",
+            "zoneId": 32,
+            "ownerSeatId": 2,
+            "controllerSeatId": 2,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Forest"
+            ],
+            "visibility": "Visibility_Private",
+            "viewers": [
+              2
+            ]
+          },
+          {
+            "instanceId": 108,
+            "grpId": 95197,
+            "type": "GameObjectType_Card",
+            "zoneId": 33,
+            "ownerSeatId": 1,
+            "controllerSeatId": 1,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Mountain"
+            ],
+            "visibility": "Visibility_Private",
+            "viewers": [
+              1
+            ]
+          },
+          {
+            "instanceId": 109,
+            "grpId": 95191,
+            "type": "GameObjectType_Card",
+            "zoneId": 33,
+            "ownerSeatId": 1,
+            "controllerSeatId": 1,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Plains"
+            ],
+            "visibility": "Visibility_Private",
+            "viewers": [
+              1
+            ]
+          },
+          {
+            "instanceId": 208,
+            "grpId": 95195,
+            "type": "GameObjectType_Card",
+            "zoneId": 34,
+            "ownerSeatId": 2,
+            "controllerSeatId": 2,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Swamp"
+            ],
+            "visibility": "Visibility_Private",
+            "viewers": [
+              2
+            ]
+          },
+          {
+            "instanceId": 209,
+            "grpId": 95199,
+            "type": "GameObjectType_Card",
+            "zoneId": 34,
+            "ownerSeatId": 2,
+            "controllerSeatId": 2,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Forest"
+            ],
+            "visibility": "Visibility_Private",
+            "viewers": [
+              2
+            ]
+          }
+        ],
+        "annotations": [],
+        "persistentAnnotations": [],
+        "actions": []
+      }
+    },
+    {
+      "_timestamp": null,
+      "type": "GREMessageType_GameStateMessage",
+      "systemSeatIds": [
+        1,
+        2
+      ],
+      "msgId": 2,
+      "gameStateId": 2,
+      "gameStateMessage": {
+        "type": "GameStateType_Diff",
+        "gameStateId": 2,
+        "prevGameStateId": 1,
+        "gameInfo": {
+          "matchID": "test-match-001",
+          "gameNumber": 1,
+          "stage": "GameStage_Play",
+          "type": "GameType_Duel",
+          "variant": "GameVariant_Normal",
+          "matchState": "MatchState_GameInProgress",
+          "matchWinCondition": "MatchWinCondition_Best2of3",
+          "superFormat": "SuperFormat_Limited",
+          "mulliganType": "MulliganType_London"
+        },
+        "turnInfo": {
+          "phase": "Phase_Main1",
+          "step": "Step_Upkeep",
+          "turnNumber": 1,
+          "activePlayer": 2
+        },
+        "annotations": []
+      }
+    },
+    {
+      "_timestamp": null,
+      "type": "GREMessageType_GameStateMessage",
+      "systemSeatIds": [
+        1,
+        2
+      ],
+      "msgId": 3,
+      "gameStateId": 3,
+      "gameStateMessage": {
+        "type": "GameStateType_Diff",
+        "gameStateId": 3,
+        "prevGameStateId": 2,
+        "turnInfo": {
+          "phase": "Phase_Main1",
+          "turnNumber": 1,
+          "activePlayer": 2
+        },
+        "zones": [
+          {
+            "zoneId": 32,
+            "type": "ZoneType_Hand",
+            "ownerSeatId": 2,
+            "objectInstanceIds": [
+              202,
+              203,
+              204,
+              205,
+              206,
+              207
+            ]
+          },
+          {
+            "zoneId": 28,
+            "type": "ZoneType_Battlefield",
+            "ownerSeatId": 0,
+            "objectInstanceIds": [
+              301
+            ]
+          }
+        ],
+        "gameObjects": [
+          {
+            "instanceId": 301,
+            "grpId": 95199,
+            "type": "GameObjectType_Card",
+            "zoneId": 28,
+            "ownerSeatId": 2,
+            "controllerSeatId": 2,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Forest"
+            ],
+            "visibility": "Visibility_Public"
+          }
+        ],
+        "annotations": [
+          {
+            "id": 1,
+            "affectorId": 301,
+            "affectedIds": [
+              201
+            ],
+            "type": [
+              "AnnotationType_ObjectIdChanged"
+            ],
+            "details": [
+              {
+                "key": "orig_id",
+                "type": "KeyValuePairValueType_int32",
+                "valueInt32": [
+                  201
+                ]
+              },
+              {
+                "key": "new_id",
+                "type": "KeyValuePairValueType_int32",
+                "valueInt32": [
+                  301
+                ]
+              }
+            ]
+          }
+        ],
+        "diffDeletedInstanceIds": [
+          201
+        ]
+      }
+    },
+    {
+      "_timestamp": null,
+      "type": "GREMessageType_GameStateMessage",
+      "systemSeatIds": [
+        1,
+        2
+      ],
+      "msgId": 4,
+      "gameStateId": 4,
+      "gameStateMessage": {
+        "type": "GameStateType_Diff",
+        "gameStateId": 4,
+        "prevGameStateId": 3,
+        "turnInfo": {
+          "phase": "Phase_Beginning",
+          "step": "Step_Upkeep",
+          "turnNumber": 2,
+          "activePlayer": 1
+        },
+        "annotations": []
+      }
+    },
+    {
+      "_timestamp": null,
+      "type": "GREMessageType_GameStateMessage",
+      "systemSeatIds": [
+        1
+      ],
+      "msgId": 5,
+      "gameStateId": 5,
+      "gameStateMessage": {
+        "type": "GameStateType_Diff",
+        "gameStateId": 5,
+        "prevGameStateId": 4,
+        "turnInfo": {
+          "step": "Step_Draw"
+        },
+        "zones": [
+          {
+            "zoneId": 33,
+            "type": "ZoneType_Library",
+            "ownerSeatId": 1,
+            "objectInstanceIds": [
+              109,
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123,
+              124,
+              125,
+              126,
+              127,
+              128,
+              129,
+              130,
+              131,
+              132,
+              133,
+              134,
+              135,
+              136,
+              137,
+              138,
+              139,
+              140
+            ]
+          },
+          {
+            "zoneId": 31,
+            "type": "ZoneType_Hand",
+            "ownerSeatId": 1,
+            "objectInstanceIds": [
+              101,
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              308
+            ]
+          }
+        ],
+        "gameObjects": [
+          {
+            "instanceId": 308,
+            "grpId": 95197,
+            "type": "GameObjectType_Card",
+            "zoneId": 31,
+            "ownerSeatId": 1,
+            "controllerSeatId": 1,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Mountain"
+            ],
+            "visibility": "Visibility_Private",
+            "viewers": [
+              1
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "id": 2,
+            "affectorId": 308,
+            "affectedIds": [
+              108
+            ],
+            "type": [
+              "AnnotationType_ObjectIdChanged"
+            ],
+            "details": [
+              {
+                "key": "orig_id",
+                "type": "KeyValuePairValueType_int32",
+                "valueInt32": [
+                  108
+                ]
+              },
+              {
+                "key": "new_id",
+                "type": "KeyValuePairValueType_int32",
+                "valueInt32": [
+                  308
+                ]
+              }
+            ]
+          }
+        ],
+        "diffDeletedInstanceIds": [
+          108
+        ]
+      }
+    },
+    {
+      "_timestamp": null,
+      "type": "GREMessageType_GameStateMessage",
+      "systemSeatIds": [
+        1,
+        2
+      ],
+      "msgId": 6,
+      "gameStateId": 6,
+      "gameStateMessage": {
+        "type": "GameStateType_Diff",
+        "gameStateId": 6,
+        "prevGameStateId": 5,
+        "turnInfo": {
+          "phase": "Phase_Main1"
+        },
+        "zones": [
+          {
+            "zoneId": 31,
+            "type": "ZoneType_Hand",
+            "ownerSeatId": 1,
+            "objectInstanceIds": [
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              308
+            ]
+          },
+          {
+            "zoneId": 28,
+            "type": "ZoneType_Battlefield",
+            "ownerSeatId": 0,
+            "objectInstanceIds": [
+              301,
+              401
+            ]
+          }
+        ],
+        "gameObjects": [
+          {
+            "instanceId": 401,
+            "grpId": 95197,
+            "type": "GameObjectType_Card",
+            "zoneId": 28,
+            "ownerSeatId": 1,
+            "controllerSeatId": 1,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Mountain"
+            ],
+            "visibility": "Visibility_Public"
+          }
+        ],
+        "annotations": [
+          {
+            "id": 3,
+            "affectorId": 401,
+            "affectedIds": [
+              101
+            ],
+            "type": [
+              "AnnotationType_ObjectIdChanged"
+            ],
+            "details": [
+              {
+                "key": "orig_id",
+                "type": "KeyValuePairValueType_int32",
+                "valueInt32": [
+                  101
+                ]
+              },
+              {
+                "key": "new_id",
+                "type": "KeyValuePairValueType_int32",
+                "valueInt32": [
+                  401
+                ]
+              }
+            ]
+          }
+        ],
+        "diffDeletedInstanceIds": [
+          101
+        ]
+      }
+    },
+    {
+      "_timestamp": null,
+      "type": "GREMessageType_GameStateMessage",
+      "systemSeatIds": [
+        1,
+        2
+      ],
+      "msgId": 7,
+      "gameStateId": 7,
+      "gameStateMessage": {
+        "type": "GameStateType_Diff",
+        "gameStateId": 7,
+        "prevGameStateId": 6,
+        "turnInfo": {
+          "phase": "Phase_Main1",
+          "step": "Step_Upkeep",
+          "turnNumber": 3,
+          "activePlayer": 2
+        },
+        "annotations": []
+      }
+    },
+    {
+      "_timestamp": null,
+      "type": "GREMessageType_GameStateMessage",
+      "systemSeatIds": [
+        1,
+        2
+      ],
+      "msgId": 8,
+      "gameStateId": 8,
+      "gameStateMessage": {
+        "type": "GameStateType_Diff",
+        "gameStateId": 8,
+        "prevGameStateId": 7,
+        "turnInfo": {
+          "phase": "Phase_Main1",
+          "turnNumber": 3,
+          "activePlayer": 2
+        },
+        "zones": [
+          {
+            "zoneId": 32,
+            "type": "ZoneType_Hand",
+            "ownerSeatId": 2,
+            "objectInstanceIds": [
+              202,
+              204,
+              205,
+              206,
+              207
+            ]
+          },
+          {
+            "zoneId": 28,
+            "type": "ZoneType_Battlefield",
+            "ownerSeatId": 0,
+            "objectInstanceIds": [
+              301,
+              401,
+              501
+            ]
+          }
+        ],
+        "gameObjects": [
+          {
+            "instanceId": 501,
+            "grpId": 95195,
+            "type": "GameObjectType_Card",
+            "zoneId": 28,
+            "ownerSeatId": 2,
+            "controllerSeatId": 2,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Swamp"
+            ],
+            "visibility": "Visibility_Public"
+          }
+        ],
+        "annotations": [
+          {
+            "id": 4,
+            "affectorId": 501,
+            "affectedIds": [
+              203
+            ],
+            "type": [
+              "AnnotationType_ObjectIdChanged"
+            ],
+            "details": [
+              {
+                "key": "orig_id",
+                "type": "KeyValuePairValueType_int32",
+                "valueInt32": [
+                  203
+                ]
+              },
+              {
+                "key": "new_id",
+                "type": "KeyValuePairValueType_int32",
+                "valueInt32": [
+                  501
+                ]
+              }
+            ]
+          }
+        ],
+        "diffDeletedInstanceIds": [
+          203
+        ]
+      }
+    },
+    {
+      "_timestamp": null,
+      "type": "GREMessageType_GameStateMessage",
+      "systemSeatIds": [
+        1,
+        2
+      ],
+      "msgId": 9,
+      "gameStateId": 9,
+      "gameStateMessage": {
+        "type": "GameStateType_Diff",
+        "gameStateId": 9,
+        "prevGameStateId": 8,
+        "turnInfo": {
+          "phase": "Phase_Beginning",
+          "step": "Step_Upkeep",
+          "turnNumber": 4,
+          "activePlayer": 1
+        },
+        "annotations": []
+      }
+    },
+    {
+      "_timestamp": null,
+      "type": "GREMessageType_GameStateMessage",
+      "systemSeatIds": [
+        1
+      ],
+      "msgId": 10,
+      "gameStateId": 10,
+      "gameStateMessage": {
+        "type": "GameStateType_Diff",
+        "gameStateId": 10,
+        "prevGameStateId": 9,
+        "turnInfo": {
+          "step": "Step_Draw"
+        },
+        "zones": [
+          {
+            "zoneId": 33,
+            "type": "ZoneType_Library",
+            "ownerSeatId": 1,
+            "objectInstanceIds": [
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123,
+              124,
+              125,
+              126,
+              127,
+              128,
+              129,
+              130,
+              131,
+              132,
+              133,
+              134,
+              135,
+              136,
+              137,
+              138,
+              139,
+              140
+            ]
+          },
+          {
+            "zoneId": 31,
+            "type": "ZoneType_Hand",
+            "ownerSeatId": 1,
+            "objectInstanceIds": [
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              308,
+              409
+            ]
+          }
+        ],
+        "gameObjects": [
+          {
+            "instanceId": 409,
+            "grpId": 95191,
+            "type": "GameObjectType_Card",
+            "zoneId": 31,
+            "ownerSeatId": 1,
+            "controllerSeatId": 1,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Plains"
+            ],
+            "visibility": "Visibility_Private",
+            "viewers": [
+              1
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "id": 5,
+            "affectorId": 409,
+            "affectedIds": [
+              109
+            ],
+            "type": [
+              "AnnotationType_ObjectIdChanged"
+            ],
+            "details": [
+              {
+                "key": "orig_id",
+                "type": "KeyValuePairValueType_int32",
+                "valueInt32": [
+                  109
+                ]
+              },
+              {
+                "key": "new_id",
+                "type": "KeyValuePairValueType_int32",
+                "valueInt32": [
+                  409
+                ]
+              }
+            ]
+          }
+        ],
+        "diffDeletedInstanceIds": [
+          109
+        ]
+      }
+    },
+    {
+      "_timestamp": null,
+      "type": "GREMessageType_GameStateMessage",
+      "systemSeatIds": [
+        1,
+        2
+      ],
+      "msgId": 11,
+      "gameStateId": 11,
+      "gameStateMessage": {
+        "type": "GameStateType_Diff",
+        "gameStateId": 11,
+        "prevGameStateId": 10,
+        "turnInfo": {
+          "phase": "Phase_Main1"
+        },
+        "zones": [
+          {
+            "zoneId": 31,
+            "type": "ZoneType_Hand",
+            "ownerSeatId": 1,
+            "objectInstanceIds": [
+              102,
+              104,
+              105,
+              106,
+              107,
+              308,
+              409
+            ]
+          },
+          {
+            "zoneId": 28,
+            "type": "ZoneType_Battlefield",
+            "ownerSeatId": 0,
+            "objectInstanceIds": [
+              301,
+              401,
+              501,
+              503
+            ]
+          }
+        ],
+        "gameObjects": [
+          {
+            "instanceId": 503,
+            "grpId": 95191,
+            "type": "GameObjectType_Card",
+            "zoneId": 28,
+            "ownerSeatId": 1,
+            "controllerSeatId": 1,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Plains"
+            ],
+            "visibility": "Visibility_Public"
+          }
+        ],
+        "annotations": [
+          {
+            "id": 6,
+            "affectorId": 503,
+            "affectedIds": [
+              103
+            ],
+            "type": [
+              "AnnotationType_ObjectIdChanged"
+            ],
+            "details": [
+              {
+                "key": "orig_id",
+                "type": "KeyValuePairValueType_int32",
+                "valueInt32": [
+                  103
+                ]
+              },
+              {
+                "key": "new_id",
+                "type": "KeyValuePairValueType_int32",
+                "valueInt32": [
+                  503
+                ]
+              }
+            ]
+          }
+        ],
+        "diffDeletedInstanceIds": [
+          103
+        ]
+      }
+    },
+    {
+      "_timestamp": null,
+      "type": "GREMessageType_GameStateMessage",
+      "systemSeatIds": [
+        1,
+        2
+      ],
+      "msgId": 12,
+      "gameStateId": 12,
+      "gameStateMessage": {
+        "type": "GameStateType_Diff",
+        "gameStateId": 12,
+        "prevGameStateId": 11,
+        "turnInfo": {
+          "phase": "Phase_Main1",
+          "step": "Step_Upkeep",
+          "turnNumber": 5,
+          "activePlayer": 2
+        },
+        "annotations": []
+      }
+    },
+    {
+      "_timestamp": null,
+      "type": "GREMessageType_GameStateMessage",
+      "systemSeatIds": [
+        1,
+        2
+      ],
+      "msgId": 13,
+      "gameStateId": 13,
+      "gameStateMessage": {
+        "type": "GameStateType_Diff",
+        "gameStateId": 13,
+        "prevGameStateId": 12,
+        "turnInfo": {
+          "phase": "Phase_Main1",
+          "turnNumber": 5,
+          "activePlayer": 2
+        },
+        "zones": [
+          {
+            "zoneId": 32,
+            "type": "ZoneType_Hand",
+            "ownerSeatId": 2,
+            "objectInstanceIds": [
+              204,
+              205,
+              206,
+              207
+            ]
+          },
+          {
+            "zoneId": 28,
+            "type": "ZoneType_Battlefield",
+            "ownerSeatId": 0,
+            "objectInstanceIds": [
+              301,
+              401,
+              501,
+              503,
+              602
+            ]
+          }
+        ],
+        "gameObjects": [
+          {
+            "instanceId": 602,
+            "grpId": 95199,
+            "type": "GameObjectType_Card",
+            "zoneId": 28,
+            "ownerSeatId": 2,
+            "controllerSeatId": 2,
+            "cardTypes": [
+              "CardType_Land"
+            ],
+            "superTypes": [
+              "SuperType_Basic"
+            ],
+            "subtypes": [
+              "SubType_Forest"
+            ],
+            "visibility": "Visibility_Public"
+          }
+        ],
+        "annotations": [
+          {
+            "id": 7,
+            "affectorId": 602,
+            "affectedIds": [
+              202
+            ],
+            "type": [
+              "AnnotationType_ObjectIdChanged"
+            ],
+            "details": [
+              {
+                "key": "orig_id",
+                "type": "KeyValuePairValueType_int32",
+                "valueInt32": [
+                  202
+                ]
+              },
+              {
+                "key": "new_id",
+                "type": "KeyValuePairValueType_int32",
+                "valueInt32": [
+                  602
+                ]
+              }
+            ]
+          }
+        ],
+        "diffDeletedInstanceIds": [
+          202
+        ]
+      }
+    }
+  ]
+}

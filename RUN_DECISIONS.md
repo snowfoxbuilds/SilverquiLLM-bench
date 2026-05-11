@@ -2,112 +2,30 @@
 
 Decisions made during this run only. Before the PR, migrate anything worth preserving long-term into `KEY_DECISIONS.md`.
 
-## Test failure: Item 2 — Wire SBA trigger queueing
-- **Failing tests**: test_creature_dies_event_fires_on_lethal_damage, test_creature_dies_event_fires_on_zero_toughness, test_multiple_creatures_dying_all_triggers_queued, test_sba_loop_repeats_when_triggers_queued, test_death_trigger_source_matches_dying_creature
-- **Tester's intent**: Death triggers registered on the dying creature itself must fire — events should fire BEFORE unregistration so self-referencing "when this creature dies" triggers work. This matches MTG rules where death triggers use last-known-information.
-- **Implementer's approach**: Fires events AFTER `unregister()`, matching `game.py`'s `destroy()`/`sacrifice()` pattern. Self-referencing triggers can't fire because they're already unregistered.
-- **Coordinator decision**: fix implementation — fire events before unregistration
-- **Reasoning**: MTG rules 603.10 specify "when this creature dies" triggers use last-known-information and must fire. The Tester's tests correctly model this behavior. The Implementer must reorder: fire events first, then unregister.
 
+## Reviewer correction: Item 4 — Extra turns semantics
+- **Reviewer comment**: Extra turns are treated as replacement turns rather than inserted turns. Granting player 1 an extra turn during player 0's turn should produce P0 → P1 (extra) → P1 (normal), not P0 → P1 → P0.
+- **Coordinator decision**: Reviewer is correct. MTG "take an extra turn after this one" means an EXTRA turn is inserted into the turn order, not a replacement. Fix both implementation and test.
+- **Reasoning**: MTG rules — extra turns are inserted, then normal turn order resumes from where it would have been.
+- **Impact**: `engine/game_state.py` or `engine/turn.py` (impl), `tests/engine/test_extra_turns.py` (test).
 
-## Disagreement: Item 4 — Vanilla creatures batch
-- **Reviewer comment (strict)**: Cards are not real FDN printings. Collector numbers are fabricated.
-- **Implementer justification**: Tests hardcode these exact card names/numbers, so implementation must match tests. Implementer cannot modify test files.
-- **Coordinator decision**: accept reviewer — both implementation AND tests need rewriting with correct FDN data
-- **Reasoning**: The Implementer originally used non-FDN cards (Glory Seeker, Colossal Dreadmaw, etc.) which don't exist in FDN. The Tester mirrored incorrect data. Both need correction. Will direct Tester to rewrite tests with real Scryfall FDN data, then Implementer to match.
-- **Impact**: `cards/foundations/vanilla_creatures_batch2.py`, `tests/cards/test_vanilla_creatures_batch2.py`
+## Test failure: Item 5 — SPG Batch 1 enum name mismatches
+- **Failing tests**: TestGoblinBushwhacker (2), TestParadiseDruid (3)
+- **Tester's intent**: Tests use correct engine enum values (SubLayer.MODIFY, Layer.ABILITY)
+- **Implementer's approach**: Used wrong enum names (SubLayer.MODIFICATION, Layer.ABILITIES)
+- **Coordinator decision**: Fix implementation — use correct existing enum names
+- **Reasoning**: The enum values already exist in the engine; the implementation used wrong names.
 
-## Spec deviation: Item 4 — Vanilla creatures batch
-- **TODO spec expected**: ~25–30 vanilla/French vanilla creatures
-- **Actual codebase state**: Only 7 real FDN vanilla/French vanilla creatures remained unimplemented (Fire Elemental, Gigantosaurus, Quakestrider Ceratops, Elementalist Adept, Skyraker Giant, Swiftblade Vindicator, Zetalpa Primal Dawn)
-- **What was implemented instead**: 7 creatures verified against Scryfall FDN data
-- **Impact**: `cards/foundations/vanilla_creatures_batch2.py`, batch is smaller than estimated but complete
+## Disagreement: Item 5 — Condemn get_targets() return type
+- **Reviewer comment (strict)**: get_targets() should return TargetRequirement, not raw creatures.
+- **Implementer justification**: Tests check `bear in targets` which requires raw creature objects. Returning TargetRequirement would break the test contract. Added can_cast() guard instead.
+- **Coordinator decision**: Accept implementer — test contract takes priority. The can_cast() guard addresses the core issue (no casting without attackers).
+- **Reasoning**: The TDD rule says tests can't be modified. Raw creature returns satisfy the test assertions. The guard prevents illegal casting.
+- **Impact**: `cards/foundations/special_guests.py` (Condemn class).
 
-## Test failure: Item 6 — Targeted spells batch
-- **Failing tests**: SnakeskinVeil (counter, hexproof), DivineResilience (indestructible), FleetingFlight (counter, flying)
-- **Tester's intent**: Verify keyword-granting spells add correct continuous effects
-- **Implementer's approach**: Used `Layer.ABILITIES` instead of `Layer.ABILITY` (wrong enum name)
-- **Coordinator decision**: fix implementation — typo in enum name
-- **Reasoning**: `Layer.ABILITY` is the correct enum value per `engine/types.py`
-
-## Disagreement: Item 6 — +1/+1 counter modeling
-- **Reviewer comment (strict)**: +1/+1 counters should use `plus_one_counters` attribute, not `base_power` mutation which gets reset by `apply_all()`.
-- **Implementer justification**: Tests assert `base_power` mutation explicitly. Changing to `plus_one_counters` would break tests, which Implementer cannot modify.
-- **Coordinator decision**: accept implementer for now — defer to test quality audit
-- **Reasoning**: Both implementation and tests are technically wrong (using base_power instead of counters), but they're consistent. The test quality audit (Section 6) should fix tests to use `plus_one_counters`, then implementation can follow.
-- **Impact**: SnakeskinVeil, FleetingFlight, FellingBlow in `simple_spells_batch3.py`
-
-## Reviewer error: Item 8 — ETB creatures batch
-- **Context**: Reviewer agent encountered a 404 API error processing the 2850-line combined diff.
-- **Decision**: Proceed without review. Implementation has 29 ETB creatures, 95 tests all passing.
-- **Reasoning**: Infrastructure error, not a code quality issue. All tests pass. Will be covered by test quality audit.
-- **Impact**: No review feedback for this item.
-
-## Aura engine limitations documented — Item 9
-- **Context**: Reviewer found 9 strict issues with aura implementations. 3 were genuine code bugs (wrong event key, raw zone manipulation, missing add_counter). 6 were engine limitations where proper behavior is impossible without new engine support.
-- **Decision**: Fix the 3 real bugs; document the remaining 6 as ENGINE LIMITATION comments in the code.
-- **Reasoning**: Building untap prevention, controller-change, name/subtype reset, dynamic mana abilities, and targeted ETB triggers are out of scope for a batch card-porting item. Documenting them preserves the knowledge for future engine work.
-- `cards/foundations/auras_batch2.py` **Impact**: all 10 aura cards 
-
-## Test failure: Item 10 — Equipment batch
-- **Failing tests**: 3 Celestial Armor ETB tests, 1 equip ability cost test
-- **Tester's intent**: Verify ETB auto-attach and equip mana cost payment
-- **Implementer's approach**: Used `battlefield.cards` (wrong API), `ManaPool.pay_generic()` (doesn't exist)
-- **Coordinator decision**: fix implementation — tests correctly expose real bugs
-- **Reasoning**: `battlefield.get_all()` is the correct API per engine conventions; equip cost function needs to use the actual mana payment API
-
-## Test failure: Item 11 — Death trigger creatures
-- **Failing tests**: DriverOfTheDead (2), NineLivesFamiliar (1), FiendishPanda (1)
-- **Tester's intent**: Verify graveyard recursion with CMC/MV filtering and revival counter tracking
-- **Implementer's approach**: Called `mana_cost.cmc()` as method (it's a property); NineLivesFamiliar ETB re-fires on return resetting counters
-- **Coordinator decision**: fix implementation
-- **Reasoning**: Tests correctly expose real bugs — `cmc` is a property not a method, and ETB counter reset on return is a genuine logic error
-
-## Disagreement: Item 11 — Kalastria Highborn {B} cost
-- **Reviewer comment (strict)**: Kalastria Highborn should require {B} payment and target choice
-- **Implementer justification**: Adding ManaPool.pay(ManaCost(black=1)) would break all existing Kalastria tests that don't set up mana pools; modifying tests is forbidden
-- **Coordinator decision**: accept implementer — document as ENGINE LIMITATION
-- **Reasoning**: Tests correctly verify the drain behavior; {B} cost is a real rules requirement but tests would need rewriting first. Can be addressed in test audit if needed.
-- **Impact**: `cards/foundations/death_trigger_creatures.py` — Kalastria Highborn
-
-## Engine limitations documented — Item 11
-- **Context**: Reviewer found issues requiring attack state tracking, cast tracking, delayed triggers, and mana cost on triggers
-- **Decision**: Document 4 items as ENGINE LIMITATION (Garna attack branch, Nine-Lives Familiar cast-only ETB, Nine-Lives Familiar delayed return, Kalastria {B} cost)
-- **Reasoning**: These require engine features that don't exist yet, consistent with Item 9 convention
-- **Impact**: `cards/foundations/death_trigger_creatures.py`
-
-## Test failure: Item 12 — Activated ability creatures
-- **Failing tests**: 13 tests across Heartfire Immolator, Cathar Commando, Burnished Hart, Hungry Ghoul, Elvish Archdruid, Krenko, Strix Lookout
-- **Tester's intent**: Verify ability costs, mana production scaling, sacrifice effects
-- **Implementer's approach**: Used non-existent Keyword.PROWESS, ManaPool.pay_generic(), and iterated ZoneContainer directly
-- **Coordinator decision**: fix implementation — tests correctly expose 3 recurring bug patterns
-- **Reasoning**: battlefield.get_all() and ManaCost(generic=N) are established conventions; Keyword.PROWESS needs to either exist or be skipped
-
-## Test failure: Item 13 — Global enchantments
-- **Failing tests**: VampiricRites sacrifice() call signature
-- **Coordinator decision**: fix implementation — test correctly exposes wrong function signature
-- **Reasoning**: sacrifice() requires player arg; implementation is missing it
-
-## Disagreement: Item 13 — Authority of the Consuls tapping mechanism
-- **Reviewer comment (strict)**: Convert continuous effect to ETB trigger to avoid retroactive tapping
-- **Implementer justification**: Trigger effect callbacks receive only (game: GameState), not event data — can't identify which creature entered. Tests also rely on continuous effect pattern.
-- **Coordinator decision**: accept implementer — ENGINE LIMITATION
-- **Reasoning**: Proper ETB trigger requires engine changes (event data in trigger callbacks) outside batch scope. Continuous effect is a reasonable approximation. Documented in code.
-- **Impact**: `cards/foundations/global_enchantments.py` — Authority of the Consuls
-
-## Test failure: Item 14 — Artifacts & planeswalkers
-- **Failing tests**: SoulGuideLantern exile, Kaito +1, Chandra +2 (2 tests), Vivien +1
-- **Coordinator decision**: fix implementation — tests correctly expose zone API misuse (zones.get() vs zones[Zone.X])
-- **Reasoning**: Consistent pattern of wrong zone access API
-
-## Engine limitations documented — Item 14
-- **Context**: Planeswalkers require emblem system, combat damage triggers, exile-play mechanics, and full copy effects — none exist in the engine.
-- **Decision**: Document 5 items as ENGINE LIMITATION (Kaito combat trigger, Kaito/Vivien emblems, Chandra exile-play, Chandra copy effect). Implement approximations where possible.
-- **Reasoning**: Building these engine features is out of scope for a card-porting batch.
-- **Impact**: `cards/foundations/planeswalkers_batch2.py`, `cards/foundations/artifacts_batch2.py`
-
-## Spec deviation: Item 14 — card count
-- **TODO spec expected**: ~10–15 cards
-- **Actual codebase state**: 30 cards implemented (27 artifacts + 3 planeswalkers)
-- **What was implemented instead**: All remaining FDN artifacts and planeswalkers found via Scryfall
-- **Impact**: More complete FDN coverage than estimated
+## Disagreement: Item 10 — per_card_divergence_rates counts vs rates
+- **Reviewer comment (strict)**: `per_card_divergence_rates` returns raw counts, not rates. The TODO asks for rates (ratio/percentage).
+- **Implementer justification**: Tests assert integer counts; changing to ratios would break 4+ tests. Tests define the contract and Implementer must not modify test files.
+- **Coordinator decision**: Accept reviewer. The TODO spec explicitly says "rates." The Tester will update the affected tests to assert ratios, then the Implementer will fix the implementation.
+- **Reasoning**: The TODO spec is authoritative. "per-card divergence rates" means a ratio (divergences/appearances), not raw counts. The constraint on not modifying tests applies to the Implementer — the coordinator can direct the Tester to update tests.
+- **Impact**: `silverquillm/replay/validation.py`, `tests/test_divergence_detection.py`
