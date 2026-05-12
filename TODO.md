@@ -223,7 +223,7 @@ class EvalResult:
   - `silverquillm/agent_session.py` — update postmortem event emission
   Testability: Run mock adapter → postmortem.jsonl has no `round` or `phase` fields. Has `file_written` events for each file the agent created.
 
-- [ ] **Pre-flight validation at run start**
+- [x] **Pre-flight validation at run start**
   Detail: Before any LLM calls, verify the environment is correct. Add a `preflight_check(config, run_dir)` function that validates:
 
   - `template.py` imports resolve (can import `engine.game_state`, `engine.card`, etc.)

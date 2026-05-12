@@ -30,6 +30,7 @@ from silverquillm.config import BenchmarkConfig, load_config
 from silverquillm.aggregator import aggregate_run, save_run_summary_v2
 from silverquillm.evaluator import run_self_eval_flat
 from silverquillm.post_eval import run_post_eval
+from silverquillm.preflight import PreflightError, preflight_check
 from silverquillm.evaluator import EvalResultV2
 from silverquillm.results import init_results_dir, save_aggregates, save_card_result, save_card_result_v2, save_run_summary
 from silverquillm.scorer import compute_scores, generate_leaderboard
@@ -170,6 +171,14 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
 
     # --- Orchestration loop ---
     run_dir = init_results_dir(cfg)
+
+    # Pre-flight validation before any LLM calls
+    try:
+        from silverquillm.preflight import preflight_check, PreflightError
+        preflight_check(cfg, Path(run_dir))
+    except PreflightError as exc:
+        raise click.ClickException(str(exc))
+
     total = len(specs)
     failures: list[tuple[str, Exception]] = []
     completed_cards: list[CompletedCard] = []

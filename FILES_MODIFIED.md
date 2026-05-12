@@ -68,3 +68,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `silverquillm/agent_session.py` — Added _append_file_written, _append_eval_result, _append_regression_check event helpers; removed phase/round from append_raw_log; wired _append_file_written into harvest_results()
 - `silverquillm/post_eval.py` — Wired _append_eval_result into self-eval and audited-eval paths in run_post_eval()
 - `silverquillm/cli.py` — Wired _append_regression_check into regression loop after run_regressions()
+
+## Item 15: Pre-flight validation at run start
+
+### Tests
+- `tests/test_preflight.py` — 18 tests for preflight validation (card_specs_dir, config, workspace, template imports, test_utils, happy path, error aggregation)
+
+### Implementation
+- `silverquillm/preflight.py` — New module with `preflight_check()`, `PreflightError`, and individual check functions for imports, workspace, .workspace/ dir, engine test suite, config, and card_specs_dir; revised: added `_check_engine_tests()` subprocess pytest, `_check_workspace_dir()` for .workspace/, enhanced `_check_test_utils_import()` with actual import verification
+- `silverquillm/cli.py` — Import and call `preflight_check()` before card loop in `run()` command
