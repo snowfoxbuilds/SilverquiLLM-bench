@@ -25,6 +25,9 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# Repo root — resolved once at import time
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
 __all__ = [
     "EvalResult",
     "run_tests",
@@ -131,12 +134,17 @@ def run_tests(
         # Copy impl as card_impl.py so tests can import it
         shutil.copy2(impl_path, tmp / "card_impl.py")
 
-        # Prepend the temp dir to PYTHONPATH so ``from card_impl import …``
-        # resolves to the swapped implementation, while pytest runs on the
-        # original tests_path preserving its directory context.
+        # Also copy test_utils.py so agent tests that import it directly work
+        test_utils_src = _REPO_ROOT / "tests" / "test_utils.py"
+        if test_utils_src.exists():
+            shutil.copy2(test_utils_src, tmp / "test_utils.py")
+
+        # Prepend the temp dir and repo root to PYTHONPATH so:
+        # 1) ``from card_impl import …`` resolves to the swapped implementation
+        # 2) ``from engine.game import …`` and similar resolve from the repo
         env = dict(__import__("os").environ)
         existing = env.get("PYTHONPATH", "")
-        env["PYTHONPATH"] = str(tmp) + (":" + existing if existing else "")
+        env["PYTHONPATH"] = str(tmp) + ":" + str(_REPO_ROOT) + (":" + existing if existing else "")
 
         # Run pytest against the *original* tests_path
         cmd = [
@@ -459,7 +467,7 @@ def run_audited_eval_per_card(
         # Run pytest on the copied tests.py in the temp directory
         env = dict(__import__("os").environ)
         existing = env.get("PYTHONPATH", "")
-        env["PYTHONPATH"] = str(tmp) + (":" + existing if existing else "")
+        env["PYTHONPATH"] = str(tmp) + ":" + str(_REPO_ROOT) + (":" + existing if existing else "")
 
         cmd = [
             sys.executable,
