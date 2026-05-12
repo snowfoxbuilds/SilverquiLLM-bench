@@ -29,3 +29,9 @@ tests/test_strategies.py — 29 tests for mode field, CardStrategy ABC, CardRunR
 - `silverquillm/strategies.py` — Implemented `BlindStrategy.run_card()` with prompt dispatch, timeout handling, and card_impl.py existence check
 - `silverquillm/prompts.py` — Added `blind_mode_prompt()` and `_BLIND_MODE_TEMPLATE` that omits test_utils from workspace listing
 
+## Item 3: Implement ImplTestStrategy
+
+### Implementation
+- `silverquillm/strategies.py` — Implemented `ImplTestStrategy.run_card()` with single prompt dispatch, timeout handling, and card_impl.py/tests.py detection
+- `silverquillm/prompts.py` — Added `impl_test_mode_prompt()` and `_IMPL_TEST_MODE_TEMPLATE` combining impl + test instructions with test_utils references
+

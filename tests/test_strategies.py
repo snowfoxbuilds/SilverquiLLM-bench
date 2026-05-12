@@ -399,3 +399,203 @@ class TestBlindStrategyRunCard:
         adapter = _MockAdapter(write_impl=True)
         result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
         assert isinstance(result, CardRunResult)
+
+
+# =========================================================================
+# ImplTestStrategy.run_card (TODO item 3)
+# =========================================================================
+
+
+class _ImplTestMockAdapter:
+    """Mock adapter for ImplTestStrategy tests.
+
+    Can write card_impl.py, tests.py, or neither based on flags.
+    """
+
+    def __init__(
+        self,
+        *,
+        write_impl: bool = False,
+        write_tests: bool = False,
+        raise_timeout: bool = False,
+    ) -> None:
+        self._write_impl = write_impl
+        self._write_tests = write_tests
+        self._raise_timeout = raise_timeout
+        self.calls: list[tuple[str, Path]] = []
+
+    def run(self, prompt: str, workspace: Path) -> str:
+        self.calls.append((prompt, workspace))
+        if self._raise_timeout:
+            raise TimeoutError("adapter timed out")
+        if self._write_impl:
+            (workspace / "card_impl.py").write_text("# impl\n")
+        if self._write_tests:
+            (workspace / "tests.py").write_text("# tests\n")
+        return "done"
+
+
+class TestImplTestStrategyRunCard:
+    """Tests for ImplTestStrategy.run_card() — the core of impl_test-mode execution."""
+
+    def test_completed_when_both_files_written(self, tmp_path: Path) -> None:
+        """When adapter writes both card_impl.py and tests.py, status → completed."""
+        strategy = ImplTestStrategy()
+        adapter = _ImplTestMockAdapter(write_impl=True, write_tests=True)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert result.status == CardRunStatus.completed
+
+    def test_completed_when_only_card_impl_written(self, tmp_path: Path) -> None:
+        """When adapter writes only card_impl.py (no tests), status → completed (partial ok)."""
+        strategy = ImplTestStrategy()
+        adapter = _ImplTestMockAdapter(write_impl=True, write_tests=False)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert result.status == CardRunStatus.completed
+
+    def test_no_output_when_nothing_written(self, tmp_path: Path) -> None:
+        """When adapter writes nothing, status → no_output."""
+        strategy = ImplTestStrategy()
+        adapter = _ImplTestMockAdapter(write_impl=False, write_tests=False)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert result.status == CardRunStatus.no_output
+
+    def test_no_output_when_only_tests_written(self, tmp_path: Path) -> None:
+        """If only tests.py is written but no card_impl.py, status → no_output."""
+        strategy = ImplTestStrategy()
+        adapter = _ImplTestMockAdapter(write_impl=False, write_tests=True)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert result.status == CardRunStatus.no_output
+
+    def test_timeout_status_on_timeout_error(self, tmp_path: Path) -> None:
+        """When adapter times out, status → timeout."""
+        strategy = ImplTestStrategy()
+        adapter = _ImplTestMockAdapter(raise_timeout=True)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert result.status == CardRunStatus.timeout
+
+    def test_timeout_with_both_files_present(self, tmp_path: Path) -> None:
+        """If timeout occurs but both files exist (partial work), files_written has both."""
+        strategy = ImplTestStrategy()
+        (tmp_path / "card_impl.py").write_text("# partial impl\n")
+        (tmp_path / "tests.py").write_text("# partial tests\n")
+        adapter = _ImplTestMockAdapter(raise_timeout=True)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert result.status == CardRunStatus.timeout
+        written_names = {p.name for p in result.files_written}
+        assert "card_impl.py" in written_names
+        assert "tests.py" in written_names
+
+    def test_timeout_with_only_card_impl_present(self, tmp_path: Path) -> None:
+        """If timeout but only card_impl.py exists, files_written has only that."""
+        strategy = ImplTestStrategy()
+        (tmp_path / "card_impl.py").write_text("# partial\n")
+        adapter = _ImplTestMockAdapter(raise_timeout=True)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert result.status == CardRunStatus.timeout
+        written_names = {p.name for p in result.files_written}
+        assert "card_impl.py" in written_names
+        assert "tests.py" not in written_names
+
+    def test_files_written_both_when_both_exist(self, tmp_path: Path) -> None:
+        """When both files written on success, files_written lists both."""
+        strategy = ImplTestStrategy()
+        adapter = _ImplTestMockAdapter(write_impl=True, write_tests=True)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        written_names = {p.name for p in result.files_written}
+        assert "card_impl.py" in written_names
+        assert "tests.py" in written_names
+
+    def test_files_written_only_impl_when_no_tests(self, tmp_path: Path) -> None:
+        """When only card_impl.py written, files_written has just that file."""
+        strategy = ImplTestStrategy()
+        adapter = _ImplTestMockAdapter(write_impl=True, write_tests=False)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        written_names = {p.name for p in result.files_written}
+        assert "card_impl.py" in written_names
+        assert "tests.py" not in written_names
+
+    def test_files_written_empty_on_no_output(self, tmp_path: Path) -> None:
+        """On no_output, files_written should be empty."""
+        strategy = ImplTestStrategy()
+        adapter = _ImplTestMockAdapter(write_impl=False, write_tests=False)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert result.files_written == []
+
+    def test_adapter_called_exactly_once(self, tmp_path: Path) -> None:
+        """Impl_test mode sends exactly one prompt — agent self-manages iteration."""
+        strategy = ImplTestStrategy()
+        adapter = _ImplTestMockAdapter(write_impl=True, write_tests=True)
+        strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert len(adapter.calls) == 1
+
+    def test_prompt_contains_card_name(self, tmp_path: Path) -> None:
+        """The prompt sent to the adapter should contain the card name."""
+        strategy = ImplTestStrategy()
+        adapter = _ImplTestMockAdapter(write_impl=True)
+        strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        prompt, _ = adapter.calls[0]
+        assert "Lightning Bolt" in prompt
+
+    def test_prompt_references_card_impl_py(self, tmp_path: Path) -> None:
+        """The prompt must instruct agent to write to card_impl.py."""
+        strategy = ImplTestStrategy()
+        adapter = _ImplTestMockAdapter(write_impl=True)
+        strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        prompt, _ = adapter.calls[0]
+        assert "card_impl.py" in prompt
+
+    def test_prompt_references_tests_py(self, tmp_path: Path) -> None:
+        """The prompt must instruct agent to write to tests.py."""
+        strategy = ImplTestStrategy()
+        adapter = _ImplTestMockAdapter(write_impl=True)
+        strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        prompt, _ = adapter.calls[0]
+        assert "tests.py" in prompt
+
+    def test_prompt_mentions_test_utils(self, tmp_path: Path) -> None:
+        """Impl_test prompt must reference test_utils for agent's use."""
+        strategy = ImplTestStrategy()
+        adapter = _ImplTestMockAdapter(write_impl=True)
+        strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        prompt, _ = adapter.calls[0]
+        assert "test_utils" in prompt
+
+    def test_prompt_mentions_test_utils_md(self, tmp_path: Path) -> None:
+        """Impl_test prompt must reference test_utils.md documentation."""
+        strategy = ImplTestStrategy()
+        adapter = _ImplTestMockAdapter(write_impl=True)
+        strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        prompt, _ = adapter.calls[0]
+        assert "test_utils.md" in prompt
+
+    def test_prompt_encourages_self_iteration(self, tmp_path: Path) -> None:
+        """Impl_test prompt must tell agent it can run tests itself to iterate."""
+        strategy = ImplTestStrategy()
+        adapter = _ImplTestMockAdapter(write_impl=True)
+        strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        prompt, _ = adapter.calls[0]
+        assert "run tests" in prompt.lower() or "iterate" in prompt.lower()
+
+    def test_prompt_does_not_mention_max_test_rounds(self, tmp_path: Path) -> None:
+        """Impl_test prompt must not reference max_test_rounds or multi-round harness feedback."""
+        strategy = ImplTestStrategy()
+        adapter = _ImplTestMockAdapter(write_impl=True)
+        strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        prompt, _ = adapter.calls[0]
+        assert "max_test_rounds" not in prompt
+        assert "max_rounds" not in prompt
+
+    def test_runtime_ms_is_non_negative(self, tmp_path: Path) -> None:
+        """runtime_ms should be a non-negative integer."""
+        strategy = ImplTestStrategy()
+        adapter = _ImplTestMockAdapter(write_impl=True, write_tests=True)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert isinstance(result.runtime_ms, int)
+        assert result.runtime_ms >= 0
+
+    def test_result_is_card_run_result(self, tmp_path: Path) -> None:
+        """run_card must return a CardRunResult instance."""
+        strategy = ImplTestStrategy()
+        adapter = _ImplTestMockAdapter(write_impl=True)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert isinstance(result, CardRunResult)

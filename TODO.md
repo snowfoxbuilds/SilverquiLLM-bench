@@ -52,7 +52,7 @@ Reference files in current codebase:
   - `silverquillm/prompts.py` — add `blind_mode_prompt()` that references `card_impl.py` and omits test-related instructions
   Testability: Unit test with a mock adapter that writes `card_impl.py` → strategy returns `completed`. Mock adapter that writes nothing → `no_output`.
 
-- [ ] **Implement ****`ImplTestStrategy`**
+- [x] **Implement ****`ImplTestStrategy`**
   Detail: In `silverquillm/strategies.py`, implement `ImplTestStrategy(CardStrategy)`. This strategy:
 
   1. Sends a single prompt: "Implement this card and write tests. Write implementation to `card_impl.py`, tests to `tests.py`. You can run tests yourself to iterate."

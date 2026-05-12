@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:  # pragma: no cover
     from silverquillm.adapters.base import AgentAdapter
 
-from silverquillm.prompts import blind_mode_prompt
+from silverquillm.prompts import blind_mode_prompt, impl_test_mode_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -121,11 +121,12 @@ class BlindStrategy(CardStrategy):
         prompt = blind_mode_prompt(card_spec)
         impl_path = workspace / "card_impl.py"
 
+        pool = ThreadPoolExecutor(max_workers=1)
+        future = pool.submit(adapter.run, prompt, workspace)
         try:
-            with ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(adapter.run, prompt, workspace)
-                future.result(timeout=timeout)
+            future.result(timeout=timeout)
         except (TimeoutError, FuturesTimeoutError, subprocess.TimeoutExpired):
+            pool.shutdown(wait=False, cancel_futures=True)
             elapsed_ms = int((time.monotonic() - start) * 1000)
             files = [impl_path] if impl_path.exists() else []
             return CardRunResult(
@@ -133,6 +134,8 @@ class BlindStrategy(CardStrategy):
                 files_written=files,
                 runtime_ms=elapsed_ms,
             )
+        else:
+            pool.shutdown(wait=False)
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
 
@@ -151,7 +154,13 @@ class BlindStrategy(CardStrategy):
 
 
 class ImplTestStrategy(CardStrategy):
-    """Strategy for *impl_test* mode — iterative implement-then-test loop."""
+    """Strategy for *impl_test* mode — single prompt, agent self-manages iteration.
+
+    Sends one prompt that instructs the agent to implement the card **and**
+    write tests, iterating on its own until satisfied (or timeout).  After
+    the adapter returns (or times out), the strategy checks the workspace
+    for ``card_impl.py`` and optionally ``tests.py``.
+    """
 
     def run_card(
         self,
@@ -160,7 +169,56 @@ class ImplTestStrategy(CardStrategy):
         adapter: Any,
         timeout: int,
     ) -> CardRunResult:
-        raise NotImplementedError("ImplTestStrategy.run_card is not yet implemented")
+        """Execute a card in impl_test mode.
+
+        Sends a single combined implement+test prompt and lets the agent
+        self-manage its iteration loop.  Returns
+        :attr:`CardRunStatus.completed` when at least ``card_impl.py``
+        exists, :attr:`CardRunStatus.no_output` when it does not, or
+        :attr:`CardRunStatus.timeout` on timeout.
+        """
+        start = time.monotonic()
+        prompt = impl_test_mode_prompt(card_spec)
+        impl_path = workspace / "card_impl.py"
+        tests_path = workspace / "tests.py"
+
+        pool = ThreadPoolExecutor(max_workers=1)
+        future = pool.submit(adapter.run, prompt, workspace)
+        try:
+            future.result(timeout=timeout)
+        except (TimeoutError, FuturesTimeoutError, subprocess.TimeoutExpired):
+            pool.shutdown(wait=False, cancel_futures=True)
+            elapsed_ms = int((time.monotonic() - start) * 1000)
+            files: list[Path] = []
+            if impl_path.exists():
+                files.append(impl_path)
+            if tests_path.exists():
+                files.append(tests_path)
+            return CardRunResult(
+                status=CardRunStatus.timeout,
+                files_written=files,
+                runtime_ms=elapsed_ms,
+            )
+        else:
+            pool.shutdown(wait=False)
+
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+
+        if impl_path.exists():
+            files = [impl_path]
+            if tests_path.exists():
+                files.append(tests_path)
+            return CardRunResult(
+                status=CardRunStatus.completed,
+                files_written=files,
+                runtime_ms=elapsed_ms,
+            )
+
+        return CardRunResult(
+            status=CardRunStatus.no_output,
+            files_written=[],
+            runtime_ms=elapsed_ms,
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -91,6 +91,86 @@ def blind_implementation_prompt(card_spec: dict) -> str:
     )
 
 
+# ---------------------------------------------------------------------------
+# Impl+test mode prompt (agent self-manages iteration)
+# ---------------------------------------------------------------------------
+
+_IMPL_TEST_MODE_TEMPLATE = """\
+You are implementing a Magic: The Gathering card for the SilverquiLLM-bench game engine.
+
+Card: {card_name}
+Mana Cost: {mana_cost}
+Type: {type_line}
+Rules Text: {oracle_text}
+
+Your workspace is the .workspace/ directory at the repo root.
+ALL files you need are in .workspace/ — do NOT look for them elsewhere.
+
+Implement this card and write tests. Write implementation to `card_impl.py`, \
+tests to `tests.py`. You can run tests yourself to iterate.
+
+You have access to (all in .workspace/):
+- .workspace/template.py (starter implementation skeleton — fill in this class)
+- .workspace/card_spec.json (full card specification)
+- .workspace/engine_api.md (game engine API reference)
+- .workspace/engine/ (game engine source — you may extend if needed)
+- .workspace/base_classes.py (card base classes)
+- .workspace/rules_overview.md (MTG rules reference)
+- .workspace/foundations/ (browse working card implementations as reference)
+- .workspace/test_utils.py (test utility helpers)
+- .workspace/test_utils.md (test utilities API documentation)
+
+Implement this card by completing the class in .workspace/template.py.
+Write your implementation to `.workspace/card_impl.py`.
+Write your tests to `.workspace/tests.py`.
+
+For tests:
+- You MUST use the test_utils helpers (create_game, set_board_state, cast_spell, etc.)
+  See .workspace/test_utils.md for the full API.
+- Maximum 30 tests per card. Focus on quality over quantity.
+- Tests must import from card_impl (e.g. `from card_impl import {class_name}`)
+
+Test for:
+- Basic functionality (correct stats, mana cost, card types)
+- Core abilities working correctly
+- Edge cases (no valid targets, empty board, etc.)
+- Interaction with game rules (stack, priority, state-based actions)
+
+You may also modify .workspace/engine/ files if needed — but all previous cards' tests \
+will be re-run, so engine changes must not break existing functionality.
+Run your tests and iterate until they pass. Do not stop until your tests are green."""
+
+
+def impl_test_mode_prompt(card_spec: dict) -> str:
+    """Build the impl_test-mode prompt from *card_spec*.
+
+    This prompt combines implementation and test-writing instructions into a
+    single prompt.  The agent is expected to self-manage its iteration loop
+    (no ``max_test_rounds``).
+
+    Parameters
+    ----------
+    card_spec:
+        Card specification dictionary.  Must contain at least ``name``,
+        ``mana_cost``, ``type_line``, and ``oracle_text``.
+
+    Returns
+    -------
+    str
+        Fully-substituted prompt.
+    """
+    class_name = card_name_to_class_name(card_spec["name"])
+    return _IMPL_TEST_MODE_TEMPLATE.format_map(
+        {
+            "card_name": card_spec["name"],
+            "mana_cost": card_spec["mana_cost"],
+            "type_line": card_spec["type_line"],
+            "oracle_text": card_spec["oracle_text"],
+            "class_name": class_name,
+        }
+    )
+
+
 def blind_mode_prompt(card_spec: dict) -> str:
     """Build the blind-mode prompt from *card_spec*.
 

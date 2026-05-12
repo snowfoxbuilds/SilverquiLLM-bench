@@ -22,3 +22,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Reasoning**: This keeps the strategy API independent of specific adapter implementations while satisfying the item requirement for a hard status transition.
 - **Alternatives considered**: Rely solely on adapter-level timeout handling; rejected because the strategy's `timeout` parameter would remain unenforced.
 - **Impact**: `silverquillm/strategies.py`.
+
+## Item 3 — Strategy timeout shutdown behavior
+- **Context**: The first shared timeout implementation used a `ThreadPoolExecutor` context manager, which would block on `shutdown(wait=True)` after `future.result(timeout=...)` raised.
+- **Decision**: Manage the executor explicitly and call `shutdown(wait=False, cancel_futures=True)` on timeout so `run_card()` returns `CardRunStatus.timeout` promptly for both blind and impl-test strategies.
+- **Reasoning**: The strategy status must reflect the supplied timeout even if a synchronous adapter keeps running internally.
+- **Alternatives considered**: Keep the context-manager pattern; rejected because it can hang past the requested timeout.
+- **Impact**: `silverquillm/strategies.py`.
