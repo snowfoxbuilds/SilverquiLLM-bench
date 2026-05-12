@@ -25,3 +25,9 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Decision**: Derived timestamp from latest result.json mtime, handled both int/dict token shapes, normalized "ok"/"success" → "completed".
 - **Reasoning**: Aggregation must be a pure function for `benchmark aggregate` re-runs; backward compat with existing run artifacts is required.
 - **Impact**: silverquillm/aggregator.py, tests/test_aggregator.py.
+
+## Item 11 — Reviewer caught incomplete allowlist scope
+- **Context**: Initial implementation still only snapshotted _PROTECTED_DIRS, leaving writes to scripts/, data/, repo root undetected.
+- **Decision**: Expanded snapshot to walk entire repo tree for true allowlist semantics. Fixed flaky mtime test by using explicit os.utime() bumps.
+- **Reasoning**: Allowlist means "deny by default" — must snapshot everything to detect any unauthorized change.
+- **Impact**: silverquillm/agent_session.py, tests/test_allowlist_contamination.py.

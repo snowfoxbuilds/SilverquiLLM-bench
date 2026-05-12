@@ -40,3 +40,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `silverquillm/aggregator.py` — New module with RunSummary dataclass, aggregate_run() pure function, save_run_summary_v2(); revised: deterministic timestamp from result.json mtime, integer token handling, legacy status normalization
 - `silverquillm/cli.py` — Imported aggregator, call aggregate_run after post-eval in run command, added `benchmark aggregate` subcommand
+
+## Item 11: Allowlist-based contamination checker
+
+### Tests
+- `tests/test_allowlist_contamination.py` — 23 tests for allowlist-based contamination detection
+
+### Implementation
+- `silverquillm/agent_session.py` — Rewrote `_snapshot_all_protected()` to walk entire repo tree (not just `_PROTECTED_DIRS`); `_check_violations()` uses allowlist via `_is_allowed_path()` helper with `_ALLOWED_DIRS` (engine/) and `_IGNORED_SUFFIXES` (.pyc/.pyo/.log)

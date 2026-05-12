@@ -178,7 +178,7 @@ class EvalResult:
   - `silverquillm/cli.py` — call aggregator at end of run, add `benchmark aggregate` subcommand
   Testability: Unit test: create mock `result.json` files → `aggregate_run()` produces correct summary. Test idempotency: running twice on same dir produces identical output.
 
-- [ ] **Allowlist-based contamination checker**
+- [x] **Allowlist-based contamination checker**
   Detail: Replace the current fragile blocklist approach in `agent_session.py`'s `_check_violations()` with an allowlist. The agent may only create/modify files within its workspace directory. Only flag modifications to explicitly protected files (card specs of other cards, audited tests, other agents' implementations). This eliminates the entire class of false-positive violations from `__pycache__`, log files, `.pyc` files, etc.
 
   Current `_check_violations()` maintains a `_PROTECTED_DIRS` set and checks if ANY file outside the workspace was modified. Replace with:

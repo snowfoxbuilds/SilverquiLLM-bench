@@ -64,6 +64,13 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 # Directories that agents must never modify
 _PROTECTED_DIRS: tuple[str, ...] = ("cards", "tests", "silverquillm", "benchmarks", "docs")
 
+# Directories outside the workspace where agent modifications are explicitly
+# allowed (e.g. agents may extend the engine).
+_ALLOWED_DIRS: tuple[str, ...] = ("engine",)
+
+# File suffixes that are never agent contamination (auto-generated artifacts).
+_IGNORED_SUFFIXES: tuple[str, ...] = (".pyc", ".pyo", ".log")
+
 
 # ---------------------------------------------------------------------------
 # Result dataclasses
@@ -821,22 +828,54 @@ def _snapshot_mtimes(root: Path) -> dict[Path, float]:
 
 
 def _snapshot_all_protected(repo_root: Path) -> dict[Path, float]:
-    """Snapshot mtimes for all protected directories that exist under *repo_root*."""
-    merged: dict[Path, float] = {}
-    for dirname in _PROTECTED_DIRS:
-        dirpath = repo_root / dirname
-        if dirpath.is_dir():
-            merged.update(_snapshot_mtimes(dirpath))
-    return merged
+    """Snapshot mtimes for the entire repo tree under *repo_root*.
+
+    Uses allowlist semantics: the full repo tree is captured so that any
+    modification outside the workspace / allowed directories is detectable.
+    """
+    return _snapshot_mtimes(repo_root)
+
+
+def _is_allowed_path(path: Path, workspace_resolved: Path, output_resolved: Path | None, allowed_resolved: list[Path]) -> bool:
+    """Return *True* if *path* is in an allowed location (workspace, output dir, or an allowed dir).
+
+    Allowlist approach: changes are permitted inside the agent workspace,
+    inside the runner output directory, inside explicitly allowed directories
+    (e.g. ``engine/``), and for auto-generated artefacts (``__pycache__``,
+    ``.pyc``, ``.pyo``, ``.log``).
+    """
+    # Auto-generated artefacts — never contamination
+    if "__pycache__" in path.parts:
+        return True
+    if path.suffix in _IGNORED_SUFFIXES:
+        return True
+    try:
+        resolved = path.resolve()
+        # Workspace changes are always expected
+        if resolved.is_relative_to(workspace_resolved):
+            return True
+        # Runner output directory (logs, results) is expected
+        if output_resolved and resolved.is_relative_to(output_resolved):
+            return True
+        # Explicitly allowed directories (e.g. engine/)
+        for allowed_dir in allowed_resolved:
+            if resolved.is_relative_to(allowed_dir):
+                return True
+    except (OSError, ValueError):
+        pass
+    return False
 
 
 def _check_violations(workspace: Path, before: dict[Path, float] | None = None, output_dir: Path | None = None) -> list[str]:
-    """Return list of violation descriptions for files outside *workspace* that changed.
+    """Return list of violation descriptions for files outside allowed locations.
+
+    Uses an **allowlist** approach: changes inside the workspace, the output
+    directory, ``engine/``, and auto-generated artefacts (``.pyc``, logs,
+    ``__pycache__``) are permitted.  Everything else in the protected
+    directories is a violation.
 
     Compares current mtimes against the *before* snapshot.  If no snapshot is
     provided, the check cannot detect violations and returns an empty list.
-    Files under *output_dir* are excluded — the runner itself writes legitimate
-    log files there and those are not agent contamination.
     """
     if before is None:
         return []
@@ -844,18 +883,14 @@ def _check_violations(workspace: Path, before: dict[Path, float] | None = None, 
     violations: list[str] = []
     workspace_resolved = workspace.resolve()
     output_resolved = output_dir.resolve() if output_dir else None
+    allowed_resolved = [
+        (_REPO_ROOT / d).resolve() for d in _ALLOWED_DIRS
+        if (_REPO_ROOT / d).is_dir()
+    ]
+
     for path, mtime in after.items():
-        # Skip __pycache__ — Python auto-generates these on import
-        if "__pycache__" in path.parts:
+        if _is_allowed_path(path, workspace_resolved, output_resolved, allowed_resolved):
             continue
-        # Files inside the workspace are expected to change
-        try:
-            if path.resolve().is_relative_to(workspace_resolved):
-                continue
-            if output_resolved and path.resolve().is_relative_to(output_resolved):
-                continue
-        except (OSError, ValueError):
-            pass
         prior = before.get(path)
         if prior is None:
             # Newly created file
@@ -871,16 +906,8 @@ def _check_violations(workspace: Path, before: dict[Path, float] | None = None, 
     for path in before:
         if path in after:
             continue
-        # Skip __pycache__ — Python auto-generates these on import
-        if "__pycache__" in path.parts:
+        if _is_allowed_path(path, workspace_resolved, output_resolved, allowed_resolved):
             continue
-        try:
-            if path.resolve().is_relative_to(workspace_resolved):
-                continue
-            if output_resolved and path.resolve().is_relative_to(output_resolved):
-                continue
-        except (OSError, ValueError):
-            pass
         desc = f"{path} was deleted"
         logger.warning("Contamination violation: %s", desc)
         violations.append(desc)
