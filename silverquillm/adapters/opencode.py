@@ -65,7 +65,7 @@ class OpenCodeAdapter(AgentAdapter):
             "temperature": self.config.temperature,
             "max_context": self.config.max_context,
             "working_directory": str(workspace),
-            "repo_root": str(workspace),
+            "repo_root": str(_REPO_ROOT),
             "engine_path": str(workspace / "engine"),
             "permissions": {
                 "deny_web_fetch": deny_web,

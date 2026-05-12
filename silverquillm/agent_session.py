@@ -23,7 +23,6 @@ import os
 import re
 import shutil
 import subprocess
-import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -190,7 +189,22 @@ class AgentSession:
         Path
             The workspace directory path.
         """
-        workspace = Path(tempfile.mkdtemp(prefix="bench_agent_"))
+        workspace = _REPO_ROOT / ".workspace"
+        # Clean slate for each card — remove any leftover from a previous run
+        if workspace.exists():
+            for root, dirs, files in os.walk(workspace):
+                for dname in dirs:
+                    try:
+                        (Path(root) / dname).chmod(0o755)
+                    except OSError:
+                        pass
+                for fname in files:
+                    try:
+                        (Path(root) / fname).chmod(0o644)
+                    except OSError:
+                        pass
+            shutil.rmtree(workspace)
+        workspace.mkdir(parents=True)
         self._workspace = workspace
 
         repo_root = _REPO_ROOT
@@ -742,6 +756,23 @@ class AgentSession:
             text=True,
             timeout=60,
         )
+
+    # ------------------------------------------------------------------
+    # Result harvesting
+    # ------------------------------------------------------------------
+
+    def harvest_results(self, card_results_dir: Path) -> None:
+        """Copy agent-produced files from workspace to the card results directory.
+
+        Must be called BEFORE cleanup() destroys the workspace.
+        """
+        if not self._workspace or not self._workspace.exists():
+            return
+        card_results_dir.mkdir(parents=True, exist_ok=True)
+        for filename in ("blind_impl.py", "tested_impl.py", "tests.py", "card_impl.py"):
+            src = self._workspace / filename
+            if src.exists():
+                shutil.copy2(src, card_results_dir / filename)
 
     # ------------------------------------------------------------------
     # Cleanup

@@ -1,4 +1,5 @@
 .env
+.workspace/
 __pycache__/
 *.egg-info/
 .ruff_cache/

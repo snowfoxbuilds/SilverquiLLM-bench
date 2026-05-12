@@ -18,22 +18,24 @@ Mana Cost: {mana_cost}
 Type: {type_line}
 Rules Text: {oracle_text}
 
-All resources are in your current working directory. Do NOT look for files outside it.
+Your workspace is the .workspace/ directory at the repo root.
+ALL files you need are in .workspace/ — do NOT look for them elsewhere.
 
-Implement this card by completing the class in ./template.py.
-You have access to (all in your current directory):
-- ./template.py (starter implementation skeleton — fill in this class)
-- ./card_spec.json (full card specification)
-- ./engine_api.md (game engine API reference)
-- ./engine/ (game engine source — you may extend it if this card needs mechanics not yet supported)
-- ./base_classes.py (card base classes)
-- ./rules_overview.md (MTG rules reference)
-- ./foundations/ (browse working card implementations as reference)
-- ./test_utils.py (test utility helpers)
+Implement this card by completing the class in .workspace/template.py.
+You have access to (all in .workspace/):
+- .workspace/template.py (starter implementation skeleton — fill in this class)
+- .workspace/card_spec.json (full card specification)
+- .workspace/engine_api.md (game engine API reference)
+- .workspace/engine/ (game engine source — you may extend if needed)
+- .workspace/base_classes.py (card base classes)
+- .workspace/rules_overview.md (MTG rules reference)
+- .workspace/foundations/ (browse working card implementations as reference)
+- .workspace/test_utils.py (test utility helpers)
 
-Write your implementation to `blind_impl.py`.
-If you need to add or modify engine files, do so — but all previous cards' tests
-will be re-run, so your engine changes must not break existing functionality.
+Write your implementation to `.workspace/blind_impl.py`.
+If you need to add or modify engine files, do so in .workspace/engine/ — but all
+previous cards' tests will be re-run, so your engine changes must not break
+existing functionality.
 Do not rename the class. Do not write tests."""
 
 
@@ -66,11 +68,14 @@ def blind_implementation_prompt(card_spec: dict) -> str:
 # ---------------------------------------------------------------------------
 
 _TEST_INFORMED_TEMPLATE = """\
+Your workspace is the .workspace/ directory at the repo root.
+ALL files you need are in .workspace/ — do NOT look for them elsewhere.
+
 Now write a comprehensive test suite for your implementation of {card_name}.
 
 Constraints:
 - You MUST use the test_utils helpers (create_game, set_board_state, cast_spell, etc.)
-  See test_utils.md for the full API.
+  See .workspace/test_utils.md for the full API.
 - Maximum 30 tests per card. Focus on quality over quantity.
 - Tests must import from card_impl (e.g. `from card_impl import {class_name}`)
 
@@ -80,22 +85,19 @@ Test for:
 - Edge cases (no valid targets, empty board, etc.)
 - Interaction with game rules (stack, priority, state-based actions)
 
-All resources are in your current working directory. Do NOT look for files outside it.
+You have access to (all in .workspace/):
+- .workspace/template.py (starter implementation skeleton — fill in this class)
+- .workspace/card_spec.json (full card specification)
+- .workspace/engine_api.md (game engine API reference)
+- .workspace/engine/ (game engine source — you may extend it if this card needs mechanics not yet supported)
+- .workspace/base_classes.py (card base classes)
+- .workspace/rules_overview.md (MTG rules reference)
+- .workspace/foundations/ (browse working card implementations as reference)
+- .workspace/test_utils.py (test utility helpers)
 
-Implement this card by completing the class in ./template.py.
-You have access to (all in your current directory):
-- ./template.py (starter implementation skeleton — fill in this class)
-- ./card_spec.json (full card specification)
-- ./engine_api.md (game engine API reference)
-- ./engine/ (game engine source — you may extend it if this card needs mechanics not yet supported)
-- ./base_classes.py (card base classes)
-- ./rules_overview.md (MTG rules reference)
-- ./foundations/ (browse working card implementations as reference)
-- ./test_utils.py (test utility helpers)
-
-Save your updated implementation to `tested_impl.py`.
-Save your tests to `tests.py`.
-You may also modify engine/ files if needed — but all previous cards' tests
+Save your updated implementation to `.workspace/tested_impl.py`.
+Save your tests to `.workspace/tests.py`.
+You may also modify .workspace/engine/ files if needed — but all previous cards' tests
 will be re-run, so engine changes must not break existing functionality.
 You have up to {max_rounds} rounds to iterate on both tests and code.
 """
@@ -167,9 +169,9 @@ Test run results (round {round_num} of {max_rounds}):
 
 Fix the failing tests or update your implementation, then resubmit both files.
 
-Write your tests to `tests.py`.
-If you update your implementation, save it to `tested_impl.py`.
-You may also modify engine/ files if needed — but all previous cards' tests
+Write your tests to `.workspace/tests.py`.
+If you update your implementation, save it to `.workspace/tested_impl.py`.
+You may also modify .workspace/engine/ files if needed — but all previous cards' tests
 will be re-run, so engine changes must not break existing functionality.
 """
 

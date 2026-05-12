@@ -7,6 +7,8 @@ and ``benchmark cards`` subcommands via Click.
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -170,6 +172,23 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
     # Persistent engine: initialise run-level engine directory
     run_engine_dir = init_run_engine(run_dir)
 
+    # Clean up any stale .workspace/ from a previous aborted run
+    stale_workspace = Path(__file__).resolve().parent.parent / ".workspace"
+    if stale_workspace.exists():
+        click.echo(_warn(f"Cleaning up stale workspace from previous run: {stale_workspace}"))
+        for root, dirs, files in os.walk(stale_workspace):
+            for dname in dirs:
+                try:
+                    (Path(root) / dname).chmod(0o755)
+                except OSError:
+                    pass
+            for fname in files:
+                try:
+                    (Path(root) / fname).chmod(0o644)
+                except OSError:
+                    pass
+        shutil.rmtree(stale_workspace, ignore_errors=True)
+
     for i, spec in enumerate(specs, 1):
         card_name = spec.get("name", "???")
         collector_number = spec.get("collector_number", spec.get("number", "unknown"))
@@ -198,10 +217,13 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
                 blind_result, tested_result, spec, cfg
             )
 
+            card_results_dir = run_dir / "cards" / str(collector_number)
             save_card_result(run_dir, collector_number, blind_dict, test_dict)
 
+            # Copy raw implementation files from workspace to results dir
+            session.harvest_results(card_results_dir)
+
             # Capture engine diff before committing changes
-            card_results_dir = run_dir / "cards" / str(collector_number)
             compute_engine_diff(workspace, run_engine_dir, card_results_dir)
 
             # Commit engine changes back to run-level directory
