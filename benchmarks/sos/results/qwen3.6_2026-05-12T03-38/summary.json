@@ -1,0 +1,21 @@
+{
+  "card_count": 5,
+  "agents": [
+    "opencode"
+  ],
+  "tier_counts": {
+    "simple": 1,
+    "complex": 1,
+    "trivial": 1,
+    "medium": 1,
+    "expert": 1
+  },
+  "self_eval": {
+    "total_passed": 110,
+    "total_tests": 110
+  },
+  "audited_eval": {
+    "total_passed": 0,
+    "total_tests": 0
+  }
+}

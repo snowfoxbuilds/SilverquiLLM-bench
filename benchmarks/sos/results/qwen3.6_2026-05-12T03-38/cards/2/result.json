@@ -1,0 +1,41 @@
+{
+  "card_id": "2",
+  "status": "max_rounds_exhausted",
+  "agent": "opencode",
+  "model": "qwen3.6",
+  "complexity_tier": "complex",
+  "implementation": {
+    "blind": {
+      "status": "ok",
+      "tokens": 1524,
+      "runtime_seconds": 362.1609487689966,
+      "peak_context": 1848,
+      "iterations": 0
+    },
+    "tested": {
+      "status": "max_rounds_exhausted",
+      "tokens": 6580,
+      "runtime_seconds": 789.8927822080004,
+      "peak_context": 6987,
+      "rules_lookups": 0,
+      "iterations": 1
+    }
+  },
+  "self_eval": {
+    "blind": {
+      "passed": 29,
+      "failed": 0,
+      "total": 29,
+      "errors": []
+    },
+    "tested": {
+      "passed": 29,
+      "failed": 0,
+      "total": 29,
+      "errors": []
+    },
+    "errors": []
+  },
+  "cross_eval": [],
+  "audited_eval": {}
+}

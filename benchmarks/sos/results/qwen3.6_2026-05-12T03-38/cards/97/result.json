@@ -1,0 +1,49 @@
+{
+  "card_id": "97",
+  "status": "violation",
+  "agent": "opencode",
+  "model": "qwen3.6",
+  "complexity_tier": "expert",
+  "implementation": {
+    "blind": {
+      "status": "ok",
+      "tokens": 6307,
+      "runtime_seconds": 781.7053588259987,
+      "peak_context": 6679,
+      "iterations": 0
+    },
+    "tested": {
+      "status": "violation",
+      "tokens": 8840,
+      "runtime_seconds": 1345.7824698359982,
+      "peak_context": 9250,
+      "rules_lookups": 0,
+      "iterations": 1
+    }
+  },
+  "self_eval": {
+    "blind": {
+      "passed": 0,
+      "failed": 0,
+      "total": 0,
+      "errors": [
+        "Missing benchmarks/sos/results/qwen3.6_2026-05-12T03-38/cards/97/blind_impl.py",
+        "Missing benchmarks/sos/results/qwen3.6_2026-05-12T03-38/cards/97/tests.py",
+        "Missing benchmarks/sos/results/qwen3.6_2026-05-12T03-38/cards/97/tested_impl.py"
+      ]
+    },
+    "tested": {
+      "passed": 0,
+      "failed": 0,
+      "total": 0,
+      "errors": []
+    },
+    "errors": [
+      "Missing benchmarks/sos/results/qwen3.6_2026-05-12T03-38/cards/97/blind_impl.py",
+      "Missing benchmarks/sos/results/qwen3.6_2026-05-12T03-38/cards/97/tests.py",
+      "Missing benchmarks/sos/results/qwen3.6_2026-05-12T03-38/cards/97/tested_impl.py"
+    ]
+  },
+  "cross_eval": [],
+  "audited_eval": {}
+}

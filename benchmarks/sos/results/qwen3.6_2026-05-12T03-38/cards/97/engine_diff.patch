@@ -1,0 +1,4997 @@
+--- a/engine/DIRECTORY_SUMMARY.md
++++ /dev/null
+@@ -1,50 +0,0 @@
+-# Directory Summary — `engine/`
+-
+-## Purpose
+-
+-Core game engine for a Magic: The Gathering implementation. Contains **17 Python modules** implementing MTG rules (types, zones, players, mana, cards, casting, stack, combat, triggers, abilities, continuous effects, replacement effects, state-based actions, protection, and the game loop). This is the rules engine layer — card-specific implementations live in `cards/`.
+-
+-## Key Files
+-
+-| File | Lines | Responsibility |
+-|------|-------|---------------|
+-| `types.py` | 230+ | **Foundation** — All enums (`Color`, `ManaType`, `Zone`, `Phase`, `Step`, `CardType`, `Supertype`, `Keyword`) and core dataclasses (`ManaCost` with `.parse()` and `.cmc`, `HybridManaSymbol`, `TargetRequirement`). `ManaCost.parse()` handles `{X/Y}` hybrid mana tokens. Zero internal dependencies. |
+-| `zones.py` | 168 | `ZoneContainer` (ordered list with add/remove/shuffle/top/bottom), `Zones` (per-player Zone→ZoneContainer mapping), `move_zone()` function, `move_to_zone()` (centralized zone-transition with replacement effects, event firing, trigger registration/unregistration hooks), `IllegalMoveError`. Uses identity-based (`is`) lookups. |
+-| `player.py` | 167 | `Player` (ABC) with life/zones/mana_pool/has_lost properties and 5 abstract methods (`choose`, `choose_card`, `choose_attackers`, `choose_blockers`, `choose_order`). `DeterministicPlayer` with FIFO scripted choices. `ScriptExhaustedError`. |
+-| `mana.py` | 200+ | `ManaPool` class — add/empty/total/get/can_pay/pay methods. Auto-pay generic costs preferring colorless mana. Backtracking hybrid mana symbol resolution in `can_pay()`/`pay()`. `last_payment_colors` property and `_MANA_TO_COLOR` mapping for Converge mechanic support. |
+-| `card.py` | 490+ | `GameObject` (auto-increment ID), `CardImpl` interface (hook methods: `can_cast`, `get_targets`, `on_cast`, `on_resolve`, `get_mana_abilities`, `get_triggers`, `register_replacement_effects`, `cost_reduction(game) -> int`). Concrete subclasses: `Creature` (with `_cant_be_blocked`, `_cant_activate`, `protections` list reset in `_reset_characteristics()`), `Instant`, `Sorcery`, `Enchantment`, `Aura`, `Artifact`, `ArtifactCreature`, `Planeswalker`, `Land`. Supporting dataclasses: `ActivatedAbility`, `LoyaltyAbility`, `ManaAbility`, `ContinuousEffect`, `Mode`. |
+-| `game_state.py` | 180+ | `GameState` — central state container holding players, stack, trigger/effect/replacement managers, combat state, phase/step tracking, turn number, priority index. `extra_turns: list[int]` FIFO queue for extra turn management. `_normal_next_index` for tracking normal rotation independently. `_TURN_SEQUENCE` constant. `advance_phase()` for turn progression (pops extra turns without advancing normal rotation). |
+-| `stack.py` | 174 | `StackObject` dataclass, `Stack` (LIFO container), `priority_loop()` with auto-pass and stack resolution, `check_state_based_actions()` wrapper. |
+-| `casting.py` | 300+ | `cast_spell()` (hand→stack→targets→cost reduction→pay mana→on_cast→push), `play_land()`, `is_sorcery_speed()`, `can_cast_at_instant_speed()`. Cost reduction via `get_cost_reduction()` / `_apply_cost_reduction()`. Protection targeting check (rejects targets with protection from the spell). Wires trigger/replacement-effect auto-registration on resolution. Uses `move_to_zone()` for spell resolution. Stores `colors_spent` on card after mana payment for Converge mechanic. |
+-| `combat.py` | 560+ | `CombatState` dataclass, `declare_attackers_step()`, `declare_blockers_step()`, `combat_damage_step()`, `end_combat_step()`. Handles first strike, double strike, trample, lifelink, deathtouch, flying/reach, menace, vigilance, summoning sickness. Protection checks in `_can_block()` and `_deal_damage()`. |
+-| `protection.py` | 166 | **Protection from qualities** — `ProtectionAbility` class (color/type/quality matching), `get_colors()`, `get_protections()`, `has_protection_from()`. DEBT helper functions: `_is_illegal_target_due_to_protection()`, `_is_illegal_block_due_to_protection()`, `_should_prevent_damage()`, `_aura_illegal_due_to_protection()`. |
+-| `abilities.py` | 273 | `activate_ability()`, `tap_cost()`, `ActivatedAbilityInstance`, `LoyaltyAbilityInstance` (per-turn tracking), `AbilityError`. Mana abilities resolve immediately; non-mana go on stack. |
+-| `triggers.py` | 171 | `EventType` enum (13 events), `TriggerRegistration` dataclass, `TriggerManager` (register/unregister/fire_event with APNAP ordering). |
+-| `continuous_effects.py` | 247 | `Layer` (7 layers), `SubLayer` (7a–7d), `ContinuousEffect` dataclass, `EffectManager` (add/remove/apply_all with reset-then-reapply idempotency). Duration constants. |
+-| `replacement_effects.py` | 209 | `ReplacementEffect` dataclass, `ReplacementManager` (register/unregister/apply with self-replacement prevention and player-choice ordering). |
+-| `state_based_actions.py` | 350+ | 8 SBAs: life≤0, toughness≤0, lethal damage (incl. deathtouch), empty library, legend rule, token cleanup, aura validity (extended for protection), counter annihilation. `check_state_based_actions()` (single pass), `resolve_state_based_actions()` (loop until stable with trigger queueing, returns bool). Fires `CREATURE_DIES`/`LEAVES_BATTLEFIELD` events in `_move_to_graveyard()`. Detaches auras/equipment from permanents with protection from them. |
+-| `turn.py` | 181 | `run_turn()` — full turn loop. Turn-based actions: untap step, draw step (skip turn 1 for starting player), combat delegation, cleanup (discard to hand size, clear damage/effects/mana, re-cleanup loop). |
+-| `game.py` | 610+ | `create_game()` (life/library/shuffle/draw-7), 11 helper actions (`deal_damage`, `destroy`, `sacrifice`, `exile`, `draw_card`, `discard`, `create_token`, `add_counter`, `remove_counter`, `tap`, `untap`), `run_game()` loop with SBA checking and `MAX_TURNS` safety. `destroy()`, `sacrifice()`, `exile()` delegate to `move_to_zone()`. `deal_damage()` checks protection before applying damage. Tracks `cards_drawn_this_turn` in `draw_card()`. |
+-
+-## Important Classes / Functions
+-
+-- **`GameState`** — The central authority; passed to nearly every function. Now includes `extra_turns` queue.
+-- **`CardImpl`** — Interface all cards implement; hook methods define card-specific behavior. Includes `cost_reduction(game)` hook.
+-- **`Player` / `DeterministicPlayer`** — Player abstraction; deterministic variant for testing.
+-- **`move_to_zone()`** — Centralized zone-transition function handling replacement effects, event firing, and trigger auto-registration/unregistration.
+-- **`priority_loop()`** — Core game flow: SBA check → priority pass → stack resolution.
+-- **`cast_spell()` / `play_land()`** — Entry points for playing cards. `cast_spell()` applies cost reductions and protection checks.
+-- **`run_turn()` / `run_game()`** — Top-level game loop orchestration.
+-- **`ProtectionAbility`** — Protection from color/type/quality with DEBT mnemonic helpers.
+-- **`HybridManaSymbol`** — Represents `{X/Y}` hybrid mana symbols in costs.
+-
+-## Dependencies
+-
+-- **External**: None (pure Python, stdlib only).
+-- **Internal**: `types.py` is the foundation with no internal deps. `protection.py` depends on `types.py`. All other modules depend on `types.py`. `game_state.py` is the central hub importing from most modules. `game.py`, `combat.py`, `casting.py`, and `state_based_actions.py` import from `protection.py`. `game.py` and `turn.py` are top-level orchestrators.
+-
+-## Testing
+-
+-- Tests in `tests/engine/` — one test file per module (e.g., `test_types.py`, `test_card.py`).
+-- ~1,050+ engine-specific tests covering all modules (including hybrid mana, cost reduction, protection, extra turns).
+-- Test utilities in `tests/test_utils.py` for convenient game setup.
+Binary file a/engine/__pycache__/__init__.cpython-312.pyc deleted
+Binary file a/engine/__pycache__/abilities.cpython-312.pyc deleted
+Binary file a/engine/__pycache__/card.cpython-312.pyc deleted
+Binary file a/engine/__pycache__/casting.cpython-312.pyc deleted
+Binary file a/engine/__pycache__/combat.cpython-312.pyc deleted
+Binary file a/engine/__pycache__/continuous_effects.cpython-312.pyc deleted
+Binary file a/engine/__pycache__/game.cpython-312.pyc deleted
+Binary file a/engine/__pycache__/game_state.cpython-312.pyc deleted
+Binary file a/engine/__pycache__/mana.cpython-312.pyc deleted
+Binary file a/engine/__pycache__/player.cpython-312.pyc deleted
+Binary file a/engine/__pycache__/protection.cpython-312.pyc deleted
+Binary file a/engine/__pycache__/replacement_effects.cpython-312.pyc deleted
+Binary file a/engine/__pycache__/stack.cpython-312.pyc deleted
+Binary file a/engine/__pycache__/state_based_actions.cpython-312.pyc deleted
+Binary file a/engine/__pycache__/triggers.cpython-312.pyc deleted
+Binary file a/engine/__pycache__/turn.cpython-312.pyc deleted
+Binary file a/engine/__pycache__/types.cpython-312.pyc deleted
+Binary file a/engine/__pycache__/zones.cpython-312.pyc deleted
+--- a/engine/abilities.py
++++ /dev/null
+@@ -1,272 +0,0 @@
+-"""Activated abilities system — tap-for-mana, loyalty abilities, and general
+-activated abilities that go on the stack (or resolve immediately for mana
+-abilities).
+-
+-Provides:
+-
+-- :func:`activate_ability` — verify timing → pay costs → resolve immediately
+-  (mana abilities) or push to the stack (non-mana abilities).
+-- :func:`tap_cost` — generic tap-cost helper: checks ``not source.is_tapped``
+-  and taps the source.
+-- :class:`ActivatedAbilityInstance` — a runtime representation of an activated
+-  ability with source, controller, cost/effect callables, and metadata.
+-- :class:`LoyaltyAbilityInstance` — activated ability variant for planeswalker
+-  loyalty abilities with per-turn restriction and loyalty-counter cost.
+-"""
+-
+-from __future__ import annotations
+-
+-from dataclasses import dataclass, field
+-from typing import TYPE_CHECKING, Any, Callable
+-
+-from engine.casting import is_sorcery_speed
+-from engine.stack import StackObject
+-
+-if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-    from engine.player import Player
+-
+-
+-class AbilityError(Exception):
+-    """Raised when an ability activation is illegal."""
+-
+-
+-# ---------------------------------------------------------------------------
+-# Runtime ability representations
+-# ---------------------------------------------------------------------------
+-
+-@dataclass
+-class ActivatedAbilityInstance:
+-    """Runtime representation of an activated ability.
+-
+-    This captures everything needed to activate and resolve an ability:
+-    the source permanent, the controlling player, cost/effect callables,
+-    and whether the ability is a mana ability.
+-
+-    Attributes:
+-        source: The permanent that has this ability.
+-        controller: The player who controls the source.
+-        cost: A callable ``(game, source) -> bool`` that checks and pays
+-            the cost. Returns ``True`` if the cost was successfully paid,
+-            ``False`` otherwise.
+-        effect: A callable ``(game) -> None`` that applies the ability's
+-            effect when it resolves.
+-        is_mana_ability: Whether this is a mana ability (resolves
+-            immediately without using the stack).
+-        description: Human-readable description of the ability.
+-    """
+-
+-    source: Any
+-    controller: Any  # Player
+-    cost: Callable[..., bool]
+-    effect: Callable[..., None]
+-    is_mana_ability: bool = False
+-    description: str = ""
+-
+-
+-@dataclass
+-class LoyaltyAbilityInstance:
+-    """Runtime representation of a planeswalker loyalty ability.
+-
+-    Loyalty abilities are activated abilities with special restrictions:
+-    they may only be activated at sorcery speed, and only once per turn
+-    per source (tracked via ``_activated_this_turn``).
+-
+-    The cost adjusts the loyalty counters on the source planeswalker.
+-
+-    Attributes:
+-        source: The planeswalker permanent.
+-        controller: The player who controls the planeswalker.
+-        loyalty_cost: The loyalty adjustment (positive for ``+N``,
+-            negative for ``−N``, zero for ``0``).
+-        effect: A callable ``(game) -> None`` for the ability's effect.
+-        description: Human-readable description.
+-    """
+-
+-    source: Any
+-    controller: Any  # Player
+-    loyalty_cost: int = 0
+-    effect: Callable[..., None] = field(default=lambda _game: None)
+-    description: str = ""
+-
+-
+-# ---------------------------------------------------------------------------
+-# Per-turn loyalty tracking
+-# ---------------------------------------------------------------------------
+-
+-# Set of (object_id, turn_number) pairs that have already activated a
+-# loyalty ability this turn.  Callers should call
+-# ``clear_loyalty_tracking()`` at the start of each turn or manage the
+-# set externally.
+-_loyalty_activated_this_turn: set[tuple[int, int]] = set()
+-
+-
+-def clear_loyalty_tracking() -> None:
+-    """Clear the loyalty-activated-this-turn tracker.
+-
+-    Should be called at the start of each turn so that planeswalkers may
+-    activate loyalty abilities again.
+-    """
+-    _loyalty_activated_this_turn.clear()
+-
+-
+-def _has_activated_loyalty_this_turn(source: Any, turn_number: int) -> bool:
+-    """Return ``True`` if *source* already used a loyalty ability this turn."""
+-    obj_id = getattr(source, "object_id", id(source))
+-    return (obj_id, turn_number) in _loyalty_activated_this_turn
+-
+-
+-def _mark_loyalty_activated(source: Any, turn_number: int) -> None:
+-    """Record that *source* used a loyalty ability this turn."""
+-    obj_id = getattr(source, "object_id", id(source))
+-    _loyalty_activated_this_turn.add((obj_id, turn_number))
+-
+-
+-# ---------------------------------------------------------------------------
+-# Tap cost helper
+-# ---------------------------------------------------------------------------
+-
+-def tap_cost(game: GameState, source: Any) -> bool:
+-    """Generic tap-cost function.
+-
+-    Checks that the source is not already tapped.  If untapped, taps it
+-    (sets ``source.is_tapped = True``) and returns ``True``.  If already
+-    tapped, returns ``False`` (cost cannot be paid).
+-
+-    Parameters:
+-        game: The current game state (unused here but kept for a
+-            consistent ``(game, source) -> bool`` cost signature).
+-        source: The permanent to tap.
+-
+-    Returns:
+-        ``True`` if the cost was successfully paid (source was untapped
+-        and is now tapped), ``False`` otherwise.
+-    """
+-    if getattr(source, "is_tapped", False):
+-        return False
+-    source.is_tapped = True
+-    return True
+-
+-
+-# ---------------------------------------------------------------------------
+-# Activate ability — main entry point
+-# ---------------------------------------------------------------------------
+-
+-def activate_ability(
+-    game: GameState,
+-    player: Any,  # Player
+-    ability: ActivatedAbilityInstance | LoyaltyAbilityInstance,
+-) -> None:
+-    """Activate an ability.
+-
+-    Pipeline
+-    --------
+-    1. **Timing check** — mana abilities bypass timing entirely and
+-       resolve immediately.  Regular (non-mana) activated abilities
+-       can be activated whenever a player has priority (instant speed);
+-       priority enforcement is handled externally by
+-       ``priority_loop``, not here.  **Only loyalty abilities** carry
+-       a sorcery-speed restriction.
+-    2. **Pay costs** — invoke the ability's cost callable.  For loyalty
+-       abilities, adjust loyalty counters and enforce once-per-turn.
+-    3. **Resolve or push to stack** — mana abilities resolve
+-       immediately; all other abilities are pushed onto the game stack
+-       as :class:`StackObject` instances.
+-
+-    Parameters:
+-        game: The current game state.
+-        player: The player activating the ability.
+-        ability: The ability to activate (an
+-            :class:`ActivatedAbilityInstance` or
+-            :class:`LoyaltyAbilityInstance`).
+-
+-    Raises:
+-        AbilityError: If the activation is illegal (timing, cost, or
+-            once-per-turn restriction).
+-    """
+-    if isinstance(ability, LoyaltyAbilityInstance):
+-        _activate_loyalty_ability(game, player, ability)
+-    elif isinstance(ability, ActivatedAbilityInstance):
+-        _activate_regular_ability(game, player, ability)
+-    else:
+-        raise AbilityError(f"Unknown ability type: {type(ability)}")
+-
+-
+-# ---------------------------------------------------------------------------
+-# Internal helpers
+-# ---------------------------------------------------------------------------
+-
+-def _activate_regular_ability(
+-    game: GameState,
+-    player: Any,
+-    ability: ActivatedAbilityInstance,
+-) -> None:
+-    """Activate a regular (non-loyalty) activated ability."""
+-    # 1. Check "can't activate" restriction (e.g. Arrest).
+-    if getattr(ability.source, "_cant_activate", False):
+-        raise AbilityError(
+-            "Cannot activate ability — source's activated abilities are suppressed"
+-        )
+-
+-    # 2. Pay costs
+-    cost_paid = ability.cost(game, ability.source)
+-    if not cost_paid:
+-        raise AbilityError("Cannot activate ability — cost could not be paid")
+-
+-    # 3. Resolve or push
+-    if ability.is_mana_ability:
+-        # Mana abilities resolve immediately without using the stack.
+-        ability.effect(game)
+-    else:
+-        # Push to stack for resolution.
+-        stack_obj = StackObject(
+-            source=ability.source,
+-            controller=player,
+-            on_resolve=ability.effect,
+-            is_mana_ability=False,
+-        )
+-        game.stack.push(stack_obj)
+-
+-
+-def _activate_loyalty_ability(
+-    game: GameState,
+-    player: Any,
+-    ability: LoyaltyAbilityInstance,
+-) -> None:
+-    """Activate a planeswalker loyalty ability."""
+-    source = ability.source
+-
+-    # 1. Timing — loyalty abilities are sorcery speed only.
+-    if not is_sorcery_speed(game, player):
+-        raise AbilityError(
+-            "Cannot activate loyalty ability — sorcery-speed timing not met"
+-        )
+-
+-    # 2. Once-per-turn restriction.
+-    turn_number = getattr(game, "turn_number", 0)
+-    if _has_activated_loyalty_this_turn(source, turn_number):
+-        raise AbilityError(
+-            "Cannot activate loyalty ability — already activated this turn"
+-        )
+-
+-    # 3. Pay loyalty cost.
+-    current_loyalty = getattr(source, "loyalty", 0)
+-    new_loyalty = current_loyalty + ability.loyalty_cost
+-    if new_loyalty < 0:
+-        raise AbilityError(
+-            f"Cannot activate loyalty ability — insufficient loyalty "
+-            f"(have {current_loyalty}, need {-ability.loyalty_cost})"
+-        )
+-    source.loyalty = new_loyalty
+-
+-    # 4. Mark as activated this turn.
+-    _mark_loyalty_activated(source, turn_number)
+-
+-    # 5. Push to stack.
+-    stack_obj = StackObject(
+-        source=source,
+-        controller=player,
+-        on_resolve=ability.effect,
+-        is_mana_ability=False,
+-    )
+-    game.stack.push(stack_obj)
+--- a/engine/card.py
++++ /dev/null
+@@ -1,494 +0,0 @@
+-"""Card base classes, CardImpl interface, and supporting dataclasses.
+-
+-Provides the core class hierarchy for all Magic: The Gathering card types:
+-
+-- ``GameObject`` — base for anything that can exist in zones.
+-- ``CardImpl(GameObject)`` — abstract card implementation with hooks for
+-  casting, resolution, targeting, triggers, and abilities.
+-- Concrete subclasses: ``Creature``, ``Instant``, ``Sorcery``,
+-  ``Enchantment``, ``Aura``, ``Artifact``, ``ArtifactCreature``,
+-  ``Planeswalker``, ``Land``.
+-- Supporting dataclasses: ``ActivatedAbility``, ``LoyaltyAbility``,
+-  ``ManaAbility``, ``ContinuousEffect``, ``Mode``.
+-"""
+-
+-from __future__ import annotations
+-
+-from dataclasses import dataclass
+-from typing import TYPE_CHECKING, Any, Callable
+-
+-from engine.types import CardType, Keyword, ManaCost, Supertype
+-
+-if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-    from engine.player import Player
+-
+-
+-# ---------------------------------------------------------------------------
+-# Supporting dataclasses
+-# ---------------------------------------------------------------------------
+-
+-@dataclass
+-class Mode:
+-    """Represents a single mode of a modal spell or ability.
+-
+-    Attributes:
+-        name: Short label for this mode (e.g. ``"Destroy target creature"``).
+-        description: Detailed rules text for the mode.
+-    """
+-
+-    name: str = ""
+-    description: str = ""
+-
+-
+-@dataclass
+-class ActivatedAbility:
+-    """An activated ability on a permanent.
+-
+-    Attributes:
+-        cost: A callable that checks/pays the cost given the game state.
+-        effect: A callable that applies the effect given the game state.
+-        description: Human-readable description of the ability.
+-    """
+-
+-    cost: Callable[..., Any]
+-    effect: Callable[..., Any]
+-    description: str = ""
+-
+-
+-@dataclass
+-class LoyaltyAbility:
+-    """A planeswalker loyalty ability.
+-
+-    Attributes:
+-        loyalty_cost: The loyalty cost (positive for ``+``, negative for ``−``).
+-        effect: A callable that applies the ability's effect.
+-        description: Human-readable description.
+-    """
+-
+-    loyalty_cost: int
+-    effect: Callable[..., Any]
+-    description: str = ""
+-
+-
+-@dataclass
+-class ManaAbility:
+-    """A mana ability (does not use the stack).
+-
+-    Attributes:
+-        cost: A callable that checks/pays the cost.
+-        mana_produced: A callable that returns the mana added.
+-        description: Human-readable description.
+-    """
+-
+-    cost: Callable[..., Any]
+-    mana_produced: Callable[..., Any]
+-    description: str = ""
+-
+-
+-@dataclass
+-class ContinuousEffect:
+-    """A continuous effect applied by an enchantment or other source.
+-
+-    Attributes:
+-        apply: A callable that applies the effect to the game state.
+-        remove: A callable that removes the effect from the game state.
+-        description: Human-readable description.
+-    """
+-
+-    apply: Callable[..., Any]
+-    remove: Callable[..., Any]
+-    description: str = ""
+-
+-
+-# ---------------------------------------------------------------------------
+-# GameObject — base class for zone-resident objects
+-# ---------------------------------------------------------------------------
+-
+-class GameObject:
+-    """Base class for anything that can exist in a zone.
+-
+-    Each instance receives a unique ``object_id`` via a class-level
+-    auto-incrementing counter.
+-
+-    Attributes:
+-        object_id: Unique integer identifier (auto-assigned).
+-        owner: The player who owns this object.
+-        controller: The player who currently controls this object.
+-    """
+-
+-    _next_id: int = 1
+-
+-    def __init__(self, owner: Player | None = None, controller: Player | None = None) -> None:
+-        self.object_id: int = GameObject._next_id
+-        GameObject._next_id += 1
+-        self.owner: Player | None = owner
+-        self.controller: Player | None = controller if controller is not None else owner
+-
+-    @classmethod
+-    def reset_id_counter(cls) -> None:
+-        """Reset the auto-incrementing counter (useful in tests)."""
+-        cls._next_id = 1
+-
+-
+-# ---------------------------------------------------------------------------
+-# CardImpl — abstract card implementation
+-# ---------------------------------------------------------------------------
+-
+-class CardImpl(GameObject):
+-    """Abstract base for all card implementations.
+-
+-    Subclasses should override the ``can_cast``, ``on_cast``, ``on_resolve``,
+-    and other hook methods to implement card-specific behaviour.
+-
+-    Attributes:
+-        name: Card name.
+-        mana_cost: The card's mana cost.
+-        card_types: Set of :class:`~engine.types.CardType` values.
+-        subtypes: Set of subtype strings (e.g. ``{"Elf", "Warrior"}``).
+-        supertypes: Set of :class:`~engine.types.Supertype` values.
+-        keywords: Combination of :class:`~engine.types.Keyword` flags.
+-        rules_text: The card's rules text string.
+-    """
+-
+-    def __init__(
+-        self,
+-        name: str = "",
+-        mana_cost: ManaCost | None = None,
+-        card_types: set[CardType] | None = None,
+-        subtypes: set[str] | None = None,
+-        supertypes: set[Supertype] | None = None,
+-        keywords: Keyword | None = None,
+-        rules_text: str = "",
+-        owner: Player | None = None,
+-        controller: Player | None = None,
+-    ) -> None:
+-        super().__init__(owner=owner, controller=controller)
+-        self.name: str = name
+-        self.mana_cost: ManaCost = mana_cost if mana_cost is not None else ManaCost()
+-        self.card_types: set[CardType] = card_types if card_types is not None else set()
+-        self.subtypes: set[str] = subtypes if subtypes is not None else set()
+-        self.supertypes: set[Supertype] = supertypes if supertypes is not None else set()
+-        self.keywords: Keyword = keywords if keywords is not None else Keyword(0)
+-        self.rules_text: str = rules_text
+-        # Snapshot original characteristics for continuous-effect reset.
+-        self._original_card_types: frozenset[CardType] = frozenset(self.card_types)
+-        self._original_keywords: Keyword = self.keywords
+-
+-    # ------------------------------------------------------------------
+-    # Continuous-effect reset support
+-    # ------------------------------------------------------------------
+-
+-    def _reset_characteristics(self) -> None:
+-        """Reset mutable characteristics to their original (pre-effect) values.
+-
+-        Called by :meth:`EffectManager.apply_all` before reapplying effects
+-        so that the recalculation is idempotent.
+-        """
+-        self.card_types = set(self._original_card_types)
+-        self.keywords = self._original_keywords
+-
+-    # ------------------------------------------------------------------
+-    # Hook methods — override in subclasses / card definitions
+-    # ------------------------------------------------------------------
+-
+-    def can_cast(self, game: GameState) -> bool:
+-        """Return ``True`` if this card can currently be cast."""
+-        return True
+-
+-    def cost_reduction(self, game: GameState) -> int:
+-        """Return the generic mana reduction for casting this card.
+-
+-        Override in subclasses to implement cost-reduction mechanics
+-        (e.g. Embercleave costs {1} less for each attacking creature).
+-        The returned value is clamped so that generic mana cannot go below 0.
+-        Only reduces generic mana — colored costs are never reduced.
+-
+-        Returns:
+-            Non-negative integer representing generic mana to subtract.
+-        """
+-        return 0
+-
+-    def on_cast(self, game: GameState) -> None:
+-        """Called when the card is cast (before it goes on the stack)."""
+-
+-    def on_resolve(self, game: GameState) -> None:
+-        """Called when the spell resolves from the stack."""
+-
+-    def get_targets(self, game: GameState) -> list[Any]:
+-        """Return a list of legal targets for this card."""
+-        return []
+-
+-    def register_triggers(self, game: GameState) -> None:
+-        """Register any triggered abilities this card provides."""
+-
+-    def register_replacement_effects(self, game: GameState) -> None:
+-        """Register any replacement effects this card provides."""
+-
+-    def get_activated_abilities(self) -> list[ActivatedAbility]:
+-        """Return activated abilities this card provides."""
+-        return []
+-
+-    def get_modes(self) -> list[Mode]:
+-        """Return available modes for modal spells/abilities.
+-
+-        Non-modal cards return an empty list by default.
+-        """
+-        return []
+-
+-
+-# ---------------------------------------------------------------------------
+-# Creature
+-# ---------------------------------------------------------------------------
+-
+-class Creature(CardImpl):
+-    """A creature card.
+-
+-    Attributes:
+-        base_power: The printed power value.
+-        base_toughness: The printed toughness value.
+-        damage_marked: Amount of damage currently marked on this creature.
+-        is_tapped: Whether the creature is tapped.
+-        summoning_sick: Whether the creature has summoning sickness.
+-        is_attacking: Combat flag — currently declared as an attacker.
+-        is_blocking: Combat flag — currently declared as a blocker.
+-        plus_one_counters: Number of +1/+1 counters.
+-        minus_one_counters: Number of -1/-1 counters.
+-        is_token: Whether this object is a token (for SBA checks).
+-    """
+-
+-    def __init__(
+-        self,
+-        name: str = "",
+-        mana_cost: ManaCost | None = None,
+-        card_types: set[CardType] | None = None,
+-        subtypes: set[str] | None = None,
+-        supertypes: set[Supertype] | None = None,
+-        keywords: Keyword | None = None,
+-        rules_text: str = "",
+-        owner: Player | None = None,
+-        controller: Player | None = None,
+-        base_power: int = 0,
+-        base_toughness: int = 0,
+-    ) -> None:
+-        # Always include CREATURE in card_types.
+-        card_types = (card_types or set()) | {CardType.CREATURE}
+-        super().__init__(
+-            name=name,
+-            mana_cost=mana_cost,
+-            card_types=card_types,
+-            subtypes=subtypes,
+-            supertypes=supertypes,
+-            keywords=keywords,
+-            rules_text=rules_text,
+-            owner=owner,
+-            controller=controller,
+-        )
+-        self.base_power: int = base_power
+-        self.base_toughness: int = base_toughness
+-        self.damage_marked: int = 0
+-        self.is_tapped: bool = False
+-        self.summoning_sick: bool = True
+-        self.is_attacking: bool = False
+-        self.is_blocking: bool = False
+-        self.plus_one_counters: int = 0
+-        self.minus_one_counters: int = 0
+-        self.is_token: bool = False
+-        self.dealt_deathtouch_damage: bool = False
+-        # Snapshot original P/T and counter values for continuous-effect reset.
+-        self._original_base_power: int = base_power
+-        self._original_base_toughness: int = base_toughness
+-        self._original_plus_one_counters: int = 0
+-        self._original_minus_one_counters: int = 0
+-
+-    def _reset_characteristics(self) -> None:
+-        """Reset creature characteristics to pre-effect values."""
+-        super()._reset_characteristics()
+-        self.base_power = self._original_base_power
+-        self.base_toughness = self._original_base_toughness
+-        self.plus_one_counters = self._original_plus_one_counters
+-        self.minus_one_counters = self._original_minus_one_counters
+-        # Reset combat-restriction flags set by continuous effects (e.g. Pacifism).
+-        # These are reapplied by active effects during apply_all().
+-        self._cant_attack: bool = False
+-        self._cant_block: bool = False
+-        self._cant_be_blocked: bool = False
+-        self._cant_activate: bool = False
+-        self._max_attackers_blocked: int = 1
+-        # Clear granted protections so they are reapplied by active effects.
+-        if hasattr(self, "protections"):
+-            self.protections = []
+-
+-    @property
+-    def counters(self) -> dict[str, int]:
+-        """Return a dict-like view of counters on this creature."""
+-        result: dict[str, int] = {}
+-        if self.plus_one_counters > 0:
+-            result["+1/+1"] = self.plus_one_counters
+-        if self.minus_one_counters > 0:
+-            result["-1/-1"] = self.minus_one_counters
+-        return result
+-
+-    @property
+-    def power(self) -> int:
+-        """Current power including counter modifications."""
+-        return self.base_power + self.plus_one_counters - self.minus_one_counters
+-
+-    @property
+-    def toughness(self) -> int:
+-        """Current toughness including counter modifications."""
+-        return self.base_toughness + self.plus_one_counters - self.minus_one_counters
+-
+-
+-# ---------------------------------------------------------------------------
+-# Instant / Sorcery
+-# ---------------------------------------------------------------------------
+-
+-class Instant(CardImpl):
+-    """An instant spell — no extra fields beyond CardImpl."""
+-
+-    def __init__(self, **kwargs: Any) -> None:
+-        kwargs["card_types"] = (kwargs.get("card_types") or set()) | {CardType.INSTANT}
+-        super().__init__(**kwargs)
+-
+-
+-class Sorcery(CardImpl):
+-    """A sorcery spell — no extra fields beyond CardImpl."""
+-
+-    def __init__(self, **kwargs: Any) -> None:
+-        kwargs["card_types"] = (kwargs.get("card_types") or set()) | {CardType.SORCERY}
+-        super().__init__(**kwargs)
+-
+-
+-# ---------------------------------------------------------------------------
+-# Enchantment
+-# ---------------------------------------------------------------------------
+-
+-class Enchantment(CardImpl):
+-    """An enchantment card.
+-
+-    For auras, use the :class:`Aura` subclass which sets ``is_aura = True``.
+-    The base ``Enchantment`` class retains the ``attached_to`` attribute for
+-    backwards compatibility but marks ``is_aura = False`` so that state-based
+-    actions do not treat a non-aura enchantment as an unattached aura.
+-
+-    Attributes:
+-        attached_to: The object this enchantment is attached to (``None``
+-            if not an aura or not yet attached).
+-        is_aura: ``False`` for regular enchantments; ``True`` for auras.
+-    """
+-
+-    is_aura: bool = False
+-
+-    def __init__(self, attached_to: Any | None = None, **kwargs: Any) -> None:
+-        kwargs["card_types"] = (kwargs.get("card_types") or set()) | {CardType.ENCHANTMENT}
+-        super().__init__(**kwargs)
+-        self.attached_to: Any | None = attached_to
+-
+-    def apply_continuous_effect(self, game: GameState) -> None:
+-        """Apply the enchantment's continuous effect to the game."""
+-
+-    def on_enchant(self, game: GameState) -> None:
+-        """Called when this enchantment becomes attached to an object."""
+-
+-    def on_detach(self, game: GameState) -> None:
+-        """Called when this enchantment is detached from its object."""
+-
+-
+-class Aura(Enchantment):
+-    """An Aura enchantment — attaches to a permanent on the battlefield.
+-
+-    Sets ``is_aura = True`` so that state-based actions correctly identify
+-    this as an aura (and move it to the graveyard when unattached).
+-
+-    Attributes:
+-        is_aura: Always ``True`` for auras.
+-    """
+-
+-    is_aura: bool = True
+-
+-    def __init__(self, attached_to: Any | None = None, **kwargs: Any) -> None:
+-        super().__init__(attached_to=attached_to, **kwargs)
+-
+-
+-# ---------------------------------------------------------------------------
+-# Artifact / ArtifactCreature
+-# ---------------------------------------------------------------------------
+-
+-class Artifact(CardImpl):
+-    """An artifact card.
+-
+-    Attributes:
+-        is_tapped: Whether the artifact is currently tapped.
+-    """
+-
+-    def __init__(self, **kwargs: Any) -> None:
+-        kwargs["card_types"] = (kwargs.get("card_types") or set()) | {CardType.ARTIFACT}
+-        super().__init__(**kwargs)
+-        self.is_tapped: bool = False
+-
+-
+-class ArtifactCreature(Creature):
+-    """An artifact creature — combines Artifact and Creature types.
+-
+-    Inherits creature combat stats and behaviour from :class:`Creature`.
+-    """
+-
+-    def __init__(self, **kwargs: Any) -> None:
+-        kwargs["card_types"] = (kwargs.get("card_types") or set()) | {CardType.ARTIFACT, CardType.CREATURE}
+-        super().__init__(**kwargs)
+-
+-
+-# ---------------------------------------------------------------------------
+-# Planeswalker
+-# ---------------------------------------------------------------------------
+-
+-class Planeswalker(CardImpl):
+-    """A planeswalker card.
+-
+-    Attributes:
+-        starting_loyalty: The starting loyalty printed on the card.
+-        loyalty: Current loyalty counter value.
+-    """
+-
+-    def __init__(
+-        self,
+-        starting_loyalty: int = 0,
+-        **kwargs: Any,
+-    ) -> None:
+-        kwargs["card_types"] = (kwargs.get("card_types") or set()) | {CardType.PLANESWALKER}
+-        super().__init__(**kwargs)
+-        self.starting_loyalty: int = starting_loyalty
+-        self.loyalty: int = starting_loyalty
+-
+-    def get_loyalty_abilities(self) -> list[LoyaltyAbility]:
+-        """Return the planeswalker's loyalty abilities."""
+-        return []
+-
+-
+-# ---------------------------------------------------------------------------
+-# Land
+-# ---------------------------------------------------------------------------
+-
+-class Land(CardImpl):
+-    """A land card.
+-
+-    Lands are not cast — they are played via a special action. ``can_cast``
+-    always returns ``False``.
+-
+-    Attributes:
+-        is_tapped: Whether the land is currently tapped.
+-    """
+-
+-    def __init__(self, **kwargs: Any) -> None:
+-        kwargs["card_types"] = (kwargs.get("card_types") or set()) | {CardType.LAND}
+-        super().__init__(**kwargs)
+-        self.is_tapped: bool = False
+-
+-    def can_cast(self, game: GameState) -> bool:
+-        """Lands cannot be cast; they are played as a special action."""
+-        return False
+-
+-    def get_mana_abilities(self) -> list[ManaAbility]:
+-        """Return the land's mana abilities."""
+-        return []
+--- a/engine/casting.py
++++ /dev/null
+@@ -1,324 +0,0 @@
+-"""Casting and resolution pipeline for spells and lands.
+-
+-Provides the full flow from casting a spell or playing a land through
+-resolution:
+-
+-- :func:`cast_spell` — verify timing & legality → move hand to stack →
+-  choose targets → pay costs → call ``on_cast`` → push :class:`StackObject`.
+-- :func:`play_land` — verify land play remaining → move hand to
+-  battlefield → decrement ``land_plays_remaining``.
+-- :func:`is_sorcery_speed` / :func:`can_cast_at_instant_speed` — timing
+-  helpers used by the casting pipeline.
+-
+-Resolution is embedded in the :class:`StackObject` ``on_resolve`` callback
+-created by :func:`cast_spell`:
+-
+-- Call ``card.on_resolve(game)``.
+-- Permanents (creature / enchantment / artifact / planeswalker) move from
+-  the stack to the battlefield.
+-- Non-permanents (instant / sorcery) move to the graveyard.
+-"""
+-
+-from __future__ import annotations
+-
+-from typing import TYPE_CHECKING, Any
+-
+-from engine.card import CardImpl
+-from engine.stack import StackObject
+-from engine.types import CardType, Keyword, ManaCost, Phase, Zone
+-from engine.zones import move_zone
+-
+-if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-    from engine.player import Player
+-
+-
+-# Card types that represent permanents — these go to the battlefield on resolve.
+-_PERMANENT_TYPES: frozenset[CardType] = frozenset({
+-    CardType.CREATURE,
+-    CardType.ENCHANTMENT,
+-    CardType.ARTIFACT,
+-    CardType.PLANESWALKER,
+-})
+-
+-
+-class CastingError(Exception):
+-    """Raised when a spell cast or land play is illegal."""
+-
+-
+-# ------------------------------------------------------------------
+-# Timing helpers
+-# ------------------------------------------------------------------
+-
+-def is_sorcery_speed(game: GameState, player: Player) -> bool:
+-    """Return ``True`` if sorcery-speed timing is met for *player*.
+-
+-    Sorcery speed requires all of:
+-
+-    * *player* is the active player.
+-    * The current phase is a main phase (``PRECOMBAT_MAIN`` or
+-      ``POSTCOMBAT_MAIN``).
+-    * The stack is empty.
+-    """
+-    if player is not game.active_player:
+-        return False
+-    if game.phase not in (Phase.PRECOMBAT_MAIN, Phase.POSTCOMBAT_MAIN):
+-        return False
+-    if not game.stack.is_empty():
+-        return False
+-    return True
+-
+-
+-def can_cast_at_instant_speed(card: CardImpl) -> bool:
+-    """Return ``True`` if *card* may be cast at instant speed.
+-
+-    A card has instant-speed timing if it is an instant or has the
+-    :attr:`~engine.types.Keyword.FLASH` keyword.
+-    """
+-    if CardType.INSTANT in card.card_types:
+-        return True
+-    if Keyword.FLASH & card.keywords:
+-        return True
+-    return False
+-
+-
+-# ------------------------------------------------------------------
+-# Cost reduction
+-# ------------------------------------------------------------------
+-
+-def get_cost_reduction(game: GameState, card: CardImpl, controller: Player) -> int:
+-    """Return the generic mana reduction for casting *card*.
+-
+-    Queries ``card.cost_reduction(game)`` and clamps the result so that
+-    the generic portion of the mana cost cannot go below 0.
+-
+-    This is a simplified single-card self-reduction model.  Full MTG
+-    cost-reduction interactions (Trinisphere, multiple reductions from
+-    different sources) are deferred.
+-    """
+-    # Ensure card.controller is set so the hook can reference "you" / the
+-    # casting player even when the card was never explicitly assigned one.
+-    prev_controller = card.controller
+-    card.controller = controller
+-    raw = card.cost_reduction(game)
+-    # Restore previous controller in case the caller doesn't want a
+-    # side-effect (get_cost_reduction is a query, not a mutation).
+-    card.controller = prev_controller
+-    generic = card.mana_cost.generic if card.mana_cost else 0
+-    return max(0, min(raw, generic))
+-
+-
+-def _apply_cost_reduction(cost: ManaCost, reduction: int) -> ManaCost:
+-    """Return a new :class:`ManaCost` with *reduction* subtracted from generic."""
+-    new_generic = max(0, cost.generic - reduction)
+-    return ManaCost(
+-        generic=new_generic,
+-        pips=dict(cost.pips),
+-        x_count=cost.x_count,
+-        hybrid=list(cost.hybrid),
+-    )
+-
+-
+-# ------------------------------------------------------------------
+-# Cast spell
+-# ------------------------------------------------------------------
+-
+-def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
+-    """Cast *card* from *player*'s hand.
+-
+-    Pipeline
+-    --------
+-    1. **Timing check** — instants (and cards with flash) can be cast
+-       whenever the player has priority; everything else requires
+-       sorcery-speed timing.
+-    2. **can_cast** — ask the card whether it can legally be cast.
+-    3. **Hand check** — the card must be in the player's hand.
+-    4. **Move hand → stack zone** — remove the card from the hand and
+-       place it into the player's stack zone.
+-    5. **Choose targets** — if the card specifies targets (via
+-       :meth:`CardImpl.get_targets`), the player is asked to choose.
+-    6. **Mana check / payment** — the player's mana pool must be able to
+-       pay the card's mana cost.  If payment fails, the card is rolled
+-       back from the stack zone to the hand.
+-    7. **Call on_cast** — invoke the card's ``on_cast`` hook.
+-    8. **Push StackObject** — push a :class:`StackObject` whose
+-       ``on_resolve`` callback handles resolution.
+-
+-    Raises:
+-        CastingError: If any legality check fails.
+-    """
+-    # 1. Timing
+-    if not can_cast_at_instant_speed(card) and not is_sorcery_speed(game, player):
+-        raise CastingError(
+-            f"Cannot cast {card.name!r} — sorcery-speed timing not met"
+-        )
+-
+-    # 2. can_cast
+-    if not card.can_cast(game):
+-        raise CastingError(f"Cannot cast {card.name!r} — can_cast returned False")
+-
+-    # 3. Hand check
+-    hand = game.get_hand(player)
+-    if not hand.contains(card):
+-        raise CastingError(f"Cannot cast {card.name!r} — card not in hand")
+-
+-    # 4. Move card from hand to stack zone
+-    stack_zone = player.zones[Zone.STACK]
+-    hand.remove(card)
+-    stack_zone.add(card)
+-
+-    # Clear any stale colors_spent from a prior cast before new payment.
+-    if hasattr(card, "colors_spent"):
+-        del card.colors_spent
+-
+-    # 5. Choose targets
+-    target_specs = card.get_targets(game)
+-    chosen_targets: list[Any] = []
+-    if target_specs:
+-        for spec in target_specs:
+-            target = player.choose_target(target_specs, spec)
+-            chosen_targets.append(target)
+-
+-    # 5b. Protection check — reject targets that have protection from this
+-    #     spell (the T in DEBT).
+-    from engine.protection import has_protection_from
+-
+-    for target in chosen_targets:
+-        if has_protection_from(target, card):
+-            # Rollback: move card from stack zone back to hand
+-            stack_zone.remove(card)
+-            hand.add(card)
+-            raise CastingError(
+-                f"Cannot cast {card.name!r} — target has protection from this spell"
+-            )
+-
+-    # Store chosen targets on the card so on_resolve() can access them
+-    # even after the StackObject has been popped from the stack.
+-    card.chosen_targets = chosen_targets  # type: ignore[attr-defined]
+-
+-    # 6. Mana check / payment (rollback on failure)
+-    # Ensure the card knows its controller so that cost_reduction() hooks
+-    # (e.g. Embercleave counting attacking creatures you control) see the
+-    # casting player, even for cards that were added to hand without an
+-    # explicit controller assignment.
+-    if card.controller is None:
+-        card.controller = player
+-    reduction = get_cost_reduction(game, card, player)
+-    effective_cost = _apply_cost_reduction(card.mana_cost, reduction) if reduction > 0 else card.mana_cost
+-
+-    if not player.mana_pool.can_pay(effective_cost):
+-        # Rollback: move card from stack zone back to hand
+-        stack_zone.remove(card)
+-        hand.add(card)
+-        raise CastingError(f"Cannot cast {card.name!r} — insufficient mana")
+-
+-    # TODO: Phase 3 — support player choice for generic mana payment to optimize Converge color count
+-    player.mana_pool.pay(effective_cost)
+-
+-    # Store colors of mana spent on the card for mechanics like Converge
+-    # that care about the colors used to cast the spell.
+-    card.colors_spent = list(player.mana_pool.last_payment_colors)  # type: ignore[attr-defined]
+-
+-    # 7. Call on_cast hook
+-    card.on_cast(game)
+-
+-    # 8. Build on_resolve callback and push StackObject
+-    def _on_resolve(g: GameState) -> None:
+-        _resolve_spell(g, card, player)
+-
+-    stack_obj = StackObject(
+-        source=card,
+-        controller=player,
+-        targets=chosen_targets,
+-        on_resolve=_on_resolve,
+-    )
+-    game.stack.push(stack_obj)
+-
+-
+-# ------------------------------------------------------------------
+-# Resolution (called when the stack pops)
+-# ------------------------------------------------------------------
+-
+-def _resolve_spell(game: GameState, card: CardImpl, player: Player) -> None:
+-    """Resolve *card* cast by *player*.
+-
+-    1. Call ``card.on_resolve(game)``.
+-    2. Remove the card from the stack zone.
+-    3. If the card is a permanent type, move it to the battlefield via
+-       :func:`~engine.zones.move_to_zone` (which handles trigger/effect
+-       registration and the ETB event).
+-    4. Otherwise (instant / sorcery), move it to the owner's graveyard.
+-    """
+-    from engine.zones import move_to_zone
+-
+-    card.on_resolve(game)
+-
+-    if card.card_types & _PERMANENT_TYPES:
+-        # Move from stack to battlefield via move_to_zone, which handles
+-        # trigger/replacement-effect registration and ENTERS_BATTLEFIELD event.
+-        move_to_zone(game, card, Zone.STACK, Zone.BATTLEFIELD)
+-    else:
+-        # Instant/sorcery: move from stack to graveyard via move_to_zone.
+-        move_to_zone(game, card, Zone.STACK, Zone.GRAVEYARD)
+-
+-
+-# ------------------------------------------------------------------
+-# Play land (special action — does not use the stack)
+-# ------------------------------------------------------------------
+-
+-def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
+-    """Play *land_card* from *player*'s hand onto the battlefield.
+-
+-    Requirements (all must hold):
+-
+-    * *land_card* has :attr:`CardType.LAND`.
+-    * *player* is the active player.
+-    * Current phase is a main phase.
+-    * The stack is empty.
+-    * ``player.land_plays_remaining > 0``.
+-    * The card is in the player's hand.
+-
+-    On success the card moves from hand to battlefield and
+-    ``land_plays_remaining`` is decremented.
+-
+-    Raises:
+-        CastingError: If any requirement is not met.
+-    """
+-    # Must be a land
+-    if CardType.LAND not in land_card.card_types:
+-        raise CastingError(
+-            f"Cannot play {land_card.name!r} as a land — not a land card"
+-        )
+-
+-    # Sorcery-speed timing (active player, main phase, stack empty)
+-    if not is_sorcery_speed(game, player):
+-        raise CastingError(
+-            f"Cannot play land {land_card.name!r} — must be active player "
+-            "during main phase with empty stack"
+-        )
+-
+-    # Land plays remaining
+-    if player.land_plays_remaining <= 0:
+-        raise CastingError(
+-            f"Cannot play land {land_card.name!r} — no land plays remaining"
+-        )
+-
+-    # Card must be in hand
+-    hand = game.get_hand(player)
+-    if not hand.contains(land_card):
+-        raise CastingError(
+-            f"Cannot play land {land_card.name!r} — card not in hand"
+-        )
+-
+-    # Ensure owner/controller are set so move_to_zone routes correctly.
+-    if land_card.owner is None:
+-        land_card.owner = player
+-    land_card.controller = player
+-
+-    # Move from hand to battlefield via move_to_zone, which fires
+-    # ENTERS_BATTLEFIELD and registers triggers/replacement effects.
+-    from engine.zones import move_to_zone
+-    move_to_zone(game, land_card, Zone.HAND, Zone.BATTLEFIELD)
+-
+-    # Decrement land plays
+-    player.land_plays_remaining -= 1
+--- a/engine/combat.py
++++ /dev/null
+@@ -1,556 +0,0 @@
+-"""Combat system: declare attackers → declare blockers → damage → end combat.
+-
+-Implements the four substeps of the MTG combat phase:
+-
+-1. **Declare Attackers** — Active player chooses creatures to attack with.
+-   Attackers are tapped (unless they have vigilance).  Creatures with
+-   summoning sickness (without haste) or the defender keyword cannot attack.
+-
+-2. **Declare Blockers** — Defending player assigns blockers.  Creatures
+-   with flying can only be blocked by creatures with flying or reach.
+-   Creatures with menace require 2+ blockers.  The attacker's controller
+-   orders the blockers for damage assignment.
+-
+-3. **Combat Damage** — First strike / double strike creatures deal damage
+-   first, then state-based actions are checked, then normal damage.
+-   Trample excess goes to the defending player.  Lifelink heals the
+-   controller.  Deathtouch makes any nonzero damage lethal.  Unblocked
+-   attackers deal damage to the defending player.
+-
+-4. **End Combat** — Clear all combat state.
+-
+-References: MTG Comprehensive Rules §506–§511.
+-"""
+-
+-from __future__ import annotations
+-
+-from dataclasses import dataclass, field
+-from typing import TYPE_CHECKING, Any
+-
+-from engine.types import Keyword
+-
+-if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-    from engine.player import Player
+-
+-
+-# ---------------------------------------------------------------------------
+-# CombatState — tracks all per-combat information
+-# ---------------------------------------------------------------------------
+-
+-@dataclass
+-class CombatState:
+-    """Tracks attackers, blockers, damage assignments, and block ordering.
+-
+-    Attributes:
+-        attackers: Mapping of attacking creature → defending player.
+-        blockers: Mapping of blocking creature → list of attackers it blocks.
+-        attacker_blockers: Mapping of attacking creature → ordered list of
+-            blockers assigned to it (order used for damage assignment).
+-        damage_assignments: Mapping of creature → list of
+-            ``(target, amount)`` tuples describing how damage is assigned.
+-        was_blocked: Set of attackers that were declared as blocked.  Per
+-            MTG rule 509.1h, once a creature is blocked it stays blocked
+-            even if all its blockers are removed before damage.
+-        in_combat: Whether the combat phase is currently active.
+-    """
+-
+-    attackers: dict[Any, Player] = field(default_factory=dict)
+-    blockers: dict[Any, list[Any]] = field(default_factory=dict)
+-    attacker_blockers: dict[Any, list[Any]] = field(default_factory=dict)
+-    damage_assignments: dict[Any, list[tuple[Any, int]]] = field(default_factory=dict)
+-    was_blocked: set[Any] = field(default_factory=set)
+-    in_combat: bool = False
+-
+-    def clear(self) -> None:
+-        """Reset all combat state."""
+-        self.attackers.clear()
+-        self.blockers.clear()
+-        self.attacker_blockers.clear()
+-        self.damage_assignments.clear()
+-        self.was_blocked.clear()
+-        self.in_combat = False
+-
+-
+-# ---------------------------------------------------------------------------
+-# Helpers
+-# ---------------------------------------------------------------------------
+-
+-def _can_attack(creature: Any) -> bool:
+-    """Return ``True`` if *creature* is eligible to be declared as an attacker.
+-
+-    A creature cannot attack if:
+-    - It is already tapped.
+-    - It has the ``DEFENDER`` keyword.
+-    - It has summoning sickness (``summoning_sick``) and does not have ``HASTE``.
+-    - A continuous effect has set ``_cant_attack`` (e.g. Pacifism).
+-    """
+-    if getattr(creature, "is_tapped", False):
+-        return False
+-
+-    # Check for "can't attack" restriction (set by continuous effects like Pacifism)
+-    if getattr(creature, "_cant_attack", False):
+-        return False
+-
+-    keywords = getattr(creature, "keywords", Keyword(0))
+-
+-    if Keyword.DEFENDER in keywords:
+-        return False
+-
+-    if getattr(creature, "summoning_sick", False) and Keyword.HASTE not in keywords:
+-        return False
+-
+-    return True
+-
+-
+-def _can_block(blocker: Any, attacker: Any) -> bool:
+-    """Return ``True`` if *blocker* can legally block *attacker*.
+-
+-    Checks:
+-    - If the blocker is tapped it cannot block.
+-    - A continuous effect has set ``_cant_block`` (e.g. Pacifism).
+-    - If the attacker has flying, the blocker must have flying or reach.
+-    """
+-    if getattr(blocker, "is_tapped", False):
+-        return False
+-
+-    # Check for "can't block" restriction (set by continuous effects like Pacifism)
+-    if getattr(blocker, "_cant_block", False):
+-        return False
+-
+-    attacker_kw = getattr(attacker, "keywords", Keyword(0))
+-    blocker_kw = getattr(blocker, "keywords", Keyword(0))
+-
+-    # Flying check
+-    if Keyword.FLYING in attacker_kw:
+-        if Keyword.FLYING not in blocker_kw and Keyword.REACH not in blocker_kw:
+-            return False
+-
+-    # Protection check — attacker with protection from blocker can't be blocked
+-    from engine.protection import has_protection_from
+-
+-    if has_protection_from(attacker, blocker):
+-        return False
+-
+-    return True
+-
+-
+-def _get_lethal_damage(creature: Any, attacker: Any | None = None) -> int:
+-    """Return the amount of damage needed to lethally assign to *creature*.
+-
+-    If *attacker* has deathtouch, 1 damage is lethal.
+-    Otherwise it's ``toughness - damage_marked`` (at least 1).
+-    """
+-    if attacker is not None:
+-        attacker_kw = getattr(attacker, "keywords", Keyword(0))
+-        if Keyword.DEATHTOUCH in attacker_kw:
+-            return 1
+-
+-    toughness = getattr(creature, "toughness", 0)
+-    damage_marked = getattr(creature, "damage_marked", 0)
+-    return max(1, toughness - damage_marked)
+-
+-
+-def _deal_damage(
+-    source: Any,
+-    target: Any,
+-    amount: int,
+-    game: GameState,
+-    combat_state: CombatState,
+-) -> None:
+-    """Apply *amount* damage from *source* to *target*.
+-
+-    If *target* is a player, reduces life.
+-    If *target* is a creature, marks damage on it.
+-    If *source* has lifelink, the controller gains that much life.
+-
+-    Protection prevents damage from sources with the protected-from quality.
+-    """
+-    if amount <= 0:
+-        return
+-
+-    # Protection prevents damage (D in DEBT).
+-    from engine.protection import has_protection_from
+-
+-    if has_protection_from(target, source):
+-        return
+-
+-    # Record damage assignment
+-    if source not in combat_state.damage_assignments:
+-        combat_state.damage_assignments[source] = []
+-    combat_state.damage_assignments[source].append((target, amount))
+-
+-    # Apply damage
+-    if hasattr(target, "life"):
+-        # Target is a player
+-        target.life -= amount
+-    elif hasattr(target, "damage_marked"):
+-        # Target is a creature
+-        target.damage_marked += amount
+-
+-        # Track deathtouch damage for SBA rule 704.5h
+-        source_kw_dt = getattr(source, "keywords", Keyword(0))
+-        if Keyword.DEATHTOUCH in source_kw_dt:
+-            target.dealt_deathtouch_damage = True
+-
+-    # Lifelink: controller gains life equal to damage dealt
+-    source_kw = getattr(source, "keywords", Keyword(0))
+-    if Keyword.LIFELINK in source_kw:
+-        controller = getattr(source, "controller", None)
+-        if controller is not None and hasattr(controller, "life"):
+-            controller.life += amount
+-
+-
+-# ---------------------------------------------------------------------------
+-# Combat steps
+-# ---------------------------------------------------------------------------
+-
+-def declare_attackers_step(game: GameState) -> None:
+-    """Declare attackers step: active player chooses creatures to attack with.
+-
+-    The active player is asked (via :meth:`Player.choose`) to select a set
+-    of creatures to attack with.  Each chosen attacker is tapped (unless it
+-    has vigilance) and its ``is_attacking`` flag is set.
+-
+-    Parameters:
+-        game: The current game state.  ``game.combat_state`` must exist.
+-    """
+-    combat = game.combat_state
+-    combat.in_combat = True
+-    active = game.active_player
+-    defending = game.non_active_player
+-
+-    # Gather legal attackers from the active player's battlefield
+-    from engine.types import Zone
+-    bf = active.zones[Zone.BATTLEFIELD]
+-    eligible = [
+-        c for c in bf.get_all()
+-        if hasattr(c, "base_power") and _can_attack(c)
+-    ]
+-
+-    if not eligible:
+-        return
+-
+-    # Active player chooses which creatures to attack with
+-    chosen = active.choose(eligible, "declare attackers")
+-
+-    # Normalize to a list
+-    if chosen is None:
+-        return
+-    if not isinstance(chosen, list):
+-        chosen = [chosen]
+-
+-    # Validate and register attackers
+-    for attacker in chosen:
+-        if attacker not in eligible:
+-            continue
+-        if not _can_attack(attacker):
+-            continue
+-
+-        combat.attackers[attacker] = defending
+-        combat.attacker_blockers[attacker] = []
+-        attacker.is_attacking = True
+-
+-        # Tap the attacker unless it has vigilance
+-        kw = getattr(attacker, "keywords", Keyword(0))
+-        if Keyword.VIGILANCE not in kw:
+-            attacker.is_tapped = True
+-
+-
+-def declare_blockers_step(game: GameState) -> None:
+-    """Declare blockers step: defending player assigns blockers.
+-
+-    The defending player is asked (via :meth:`Player.choose`) to assign
+-    blockers.  The expected format is a dict mapping blocker → attacker
+-    (or blocker → list of attackers for multi-blocking scenarios), but
+-    commonly blocker → attacker.
+-
+-    After blockers are assigned:
+-    - Menace check: attackers with menace must be blocked by 2+ creatures.
+-    - Flying/reach check is already handled by ``_can_block``.
+-    - The attacking player orders blockers for each attacker (for damage
+-      assignment).
+-
+-    Parameters:
+-        game: The current game state.
+-    """
+-    combat = game.combat_state
+-
+-    if not combat.attackers:
+-        return
+-
+-    defending = game.non_active_player
+-    active = game.active_player
+-
+-    from engine.types import Zone
+-    bf_defending = defending.zones[Zone.BATTLEFIELD]
+-    eligible_blockers = [
+-        c for c in bf_defending.get_all()
+-        if hasattr(c, "base_power") and not getattr(c, "is_tapped", False)
+-    ]
+-
+-    if not eligible_blockers:
+-        return
+-
+-    # Defending player chooses block assignments
+-    # Expected format: dict mapping blocker → attacker (or list of attackers)
+-    block_assignments = defending.choose(
+-        eligible_blockers,
+-        "declare blockers",
+-    )
+-
+-    if block_assignments is None:
+-        return
+-
+-    if not isinstance(block_assignments, dict):
+-        return
+-
+-    # Process block assignments
+-    for blocker, target in block_assignments.items():
+-        # Validate that the blocker is in the eligible set
+-        if blocker not in eligible_blockers:
+-            continue
+-        targets = target if isinstance(target, list) else [target]
+-        valid_targets = []
+-        max_blocked = getattr(blocker, "_max_attackers_blocked", 1)
+-        for attacker in targets:
+-            if len(valid_targets) >= max_blocked:
+-                break
+-            if attacker in combat.attackers and _can_block(blocker, attacker):
+-                valid_targets.append(attacker)
+-        if valid_targets:
+-            combat.blockers[blocker] = valid_targets
+-            blocker.is_blocking = True
+-            for attacker in valid_targets:
+-                if attacker not in combat.attacker_blockers:
+-                    combat.attacker_blockers[attacker] = []
+-                combat.attacker_blockers[attacker].append(blocker)
+-
+-    # Menace check: attackers with menace that have fewer than 2 blockers
+-    # are treated as unblocked (remove the single blocker assignment).
+-    for attacker, blocker_list in list(combat.attacker_blockers.items()):
+-        kw = getattr(attacker, "keywords", Keyword(0))
+-        if Keyword.MENACE in kw and len(blocker_list) < 2 and len(blocker_list) > 0:
+-            # Illegal block — remove these blockers
+-            for b in blocker_list:
+-                if b in combat.blockers:
+-                    combat.blockers[b] = [
+-                        a for a in combat.blockers[b] if a is not attacker
+-                    ]
+-                    if not combat.blockers[b]:
+-                        del combat.blockers[b]
+-                        b.is_blocking = False
+-            combat.attacker_blockers[attacker] = []
+-
+-    # Mark attackers that have at least one blocker as "was_blocked".
+-    # Per MTG rule 509.1h, once a creature is blocked it remains blocked
+-    # even if all its blockers are removed before the damage step.
+-    for attacker, blocker_list in combat.attacker_blockers.items():
+-        if blocker_list:
+-            combat.was_blocked.add(attacker)
+-
+-    # Controller of each attacker orders the blockers for damage assignment
+-    for attacker, blocker_list in combat.attacker_blockers.items():
+-        if len(blocker_list) > 1:
+-            controller = getattr(attacker, "controller", active)
+-            ordered = controller.assign_damage_order(blocker_list)
+-            combat.attacker_blockers[attacker] = ordered
+-
+-
+-def combat_damage_step(game: GameState) -> None:
+-    """Combat damage step: deal combat damage.
+-
+-    Handles:
+-    - First strike / double strike creatures deal damage first.
+-    - State-based actions are checked between first-strike and normal damage.
+-    - Trample: excess damage over blocker toughness → defending player.
+-    - Lifelink: controller gains life equal to damage dealt.
+-    - Deathtouch: any damage is lethal (1 damage = lethal assignment).
+-    - Unblocked attackers deal damage to defending player.
+-
+-    Parameters:
+-        game: The current game state.
+-    """
+-    from engine.state_based_actions import resolve_state_based_actions
+-
+-    combat = game.combat_state
+-
+-    if not combat.attackers:
+-        return
+-
+-    all_attackers = list(combat.attackers.keys())
+-
+-    # Determine if a first-strike damage sub-step is needed
+-    # Check both attackers and blockers for first strike / double strike
+-    all_blockers = set()
+-    for blocker_list in combat.attacker_blockers.values():
+-        all_blockers.update(blocker_list)
+-
+-    has_first_strike_step = any(
+-        Keyword.FIRST_STRIKE in getattr(c, "keywords", Keyword(0))
+-        or Keyword.DOUBLE_STRIKE in getattr(c, "keywords", Keyword(0))
+-        for c in list(all_attackers) + list(all_blockers)
+-    )
+-
+-    # --- First strike damage sub-step ---
+-    if has_first_strike_step:
+-        _assign_combat_damage(all_attackers, combat, game, is_first_strike=True)
+-        resolve_state_based_actions(game)
+-
+-    # --- Normal damage sub-step ---
+-    _assign_combat_damage(all_attackers, combat, game, is_first_strike=False)
+-    resolve_state_based_actions(game)
+-
+-
+-def _assign_combat_damage(
+-    attackers: list[Any],
+-    combat: CombatState,
+-    game: GameState,
+-    *,
+-    is_first_strike: bool = False,
+-) -> None:
+-    """Assign and deal combat damage for a set of attackers.
+-
+-    For each attacker:
+-    - If unblocked → damage to defending player.
+-    - If blocked → damage assigned to blockers in order.  With trample,
+-      excess damage goes to the defending player.
+-    - Blockers deal damage back to the attacker they block.
+-
+-    When *is_first_strike* is ``True``, only creatures with
+-    ``FIRST_STRIKE`` or ``DOUBLE_STRIKE`` deal damage (both attackers
+-    and blockers).  When ``False``, only creatures *without*
+-    ``FIRST_STRIKE`` deal damage (plus ``DOUBLE_STRIKE`` creatures,
+-    which participate in both steps).  Blockers that are no longer on
+-    the battlefield (e.g. killed by first-strike damage and removed by
+-    SBAs) are skipped.
+-    """
+-    from engine.types import Zone
+-
+-    # Track which blockers have already dealt their damage this sub-step
+-    # (blockers only deal damage once even if blocking multiple attackers)
+-    blockers_dealt: set[int] = set()
+-
+-    for attacker in attackers:
+-        if attacker not in combat.attackers:
+-            continue
+-
+-        kw = getattr(attacker, "keywords", Keyword(0))
+-        has_first = Keyword.FIRST_STRIKE in kw
+-        has_double = Keyword.DOUBLE_STRIKE in kw
+-
+-        # Determine if this attacker deals damage in this sub-step
+-        if is_first_strike:
+-            attacker_deals = has_first or has_double
+-        else:
+-            attacker_deals = not has_first or has_double
+-
+-        # Skip if attacker is no longer on the battlefield
+-        if attacker_deals:
+-            controller = getattr(attacker, "controller", None)
+-            if controller is not None:
+-                bf = controller.zones[Zone.BATTLEFIELD]
+-                if not bf.contains(attacker):
+-                    attacker_deals = False
+-
+-        defending_player = combat.attackers[attacker]
+-        blocker_list = combat.attacker_blockers.get(attacker, [])
+-        attacker_kw = getattr(attacker, "keywords", Keyword(0))
+-
+-        if attacker_deals:
+-            power = getattr(attacker, "power", 0)
+-
+-            # Check if attacker was blocked.  Per MTG rule 509.1h, a blocked
+-            # creature stays blocked even if all its blockers are removed.
+-            is_blocked = attacker in combat.was_blocked
+-
+-            if not is_blocked and not blocker_list:
+-                # Truly unblocked → damage to defending player
+-                _deal_damage(attacker, defending_player, power, game, combat)
+-            elif is_blocked and not blocker_list:
+-                # Was blocked but all blockers removed.
+-                # Without trample: deals no damage.
+-                # With trample: all damage tramples to defending player.
+-                has_trample = Keyword.TRAMPLE in attacker_kw
+-                if has_trample:
+-                    _deal_damage(attacker, defending_player, power, game, combat)
+-                # else: no damage dealt
+-            else:
+-                # Blocked → assign damage to blockers in order
+-                has_trample = Keyword.TRAMPLE in attacker_kw
+-                remaining_damage = power
+-
+-                for i, blocker in enumerate(blocker_list):
+-                    if remaining_damage <= 0:
+-                        break
+-
+-                    lethal = _get_lethal_damage(blocker, attacker)
+-
+-                    if i < len(blocker_list) - 1:
+-                        # Not the last blocker — assign lethal damage
+-                        assign = min(lethal, remaining_damage)
+-                    else:
+-                        # Last blocker
+-                        if has_trample:
+-                            # With trample: assign lethal, rest tramples through
+-                            assign = min(lethal, remaining_damage)
+-                        else:
+-                            # Without trample: all remaining damage to last blocker
+-                            assign = remaining_damage
+-
+-                    _deal_damage(attacker, blocker, assign, game, combat)
+-                    remaining_damage -= assign
+-
+-                # Trample: excess damage to defending player
+-                if has_trample and remaining_damage > 0:
+-                    _deal_damage(attacker, defending_player, remaining_damage, game, combat)
+-
+-        # Blockers deal damage back to the attacker
+-        for blocker in blocker_list:
+-            if id(blocker) not in blockers_dealt:
+-                blocker_kw = getattr(blocker, "keywords", Keyword(0))
+-                blocker_has_first = Keyword.FIRST_STRIKE in blocker_kw
+-                blocker_has_double = Keyword.DOUBLE_STRIKE in blocker_kw
+-
+-                # Determine if this blocker deals damage in this sub-step
+-                if is_first_strike:
+-                    should_deal = blocker_has_first or blocker_has_double
+-                else:
+-                    should_deal = not blocker_has_first or blocker_has_double
+-
+-                # Skip if blocker is no longer on the battlefield
+-                if should_deal:
+-                    blocker_ctrl = getattr(blocker, "controller", None)
+-                    if blocker_ctrl is not None:
+-                        bf = blocker_ctrl.zones[Zone.BATTLEFIELD]
+-                        if not bf.contains(blocker):
+-                            should_deal = False
+-
+-                if should_deal:
+-                    blocker_power = getattr(blocker, "power", 0)
+-                    _deal_damage(blocker, attacker, blocker_power, game, combat)
+-                    blockers_dealt.add(id(blocker))
+-
+-
+-def end_combat_step(game: GameState) -> None:
+-    """End combat step: remove from combat and clear combat state.
+-
+-    Resets ``is_attacking`` and ``is_blocking`` flags on all creatures
+-    and clears the combat state.
+-
+-    Parameters:
+-        game: The current game state.
+-    """
+-    combat = game.combat_state
+-
+-    # Clear combat flags on all attackers
+-    for attacker in combat.attackers:
+-        if hasattr(attacker, "is_attacking"):
+-            attacker.is_attacking = False
+-
+-    # Clear combat flags on all blockers
+-    for blocker in combat.blockers:
+-        if hasattr(blocker, "is_blocking"):
+-            blocker.is_blocking = False
+-
+-    combat.clear()
+--- a/engine/continuous_effects.py
++++ /dev/null
+@@ -1,247 +0,0 @@
+-"""Continuous effects and the 7-layer system.
+-
+-Implements the MTG layer system (rule 613) for applying continuous effects
+-in the correct order. Effects are applied in layer order, and within the
+-same layer/sublayer, in timestamp order.
+-
+-Phase 1 scope:
+-  - Layers 4 (type-changing), 6 (ability granting/removing), 7c (P/T
+-    modifications), and 7d (P/T from counters) are fully functional.
+-  - Layers 1 (copy), 2 (control), 3 (text), and 5 (color) are stubs
+-    that iterate effects but delegate to their ``apply`` callables.
+-"""
+-
+-from __future__ import annotations
+-
+-import enum
+-from dataclasses import dataclass, field
+-from typing import TYPE_CHECKING, Any, Callable
+-
+-if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-
+-
+-class Layer(enum.IntEnum):
+-    """The 7 layers for applying continuous effects (rule 613).
+-
+-    Using IntEnum so that effects are naturally sorted by layer order.
+-    """
+-
+-    COPY = 1
+-    CONTROL = 2
+-    TEXT = 3
+-    TYPE = 4
+-    COLOR = 5
+-    ABILITY = 6
+-    POWER_TOUGHNESS = 7
+-
+-
+-class SubLayer(enum.Enum):
+-    """Sub-layers for layer 7 (power/toughness) effects.
+-
+-    Per rule 613.4:
+-      - 7a: Characteristic-defining abilities that set P/T.
+-      - 7b: Effects that set P/T to specific values.
+-      - 7c: Effects that modify P/T (e.g. +2/+2).
+-      - 7d: P/T changes from counters.
+-    """
+-
+-    CHARACTERISTIC_DEFINING = "7a"
+-    SET_PT = "7b"
+-    MODIFY_PT = "7c"
+-    COUNTERS = "7d"
+-
+-
+-# Duration constants — sentinels for ContinuousEffect.duration.
+-DURATION_PERMANENT = -1
+-"""The effect lasts as long as its source is on the battlefield."""
+-
+-DURATION_END_OF_TURN = 0
+-"""The effect lasts until end of turn (removed during cleanup)."""
+-
+-
+-@dataclass
+-class ContinuousEffect:
+-    """A single continuous effect in the layer system.
+-
+-    Attributes:
+-        source: The game object that creates this effect.
+-        layer: Which of the 7 layers this effect belongs to.
+-        sublayer: Sub-layer within layer 7 (``None`` for layers 1–6).
+-        apply: Callable ``(game: GameState) -> None`` that applies the effect.
+-        timestamp: Monotonically increasing integer for ordering effects
+-            within the same layer. Lower timestamp means earlier.
+-        duration: How long the effect lasts.  Use :data:`DURATION_PERMANENT`
+-            for static abilities, :data:`DURATION_END_OF_TURN` for until-EOT
+-            effects, or a positive integer representing the turn number
+-            on which the effect expires (removed when
+-            ``game.turn_number > duration``).
+-    """
+-
+-    source: Any
+-    layer: Layer
+-    sublayer: SubLayer | None = None
+-    apply: Callable[..., Any] = field(default=lambda _game: None)
+-    timestamp: int = 0
+-    duration: int = DURATION_PERMANENT
+-
+-    def _sort_key(self) -> tuple[int, int, int]:
+-        """Return a sort key: (layer, sublayer-ordinal, timestamp).
+-
+-        Effects are sorted first by layer, then by sublayer (for layer 7),
+-        then by timestamp within the same (layer, sublayer).
+-        """
+-        sublayer_order = _SUBLAYER_ORDER.get(self.sublayer, 0) if self.sublayer else 0
+-        return (self.layer.value, sublayer_order, self.timestamp)
+-
+-
+-# Map SubLayer values to a numeric ordering so 7a < 7b < 7c < 7d.
+-_SUBLAYER_ORDER: dict[SubLayer, int] = {
+-    SubLayer.CHARACTERISTIC_DEFINING: 1,
+-    SubLayer.SET_PT: 2,
+-    SubLayer.MODIFY_PT: 3,
+-    SubLayer.COUNTERS: 4,
+-}
+-
+-
+-class EffectManager:
+-    """Manages all active continuous effects and applies them in layer order.
+-
+-    The manager holds a list of :class:`ContinuousEffect` objects and provides
+-    methods to add, remove expired effects, and apply them all to the game
+-    state in the correct layer/timestamp order.
+-    """
+-
+-    def __init__(self) -> None:
+-        self._effects: list[ContinuousEffect] = []
+-        self._next_timestamp: int = 1
+-
+-    # ------------------------------------------------------------------
+-    # Public API
+-    # ------------------------------------------------------------------
+-
+-    def add(self, effect: ContinuousEffect) -> ContinuousEffect:
+-        """Add a continuous effect, auto-assigning a timestamp if it's 0.
+-
+-        Args:
+-            effect: The effect to register.
+-
+-        Returns:
+-            The effect (with timestamp populated).
+-        """
+-        if effect.timestamp == 0:
+-            effect.timestamp = self._next_timestamp
+-            self._next_timestamp += 1
+-        else:
+-            # Keep _next_timestamp ahead of any manually assigned timestamps.
+-            if effect.timestamp >= self._next_timestamp:
+-                self._next_timestamp = effect.timestamp + 1
+-        self._effects.append(effect)
+-        return effect
+-
+-    def remove(self, effect: ContinuousEffect) -> bool:
+-        """Remove a specific effect by identity.
+-
+-        Returns:
+-            ``True`` if the effect was found and removed, ``False`` otherwise.
+-        """
+-        for i, e in enumerate(self._effects):
+-            if e is effect:
+-                self._effects.pop(i)
+-                return True
+-        return False
+-
+-    def remove_expired(self, game: GameState) -> int:
+-        """Remove effects whose duration has expired.
+-
+-        - ``DURATION_PERMANENT`` (−1): never expires automatically.
+-        - ``DURATION_END_OF_TURN`` (0): removed when this method is called
+-          (typically during the cleanup step).
+-        - Positive integer *n*: removed when ``game.turn_number > n``.
+-
+-        Args:
+-            game: The current game state (used for turn number).
+-
+-        Returns:
+-            The number of effects removed.
+-        """
+-        before = len(self._effects)
+-        remaining: list[ContinuousEffect] = []
+-        for eff in self._effects:
+-            if eff.duration == DURATION_PERMANENT:
+-                remaining.append(eff)
+-            elif eff.duration == DURATION_END_OF_TURN:
+-                # End-of-turn effects are swept away.
+-                continue
+-            elif game.turn_number > eff.duration:
+-                # Turn-numbered expiry.
+-                continue
+-            else:
+-                remaining.append(eff)
+-        self._effects = remaining
+-        return before - len(self._effects)
+-
+-    def apply_all(self, game: GameState) -> None:
+-        """Apply all active effects in layer order, then timestamp order.
+-
+-        Before applying, all objects on each player's battlefield are reset
+-        to their original (pre-effect) characteristics so that calling this
+-        method multiple times is idempotent.
+-
+-        Within each layer (and sublayer for layer 7), effects are applied
+-        in timestamp order.  This method should be called whenever the
+-        game state needs a fresh recalculation of continuous effects —
+-        for example, after state-based actions or any game event that
+-        could change the set of applicable effects.
+-        """
+-        # Reset battlefield objects to their base characteristics so that
+-        # reapplying effects does not accumulate on top of stale mutations.
+-        self._reset_objects(game)
+-
+-        sorted_effects = sorted(self._effects, key=lambda e: e._sort_key())
+-        for effect in sorted_effects:
+-            effect.apply(game)
+-
+-    # ------------------------------------------------------------------
+-    # Internal helpers
+-    # ------------------------------------------------------------------
+-
+-    def _reset_objects(self, game: GameState) -> None:
+-        """Reset all battlefield objects to their original characteristics.
+-
+-        Iterates over every player's battlefield and calls
+-        ``_reset_characteristics()`` on any object that supports it
+-        (i.e. :class:`~engine.card.CardImpl` and its subclasses).
+-        """
+-        for player in game.players:
+-            for obj in game.get_battlefield(player).get_all():
+-                reset = getattr(obj, "_reset_characteristics", None)
+-                if callable(reset):
+-                    reset()
+-
+-    # ------------------------------------------------------------------
+-    # Query helpers
+-    # ------------------------------------------------------------------
+-
+-    @property
+-    def effects(self) -> list[ContinuousEffect]:
+-        """Return a shallow copy of the current effects list."""
+-        return list(self._effects)
+-
+-    def get_effects_for_layer(self, layer: Layer) -> list[ContinuousEffect]:
+-        """Return effects belonging to a specific layer, in timestamp order."""
+-        return sorted(
+-            [e for e in self._effects if e.layer == layer],
+-            key=lambda e: e._sort_key(),
+-        )
+-
+-    def get_effects_by_source(self, source: Any) -> list[ContinuousEffect]:
+-        """Return all effects created by a given source object."""
+-        return [e for e in self._effects if e.source is source]
+-
+-    def clear(self) -> None:
+-        """Remove all effects."""
+-        self._effects.clear()
+-
+-    def __len__(self) -> int:
+-        return len(self._effects)
+--- a/engine/game.py
++++ /dev/null
+@@ -1,519 +0,0 @@
+-"""Game setup, helper actions, and the full game loop.
+-
+-Provides the top-level functions for creating, running, and interacting with
+-a game of Magic: The Gathering:
+-
+-- :func:`create_game` — initialise a full game state for two players.
+-- Helper actions — module-level functions for common game operations
+-  (``deal_damage``, ``destroy``, ``sacrifice``, ``exile``, ``draw_card``,
+-  ``discard``, ``create_token``, ``add_counter``, ``remove_counter``,
+-  ``tap``, ``untap``).
+-- :func:`run_game` — execute turns until the game ends, returning the winner.
+-"""
+-
+-from __future__ import annotations
+-
+-from typing import TYPE_CHECKING, Any
+-
+-from engine.game_state import GameState
+-from engine.triggers import EventType
+-from engine.turn import run_turn
+-from engine.types import Zone
+-from engine.zones import move_to_zone
+-
+-if TYPE_CHECKING:
+-    from engine.card import CardImpl, Creature
+-    from engine.player import Player
+-
+-
+-# Maximum number of turns before the game is considered a draw.
+-# Prevents infinite loops in deterministic or stuck game states.
+-MAX_TURNS: int = 1000
+-
+-
+-# ---------------------------------------------------------------------------
+-# Game creation
+-# ---------------------------------------------------------------------------
+-
+-def create_game(
+-    player1: Player,
+-    player2: Player,
+-    deck1: list[CardImpl],
+-    deck2: list[CardImpl],
+-) -> GameState:
+-    """Create and initialise a new two-player game.
+-
+-    Steps performed:
+-
+-    1. Set each player's life total to 20.
+-    2. Place *deck1* / *deck2* into the respective player's library zone.
+-    3. Shuffle each library.
+-    4. Draw 7 cards for each player.
+-    5. Set the active player to *player1*.
+-
+-    Card ownership is set so that each card's ``owner`` and ``controller``
+-    point to the player whose deck it came from.
+-
+-    Parameters:
+-        player1: The first player (goes first).
+-        player2: The second player.
+-        deck1: Cards comprising player1's deck.
+-        deck2: Cards comprising player2's deck.
+-
+-    Returns:
+-        A fully initialised :class:`GameState` ready for play.
+-    """
+-    # 1. Set life totals
+-    player1.life = 20
+-    player2.life = 20
+-
+-    # 2. Place deck cards into libraries and set ownership
+-    library1 = player1.zones[Zone.LIBRARY]
+-    for card in deck1:
+-        card.owner = player1
+-        card.controller = player1
+-        library1.add(card)
+-
+-    library2 = player2.zones[Zone.LIBRARY]
+-    for card in deck2:
+-        card.owner = player2
+-        card.controller = player2
+-        library2.add(card)
+-
+-    # 3. Shuffle libraries
+-    library1.shuffle()
+-    library2.shuffle()
+-
+-    # Build the game state
+-    game = GameState([player1, player2])
+-
+-    # 4. Draw 7 cards each
+-    for _ in range(7):
+-        draw_card(game, player1)
+-    for _ in range(7):
+-        draw_card(game, player2)
+-
+-    # 5. Active player is player1 (index 0 — already the default)
+-    game.active_player_index = 0
+-    game.priority_player_index = 0
+-
+-    return game
+-
+-
+-# ---------------------------------------------------------------------------
+-# Common helper actions
+-# ---------------------------------------------------------------------------
+-
+-def deal_damage(game: GameState, source: Any, target: Any, amount: int) -> None:
+-    """Deal *amount* damage from *source* to *target*.
+-
+-    If *target* has a ``life`` attribute (i.e. is a player), life is reduced.
+-    If *target* has a ``damage_marked`` attribute (i.e. is a creature),
+-    damage is marked on it.
+-
+-    Fires :attr:`EventType.DEALS_DAMAGE` via the trigger manager.
+-
+-    Parameters:
+-        game: The current game state.
+-        source: The object dealing the damage.
+-        target: The player or creature receiving the damage.
+-        amount: The amount of damage to deal (must be > 0 to have effect).
+-    """
+-    if amount <= 0:
+-        return
+-
+-    from engine.protection import has_protection_from
+-    from engine.types import Keyword
+-
+-    # Protection prevents damage from sources with the protected-from quality.
+-    if has_protection_from(target, source):
+-        return
+-
+-    if hasattr(target, "life"):
+-        # Target is a player
+-        target.life -= amount
+-        # Fire damage trigger
+-        game.trigger_manager.fire_event(
+-            game,
+-            EventType.DEALS_DAMAGE,
+-            {"source": source, "target": target, "amount": amount},
+-        )
+-        # Fire loses-life trigger
+-        game.trigger_manager.fire_event(
+-            game,
+-            EventType.LOSES_LIFE,
+-            {"player": target, "amount": amount},
+-        )
+-    elif hasattr(target, "damage_marked"):
+-        # Target is a creature
+-        target.damage_marked += amount
+-
+-        # Track deathtouch damage for SBA rule 704.5h
+-        source_kw = getattr(source, "keywords", Keyword(0))
+-        if Keyword.DEATHTOUCH in source_kw:
+-            target.dealt_deathtouch_damage = True
+-
+-        # Fire damage trigger
+-        game.trigger_manager.fire_event(
+-            game,
+-            EventType.DEALS_DAMAGE,
+-            {"source": source, "target": target, "amount": amount},
+-        )
+-
+-    # Lifelink: controller of source gains life equal to damage dealt
+-    source_kw = getattr(source, "keywords", Keyword(0))
+-    if Keyword.LIFELINK in source_kw:
+-        controller = getattr(source, "controller", None)
+-        if controller is not None and hasattr(controller, "life"):
+-            controller.life += amount
+-
+-
+-def destroy(game: GameState, permanent: Any) -> None:
+-    """Destroy *permanent* — move it from the battlefield to its owner's graveyard.
+-
+-    Respects replacement effects via :func:`move_to_zone`.
+-    Creatures with the ``INDESTRUCTIBLE`` keyword are not destroyed.
+-
+-    Parameters:
+-        game: The current game state.
+-        permanent: The permanent to destroy.
+-    """
+-    from engine.types import Keyword
+-
+-    # Indestructible permanents cannot be destroyed
+-    kw = getattr(permanent, "keywords", Keyword(0))
+-    if Keyword.INDESTRUCTIBLE in kw:
+-        return
+-
+-    controller = getattr(permanent, "controller", None)
+-    if controller is None:
+-        # Fallback: find which player's battlefield contains it
+-        for player in game.players:
+-            bf = game.get_battlefield(player)
+-            if bf.contains(permanent):
+-                controller = player
+-                break
+-    if controller is None:
+-        return
+-
+-    bf = game.get_battlefield(controller)
+-    if not bf.contains(permanent):
+-        return
+-
+-    # Determine the replacement event type based on card type
+-    from engine.types import CardType
+-
+-    card_types = getattr(permanent, "card_types", set())
+-    is_creature = CardType.CREATURE in card_types
+-    event_type_str = "creature_dies" if is_creature else "permanent_destroyed"
+-
+-    move_to_zone(
+-        game,
+-        permanent,
+-        Zone.BATTLEFIELD,
+-        Zone.GRAVEYARD,
+-        replacement_event_type=event_type_str,
+-    )
+-
+-
+-def sacrifice(game: GameState, player: Player, permanent: Any) -> None:
+-    """Sacrifice *permanent* — move it from the battlefield to its owner's graveyard.
+-
+-    Sacrificing cannot be prevented by indestructible or regeneration, but
+-    replacement effects that modify zone changes (e.g. "if this would be
+-    put into a graveyard, exile it instead") still apply via
+-    :func:`move_to_zone`.
+-
+-    Parameters:
+-        game: The current game state.
+-        player: The player performing the sacrifice.
+-        permanent: The permanent to sacrifice.
+-    """
+-    bf = game.get_battlefield(player)
+-    if not bf.contains(permanent):
+-        return
+-
+-    move_to_zone(
+-        game,
+-        permanent,
+-        Zone.BATTLEFIELD,
+-        Zone.GRAVEYARD,
+-        replacement_event_type="sacrifice",
+-    )
+-
+-
+-def exile(game: GameState, obj: Any) -> None:
+-    """Exile *obj* — move it to its owner's exile zone.
+-
+-    Works for objects on the battlefield, in the graveyard, on the stack,
+-    or in hand.
+-
+-    Parameters:
+-        game: The current game state.
+-        obj: The game object to exile.
+-    """
+-    # Find which zone the object is currently in
+-    source_zone_type = None
+-    for player in game.players:
+-        for zone_type in Zone:
+-            zone = player.zones[zone_type]
+-            if zone.contains(obj):
+-                source_zone_type = zone_type
+-                break
+-        if source_zone_type is not None:
+-            break
+-
+-    if source_zone_type is None:
+-        return
+-
+-    move_to_zone(game, obj, source_zone_type, Zone.EXILE)
+-
+-
+-def draw_card(game: GameState, player: Player) -> Any | None:
+-    """Draw a card for *player* — move the top card of library to hand.
+-
+-    If the library is empty, sets ``player.drawn_from_empty_library = True``
+-    (SBAs will handle the game loss).
+-
+-    Fires :attr:`EventType.DRAWS_CARD` via the trigger manager.
+-
+-    Parameters:
+-        game: The current game state.
+-        player: The player drawing a card.
+-
+-    Returns:
+-        The drawn card, or ``None`` if the library was empty.
+-    """
+-    library = player.zones[Zone.LIBRARY]
+-
+-    if len(library) == 0:
+-        player.drawn_from_empty_library = True
+-        return None
+-
+-    # Top of library is the last element (index -1)
+-    cards = library.top(1)
+-    card = cards[0]
+-    library.remove(card)
+-
+-    hand = player.zones[Zone.HAND]
+-    hand.add(card)
+-
+-    # Track cards drawn this turn
+-    if not hasattr(player, "cards_drawn_this_turn"):
+-        player.cards_drawn_this_turn = 0
+-    player.cards_drawn_this_turn += 1
+-
+-    # Fire trigger (only if game has a trigger_manager — may not during setup)
+-    if hasattr(game, "trigger_manager"):
+-        game.trigger_manager.fire_event(
+-            game,
+-            EventType.DRAWS_CARD,
+-            {"player": player, "card": card},
+-        )
+-
+-    return card
+-
+-
+-def discard(game: GameState, player: Player, card: Any) -> None:
+-    """Discard *card* from *player*'s hand to the owner's graveyard.
+-
+-    Parameters:
+-        game: The current game state.
+-        player: The player discarding.
+-        card: The card to discard (must be in the player's hand).
+-    """
+-    hand = game.get_hand(player)
+-    if not hand.contains(card):
+-        return
+-
+-    move_to_zone(game, card, Zone.HAND, Zone.GRAVEYARD)
+-
+-
+-def create_token(game: GameState, player: Player, token: Any) -> None:
+-    """Create a token on the battlefield under *player*'s control.
+-
+-    Sets ``is_token = True`` on the token, along with ``owner`` and
+-    ``controller``.  Uses :func:`move_to_zone` for entering-battlefield
+-    hooks (trigger/replacement-effect registration and ETB event).
+-
+-    Parameters:
+-        game: The current game state.
+-        player: The player who controls the token.
+-        token: The token object to place on the battlefield.
+-    """
+-    token.is_token = True
+-    token.owner = player
+-    token.controller = player
+-
+-    # Tokens don't come from an existing zone — add directly and fire hooks.
+-    # Ordering matches move_to_zone: fire ETB *before* registering the token's
+-    # own triggers so a token's ETB trigger doesn't self-fire on entry.
+-    battlefield = game.get_battlefield(player)
+-    battlefield.add(token)
+-
+-    from engine.triggers import EventType as _ET
+-
+-    game.trigger_manager.fire_event(
+-        game,
+-        _ET.ENTERS_BATTLEFIELD,
+-        {"permanent": token, "controller": player},
+-    )
+-
+-    # Register triggers/replacement effects after the ETB event.
+-    if hasattr(token, "register_triggers"):
+-        token.register_triggers(game)
+-    if hasattr(token, "register_replacement_effects"):
+-        token.register_replacement_effects(game)
+-
+-
+-def add_counter(
+-    game: GameState,
+-    permanent: Any,
+-    counter_type: str,
+-    amount: int = 1,
+-) -> None:
+-    """Add *amount* counters of *counter_type* to *permanent*.
+-
+-    Supports ``"+1/+1"`` and ``"-1/-1"`` counter types via the
+-    ``plus_one_counters`` / ``minus_one_counters`` attributes.  For other
+-    counter types, uses a generic ``counters`` dict.
+-
+-    Parameters:
+-        game: The current game state.
+-        permanent: The permanent to add counters to.
+-        counter_type: The type of counter (e.g. ``"+1/+1"``, ``"-1/-1"``,
+-            ``"loyalty"``, ``"charge"``).
+-        amount: Number of counters to add (default 1).
+-    """
+-    if amount <= 0:
+-        return
+-
+-    if counter_type == "+1/+1" and hasattr(permanent, "plus_one_counters"):
+-        permanent.plus_one_counters += amount
+-    elif counter_type == "-1/-1" and hasattr(permanent, "minus_one_counters"):
+-        permanent.minus_one_counters += amount
+-    elif counter_type == "loyalty" and hasattr(permanent, "loyalty"):
+-        permanent.loyalty += amount
+-    else:
+-        # Generic counter storage
+-        if not hasattr(permanent, "counters"):
+-            permanent.counters = {}
+-        permanent.counters[counter_type] = permanent.counters.get(counter_type, 0) + amount
+-
+-
+-def remove_counter(
+-    game: GameState,
+-    permanent: Any,
+-    counter_type: str,
+-    amount: int = 1,
+-) -> None:
+-    """Remove *amount* counters of *counter_type* from *permanent*.
+-
+-    Will not reduce below zero.
+-
+-    Parameters:
+-        game: The current game state.
+-        permanent: The permanent to remove counters from.
+-        counter_type: The type of counter to remove.
+-        amount: Number of counters to remove (default 1).
+-    """
+-    if amount <= 0:
+-        return
+-
+-    if counter_type == "+1/+1" and hasattr(permanent, "plus_one_counters"):
+-        permanent.plus_one_counters = max(0, permanent.plus_one_counters - amount)
+-    elif counter_type == "-1/-1" and hasattr(permanent, "minus_one_counters"):
+-        permanent.minus_one_counters = max(0, permanent.minus_one_counters - amount)
+-    elif counter_type == "loyalty" and hasattr(permanent, "loyalty"):
+-        permanent.loyalty = max(0, permanent.loyalty - amount)
+-    else:
+-        if hasattr(permanent, "counters") and counter_type in permanent.counters:
+-            permanent.counters[counter_type] = max(
+-                0, permanent.counters[counter_type] - amount
+-            )
+-
+-
+-def tap(game: GameState, permanent: Any) -> None:
+-    """Tap *permanent* — set ``is_tapped = True``.
+-
+-    Parameters:
+-        game: The current game state.
+-        permanent: The permanent to tap.
+-    """
+-    if hasattr(permanent, "is_tapped"):
+-        permanent.is_tapped = True
+-
+-
+-def untap(game: GameState, permanent: Any) -> None:
+-    """Untap *permanent* — set ``is_tapped = False``.
+-
+-    Parameters:
+-        game: The current game state.
+-        permanent: The permanent to untap.
+-    """
+-    if hasattr(permanent, "is_tapped"):
+-        permanent.is_tapped = False
+-
+-
+-# ---------------------------------------------------------------------------
+-# Game loop
+-# ---------------------------------------------------------------------------
+-
+-def run_game(game: GameState) -> Player | None:
+-    """Run the game loop until the game ends.
+-
+-    Executes :func:`~engine.turn.run_turn` in a loop, checking
+-    :attr:`GameState.is_game_over` after each turn.  State-based actions
+-    are resolved before and after each turn to catch game-ending conditions
+-    even when the priority loop auto-passes.
+-
+-    Includes a safety limit of :data:`MAX_TURNS` to prevent infinite loops
+-    in deterministic or stuck game states.
+-
+-    Parameters:
+-        game: The game state to run.
+-
+-    Returns:
+-        The winning player, or ``None`` if the game ended in a draw (or
+-        hit the turn limit).
+-    """
+-    from engine.state_based_actions import resolve_state_based_actions
+-
+-    while not game.is_game_over and game.turn_number <= MAX_TURNS:
+-        # Check SBAs before the turn (catches pre-existing conditions)
+-        resolve_state_based_actions(game)
+-        _check_game_over(game)
+-        if game.is_game_over:
+-            break
+-
+-        run_turn(game)
+-
+-        # Check SBAs after the turn
+-        resolve_state_based_actions(game)
+-        _check_game_over(game)
+-
+-    return game.winner
+-
+-
+-def _check_game_over(game: GameState) -> None:
+-    """Check whether the game has ended and update ``game.is_game_over`` / ``game.winner``.
+-
+-    The game ends when:
+-    - One player has lost (``has_lost``): the other player wins.
+-    - Both players have lost: the game is a draw (``winner = None``).
+-    - The turn limit is exceeded: the game is a draw.
+-    """
+-    lost_players = [p for p in game.players if p.has_lost]
+-
+-    if len(lost_players) == len(game.players):
+-        # All players have lost — draw
+-        game.is_game_over = True
+-        game.winner = None
+-    elif len(lost_players) == 1:
+-        # One player lost — the other wins
+-        game.is_game_over = True
+-        game.winner = [p for p in game.players if not p.has_lost][0]
+-    elif game.turn_number > MAX_TURNS:
+-        # Turn limit exceeded — draw
+-        game.is_game_over = True
+-        game.winner = None
+--- a/engine/game_state.py
++++ /dev/null
+@@ -1,168 +0,0 @@
+-"""Central game state and turn/phase/step progression."""
+-
+-from __future__ import annotations
+-
+-from typing import Any
+-
+-from engine.combat import CombatState
+-from engine.continuous_effects import EffectManager
+-from engine.player import Player
+-from engine.replacement_effects import ReplacementManager
+-from engine.stack import Stack
+-from engine.triggers import TriggerManager
+-from engine.types import Phase, Step, Zone
+-from engine.zones import ZoneContainer
+-
+-# Ordered list of (Phase, Step | None) representing a full MTG turn.
+-_TURN_SEQUENCE: list[tuple[Phase, Step | None]] = [
+-    # Beginning phase
+-    (Phase.BEGINNING, Step.UNTAP),
+-    (Phase.BEGINNING, Step.UPKEEP),
+-    (Phase.BEGINNING, Step.DRAW),
+-    # Precombat main phase
+-    (Phase.PRECOMBAT_MAIN, None),
+-    # Combat phase
+-    (Phase.COMBAT, Step.BEGIN_COMBAT),
+-    (Phase.COMBAT, Step.DECLARE_ATTACKERS),
+-    (Phase.COMBAT, Step.DECLARE_BLOCKERS),
+-    (Phase.COMBAT, Step.COMBAT_DAMAGE),
+-    (Phase.COMBAT, Step.END_COMBAT),
+-    # Postcombat main phase
+-    (Phase.POSTCOMBAT_MAIN, None),
+-    # Ending phase
+-    (Phase.ENDING, Step.END),
+-    (Phase.ENDING, Step.CLEANUP),
+-]
+-
+-
+-class GameState:
+-    """Central game-state object tracking all mutable game information.
+-
+-    Attributes:
+-        players: The list of players in the game.
+-        active_player_index: Index of the current active player.
+-        priority_player_index: Index of the player who currently has priority.
+-        phase: Current phase of the turn.
+-        step: Current step within the phase (``None`` for main phases).
+-        turn_number: The current turn number (1-indexed).
+-        stack: The game stack for spells and abilities.
+-        trigger_manager: Central registry for triggered abilities.
+-        replacement_manager: Central registry for replacement effects.
+-        effect_manager: Manager for continuous effects and the layer system.
+-        is_game_over: Whether the game has ended.
+-        winner: The winning player, or ``None`` if the game is ongoing / draw.
+-    """
+-
+-    def __init__(self, players: list[Player]) -> None:
+-        if len(players) < 2:
+-            raise ValueError("GameState requires at least 2 players")
+-        if len(players) > 2:
+-            raise ValueError("GameState supports exactly 2 players")
+-
+-        self.players: list[Player] = players
+-        self.active_player_index: int = 0
+-        self.priority_player_index: int = 0
+-        self.phase: Phase = Phase.BEGINNING
+-        self.step: Step | None = Step.UNTAP
+-        self.turn_number: int = 1
+-        self.stack: Stack = Stack()
+-        self.trigger_manager: TriggerManager = TriggerManager()
+-        self.replacement_manager: ReplacementManager = ReplacementManager()
+-        self.effect_manager: EffectManager = EffectManager()
+-        self.combat_state: CombatState = CombatState()
+-        self.is_game_over: bool = False
+-        self.winner: Player | None = None
+-        # ENGINE LIMITATION: Extra turns queue (FIFO of player seat indices).
+-        # Complex interactions ('skip your next turn', multiple extra turns
+-        # from different sources) are not fully handled.
+-        self.extra_turns: list[int] = []
+-        # Tracks normal turn rotation independently of extra turns.
+-        # Extra turns are truly *inserted* — they don't advance the
+-        # normal rotation.  When extras are exhausted the game picks up
+-        # from _normal_next_index.
+-        self._normal_next_index: int = 1
+-
+-    # ------------------------------------------------------------------
+-    # Player properties
+-    # ------------------------------------------------------------------
+-
+-    @property
+-    def active_player(self) -> Player:
+-        """Return the currently active player."""
+-        return self.players[self.active_player_index]
+-
+-    @property
+-    def priority_player(self) -> Player:
+-        """Return the player who currently has priority."""
+-        return self.players[self.priority_player_index]
+-
+-    @property
+-    def non_active_player(self) -> Player:
+-        """Return the non-active player (2-player assumption for v1)."""
+-        return self.players[1 - self.active_player_index]
+-
+-    # ------------------------------------------------------------------
+-    # Zone accessors
+-    # ------------------------------------------------------------------
+-
+-    def get_battlefield(self, player: Player) -> ZoneContainer:
+-        """Return the battlefield zone for *player*."""
+-        return player.zones[Zone.BATTLEFIELD]
+-
+-    def get_hand(self, player: Player) -> ZoneContainer:
+-        """Return the hand zone for *player*."""
+-        return player.zones[Zone.HAND]
+-
+-    def get_graveyard(self, player: Player) -> ZoneContainer:
+-        """Return the graveyard zone for *player*."""
+-        return player.zones[Zone.GRAVEYARD]
+-
+-    def get_library(self, player: Player) -> ZoneContainer:
+-        """Return the library zone for *player*."""
+-        return player.zones[Zone.LIBRARY]
+-
+-    def get_exile(self, player: Player) -> ZoneContainer:
+-        """Return the exile zone for *player*."""
+-        return player.zones[Zone.EXILE]
+-
+-    # ------------------------------------------------------------------
+-    # Phase/step progression
+-    # ------------------------------------------------------------------
+-
+-    def advance_phase(self) -> None:
+-        """Advance to the next phase/step in MTG turn order.
+-
+-        At the end of CLEANUP, the turn number is incremented and the
+-        active player swaps (2-player assumption).  Mana pools are
+-        emptied on every transition.
+-        """
+-        current = (self.phase, self.step)
+-        idx = _TURN_SEQUENCE.index(current)
+-
+-        if idx + 1 < len(_TURN_SEQUENCE):
+-            # Move to next phase/step within the same turn.
+-            next_phase, next_step = _TURN_SEQUENCE[idx + 1]
+-            self.phase = next_phase
+-            self.step = next_step
+-        else:
+-            # End of turn — wrap around.
+-            self.turn_number += 1
+-            if self.extra_turns:
+-                # ENGINE LIMITATION: Extra turns queue (FIFO). Pop the
+-                # next player seat index; that player gets the next turn.
+-                # Normal rotation is NOT advanced — extra turns are
+-                # inserted before the normal next turn.
+-                self.active_player_index = self.extra_turns.pop(0)
+-            else:
+-                self.active_player_index = self._normal_next_index
+-                self._normal_next_index = 1 - self._normal_next_index
+-            self.priority_player_index = self.active_player_index
+-            self.phase = _TURN_SEQUENCE[0][0]
+-            self.step = _TURN_SEQUENCE[0][1]
+-
+-        self.empty_mana_pools()
+-
+-    def empty_mana_pools(self) -> None:
+-        """Empty all players' mana pools — called on each phase/step transition."""
+-        for player in self.players:
+-            player.mana_pool.empty()
+--- a/engine/mana.py
++++ /dev/null
+@@ -1,250 +0,0 @@
+-"""Mana pool and cost payment logic."""
+-
+-from __future__ import annotations
+-
+-from engine.types import Color, HybridManaSymbol, ManaCost, ManaType
+-
+-# Map colored ManaTypes to their corresponding Color enum values.
+-_MANA_TO_COLOR: dict[ManaType, Color] = {
+-    ManaType.WHITE: Color.WHITE,
+-    ManaType.BLUE: Color.BLUE,
+-    ManaType.BLACK: Color.BLACK,
+-    ManaType.RED: Color.RED,
+-    ManaType.GREEN: Color.GREEN,
+-}
+-
+-
+-class ManaPool:
+-    """Tracks available mana for a player.
+-
+-    Internal storage uses a ``dict[ManaType, int]`` mapping each mana type
+-    to its current count.
+-    """
+-
+-    def __init__(self) -> None:
+-        self._pool: dict[ManaType, int] = {mt: 0 for mt in ManaType}
+-        self._last_payment_colors: list[Color] = []
+-
+-    # ------------------------------------------------------------------
+-    # Basic operations
+-    # ------------------------------------------------------------------
+-
+-    def add(self, mana_type: ManaType, amount: int = 1) -> None:
+-        """Add *amount* mana of the given type to the pool.
+-
+-        Parameters:
+-            mana_type: The type of mana to add.
+-            amount: How many mana to add (must be non-negative).
+-        """
+-        if amount < 0:
+-            raise ValueError(f"Cannot add negative mana: {amount}")
+-        self._pool[mana_type] = self._pool.get(mana_type, 0) + amount
+-
+-    def empty(self) -> None:
+-        """Clear the pool — happens at phase/step transitions."""
+-        for mt in self._pool:
+-            self._pool[mt] = 0
+-
+-    def total(self) -> int:
+-        """Return the total amount of mana in the pool across all types."""
+-        return sum(self._pool.values())
+-
+-    def get(self, mana_type: ManaType) -> int:
+-        """Return the amount of a specific mana type in the pool."""
+-        return self._pool.get(mana_type, 0)
+-
+-    @property
+-    def last_payment_colors(self) -> list[Color]:
+-        """Return the distinct colors of mana spent in the last :meth:`pay` call.
+-
+-        Colorless mana is not a color and is excluded.  The list is sorted
+-        by Color enum order for determinism.  Empty if no payment has been
+-        made or if all mana spent was colorless.
+-        """
+-        return list(self._last_payment_colors)
+-
+-    # ------------------------------------------------------------------
+-    # Cost payment
+-    # ------------------------------------------------------------------
+-
+-    def can_pay(self, cost: ManaCost) -> bool:
+-        """Check whether the pool can satisfy *cost*.
+-
+-        Generic mana can be paid by any type.  X is treated as 0 for
+-        ``can_pay`` unless explicitly set in the cost's generic component.
+-        Hybrid symbols can be paid with either option; this method uses
+-        backtracking to find a valid assignment.
+-
+-        Returns:
+-            True if the pool has enough mana to pay the cost.
+-        """
+-        remaining: dict[ManaType, int] = dict(self._pool)
+-
+-        # Pay colored/colorless pips first.
+-        for mana_type, count in cost.pips.items():
+-            if remaining.get(mana_type, 0) < count:
+-                return False
+-            remaining[mana_type] = remaining.get(mana_type, 0) - count
+-
+-        # Solve hybrid symbols with backtracking.
+-        if cost.hybrid:
+-            if not self._can_pay_hybrid(remaining, list(cost.hybrid), 0, cost.generic):
+-                return False
+-            return True
+-
+-        # Then check generic — sum of all remaining mana must cover it.
+-        return sum(remaining.values()) >= cost.generic
+-
+-    def pay(self, cost: ManaCost, choices: dict[ManaType, int] | None = None) -> bool:
+-        """Deduct mana from the pool to pay *cost*.
+-
+-        Parameters:
+-            cost: The mana cost to pay.
+-            choices: How to split the generic portion across mana types.
+-                If ``None``, auto-pay greedily: pay colored pips first,
+-                then hybrid symbols, then generic using colorless first,
+-                then excess colored.
+-
+-        Returns:
+-            True if payment succeeded, False if the pool has insufficient mana.
+-        """
+-        if not self.can_pay(cost):
+-            return False
+-
+-        # Work on a copy so we can roll back on failure.
+-        working: dict[ManaType, int] = dict(self._pool)
+-
+-        # 1. Pay colored/colorless pips.
+-        for mana_type, count in cost.pips.items():
+-            working[mana_type] -= count
+-
+-        # 2. When explicit generic choices are provided, reserve that mana
+-        #    *before* solving hybrids so the solver doesn't steal it.
+-        generic_remaining = cost.generic
+-        if generic_remaining > 0 and choices is not None:
+-            # Reject negative choice amounts — they would create mana.
+-            if any(v < 0 for v in choices.values()):
+-                return False
+-            # Validate choices sum to generic cost.
+-            if sum(choices.values()) != generic_remaining:
+-                return False
+-            for mana_type, amount in choices.items():
+-                if working.get(mana_type, 0) < amount:
+-                    return False
+-                working[mana_type] -= amount
+-
+-        # 3. Pay hybrid symbols using backtracking to find a valid assignment.
+-        #    Generic choices (if any) have already been reserved above,
+-        #    so _solve_hybrid sees only the genuinely available mana.
+-        if cost.hybrid:
+-            generic_for_solver = generic_remaining if choices is None else 0
+-            hybrid_assignment = self._solve_hybrid(
+-                working, list(cost.hybrid), 0, generic_for_solver,
+-            )
+-            if hybrid_assignment is None:
+-                return False  # pragma: no cover – should not happen after can_pay
+-            for mt in hybrid_assignment:
+-                working[mt] = working.get(mt, 0) - 1
+-
+-        # 4. Pay generic cost (auto-pay path — choices already deducted above).
+-        if generic_remaining > 0 and choices is None:
+-            generic_remaining = self._auto_pay_generic(working, generic_remaining)
+-            if generic_remaining > 0:
+-                return False  # pragma: no cover – should not happen after can_pay
+-
+-        # Commit the payment.
+-        # Compute colors of mana spent by comparing old pool to new working pool.
+-        colors_spent: set[Color] = set()
+-        for mt, old_amount in self._pool.items():
+-            new_amount = working.get(mt, 0)
+-            if new_amount < old_amount and mt in _MANA_TO_COLOR:
+-                colors_spent.add(_MANA_TO_COLOR[mt])
+-        self._last_payment_colors = sorted(colors_spent, key=lambda c: c.value)
+-        self._pool = working
+-        return True
+-
+-    @staticmethod
+-    def _can_pay_hybrid(
+-        remaining: dict[ManaType, int],
+-        hybrids: list[HybridManaSymbol],
+-        idx: int,
+-        generic: int,
+-    ) -> bool:
+-        """Recursively check if hybrid symbols + generic can be satisfied.
+-
+-        Uses backtracking: for each hybrid symbol, try option_a then option_b.
+-        After all hybrids are assigned, check that remaining mana covers generic.
+-        """
+-        if idx >= len(hybrids):
+-            return sum(remaining.values()) >= generic
+-
+-        sym = hybrids[idx]
+-        for option in (sym.option_a, sym.option_b):
+-            if remaining.get(option, 0) > 0:
+-                remaining[option] -= 1
+-                if ManaPool._can_pay_hybrid(remaining, hybrids, idx + 1, generic):
+-                    remaining[option] += 1
+-                    return True
+-                remaining[option] += 1
+-        return False
+-
+-    @staticmethod
+-    def _solve_hybrid(
+-        remaining: dict[ManaType, int],
+-        hybrids: list[HybridManaSymbol],
+-        idx: int,
+-        generic: int,
+-    ) -> list[ManaType] | None:
+-        """Find a valid assignment for hybrid symbols.
+-
+-        Returns a list of ManaType choices (one per hybrid symbol) or None
+-        if no valid assignment exists.
+-        """
+-        if idx >= len(hybrids):
+-            if sum(remaining.values()) >= generic:
+-                return []
+-            return None
+-
+-        sym = hybrids[idx]
+-        for option in (sym.option_a, sym.option_b):
+-            if remaining.get(option, 0) > 0:
+-                remaining[option] -= 1
+-                result = ManaPool._solve_hybrid(remaining, hybrids, idx + 1, generic)
+-                if result is not None:
+-                    remaining[option] += 1
+-                    return [option] + result
+-                remaining[option] += 1
+-        return None
+-
+-    @staticmethod
+-    def _auto_pay_generic(working: dict[ManaType, int], amount: int) -> int:
+-        """Deduct *amount* generic mana from *working*, preferring colorless.
+-
+-        Returns the remaining unpaid generic amount (0 on success).
+-        """
+-        # Pay with colorless first.
+-        if working.get(ManaType.COLORLESS, 0) > 0:
+-            take = min(working[ManaType.COLORLESS], amount)
+-            working[ManaType.COLORLESS] -= take
+-            amount -= take
+-
+-        # Then pay with each colored type in enum order.
+-        for mt in ManaType:
+-            if mt is ManaType.COLORLESS:
+-                continue
+-            if amount <= 0:
+-                break
+-            if working.get(mt, 0) > 0:
+-                take = min(working[mt], amount)
+-                working[mt] -= take
+-                amount -= take
+-
+-        return amount
+-
+-    # ------------------------------------------------------------------
+-    # Dunder helpers
+-    # ------------------------------------------------------------------
+-
+-    def __repr__(self) -> str:
+-        non_zero = {mt.name: v for mt, v in self._pool.items() if v > 0}
+-        return f"ManaPool({non_zero})"
+--- a/engine/player.py
++++ /dev/null
+@@ -1,145 +0,0 @@
+-"""Player interface and deterministic test player implementation."""
+-
+-from __future__ import annotations
+-
+-from abc import ABC, abstractmethod
+-from collections import deque
+-from typing import Any
+-
+-from engine.mana import ManaPool
+-from engine.zones import Zones
+-
+-
+-class ScriptExhaustedError(Exception):
+-    """Raised when a DeterministicPlayer's script runs out of predetermined answers."""
+-
+-
+-class Player(ABC):
+-    """Abstract base class for all players in the game.
+-
+-    Attributes:
+-        name: The player's display name.
+-        life: Current life total (default 20).
+-        zones: Per-player zone containers.
+-        mana_pool: The player's mana pool (forward ref; initialized to None until ManaPool is implemented).
+-        has_lost: Whether this player has lost the game.
+-        land_plays_remaining: Number of land plays remaining this turn.
+-        drawn_from_empty_library: Whether this player attempted to draw from an empty library.
+-    """
+-
+-    def __init__(self, name: str, life: int = 20) -> None:
+-        self.name: str = name
+-        self.life: int = life
+-        self.zones: Zones = Zones.new_player()
+-        self.mana_pool: ManaPool = ManaPool()
+-        self.has_lost: bool = False
+-        self.land_plays_remaining: int = 1
+-        self.drawn_from_empty_library: bool = False
+-
+-    @abstractmethod
+-    def choose_target(self, options: Any, requirement: Any) -> Any:
+-        """Choose a target from the available options given a requirement.
+-
+-        Parameters:
+-            options: The available targets to choose from.
+-            requirement: The targeting requirement to satisfy.
+-
+-        Returns:
+-            The chosen target.
+-        """
+-
+-    @abstractmethod
+-    def choose(self, options: Any, description: str) -> Any:
+-        """Choose from a list of options.
+-
+-        Parameters:
+-            options: The available choices.
+-            description: Human-readable description of the choice.
+-
+-        Returns:
+-            The chosen option.
+-        """
+-
+-    @abstractmethod
+-    def choose_yes_no(self, prompt: str) -> bool:
+-        """Make a yes/no decision.
+-
+-        Parameters:
+-            prompt: Human-readable prompt for the decision.
+-
+-        Returns:
+-            True for yes, False for no.
+-        """
+-
+-    @abstractmethod
+-    def assign_damage_order(self, attackers_or_blockers: Any) -> list[Any]:
+-        """Assign a damage ordering to attackers or blockers.
+-
+-        Parameters:
+-            attackers_or_blockers: The creatures to order.
+-
+-        Returns:
+-            An ordered list representing the damage assignment order.
+-        """
+-
+-    @abstractmethod
+-    def choose_card(self, cards: Any, description: str) -> Any:
+-        """Choose a card from a collection.
+-
+-        Parameters:
+-            cards: The available cards to choose from.
+-            description: Human-readable description of why a card is being chosen.
+-
+-        Returns:
+-            The chosen card.
+-        """
+-
+-
+-class DeterministicPlayer(Player):
+-    """A scripted player for testing that returns predetermined answers.
+-
+-    Each abstract method call pops the next answer from the front of the
+-    script queue. Raises :class:`ScriptExhaustedError` if the script is empty
+-    when a choice is requested.
+-    """
+-
+-    def __init__(self, name: str, script: list[Any], life: int = 20) -> None:
+-        super().__init__(name, life)
+-        self._script: deque[Any] = deque(script)
+-
+-    def _pop(self) -> Any:
+-        """Pop the next scripted answer from the queue.
+-
+-        Raises:
+-            ScriptExhaustedError: If the script has no remaining answers.
+-        """
+-        if not self._script:
+-            raise ScriptExhaustedError(
+-                f"Player {self.name!r} script exhausted — no more predetermined answers"
+-            )
+-        return self._script.popleft()
+-
+-    @property
+-    def remaining_choices(self) -> int:
+-        """Return the number of scripted answers remaining."""
+-        return len(self._script)
+-
+-    def choose_target(self, options: Any, requirement: Any) -> Any:
+-        """Return the next scripted target choice."""
+-        return self._pop()
+-
+-    def choose(self, options: Any, description: str) -> Any:
+-        """Return the next scripted choice."""
+-        return self._pop()
+-
+-    def choose_yes_no(self, prompt: str) -> bool:
+-        """Return the next scripted yes/no decision."""
+-        return self._pop()
+-
+-    def assign_damage_order(self, attackers_or_blockers: Any) -> list[Any]:
+-        """Return the next scripted damage ordering."""
+-        return self._pop()
+-
+-    def choose_card(self, cards: Any, description: str) -> Any:
+-        """Return the next scripted card choice."""
+-        return self._pop()
+--- a/engine/protection.py
++++ /dev/null
+@@ -1,166 +0,0 @@
+-"""Protection from qualities — keyword ability implementation.
+-
+-Implements the 'protection from [quality]' keyword per MTG rules.
+-Protection prevents (DEBT mnemonic):
+-  - **D**amage from sources with that quality
+-  - **E**nchanting/equipping by permanents with that quality
+-  - **B**locking by creatures with that quality
+-  - **T**argeting by spells/abilities from sources with that quality
+-
+-Phase 1 supports color-based protection.  The framework is extensible to
+-card-type, subtype, and arbitrary predicate-based protection.
+-"""
+-
+-from __future__ import annotations
+-
+-from dataclasses import dataclass, field
+-from typing import TYPE_CHECKING, Any, Callable
+-
+-from engine.types import Color, ManaType
+-
+-if TYPE_CHECKING:
+-    pass
+-
+-
+-# ---------------------------------------------------------------------------
+-# Colour helpers
+-# ---------------------------------------------------------------------------
+-
+-# Map from ManaType to Color for deriving a card's colours from its mana cost.
+-_MANA_TO_COLOR: dict[ManaType, Color] = {
+-    ManaType.WHITE: Color.WHITE,
+-    ManaType.BLUE: Color.BLUE,
+-    ManaType.BLACK: Color.BLACK,
+-    ManaType.RED: Color.RED,
+-    ManaType.GREEN: Color.GREEN,
+-}
+-
+-
+-def get_colors(obj: Any) -> set[Color]:
+-    """Return the set of colours of *obj*.
+-
+-    Colour is determined by:
+-    1. An explicit ``colors`` attribute (set or list of :class:`Color`).
+-    2. The coloured pips in the object's ``mana_cost``.
+-    3. An explicit ``color`` attribute (single :class:`Color`).
+-
+-    Colourless objects return an empty set.
+-    """
+-    # Explicit colors attribute (takes precedence)
+-    if hasattr(obj, "colors") and obj.colors is not None:
+-        return set(obj.colors)
+-
+-    # Derive from mana cost pips
+-    mana_cost = getattr(obj, "mana_cost", None)
+-    if mana_cost is not None:
+-        pips = getattr(mana_cost, "pips", None)
+-        if pips:
+-            result: set[Color] = set()
+-            for mt in pips:
+-                if mt in _MANA_TO_COLOR:
+-                    result.add(_MANA_TO_COLOR[mt])
+-            return result
+-
+-    # Single color attribute fallback
+-    if hasattr(obj, "color") and obj.color is not None:
+-        return {obj.color}
+-
+-    return set()
+-
+-
+-# ---------------------------------------------------------------------------
+-# ProtectionAbility
+-# ---------------------------------------------------------------------------
+-
+-@dataclass
+-class ProtectionAbility:
+-    """Represents a 'protection from [quality]' ability.
+-
+-    The *quality* is typically a :class:`Color`, but the framework supports
+-    arbitrary predicates via *predicate*.
+-
+-    Usage::
+-
+-        # Colour-based protection
+-        pro_red = ProtectionAbility(quality=Color.RED)
+-
+-        # Custom predicate (e.g. protection from artifacts)
+-        pro_artifacts = ProtectionAbility(
+-            quality="artifacts",
+-            predicate=lambda src: CardType.ARTIFACT in getattr(src, "card_types", set()),
+-        )
+-
+-    Attributes:
+-        quality: A human-readable label for the quality (often a
+-            :class:`Color` enum member).
+-        predicate: An optional callable ``(source) -> bool`` that returns
+-            ``True`` if *source* has the protected-from quality.  When
+-            ``None``, the quality must be a :class:`Color` and the default
+-            colour-matching predicate is used.
+-    """
+-
+-    quality: Any  # typically Color, but may be str or CardType
+-    predicate: Callable[[Any], bool] | None = None
+-
+-    def matches(self, source: Any) -> bool:
+-        """Return ``True`` if *source* has the quality this protects from."""
+-        if self.predicate is not None:
+-            return self.predicate(source)
+-
+-        # Default: colour-based matching
+-        if isinstance(self.quality, Color):
+-            return self.quality in get_colors(source)
+-
+-        return False
+-
+-
+-# ---------------------------------------------------------------------------
+-# Query helpers — work with any object that has a ``protections`` list
+-# ---------------------------------------------------------------------------
+-
+-def get_protections(obj: Any) -> list[ProtectionAbility]:
+-    """Return the list of :class:`ProtectionAbility` on *obj*, or ``[]``."""
+-    return getattr(obj, "protections", [])
+-
+-
+-def has_protection_from(permanent: Any, source: Any) -> bool:
+-    """Return ``True`` if *permanent* has protection from *source*.
+-
+-    Iterates over all :class:`ProtectionAbility` instances on *permanent*
+-    and returns ``True`` if any matches *source*.
+-    """
+-    for prot in get_protections(permanent):
+-        if prot.matches(source):
+-            return True
+-    return False
+-
+-
+-def _is_illegal_target_due_to_protection(target: Any, source: Any) -> bool:
+-    """Return ``True`` if *target* cannot be targeted by *source* due to protection."""
+-    return has_protection_from(target, source)
+-
+-
+-def _is_illegal_block_due_to_protection(attacker: Any, blocker: Any) -> bool:
+-    """Return ``True`` if *attacker* has protection from *blocker*.
+-
+-    Protection prevents blocking *by* creatures with that quality —
+-    i.e. the attacker is the one with protection, the blocker is checked.
+-    """
+-    return has_protection_from(attacker, blocker)
+-
+-
+-def _should_prevent_damage(target: Any, source: Any) -> bool:
+-    """Return ``True`` if damage from *source* to *target* should be prevented."""
+-    return has_protection_from(target, source)
+-
+-
+-def _aura_illegal_due_to_protection(aura: Any) -> bool:
+-    """Return ``True`` if *aura* is illegally attached due to protection.
+-
+-    An aura is illegal if the enchanted permanent has protection from the
+-    aura (checked via the aura's colours / quality).
+-    """
+-    attached = getattr(aura, "attached_to", None)
+-    if attached is None:
+-        return False
+-    return has_protection_from(attached, aura)
+--- a/engine/replacement_effects.py
++++ /dev/null
+@@ -1,209 +0,0 @@
+-"""Replacement effects engine — modifies events in-place with "instead" semantics.
+-
+-Unlike triggered abilities (which go on the stack), replacement effects
+-intercept an event *before* it happens and substitute an alternative
+-outcome.  Key design differences from triggers:
+-
+-- **No stack**: replacements are applied inline, not pushed.
+-- **"Instead" semantics**: the original event is replaced, not supplemented.
+-- **Self-replacement prevention**: each effect applies at most once per
+-  event to avoid infinite loops.
+-- **Player choice**: when multiple replacements apply to the same event,
+-  the affected player chooses the order via ``Player.choose``.
+-
+-Public API:
+-
+-- :class:`ReplacementEffect` — dataclass describing a single replacement.
+-- :class:`ReplacementManager` — central registry with ``register``,
+-  ``unregister``, and ``apply`` methods.
+-"""
+-
+-from __future__ import annotations
+-
+-from dataclasses import dataclass
+-from typing import TYPE_CHECKING, Any, Callable
+-
+-if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-    from engine.player import Player
+-
+-
+-@dataclass
+-class ReplacementEffect:
+-    """Describes a single replacement effect.
+-
+-    Attributes:
+-        event_type: The event type string this replacement watches for
+-            (e.g. ``"creature_dies"``).
+-        source: The game object (card / permanent) that owns this effect.
+-        condition: Optional callable ``(game, event_data) -> bool`` that
+-            must return ``True`` for the replacement to apply.  ``None``
+-            means the replacement always applies for its event type.
+-        replacement: Callable ``(game, event_data) -> event_data`` that
+-            receives the current event data dict and returns a (possibly
+-            modified) version.  This callable implements the "instead"
+-            logic.
+-        controller: The player who controls the source.  Used to determine
+-            who the "affected player" is when multiple replacements compete.
+-    """
+-
+-    event_type: str
+-    source: Any
+-    condition: Callable[..., bool] | None
+-    replacement: Callable[..., dict[str, Any]]
+-    controller: Player | None = None
+-
+-
+-class ReplacementManager:
+-    """Central registry for replacement effects.
+-
+-    Replacement effects are registered when a permanent enters the
+-    battlefield (via ``card.register_replacement_effects(game)``) and
+-    unregistered when the source leaves.
+-
+-    :meth:`apply` checks all registered effects matching the given
+-    event type, evaluates conditions, and applies the matching
+-    replacements to the event data.  If multiple replacements match,
+-    the affected player chooses the application order.
+-
+-    Each replacement effect can apply at most **once per event** to
+-    prevent infinite self-replacement loops.
+-    """
+-
+-    def __init__(self) -> None:
+-        self._effects: list[ReplacementEffect] = []
+-
+-    # ------------------------------------------------------------------
+-    # Registration
+-    # ------------------------------------------------------------------
+-
+-    def register(self, effect: ReplacementEffect) -> None:
+-        """Register a replacement effect.
+-
+-        Parameters:
+-            effect: The :class:`ReplacementEffect` to add.
+-        """
+-        self._effects.append(effect)
+-
+-    def unregister(self, source: Any) -> None:
+-        """Remove all replacement effects registered by *source* (identity-based).
+-
+-        Called when a permanent leaves the battlefield.
+-
+-        Parameters:
+-            source: The game object whose effects should be removed.
+-        """
+-        self._effects = [e for e in self._effects if e.source is not source]
+-
+-    # ------------------------------------------------------------------
+-    # Application
+-    # ------------------------------------------------------------------
+-
+-    def apply(
+-        self,
+-        game: GameState,
+-        event_type: str,
+-        event_data: dict[str, Any],
+-    ) -> dict[str, Any]:
+-        """Apply matching replacement effects to *event_data*.
+-
+-        1. Collect all registered effects whose ``event_type`` matches and
+-           whose ``condition`` (if any) returns ``True``.
+-        2. If multiple effects match, the affected player chooses the order
+-           via ``Player.choose``.
+-        3. Each chosen effect's ``replacement`` callable is invoked with
+-           ``(game, event_data)`` and the result replaces the current
+-           ``event_data``.
+-        4. **Self-replacement prevention**: each effect is applied at most
+-           once per invocation.
+-
+-        Parameters:
+-            game: The current game state.
+-            event_type: The event type string (e.g. ``"creature_dies"``).
+-            event_data: A mutable dict of event-specific data.
+-
+-        Returns:
+-            The (possibly modified) *event_data* dict after all applicable
+-            replacements have been applied.
+-        """
+-        # Track which effects have already been applied (self-replacement prevention).
+-        applied: set[int] = set()  # ids of ReplacementEffect objects
+-
+-        # Iterate: after each application, re-check for newly applicable effects.
+-        # This allows chained replacements while preventing self-loops.
+-        while True:
+-            matching = self._collect_matching(game, event_type, event_data, applied)
+-            if not matching:
+-                break
+-
+-            if len(matching) == 1:
+-                chosen = matching[0]
+-            else:
+-                # Affected player chooses order.  Determine affected player
+-                # from event_data, falling back to active player.
+-                affected = self._get_affected_player(game, event_data)
+-                chosen = affected.choose(
+-                    matching,
+-                    "Choose replacement effect order",
+-                )
+-
+-            applied.add(id(chosen))
+-            event_data = chosen.replacement(game, event_data)
+-
+-        return event_data
+-
+-    # ------------------------------------------------------------------
+-    # Queries
+-    # ------------------------------------------------------------------
+-
+-    def get_effects(self) -> list[ReplacementEffect]:
+-        """Return a shallow copy of all registered replacement effects."""
+-        return list(self._effects)
+-
+-    def get_effects_for_source(self, source: Any) -> list[ReplacementEffect]:
+-        """Return all effects registered by *source* (identity-based)."""
+-        return [e for e in self._effects if e.source is source]
+-
+-    def clear(self) -> None:
+-        """Remove all registered replacement effects."""
+-        self._effects.clear()
+-
+-    # ------------------------------------------------------------------
+-    # Internal helpers
+-    # ------------------------------------------------------------------
+-
+-    def _collect_matching(
+-        self,
+-        game: GameState,
+-        event_type: str,
+-        event_data: dict[str, Any],
+-        applied: set[int],
+-    ) -> list[ReplacementEffect]:
+-        """Collect effects matching *event_type* that haven't been applied yet."""
+-        matching: list[ReplacementEffect] = []
+-        for effect in self._effects:
+-            if id(effect) in applied:
+-                continue
+-            if effect.event_type != event_type:
+-                continue
+-            if effect.condition is not None:
+-                if not effect.condition(game, event_data):
+-                    continue
+-            matching.append(effect)
+-        return matching
+-
+-    @staticmethod
+-    def _get_affected_player(
+-        game: GameState,
+-        event_data: dict[str, Any],
+-    ) -> Any:
+-        """Determine the affected player for ordering choices.
+-
+-        Checks ``event_data`` for ``"player"`` or ``"controller"`` keys;
+-        falls back to the game's active player.
+-        """
+-        if "player" in event_data:
+-            return event_data["player"]
+-        if "controller" in event_data:
+-            return event_data["controller"]
+-        return game.active_player
+--- a/engine/stack.py
++++ /dev/null
+@@ -1,183 +0,0 @@
+-"""The spell/ability stack with LIFO resolution and priority passing."""
+-
+-from __future__ import annotations
+-
+-from dataclasses import dataclass, field
+-from typing import TYPE_CHECKING, Any, Callable
+-
+-if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-    from engine.player import Player
+-
+-
+-@dataclass
+-class StackObject:
+-    """An object on the stack representing a spell or ability.
+-
+-    Attributes:
+-        source: The card or ability that created this stack object.
+-        controller: The player who controls this stack object.
+-        targets: The chosen targets for the spell/ability.
+-        on_resolve: Callback invoked when this object resolves.
+-        is_mana_ability: Whether this is a mana ability (resolves immediately).
+-    """
+-
+-    source: Any
+-    controller: Player
+-    targets: list[Any] = field(default_factory=list)
+-    on_resolve: Callable[[GameState], None] = field(default=lambda _game: None)
+-    is_mana_ability: bool = False
+-
+-
+-class Stack:
+-    """The game stack — a LIFO structure for spells and abilities.
+-
+-    The internal list stores objects with the last element being the top
+-    of the stack (most recently pushed).
+-    """
+-
+-    def __init__(self) -> None:
+-        self._items: list[StackObject] = []
+-
+-    def push(self, obj: StackObject) -> None:
+-        """Push *obj* onto the top of the stack."""
+-        self._items.append(obj)
+-
+-    def pop(self) -> StackObject:
+-        """Remove and return the top object from the stack.
+-
+-        Raises:
+-            IndexError: If the stack is empty.
+-        """
+-        return self._items.pop()
+-
+-    def peek(self) -> StackObject | None:
+-        """Return the top object without removing it, or ``None`` if empty."""
+-        return self._items[-1] if self._items else None
+-
+-    def __len__(self) -> int:
+-        """Return the number of objects on the stack."""
+-        return len(self._items)
+-
+-    def is_empty(self) -> bool:
+-        """Return ``True`` if the stack contains no objects."""
+-        return len(self._items) == 0
+-
+-    def objects(self) -> list[StackObject]:
+-        """Return all stack objects ordered from top to bottom."""
+-        return list(reversed(self._items))
+-
+-
+-def check_state_based_actions(game: GameState) -> None:
+-    """Check and perform all state-based actions until the game state is stable.
+-
+-    This is a convenience wrapper around
+-    :func:`engine.state_based_actions.resolve_state_based_actions` that
+-    maintains the original ``-> None`` call-site contract used by
+-    :func:`priority_loop`.  For the single-pass boolean API, import
+-    :func:`~engine.state_based_actions.check_state_based_actions` directly
+-    from :mod:`engine.state_based_actions`.
+-    """
+-    from engine.state_based_actions import resolve_state_based_actions
+-
+-    resolve_state_based_actions(game)
+-
+-
+-def _get_legal_actions(game: GameState, player: Player) -> list[Any]:
+-    """Return the legal actions available to *player*.
+-
+-    Placeholder — returns an empty list until spells/abilities are
+-    implemented in later items.
+-    """
+-    return []
+-
+-
+-def _handle_priority(game: GameState, player: Player) -> bool:
+-    """Give priority to *player* and let them act or pass.
+-
+-    Returns ``True`` if the player passed priority, ``False`` if they
+-    took an action (in which case the priority loop restarts).
+-
+-    When the stack is non-empty, the player is always asked via
+-    :meth:`Player.choose` so they can respond.  When the stack is empty
+-    and no legal actions exist, the player auto-passes.
+-    """
+-    actions = _get_legal_actions(game, player)
+-
+-    # Auto-pass when there is nothing to respond to and no actions.
+-    if not actions and game.stack.is_empty():
+-        return True
+-
+-    options = actions + ["pass"]
+-    choice = player.choose(options, "priority: choose action or pass")
+-
+-    if choice == "pass":
+-        return True
+-
+-    # Mana abilities resolve immediately without using the stack.
+-    if isinstance(choice, StackObject) and choice.is_mana_ability:
+-        choice.on_resolve(game)
+-        return False
+-
+-    # Regular spell / ability — push onto the stack.
+-    if isinstance(choice, StackObject):
+-        game.stack.push(choice)
+-
+-    return False
+-
+-
+-def priority_loop(game: GameState) -> None:
+-    """Run the priority-passing loop for the current phase/step.
+-
+-    Flow
+-    ----
+-    1. Active player gets priority.  They may play spells/abilities
+-       (pushed to stack) or pass.
+-    2. When a player takes an action they **retain** priority (MTG rule:
+-       the player who just acted gets to respond first).
+-    3. When a player passes, priority moves to the other player.
+-    4. If both players pass in succession with the stack **non-empty**,
+-       the top of the stack is resolved (``pop`` → ``on_resolve(game)``),
+-       state-based actions are checked, and the active player receives
+-       priority again.
+-    5. If both players pass with the stack **empty**, return (the game
+-       advances to the next phase/step).
+-
+-    ``game.priority_player_index`` is kept in sync throughout so that
+-    :pyattr:`GameState.priority_player` always reflects who currently
+-    holds priority.
+-
+-    Player decisions come from :meth:`Player.choose`.  When no legal
+-    actions exist and the stack is empty, the player auto-passes without
+-    being asked.
+-    """
+-    while True:
+-        # Active player receives priority at the start of each
+-        # resolution round.
+-        current_index = game.active_player_index
+-        game.priority_player_index = current_index
+-        consecutive_passes = 0
+-
+-        while consecutive_passes < 2:
+-            player = game.players[current_index]
+-            game.priority_player_index = current_index
+-
+-            passed = _handle_priority(game, player)
+-
+-            if passed:
+-                consecutive_passes += 1
+-                # Priority moves to the other player.
+-                current_index = 1 - current_index
+-            else:
+-                # Player took an action — they retain priority.
+-                consecutive_passes = 0
+-
+-        # Both players passed consecutively.
+-        if game.stack.is_empty():
+-            return  # Advance to next phase/step
+-
+-        # Resolve top of stack (LIFO).
+-        obj = game.stack.pop()
+-        obj.on_resolve(game)
+-        check_state_based_actions(game)
+-        # Active player receives priority again — outer loop continues.
+--- a/engine/state_based_actions.py
++++ /dev/null
+@@ -1,361 +0,0 @@
+-"""State-based actions checker and resolver.
+-
+-State-based actions (SBAs) are game rules that are checked and applied
+-automatically whenever a player would receive priority.  They are checked
+-repeatedly until no more actions are taken, at which point triggered
+-abilities are placed on the stack.
+-
+-References: MTG Comprehensive Rules §704.
+-"""
+-
+-from __future__ import annotations
+-
+-from collections import defaultdict
+-from typing import TYPE_CHECKING, Any
+-
+-from engine.triggers import EventType
+-from engine.types import CardType, Supertype, Zone
+-from engine.zones import ZoneContainer
+-
+-if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-    from engine.player import Player
+-
+-
+-# ---------------------------------------------------------------------------
+-# Internal helpers
+-# ---------------------------------------------------------------------------
+-
+-def _battlefield(game: GameState, player: Player) -> ZoneContainer:
+-    """Return *player*'s battlefield zone."""
+-    return player.zones[Zone.BATTLEFIELD]
+-
+-
+-def _graveyard(game: GameState, player: Player) -> ZoneContainer:
+-    """Return *player*'s graveyard zone."""
+-    return player.zones[Zone.GRAVEYARD]
+-
+-
+-def _move_to_graveyard(game: GameState, player: Player, obj: Any) -> None:
+-    """Move *obj* from the battlefield to its owner's graveyard (or a
+-    replacement destination).
+-
+-    Delegates to :func:`~engine.zones.move_to_zone` which handles
+-    replacement effects, event firing (``LEAVES_BATTLEFIELD``,
+-    ``CREATURE_DIES``), and trigger/effect unregistration.
+-    """
+-    from engine.zones import move_to_zone
+-
+-    bf = _battlefield(game, player)
+-    if bf.contains(obj):
+-        move_to_zone(
+-            game,
+-            obj,
+-            Zone.BATTLEFIELD,
+-            Zone.GRAVEYARD,
+-            replacement_event_type="creature_dies",
+-        )
+-
+-
+-# Mapping from replacement-effect destination strings to Zone enum values.
+-_DESTINATION_ZONE_MAP: dict[str, Zone] = {
+-    "graveyard": Zone.GRAVEYARD,
+-    "exile": Zone.EXILE,
+-    "hand": Zone.HAND,
+-    "library": Zone.LIBRARY,
+-}
+-
+-
+-def _owner_of(game: GameState, obj: Any) -> Player:
+-    """Return the owner of *obj*.
+-
+-    Falls back to checking which player's battlefield contains the object,
+-    then defaults to the first player.
+-    """
+-    if hasattr(obj, "owner"):
+-        return obj.owner
+-    # Fallback: check each player's battlefield
+-    for player in game.players:
+-        if _battlefield(game, player).contains(obj):
+-            return player
+-    return game.players[0]
+-
+-
+-# ---------------------------------------------------------------------------
+-# Individual SBA checks
+-# ---------------------------------------------------------------------------
+-
+-def _sba_player_life_zero(game: GameState) -> bool:
+-    """A player with 0 or less life loses the game."""
+-    action_taken = False
+-    for player in game.players:
+-        if player.life <= 0 and not player.has_lost:
+-            player.has_lost = True
+-            action_taken = True
+-    return action_taken
+-
+-
+-def _sba_creature_zero_toughness(game: GameState) -> bool:
+-    """A creature with toughness 0 or less is put into its owner's graveyard."""
+-    action_taken = False
+-    to_remove: list[tuple[Player, Any]] = []
+-    for player in game.players:
+-        for obj in _battlefield(game, player).get_all():
+-            if hasattr(obj, "toughness") and obj.toughness <= 0:
+-                to_remove.append((player, obj))
+-    for player, obj in to_remove:
+-        _move_to_graveyard(game, player, obj)
+-        action_taken = True
+-    return action_taken
+-
+-
+-def _sba_creature_lethal_damage(game: GameState) -> bool:
+-    """A creature with lethal damage marked on it is destroyed (moved to graveyard).
+-
+-    Lethal damage means ``damage_marked >= toughness`` (rule 704.5g) or the
+-    creature has been dealt damage by a source with deathtouch and has any
+-    damage marked on it (rule 704.5h).  Creatures with the ``indestructible``
+-    keyword are skipped.
+-    """
+-    action_taken = False
+-    to_remove: list[tuple[Player, Any]] = []
+-    for player in game.players:
+-        for obj in _battlefield(game, player).get_all():
+-            if not hasattr(obj, "toughness") or not hasattr(obj, "damage_marked"):
+-                continue
+-
+-            # Skip indestructible creatures
+-            if hasattr(obj, "keywords"):
+-                from engine.types import Keyword
+-
+-                if Keyword.INDESTRUCTIBLE in obj.keywords:
+-                    continue
+-
+-            lethal = obj.damage_marked >= obj.toughness
+-            # Rule 704.5h: creature dealt damage by a deathtouch source
+-            deathtouch_lethal = (
+-                getattr(obj, "dealt_deathtouch_damage", False)
+-                and obj.damage_marked > 0
+-            )
+-
+-            if lethal or deathtouch_lethal:
+-                to_remove.append((player, obj))
+-
+-    for player, obj in to_remove:
+-        _move_to_graveyard(game, player, obj)
+-        action_taken = True
+-    return action_taken
+-
+-
+-def _sba_draw_from_empty_library(game: GameState) -> bool:
+-    """A player who attempted to draw from an empty library loses the game."""
+-    action_taken = False
+-    for player in game.players:
+-        if (
+-            hasattr(player, "drawn_from_empty_library")
+-            and player.drawn_from_empty_library
+-            and not player.has_lost
+-        ):
+-            player.has_lost = True
+-            action_taken = True
+-    return action_taken
+-
+-
+-def _sba_legend_rule(game: GameState) -> bool:
+-    """If a player controls 2+ legendaries with the same name, they choose one to keep.
+-
+-    The player is asked to choose which legendary permanent to keep via
+-    ``player.choose()``.  All others are moved to the graveyard.
+-    """
+-    action_taken = False
+-    for player in game.players:
+-        bf = _battlefield(game, player)
+-        legendaries: dict[str, list[Any]] = defaultdict(list)
+-        for obj in bf.get_all():
+-            if (
+-                hasattr(obj, "supertypes")
+-                and Supertype.LEGENDARY in obj.supertypes
+-                and hasattr(obj, "name")
+-            ):
+-                legendaries[obj.name].append(obj)
+-        for name, objs in legendaries.items():
+-            if len(objs) >= 2:
+-                # Let the player choose which to keep
+-                keep = player.choose(objs, f"legend rule: choose which {name!r} to keep")
+-                for obj in objs:
+-                    if obj is not keep:
+-                        _move_to_graveyard(game, player, obj)
+-                action_taken = True
+-    return action_taken
+-
+-
+-def _sba_token_not_on_battlefield(game: GameState) -> bool:
+-    """Tokens that are not on the battlefield cease to exist (removed from game).
+-
+-    Checks all non-battlefield zones for tokens and removes them entirely.
+-    """
+-    action_taken = False
+-    non_battlefield_zones = [
+-        Zone.HAND,
+-        Zone.GRAVEYARD,
+-        Zone.LIBRARY,
+-        Zone.EXILE,
+-        Zone.STACK,
+-        Zone.COMMAND,
+-    ]
+-    for player in game.players:
+-        for zone_type in non_battlefield_zones:
+-            zone = player.zones[zone_type]
+-            tokens = [
+-                obj
+-                for obj in zone.get_all()
+-                if hasattr(obj, "is_token") and obj.is_token
+-            ]
+-            for token in tokens:
+-                zone.remove(token)
+-                action_taken = True
+-    return action_taken
+-
+-
+-def _attachment_illegal_due_to_protection(obj: Any) -> bool:
+-    """Return ``True`` if *obj* (aura or equipment) is illegally attached due to protection."""
+-    attached = getattr(obj, "attached_to", None)
+-    if attached is None:
+-        return False
+-    from engine.protection import has_protection_from
+-    return has_protection_from(attached, obj)
+-
+-
+-def _sba_aura_unattached(game: GameState) -> bool:
+-    """An Aura or Equipment not attached to a legal object is put into its
+-    owner's graveyard.
+-
+-    An attachment is considered illegally attached if:
+-    - It has an ``attached_to`` attribute that is ``None``, OR
+-    - The object it is attached to is no longer on the battlefield, OR
+-    - The enchanted/equipped permanent has protection from the attachment.
+-    """
+-    action_taken = False
+-    to_remove: list[tuple[Player, Any]] = []
+-
+-    # Collect all objects on all battlefields for checking attachment legality
+-    all_on_battlefield: set[int] = set()
+-    for player in game.players:
+-        for obj in _battlefield(game, player).get_all():
+-            all_on_battlefield.add(id(obj))
+-
+-    to_unattach: list[Any] = []  # Equipment just becomes unattached
+-
+-    for player in game.players:
+-        for obj in _battlefield(game, player).get_all():
+-            is_aura = getattr(obj, "is_aura", False)
+-            is_equipment = getattr(obj, "is_equipment", False)
+-            if not hasattr(obj, "attached_to"):
+-                continue
+-            if is_aura:
+-                target = obj.attached_to
+-                if target is None or id(target) not in all_on_battlefield:
+-                    to_remove.append((player, obj))
+-                elif _attachment_illegal_due_to_protection(obj):
+-                    to_remove.append((player, obj))
+-            elif is_equipment:
+-                target = obj.attached_to
+-                if target is not None and _attachment_illegal_due_to_protection(obj):
+-                    to_unattach.append(obj)
+-
+-    for player, obj in to_remove:
+-        _move_to_graveyard(game, player, obj)
+-        action_taken = True
+-    for obj in to_unattach:
+-        obj.attached_to = None
+-        action_taken = True
+-    return action_taken
+-
+-
+-def _sba_counter_annihilation(game: GameState) -> bool:
+-    """+1/+1 and -1/-1 counters on the same permanent annihilate in pairs."""
+-    action_taken = False
+-    for player in game.players:
+-        for obj in _battlefield(game, player).get_all():
+-            if (
+-                hasattr(obj, "plus_one_counters")
+-                and hasattr(obj, "minus_one_counters")
+-            ):
+-                plus = obj.plus_one_counters
+-                minus = obj.minus_one_counters
+-                if plus > 0 and minus > 0:
+-                    annihilate = min(plus, minus)
+-                    obj.plus_one_counters -= annihilate
+-                    obj.minus_one_counters -= annihilate
+-                    action_taken = True
+-    return action_taken
+-
+-
+-# ---------------------------------------------------------------------------
+-# Public API
+-# ---------------------------------------------------------------------------
+-
+-def check_state_based_actions(game: GameState) -> bool:
+-    """Perform a single pass of all state-based actions.
+-
+-    Returns ``True`` if any action was taken during this pass.  The caller
+-    should invoke this repeatedly until it returns ``False`` to ensure the
+-    game state is fully stable.
+-    """
+-    action_taken = False
+-    # Player with 0 or less life loses
+-    action_taken = _sba_player_life_zero(game) or action_taken
+-    # Creature with toughness 0 or less → graveyard
+-    action_taken = _sba_creature_zero_toughness(game) or action_taken
+-    # Creature with lethal damage → destroyed
+-    action_taken = _sba_creature_lethal_damage(game) or action_taken
+-    # Player who drew from empty library loses
+-    action_taken = _sba_draw_from_empty_library(game) or action_taken
+-    # Legend rule
+-    action_taken = _sba_legend_rule(game) or action_taken
+-    # Token not on battlefield → ceases to exist
+-    action_taken = _sba_token_not_on_battlefield(game) or action_taken
+-    # Aura not attached to legal object → graveyard
+-    action_taken = _sba_aura_unattached(game) or action_taken
+-    # +1/+1 and -1/-1 counter annihilation
+-    action_taken = _sba_counter_annihilation(game) or action_taken
+-    return action_taken
+-
+-
+-def resolve_state_based_actions(game: GameState) -> bool:
+-    """Run state-based actions in a loop until no more actions are taken.
+-
+-    After each SBA stabilisation pass, any triggered abilities that were
+-    queued during processing are left on the stack.  Per MTG rule 704.3,
+-    the SBA loop must repeat if new triggers were placed on the stack
+-    (because those triggers may cause further SBAs when resolved, and
+-    the game state must be fully stable before a player receives priority).
+-
+-    The outer loop: repeat { run SBA passes until stable; record whether
+-    new triggers were pushed onto the stack during those passes } until
+-    no SBAs were performed **and** no new triggers were queued.
+-
+-    Returns ``True`` if any SBAs were performed during the entire process,
+-    ``False`` if the game state was already stable.
+-    """
+-    any_performed = False
+-    while True:
+-        # Snapshot the stack size before SBA passes so we can detect new
+-        # triggers that were pushed during processing.
+-        stack_size_before = len(game.stack)
+-
+-        # Inner loop: run SBA checks until no more actions are taken.
+-        sba_this_round = False
+-        while check_state_based_actions(game):
+-            sba_this_round = True
+-            any_performed = True
+-
+-        # Detect whether any triggers were queued during this round.
+-        triggers_queued = len(game.stack) > stack_size_before
+-
+-        # If nothing happened this round (no SBAs and no new triggers),
+-        # the game state is fully stable.
+-        if not sba_this_round and not triggers_queued:
+-            break
+-
+-    return any_performed
+--- a/engine/triggers.py
++++ /dev/null
+@@ -1,182 +0,0 @@
+-"""Triggered abilities system — event-driven trigger registration and firing.
+-
+-Provides the core mechanism for registering triggered abilities and firing
+-events that push matching triggers onto the stack:
+-
+-- :class:`EventType` — enumeration of game events that can trigger abilities.
+-- :class:`TriggerRegistration` — dataclass describing a single trigger.
+-- :class:`TriggerManager` — central registry for triggers with APNAP-ordered
+-  event firing.
+-"""
+-
+-from __future__ import annotations
+-
+-import enum
+-from dataclasses import dataclass, field
+-from typing import TYPE_CHECKING, Any, Callable
+-
+-from engine.stack import StackObject
+-
+-if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-    from engine.player import Player
+-
+-
+-class EventType(enum.Enum):
+-    """Game events that can trigger abilities."""
+-
+-    ENTERS_BATTLEFIELD = "enters_battlefield"
+-    LEAVES_BATTLEFIELD = "leaves_battlefield"
+-    DEALS_DAMAGE = "deals_damage"
+-    LOSES_LIFE = "loses_life"
+-    GAINS_LIFE = "gains_life"
+-    DRAWS_CARD = "draws_card"
+-    BEGINNING_OF_UPKEEP = "beginning_of_upkeep"
+-    BEGINNING_OF_COMBAT = "beginning_of_combat"
+-    END_OF_TURN = "end_of_turn"
+-    CREATURE_DIES = "creature_dies"
+-    SPELL_CAST = "spell_cast"
+-    ATTACKS = "attacks"
+-    BLOCKS = "blocks"
+-
+-
+-@dataclass
+-class TriggerRegistration:
+-    """Describes a single triggered ability.
+-
+-    Attributes:
+-        event_type: The event type that fires this trigger.
+-        condition: Optional callable ``(game, data) -> bool`` that must
+-            return ``True`` for the trigger to fire.  ``None`` means the
+-            trigger always fires for its event type.
+-        effect: Callable ``(game) -> None`` executed when the trigger
+-            resolves (becomes the :attr:`StackObject.on_resolve` callback).
+-        source: The game object (card / permanent) that owns this trigger.
+-        controller: The player who controls the source at the time of
+-            registration.
+-    """
+-
+-    event_type: EventType
+-    condition: Callable[..., bool] | None
+-    effect: Callable[..., None]
+-    source: Any
+-    controller: Player
+-
+-
+-class TriggerManager:
+-    """Central registry for triggered abilities.
+-
+-    Triggers are registered when a permanent enters the battlefield (or
+-    via other game actions) and unregistered when the source leaves.
+-
+-    :meth:`fire_event` checks all registered triggers of a matching
+-    event type, evaluates their conditions, and pushes matching triggers
+-    onto the game stack as :class:`StackObject` instances.  Triggers are
+-    ordered according to APNAP (Active Player, Non-Active Player):
+-
+-    * Active player's triggers are pushed first (end up on the bottom
+-      of the batch).
+-    * Non-active player's triggers are pushed second (end up on top).
+-    * Within the same player, triggers are pushed in registration order
+-      (controller would normally choose; for now we use registration
+-      order as a deterministic default).
+-    """
+-
+-    def __init__(self) -> None:
+-        self._triggers: list[TriggerRegistration] = []
+-
+-    def register(self, trigger: TriggerRegistration) -> None:
+-        """Register a triggered ability.
+-
+-        Parameters:
+-            trigger: The :class:`TriggerRegistration` to add.
+-        """
+-        self._triggers.append(trigger)
+-
+-    def unregister(self, source: Any) -> None:
+-        """Remove all triggers registered by *source* (identity-based).
+-
+-        Called when a permanent leaves the battlefield.
+-
+-        Parameters:
+-            source: The game object whose triggers should be removed.
+-        """
+-        self._triggers = [t for t in self._triggers if t.source is not source]
+-
+-    def fire_event(
+-        self,
+-        game: GameState,
+-        event_type: EventType,
+-        data: dict[str, Any] | None = None,
+-    ) -> None:
+-        """Fire an event and push all matching triggers onto the stack.
+-
+-        Parameters:
+-            game: The current game state.
+-            event_type: The event that occurred.
+-            data: Optional dictionary of event-specific data passed to
+-                each trigger's condition callable.
+-
+-        Matching triggers are pushed in APNAP order:
+-
+-        1. Active player's matching triggers (in registration order).
+-        2. Non-active player's matching triggers (in registration order).
+-        """
+-        if data is None:
+-            data = {}
+-
+-        # Collect matching triggers
+-        matching: list[TriggerRegistration] = []
+-        for trigger in self._triggers:
+-            if trigger.event_type != event_type:
+-                continue
+-            # Evaluate condition if present
+-            if trigger.condition is not None:
+-                if not trigger.condition(game, data):
+-                    continue
+-            matching.append(trigger)
+-
+-        if not matching:
+-            return
+-
+-        # Partition by controller into APNAP order
+-        active_player = game.active_player
+-        active_triggers: list[TriggerRegistration] = []
+-        non_active_triggers: list[TriggerRegistration] = []
+-
+-        for trigger in matching:
+-            if trigger.controller is active_player:
+-                active_triggers.append(trigger)
+-            else:
+-                non_active_triggers.append(trigger)
+-
+-        # Push active player's triggers first (they end up on the bottom),
+-        # then non-active player's triggers (they end up on top).
+-        ordered = active_triggers + non_active_triggers
+-
+-        for trigger in ordered:
+-            stack_obj = StackObject(
+-                source=trigger.source,
+-                controller=trigger.controller,
+-                on_resolve=trigger.effect,
+-            )
+-            game.stack.push(stack_obj)
+-
+-    def get_triggers(self) -> list[TriggerRegistration]:
+-        """Return a shallow copy of all registered triggers.
+-
+-        Useful for inspection and testing.
+-        """
+-        return list(self._triggers)
+-
+-    def get_triggers_for_source(self, source: Any) -> list[TriggerRegistration]:
+-        """Return all triggers registered by *source* (identity-based).
+-
+-        Parameters:
+-            source: The game object to filter by.
+-        """
+-        return [t for t in self._triggers if t.source is source]
+-
+-    def clear(self) -> None:
+-        """Remove all registered triggers."""
+-        self._triggers.clear()
+--- a/engine/turn.py
++++ /dev/null
+@@ -1,217 +0,0 @@
+-"""Turn execution loop for the SilverquiLLM engine."""
+-
+-from __future__ import annotations
+-
+-import warnings
+-from typing import TYPE_CHECKING
+-
+-if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-
+-from engine.stack import priority_loop
+-from engine.types import Phase, Step, Zone
+-
+-
+-# Maximum hand size — players discard down to this during cleanup.
+-MAX_HAND_SIZE: int = 7
+-
+-
+-# Steps/phases where priority is given to players.
+-# In MTG, players do NOT receive priority during Untap and Cleanup (normally).
+-_NO_PRIORITY_STEPS: set[tuple[Phase, Step | None]] = {
+-    (Phase.BEGINNING, Step.UNTAP),
+-    (Phase.ENDING, Step.CLEANUP),
+-}
+-
+-
+-def _do_untap_step(game: GameState) -> None:
+-    """Perform untap step actions: untap all permanents controlled by the active player.
+-
+-    Per MTG rules, the active player untaps all permanents they control
+-    during their untap step. Summoning sickness is also cleared at this point.
+-    """
+-    active = game.active_player
+-    bf = active.zones[Zone.BATTLEFIELD]
+-    for obj in bf.get_all():
+-        if hasattr(obj, "is_tapped"):
+-            obj.is_tapped = False
+-        if hasattr(obj, "summoning_sick"):
+-            obj.summoning_sick = False
+-
+-    # Reset land plays for the active player
+-    active.land_plays_remaining = 1
+-
+-
+-def _do_draw_step(game: GameState) -> None:
+-    """Perform draw step actions: active player draws a card.
+-
+-    In a two-player game, the starting player (the player who takes
+-    turn 1) skips their draw step on that first turn.  This is per
+-    MTG comprehensive rules §103.7a.
+-    """
+-    # The starting player skips their draw on turn 1.
+-    if game.turn_number == 1 and game.active_player_index == 0:
+-        return
+-
+-    from engine.game import draw_card
+-
+-    draw_card(game, game.active_player)
+-
+-
+-def _do_combat_step(game: GameState, step: Step) -> None:
+-    """Dispatch combat sub-steps to the appropriate combat functions.
+-
+-    Parameters:
+-        game: The current game state.
+-        step: The combat step to execute.
+-    """
+-    from engine.combat import (
+-        combat_damage_step,
+-        declare_attackers_step,
+-        declare_blockers_step,
+-        end_combat_step,
+-    )
+-
+-    if step == Step.DECLARE_ATTACKERS:
+-        declare_attackers_step(game)
+-    elif step == Step.DECLARE_BLOCKERS:
+-        declare_blockers_step(game)
+-    elif step == Step.COMBAT_DAMAGE:
+-        combat_damage_step(game)
+-    elif step == Step.END_COMBAT:
+-        end_combat_step(game)
+-
+-
+-def _do_cleanup_step(game: GameState) -> None:
+-    """Perform the cleanup step (MTG rule §514).
+-
+-    The cleanup step executes the following actions in order:
+-
+-    1. Active player discards down to maximum hand size (7) using
+-       :meth:`Player.choose_card`.
+-    2. Remove all "until end of turn" continuous effects via
+-       :meth:`EffectManager.remove_expired`, then reapply remaining
+-       effects for a consistent game state.
+-    3. Clear damage marked on all creatures on the battlefield.
+-    4. Clear combat-related flags (``dealt_deathtouch_damage``,
+-       ``is_attacking``, ``is_blocking``) and reset the combat state.
+-    5. Empty all players' mana pools.
+-    6. Check state-based actions.
+-    7. If triggers fired during cleanup (e.g. from discarding), process
+-       them (give priority, resolve stack) and perform another cleanup step.
+-    """
+-    from engine.game import discard as _discard
+-    from engine.player import ScriptExhaustedError
+-    from engine.state_based_actions import resolve_state_based_actions
+-
+-    # --- Step 1: Discard to hand size ---
+-    active = game.active_player
+-    hand = active.zones[Zone.HAND]
+-    while len(hand) > MAX_HAND_SIZE:
+-        cards_in_hand = hand.get_all()
+-        if not cards_in_hand:
+-            break  # safety guard
+-        try:
+-            chosen = active.choose_card(cards_in_hand, "discard to hand size")
+-        except (ScriptExhaustedError, NotImplementedError) as exc:
+-            # Player implementation doesn't support choose_card or script
+-            # was exhausted.  Discard deterministically from end.
+-            chosen = cards_in_hand[-1]
+-            exc_name = type(exc).__name__
+-            warnings.warn(
+-                f"{exc_name} during cleanup discard for {active.name}; "
+-                f"auto-discarding {chosen.name}"
+-            )
+-        if chosen is not None and hand.contains(chosen):
+-            _discard(game, active, chosen)
+-        else:
+-            # If choose_card returns something invalid, discard the last card
+-            # to avoid an infinite loop.
+-            _discard(game, active, cards_in_hand[-1])
+-
+-    # --- Step 2: Remove "until end of turn" continuous effects ---
+-    if hasattr(game, "effect_manager"):
+-        game.effect_manager.remove_expired(game)
+-        # Reapply remaining effects so the game state is consistent.
+-        game.effect_manager.apply_all(game)
+-
+-    # --- Step 3: Clear damage on all creatures ---
+-    for player in game.players:
+-        bf = player.zones[Zone.BATTLEFIELD]
+-        for obj in bf.get_all():
+-            if hasattr(obj, "damage_marked"):
+-                obj.damage_marked = 0
+-
+-    # --- Step 4: Clear combat flags ---
+-    for player in game.players:
+-        bf = player.zones[Zone.BATTLEFIELD]
+-        for obj in bf.get_all():
+-            if hasattr(obj, "dealt_deathtouch_damage"):
+-                obj.dealt_deathtouch_damage = False
+-            if hasattr(obj, "is_attacking"):
+-                obj.is_attacking = False
+-            if hasattr(obj, "is_blocking"):
+-                obj.is_blocking = False
+-    # Reset the CombatState itself.
+-    if hasattr(game, "combat_state"):
+-        game.combat_state.clear()
+-
+-    # --- Step 5: Empty mana pools ---
+-    game.empty_mana_pools()
+-
+-    # --- Step 6: Check state-based actions ---
+-    sba_happened = resolve_state_based_actions(game)
+-
+-    # --- Step 7: If SBAs were performed or triggers fired, process & repeat ---
+-    # Rule 514.3a: if state-based actions were performed or triggered abilities
+-    # triggered during cleanup, another cleanup step occurs.
+-    if sba_happened or not game.stack.is_empty():
+-        # Triggers were placed on the stack — give priority and resolve.
+-        priority_loop(game)
+-        # After resolving, perform another cleanup step (recursive).
+-        _do_cleanup_step(game)
+-
+-
+-def run_turn(game: GameState) -> None:
+-    """Execute a full turn, iterating through all phases/steps.
+-
+-    At each priority point (every phase/step except Untap and Cleanup),
+-    :func:`priority_loop` is called.  Turn-based actions are performed
+-    at the appropriate steps:
+-
+-    - **Untap**: Untap all permanents, clear summoning sickness, reset
+-      land plays.
+-    - **Draw**: Active player draws a card.
+-    - **Combat**: Delegate to combat system functions.
+-    - **Cleanup**: Clear damage, remove expired effects.
+-
+-    After the last step (Cleanup), the turn number is incremented and
+-    the active player swaps via :meth:`GameState.advance_phase`.
+-
+-    Parameters:
+-        game: The game state to advance through one complete turn.
+-    """
+-    start_turn = game.turn_number
+-
+-    while game.turn_number == start_turn:
+-        current = (game.phase, game.step)
+-
+-        # Perform turn-based actions for the current step
+-        if current == (Phase.BEGINNING, Step.UNTAP):
+-            _do_untap_step(game)
+-        elif current == (Phase.BEGINNING, Step.UPKEEP):
+-            from engine.triggers import EventType
+-            game.trigger_manager.fire_event(game, EventType.BEGINNING_OF_UPKEEP)
+-        elif current == (Phase.BEGINNING, Step.DRAW):
+-            _do_draw_step(game)
+-        elif game.phase == Phase.COMBAT and game.step is not None:
+-            _do_combat_step(game, game.step)
+-        elif current == (Phase.ENDING, Step.CLEANUP):
+-            _do_cleanup_step(game)
+-
+-        # Grant priority at this phase/step unless it's Untap or Cleanup.
+-        if current not in _NO_PRIORITY_STEPS:
+-            priority_loop(game)
+-
+-        # Advance to the next phase/step (or to next turn).
+-        game.advance_phase()
+--- a/engine/types.py
++++ /dev/null
+@@ -1,251 +0,0 @@
+-"""Core enums and type definitions for the SilverquiLLM engine."""
+-
+-from __future__ import annotations
+-
+-import enum
+-import re
+-from dataclasses import dataclass, field
+-from typing import Any, Callable
+-
+-
+-class Color(enum.Enum):
+-    """The five colors of Magic."""
+-
+-    WHITE = "W"
+-    BLUE = "U"
+-    BLACK = "B"
+-    RED = "R"
+-    GREEN = "G"
+-
+-
+-# Single-letter aliases accessible as Color.W, Color.U, etc.
+-Color.W = Color.WHITE  # type: ignore[attr-defined]
+-Color.U = Color.BLUE  # type: ignore[attr-defined]
+-Color.B = Color.BLACK  # type: ignore[attr-defined]
+-Color.R = Color.RED  # type: ignore[attr-defined]
+-Color.G = Color.GREEN  # type: ignore[attr-defined]
+-
+-
+-class ManaType(enum.Enum):
+-    """Mana types including colorless."""
+-
+-    WHITE = "W"
+-    BLUE = "U"
+-    BLACK = "B"
+-    RED = "R"
+-    GREEN = "G"
+-    COLORLESS = "C"
+-
+-
+-class Zone(enum.Enum):
+-    """Game zones."""
+-
+-    BATTLEFIELD = "battlefield"
+-    HAND = "hand"
+-    LIBRARY = "library"
+-    GRAVEYARD = "graveyard"
+-    EXILE = "exile"
+-    STACK = "stack"
+-    COMMAND = "command"
+-
+-
+-class Phase(enum.Enum):
+-    """Turn phases."""
+-
+-    BEGINNING = "beginning"
+-    PRECOMBAT_MAIN = "precombat_main"
+-    COMBAT = "combat"
+-    POSTCOMBAT_MAIN = "postcombat_main"
+-    ENDING = "ending"
+-
+-
+-class Step(enum.Enum):
+-    """Turn steps."""
+-
+-    UNTAP = "untap"
+-    UPKEEP = "upkeep"
+-    DRAW = "draw"
+-    BEGIN_COMBAT = "begin_combat"
+-    DECLARE_ATTACKERS = "declare_attackers"
+-    DECLARE_BLOCKERS = "declare_blockers"
+-    COMBAT_DAMAGE = "combat_damage"
+-    END_COMBAT = "end_combat"
+-    END = "end"
+-    CLEANUP = "cleanup"
+-
+-
+-class CardType(enum.Enum):
+-    """Card types."""
+-
+-    CREATURE = "creature"
+-    INSTANT = "instant"
+-    SORCERY = "sorcery"
+-    ENCHANTMENT = "enchantment"
+-    ARTIFACT = "artifact"
+-    PLANESWALKER = "planeswalker"
+-    LAND = "land"
+-
+-
+-class Supertype(enum.Enum):
+-    """Card supertypes."""
+-
+-    BASIC = "basic"
+-    LEGENDARY = "legendary"
+-    SNOW = "snow"
+-
+-
+-class Keyword(enum.Flag):
+-    """Evergreen keyword abilities (combinable via bitwise OR)."""
+-
+-    FLYING = enum.auto()
+-    FIRST_STRIKE = enum.auto()
+-    DOUBLE_STRIKE = enum.auto()
+-    DEATHTOUCH = enum.auto()
+-    TRAMPLE = enum.auto()
+-    LIFELINK = enum.auto()
+-    VIGILANCE = enum.auto()
+-    REACH = enum.auto()
+-    HASTE = enum.auto()
+-    FLASH = enum.auto()
+-    DEFENDER = enum.auto()
+-    HEXPROOF = enum.auto()
+-    INDESTRUCTIBLE = enum.auto()
+-    MENACE = enum.auto()
+-    WARD = enum.auto()
+-    PROWESS = enum.auto()
+-
+-
+-# Mapping from pip string to ManaType for parsing
+-_PIP_MAP: dict[str, ManaType] = {
+-    "W": ManaType.WHITE,
+-    "U": ManaType.BLUE,
+-    "B": ManaType.BLACK,
+-    "R": ManaType.RED,
+-    "G": ManaType.GREEN,
+-    "C": ManaType.COLORLESS,
+-}
+-
+-# Regex to tokenize a mana cost string like "{2}{W}{U}" or "{X}{X}{R}"
+-_MANA_TOKEN_RE = re.compile(r"\{([^}]+)\}")
+-
+-# Regex to detect hybrid mana tokens like "B/G", "W/U", etc.
+-_HYBRID_RE = re.compile(r"^([WUBRGC])/([WUBRGC])$")
+-
+-
+-@dataclass(frozen=True)
+-class HybridManaSymbol:
+-    """A hybrid mana symbol that can be paid with either of two colors.
+-
+-    For example, ``{B/G}`` is represented as
+-    ``HybridManaSymbol(option_a=ManaType.BLACK, option_b=ManaType.GREEN)``.
+-    """
+-
+-    option_a: ManaType
+-    option_b: ManaType
+-
+-
+-@dataclass(frozen=True)
+-class ManaCost:
+-    """Represents a mana cost.
+-
+-    Attributes:
+-        generic: The generic (numerical) component of the cost.
+-        pips: Mapping of colored/colorless mana pips to their counts.
+-        x_count: Number of {X} symbols in the cost.
+-        hybrid: List of hybrid mana symbols that can be paid with either option.
+-    """
+-
+-    generic: int = 0
+-    pips: dict[ManaType, int] = field(default_factory=dict)
+-    x_count: int = 0
+-    hybrid: list[HybridManaSymbol] = field(default_factory=list)
+-
+-    @property
+-    def cmc(self) -> int:
+-        """Converted mana cost (total mana value, treating X as 0).
+-
+-        Each hybrid symbol contributes 1 to the CMC.
+-        """
+-        return self.generic + sum(self.pips.values()) + len(self.hybrid)
+-
+-    @classmethod
+-    def parse(cls, cost_str: str) -> ManaCost:
+-        """Parse a mana cost string like ``"{2}{W}{U}"`` into a ManaCost.
+-
+-        Supports generic mana (``{N}``), colored pips (``{W}``, ``{U}``, ``{B}``,
+-        ``{R}``, ``{G}``), colorless pips (``{C}``), and X costs (``{X}``).
+-
+-        Raises:
+-            ValueError: If *cost_str* is empty, contains no valid tokens, or
+-                includes an unrecognised pip symbol.
+-        """
+-        if not cost_str or not cost_str.strip():
+-            raise ValueError(f"Invalid mana cost string: {cost_str!r}")
+-
+-        tokens = _MANA_TOKEN_RE.findall(cost_str)
+-        if not tokens:
+-            raise ValueError(f"Invalid mana cost string: {cost_str!r}")
+-
+-        # Verify that the entire input is consumed by brace tokens (no extra
+-        # characters outside braces such as trailing junk or stray spaces).
+-        reconstructed = "".join(f"{{{t}}}" for t in tokens)
+-        if reconstructed != cost_str:
+-            raise ValueError(f"Invalid mana cost string: {cost_str!r}")
+-
+-        generic = 0
+-        pips: dict[ManaType, int] = {}
+-        x_count = 0
+-        hybrid: list[HybridManaSymbol] = []
+-
+-        for token in tokens:
+-            upper = token.upper()
+-            if upper == "X":
+-                x_count += 1
+-            elif upper in _PIP_MAP:
+-                mana_type = _PIP_MAP[upper]
+-                pips[mana_type] = pips.get(mana_type, 0) + 1
+-            else:
+-                # Check for hybrid mana like "B/G"
+-                hybrid_match = _HYBRID_RE.match(upper)
+-                if hybrid_match:
+-                    a_str, b_str = hybrid_match.group(1), hybrid_match.group(2)
+-                    if a_str not in _PIP_MAP or b_str not in _PIP_MAP:
+-                        raise ValueError(
+-                            f"Unrecognised mana symbol {token!r} in cost string {cost_str!r}"
+-                        )
+-                    hybrid.append(
+-                        HybridManaSymbol(
+-                            option_a=_PIP_MAP[a_str], option_b=_PIP_MAP[b_str]
+-                        )
+-                    )
+-                else:
+-                    # Try to parse as a number (generic mana)
+-                    try:
+-                        value = int(token)
+-                    except ValueError:
+-                        raise ValueError(
+-                            f"Unrecognised mana symbol {token!r} in cost string {cost_str!r}"
+-                        ) from None
+-                    if value < 0:
+-                        raise ValueError(
+-                            f"Negative generic mana {token!r} in cost string {cost_str!r}"
+-                        )
+-                    generic += value
+-
+-        return cls(generic=generic, pips=pips, x_count=x_count, hybrid=hybrid)
+-
+-
+-@dataclass
+-class TargetRequirement:
+-    """Describes a targeting requirement for a spell or ability.
+-
+-    Attributes:
+-        filter_fn: A callable that accepts a game object and returns True
+-            if the object is a legal target.
+-        description: Human-readable description of what this targets.
+-        zone: The zone in which legal targets must reside.
+-    """
+-
+-    filter_fn: Callable[..., Any]
+-    description: str
+-    zone: Zone
+--- a/engine/zones.py
++++ /dev/null
+@@ -1,331 +0,0 @@
+-"""Zone containers for managing game objects across game zones."""
+-
+-from __future__ import annotations
+-
+-import random
+-from typing import TYPE_CHECKING, Any
+-
+-from engine.types import CardType, Zone
+-
+-if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-
+-
+-class IllegalMoveError(Exception):
+-    """Raised when a zone move is illegal (e.g. object not found in source zone)."""
+-
+-
+-class ZoneContainer:
+-    """Wraps an ordered list of game-object references for a single zone.
+-
+-    Internal list convention: index 0 is the *bottom*, index -1 is the *top*.
+-    This matches the intuitive model where ``add(obj, position="top")``
+-    appends, and ``top(n)`` returns the last *n* items.
+-    """
+-
+-    def __init__(self) -> None:
+-        self._objects: list[Any] = []
+-
+-    # ------------------------------------------------------------------
+-    # Mutators
+-    # ------------------------------------------------------------------
+-
+-    def add(self, obj: Any, position: str = "top") -> None:
+-        """Add *obj* to this zone.
+-
+-        Parameters:
+-            obj: The game object to add.
+-            position: ``"top"`` (default) appends to the end of the internal
+-                list; ``"bottom"`` inserts at position 0.
+-        """
+-        if position == "top":
+-            self._objects.append(obj)
+-        elif position == "bottom":
+-            self._objects.insert(0, obj)
+-        else:
+-            raise ValueError(f"Invalid position: {position!r}; expected 'top' or 'bottom'")
+-
+-    def remove(self, obj: Any) -> None:
+-        """Remove *obj* from this zone (identity-based lookup).
+-
+-        Raises:
+-            ValueError: If *obj* is not in the zone.
+-        """
+-        for i, item in enumerate(self._objects):
+-            if item is obj:
+-                del self._objects[i]
+-                return
+-        raise ValueError(f"{obj!r} not in zone")
+-
+-    def shuffle(self) -> None:
+-        """Randomly shuffle the contents of this zone (used for libraries)."""
+-        random.shuffle(self._objects)
+-
+-    # ------------------------------------------------------------------
+-    # Queries
+-    # ------------------------------------------------------------------
+-
+-    def contains(self, obj: Any) -> bool:
+-        """Return ``True`` if *obj* is in this zone (identity-based lookup)."""
+-        return any(item is obj for item in self._objects)
+-
+-    def get_all(self) -> list[Any]:
+-        """Return a shallow copy of all objects in order (bottom → top)."""
+-        return list(self._objects)
+-
+-    def top(self, n: int) -> list[Any]:
+-        """Return the top *n* items (last *n* in the internal list).
+-
+-        If *n* >= len, returns all items.  Order is bottom-to-top (same
+-        orientation as the internal list).
+-        """
+-        if n <= 0:
+-            return []
+-        return self._objects[-n:]
+-
+-    def bottom(self, n: int) -> list[Any]:
+-        """Return the bottom *n* items (first *n* in the internal list).
+-
+-        If *n* >= len, returns all items.
+-        """
+-        if n <= 0:
+-            return []
+-        return self._objects[:n]
+-
+-    def __len__(self) -> int:
+-        return len(self._objects)
+-
+-    def __repr__(self) -> str:
+-        return f"ZoneContainer({self._objects!r})"
+-
+-
+-class Zones:
+-    """Per-player collection mapping each :class:`Zone` to a :class:`ZoneContainer`."""
+-
+-    def __init__(self, zones: dict[Zone, ZoneContainer]) -> None:
+-        self._zones = zones
+-
+-    @classmethod
+-    def new_player(cls) -> Zones:
+-        """Create a fresh set of empty zones for a player."""
+-        return cls({zone: ZoneContainer() for zone in Zone})
+-
+-    def __getitem__(self, zone: Zone) -> ZoneContainer:
+-        return self._zones[zone]
+-
+-    def __contains__(self, zone: Zone) -> bool:
+-        return zone in self._zones
+-
+-    def __repr__(self) -> str:
+-        return f"Zones({self._zones!r})"
+-
+-
+-def move_zone(
+-    obj: Any,
+-    from_zone: ZoneContainer,
+-    to_zone: ZoneContainer,
+-    position: str = "top",
+-) -> None:
+-    """Move *obj* from *from_zone* to *to_zone*.
+-
+-    Parameters:
+-        obj: The game object to move.
+-        from_zone: Source :class:`ZoneContainer`.
+-        to_zone: Destination :class:`ZoneContainer`.
+-        position: ``"top"`` (default), ``"bottom"``, or ``"shuffle"``
+-            (add then shuffle the destination).
+-
+-    Raises:
+-        IllegalMoveError: If *obj* is not in *from_zone*.
+-    """
+-    # Moving an object to the same zone it's already in is a no-op.
+-    if from_zone is to_zone:
+-        return
+-
+-    if not from_zone.contains(obj):
+-        raise IllegalMoveError(
+-            f"Object {obj!r} not found in source zone"
+-        )
+-
+-    # Validate position *before* mutating either zone so that an invalid
+-    # position does not leave the object removed from the source without
+-    # being added to the destination.
+-    if position not in ("top", "bottom", "shuffle"):
+-        raise ValueError(f"Invalid position: {position!r}; expected 'top', 'bottom', or 'shuffle'")
+-
+-    from_zone.remove(obj)
+-
+-    # Clear transient casting metadata when a card changes zones so that
+-    # stale data (e.g. colors_spent from a previous cast) does not leak.
+-    if hasattr(obj, "colors_spent"):
+-        del obj.colors_spent
+-
+-    if position == "shuffle":
+-        to_zone.add(obj, position="top")
+-        to_zone.shuffle()
+-    else:
+-        to_zone.add(obj, position=position)
+-
+-
+-# Mapping from replacement-effect destination strings to Zone enum values.
+-_DESTINATION_ZONE_MAP: dict[str, Zone] = {
+-    "graveyard": Zone.GRAVEYARD,
+-    "exile": Zone.EXILE,
+-    "hand": Zone.HAND,
+-    "library": Zone.LIBRARY,
+-}
+-
+-
+-def move_to_zone(
+-    game: GameState,
+-    card: Any,
+-    from_zone: Zone,
+-    to_zone: Zone,
+-    *,
+-    replacement_event_type: str | None = None,
+-) -> None:
+-    """High-level zone transition with trigger/replacement-effect hooks.
+-
+-    Centralises the bookkeeping that was previously duplicated across
+-    ``destroy()``, ``sacrifice()``, ``exile()``, ``create_token()``,
+-    ``_move_to_graveyard()`` (SBAs), and ``_resolve_spell()`` (casting).
+-
+-    Steps:
+-    1. Consult replacement effects for zone-change redirection (if
+-       *replacement_event_type* is supplied and the card is leaving the
+-       battlefield for the graveyard).  The replacement may change the
+-       destination zone (e.g. exile instead of graveyard).
+-    2. Remove *card* from the source zone.
+-    3. Add *card* to the (possibly redirected) destination zone.
+-    4. If leaving the battlefield:
+-       a. Fire ``LEAVES_BATTLEFIELD`` event.
+-       b. Fire ``CREATURE_DIES`` if the card is a creature **and** the
+-          final destination is the graveyard (per KEY_DECISIONS).
+-       c. Unregister triggers and replacement effects (fires happen
+-          **before** unregister so self-referencing triggers still match).
+-    5. If entering the battlefield:
+-       a. Register triggers (``register_triggers``) and replacement
+-          effects (``register_replacement_effects``).
+-       b. Fire ``ENTERS_BATTLEFIELD`` event.
+-
+-    Parameters:
+-        game: The current game state.
+-        card: The game object being moved.
+-        from_zone: The :class:`Zone` the card is currently in.
+-        to_zone: The intended destination :class:`Zone`.
+-        replacement_event_type: Optional string passed to the replacement
+-            manager (e.g. ``"creature_dies"``, ``"sacrifice"``,
+-            ``"permanent_destroyed"``).  When ``None``, no replacement
+-            effects are consulted (useful for simple moves like casting
+-            resolution or exile-from-graveyard).
+-    """
+-    from engine.triggers import EventType
+-
+-    controller = getattr(card, "controller", None)
+-    owner = getattr(card, "owner", controller)
+-
+-    leaving_battlefield = from_zone == Zone.BATTLEFIELD
+-    entering_battlefield = to_zone == Zone.BATTLEFIELD
+-
+-    # --- Determine the source player for zone lookup ---
+-    # When leaving the battlefield, use the controller's zone.
+-    # For other zones (hand, graveyard, etc.), use the owner's zone.
+-    if leaving_battlefield:
+-        source_player = controller
+-    else:
+-        source_player = owner
+-
+-    # Fallback: search all players for the zone containing the card.
+-    # Also triggered when the inferred player's zone doesn't contain the card
+-    # (e.g. discarding a card that's in a different player's hand than its owner).
+-    if source_player is None or not source_player.zones[from_zone].contains(card):
+-        for player in game.players:
+-            if player.zones[from_zone].contains(card):
+-                source_player = player
+-                break
+-
+-    if source_player is None:
+-        return  # Card not found anywhere
+-
+-    source_container = source_player.zones[from_zone]
+-    if not source_container.contains(card):
+-        return  # Safety: card not in any player's zone
+-
+-    if owner is None:
+-        owner = source_player
+-
+-    # --- Replacement effects (zone-change redirection) ---
+-    dest_zone = to_zone
+-    if replacement_event_type is not None and leaving_battlefield:
+-        card_types = getattr(card, "card_types", set())
+-        is_creature = CardType.CREATURE in card_types
+-
+-        event_data: dict[str, Any] = {
+-            "creature" if is_creature else "permanent": card,
+-            "destination": _ZONE_TO_DESTINATION.get(to_zone, "graveyard"),
+-            "controller": controller,
+-            "owner": owner,
+-        }
+-        event_data = game.replacement_manager.apply(
+-            game, replacement_event_type, event_data,
+-        )
+-        destination_str = event_data.get("destination", "graveyard")
+-        dest_zone = _DESTINATION_ZONE_MAP.get(destination_str, to_zone)
+-
+-    # --- Perform the zone move ---
+-    source_container.remove(card)
+-
+-    # Determine the destination player (always the owner for graveyard/exile/hand/library).
+-    if entering_battlefield:
+-        dest_player = controller if controller is not None else owner
+-    else:
+-        dest_player = owner
+-
+-    dest_player.zones[dest_zone].add(card)
+-
+-    # --- Leaving battlefield hooks ---
+-    if leaving_battlefield:
+-        card_types = getattr(card, "card_types", set())
+-        is_creature = CardType.CREATURE in card_types
+-
+-        # Fire events BEFORE unregistering (KEY_DECISIONS convention).
+-        game.trigger_manager.fire_event(
+-            game,
+-            EventType.LEAVES_BATTLEFIELD,
+-            {"permanent": card, "controller": controller},
+-        )
+-        if is_creature and dest_zone == Zone.GRAVEYARD:
+-            game.trigger_manager.fire_event(
+-                game,
+-                EventType.CREATURE_DIES,
+-                {"creature": card, "controller": controller, "owner": owner},
+-            )
+-
+-        # Now unregister triggers and replacement effects.
+-        game.trigger_manager.unregister(card)
+-        game.replacement_manager.unregister(card)
+-
+-    # --- Entering battlefield hooks ---
+-    if entering_battlefield:
+-        # Fire the ENTERS_BATTLEFIELD event *before* registering the card's
+-        # own triggers so that a permanent's ETB trigger does not
+-        # retroactively trigger off its own entry.  Other already-registered
+-        # triggers that watch for ENTERS_BATTLEFIELD will still fire.
+-        game.trigger_manager.fire_event(
+-            game,
+-            EventType.ENTERS_BATTLEFIELD,
+-            {"permanent": card, "controller": controller if controller is not None else owner},
+-        )
+-        if hasattr(card, "register_triggers"):
+-            card.register_triggers(game)
+-        if hasattr(card, "register_replacement_effects"):
+-            card.register_replacement_effects(game)
+-
+-
+-# Reverse mapping: Zone enum → destination string for replacement events.
+-_ZONE_TO_DESTINATION: dict[Zone, str] = {
+-    Zone.GRAVEYARD: "graveyard",
+-    Zone.EXILE: "exile",
+-    Zone.HAND: "hand",
+-    Zone.LIBRARY: "library",
+-}
