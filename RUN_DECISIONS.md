@@ -19,3 +19,9 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Decision**: Wired save_card_result_v2 into cli.py and post_eval.py, made scorer mode-aware (blind→Cat1 only, impl_test→Cat2 only), and flattened v1 implementation in normalizer.
 - **Reasoning**: The whole point of v2 is to replace v1 in practice, not just exist as dead code. Mode-aware scoring preserves the blind/tested distinction.
 - **Impact**: silverquillm/cli.py, silverquillm/post_eval.py, silverquillm/results.py, silverquillm/scorer.py.
+
+## Item 10 — Reviewer caught non-deterministic timestamp and legacy compat gaps
+- **Context**: aggregate_run() used datetime.now() breaking idempotency, token extraction only handled dict shape, and legacy status strings weren't normalized.
+- **Decision**: Derived timestamp from latest result.json mtime, handled both int/dict token shapes, normalized "ok"/"success" → "completed".
+- **Reasoning**: Aggregation must be a pure function for `benchmark aggregate` re-runs; backward compat with existing run artifacts is required.
+- **Impact**: silverquillm/aggregator.py, tests/test_aggregator.py.

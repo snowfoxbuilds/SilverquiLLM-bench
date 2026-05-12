@@ -160,7 +160,7 @@ class EvalResult:
   - `silverquillm/scorer.py` — update scoring to use v2 fields
   Testability: Unit test: v2 result.json round-trips correctly. Unit test: v1 result.json from existing runs still loads.
 
-- [ ] **Automatic ****`run_summary.json`**** aggregation**
+- [x] **Automatic ****`run_summary.json`**** aggregation**
   Detail: After post-run evaluation completes, automatically aggregate all per-card `result.json` files into a `run_summary.json` at the run level. Create `silverquillm/aggregator.py` with:
 
   - `aggregate_run(run_dir: Path) -> RunSummary` — pure function, reads all `cards/*/result.json`, produces summary

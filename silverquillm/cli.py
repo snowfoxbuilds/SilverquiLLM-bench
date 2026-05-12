@@ -26,6 +26,7 @@ from silverquillm.agent_session import (
 )
 from silverquillm.card_loader import filter_by_collectors, filter_by_prototype, load_card_specs
 from silverquillm.config import BenchmarkConfig, load_config
+from silverquillm.aggregator import aggregate_run, save_run_summary_v2
 from silverquillm.evaluator import run_self_eval_flat
 from silverquillm.post_eval import run_post_eval
 from silverquillm.evaluator import EvalResultV2
@@ -351,6 +352,10 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
 
     save_run_summary(run_dir, all_results)
 
+    # --- Aggregate run_summary.json ---
+    run_summary = aggregate_run(run_dir)
+    save_run_summary_v2(run_dir, run_summary)
+
     # --- Print summary ---
     blind_passed = sum(r.get("self_eval", {}).get("blind", {}).get("passed", 0) for r in all_results)
     blind_total_tests = sum(r.get("self_eval", {}).get("blind", {}).get("total", 0) for r in all_results)
@@ -637,6 +642,25 @@ def cards(set_code: str) -> None:
         name = card.get("name", "???")
         tier = card.get("complexity_tier", card.get("tier", "unknown"))
         click.echo(_sys(f"  [{tier}] {name}"))
+
+
+@main.command()
+@click.argument("run_dir", type=click.Path(exists=True))
+def aggregate(run_dir: str) -> None:
+    """Aggregate per-card results into run_summary.json.
+
+    Reads all cards/*/result.json in the given run directory and produces
+    a run_summary.json.  Can be used to manually re-aggregate after editing
+    individual card results.
+    """
+    run_path = Path(run_dir)
+    summary = aggregate_run(run_path)
+    out = save_run_summary_v2(run_path, summary)
+    click.echo(_sys(f"Wrote {out}"))
+    click.echo(_sys(f"  Total cards: {summary.total_cards}"))
+    click.echo(_sys(f"  Completed: {summary.cards_completed}"))
+    click.echo(_sys(f"  Timeout: {summary.cards_timeout}"))
+    click.echo(_sys(f"  No output: {summary.cards_no_output}"))
 
 
 if __name__ == "__main__":
