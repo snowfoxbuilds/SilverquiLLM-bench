@@ -18,15 +18,18 @@ Mana Cost: {mana_cost}
 Type: {type_line}
 Rules Text: {oracle_text}
 
-Implement this card by completing the class in template.py.
-You have access to:
-- engine_api.md (game engine API reference)
-- engine/ (game engine source — you may extend it if this card needs mechanics not yet supported)
-- base_classes.py (card base classes)
-- rules_overview.md + rules lookup tool (search MTG rules by keyword/number)
-- foundations/ (browse working card implementations as reference)
-- card_spec.json (contains details on the cards you are implementing)
-- template.py (contains the starter template for your card implementation)
+All resources are in your current working directory. Do NOT look for files outside it.
+
+Implement this card by completing the class in ./template.py.
+You have access to (all in your current directory):
+- ./template.py (starter implementation skeleton — fill in this class)
+- ./card_spec.json (full card specification)
+- ./engine_api.md (game engine API reference)
+- ./engine/ (game engine source — you may extend it if this card needs mechanics not yet supported)
+- ./base_classes.py (card base classes)
+- ./rules_overview.md (MTG rules reference)
+- ./foundations/ (browse working card implementations as reference)
+- ./test_utils.py (test utility helpers)
 
 Write your implementation to `blind_impl.py`.
 If you need to add or modify engine files, do so — but all previous cards' tests
@@ -77,15 +80,18 @@ Test for:
 - Edge cases (no valid targets, empty board, etc.)
 - Interaction with game rules (stack, priority, state-based actions)
 
-You have access to:
-- engine_api.md (game engine API reference)
-- engine/ (game engine source — you may extend it if this card needs mechanics not yet supported)
-- base_classes.py (card base classes)
-- rules_overview.md + rules lookup tool (search MTG rules by keyword/number)
-- foundations/ (browse working card implementations as reference)
-- card_spec.json (contains details on the cards you are implementing)
-- template.py (contains the starter template for your card implementation)
-- test_utils.py (you are not asked to write tests yet)
+All resources are in your current working directory. Do NOT look for files outside it.
+
+Implement this card by completing the class in ./template.py.
+You have access to (all in your current directory):
+- ./template.py (starter implementation skeleton — fill in this class)
+- ./card_spec.json (full card specification)
+- ./engine_api.md (game engine API reference)
+- ./engine/ (game engine source — you may extend it if this card needs mechanics not yet supported)
+- ./base_classes.py (card base classes)
+- ./rules_overview.md (MTG rules reference)
+- ./foundations/ (browse working card implementations as reference)
+- ./test_utils.py (test utility helpers)
 
 Save your updated implementation to `tested_impl.py`.
 Save your tests to `tests.py`.

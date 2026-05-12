@@ -180,6 +180,7 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
             session = AgentSession(
                 config=cfg, card_spec=spec, card_dir=card_dir,
                 run_engine_dir=run_engine_dir,
+                run_dir=run_dir,
             )
             workspace = session.setup_workspace()
 

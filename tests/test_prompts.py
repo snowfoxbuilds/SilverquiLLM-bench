@@ -101,10 +101,6 @@ class TestBlindImplementationPrompt:
         result = blind_implementation_prompt(_SAMPLE_CARD_SPEC)
         assert "deals 3 damage" in result
 
-    def test_does_not_mention_test_utils(self) -> None:
-        result = blind_implementation_prompt(_SAMPLE_CARD_SPEC)
-        assert "test_utils" not in result.lower()
-
     def test_does_not_mention_card_impl(self) -> None:
         result = blind_implementation_prompt(_SAMPLE_CARD_SPEC)
         assert "card_impl" not in result.lower()

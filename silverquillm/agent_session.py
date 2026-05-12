@@ -154,6 +154,7 @@ class AgentSession:
     card_spec: dict[str, Any]
     card_dir: str
     run_engine_dir: Path | None = field(default=None)
+    run_dir: Path | None = field(default=None)
     _workspace: Path | None = field(default=None, init=False, repr=False)
     _adapter: AgentAdapter | None = field(default=None, init=False, repr=False)
 
@@ -335,8 +336,8 @@ class AgentSession:
         protected_snapshot = _snapshot_all_protected(_REPO_ROOT)
         start = time.monotonic()
 
-        postmortem_path = _get_postmortem_path(self.config, self.card_name)
-        raw_log_path = _get_raw_log_path(self.config)
+        postmortem_path = _get_postmortem_path(self.run_dir, self.card_name)
+        raw_log_path = _get_raw_log_path(self.run_dir)
 
         try:
             output = self._run_agent(prompt, workspace)
@@ -495,8 +496,8 @@ class AgentSession:
         tests_passed = False
         start = time.monotonic()
 
-        postmortem_path = _get_postmortem_path(self.config, self.card_name)
-        raw_log_path = _get_raw_log_path(self.config)
+        postmortem_path = _get_postmortem_path(self.run_dir, self.card_name)
+        raw_log_path = _get_raw_log_path(self.run_dir)
 
         prompt = test_informed_prompt(
             self.card_spec,
@@ -674,9 +675,9 @@ class AgentSession:
         finally:
             # Generate agent_thoughts.md on ALL exit paths (normal,
             # early-return on timeout/violation, and exceptions).
-            if self.config.output_dir:
+            if self.run_dir:
                 try:
-                    _generate_agent_thoughts(self.config.output_dir, self.card_name)
+                    _generate_agent_thoughts(self.run_dir, self.card_name)
                 except Exception:
                     logger.debug(
                         "Failed to generate agent_thoughts.md for %s",
@@ -827,18 +828,18 @@ def _append_postmortem(
         f.write(json.dumps(entry) + "\n")
 
 
-def _get_postmortem_path(config: BenchmarkConfig, card_name: str) -> Path | None:
-    """Return the postmortem.jsonl path, or None if output_dir is not set."""
-    if not config.output_dir:
+def _get_postmortem_path(run_dir: Path | None, card_name: str) -> Path | None:
+    """Return the postmortem.jsonl path, or None if run_dir is not set."""
+    if not run_dir:
         return None
-    return Path(config.output_dir) / card_name / "postmortem.jsonl"
+    return run_dir / "cards" / card_name / "postmortem.jsonl"
 
 
-def _get_raw_log_path(config: BenchmarkConfig) -> Path | None:
-    """Return the run-level raw_agent_log.jsonl path, or None if output_dir is not set."""
-    if not config.output_dir:
+def _get_raw_log_path(run_dir: Path | None) -> Path | None:
+    """Return the run-level raw_agent_log.jsonl path, or None if run_dir is not set."""
+    if not run_dir:
         return None
-    return Path(config.output_dir) / "raw_agent_log.jsonl"
+    return run_dir / "raw_agent_log.jsonl"
 
 
 def append_raw_log(
@@ -895,7 +896,7 @@ def _generate_agent_thoughts(output_dir: str | Path, card_name: str) -> Path | N
         does not exist or is empty.
     """
     output_dir = Path(output_dir)
-    postmortem_path = output_dir / card_name / "postmortem.jsonl"
+    postmortem_path = output_dir / "cards" / card_name / "postmortem.jsonl"
 
     if not postmortem_path.exists():
         return None
@@ -1021,7 +1022,7 @@ def _generate_agent_thoughts(output_dir: str | Path, card_name: str) -> Path | N
     lines.append("")
 
     # --- Write the file ---
-    thoughts_path = output_dir / card_name / "agent_thoughts.md"
+    thoughts_path = output_dir / "cards" / card_name / "agent_thoughts.md"
     thoughts_path.parent.mkdir(parents=True, exist_ok=True)
     thoughts_path.write_text("\n".join(lines))
 
