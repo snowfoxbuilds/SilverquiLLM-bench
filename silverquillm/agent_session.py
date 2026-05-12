@@ -1117,6 +1117,9 @@ def _check_violations(workspace: Path, before: dict[Path, float] | None = None, 
     workspace_resolved = workspace.resolve()
     output_resolved = output_dir.resolve() if output_dir else None
     for path, mtime in after.items():
+        # Skip __pycache__ — Python auto-generates these on import
+        if "__pycache__" in path.parts:
+            continue
         # Files inside the workspace are expected to change
         try:
             if path.resolve().is_relative_to(workspace_resolved):
@@ -1139,6 +1142,9 @@ def _check_violations(workspace: Path, before: dict[Path, float] | None = None, 
     # Check for deletions: files in before but missing from after
     for path in before:
         if path in after:
+            continue
+        # Skip __pycache__ — Python auto-generates these on import
+        if "__pycache__" in path.parts:
             continue
         try:
             if path.resolve().is_relative_to(workspace_resolved):
