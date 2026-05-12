@@ -16,3 +16,5 @@ data/sets/*.json
 .review-venv/
 dist-review/
 data/replays/*
+
+.opencode
