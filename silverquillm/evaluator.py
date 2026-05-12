@@ -30,6 +30,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 __all__ = [
     "EvalResult",
+    "EvalResultV2",
     "run_tests",
     "run_self_eval",
     "run_self_eval_flat",
@@ -39,13 +40,18 @@ __all__ = [
 ]
 
 # ---------------------------------------------------------------------------
-# Result dataclass
+# Result dataclasses
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class EvalResult:
-    """Outcome of running one implementation against one test suite."""
+    """Outcome of running one implementation against one test suite (v1 schema).
+
+    Retained for backward compatibility with existing evaluation functions
+    (``run_self_eval``, ``run_cross_eval``, ``run_audited_eval``) and tests.
+    New code should prefer :class:`EvalResultV2`.
+    """
 
     card_id: str
     agent: str
@@ -56,6 +62,31 @@ class EvalResult:
     tested_passed: int
     tested_failed: int
     tested_total: int
+    errors: list[str] = field(default_factory=list)
+
+
+@dataclass
+class EvalResultV2:
+    """Per-card evaluation outcome — v2 schema.
+
+    Replaces the blind/tested split with a mode-aware layout:
+
+    * ``implementation`` — token/runtime metrics for the generation phase.
+    * ``self_eval`` — agent's own tests against its impl (impl_test mode only).
+    * ``audited_eval`` — gold-standard tests against the impl.
+    * ``engine_diff_summary`` — human-readable summary of engine changes.
+    """
+
+    card_id: str
+    mode: str  # "blind" | "impl_test"
+    model_name: str
+    adapter: str
+    status: str  # "completed" | "timeout" | "no_output"
+    complexity_tier: str
+    implementation: dict = field(default_factory=dict)  # {tokens: {input, output, total}, runtime_ms, peak_context}
+    self_eval: dict | None = None  # {passed, failed, total} — None for blind mode
+    audited_eval: dict | None = None  # {passed, failed, total}
+    engine_diff_summary: str = ""  # human-readable summary of engine changes
     errors: list[str] = field(default_factory=list)
 
 

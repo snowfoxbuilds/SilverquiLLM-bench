@@ -13,3 +13,9 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Decision**: Revised to use deterministic `{set_code}/{collector}` lookup from card metadata and preserved existing result.json schema format. V2 schema is deferred to item 9.
 - **Reasoning**: Multiple benchmark sets can share collector numbers; schema changes must be coordinated with all consumers.
 - **Impact**: silverquillm/post_eval.py, tests/test_post_eval.py.
+
+## Item 9 — Reviewer caught v2 not wired in and mode-unaware scoring
+- **Context**: Initial v2 implementation added the schema but didn't wire it into harness (cli.py/post_eval.py still used v1), scorer ignored mode when converting v2→v1 columns, and v1→v2 normalization left nested implementation.
+- **Decision**: Wired save_card_result_v2 into cli.py and post_eval.py, made scorer mode-aware (blind→Cat1 only, impl_test→Cat2 only), and flattened v1 implementation in normalizer.
+- **Reasoning**: The whole point of v2 is to replace v1 in practice, not just exist as dead code. Mode-aware scoring preserves the blind/tested distinction.
+- **Impact**: silverquillm/cli.py, silverquillm/post_eval.py, silverquillm/results.py, silverquillm/scorer.py.

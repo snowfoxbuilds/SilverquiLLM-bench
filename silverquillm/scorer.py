@@ -183,6 +183,10 @@ def _load_eval_results(results_dir: Path) -> list[dict[str, Any]]:
     Supports two layouts:
     1. A single ``results.json`` file containing a list of result dicts.
     2. Multiple ``*.json`` files each containing a single result dict or list.
+
+    Both v1 and v2 result schemas are supported.  v2 results (with
+    ``schema_version: 2``) are normalised to the flat EvalResult dict
+    format expected by :func:`compute_scores`.
     """
     results: list[dict[str, Any]] = []
     results_file = results_dir / "results.json"
@@ -192,15 +196,92 @@ def _load_eval_results(results_dir: Path) -> list[dict[str, Any]]:
             results.extend(data)
         else:
             results.append(data)
-        return results
+    else:
+        for f in sorted(results_dir.glob("*.json")):
+            data = json.loads(f.read_text())
+            if isinstance(data, list):
+                results.extend(data)
+            else:
+                results.append(data)
 
-    for f in sorted(results_dir.glob("*.json")):
-        data = json.loads(f.read_text())
-        if isinstance(data, list):
-            results.extend(data)
+    # Normalise any v2 results to the flat dict format used by compute_scores
+    normalised: list[dict[str, Any]] = []
+    for r in results:
+        if r.get("schema_version") == 2:
+            normalised.extend(_v2_to_eval_dicts(r))
         else:
-            results.append(data)
-    return results
+            normalised.append(r)
+    return normalised
+
+
+def _v2_to_eval_dicts(v2: dict[str, Any]) -> list[dict[str, Any]]:
+    """Convert a v2 result record to flat EvalResult-style dicts.
+
+    A single v2 record may produce multiple flat dicts (self, audited)
+    since the scorer expects one dict per (agent, card_id, eval_type).
+
+    Respects ``v2['mode']``:
+    - ``"blind"`` → populate blind columns only (Category 1).
+    - ``"impl_test"`` → populate tested columns only (Category 2).
+    - Missing/other → populate both columns (backward compat).
+    """
+    card_id = v2.get("card_id", "")
+    agent = v2.get("adapter", v2.get("agent", "unknown"))
+    mode = v2.get("mode")
+    flat_results: list[dict[str, Any]] = []
+
+    # Self-eval
+    self_eval = v2.get("self_eval")
+    if self_eval and isinstance(self_eval, dict) and "passed" in self_eval:
+        entry: dict[str, Any] = {
+            "agent": agent,
+            "card_id": card_id,
+            "eval_type": "self",
+            "blind_passed": 0,
+            "blind_total": 0,
+            "tested_passed": 0,
+            "tested_total": 0,
+        }
+        if mode == "blind":
+            entry["blind_passed"] = self_eval.get("passed", 0)
+            entry["blind_total"] = self_eval.get("total", 0)
+        elif mode == "impl_test":
+            entry["tested_passed"] = self_eval.get("passed", 0)
+            entry["tested_total"] = self_eval.get("total", 0)
+        else:
+            # No mode specified — populate both for backward compat
+            entry["blind_passed"] = self_eval.get("passed", 0)
+            entry["blind_total"] = self_eval.get("total", 0)
+            entry["tested_passed"] = self_eval.get("passed", 0)
+            entry["tested_total"] = self_eval.get("total", 0)
+        flat_results.append(entry)
+
+    # Audited eval
+    audited_eval = v2.get("audited_eval")
+    if audited_eval and isinstance(audited_eval, dict) and "passed" in audited_eval:
+        entry = {
+            "agent": agent,
+            "card_id": card_id,
+            "eval_type": "audited",
+            "blind_passed": 0,
+            "blind_total": 0,
+            "tested_passed": 0,
+            "tested_total": 0,
+        }
+        if mode == "blind":
+            entry["blind_passed"] = audited_eval.get("passed", 0)
+            entry["blind_total"] = audited_eval.get("total", 0)
+        elif mode == "impl_test":
+            entry["tested_passed"] = audited_eval.get("passed", 0)
+            entry["tested_total"] = audited_eval.get("total", 0)
+        else:
+            entry["blind_passed"] = audited_eval.get("passed", 0)
+            entry["blind_total"] = audited_eval.get("total", 0)
+            entry["tested_passed"] = audited_eval.get("passed", 0)
+            entry["tested_total"] = audited_eval.get("total", 0)
+        flat_results.append(entry)
+
+    return flat_results
 
 
 # ---------------------------------------------------------------------------

@@ -28,7 +28,8 @@ from silverquillm.card_loader import filter_by_collectors, filter_by_prototype, 
 from silverquillm.config import BenchmarkConfig, load_config
 from silverquillm.evaluator import run_self_eval_flat
 from silverquillm.post_eval import run_post_eval
-from silverquillm.results import init_results_dir, save_aggregates, save_card_result, save_run_summary
+from silverquillm.evaluator import EvalResultV2
+from silverquillm.results import init_results_dir, save_aggregates, save_card_result, save_card_result_v2, save_run_summary
 from silverquillm.scorer import compute_scores, generate_leaderboard
 from silverquillm.regression import CompletedCard, run_regressions
 from silverquillm.replay.cli import validate as validate_cmd
@@ -255,6 +256,28 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
 
             card_results_dir = run_dir / "cards" / str(card_dir_name)
             save_card_result(run_dir, card_dir_name, blind_dict, test_dict)
+
+            # Overwrite result.json with v2 schema
+            _active = test_dict if cfg.mode == "impl_test" else blind_dict
+            _v2_result = EvalResultV2(
+                card_id=str(card_dir_name),
+                mode=cfg.mode,
+                model_name=_active.get("model", cfg.model_name),
+                adapter=_active.get("agent", getattr(cfg.agent, "adapter", "unknown")),
+                status=_active.get("status", "completed"),
+                complexity_tier=_active.get("complexity_tier", _active.get("tier", "unknown")),
+                implementation={
+                    "tokens": _active.get("tokens", 0),
+                    "runtime_ms": int(_active.get("runtime_seconds", 0) * 1000),
+                    "peak_context": _active.get("peak_context", 0),
+                },
+                errors=[],
+            )
+            save_card_result_v2(
+                run_dir, _v2_result,
+                impl_source=_active.get("impl_source", ""),
+                tests_source=_active.get("tests_source", ""),
+            )
 
             # Copy raw implementation files from workspace to results dir
             session.harvest_results(card_results_dir)

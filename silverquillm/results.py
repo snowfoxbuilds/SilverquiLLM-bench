@@ -24,13 +24,15 @@ from typing import Any
 import yaml
 
 from silverquillm.config import BenchmarkConfig
-from silverquillm.evaluator import EvalResult
+from silverquillm.evaluator import EvalResult, EvalResultV2
 from silverquillm.scorer import Leaderboard, generate_leaderboard
 
 __all__ = [
     "generate_run_name",
     "init_results_dir",
     "save_card_result",
+    "save_card_result_v2",
+    "load_card_result",
     "save_run_summary",
     "save_aggregates",
 ]
@@ -320,6 +322,203 @@ def _build_result_record(
                 record["audited_eval"] = entry
 
     return record
+
+
+# ---------------------------------------------------------------------------
+# v2 result.json — mode-aware schema
+# ---------------------------------------------------------------------------
+
+
+def save_card_result_v2(
+    run_dir: Path,
+    result: EvalResultV2,
+    *,
+    impl_source: str = "",
+    tests_source: str = "",
+) -> Path:
+    """Write a v2 ``result.json`` for a single card.
+
+    The v2 schema is mode-aware (blind vs impl_test) and stores
+    implementation metrics, self-eval, audited-eval, and engine diff
+    summary in a flat structure.
+
+    Parameters
+    ----------
+    run_dir:
+        Path to the run directory.
+    result:
+        The :class:`~silverquillm.evaluator.EvalResultV2` to persist.
+    impl_source:
+        Optional implementation source code to write as ``card_impl.py``.
+    tests_source:
+        Optional test source code to write as ``tests.py``.
+
+    Returns
+    -------
+    Path
+        The per-card directory.
+    """
+    card_dir = run_dir / "cards" / result.card_id
+    card_dir.mkdir(parents=True, exist_ok=True)
+
+    if impl_source:
+        (card_dir / "card_impl.py").write_text(impl_source)
+    if tests_source:
+        (card_dir / "tests.py").write_text(tests_source)
+
+    record = _build_result_record_v2(result)
+    (card_dir / "result.json").write_text(
+        json.dumps(record, indent=2, default=str)
+    )
+
+    return card_dir
+
+
+def _build_result_record_v2(result: EvalResultV2) -> dict[str, Any]:
+    """Build the v2 result.json record from an :class:`EvalResultV2`."""
+    record: dict[str, Any] = {
+        "schema_version": 2,
+        "card_id": result.card_id,
+        "mode": result.mode,
+        "model_name": result.model_name,
+        "adapter": result.adapter,
+        "status": result.status,
+        "complexity_tier": result.complexity_tier,
+        "implementation": result.implementation,
+        "self_eval": result.self_eval,
+        "audited_eval": result.audited_eval,
+        "engine_diff_summary": result.engine_diff_summary,
+        "errors": result.errors,
+    }
+    return record
+
+
+# ---------------------------------------------------------------------------
+# Loading result.json — supports v1 and v2 schemas
+# ---------------------------------------------------------------------------
+
+
+def load_card_result(card_dir: Path) -> dict[str, Any]:
+    """Load a card's ``result.json`` and normalise to v2 schema.
+
+    Supports both v1 (blind/tested split, no ``schema_version``) and v2
+    (mode-aware, ``schema_version: 2``) formats.  v1 results are
+    converted to the v2 shape so callers only need to handle one format.
+
+    Parameters
+    ----------
+    card_dir:
+        Path to the card directory containing ``result.json``.
+
+    Returns
+    -------
+    dict
+        The result record normalised to v2 schema.
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``result.json`` does not exist in *card_dir*.
+    """
+    result_path = card_dir / "result.json"
+    if not result_path.exists():
+        raise FileNotFoundError(f"No result.json in {card_dir}")
+
+    data = json.loads(result_path.read_text())
+    return _normalise_to_v2(data)
+
+
+def _normalise_to_v2(data: dict[str, Any]) -> dict[str, Any]:
+    """Convert a result record to v2 schema if needed.
+
+    v1 records lack ``schema_version`` and have the nested-by-phase
+    ``self_eval.blind``/``self_eval.tested`` structure.  v2 records have
+    ``schema_version: 2`` and flat ``self_eval: {passed, failed, total}``.
+
+    When converting v1 → v2:
+    - ``mode`` is inferred as ``"impl_test"`` if tested data exists,
+      otherwise ``"blind"``.
+    - ``model_name`` comes from ``model`` field.
+    - ``adapter`` comes from ``agent`` field.
+    - ``self_eval`` is flattened to the tested phase (or blind if no
+      tested data).
+    - ``audited_eval`` is similarly flattened.
+    """
+    if data.get("schema_version") == 2:
+        return data
+
+    # ---- v1 → v2 conversion ----
+    card_id = data.get("card_id", "")
+
+    # Infer mode from whether tested data exists
+    impl = data.get("implementation", {})
+    tested_impl = impl.get("tested", {})
+    blind_impl = impl.get("blind", {})
+    has_tested = bool(tested_impl) and tested_impl != {}
+    mode = "impl_test" if has_tested else "blind"
+
+    # Flatten implementation: v1 has {blind: {...}, tested: {...}},
+    # v2 uses the active phase's metrics directly
+    if "blind" in impl or "tested" in impl:
+        # v1 nested layout — flatten to the active phase
+        active_impl = tested_impl if has_tested else blind_impl
+        # Remove the nested keys, keep as flat dict
+        flat_impl = dict(active_impl)
+    else:
+        # Already flat or empty
+        flat_impl = impl
+
+    # Flatten self_eval: prefer tested phase, fall back to blind
+    raw_self_eval = data.get("self_eval", {})
+    if isinstance(raw_self_eval, dict) and ("blind" in raw_self_eval or "tested" in raw_self_eval):
+        # v1 nested-by-phase format
+        phase = raw_self_eval.get("tested", raw_self_eval.get("blind", {}))
+        self_eval = {
+            "passed": phase.get("passed", 0),
+            "failed": phase.get("failed", 0),
+            "total": phase.get("total", 0),
+        } if phase else None
+    elif isinstance(raw_self_eval, dict) and "passed" in raw_self_eval:
+        # Already flat (e.g. written by post_eval)
+        self_eval = raw_self_eval
+    else:
+        self_eval = None
+
+    # Flatten audited_eval
+    raw_audited = data.get("audited_eval", {})
+    if isinstance(raw_audited, dict) and ("blind" in raw_audited or "tested" in raw_audited):
+        phase = raw_audited.get("tested", raw_audited.get("blind", {}))
+        audited_eval = {
+            "passed": phase.get("passed", 0),
+            "failed": phase.get("failed", 0),
+            "total": phase.get("total", 0),
+        } if phase else None
+    elif isinstance(raw_audited, dict) and "passed" in raw_audited:
+        audited_eval = raw_audited
+    else:
+        audited_eval = None
+
+    v2: dict[str, Any] = {
+        "schema_version": 2,
+        "card_id": card_id,
+        "mode": mode,
+        "model_name": data.get("model", data.get("model_name", "unknown")),
+        "adapter": data.get("agent", data.get("adapter", "unknown")),
+        "status": data.get("status", "completed"),
+        "complexity_tier": data.get("complexity_tier", "unknown"),
+        "implementation": flat_impl,
+        "self_eval": self_eval,
+        "audited_eval": audited_eval,
+        "engine_diff_summary": data.get("engine_diff_summary", ""),
+        "errors": data.get("errors", data.get("eval_errors", [])),
+    }
+
+    # Preserve extra v1 fields that don't map directly
+    for extra_key in ("violations", "cross_eval", "regression_results", "failed_tests"):
+        if extra_key in data:
+            v2[extra_key] = data[extra_key]
+
+    return v2
 
 
 # ---------------------------------------------------------------------------

@@ -132,7 +132,7 @@ Reference files in current codebase:
   - `silverquillm/evaluator.py` — update `run_tests()` to accept `engine_dir` param for PYTHONPATH
   Testability: Integration test: run 2 mock cards → post_eval runs all tests against final engine → results written to both cards' result.json.
 
-- [ ] **Refactor ****`EvalResult`**** and ****`result.json`**** to v2 schema**
+- [x] **Refactor ****`EvalResult`**** and ****`result.json`**** to v2 schema**
   Detail: The current `EvalResult` in `evaluator.py` has `blind_passed`/`blind_failed`/`tested_passed`/`tested_failed` fields reflecting the old blind/tested split. Refactor to v2 schema:
 
   ```python

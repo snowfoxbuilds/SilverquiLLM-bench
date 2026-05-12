@@ -130,7 +130,7 @@ def run_post_eval(
             )
 
         # ----- Persist to result.json -----
-        _merge_result_json(card_path, card_result)
+        _merge_result_json(card_path, card_result, mode=mode)
 
         results.append(card_result)
 
@@ -209,25 +209,41 @@ def _run_audited_for_card(
     card_result.errors.extend(errors)
 
 
-def _merge_result_json(card_path: Path, card_result: CardEvalResult) -> None:
-    """Merge *card_result* into the card's ``result.json``."""
+def _merge_result_json(card_path: Path, card_result: CardEvalResult, mode: str = "impl_test") -> None:
+    """Merge *card_result* into the card's ``result.json`` using v2 schema."""
     result_json = card_path / "result.json"
     if result_json.exists():
         record = json.loads(result_json.read_text())
     else:
         record = {"card_id": card_result.card_id}
 
-    record["self_eval"] = {
-        "passed": card_result.self_eval_passed,
-        "failed": card_result.self_eval_failed,
-        "total": card_result.self_eval_total,
-    }
-    record["audited_eval"] = {
-        "passed": card_result.audited_passed,
-        "failed": card_result.audited_failed,
-        "total": card_result.audited_total,
-    }
+    # Ensure v2 schema markers
+    record.setdefault("schema_version", 2)
+    record.setdefault("mode", mode)
+
+    # Self-eval: only present in impl_test mode
+    if mode == "impl_test" and card_result.self_eval_total > 0:
+        record["self_eval"] = {
+            "passed": card_result.self_eval_passed,
+            "failed": card_result.self_eval_failed,
+            "total": card_result.self_eval_total,
+        }
+    elif "self_eval" not in record:
+        record["self_eval"] = None
+
+    # Audited eval
+    if card_result.audited_total > 0:
+        record["audited_eval"] = {
+            "passed": card_result.audited_passed,
+            "failed": card_result.audited_failed,
+            "total": card_result.audited_total,
+        }
+    elif "audited_eval" not in record:
+        record["audited_eval"] = None
+
     if card_result.errors:
-        record["eval_errors"] = card_result.errors
+        record["eval_errors"] = record.get("eval_errors", []) + card_result.errors
+        # Also store under v2 key for forward compat
+        record["errors"] = record.get("errors", []) + card_result.errors
 
     result_json.write_text(json.dumps(record, indent=2, default=str))
