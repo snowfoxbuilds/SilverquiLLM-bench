@@ -562,13 +562,13 @@ def save_run_summary(
     audited_total_tests = 0
 
     for r in all_results:
-        se = r.get("self_eval", {})
-        tested = se.get("tested", {})
+        se = r.get("self_eval") or {}
+        tested = se.get("tested") or {}
         self_total_passed += tested.get("passed", 0)
         self_total_tests += tested.get("total", 0)
 
-        ae = r.get("audited_eval", {})
-        ae_tested = ae.get("tested", {})
+        ae = r.get("audited_eval") or {}
+        ae_tested = ae.get("tested") or {}
         audited_total_passed += ae_tested.get("passed", 0)
         audited_total_tests += ae_tested.get("total", 0)
 

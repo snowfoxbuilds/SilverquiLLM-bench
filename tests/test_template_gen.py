@@ -267,6 +267,24 @@ class TestGenerateTemplate:
         source = generate_template(_creature_spec())
         assert "from engine.types import" in source
 
+    def test_template_imports_game_state(self):
+        """Generated template must include GameState import (Item 13 / Issue #12)."""
+        source = generate_template(_creature_spec())
+        assert "from engine.game_state import GameState" in source
+
+    def test_all_card_types_import_game_state(self):
+        """GameState import must be present in templates for all card types."""
+        specs = [
+            _creature_spec(), _instant_spec(), _sorcery_spec(),
+            _planeswalker_spec(), _enchantment_spec(), _artifact_spec(),
+            _land_spec(), _artifact_creature_spec(),
+        ]
+        for spec in specs:
+            source = generate_template(spec)
+            assert "from engine.game_state import GameState" in source, (
+                f"GameState import missing in template for {spec.get('type_line', 'unknown')}"
+            )
+
     # --- Creature stubs: power/toughness ---
 
     def test_creature_has_power_stub(self):

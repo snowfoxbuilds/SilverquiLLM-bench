@@ -524,6 +524,51 @@ class TestSaveRunSummary:
         assert summary["audited_eval"]["total_passed"] == 5
         assert summary["audited_eval"]["total_tests"] == 10
 
+    def test_handles_none_audited_eval(self, tmp_path: Path):
+        """save_run_summary must not crash when audited_eval is None (not missing).
+
+        Regression test: v2 result.json can write audited_eval: null. The
+        previous code used `r.get("audited_eval", {})` which returns None
+        (key present, value None), causing AttributeError on `.get()`.
+        """
+        config = _make_config()
+        run_dir = init_results_dir(config, run_name="run-null", base_dir=tmp_path)
+
+        all_results = [
+            {
+                "card_id": "c1",
+                "agent": "a1",
+                "complexity_tier": "simple",
+                "self_eval": None,
+                "audited_eval": None,
+            },
+        ]
+
+        summary_path = save_run_summary(run_dir, all_results)
+        summary = json.loads(summary_path.read_text())
+        assert summary["card_count"] == 1
+        assert summary["self_eval"]["total_passed"] == 0
+        assert summary["audited_eval"]["total_passed"] == 0
+
+    def test_handles_missing_eval_keys(self, tmp_path: Path):
+        """save_run_summary must handle results with no self_eval/audited_eval keys."""
+        config = _make_config()
+        run_dir = init_results_dir(config, run_name="run-missing", base_dir=tmp_path)
+
+        all_results = [
+            {
+                "card_id": "c1",
+                "agent": "a1",
+                "complexity_tier": "simple",
+            },
+        ]
+
+        summary_path = save_run_summary(run_dir, all_results)
+        summary = json.loads(summary_path.read_text())
+        assert summary["card_count"] == 1
+        assert summary["self_eval"]["total_passed"] == 0
+        assert summary["audited_eval"]["total_passed"] == 0
+
 
 # ---------------------------------------------------------------------------
 # save_aggregates

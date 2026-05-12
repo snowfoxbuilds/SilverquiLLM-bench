@@ -381,10 +381,10 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
     save_run_summary_v2(run_dir, run_summary)
 
     # --- Print summary ---
-    blind_passed = sum(r.get("self_eval", {}).get("blind", {}).get("passed", 0) for r in all_results)
-    blind_total_tests = sum(r.get("self_eval", {}).get("blind", {}).get("total", 0) for r in all_results)
-    tested_passed = sum(r.get("self_eval", {}).get("tested", {}).get("passed", 0) for r in all_results)
-    tested_total_tests = sum(r.get("self_eval", {}).get("tested", {}).get("total", 0) for r in all_results)
+    blind_passed = sum((r.get("self_eval") or {}).get("blind", {}).get("passed", 0) for r in all_results)
+    blind_total_tests = sum((r.get("self_eval") or {}).get("blind", {}).get("total", 0) for r in all_results)
+    tested_passed = sum((r.get("self_eval") or {}).get("tested", {}).get("passed", 0) for r in all_results)
+    tested_total_tests = sum((r.get("self_eval") or {}).get("tested", {}).get("total", 0) for r in all_results)
 
     click.echo(_sys(f"\n--- Run Summary ---"))
     click.echo(_sys(f"Cards run: {len(all_results)}"))
