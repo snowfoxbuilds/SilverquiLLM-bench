@@ -240,7 +240,7 @@ class EvalResult:
   - `silverquillm/cli.py` — call `preflight_check()` before entering the card loop
   Testability: Unit test: missing card_specs_dir → preflight fails with clear message. Unit test: invalid adapter name → preflight fails.
 
-- [ ] **Smoke tests with mock adapter (****`tests/test_harness.py`****)**
+- [x] **Smoke tests with mock adapter (****`tests/test_harness.py`****)**
   Detail: Comprehensive deterministic pytest tests (zero LLM calls) using a `MockAdapter` that writes pre-baked implementations from `cards/foundations/`. These test the full harness pipeline end-to-end.
 
   Create `silverquillm/adapters/mock.py` with a `MockAdapter` that:

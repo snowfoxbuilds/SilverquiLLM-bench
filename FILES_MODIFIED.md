@@ -77,3 +77,13 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `silverquillm/preflight.py` — New module with `preflight_check()`, `PreflightError`, and individual check functions for imports, workspace, .workspace/ dir, engine test suite, config, and card_specs_dir; revised: added `_check_engine_tests()` subprocess pytest, `_check_workspace_dir()` for .workspace/, enhanced `_check_test_utils_import()` with actual import verification
 - `silverquillm/cli.py` — Import and call `preflight_check()` before card loop in `run()` command
+
+## Item 16: Smoke tests with mock adapter
+
+### Tests
+- `tests/test_harness.py` — 39 deterministic smoke tests covering full harness pipeline end-to-end
+
+### Implementation
+- `silverquillm/adapters/mock.py` — MockAdapter with configurable behaviors; derives card_name from workspace card_spec.json for registry compatibility; no_output cleans seeded files
+- `silverquillm/adapters/__init__.py` — Added mock adapter auto-import for registration
+- `silverquillm/cli.py` — Updated --dry-run flag to use MockAdapter for environment validation

@@ -166,7 +166,13 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
         click.echo(_sys(f"  [{tier}] {name}"))
 
     if dry_run:
-        click.echo(_sys(f"Dry run complete. {len(specs)} cards selected."))
+        # Use MockAdapter for quick environment validation
+        from silverquillm.adapters.mock import MockAdapter
+        click.echo(_sys("Dry run: using MockAdapter for environment validation"))
+        mock_adapter = MockAdapter(cfg, behavior="write")
+        mock_adapter.setup()
+        mock_adapter.teardown()
+        click.echo(_sys(f"Dry run complete. {len(specs)} cards selected. MockAdapter OK."))
         return
 
     # --- Orchestration loop ---

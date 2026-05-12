@@ -50,3 +50,9 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Actual implementation**: `pytest tests/engine/ -x -q`
 - **What was implemented instead**: Scoped to `tests/engine/` because the TODO says "Engine test suite" and running all tests would include unrelated harness tests.
 - **Impact**: silverquillm/preflight.py
+
+## Reviewer intervention: Item 16 — Smoke tests with mock adapter
+- **Reviewer comments (6 strict)**: MockAdapter not wired through registry, no_output doesn't clean seeded files, tests not truly e2e (bypass AgentSession), violation tests skip _check_violations, aggregation is unit test not pipeline test, dry-run only checks imports.
+- **Coordinator decision**: Accept all. Implementer fixed MockAdapter (registry wiring + no_output cleanup). Tester rewrote all 27 tests to use AgentSession.run_card() and CliRunner for true e2e coverage.
+- **Reasoning**: Smoke tests that bypass the harness layers defeat the purpose — they wouldn't catch real integration regressions.
+- **Impact**: silverquillm/adapters/mock.py, tests/test_harness.py, silverquillm/cli.py
