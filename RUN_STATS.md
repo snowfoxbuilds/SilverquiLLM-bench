@@ -2,57 +2,47 @@
 
 **Skill**: execute-todo-with-subagents
 **Reviewer model**: GPT-5.4 (via `Reviewer` custom agent)
-**Started**: 2026-05-11T06:27:14Z
-**Finished**: 2026-05-11T14:55:44Z
-**Total duration**: 8h 28m 30s
-**Total duration (seconds)**: 30510
+**Started**: 2026-05-12T16:32:39Z
+**Finished**: 2026-05-12T20:33:13Z
+**Total duration**: 4h 0m 34s
+**Total duration (seconds)**: 14434
 
 ## Summary
-
-- TODO items completed: 15
-- Items requiring test dispute: 3
-- Items requiring review revision: 14
-- Items with coordinator arbitration: 15
-- Commits: 19 after this file is committed
-- RUN_DECISIONS entries: 24
-- KEY_DECISIONS entries added: 12
-- Test quality audit: 0 added, 5 fixed, 0 deleted
-- Test suite result: non-audited and FDN audited tests passing; SOS audited tests collect and run with expected stub-behavior failures only
+- TODO items completed: 10 (items 7–16)
+- Items requiring test dispute: 0
+- Items requiring review revision: 8 (items 7, 8, 9, 10, 11, 14, 15, 16)
+- Items with coordinator arbitration: 8
+- Commits: 13 (10 feature/fix + 1 dir summaries + 1 test audit + 1 reset)
+- RUN_DECISIONS entries: 9
+- KEY_DECISIONS entries added: 2 (process-group termination, TESTING-CONVENTIONS)
+- Test quality audit: 4 added, 5 fixed, 0 deleted
+- Test suite result: passing (1861+ non-audited tests)
 
 ## Tokens (subagents)
-
-- Total Tester tokens: null
-- Total Implementer tokens: null
-- Total Reviewer tokens: null
+- Total Implementer tokens: null (not observable per-invocation)
+- Total Tester tokens: null (not observable per-invocation)
+- Total Reviewer tokens: null (not observable per-invocation)
 - Total across all subagents: null
-- Coordinator tokens: null
+- Coordinator tokens: null (not observable)
 
-Token counts were not exposed by the subagent orchestration layer. Durations below are aggregated from `/tmp/execute-todo-with-subagents-phase6-20260511-062714/run-stats.md`.
+## Subagent Duration (seconds)
+- Total Implementer: 5365s
+- Total Tester: 6000s
+- Total Reviewer: 1284s
+- Total across all subagents: 12649s
 
 ## Per-item breakdown
-
-| TODO item | Implementer | Tester | Reviewer | Test disputes | Review revisions | Duration (s) |
-|-----------|-------------|--------|----------|---------------|------------------|--------------|
-| Item 1: Include Mystical Archives | null | null | null | 0 | 2 | 854 |
-| Item 2: Include Special Guests | null | null | null | 1 | 2 | 1101 |
-| Item 3: Enforce SOS base cutoff | null | null | null | 0 | 2 | 677 |
-| Item 4: Regenerate SOS classification/specs | null | null | null | 0 | 1 | 1105 |
-| Item 5: Per-card audited test infrastructure | null | null | null | 0 | 2 | 2288 |
-| Item 6: Generate SOS stub card classes | null | null | null | 1 | 2 | 1758 |
-| Item 7: FDN audited tests batch 1 | null | null | null | 0 | 2 | 1474 |
-| Item 8: FDN audited tests batch 2 | null | null | null | 1 | 2 | 3042 |
-| Item 9: FDN audited tests batch 3 | null | null | null | 0 | 1 | 1889 |
-| Item 10: FDN audited tests batch 4 | null | null | null | 0 | 1 | 2502 |
-| Item 11: FDN audited tests batch 5 | null | null | null | 0 | 1 | 1925 |
-| Item 12: SOS audited tests batch 1 | null | null | null | 0 | 1 | 1819 |
-| Item 13: SOS audited tests batch 2 | null | null | null | 0 | 1 | 2181 |
-| Item 14: SOS audited tests batch 3 | null | null | null | 0 | 1 | 1827 |
-| Item 15: Wire per-card audited eval | null | null | null | 0 | 1 | 882 |
-| Dir summaries | null | - | - | - | - | 185 |
-| Test audit | - | null | - | - | - | 534 |
-
-## Validation snapshot
-
-- Non-audited suite: 4359 passed
-- FDN audited suite: 1487 passed
-- SOS audited suite: 2995 passed, 994 expected failures against intentionally behavior-empty stubs
+| TODO item | Implementer (s) | Tester (s) | Reviewer (s) | Test disputes | Review revisions | Total (s) |
+|-----------|-----------------|------------|--------------|---------------|------------------|-----------|
+| Item 7: Enforce timeout_per_card | 654 | 970 | 155 | 0 | 1 | 1779 |
+| Item 8: Move eval to post-run | 385 | 563 | 183 | 0 | 1 | 1131 |
+| Item 9: EvalResult v2 schema | 751 | 331 | 130 | 0 | 1 | 1212 |
+| Item 10: run_summary.json aggregation | 302 | 218 | 236 | 0 | 1 | 756 |
+| Item 11: Allowlist contamination | 298 | 233 | 75 | 0 | 1 | 606 |
+| Item 12: Fix test_utils.md imports | 66 | — | — | 0 | 0 | 66 |
+| Item 13: Add GameState to template | 73 | — | — | 0 | 0 | 73 |
+| Item 14: Simplify postmortem schema | 507 | 320 | 104 | 0 | 1 | 931 |
+| Item 15: Pre-flight validation | 1389 | 312 | 82 | 0 | 1 | 1783 |
+| Item 16: Smoke tests + MockAdapter | 690 | 1044 | 319 | 0 | 1 | 2053 |
+| Dir summaries | 250 | — | — | — | — | 250 |
+| Test audit | — | 2009 | — | — | — | 2009 |
