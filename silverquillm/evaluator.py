@@ -30,6 +30,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 __all__ = [
     "EvalResult",
+    "EvalResultV2",
     "run_tests",
     "run_self_eval",
     "run_self_eval_flat",
@@ -39,13 +40,18 @@ __all__ = [
 ]
 
 # ---------------------------------------------------------------------------
-# Result dataclass
+# Result dataclasses
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class EvalResult:
-    """Outcome of running one implementation against one test suite."""
+    """Outcome of running one implementation against one test suite (v1 schema).
+
+    Retained for backward compatibility with existing evaluation functions
+    (``run_self_eval``, ``run_cross_eval``, ``run_audited_eval``) and tests.
+    New code should prefer :class:`EvalResultV2`.
+    """
 
     card_id: str
     agent: str
@@ -56,6 +62,31 @@ class EvalResult:
     tested_passed: int
     tested_failed: int
     tested_total: int
+    errors: list[str] = field(default_factory=list)
+
+
+@dataclass
+class EvalResultV2:
+    """Per-card evaluation outcome — v2 schema.
+
+    Replaces the blind/tested split with a mode-aware layout:
+
+    * ``implementation`` — token/runtime metrics for the generation phase.
+    * ``self_eval`` — agent's own tests against its impl (impl_test mode only).
+    * ``audited_eval`` — gold-standard tests against the impl.
+    * ``engine_diff_summary`` — human-readable summary of engine changes.
+    """
+
+    card_id: str
+    mode: str  # "blind" | "impl_test"
+    model_name: str
+    adapter: str
+    status: str  # "completed" | "timeout" | "no_output"
+    complexity_tier: str
+    implementation: dict = field(default_factory=dict)  # {tokens: {input, output, total}, runtime_ms, peak_context}
+    self_eval: dict | None = None  # {passed, failed, total} — None for blind mode
+    audited_eval: dict | None = None  # {passed, failed, total}
+    engine_diff_summary: str = ""  # human-readable summary of engine changes
     errors: list[str] = field(default_factory=list)
 
 
@@ -119,11 +150,19 @@ def run_tests(
     impl_path: Path,
     tests_path: Path,
     timeout: int = 60,
+    engine_dir: Path | None = None,
 ) -> tuple[int, int, int, list[str]]:
     """Run *tests_path* against *impl_path* in an isolated subprocess.
 
     The implementation file is copied to ``card_impl.py`` in a temporary
     directory so that tests can ``from card_impl import …``.
+
+    Parameters
+    ----------
+    engine_dir:
+        Optional path to an engine directory.  When provided it is prepended
+        to ``PYTHONPATH`` so that ``import engine`` resolves to this directory's
+        parent (i.e. the run-level engine state rather than the repo default).
 
     Returns ``(passed, failed, total, error_messages)``.
     """
@@ -151,10 +190,19 @@ def run_tests(
         shutil.copy2(tests_path, tmp / "test_card.py")
 
         # PYTHONPATH: temp dir first (card_impl.py, test_utils.py),
+        # then engine dir parent (if provided, for run-level engine state),
         # then repo root (for tests/ package and engine/ imports)
         env = dict(__import__("os").environ)
         existing = env.get("PYTHONPATH", "")
-        env["PYTHONPATH"] = str(tmp) + ":" + str(_REPO_ROOT) + (":" + existing if existing else "")
+        parts = [str(tmp)]
+        if engine_dir is not None:
+            # engine_dir is e.g. run_dir/engine; its parent must be on
+            # PYTHONPATH so ``import engine`` resolves to the run-level copy.
+            parts.append(str(Path(engine_dir).parent))
+        parts.append(str(_REPO_ROOT))
+        if existing:
+            parts.append(existing)
+        env["PYTHONPATH"] = ":".join(parts)
 
         # Run pytest on the RENAMED copy in the temp dir
         cmd = [

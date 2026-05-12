@@ -111,6 +111,7 @@ def generate_template(card_spec: dict[str, Any]) -> str:
 
     # Imports
     lines.append("from engine.card import *")
+    lines.append("from engine.game_state import GameState")
     lines.append("from engine.types import *")
     lines.append("")
     lines.append("")

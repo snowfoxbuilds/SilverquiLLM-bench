@@ -17,6 +17,9 @@ import click
 
 from silverquillm.agent_session import (
     AgentSession,
+    BlindResult,
+    TestInformedResult,
+    _append_regression_check,
     commit_engine_changes,
     compute_engine_diff,
     init_run_engine,
@@ -24,8 +27,12 @@ from silverquillm.agent_session import (
 )
 from silverquillm.card_loader import filter_by_collectors, filter_by_prototype, load_card_specs
 from silverquillm.config import BenchmarkConfig, load_config
+from silverquillm.aggregator import aggregate_run, save_run_summary_v2
 from silverquillm.evaluator import run_self_eval_flat
-from silverquillm.results import init_results_dir, save_aggregates, save_card_result, save_run_summary
+from silverquillm.post_eval import run_post_eval
+from silverquillm.preflight import PreflightError, preflight_check
+from silverquillm.evaluator import EvalResultV2
+from silverquillm.results import init_results_dir, save_aggregates, save_card_result, save_card_result_v2, save_run_summary
 from silverquillm.scorer import compute_scores, generate_leaderboard
 from silverquillm.regression import CompletedCard, run_regressions
 from silverquillm.replay.cli import validate as validate_cmd
@@ -112,7 +119,8 @@ main.add_command(validate_cmd)
 @click.option("--cards", "card_ids", default=None, help="Comma-separated collector numbers to run.")
 @click.option("--prototype", "use_prototype", is_flag=True, default=False, help="Use prototype card selection.")
 @click.option("--dry-run", "dry_run", is_flag=True, default=False, help="Print selected cards and exit.")
-def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bool) -> None:
+@click.option("--skip-engine-tests", "skip_engine_tests", is_flag=True, default=False, help="Skip engine test suite in pre-flight (faster iteration).")
+def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bool, skip_engine_tests: bool) -> None:
     """Run benchmark against selected cards."""
     if card_ids and use_prototype:
         raise click.UsageError("--cards and --prototype are mutually exclusive.")
@@ -159,11 +167,25 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
         click.echo(_sys(f"  [{tier}] {name}"))
 
     if dry_run:
-        click.echo(_sys(f"Dry run complete. {len(specs)} cards selected."))
+        # Use MockAdapter for quick environment validation
+        from silverquillm.adapters.mock import MockAdapter
+        click.echo(_sys("Dry run: using MockAdapter for environment validation"))
+        mock_adapter = MockAdapter(cfg, behavior="write")
+        mock_adapter.setup()
+        mock_adapter.teardown()
+        click.echo(_sys(f"Dry run complete. {len(specs)} cards selected. MockAdapter OK."))
         return
 
     # --- Orchestration loop ---
     run_dir = init_results_dir(cfg)
+
+    # Pre-flight validation before any LLM calls
+    try:
+        from silverquillm.preflight import preflight_check, PreflightError
+        preflight_check(cfg, Path(run_dir), skip_engine_tests=skip_engine_tests)
+    except PreflightError as exc:
+        raise click.ClickException(str(exc))
+
     total = len(specs)
     failures: list[tuple[str, Exception]] = []
     completed_cards: list[CompletedCard] = []
@@ -204,22 +226,76 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
             )
             workspace = session.setup_workspace()
 
-            blind_result = session.run_blind_implementation(workspace)
+            card_run_result = session.run_card()
 
-            tested_result = None
-            if (
-                blind_result.impl_path
-                and blind_result.status in ("ok", "syntax_error")
-            ):
-                tested_result = session.run_test_informed(workspace, blind_result.impl_path)
+            # Build legacy result dicts for backward compatibility
+            from silverquillm.strategies import CardRunStatus
+            run_status = card_run_result.status.value
+            impl_path = workspace / "card_impl.py" if (workspace / "card_impl.py").exists() else None
+            runtime_s = card_run_result.runtime_ms / 1000 if card_run_result.runtime_ms else 0
+
+            if cfg.mode == "impl_test":
+                # In impl_test mode, record as a tested result
+                blind_result = BlindResult(
+                    impl_path=None,
+                    tokens=0,
+                    runtime_seconds=0,
+                    peak_context=0,
+                    status="skipped",
+                )
+                tests_path_ws = workspace / "tests.py"
+                tested_result = TestInformedResult(
+                    impl_path=impl_path,
+                    tests_path=tests_path_ws if tests_path_ws.exists() else None,
+                    iterations=1,
+                    tokens=0,
+                    runtime_seconds=runtime_s,
+                    peak_context=0,
+                    status=run_status,
+                )
+            else:
+                blind_result = BlindResult(
+                    impl_path=impl_path,
+                    tokens=0,
+                    runtime_seconds=runtime_s,
+                    peak_context=0,
+                    status=run_status,
+                )
+                tested_result = None
 
             # Read source files before cleanup destroys the workspace
             blind_dict, test_dict = _session_results_to_dicts(
                 blind_result, tested_result, spec, cfg
             )
 
+            # Propagate violations into result dicts so result.json is annotated
+            if card_run_result.violations:
+                blind_dict["violations"] = list(card_run_result.violations)
+
             card_results_dir = run_dir / "cards" / str(card_dir_name)
             save_card_result(run_dir, card_dir_name, blind_dict, test_dict)
+
+            # Overwrite result.json with v2 schema
+            _active = test_dict if cfg.mode == "impl_test" else blind_dict
+            _v2_result = EvalResultV2(
+                card_id=str(card_dir_name),
+                mode=cfg.mode,
+                model_name=_active.get("model", cfg.model_name),
+                adapter=_active.get("agent", getattr(cfg.agent, "adapter", "unknown")),
+                status=_active.get("status", "completed"),
+                complexity_tier=_active.get("complexity_tier", _active.get("tier", "unknown")),
+                implementation={
+                    "tokens": _active.get("tokens", 0),
+                    "runtime_ms": int(_active.get("runtime_seconds", 0) * 1000),
+                    "peak_context": _active.get("peak_context", 0),
+                },
+                errors=[],
+            )
+            save_card_result_v2(
+                run_dir, _v2_result,
+                impl_source=_active.get("impl_source", ""),
+                tests_source=_active.get("tests_source", ""),
+            )
 
             # Copy raw implementation files from workspace to results dir
             session.harvest_results(card_results_dir)
@@ -236,6 +312,14 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
                     completed_cards,
                     run_engine_dir=run_engine_dir,
                 )
+                # Emit structured regression_check event
+                pm_path = run_dir / "cards" / card_name / "postmortem.jsonl"
+                _append_regression_check(
+                    pm_path,
+                    status="fail" if regression_result.has_failures else "pass",
+                    cards_failed=regression_result.cards_failed,
+                    total_cards=regression_result.total_cards,
+                )
                 if regression_result.has_failures:
                     click.echo(
                         _warn(
@@ -247,7 +331,7 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
 
             # Record this card as completed for future regression runs
             tests_path = card_results_dir / "tests.py"
-            impl_path = card_results_dir / "tested_impl.py"
+            impl_path = card_results_dir / "card_impl.py"
             if tests_path.exists():
                 completed_cards.append(CompletedCard(
                     card_id=str(card_dir_name),
@@ -255,11 +339,10 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
                     tests_file=tests_path,
                     impl_file=impl_path if impl_path.exists() else None,
                 ))
-
-            blind_status = blind_result.status
-            tested_status = tested_result.status if tested_result else "skipped"
+            blind_status_str = blind_result.status
+            tested_status_str = tested_result.status if tested_result else "skipped"
             click.echo(
-                _sys(f"[{i}/{total}] {card_name}: blind={blind_status}, tested={tested_status}")
+                _sys(f"[{i}/{total}] {card_name}: blind={blind_status_str}, tested={tested_status_str}")
             )
         except Exception as exc:  # noqa: BLE001
             failures.append((card_name, exc))
@@ -273,11 +356,15 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
     # Save final engine state as a run artifact
     save_engine_final(run_engine_dir, run_dir)
 
-    # --- Post-loop: self-eval and summary ---
+    # --- Post-loop: evaluation phase (all tests against final engine state) ---
     elapsed = time.time() - start_time
     cards_dir = run_dir / "cards"
     all_results: list[dict] = []
 
+    # Run post-eval: evaluates all cards against the final engine state
+    post_eval_results = run_post_eval(run_dir, mode=cfg.mode)
+
+    # Build all_results from the updated result.json files
     if cards_dir.exists():
         for card_path in sorted(cards_dir.iterdir()):
             if not card_path.is_dir():
@@ -285,37 +372,20 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
             result_json = card_path / "result.json"
             if not result_json.exists():
                 continue
-
-            # Run self-eval on the flat layout
-            eval_result = run_self_eval_flat(card_path, cfg.model_name)
-
-            # Load existing result, merge self-eval, re-save
             record = json.loads(result_json.read_text())
-            record["self_eval"] = {
-                "blind": {
-                    "passed": eval_result.blind_passed,
-                    "failed": eval_result.blind_failed,
-                    "total": eval_result.blind_total,
-                    "errors": [e for e in eval_result.errors],
-                },
-                "tested": {
-                    "passed": eval_result.tested_passed,
-                    "failed": eval_result.tested_failed,
-                    "total": eval_result.tested_total,
-                    "errors": [],
-                },
-                "errors": eval_result.errors,
-            }
-            result_json.write_text(json.dumps(record, indent=2, default=str))
             all_results.append(record)
 
     save_run_summary(run_dir, all_results)
 
+    # --- Aggregate run_summary.json ---
+    run_summary = aggregate_run(run_dir)
+    save_run_summary_v2(run_dir, run_summary)
+
     # --- Print summary ---
-    blind_passed = sum(r.get("self_eval", {}).get("blind", {}).get("passed", 0) for r in all_results)
-    blind_total_tests = sum(r.get("self_eval", {}).get("blind", {}).get("total", 0) for r in all_results)
-    tested_passed = sum(r.get("self_eval", {}).get("tested", {}).get("passed", 0) for r in all_results)
-    tested_total_tests = sum(r.get("self_eval", {}).get("tested", {}).get("total", 0) for r in all_results)
+    blind_passed = sum((r.get("self_eval") or {}).get("blind", {}).get("passed", 0) for r in all_results)
+    blind_total_tests = sum((r.get("self_eval") or {}).get("blind", {}).get("total", 0) for r in all_results)
+    tested_passed = sum((r.get("self_eval") or {}).get("tested", {}).get("passed", 0) for r in all_results)
+    tested_total_tests = sum((r.get("self_eval") or {}).get("tested", {}).get("total", 0) for r in all_results)
 
     click.echo(_sys(f"\n--- Run Summary ---"))
     click.echo(_sys(f"Cards run: {len(all_results)}"))
@@ -597,6 +667,25 @@ def cards(set_code: str) -> None:
         name = card.get("name", "???")
         tier = card.get("complexity_tier", card.get("tier", "unknown"))
         click.echo(_sys(f"  [{tier}] {name}"))
+
+
+@main.command()
+@click.argument("run_dir", type=click.Path(exists=True))
+def aggregate(run_dir: str) -> None:
+    """Aggregate per-card results into run_summary.json.
+
+    Reads all cards/*/result.json in the given run directory and produces
+    a run_summary.json.  Can be used to manually re-aggregate after editing
+    individual card results.
+    """
+    run_path = Path(run_dir)
+    summary = aggregate_run(run_path)
+    out = save_run_summary_v2(run_path, summary)
+    click.echo(_sys(f"Wrote {out}"))
+    click.echo(_sys(f"  Total cards: {summary.total_cards}"))
+    click.echo(_sys(f"  Completed: {summary.cards_completed}"))
+    click.echo(_sys(f"  Timeout: {summary.cards_timeout}"))
+    click.echo(_sys(f"  No output: {summary.cards_no_output}"))
 
 
 if __name__ == "__main__":

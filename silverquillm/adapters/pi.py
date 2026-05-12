@@ -6,6 +6,8 @@ Passes prompts via stdin and checks subprocess exit status.
 
 from __future__ import annotations
 
+import os
+import signal
 import subprocess
 import threading
 from pathlib import Path
@@ -26,6 +28,7 @@ class PiAdapter(AgentAdapter):
 
     def __init__(self, config: BenchmarkConfig) -> None:
         super().__init__(config)
+        self._process: subprocess.Popen | None = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -36,6 +39,24 @@ class PiAdapter(AgentAdapter):
 
     def teardown(self) -> None:  # noqa: D401
         """No-op — pi leaves no persistent resources."""
+
+    def kill(self) -> None:
+        """Terminate the running pi subprocess and its process group."""
+        proc = self._process
+        if proc is not None and proc.poll() is None:
+            try:
+                pgid = os.getpgid(proc.pid)
+                os.killpg(pgid, signal.SIGTERM)
+            except (OSError, ProcessLookupError):
+                proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                try:
+                    pgid = os.getpgid(proc.pid)
+                    os.killpg(pgid, signal.SIGKILL)
+                except (OSError, ProcessLookupError):
+                    proc.kill()
 
     # ------------------------------------------------------------------
     # Run
@@ -60,7 +81,9 @@ class PiAdapter(AgentAdapter):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            start_new_session=True,
         )
+        self._process = process
 
         stdout_lines: list[str] = []
         stderr_lines: list[str] = []

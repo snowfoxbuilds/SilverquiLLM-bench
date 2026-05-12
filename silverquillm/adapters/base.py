@@ -60,6 +60,20 @@ class AgentAdapter(ABC):
         """Clean up resources held by the adapter."""
 
     # ------------------------------------------------------------------
+    # Kill (hard timeout support)
+    # ------------------------------------------------------------------
+
+    def kill(self) -> None:
+        """Forcibly terminate any running subprocess or background work.
+
+        Called by the strategy layer when a hard timeout fires to ensure
+        child processes are actually terminated rather than left orphaned.
+        Subclasses that spawn subprocesses **must** override this.
+
+        The default implementation is a no-op.
+        """
+
+    # ------------------------------------------------------------------
     # Timeout / retry helper
     # ------------------------------------------------------------------
 
@@ -120,6 +134,7 @@ class AgentAdapter(ABC):
                     time.sleep(min(2**attempt, 30))
 
         if isinstance(last_exc, TimeoutError):
+            self.kill()
             raise last_exc
 
         raise RuntimeError(
@@ -131,12 +146,17 @@ class AgentAdapter(ABC):
     ) -> str:
         """Execute :meth:`run` enforcing a wall-clock *timeout*.
 
-        Uses ``signal.SIGALRM`` on Unix and a ``threading.Timer`` fallback
-        on Windows (which lacks SIGALRM).
+        Uses ``signal.SIGALRM`` on Unix when called from the main thread.
+        Falls back to the threading implementation on Windows or when called
+        from a non-main thread (``signal.signal`` raises ``ValueError`` in
+        non-main threads).
         """
         import sys
+        import threading
 
-        if sys.platform == "win32":
+        if sys.platform == "win32" or not (
+            threading.current_thread() is threading.main_thread()
+        ):
             return self._run_with_timeout_threading(prompt, workspace, timeout)
 
         import signal

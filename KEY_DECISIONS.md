@@ -21,6 +21,30 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: Clean API surface; no more dual access patterns.
 - **Impact**: All test fixtures use `agent=AgentConfig(...)`. New code must use `config.agent.*`.
 
+## Mode-based CardStrategy convention
+- **Context**: Phase 7 refactors the benchmark harness away from harness-managed blind/test-informed rounds.
+- **Decision**: Benchmark mode is a top-level `BenchmarkConfig.mode` field with valid values `blind` and `impl_test`, defaulting to `impl_test` for backward compatibility. Per-card execution is selected through `silverquillm.strategies.get_strategy(mode)`, returning a `CardStrategy` implementation. `AgentConfig.max_test_rounds` was removed because agents self-manage iteration inside a single mode prompt.
+- **Reasoning**: Mode is a benchmark-run property, not an agent setting. Keeping strategy selection separate from adapter configuration preserves the nested `AgentConfig` convention while making the outer harness mode-agnostic.
+- **Impact**: `silverquillm/config.py`, `silverquillm/strategies.py`, agent-session consumers, config tests, and strategy tests.
+
+## AgentSession thin-wrapper convention
+- **Context**: Phase 7 removes harness-managed implementation/test feedback rounds.
+- **Decision**: `AgentSession.run_card()` is the canonical per-card execution path: setup workspace, delegate to `CardStrategy.run_card()`, run violation/postmortem bookkeeping, and harvest canonical `card_impl.py` plus optional `tests.py`. Harness-managed pytest loops, `_run_pytest()`, and per-round feedback prompts are removed.
+- **Reasoning**: The benchmark harness treats agents as black boxes; mode-specific prompting and output expectations belong in strategies, while the session wrapper owns workspace, contamination checks, postmortem logging, and artifact harvest.
+- **Impact**: `silverquillm/agent_session.py`, `silverquillm/cli.py`, agent-session tests, CLI orchestration tests, postmortem tests, violation wiring tests.
+
+## Violation annotation does not block artifact harvest
+- **Context**: Issue #15 showed a card with a contamination violation could lose its implementation artifacts.
+- **Decision**: `harvest_results()` runs regardless of violation status and captures canonical `card_impl.py` plus optional `tests.py`. Violations are propagated through `CardRunResult.violations` and written as a top-level `violations` list in per-card `result.json`.
+- **Reasoning**: Contamination should affect scoring/status annotations, not destroy diagnostic or evaluatable artifacts.
+- **Impact**: `silverquillm/agent_session.py`, `silverquillm/cli.py`, `silverquillm/results.py`, harvest/violation/result tests.
+
+## Engine snapshot rollback on timeout
+- **Context**: Timed-out agents can leave partial engine modifications in the run-level engine, poisoning subsequent cards.
+- **Decision**: `AgentSession.run_card()` snapshots the run engine before strategy execution. Timeout results or timeout exceptions restore the snapshot; successful runs delete the snapshot and preserve engine changes for the normal commit path.
+- **Reasoning**: Timeouts are failure states for a card, so partial engine changes should not persist beyond that card. Successful cards still retain the persistent-engine behavior.
+- **Impact**: `silverquillm/agent_session.py`, engine snapshot tests, timeout-result regression tests.
+
 ## AgentAdapter pattern
 - **Context**: Need pluggable agent adapters for different CLI tools.
 - **Decision**: ABC with `run(prompt, workspace) -> str`, `setup()`, `teardown()`. Registry-based factory via `get_adapter(config)`. Concrete adapters call `register_adapter("name", cls)` at module level. `run_with_retries` uses a single overall deadline from `timeout_per_card`.
@@ -253,3 +277,15 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Context**: Replays that fail to parse were silently skipped, undercounting games_attempted.
 - **Decision**: Parse failures generate a ValidationReport with a single ENGINE_ERROR divergence, counted in games_attempted and visible in summary.
 - **Impact**: `silverquillm/replay/cli.py`.
+
+## Process-group termination for adapter timeouts
+- **Context**: Item 7 enforces `timeout_per_card` at the subprocess level. Adapters must terminate not just the direct Popen process, but all child processes spawned by the agent CLI tool.
+- **Decision**: All subprocess-based adapters use `start_new_session=True` in Popen and `os.killpg()` in their `kill()` method to terminate the entire process group. SIGTERM→SIGKILL escalation with 5s grace period. `run_with_retries()` calls `self.kill()` before raising TimeoutError.
+- **Reasoning**: Agent CLI tools (opencode, claude, aider, pi) may fork worker processes. Only process-group termination ensures all descendants are terminated.
+- **Impact**: All adapters in `silverquillm/adapters/`, `silverquillm/strategies.py`, `silverquillm/adapters/base.py`.
+
+## TESTING-CONVENTIONS.md established
+- **Context**: PR #11 demonstrated a critical failure where `os.killpg()` with auto-MagicMock PID sent SIGTERM to PID group 1, terminating the container.
+- **Decision**: Created `docs/specs/TESTING-CONVENTIONS.md` with hard rules: explicit mock PIDs, patched os.killpg/os.getpgid, Event.wait instead of while-True, pytest-timeout safety net.
+- **Reasoning**: Prevent tests from terminating real processes or hanging forever.
+- **Impact**: All tests involving subprocess/timeout/signal must comply.

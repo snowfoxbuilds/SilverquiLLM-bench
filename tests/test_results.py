@@ -524,6 +524,51 @@ class TestSaveRunSummary:
         assert summary["audited_eval"]["total_passed"] == 5
         assert summary["audited_eval"]["total_tests"] == 10
 
+    def test_handles_none_audited_eval(self, tmp_path: Path):
+        """save_run_summary must not crash when audited_eval is None (not missing).
+
+        Regression test: v2 result.json can write audited_eval: null. The
+        previous code used `r.get("audited_eval", {})` which returns None
+        (key present, value None), causing AttributeError on `.get()`.
+        """
+        config = _make_config()
+        run_dir = init_results_dir(config, run_name="run-null", base_dir=tmp_path)
+
+        all_results = [
+            {
+                "card_id": "c1",
+                "agent": "a1",
+                "complexity_tier": "simple",
+                "self_eval": None,
+                "audited_eval": None,
+            },
+        ]
+
+        summary_path = save_run_summary(run_dir, all_results)
+        summary = json.loads(summary_path.read_text())
+        assert summary["card_count"] == 1
+        assert summary["self_eval"]["total_passed"] == 0
+        assert summary["audited_eval"]["total_passed"] == 0
+
+    def test_handles_missing_eval_keys(self, tmp_path: Path):
+        """save_run_summary must handle results with no self_eval/audited_eval keys."""
+        config = _make_config()
+        run_dir = init_results_dir(config, run_name="run-missing", base_dir=tmp_path)
+
+        all_results = [
+            {
+                "card_id": "c1",
+                "agent": "a1",
+                "complexity_tier": "simple",
+            },
+        ]
+
+        summary_path = save_run_summary(run_dir, all_results)
+        summary = json.loads(summary_path.read_text())
+        assert summary["card_count"] == 1
+        assert summary["self_eval"]["total_passed"] == 0
+        assert summary["audited_eval"]["total_passed"] == 0
+
 
 # ---------------------------------------------------------------------------
 # save_aggregates
@@ -654,3 +699,45 @@ class TestSaveAggregates:
         assert "agent-alpha" in matrix["card_x"]
         assert "agent-beta" in matrix["card_x"]["agent-alpha"]
         assert matrix["card_x"]["agent-alpha"]["agent-beta"]["passed"] == 3
+
+
+# ---------------------------------------------------------------------------
+# Violations annotation in result.json  (Item 5)
+# ---------------------------------------------------------------------------
+
+
+class TestViolationsInResultJson:
+    """save_card_result must propagate violations into result.json."""
+
+    def test_violations_appear_in_result_json(self, tmp_path):
+        cfg = _make_config()
+        run_dir = init_results_dir(cfg, run_name="violation-run", base_dir=tmp_path)
+        violations = ["docs/hack.py was created", "engine/core.py was modified"]
+        blind = _make_blind_result(violations=violations)
+        save_card_result(run_dir, "card_v", blind_result=blind)
+
+        result = json.loads((run_dir / "cards" / "card_v" / "result.json").read_text())
+        assert result["violations"] == violations
+
+    def test_no_violations_yields_empty_list(self, tmp_path):
+        cfg = _make_config()
+        run_dir = init_results_dir(cfg, run_name="clean-run", base_dir=tmp_path)
+        blind = _make_blind_result()
+        save_card_result(run_dir, "card_clean", blind_result=blind)
+
+        result = json.loads((run_dir / "cards" / "card_clean" / "result.json").read_text())
+        assert result["violations"] == []
+
+    def test_violations_and_files_coexist(self, tmp_path):
+        """Violations annotate result.json while impl files are still saved."""
+        cfg = _make_config()
+        run_dir = init_results_dir(cfg, run_name="coexist-run", base_dir=tmp_path)
+        violations = ["tests/existing.py was modified"]
+        blind = _make_blind_result(impl_source="class Card: pass\n", violations=violations)
+        test = _make_test_result(impl_source="class CardTested: pass\n")
+        card_dir = save_card_result(run_dir, "card_co", blind_result=blind, test_result=test)
+
+        result = json.loads((card_dir / "result.json").read_text())
+        assert result["violations"] == violations
+        assert (card_dir / "blind_impl.py").read_text() == "class Card: pass\n"
+        assert (card_dir / "tested_impl.py").read_text() == "class CardTested: pass\n"

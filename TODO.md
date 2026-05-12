@@ -26,7 +26,7 @@ Reference files in current codebase:
 - `silverquillm/adapters/base.py` — `AgentAdapter` ABC with `run()` method
 ---
 
-- [ ] **Add ****`mode`**** to config and create ****`CardStrategy`**** ABC**
+- [x] **Add ****`mode`**** to config and create ****`CardStrategy`**** ABC**
   Detail: Add `mode: str` field to `BenchmarkConfig` in `silverquillm/config.py`. Valid values: `"blind"` and `"impl_test"`. Remove `max_test_rounds` from `AgentConfig` (no longer used — agent self-manages iteration). Create `silverquillm/strategies.py` with:
 
   - `CardStrategy` ABC with abstract method `run_card(self, card_spec, workspace, adapter, timeout) -> CardRunResult`
@@ -38,7 +38,7 @@ Reference files in current codebase:
 
   Testability: Unit test that `load_config()` parses `mode` correctly, rejects invalid values, defaults to `"impl_test"`. Unit test that `get_strategy()` returns correct strategy class.
 
-- [ ] **Implement ****`BlindStrategy`**
+- [x] **Implement ****`BlindStrategy`**
   Detail: In `silverquillm/strategies.py`, implement `BlindStrategy(CardStrategy)`. This strategy:
 
   1. Sends a single prompt to the agent: "Implement this card, write to `card_impl.py`. Do not write tests."
@@ -52,7 +52,7 @@ Reference files in current codebase:
   - `silverquillm/prompts.py` — add `blind_mode_prompt()` that references `card_impl.py` and omits test-related instructions
   Testability: Unit test with a mock adapter that writes `card_impl.py` → strategy returns `completed`. Mock adapter that writes nothing → `no_output`.
 
-- [ ] **Implement ****`ImplTestStrategy`**
+- [x] **Implement ****`ImplTestStrategy`**
   Detail: In `silverquillm/strategies.py`, implement `ImplTestStrategy(CardStrategy)`. This strategy:
 
   1. Sends a single prompt: "Implement this card and write tests. Write implementation to `card_impl.py`, tests to `tests.py`. You can run tests yourself to iterate."
@@ -66,7 +66,7 @@ Reference files in current codebase:
   - `silverquillm/prompts.py` — add `impl_test_mode_prompt()` combining impl + test instructions
   Testability: Unit test with mock adapter that writes both files → `completed`. Mock adapter that writes only `card_impl.py` (no tests) → `completed` (partial is still completed, eval will just skip self-eval).
 
-- [ ] **Refactor ****`agent_session.py`****: remove harness-managed iteration**
+- [x] **Refactor ****`agent_session.py`****: remove harness-managed iteration**
   Detail: The current `agent_session.py` (51KB) contains `_run_pytest`, multi-round orchestration logic, and round counting. Remove all of this:
 
   - Delete `_run_pytest()` method entirely — the harness does NOT run pytest during agent implementation rounds
@@ -82,7 +82,7 @@ Reference files in current codebase:
   - `silverquillm/agent_session.py` — major refactor (remove ~40% of the file)
   Testability: Existing integration tests should still pass after refactor. New unit test: workspace setup creates correct files for each mode (blind mode has no test_utils, impl_test mode has test_utils).
 
-- [ ] **Decouple ****`harvest_results()`**** from violation status (fixes Issue #15)**
+- [x] **Decouple ****`harvest_results()`**** from violation status (fixes Issue #15)**
   Detail: Currently, `harvest_results()` in `agent_session.py` is skipped or partial when a violation is detected. Ral Zarek (#97) got a violation and its implementation files were never captured. Fix: `harvest_results()` must run unconditionally — always copy `card_impl.py` and `tests.py` from the workspace regardless of violation status. Violations annotate `result.json` but don't prevent file capture.
 
   Files to change:
@@ -90,7 +90,7 @@ Reference files in current codebase:
   - `silverquillm/agent_session.py` — ensure `harvest_results()` is called before violation status affects control flow
   Testability: Unit test: mock adapter writes `card_impl.py` + triggers a violation → both violation is recorded AND `card_impl.py` is harvested.
 
-- [ ] **Engine snapshot and rollback on timeout**
+- [x] **Engine snapshot and rollback on timeout**
   Detail: Before each card starts, snapshot the run-level engine directory (e.g., `shutil.copytree(run_engine_dir, run_engine_dir.with_suffix('.snapshot'))`). If the agent times out, restore the snapshot — this prevents corrupted partial engine modifications from poisoning subsequent cards. On successful completion, delete the snapshot and commit engine changes as normal.
 
   The snapshot/restore logic should live in `agent_session.py` alongside the existing `init_run_engine()` and `commit_engine_changes()` functions. Add `snapshot_engine(run_engine_dir) -> Path` and `restore_engine_snapshot(run_engine_dir, snapshot_dir)` functions.
@@ -100,7 +100,7 @@ Reference files in current codebase:
   - `silverquillm/agent_session.py` — add snapshot/restore functions, call them in the per-card flow
   Testability: Unit test: mock adapter that times out → engine dir is restored to pre-card state. Mock adapter that succeeds → snapshot is cleaned up.
 
-- [ ] **Enforce ****`timeout_per_card`**** (fixes Issue #14)**
+- [x] **Enforce ****`timeout_per_card`**** (fixes Issue #14)**
   Detail: Config specifies `timeout_per_card: 300` but it's never enforced — Qwen's Plains (trivial) took 28 minutes. Wrap the adapter's `run()` call with a hard timeout. On expiry: kill the subprocess, record `status: timeout` in `CardRunResult`, zero all scores for this card, trigger engine rollback (previous item).
 
   Implementation: In the `CardStrategy.run_card()` base method (or a shared utility), use `subprocess` timeout or `signal.alarm()` as a fallback. The adapter's own `run_with_retries()` in `silverquillm/adapters/base.py` already has a deadline concept — ensure it's actually enforced at the process level, not just as a soft limit.
@@ -112,7 +112,7 @@ Reference files in current codebase:
   - `silverquillm/adapters/opencode.py` — ensure `Popen` subprocess is killed on timeout
   Testability: Unit test: mock adapter that sleeps forever → times out at `timeout_per_card`, status is `timeout`.
 
-- [ ] **Move all evaluation to post-run**
+- [x] **Move all evaluation to post-run**
   Detail: Currently `cli.py` runs self-eval per card inside the run loop. Refactor so the run loop ONLY does: workspace setup → [strategy.run](http://strategy.run/)_card() → harvest → postmortem → next card. After ALL cards complete, a separate evaluation phase runs all tests against the final engine state.
 
   Create `silverquillm/post_eval.py` with:
@@ -132,7 +132,7 @@ Reference files in current codebase:
   - `silverquillm/evaluator.py` — update `run_tests()` to accept `engine_dir` param for PYTHONPATH
   Testability: Integration test: run 2 mock cards → post_eval runs all tests against final engine → results written to both cards' result.json.
 
-- [ ] **Refactor ****`EvalResult`**** and ****`result.json`**** to v2 schema**
+- [x] **Refactor ****`EvalResult`**** and ****`result.json`**** to v2 schema**
   Detail: The current `EvalResult` in `evaluator.py` has `blind_passed`/`blind_failed`/`tested_passed`/`tested_failed` fields reflecting the old blind/tested split. Refactor to v2 schema:
 
   ```python
@@ -160,7 +160,7 @@ class EvalResult:
   - `silverquillm/scorer.py` — update scoring to use v2 fields
   Testability: Unit test: v2 result.json round-trips correctly. Unit test: v1 result.json from existing runs still loads.
 
-- [ ] **Automatic ****`run_summary.json`**** aggregation**
+- [x] **Automatic ****`run_summary.json`**** aggregation**
   Detail: After post-run evaluation completes, automatically aggregate all per-card `result.json` files into a `run_summary.json` at the run level. Create `silverquillm/aggregator.py` with:
 
   - `aggregate_run(run_dir: Path) -> RunSummary` — pure function, reads all `cards/*/result.json`, produces summary
@@ -178,7 +178,7 @@ class EvalResult:
   - `silverquillm/cli.py` — call aggregator at end of run, add `benchmark aggregate` subcommand
   Testability: Unit test: create mock `result.json` files → `aggregate_run()` produces correct summary. Test idempotency: running twice on same dir produces identical output.
 
-- [ ] **Allowlist-based contamination checker**
+- [x] **Allowlist-based contamination checker**
   Detail: Replace the current fragile blocklist approach in `agent_session.py`'s `_check_violations()` with an allowlist. The agent may only create/modify files within its workspace directory. Only flag modifications to explicitly protected files (card specs of other cards, audited tests, other agents' implementations). This eliminates the entire class of false-positive violations from `__pycache__`, log files, `.pyc` files, etc.
 
   Current `_check_violations()` maintains a `_PROTECTED_DIRS` set and checks if ANY file outside the workspace was modified. Replace with:
@@ -193,7 +193,7 @@ class EvalResult:
   - `silverquillm/agent_session.py` — rewrite `_check_violations()` with allowlist logic
   Testability: Unit test: agent writes `card_impl.py` in workspace → no violation. Agent modifies `engine/ward.py` → no violation. Agent modifies `tests/audited/sos/001/tests.py` → violation detected.
 
-- [ ] **Fix ****`test_utils.md`**** import path (fixes Issue #11)**
+- [x] **Fix `test_utils.md`**** import path (fixes Issue #11)**
   Detail: Agent-facing `test_utils.md` documentation says `from tests.test_utils import ...` but workspace has flat `test_utils.py` at the root. Agents waste a correction iteration discovering this. Update all import examples to `from test_utils import create_game, set_board_state, cast_spell, ...`.
 
   Files to change:
@@ -201,7 +201,7 @@ class EvalResult:
   - `docs/test_utils.md` (or `tests/test_utils.md` — check which path the workspace copies from) — update all import examples
   Testability: Grep the updated file for `from tests.test_utils` — should find zero matches. Grep for `from test_utils import` — should find all examples.
 
-- [ ] **Add ****`GameState`**** to template imports (fixes Issue #12)**
+- [x] **Add `GameState`**** to template imports (fixes Issue #12)**
   Detail: Nearly every card implementation needs `from engine.game_state import GameState` for type hints. Agents waste time adding this import. Add it to the template that `silverquillm/template_gen.py` generates.
 
   Files to change:
@@ -209,7 +209,7 @@ class EvalResult:
   - `silverquillm/template_gen.py` — add `from engine.game_state import GameState` to the generated template's import block
   Testability: Generate a template for any card → verify `GameState` is in the imports.
 
-- [ ] **Simplify postmortem schema**
+- [x] **Simplify postmortem schema**
   Detail: The current `postmortem.jsonl` events use `round` and `phase` fields from the old multi-round model. Update to the simplified schema:
 
   - Remove `round` and `phase` fields from all events
@@ -223,7 +223,7 @@ class EvalResult:
   - `silverquillm/agent_session.py` — update postmortem event emission
   Testability: Run mock adapter → postmortem.jsonl has no `round` or `phase` fields. Has `file_written` events for each file the agent created.
 
-- [ ] **Pre-flight validation at run start**
+- [x] **Pre-flight validation at run start**
   Detail: Before any LLM calls, verify the environment is correct. Add a `preflight_check(config, run_dir)` function that validates:
 
   - `template.py` imports resolve (can import `engine.game_state`, `engine.card`, etc.)
@@ -240,7 +240,7 @@ class EvalResult:
   - `silverquillm/cli.py` — call `preflight_check()` before entering the card loop
   Testability: Unit test: missing card_specs_dir → preflight fails with clear message. Unit test: invalid adapter name → preflight fails.
 
-- [ ] **Smoke tests with mock adapter (****`tests/test_harness.py`****)**
+- [x] **Smoke tests with mock adapter (****`tests/test_harness.py`****)**
   Detail: Comprehensive deterministic pytest tests (zero LLM calls) using a `MockAdapter` that writes pre-baked implementations from `cards/foundations/`. These test the full harness pipeline end-to-end.
 
   Create `silverquillm/adapters/mock.py` with a `MockAdapter` that:

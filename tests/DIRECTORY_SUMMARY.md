@@ -21,9 +21,11 @@ Test root directory for the SilverquiLLM-bench project. Contains top-level test 
 | `test_pi_adapter.py` | **Pi adapter tests** — --no-interactive, stdin passing. |
 | `test_agent_session.py` | **Agent session tests** — Workspace setup, blind/test-informed phases, adapter lifecycle. |
 | `test_agent_session_adapter.py` | **Session + adapter integration** — Adapter wiring into session. |
+| `test_agent_session_refactor.py` | **Agent session refactor tests** — Refactored session behavior validation. |
 | `test_agent_config.py` | **Agent config tests** — Nested AgentConfig dataclass. |
 | `test_agent_thoughts.py` | **Agent thoughts tests** — Narrative generation from postmortem JSONL. |
 | `test_postmortem_logging.py` | **Postmortem logging tests** — JSONL append, timing, error handling. |
+| `test_postmortem_schema_v2.py` | **Postmortem schema v2 tests** — 26 tests for structured event helpers (`_append_file_written`, `_append_eval_result`, `_append_regression_check`) and raw log schema. |
 | `test_config_consumers.py` | **Config consumer tests** — All modules correctly use nested config. |
 | `test_card_classifier.py` | **Card classifier tests** — Tier classification, SOS integration. |
 | `test_card_spec.py` | **Card spec tests** — Spec generation, field validation. |
@@ -35,6 +37,7 @@ Test root directory for the SilverquiLLM-bench project. Contains top-level test 
 | `test_prompts.py` | **Prompt template tests** — All prompt types. |
 | `test_engine_extensibility_prompts.py` | **Engine extensibility prompt tests** — Extensibility instructions in prompts. |
 | `test_evaluator.py` | **Evaluator tests** — Subprocess test execution, eval scenarios. |
+| `test_eval_result_v2.py` | **EvalResultV2 tests** — Mode-aware v2 eval schema, v1→v2 normalization, result persistence. |
 | `test_scorer.py` | **Scorer tests** — 4-category metrics, leaderboard generation. |
 | `test_cat4_scoring.py` | **Category 4 scoring tests** — Engine extension quality scoring. |
 | `test_results.py` | **Result recorder tests** — Run naming, directory init, artifacts. |
@@ -58,6 +61,13 @@ Test root directory for the SilverquiLLM-bench project. Contains top-level test 
 | `test_sos_regenerated_artifacts.py` | **SOS artifact regeneration tests** — 26 tests for 346-card pool integrity, classification, specs, docs. |
 | `test_audited_per_card.py` | **Audited per-card test runner** — Parametrized per-card test discovery and execution. |
 | `test_violation_wiring.py` | **Violation wiring tests** — Violation checks in agent runs. |
+| `test_timeout_enforcement.py` | **Timeout enforcement tests** — Hard timeout at strategy and adapter level with kill(). |
+| `test_post_eval.py` | **Post-eval tests** — CardEvalResult dataclass, run_post_eval flow, self-eval, audited eval, result.json persistence, CLI integration. |
+| `test_aggregator.py` | **Aggregator tests** — aggregate_run() pure function, RunSummary dataclass, persistence, idempotency. |
+| `test_allowlist_contamination.py` | **Allowlist contamination tests** — 23 tests for allowlist-based contamination detection. |
+| `test_preflight.py` | **Preflight tests** — 18 tests for pre-flight validation (card_specs_dir, config, workspace, template imports, test_utils, happy path, error aggregation). |
+| `test_harness.py` | **Harness smoke tests** — 39 deterministic end-to-end tests covering full harness pipeline with MockAdapter. |
+| `test_strategies.py` | **Strategy tests** — BlindStrategy and ImplTestStrategy behavior. |
 | `test_replay_parser.py` | **Replay parser tests** — 39 tests for GRE JSON parsing: game setup, opening hands, state reconstruction, land plays, life totals, draws, ObjectIdChanged tracking. |
 | `test_replay_executor.py` | **Replay executor tests** — 23 tests for ReplayExecutor initialization, step execution, state comparison, seat 1/2 behavior. |
 | `test_divergence_detection.py` | **Divergence detection tests** — 43 tests for DivergenceType, Divergence, ValidationReport, ValidatingExecutor, validate_replay. |

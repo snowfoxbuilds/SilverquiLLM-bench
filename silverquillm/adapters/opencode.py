@@ -2,15 +2,17 @@
 
 Wraps the ``opencode`` CLI tool as a concrete :class:`AgentAdapter`.
 Ports logic from :func:`silverquillm.agent_session.AgentSession._run_agent`
-with the following fixes:
+with the following changes:
 
-- Removes the invalid ``--thinking`` flag.
 - Passes prompts via stdin instead of as a CLI argument.
+- Streams stdout/stderr to the terminal with ANSI colours.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import signal
 import subprocess
 import sys
 import threading
@@ -38,6 +40,7 @@ class OpenCodeAdapter(AgentAdapter):
     def __init__(self, config: BenchmarkConfig) -> None:
         super().__init__(config)
         self._opencode_cfg_path: Path | None = None
+        self._process: subprocess.Popen | None = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -48,6 +51,24 @@ class OpenCodeAdapter(AgentAdapter):
 
     def teardown(self) -> None:  # noqa: D401
         """No-op — opencode leaves no persistent resources."""
+
+    def kill(self) -> None:
+        """Terminate the running opencode subprocess and its process group."""
+        proc = self._process
+        if proc is not None and proc.poll() is None:
+            try:
+                pgid = os.getpgid(proc.pid)
+                os.killpg(pgid, signal.SIGTERM)
+            except (OSError, ProcessLookupError):
+                proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                try:
+                    pgid = os.getpgid(proc.pid)
+                    os.killpg(pgid, signal.SIGKILL)
+                except (OSError, ProcessLookupError):
+                    proc.kill()
 
     # ------------------------------------------------------------------
     # Configuration
@@ -104,7 +125,9 @@ class OpenCodeAdapter(AgentAdapter):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            start_new_session=True,
         )
+        self._process = process
 
         stdout_lines: list[str] = []
         stderr_lines: list[str] = []

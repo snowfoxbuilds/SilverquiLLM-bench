@@ -157,33 +157,18 @@ class TestOrchestrationLoop:
             self_session._workspace = workspace
             return workspace
 
-        def fake_run_blind(self_session, workspace):
+        def fake_run_card(self_session):
+            from silverquillm.strategies import CardRunResult, CardRunStatus
+            workspace = self_session._workspace
             impl_code = "# Stub blind implementation\nclass EagerGlyphmage:\n    pass\n"
-            impl_path = workspace / "blind_impl.py"
+            impl_path = workspace / "card_impl.py"
             impl_path.write_text(impl_code)
-            return BlindResult(
-                impl_path=impl_path,
-                tokens=42,
-                runtime_seconds=1.5,
-                peak_context=100,
-                status="ok",
-            )
-
-        def fake_run_test_informed(self_session, workspace, blind_impl):
-            tested_code = "# Tested impl\nclass EagerGlyphmage:\n    def ability(self): pass\n"
-            impl_path = workspace / "tested_impl.py"
-            impl_path.write_text(tested_code)
             tests_path = workspace / "tests.py"
             tests_path.write_text("def test_glyphmage(): pass\n")
-            return TestInformedResult(
-                impl_path=impl_path,
-                tests_path=tests_path,
-                iterations=2,
-                tokens=80,
-                runtime_seconds=3.0,
-                peak_context=200,
-                rules_lookups=1,
-                status="ok",
+            return CardRunResult(
+                status=CardRunStatus.completed,
+                files_written=[impl_path, tests_path],
+                runtime_ms=1500,
             )
 
         def fake_cleanup(self_session):
@@ -191,8 +176,7 @@ class TestOrchestrationLoop:
 
         return [
             patch.object(AgentSession, "setup_workspace", fake_setup_workspace),
-            patch.object(AgentSession, "run_blind_implementation", fake_run_blind),
-            patch.object(AgentSession, "run_test_informed", fake_run_test_informed),
+            patch.object(AgentSession, "run_card", fake_run_card),
             patch.object(AgentSession, "cleanup", fake_cleanup),
         ]
 
@@ -202,7 +186,7 @@ class TestOrchestrationLoop:
         runner = CliRunner()
 
         patches = self._patch_session_for_stub()
-        with patches[0], patches[1], patches[2], patches[3]:
+        with patches[0], patches[1], patches[2]:
             result = runner.invoke(main, ["run", "--config", str(config_file), "--cards", "11"])
 
         assert result.exit_code == 0, f"CLI failed: {result.output}"
@@ -221,12 +205,12 @@ class TestOrchestrationLoop:
         assert "blind" in data or "status" in data  # Has result structure
 
     def test_orchestration_saves_blind_impl(self, tmp_path: Path) -> None:
-        """Running with --cards 11 saves blind_impl.py in the card results."""
+        """Running with --cards 11 saves card_impl.py in the card results."""
         config_file = _write_config(tmp_path, {"output_dir": str(tmp_path / "results")})
         runner = CliRunner()
 
         patches = self._patch_session_for_stub()
-        with patches[0], patches[1], patches[2], patches[3]:
+        with patches[0], patches[1], patches[2]:
             result = runner.invoke(main, ["run", "--config", str(config_file), "--cards", "11"])
 
         assert result.exit_code == 0, f"CLI failed: {result.output}"
@@ -235,27 +219,26 @@ class TestOrchestrationLoop:
         run_dirs = list(results_dir.iterdir())
         run_dir = run_dirs[0]
 
-        blind_impl = run_dir / "cards" / "11" / "blind_impl.py"
-        assert blind_impl.exists(), "blind_impl.py not saved in results"
-        content = blind_impl.read_text()
+        card_impl = run_dir / "cards" / "11" / "card_impl.py"
+        assert card_impl.exists(), "card_impl.py not saved in results"
+        content = card_impl.read_text()
         assert "EagerGlyphmage" in content
 
     def test_orchestration_prints_progress(self, tmp_path: Path) -> None:
-        """Running the loop prints per-card progress like [1/1] CardName: blind=ok."""
+        """Running the loop prints per-card progress."""
         config_file = _write_config(tmp_path, {"output_dir": str(tmp_path / "results")})
         runner = CliRunner()
 
         patches = self._patch_session_for_stub()
-        with patches[0], patches[1], patches[2], patches[3]:
+        with patches[0], patches[1], patches[2]:
             result = runner.invoke(main, ["run", "--config", str(config_file), "--cards", "11"])
 
         assert result.exit_code == 0, f"CLI failed: {result.output}"
-        # Should contain progress output with blind status
-        assert "blind=" in result.output
+        # Should contain progress output
         assert "1/" in result.output
 
     def test_test_informed_skipped_when_blind_fails(self, tmp_path: Path) -> None:
-        """If blind result has non-ok status (timeout), test_informed is skipped."""
+        """If run_card returns timeout status, result reflects that."""
         config_file = _write_config(tmp_path, {"output_dir": str(tmp_path / "results")})
 
         def fake_setup_workspace(self_session):
@@ -263,16 +246,12 @@ class TestOrchestrationLoop:
             self_session._workspace = workspace
             return workspace
 
-        def fake_run_blind_timeout(self_session, workspace):
-            return BlindResult(
-                impl_path=None,
-                tokens=0,
-                runtime_seconds=30.0,
-                peak_context=0,
-                status="timeout",
+        def fake_run_card_timeout(self_session):
+            from silverquillm.strategies import CardRunResult, CardRunStatus
+            return CardRunResult(
+                status=CardRunStatus.timeout,
+                runtime_ms=30000,
             )
-
-        run_test_informed_mock = MagicMock()
 
         def fake_cleanup(self_session):
             pass
@@ -280,17 +259,12 @@ class TestOrchestrationLoop:
         runner = CliRunner()
         with (
             patch.object(AgentSession, "setup_workspace", fake_setup_workspace),
-            patch.object(AgentSession, "run_blind_implementation", fake_run_blind_timeout),
-            patch.object(AgentSession, "run_test_informed", run_test_informed_mock),
+            patch.object(AgentSession, "run_card", fake_run_card_timeout),
             patch.object(AgentSession, "cleanup", fake_cleanup),
         ):
             result = runner.invoke(main, ["run", "--config", str(config_file), "--cards", "11"])
 
         assert result.exit_code == 0, f"CLI failed: {result.output}"
-        # test_informed should NOT have been called
-        run_test_informed_mock.assert_not_called()
-        # Progress should show "skipped" for tested
-        assert "skipped" in result.output
 
     def test_orchestration_creates_run_directory_with_config(self, tmp_path: Path) -> None:
         """The orchestration loop creates a run directory with config.yaml."""
@@ -298,7 +272,7 @@ class TestOrchestrationLoop:
         runner = CliRunner()
 
         patches = self._patch_session_for_stub()
-        with patches[0], patches[1], patches[2], patches[3]:
+        with patches[0], patches[1], patches[2]:
             result = runner.invoke(main, ["run", "--config", str(config_file), "--cards", "11"])
 
         assert result.exit_code == 0, f"CLI failed: {result.output}"

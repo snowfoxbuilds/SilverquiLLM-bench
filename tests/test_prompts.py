@@ -20,6 +20,7 @@ import pytest
 
 from silverquillm.prompts import (
     blind_implementation_prompt,
+    blind_mode_prompt,
     iteration_feedback_prompt,
     test_informed_prompt,
 )
@@ -217,3 +218,180 @@ class TestIterationFeedbackPrompt:
         output = "line1\nline2\nFAILED test_bar\nline4"
         result = iteration_feedback_prompt(output, round_num=1, max_rounds=3)
         assert "FAILED test_bar" in result
+
+
+# ---------------------------------------------------------------------------
+# blind_mode_prompt (TODO item 2)
+# ---------------------------------------------------------------------------
+
+class TestBlindModePrompt:
+    """Tests for blind_mode_prompt() — the blind-mode variant that omits test utilities."""
+
+    def test_returns_string(self) -> None:
+        result = blind_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert isinstance(result, str)
+
+    def test_no_unfilled_placeholders(self) -> None:
+        result = blind_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert not _has_unfilled_placeholder(result), (
+            f"Found unfilled placeholder in blind_mode_prompt: {result!r}"
+        )
+
+    def test_contains_card_name(self) -> None:
+        result = blind_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "Lightning Bolt" in result
+
+    def test_contains_mana_cost(self) -> None:
+        result = blind_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "{R}" in result
+
+    def test_contains_type_line(self) -> None:
+        result = blind_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "Instant" in result
+
+    def test_contains_oracle_text(self) -> None:
+        result = blind_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "deals 3 damage" in result
+
+    def test_references_card_impl_py(self) -> None:
+        """Blind-mode prompt must instruct agent to write to card_impl.py."""
+        result = blind_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "card_impl.py" in result
+
+    def test_does_not_mention_test_utils_py(self) -> None:
+        """Blind-mode workspace listing must NOT include test_utils.py."""
+        result = blind_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "test_utils.py" not in result
+
+    def test_does_not_mention_test_utils_md(self) -> None:
+        """Blind-mode workspace listing must NOT include test_utils.md."""
+        result = blind_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "test_utils.md" not in result
+
+    def test_says_do_not_write_tests(self) -> None:
+        """Blind-mode prompt must instruct the agent not to write tests."""
+        result = blind_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "Do not write tests" in result
+
+    def test_empty_oracle_text(self) -> None:
+        result = blind_mode_prompt(_NO_ORACLE_SPEC)
+        assert not _has_unfilled_placeholder(result)
+        assert "Memnite" in result
+
+    def test_planeswalker_spec(self) -> None:
+        result = blind_mode_prompt(_PLANESWALKER_SPEC)
+        assert not _has_unfilled_placeholder(result)
+        assert "Jace, the Mind Sculptor" in result
+
+    def test_differs_from_blind_implementation_prompt(self) -> None:
+        """blind_mode_prompt should differ from blind_implementation_prompt
+        (specifically by omitting test_utils references)."""
+        mode_result = blind_mode_prompt(_SAMPLE_CARD_SPEC)
+        impl_result = blind_implementation_prompt(_SAMPLE_CARD_SPEC)
+        # The implementation prompt has test_utils; the mode prompt does not
+        assert "test_utils" in impl_result
+        assert "test_utils" not in mode_result
+
+
+# ---------------------------------------------------------------------------
+# impl_test_mode_prompt (TODO item 3)
+# ---------------------------------------------------------------------------
+
+
+class TestImplTestModePrompt:
+    """Tests for impl_test_mode_prompt() — combined impl + test instructions."""
+
+    def test_returns_string(self) -> None:
+        from silverquillm.prompts import impl_test_mode_prompt
+        result = impl_test_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert isinstance(result, str)
+
+    def test_no_unfilled_placeholders(self) -> None:
+        from silverquillm.prompts import impl_test_mode_prompt
+        result = impl_test_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert not _has_unfilled_placeholder(result), (
+            f"Found unfilled placeholder in impl_test_mode_prompt: {result!r}"
+        )
+
+    def test_contains_card_name(self) -> None:
+        from silverquillm.prompts import impl_test_mode_prompt
+        result = impl_test_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "Lightning Bolt" in result
+
+    def test_contains_mana_cost(self) -> None:
+        from silverquillm.prompts import impl_test_mode_prompt
+        result = impl_test_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "{R}" in result
+
+    def test_contains_type_line(self) -> None:
+        from silverquillm.prompts import impl_test_mode_prompt
+        result = impl_test_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "Instant" in result
+
+    def test_contains_oracle_text(self) -> None:
+        from silverquillm.prompts import impl_test_mode_prompt
+        result = impl_test_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "deals 3 damage" in result
+
+    def test_references_card_impl_py(self) -> None:
+        """Prompt must instruct agent to write implementation to card_impl.py."""
+        from silverquillm.prompts import impl_test_mode_prompt
+        result = impl_test_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "card_impl.py" in result
+
+    def test_references_tests_py(self) -> None:
+        """Prompt must instruct agent to write tests to tests.py."""
+        from silverquillm.prompts import impl_test_mode_prompt
+        result = impl_test_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "tests.py" in result
+
+    def test_mentions_test_utils_py(self) -> None:
+        """Prompt must list test_utils.py in workspace."""
+        from silverquillm.prompts import impl_test_mode_prompt
+        result = impl_test_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "test_utils.py" in result
+
+    def test_mentions_test_utils_md(self) -> None:
+        """Prompt must list test_utils.md in workspace."""
+        from silverquillm.prompts import impl_test_mode_prompt
+        result = impl_test_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "test_utils.md" in result
+
+    def test_encourages_self_iteration(self) -> None:
+        """Prompt must tell agent it can run tests and iterate on its own."""
+        from silverquillm.prompts import impl_test_mode_prompt
+        result = impl_test_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "run tests" in result.lower()
+
+    def test_no_max_rounds_reference(self) -> None:
+        """Prompt must NOT reference max_rounds or max_test_rounds — agent self-manages."""
+        from silverquillm.prompts import impl_test_mode_prompt
+        result = impl_test_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "max_rounds" not in result
+        assert "max_test_rounds" not in result
+
+    def test_contains_implement_and_write_tests_instruction(self) -> None:
+        """Prompt should contain the key instruction to implement and write tests."""
+        from silverquillm.prompts import impl_test_mode_prompt
+        result = impl_test_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "Implement this card and write tests" in result
+
+    def test_planeswalker_spec_no_placeholders(self) -> None:
+        from silverquillm.prompts import impl_test_mode_prompt
+        result = impl_test_mode_prompt(_PLANESWALKER_SPEC)
+        assert not _has_unfilled_placeholder(result)
+        assert "Jace, the Mind Sculptor" in result
+
+    def test_empty_oracle_text(self) -> None:
+        from silverquillm.prompts import impl_test_mode_prompt
+        result = impl_test_mode_prompt(_NO_ORACLE_SPEC)
+        assert not _has_unfilled_placeholder(result)
+        assert "Memnite" in result
+
+    def test_differs_from_blind_mode_prompt(self) -> None:
+        """impl_test_mode_prompt should include test_utils; blind_mode_prompt should not."""
+        from silverquillm.prompts import impl_test_mode_prompt
+        impl_test = impl_test_mode_prompt(_SAMPLE_CARD_SPEC)
+        blind = blind_mode_prompt(_SAMPLE_CARD_SPEC)
+        assert "test_utils" in impl_test
+        assert "test_utils" not in blind

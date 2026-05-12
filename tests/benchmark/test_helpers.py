@@ -173,7 +173,6 @@ def create_test_config(tmp_path: Path, set_code: str = "sos") -> BenchmarkConfig
         temperature=0.0,
         agent=AgentConfig(
             adapter="opencode",
-            max_test_rounds=1,
             timeout_per_card=10,
             disable_web_search=True,
         ),
