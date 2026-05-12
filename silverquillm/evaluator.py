@@ -134,24 +134,29 @@ def run_tests(
         # Copy impl as card_impl.py so tests can import it
         shutil.copy2(impl_path, tmp / "card_impl.py")
 
-        # Also copy test_utils.py so agent tests that import it directly work
+        # Copy test_utils.py so flat imports (from test_utils import ...) work
         test_utils_src = _REPO_ROOT / "tests" / "test_utils.py"
         if test_utils_src.exists():
             shutil.copy2(test_utils_src, tmp / "test_utils.py")
 
-        # Prepend the temp dir and repo root to PYTHONPATH so:
-        # 1) ``from card_impl import …`` resolves to the swapped implementation
-        # 2) ``from engine.game import …`` and similar resolve from the repo
+        # Copy tests as test_card.py to avoid shadowing the tests/ package.
+        # The agent may write `from tests.test_utils import ...` which fails
+        # if a local file named tests.py exists (Python resolves it as the
+        # local module instead of the repo's tests/ package).
+        shutil.copy2(tests_path, tmp / "test_card.py")
+
+        # PYTHONPATH: temp dir first (card_impl.py, test_utils.py),
+        # then repo root (for tests/ package and engine/ imports)
         env = dict(__import__("os").environ)
         existing = env.get("PYTHONPATH", "")
         env["PYTHONPATH"] = str(tmp) + ":" + str(_REPO_ROOT) + (":" + existing if existing else "")
 
-        # Run pytest against the *original* tests_path
+        # Run pytest on the RENAMED copy in the temp dir
         cmd = [
             sys.executable,
             "-m",
             "pytest",
-            str(tests_path),
+            str(tmp / "test_card.py"),
             "--tb=short",
             "-q",
             "--no-header",
