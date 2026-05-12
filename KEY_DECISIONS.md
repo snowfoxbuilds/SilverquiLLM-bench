@@ -39,6 +39,12 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: Contamination should affect scoring/status annotations, not destroy diagnostic or evaluatable artifacts.
 - **Impact**: `silverquillm/agent_session.py`, `silverquillm/cli.py`, `silverquillm/results.py`, harvest/violation/result tests.
 
+## Engine snapshot rollback on timeout
+- **Context**: Timed-out agents can leave partial engine modifications in the run-level engine, poisoning subsequent cards.
+- **Decision**: `AgentSession.run_card()` snapshots the run engine before strategy execution. Timeout results or timeout exceptions restore the snapshot; successful runs delete the snapshot and preserve engine changes for the normal commit path.
+- **Reasoning**: Timeouts are failure states for a card, so partial engine changes should not persist beyond that card. Successful cards still retain the persistent-engine behavior.
+- **Impact**: `silverquillm/agent_session.py`, engine snapshot tests, timeout-result regression tests.
+
 ## AgentAdapter pattern
 - **Context**: Need pluggable agent adapters for different CLI tools.
 - **Decision**: ABC with `run(prompt, workspace) -> str`, `setup()`, `teardown()`. Registry-based factory via `get_adapter(config)`. Concrete adapters call `register_adapter("name", cls)` at module level. `run_with_retries` uses a single overall deadline from `timeout_per_card`.

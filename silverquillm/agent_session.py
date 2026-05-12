@@ -50,6 +50,8 @@ __all__ = [
     "commit_engine_changes",
     "compute_engine_diff",
     "save_engine_final",
+    "snapshot_engine",
+    "restore_engine_snapshot",
     "setup_workspace",
     "run_blind",
     "run_test_informed",
@@ -386,6 +388,12 @@ class AgentSession:
 
         # Snapshot protected paths before strategy execution
         protected_snapshot = _snapshot_all_protected(_REPO_ROOT)
+
+        # Snapshot engine directory before card execution
+        engine_snapshot_dir: Path | None = None
+        if self.run_engine_dir and self.run_engine_dir.exists():
+            engine_snapshot_dir = snapshot_engine(self.run_engine_dir)
+
         start = time.monotonic()
 
         postmortem_path = _get_postmortem_path(self.run_dir, self.card_name)
@@ -400,6 +408,9 @@ class AgentSession:
             )
         except subprocess.TimeoutExpired:
             elapsed = time.monotonic() - start
+            # Restore engine from snapshot on timeout
+            if engine_snapshot_dir and self.run_engine_dir:
+                restore_engine_snapshot(self.run_engine_dir, engine_snapshot_dir)
             if postmortem_path:
                 _append_postmortem(
                     postmortem_path=postmortem_path,
@@ -418,6 +429,9 @@ class AgentSession:
             )
         except Exception as exc:
             elapsed = time.monotonic() - start
+            # Restore engine from snapshot on unexpected errors
+            if engine_snapshot_dir and self.run_engine_dir:
+                restore_engine_snapshot(self.run_engine_dir, engine_snapshot_dir)
             response_text = f"{type(exc).__name__}: {exc}"
             if postmortem_path:
                 _append_postmortem(
@@ -434,6 +448,17 @@ class AgentSession:
             raise
 
         elapsed = time.monotonic() - start
+
+        # If the strategy returned a timeout result (production adapters catch
+        # timeouts internally and return CardRunResult(status=timeout) instead
+        # of raising subprocess.TimeoutExpired), restore the engine snapshot so
+        # corrupted partial engine modifications cannot poison subsequent cards.
+        if result.status == CardRunStatus.timeout:
+            if engine_snapshot_dir and self.run_engine_dir:
+                restore_engine_snapshot(self.run_engine_dir, engine_snapshot_dir)
+        elif engine_snapshot_dir and engine_snapshot_dir.exists():
+            # Strategy succeeded — delete the engine snapshot
+            shutil.rmtree(engine_snapshot_dir)
 
         # Log successful strategy execution
         if postmortem_path:
@@ -893,6 +918,53 @@ def init_run_engine(output_dir: str | Path) -> Path:
     else:
         run_engine.mkdir(parents=True, exist_ok=True)
     return run_engine
+
+
+def snapshot_engine(run_engine_dir: Path) -> Path:
+    """Create a snapshot of the run-level engine directory.
+
+    Copies *run_engine_dir* to ``<run_engine_dir>.snapshot`` so it can be
+    restored if a card run fails or times out.
+
+    Parameters
+    ----------
+    run_engine_dir:
+        The persistent run-level engine directory.
+
+    Returns
+    -------
+    Path
+        Path to the snapshot directory.
+    """
+    snapshot_dir = run_engine_dir.with_suffix(".snapshot")
+    if snapshot_dir.exists():
+        shutil.rmtree(snapshot_dir)
+    shutil.copytree(run_engine_dir, snapshot_dir)
+    return snapshot_dir
+
+
+def restore_engine_snapshot(run_engine_dir: Path, snapshot_dir: Path) -> None:
+    """Restore the run-level engine directory from a snapshot.
+
+    Replaces *run_engine_dir* with the contents of *snapshot_dir*,
+    effectively rolling back any partial modifications made during a
+    failed card run.
+
+    Parameters
+    ----------
+    run_engine_dir:
+        The persistent run-level engine directory to restore.
+    snapshot_dir:
+        The snapshot directory to restore from.
+    """
+    if not snapshot_dir.exists():
+        logger.warning("Snapshot dir %s does not exist; cannot restore", snapshot_dir)
+        return
+    if run_engine_dir.exists():
+        shutil.rmtree(run_engine_dir)
+    shutil.copytree(snapshot_dir, run_engine_dir)
+    # Clean up the snapshot after successful restore
+    shutil.rmtree(snapshot_dir)
 
 
 def commit_engine_changes(workspace: Path, run_engine_dir: Path) -> list[str]:

@@ -90,7 +90,7 @@ Reference files in current codebase:
   - `silverquillm/agent_session.py` — ensure `harvest_results()` is called before violation status affects control flow
   Testability: Unit test: mock adapter writes `card_impl.py` + triggers a violation → both violation is recorded AND `card_impl.py` is harvested.
 
-- [ ] **Engine snapshot and rollback on timeout**
+- [x] **Engine snapshot and rollback on timeout**
   Detail: Before each card starts, snapshot the run-level engine directory (e.g., `shutil.copytree(run_engine_dir, run_engine_dir.with_suffix('.snapshot'))`). If the agent times out, restore the snapshot — this prevents corrupted partial engine modifications from poisoning subsequent cards. On successful completion, delete the snapshot and commit engine changes as normal.
 
   The snapshot/restore logic should live in `agent_session.py` alongside the existing `init_run_engine()` and `commit_engine_changes()` functions. Add `snapshot_engine(run_engine_dir) -> Path` and `restore_engine_snapshot(run_engine_dir, snapshot_dir)` functions.

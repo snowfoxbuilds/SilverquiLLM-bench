@@ -43,3 +43,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Reasoning**: The implementation removed the legacy iteration path and preserved session bookkeeping according to targeted and related tests.
 - **Alternatives considered**: Block the harness refactor on audited card-oracle failures.
 - **Impact**: No code impact for item 4; final run stats should report the audited baseline if it remains.
+
+## Test baseline note: Item 6 — audited SOS failures
+- **Context**: The item 6 verification pass reported all 1301 non-audited tests passing and 994 audited failures that are pre-existing and unrelated.
+- **Decision**: Proceed with item 6 because snapshot/rollback behavior is covered by targeted and non-audited tests.
+- **Reasoning**: Audited SOS behavior failures are outside the engine snapshot/rollback harness surface.
+- **Alternatives considered**: Block item 6 on audited card-oracle failures.
+- **Impact**: No code impact for item 6; final run stats should report the audited baseline if it remains.

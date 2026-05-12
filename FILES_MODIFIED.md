@@ -61,3 +61,13 @@ tests/test_agent_session_refactor.py — 24 tests for harness removal, run_card 
 - `tests/test_results.py` — Added `TestViolationsInResultJson` class with 3 tests for violations in result.json
 - `tests/test_harvest_unconditional.py` — New test file: 7 tests verifying violations annotate result and harvest runs unconditionally
 - `tests/test_strategies.py` — Updated `test_has_expected_fields` to include `violations` in expected field set
+
+## Item 6: Engine snapshot and rollback on timeout
+
+### Tests
+- `tests/test_engine_snapshot.py` — 20 tests for snapshot/restore functions and run_card integration with timeout rollback
+- `tests/test_engine_snapshot_timeout_result.py` — 3 tests for production-like timeout-result path engine rollback
+
+### Implementation
+- `silverquillm/agent_session.py` — Added snapshot_engine() and restore_engine_snapshot() functions; integrated snapshot/rollback into run_card() flow; handles both exception-raised and result-status timeouts
+- `tests/test_engine_snapshot_timeout_result.py` — New test file: 3 tests verifying engine rollback on CardRunResult(status=timeout)
