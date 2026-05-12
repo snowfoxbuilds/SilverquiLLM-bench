@@ -191,8 +191,9 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
 
     for i, spec in enumerate(specs, 1):
         card_name = spec.get("name", "???")
+        card_dir_name = spec.get("card_dir_name", spec.get("collector_number", spec.get("number", "unknown")))
         collector_number = spec.get("collector_number", spec.get("number", "unknown"))
-        card_dir = f"{specs_dir}/{collector_number}/"
+        card_dir = f"{specs_dir}/{card_dir_name}/"
 
         session: AgentSession | None = None
         try:
@@ -217,8 +218,8 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
                 blind_result, tested_result, spec, cfg
             )
 
-            card_results_dir = run_dir / "cards" / str(collector_number)
-            save_card_result(run_dir, collector_number, blind_dict, test_dict)
+            card_results_dir = run_dir / "cards" / str(card_dir_name)
+            save_card_result(run_dir, card_dir_name, blind_dict, test_dict)
 
             # Copy raw implementation files from workspace to results dir
             session.harvest_results(card_results_dir)
@@ -249,7 +250,7 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
             impl_path = card_results_dir / "tested_impl.py"
             if tests_path.exists():
                 completed_cards.append(CompletedCard(
-                    card_id=str(collector_number),
+                    card_id=str(card_dir_name),
                     workspace=card_results_dir,
                     tests_file=tests_path,
                     impl_file=impl_path if impl_path.exists() else None,

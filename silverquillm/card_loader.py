@@ -52,6 +52,7 @@ def load_card_specs(specs_dir: str) -> list[dict]:
         if spec_file.exists():
             with open(spec_file, "r", encoding="utf-8") as f:
                 spec = json.load(f)
+            spec["card_dir_name"] = child.name  # e.g. "6", "soa_6"
             specs.append(spec)
 
     specs.sort(key=_collector_number_sort_key)
@@ -83,14 +84,18 @@ def load_prototype_cards(prototype_path: str) -> list[str]:
 def filter_by_collectors(
     specs: list[dict], collector_numbers: list[str]
 ) -> list[dict]:
-    """Filter *specs* to only those whose collector_number is in *collector_numbers*.
+    """Filter *specs* to only those whose card ID is in *collector_numbers*.
+
+    The card ID is the directory name (``card_dir_name``) when present, which
+    is unique across subsets (e.g. ``"6"`` vs ``"soa_6"``).  Falls back to
+    ``collector_number`` for specs loaded without ``card_dir_name``.
 
     Parameters
     ----------
     specs:
-        Full list of card spec dicts (each must have a ``collector_number`` key).
+        Full list of card spec dicts.
     collector_numbers:
-        The collector numbers to keep.
+        The card IDs to keep (directory names or collector numbers).
 
     Returns
     -------
@@ -102,15 +107,16 @@ def filter_by_collectors(
     ValueError
         If any requested collector number is not found in *specs*.
     """
-    available = {s["collector_number"] for s in specs}
+    available = {_card_id(s) for s in specs}
     missing = [cn for cn in collector_numbers if cn not in available]
     if missing:
         raise ValueError(
-            f"Collector number(s) not found in specs: {missing}"
+            f"Card ID(s) not found in specs: {missing}. "
+            f"Available: {sorted(available)}"
         )
 
     requested = set(collector_numbers)
-    return [s for s in specs if s["collector_number"] in requested]
+    return [s for s in specs if _card_id(s) in requested]
 
 
 def filter_by_prototype(specs: list[dict], prototype_path: str) -> list[dict]:
@@ -140,6 +146,11 @@ def filter_by_prototype(specs: list[dict], prototype_path: str) -> list[dict]:
     """
     collector_numbers = load_prototype_cards(prototype_path)
     return filter_by_collectors(specs, collector_numbers)
+
+
+def _card_id(spec: dict) -> str:
+    """Return the unique card identifier (directory name if set, else collector_number)."""
+    return spec.get("card_dir_name", spec.get("collector_number", ""))
 
 
 def _collector_number_sort_key(spec: dict) -> tuple[int, str]:
