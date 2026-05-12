@@ -112,7 +112,7 @@ Reference files in current codebase:
   - `silverquillm/adapters/opencode.py` — ensure `Popen` subprocess is killed on timeout
   Testability: Unit test: mock adapter that sleeps forever → times out at `timeout_per_card`, status is `timeout`.
 
-- [ ] **Move all evaluation to post-run**
+- [x] **Move all evaluation to post-run**
   Detail: Currently `cli.py` runs self-eval per card inside the run loop. Refactor so the run loop ONLY does: workspace setup → [strategy.run](http://strategy.run/)_card() → harvest → postmortem → next card. After ALL cards complete, a separate evaluation phase runs all tests against the final engine state.
 
   Create `silverquillm/post_eval.py` with:

@@ -27,6 +27,7 @@ from silverquillm.agent_session import (
 from silverquillm.card_loader import filter_by_collectors, filter_by_prototype, load_card_specs
 from silverquillm.config import BenchmarkConfig, load_config
 from silverquillm.evaluator import run_self_eval_flat
+from silverquillm.post_eval import run_post_eval
 from silverquillm.results import init_results_dir, save_aggregates, save_card_result, save_run_summary
 from silverquillm.scorer import compute_scores, generate_leaderboard
 from silverquillm.regression import CompletedCard, run_regressions
@@ -306,11 +307,15 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
     # Save final engine state as a run artifact
     save_engine_final(run_engine_dir, run_dir)
 
-    # --- Post-loop: self-eval and summary ---
+    # --- Post-loop: evaluation phase (all tests against final engine state) ---
     elapsed = time.time() - start_time
     cards_dir = run_dir / "cards"
     all_results: list[dict] = []
 
+    # Run post-eval: evaluates all cards against the final engine state
+    post_eval_results = run_post_eval(run_dir, mode=cfg.mode)
+
+    # Build all_results from the updated result.json files
     if cards_dir.exists():
         for card_path in sorted(cards_dir.iterdir()):
             if not card_path.is_dir():
@@ -318,28 +323,7 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
             result_json = card_path / "result.json"
             if not result_json.exists():
                 continue
-
-            # Run self-eval on the flat layout
-            eval_result = run_self_eval_flat(card_path, cfg.model_name)
-
-            # Load existing result, merge self-eval, re-save
             record = json.loads(result_json.read_text())
-            record["self_eval"] = {
-                "blind": {
-                    "passed": eval_result.blind_passed,
-                    "failed": eval_result.blind_failed,
-                    "total": eval_result.blind_total,
-                    "errors": [e for e in eval_result.errors],
-                },
-                "tested": {
-                    "passed": eval_result.tested_passed,
-                    "failed": eval_result.tested_failed,
-                    "total": eval_result.tested_total,
-                    "errors": [],
-                },
-                "errors": eval_result.errors,
-            }
-            result_json.write_text(json.dumps(record, indent=2, default=str))
             all_results.append(record)
 
     save_run_summary(run_dir, all_results)

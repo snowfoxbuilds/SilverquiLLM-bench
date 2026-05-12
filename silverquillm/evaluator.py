@@ -119,11 +119,19 @@ def run_tests(
     impl_path: Path,
     tests_path: Path,
     timeout: int = 60,
+    engine_dir: Path | None = None,
 ) -> tuple[int, int, int, list[str]]:
     """Run *tests_path* against *impl_path* in an isolated subprocess.
 
     The implementation file is copied to ``card_impl.py`` in a temporary
     directory so that tests can ``from card_impl import …``.
+
+    Parameters
+    ----------
+    engine_dir:
+        Optional path to an engine directory.  When provided it is prepended
+        to ``PYTHONPATH`` so that ``import engine`` resolves to this directory's
+        parent (i.e. the run-level engine state rather than the repo default).
 
     Returns ``(passed, failed, total, error_messages)``.
     """
@@ -151,10 +159,19 @@ def run_tests(
         shutil.copy2(tests_path, tmp / "test_card.py")
 
         # PYTHONPATH: temp dir first (card_impl.py, test_utils.py),
+        # then engine dir parent (if provided, for run-level engine state),
         # then repo root (for tests/ package and engine/ imports)
         env = dict(__import__("os").environ)
         existing = env.get("PYTHONPATH", "")
-        env["PYTHONPATH"] = str(tmp) + ":" + str(_REPO_ROOT) + (":" + existing if existing else "")
+        parts = [str(tmp)]
+        if engine_dir is not None:
+            # engine_dir is e.g. run_dir/engine; its parent must be on
+            # PYTHONPATH so ``import engine`` resolves to the run-level copy.
+            parts.append(str(Path(engine_dir).parent))
+        parts.append(str(_REPO_ROOT))
+        if existing:
+            parts.append(existing)
+        env["PYTHONPATH"] = ":".join(parts)
 
         # Run pytest on the RENAMED copy in the temp dir
         cmd = [
