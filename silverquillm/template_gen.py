@@ -80,6 +80,9 @@ def _determine_base_class(type_line: str) -> tuple[str, list[str]]:
 def generate_template(card_spec: dict[str, Any]) -> str:
     """Generate a Python skeleton file from a card spec dictionary.
 
+    The generated source is written to both ``template.py`` (reference)
+    and ``card_impl.py`` (the file agents edit) in the workspace.
+
     Parameters
     ----------
     card_spec:

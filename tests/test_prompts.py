@@ -101,9 +101,10 @@ class TestBlindImplementationPrompt:
         result = blind_implementation_prompt(_SAMPLE_CARD_SPEC)
         assert "deals 3 damage" in result
 
-    def test_does_not_mention_card_impl(self) -> None:
+    def test_mentions_card_impl_output_file(self) -> None:
+        """Blind prompt must tell the agent to write to card_impl.py."""
         result = blind_implementation_prompt(_SAMPLE_CARD_SPEC)
-        assert "card_impl" not in result.lower()
+        assert "card_impl.py" in result
 
     def test_empty_oracle_text(self) -> None:
         result = blind_implementation_prompt(_NO_ORACLE_SPEC)

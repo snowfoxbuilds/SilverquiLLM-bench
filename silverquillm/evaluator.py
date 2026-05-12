@@ -134,6 +134,11 @@ def run_tests(
         # Copy impl as card_impl.py so tests can import it
         shutil.copy2(impl_path, tmp / "card_impl.py")
 
+        # Also copy under alternative names agents might import from
+        for alias in ("blind_impl.py", "tested_impl.py"):
+            if not (tmp / alias).exists():
+                shutil.copy2(impl_path, tmp / alias)
+
         # Copy test_utils.py so flat imports (from test_utils import ...) work
         test_utils_src = _REPO_ROOT / "tests" / "test_utils.py"
         if test_utils_src.exists():

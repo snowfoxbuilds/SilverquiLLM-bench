@@ -32,7 +32,7 @@ You have access to (all in .workspace/):
 - .workspace/foundations/ (browse working card implementations as reference)
 - .workspace/test_utils.py (test utility helpers)
 
-Write your implementation to `.workspace/blind_impl.py`.
+Write your implementation to `.workspace/card_impl.py`.
 If you need to add or modify engine files, do so in .workspace/engine/ — but all
 previous cards' tests will be re-run, so your engine changes must not break
 existing functionality.
@@ -95,7 +95,7 @@ You have access to (all in .workspace/):
 - .workspace/foundations/ (browse working card implementations as reference)
 - .workspace/test_utils.py (test utility helpers)
 
-Save your updated implementation to `.workspace/tested_impl.py`.
+Update your implementation in `.workspace/card_impl.py`.
 Save your tests to `.workspace/tests.py`.
 You may also modify .workspace/engine/ files if needed — but all previous cards' tests
 will be re-run, so engine changes must not break existing functionality.
@@ -170,7 +170,7 @@ Test run results (round {round_num} of {max_rounds}):
 Fix the failing tests or update your implementation, then resubmit both files.
 
 Write your tests to `.workspace/tests.py`.
-If you update your implementation, save it to `.workspace/tested_impl.py`.
+If you update your implementation, save it to `.workspace/card_impl.py`.
 You may also modify .workspace/engine/ files if needed — but all previous cards' tests
 will be re-run, so engine changes must not break existing functionality.
 """

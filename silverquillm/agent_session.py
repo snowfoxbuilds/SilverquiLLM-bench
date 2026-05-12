@@ -238,6 +238,10 @@ class AgentSession:
         template_source = generate_template(self.card_spec)
         (workspace / "template.py").write_text(template_source)
 
+        # Also write as card_impl.py — the canonical implementation file.
+        # The agent is instructed to edit card_impl.py directly.
+        (workspace / "card_impl.py").write_text(template_source)
+
         # 5. rules_overview.md
         rules_src = repo_root / "benchmarks" / "sos" / "data" / "rules_overview.md"
         if rules_src.exists():
@@ -412,11 +416,12 @@ class AgentSession:
         if raw_log_path:
             append_raw_log(raw_log_path, self.card_name, "blind", 1, prompt, output)
 
-        # Look for implementation file produced by the agent
-        impl_path = workspace / "blind_impl.py"
-
-        # Only consider blind_impl.py if the agent actually created it.
-        # Do NOT copy the starter template — that would be a false positive.
+        # Look for implementation file produced by the agent.
+        # The agent is instructed to write to card_impl.py.
+        # Also check blind_impl.py as a fallback in case the agent uses the old name.
+        impl_path = workspace / "card_impl.py"
+        if not impl_path.exists():
+            impl_path = workspace / "blind_impl.py"
 
         if not impl_path.exists():
             return BlindResult(
@@ -501,10 +506,8 @@ class AgentSession:
         if test_utils_src.exists():
             shutil.copy2(test_utils_src, workspace / "test_utils.md")
 
-        # Copy blind impl as card_impl.py for the agent to work from
+        # card_impl.py already exists from the blind phase — the agent edits it in place.
         card_impl_path = workspace / "card_impl.py"
-        if blind_impl.exists():
-            shutil.copy2(blind_impl, card_impl_path)
 
         total_tokens = 0
         peak_context = 0
@@ -704,12 +707,13 @@ class AgentSession:
 
         elapsed = time.monotonic() - start
 
-        # Determine final paths
+        # Determine final paths — card_impl.py is the canonical output
         final_impl = None
-        if (workspace / "tested_impl.py").exists():
-            final_impl = workspace / "tested_impl.py"
-        elif card_impl_path.exists():
+        if card_impl_path.exists():
             final_impl = card_impl_path
+        elif (workspace / "tested_impl.py").exists():
+            # Fallback if agent used old name
+            final_impl = workspace / "tested_impl.py"
 
         final_tests = workspace / "tests.py" if (workspace / "tests.py").exists() else None
 

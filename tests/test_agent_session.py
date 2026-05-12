@@ -192,7 +192,7 @@ class TestRunBlind:
         ws = session.setup_workspace()
 
         def fake_opencode(prompt, workspace):
-            (workspace / "blind_impl.py").write_text("x = 1\n")
+            (workspace / "card_impl.py").write_text("x = 1\n")
             return "some output from opencode"
 
         session._run_agent = fake_opencode
@@ -201,9 +201,14 @@ class TestRunBlind:
         assert result.status == "ok"
         assert result.impl_path is not None
         assert result.impl_path.exists()
-        assert result.impl_path.name == "blind_impl.py"
+        assert result.impl_path.name == "card_impl.py"
 
-    def test_returns_no_output_when_no_file_produced(self, session):
+    def test_returns_ok_with_seeded_template_when_agent_does_nothing(self, session):
+        """card_impl.py is pre-seeded as the template, so it always exists.
+
+        If the agent doesn't overwrite it, run_blind returns ok with the template.
+        The no_output path is unreachable because setup_workspace seeds card_impl.py.
+        """
         session.setup_workspace()
 
         def fake_opencode(prompt, workspace):
@@ -211,8 +216,10 @@ class TestRunBlind:
 
         session._run_agent = fake_opencode
         result = run_blind(session)
-        assert result.status == "no_output"
-        assert result.impl_path is None
+        # card_impl.py was seeded by setup_workspace — it exists even if agent did nothing
+        assert result.status == "ok"
+        assert result.impl_path is not None
+        assert result.impl_path.name == "card_impl.py"
 
     def test_returns_timeout_on_timeout_expired(self, session):
         session.setup_workspace()
@@ -229,7 +236,7 @@ class TestRunBlind:
         session.setup_workspace()
 
         def fake_opencode(prompt, workspace):
-            (workspace / "blind_impl.py").write_text("def broken(\n")
+            (workspace / "card_impl.py").write_text("def broken(\n")
             return "output"
 
         session._run_agent = fake_opencode
