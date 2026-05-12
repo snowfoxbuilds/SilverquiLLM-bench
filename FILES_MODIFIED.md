@@ -48,3 +48,7 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `silverquillm/agent_session.py` — Rewrote `_snapshot_all_protected()` to walk entire repo tree (not just `_PROTECTED_DIRS`); `_check_violations()` uses allowlist via `_is_allowed_path()` helper with `_ALLOWED_DIRS` (engine/) and `_IGNORED_SUFFIXES` (.pyc/.pyo/.log)
+## Item 12: Fix test_utils.md import path (fixes Issue #11)
+
+### Implementation
+- `docs/test_utils.md` — Updated all import examples and prose from `tests.test_utils` to `test_utils`

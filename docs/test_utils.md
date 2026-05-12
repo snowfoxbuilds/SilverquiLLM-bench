@@ -1,6 +1,6 @@
 # Test Utilities API Reference
 
-Helper functions for writing card tests. Import from `tests.test_utils`.
+Helper functions for writing card tests. Import from `test_utils`.
 
 ## Functions
 
@@ -11,7 +11,7 @@ Helper functions for writing card tests. Import from `tests.test_utils`.
 Create a two-player game with `DeterministicPlayer` instances. Decks default to empty lists.
 
 ```python
-from tests.test_utils import create_game
+from test_utils import create_game
 game = create_game(player1_life=25)
 ```
 
@@ -25,7 +25,7 @@ Set zone contents and player state. Only zones explicitly provided are modified.
 - **mana** — `dict[ManaType, int]`.
 
 ```python
-from tests.test_utils import create_game, set_board_state
+from test_utils import create_game, set_board_state
 from engine.types import ManaType
 from cards.card_impl import Bear, BoltCard
 
@@ -41,7 +41,7 @@ set_board_state(game, 1, battlefield=[Bear()], life=15)
 Find a card in hand by name, cast it, and resolve. Sets sorcery-speed timing automatically.
 
 ```python
-from tests.test_utils import create_game, set_board_state, cast_spell
+from test_utils import create_game, set_board_state, cast_spell
 from engine.types import ManaType
 from cards.card_impl import HealingCard
 
@@ -57,7 +57,7 @@ cast_spell(game, 0, "HealingCard")
 Fast-forward to the specified phase/step without granting priority.
 
 ```python
-from tests.test_utils import create_game, advance_to_phase
+from test_utils import create_game, advance_to_phase
 from engine.types import Phase, Step
 
 game = create_game()
@@ -71,7 +71,7 @@ advance_to_phase(game, Phase.COMBAT, Step.DECLARE_ATTACKERS)
 Advance to combat and declare creatures as attackers by name from the active player's battlefield.
 
 ```python
-from tests.test_utils import create_game, set_board_state, declare_attackers
+from test_utils import create_game, set_board_state, declare_attackers
 from cards.card_impl import Bear
 
 game = create_game()
@@ -86,7 +86,7 @@ declare_attackers(game, ["Bear"])
 Assign blockers by name mapping: `{"attacker_name": ["blocker_name", ...]}`.
 
 ```python
-from tests.test_utils import create_game, set_board_state, declare_attackers, declare_blockers
+from test_utils import create_game, set_board_state, declare_attackers, declare_blockers
 from cards.card_impl import Bear, Wall
 
 game = create_game()
@@ -100,7 +100,7 @@ declare_blockers(game, {"Bear": ["Wall"]})
 
 ```python
 import pytest
-from tests.test_utils import create_game, set_board_state, cast_spell
+from test_utils import create_game, set_board_state, cast_spell
 from cards.card_impl import MyCard
 from engine.types import ManaType
 
@@ -115,5 +115,5 @@ class TestMyCard:
 ## Constraints
 
 - **Max 30 tests per card.**
-- Import helpers from `tests.test_utils`.
+- Import helpers from `test_utils`.
 - Import card implementations from `cards.card_impl`.

@@ -193,7 +193,7 @@ class EvalResult:
   - `silverquillm/agent_session.py` — rewrite `_check_violations()` with allowlist logic
   Testability: Unit test: agent writes `card_impl.py` in workspace → no violation. Agent modifies `engine/ward.py` → no violation. Agent modifies `tests/audited/sos/001/tests.py` → violation detected.
 
-- [ ] **Fix ****`test_utils.md`**** import path (fixes Issue #11)**
+- [x] **Fix `test_utils.md`**** import path (fixes Issue #11)**
   Detail: Agent-facing `test_utils.md` documentation says `from tests.test_utils import ...` but workspace has flat `test_utils.py` at the root. Agents waste a correction iteration discovering this. Update all import examples to `from test_utils import create_game, set_board_state, cast_spell, ...`.
 
   Files to change:
