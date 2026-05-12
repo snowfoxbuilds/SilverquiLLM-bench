@@ -1,0 +1,55 @@
+{
+  "card_id": "11",
+  "status": "ok",
+  "agent": "opencode",
+  "model": "gemma4",
+  "complexity_tier": "simple",
+  "implementation": {
+    "blind": {
+      "status": "ok",
+      "tokens": 3660,
+      "runtime_seconds": 225.33252427901607,
+      "peak_context": 3980,
+      "iterations": 0
+    },
+    "tested": {
+      "status": "ok",
+      "tokens": 6288,
+      "runtime_seconds": 521.8024157149484,
+      "peak_context": 6694,
+      "rules_lookups": 0,
+      "iterations": 1
+    }
+  },
+  "self_eval": {
+    "blind": {
+      "passed": 2,
+      "failed": 3,
+      "total": 5,
+      "errors": [
+        "FAILED ../../../tmp/eval_thhzcccx/test_card.py::TestEagerGlyphmage::test_etb_creates_token",
+        "FAILED ../../../tmp/eval_thhzcccx/test_card.py::TestEagerGlyphmage::test_etb_controller",
+        "FAILED ../../../tmp/eval_thhzcccx/test_card.py::TestEagerGlyphmage::test_multiple_etbs",
+        "FAILED ../../../tmp/eval_mfh0moyc/test_card.py::TestEagerGlyphmage::test_etb_creates_token",
+        "FAILED ../../../tmp/eval_mfh0moyc/test_card.py::TestEagerGlyphmage::test_etb_controller",
+        "FAILED ../../../tmp/eval_mfh0moyc/test_card.py::TestEagerGlyphmage::test_multiple_etbs"
+      ]
+    },
+    "tested": {
+      "passed": 2,
+      "failed": 3,
+      "total": 5,
+      "errors": []
+    },
+    "errors": [
+      "FAILED ../../../tmp/eval_thhzcccx/test_card.py::TestEagerGlyphmage::test_etb_creates_token",
+      "FAILED ../../../tmp/eval_thhzcccx/test_card.py::TestEagerGlyphmage::test_etb_controller",
+      "FAILED ../../../tmp/eval_thhzcccx/test_card.py::TestEagerGlyphmage::test_multiple_etbs",
+      "FAILED ../../../tmp/eval_mfh0moyc/test_card.py::TestEagerGlyphmage::test_etb_creates_token",
+      "FAILED ../../../tmp/eval_mfh0moyc/test_card.py::TestEagerGlyphmage::test_etb_controller",
+      "FAILED ../../../tmp/eval_mfh0moyc/test_card.py::TestEagerGlyphmage::test_multiple_etbs"
+    ]
+  },
+  "cross_eval": [],
+  "audited_eval": {}
+}

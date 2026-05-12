@@ -1,0 +1,41 @@
+{
+  "card_id": "2",
+  "status": "ok",
+  "agent": "opencode",
+  "model": "gemma4",
+  "complexity_tier": "complex",
+  "implementation": {
+    "blind": {
+      "status": "ok",
+      "tokens": 4694,
+      "runtime_seconds": 250.12522501591593,
+      "peak_context": 5019,
+      "iterations": 0
+    },
+    "tested": {
+      "status": "ok",
+      "tokens": 3495,
+      "runtime_seconds": 485.5915442550322,
+      "peak_context": 3902,
+      "rules_lookups": 0,
+      "iterations": 1
+    }
+  },
+  "self_eval": {
+    "blind": {
+      "passed": 6,
+      "failed": 0,
+      "total": 6,
+      "errors": []
+    },
+    "tested": {
+      "passed": 6,
+      "failed": 0,
+      "total": 6,
+      "errors": []
+    },
+    "errors": []
+  },
+  "cross_eval": [],
+  "audited_eval": {}
+}

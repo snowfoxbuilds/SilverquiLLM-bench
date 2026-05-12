@@ -1,0 +1,33 @@
+Binary file b/engine/__pycache__/protection.cpython-312.pyc added
+Binary file b/engine/__pycache__/state_based_actions.cpython-312.pyc added
+Binary files a/engine/__pycache__/zones.cpython-312.pyc and b/engine/__pycache__/zones.cpython-312.pyc differ
+--- a/engine/zones.py
++++ b/engine/zones.py
+@@ -307,19 +307,19 @@
+ 
+     # --- Entering battlefield hooks ---
+     if entering_battlefield:
+-        # Fire the ENTERS_BATTLEFIELD event *before* registering the card's
+-        # own triggers so that a permanent's ETB trigger does not
+-        # retroactively trigger off its own entry.  Other already-registered
+-        # triggers that watch for ENTERS_BATTLEFIELD will still fire.
++        if hasattr(card, "register_triggers"):
++            card.register_triggers(game)
++        if hasattr(card, "register_replacement_effects"):
++            card.register_replacement_effects(game)
++
++        # Fire the ENTERS_BATTLEFIELD event *after* registering the card's
++        # own triggers so that a permanent's ETB trigger can fire off its
++        # own entry.
+         game.trigger_manager.fire_event(
+             game,
+             EventType.ENTERS_BATTLEFIELD,
+             {"permanent": card, "controller": controller if controller is not None else owner},
+         )
+-        if hasattr(card, "register_triggers"):
+-            card.register_triggers(game)
+-        if hasattr(card, "register_replacement_effects"):
+-            card.register_replacement_effects(game)
+ 
+ 
+ # Reverse mapping: Zone enum → destination string for replacement events.

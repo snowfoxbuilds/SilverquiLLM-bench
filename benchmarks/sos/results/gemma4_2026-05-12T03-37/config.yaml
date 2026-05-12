@@ -1,0 +1,15 @@
+agent:
+  adapter: opencode
+  disable_web_search: true
+  max_test_rounds: 2
+  timeout_per_card: 300
+card_specs_dir: benchmarks/sos/cards
+engine_docs_path: docs/engine_api.md
+max_context: 200000
+model_name: gemma4
+model_provider: llamacpp
+name: SOS Benchmark Run
+output_dir: benchmarks/sos/results
+set_code: SOS
+temperature: 0.0
+template_dir: ''
