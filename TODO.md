@@ -209,7 +209,7 @@ class EvalResult:
   - `silverquillm/template_gen.py` — add `from engine.game_state import GameState` to the generated template's import block
   Testability: Generate a template for any card → verify `GameState` is in the imports.
 
-- [ ] **Simplify postmortem schema**
+- [x] **Simplify postmortem schema**
   Detail: The current `postmortem.jsonl` events use `round` and `phase` fields from the old multi-round model. Update to the simplified schema:
 
   - Remove `round` and `phase` fields from all events

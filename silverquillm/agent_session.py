@@ -44,6 +44,9 @@ __all__ = [
     "BlindResult",
     "TestInformedResult",
     "_append_postmortem",
+    "_append_file_written",
+    "_append_eval_result",
+    "_append_regression_check",
     "_generate_agent_thoughts",
     "append_raw_log",
     "init_run_engine",
@@ -358,10 +361,18 @@ class AgentSession:
         if not self._workspace or not self._workspace.exists():
             return
         card_results_dir.mkdir(parents=True, exist_ok=True)
+        postmortem_path = _get_postmortem_path(self.run_dir, self.card_name)
         for filename in ("card_impl.py", "tests.py"):
             src = self._workspace / filename
             if src.exists():
                 shutil.copy2(src, card_results_dir / filename)
+                # Emit structured file_written event
+                if postmortem_path:
+                    _append_file_written(
+                        postmortem_path,
+                        path=str(card_results_dir / filename),
+                        size_bytes=src.stat().st_size,
+                    )
 
     # ------------------------------------------------------------------
     # Cleanup
@@ -429,7 +440,7 @@ class AgentSession:
                     status="error",
                 )
             if raw_log_path:
-                append_raw_log(raw_log_path, self.card_name, self.config.mode, 1, "(strategy-level)", "TimeoutExpired")
+                append_raw_log(raw_log_path, self.card_name, self.config.mode, "(strategy-level)", "TimeoutExpired")
             return CardRunResult(
                 status=CardRunStatus.timeout,
                 runtime_ms=int(elapsed * 1000),
@@ -451,7 +462,7 @@ class AgentSession:
                     status="error",
                 )
             if raw_log_path:
-                append_raw_log(raw_log_path, self.card_name, self.config.mode, 1, "(strategy-level)", response_text)
+                append_raw_log(raw_log_path, self.card_name, self.config.mode, "(strategy-level)", response_text)
             raise
 
         elapsed = time.monotonic() - start
@@ -480,7 +491,7 @@ class AgentSession:
             )
         if raw_log_path:
             append_raw_log(
-                raw_log_path, self.card_name, self.config.mode, 1,
+                raw_log_path, self.card_name, self.config.mode,
                 "(strategy-level)", f"status={result.status.value}",
             )
 
@@ -597,6 +608,87 @@ def _append_postmortem(
         f.write(json.dumps(entry) + "\n")
 
 
+def _append_file_written(
+    postmortem_path: Path,
+    path: str,
+    size_bytes: int,
+) -> None:
+    """Append a ``file_written`` event to the postmortem log.
+
+    Replaces the old ``file_diff`` event type.  The harness only knows which
+    files exist after the agent run, not the diffs themselves.
+
+    Parameters
+    ----------
+    postmortem_path:
+        Path to the ``postmortem.jsonl`` file.
+    path:
+        Relative path of the file that was written by the agent.
+    size_bytes:
+        Size of the written file in bytes.
+    """
+    entry: dict[str, Any] = {
+        "event": "file_written",
+        "path": path,
+        "size_bytes": size_bytes,
+    }
+    postmortem_path.parent.mkdir(parents=True, exist_ok=True)
+    with postmortem_path.open("a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def _append_eval_result(
+    postmortem_path: Path,
+    eval_type: str,
+    passed: int,
+    failed: int,
+) -> None:
+    """Append an ``eval_result`` event to the postmortem log.
+
+    Parameters
+    ----------
+    postmortem_path:
+        Path to the ``postmortem.jsonl`` file.
+    eval_type:
+        ``"self"`` or ``"audited"``.
+    passed:
+        Number of tests that passed.
+    failed:
+        Number of tests that failed.
+    """
+    entry: dict[str, Any] = {
+        "event": "eval_result",
+        "eval_type": eval_type,
+        "passed": passed,
+        "failed": failed,
+    }
+    postmortem_path.parent.mkdir(parents=True, exist_ok=True)
+    with postmortem_path.open("a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def _append_regression_check(
+    postmortem_path: Path,
+    **kwargs: Any,
+) -> None:
+    """Append a ``regression_check`` event to the postmortem log.
+
+    Reserved for future use.  Any keyword arguments are included as
+    additional fields in the event.
+
+    Parameters
+    ----------
+    postmortem_path:
+        Path to the ``postmortem.jsonl`` file.
+    **kwargs:
+        Additional fields to include in the event payload.
+    """
+    entry: dict[str, Any] = {"event": "regression_check", **kwargs}
+    postmortem_path.parent.mkdir(parents=True, exist_ok=True)
+    with postmortem_path.open("a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
 def _get_postmortem_path(run_dir: Path | None, card_name: str) -> Path | None:
     """Return the postmortem.jsonl path, or None if run_dir is not set."""
     if not run_dir:
@@ -614,8 +706,7 @@ def _get_raw_log_path(run_dir: Path | None) -> Path | None:
 def append_raw_log(
     run_log_path: Path,
     card_name: str,
-    phase: str,
-    round_num: int,
+    mode: str,
     prompt: str,
     response: str,
 ) -> None:
@@ -629,8 +720,7 @@ def append_raw_log(
             "%Y-%m-%dT%H:%M:%SZ"
         ),
         "card_name": card_name,
-        "phase": phase,
-        "round": round_num,
+        "mode": mode,
         "prompt": prompt,
         "response": response,
     }

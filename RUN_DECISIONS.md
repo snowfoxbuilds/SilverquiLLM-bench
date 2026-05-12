@@ -31,3 +31,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Decision**: Expanded snapshot to walk entire repo tree for true allowlist semantics. Fixed flaky mtime test by using explicit os.utime() bumps.
 - **Reasoning**: Allowlist means "deny by default" — must snapshot everything to detect any unauthorized change.
 - **Impact**: silverquillm/agent_session.py, tests/test_allowlist_contamination.py.
+
+## Reviewer intervention: Item 14 — Simplify postmortem schema
+- **Reviewer comment (strict #1)**: Event helpers `file_written`, `eval_result`, `regression_check` defined but never called from production code — real runs would never produce these events.
+- **Reviewer comment (strict #2)**: Tests only call helpers directly, missing integration coverage for actual call sites.
+- **Coordinator decision**: Accept both. Implementer wired helpers into harvest_results(), post_eval, and CLI regression loop. Tester added 11 integration tests.
+- **Reasoning**: Helpers without call sites are dead code; the TODO clearly requires production use. Integration tests ensure wiring stays intact.
+- **Impact**: agent_session.py, post_eval.py, cli.py, tests/test_postmortem_schema_v2.py

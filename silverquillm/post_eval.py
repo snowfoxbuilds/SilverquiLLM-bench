@@ -16,6 +16,7 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from silverquillm.agent_session import _append_eval_result
 from silverquillm.evaluator import run_tests
 
 logger = logging.getLogger(__name__)
@@ -117,6 +118,9 @@ def run_post_eval(
             card_result.self_eval_failed = failed
             card_result.self_eval_total = total
             card_result.errors.extend(errors)
+            # Emit structured eval_result event
+            pm = card_path / "postmortem.jsonl"
+            _append_eval_result(pm, "self", passed=passed, failed=failed)
         elif mode == "impl_test":
             if not impl_path.exists():
                 card_result.errors.append(f"Missing {impl_path}")
@@ -128,6 +132,14 @@ def run_post_eval(
             _run_audited_for_card(
                 card_result, impl_path, card_id, card_path, audited_dir, effective_engine,
             )
+            # Emit structured eval_result event for audited eval
+            if card_result.audited_total > 0:
+                pm = card_path / "postmortem.jsonl"
+                _append_eval_result(
+                    pm, "audited",
+                    passed=card_result.audited_passed,
+                    failed=card_result.audited_failed,
+                )
 
         # ----- Persist to result.json -----
         _merge_result_json(card_path, card_result, mode=mode)

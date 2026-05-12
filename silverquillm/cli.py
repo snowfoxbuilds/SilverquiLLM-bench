@@ -19,6 +19,7 @@ from silverquillm.agent_session import (
     AgentSession,
     BlindResult,
     TestInformedResult,
+    _append_regression_check,
     commit_engine_changes,
     compute_engine_diff,
     init_run_engine,
@@ -294,6 +295,14 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
                 regression_result = run_regressions(
                     completed_cards,
                     run_engine_dir=run_engine_dir,
+                )
+                # Emit structured regression_check event
+                pm_path = run_dir / "cards" / card_name / "postmortem.jsonl"
+                _append_regression_check(
+                    pm_path,
+                    status="fail" if regression_result.has_failures else "pass",
+                    cards_failed=regression_result.cards_failed,
+                    total_cards=regression_result.total_cards,
                 )
                 if regression_result.has_failures:
                     click.echo(

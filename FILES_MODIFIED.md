@@ -57,3 +57,14 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `silverquillm/template_gen.py` — Added `from engine.game_state import GameState` to generated template import block
+
+## Item 14: Simplify postmortem schema
+
+### Tests
+- `tests/test_postmortem_schema_v2.py` — 26 tests for structured event helpers and raw log schema
+- `tests/test_postmortem_logging.py` — Existing postmortem JSONL logging tests (18 tests, all passing)
+
+### Implementation
+- `silverquillm/agent_session.py` — Added _append_file_written, _append_eval_result, _append_regression_check event helpers; removed phase/round from append_raw_log; wired _append_file_written into harvest_results()
+- `silverquillm/post_eval.py` — Wired _append_eval_result into self-eval and audited-eval paths in run_post_eval()
+- `silverquillm/cli.py` — Wired _append_regression_check into regression loop after run_regressions()
