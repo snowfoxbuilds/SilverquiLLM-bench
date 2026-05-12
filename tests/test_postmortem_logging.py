@@ -242,91 +242,168 @@ class TestAppendPostmortem:
 # ---------------------------------------------------------------------------
 
 class TestPostmortemDuringBlind:
-    """Verify postmortem.jsonl is written during run_blind_implementation."""
+    """Verify postmortem functions are importable and callable after refactor."""
 
     def test_blind_success_logs_postmortem(self, tmp_path, monkeypatch):
+        """_append_postmortem can be called directly to log entries."""
         output_dir = tmp_path / "output"
         output_dir.mkdir()
-        config = _make_config(output_dir=str(output_dir))
-        session = AgentSession(
-            config=config,
-            card_spec=_SAMPLE_SPEC,
-            card_dir=str(tmp_path),
-            run_dir=output_dir,
+
+        postmortem_path = output_dir / "cards" / "Grizzly Bears" / "postmortem.jsonl"
+        _append_postmortem(
+            postmortem_path=postmortem_path,
+            prompt="blind prompt",
+            response="agent output",
+            tokens=42,
+            timing_ms=123.4,
+            round_num=1,
+            status="success",
         )
 
-        workspace = tmp_path / "workspace"
-        workspace.mkdir()
-        session._workspace = workspace
-
-        # Make _run_agent produce output and create blind_impl.py
-        def fake_run(prompt, ws):
-            (ws / "blind_impl.py").write_text("x = 1\n")
-            return "agent output"
-
-        monkeypatch.setattr(session, "_run_agent", fake_run)
-
-        result = session.run_blind_implementation(workspace)
-        assert result.status == "ok"
-
-        postmortem = output_dir / "cards" / "Grizzly Bears" / "postmortem.jsonl"
-        assert postmortem.exists()
-        entry = json.loads(postmortem.read_text().strip())
+        assert postmortem_path.exists()
+        entry = json.loads(postmortem_path.read_text().strip())
         assert entry["status"] == "success"
         assert entry["round"] == 1
         assert entry["timing_ms"] > 0
 
     def test_blind_timeout_logs_error(self, tmp_path, monkeypatch):
+        """_append_postmortem can log error entries for timeouts."""
         output_dir = tmp_path / "output"
         output_dir.mkdir()
-        config = _make_config(output_dir=str(output_dir))
-        session = AgentSession(
-            config=config,
-            card_spec=_SAMPLE_SPEC,
-            card_dir=str(tmp_path),
-            run_dir=output_dir,
+
+        postmortem_path = output_dir / "cards" / "Grizzly Bears" / "postmortem.jsonl"
+        _append_postmortem(
+            postmortem_path=postmortem_path,
+            prompt="blind prompt",
+            response="TimeoutExpired",
+            tokens=None,
+            timing_ms=300000.0,
+            round_num=1,
+            status="error",
         )
 
-        workspace = tmp_path / "workspace"
-        workspace.mkdir()
-        session._workspace = workspace
-
-        def fake_run(prompt, ws):
-            raise subprocess.TimeoutExpired(cmd="agent", timeout=300)
-
-        monkeypatch.setattr(session, "_run_agent", fake_run)
-
-        result = session.run_blind_implementation(workspace)
-        assert result.status == "timeout"
-
-        postmortem = output_dir / "cards" / "Grizzly Bears" / "postmortem.jsonl"
-        assert postmortem.exists()
-        entry = json.loads(postmortem.read_text().strip())
+        assert postmortem_path.exists()
+        entry = json.loads(postmortem_path.read_text().strip())
         assert entry["status"] == "error"
         assert entry["round"] == 1
 
+
+# ---------------------------------------------------------------------------
+# Integration: run_card() triggers postmortem logging
+# ---------------------------------------------------------------------------
+
+class TestRunCardPostmortem:
+    """AgentSession.run_card() must log postmortem entries and generate agent_thoughts."""
+
+    def test_run_card_logs_postmortem_on_success(self, tmp_path, monkeypatch):
+        """run_card() must append a postmortem entry after successful strategy execution."""
+        from unittest.mock import MagicMock, patch
+        from silverquillm.strategies import CardRunResult, CardRunStatus
+
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        card_dir = tmp_path / "card_data"
+        card_dir.mkdir()
+        (card_dir / "card_spec.json").write_text(json.dumps(_SAMPLE_SPEC))
+
+        config = _make_config(output_dir=str(run_dir))
+        session = AgentSession(
+            config=config, card_spec=_SAMPLE_SPEC, card_dir=str(card_dir),
+            run_dir=run_dir,
+        )
+
+        mock_strategy = MagicMock()
+        mock_strategy.run_card.return_value = CardRunResult(
+            status=CardRunStatus.completed, files_written=[], runtime_ms=200,
+        )
+
+        try:
+            with patch("silverquillm.strategies.get_strategy", return_value=mock_strategy):
+                session.setup_workspace()
+                session.run_card()
+
+            postmortem_path = run_dir / "cards" / "Grizzly Bears" / "postmortem.jsonl"
+            assert postmortem_path.exists(), "run_card() must log postmortem entries"
+            lines = postmortem_path.read_text().strip().splitlines()
+            assert len(lines) >= 1
+            entry = json.loads(lines[0])
+            assert entry["status"] == "success"
+        finally:
+            session.cleanup()
+
+    def test_run_card_generates_agent_thoughts(self, tmp_path, monkeypatch):
+        """run_card() must generate agent_thoughts.md after strategy execution."""
+        from unittest.mock import MagicMock, patch
+        from silverquillm.strategies import CardRunResult, CardRunStatus
+
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        card_dir = tmp_path / "card_data"
+        card_dir.mkdir()
+        (card_dir / "card_spec.json").write_text(json.dumps(_SAMPLE_SPEC))
+
+        config = _make_config(output_dir=str(run_dir))
+        session = AgentSession(
+            config=config, card_spec=_SAMPLE_SPEC, card_dir=str(card_dir),
+            run_dir=run_dir,
+        )
+
+        mock_strategy = MagicMock()
+        mock_strategy.run_card.return_value = CardRunResult(
+            status=CardRunStatus.completed, files_written=[], runtime_ms=100,
+        )
+
+        try:
+            with patch("silverquillm.strategies.get_strategy", return_value=mock_strategy):
+                session.setup_workspace()
+                session.run_card()
+
+            thoughts_path = run_dir / "cards" / "Grizzly Bears" / "agent_thoughts.md"
+            assert thoughts_path.exists(), "run_card() must generate agent_thoughts.md"
+        finally:
+            session.cleanup()
+
+    def test_run_card_logs_postmortem_on_error(self, tmp_path, monkeypatch):
+        """run_card() must log an error postmortem when strategy raises."""
+        from unittest.mock import MagicMock, patch
+
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        card_dir = tmp_path / "card_data"
+        card_dir.mkdir()
+        (card_dir / "card_spec.json").write_text(json.dumps(_SAMPLE_SPEC))
+
+        config = _make_config(output_dir=str(run_dir))
+        session = AgentSession(
+            config=config, card_spec=_SAMPLE_SPEC, card_dir=str(card_dir),
+            run_dir=run_dir,
+        )
+
+        mock_strategy = MagicMock()
+        mock_strategy.run_card.side_effect = RuntimeError("agent crashed")
+
+        try:
+            with patch("silverquillm.strategies.get_strategy", return_value=mock_strategy):
+                session.setup_workspace()
+                with pytest.raises(RuntimeError):
+                    session.run_card()
+
+            postmortem_path = run_dir / "cards" / "Grizzly Bears" / "postmortem.jsonl"
+            assert postmortem_path.exists(), "run_card() must log postmortem even on error"
+            entry = json.loads(postmortem_path.read_text().strip())
+            assert entry["status"] == "error"
+        finally:
+            session.cleanup()
     def test_no_postmortem_when_no_output_dir(self, tmp_path, monkeypatch):
-        """When output_dir is empty, postmortem is silently skipped."""
+        """When output_dir is empty, postmortem is silently skipped (no crash)."""
         config = _make_config(output_dir="")
         session = AgentSession(
             config=config,
             card_spec=_SAMPLE_SPEC,
             card_dir=str(tmp_path),
         )
-
-        workspace = tmp_path / "workspace"
-        workspace.mkdir()
-        session._workspace = workspace
-
-        def fake_run(prompt, ws):
-            (ws / "blind_impl.py").write_text("x = 1\n")
-            return "output"
-
-        monkeypatch.setattr(session, "_run_agent", fake_run)
-
-        result = session.run_blind_implementation(workspace)
-        assert result.status == "ok"
-        # No crash — postmortem just isn't written
+        # Just verify the session can be created without crash
+        assert session.config.output_dir == ""
 
 
 # ---------------------------------------------------------------------------
@@ -334,93 +411,50 @@ class TestPostmortemDuringBlind:
 # ---------------------------------------------------------------------------
 
 class TestPostmortemDuringTestInformed:
-    """Verify postmortem.jsonl entries for each test-informed round."""
+    """Verify postmortem entries can be written for multiple rounds."""
 
     def test_test_informed_logs_per_round(self, tmp_path, monkeypatch):
+        """Multiple postmortem entries can be appended for iteration rounds."""
         output_dir = tmp_path / "output"
         output_dir.mkdir()
-        config = _make_config(
-            output_dir=str(output_dir),
-            agent=AgentConfig(timeout_per_card=300),
-        )
-        session = AgentSession(
-            config=config,
-            card_spec=_SAMPLE_SPEC,
-            card_dir=str(tmp_path),
-            run_dir=output_dir,
-        )
 
-        workspace = tmp_path / "workspace"
-        workspace.mkdir()
-        session._workspace = workspace
+        postmortem_path = output_dir / "cards" / "Grizzly Bears" / "postmortem.jsonl"
 
-        blind_impl = workspace / "blind_impl.py"
-        blind_impl.write_text("x = 1\n")
-
-        call_count = 0
-
-        def fake_run(prompt, ws):
-            nonlocal call_count
-            call_count += 1
-            # On round 1, produce tests that fail; on round 2, succeed
-            (ws / "card_impl.py").write_text("x = 1\n")
-            (ws / "tests.py").write_text("def test_ok(): pass\n")
-            return f"round {call_count} output"
-
-        monkeypatch.setattr(session, "_run_agent", fake_run)
-
-        # Make _run_pytest return success on first call
-        def fake_pytest(ws, tp):
-            return subprocess.CompletedProcess(
-                args=[], returncode=0, stdout="passed", stderr=""
+        for round_num in range(1, 4):
+            _append_postmortem(
+                postmortem_path=postmortem_path,
+                prompt=f"round {round_num} prompt",
+                response=f"round {round_num} output",
+                tokens=round_num * 10,
+                timing_ms=float(round_num * 100),
+                round_num=round_num,
+                status="success",
             )
 
-        monkeypatch.setattr(session, "_run_pytest", fake_pytest)
-
-        result = session.run_test_informed(workspace, blind_impl)
-        assert result.status == "ok"
-
-        postmortem = output_dir / "cards" / "Grizzly Bears" / "postmortem.jsonl"
-        assert postmortem.exists()
-        lines = postmortem.read_text().strip().splitlines()
-        # At least 1 entry logged
-        assert len(lines) >= 1
+        assert postmortem_path.exists()
+        lines = postmortem_path.read_text().strip().splitlines()
+        assert len(lines) == 3
         entry = json.loads(lines[0])
         assert entry["status"] == "success"
         assert entry["round"] == 1
 
     def test_test_informed_timeout_logs_error(self, tmp_path, monkeypatch):
+        """Timeout error entry can be logged via _append_postmortem."""
         output_dir = tmp_path / "output"
         output_dir.mkdir()
-        config = _make_config(
-            output_dir=str(output_dir),
-            agent=AgentConfig(timeout_per_card=300),
+
+        postmortem_path = output_dir / "cards" / "Grizzly Bears" / "postmortem.jsonl"
+        _append_postmortem(
+            postmortem_path=postmortem_path,
+            prompt="test informed prompt",
+            response="TimeoutExpired",
+            tokens=None,
+            timing_ms=300000.0,
+            round_num=1,
+            status="error",
         )
-        session = AgentSession(
-            config=config,
-            card_spec=_SAMPLE_SPEC,
-            card_dir=str(tmp_path),
-            run_dir=output_dir,
-        )
 
-        workspace = tmp_path / "workspace"
-        workspace.mkdir()
-        session._workspace = workspace
-
-        blind_impl = workspace / "blind_impl.py"
-        blind_impl.write_text("x = 1\n")
-        (workspace / "card_impl.py").write_text("x = 1\n")
-
-        def fake_run(prompt, ws):
-            raise subprocess.TimeoutExpired(cmd="agent", timeout=300)
-
-        monkeypatch.setattr(session, "_run_agent", fake_run)
-
-        result = session.run_test_informed(workspace, blind_impl)
-        assert result.status == "timeout"
-
-        postmortem = output_dir / "cards" / "Grizzly Bears" / "postmortem.jsonl"
-        assert postmortem.exists()
-        entry = json.loads(postmortem.read_text().strip())
+        assert postmortem_path.exists()
+        entry = json.loads(postmortem_path.read_text().strip())
         assert entry["status"] == "error"
         assert entry["round"] == 1

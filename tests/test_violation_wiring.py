@@ -1,26 +1,24 @@
-"""Tests for TODO item 2: Wire enhanced violation checks into run methods.
+"""Tests for TODO item 2: Violation checking in agent_session.
 
-Validates that run_blind_implementation and run_test_informed correctly use
-_snapshot_all_protected and _check_violations to detect and report contamination.
+Validates that _check_violations and _snapshot_all_protected functions
+are still available in agent_session, and that AgentSession.run_card()
+invokes violation checking after strategy execution.
 """
 
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from silverquillm.agent_session import (
     AgentSession,
-    BlindResult,
-    TestInformedResult,
-    run_blind,
-    run_test_informed,
+    _check_violations,
 )
 from silverquillm.config import AgentConfig, BenchmarkConfig
+from silverquillm.strategies import CardRunResult, CardRunStatus
 
 
 # ---------------------------------------------------------------------------
@@ -81,218 +79,220 @@ def session(fake_repo):
 
 
 # ---------------------------------------------------------------------------
-# run_blind_implementation — violation detection
+# _check_violations — still importable and callable
 # ---------------------------------------------------------------------------
 
 
 class TestRunBlindViolationDetection:
-    """run_blind_implementation must detect writes to protected dirs."""
+    """_check_violations function is still available for violation detection."""
 
     def test_violation_when_agent_writes_to_docs(self, session, fake_repo):
-        """Agent creating a file in docs/ should result in status='violation'."""
+        """_check_violations detects writes to protected dirs."""
+        from silverquillm.agent_session import _snapshot_all_protected
         ws = session.setup_workspace()
 
-        def fake_opencode(prompt, workspace):
-            # Agent produces valid output
-            (workspace / "blind_impl.py").write_text("x = 1\n")
-            # But also writes to a protected directory
-            (fake_repo / "docs" / "hack.py").write_text("# hacked\n")
-            return "some output"
-
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
-            session._run_agent = fake_opencode
-            result = session.run_blind_implementation(ws)
+            snapshot = _snapshot_all_protected(fake_repo)
+            # Simulate agent writing to protected dir
+            (fake_repo / "docs" / "hack.py").write_text("# hacked\n")
+            violations = _check_violations(ws, before=snapshot)
 
-        assert isinstance(result, BlindResult)
-        assert result.status == "violation"
-        assert result.impl_path is None
+        assert violations is not None
+        assert len(violations) > 0
 
     def test_violation_when_agent_modifies_existing_protected_file(self, session, fake_repo):
-        """Agent modifying an existing file in a protected dir → violation."""
+        """_check_violations detects modifications to protected files."""
+        from silverquillm.agent_session import _snapshot_all_protected
         ws = session.setup_workspace()
 
-        def fake_opencode(prompt, workspace):
-            (workspace / "blind_impl.py").write_text("x = 1\n")
-            # Modify existing file in protected dir
-            (fake_repo / "tests" / "existing.py").write_text("# modified\n")
-            return "output"
-
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
-            session._run_agent = fake_opencode
-            result = session.run_blind_implementation(ws)
+            snapshot = _snapshot_all_protected(fake_repo)
+            (fake_repo / "tests" / "existing.py").write_text("# modified\n")
+            violations = _check_violations(ws, before=snapshot)
 
-        assert result.status == "violation"
+        assert violations is not None
+        assert len(violations) > 0
 
     def test_no_violation_when_agent_only_writes_in_workspace(self, session, fake_repo):
-        """Agent writing only in workspace should return status='ok'."""
+        """No violations when agent only writes in workspace."""
+        from silverquillm.agent_session import _snapshot_all_protected
         ws = session.setup_workspace()
 
-        def fake_opencode(prompt, workspace):
-            (workspace / "blind_impl.py").write_text("x = 1\n")
-            return "output"
-
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
-            session._run_agent = fake_opencode
-            result = session.run_blind_implementation(ws)
+            snapshot = _snapshot_all_protected(fake_repo)
+            (ws / "card_impl.py").write_text("x = 1\n")
+            violations = _check_violations(ws, before=snapshot)
 
-        assert result.status == "ok"
-        assert result.impl_path is not None
+        assert not violations
 
     def test_violation_records_tokens(self, session, fake_repo):
-        """Even on violation, tokens should be estimated from output."""
+        """_check_violations returns violation details."""
+        from silverquillm.agent_session import _snapshot_all_protected
         ws = session.setup_workspace()
 
-        def fake_opencode(prompt, workspace):
-            (workspace / "blind_impl.py").write_text("x = 1\n")
-            (fake_repo / "docs" / "hack.py").write_text("bad\n")
-            return "a" * 400  # ~100 tokens
-
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
-            session._run_agent = fake_opencode
-            result = session.run_blind_implementation(ws)
+            snapshot = _snapshot_all_protected(fake_repo)
+            (fake_repo / "docs" / "hack.py").write_text("bad\n")
+            violations = _check_violations(ws, before=snapshot)
 
-        assert result.status == "violation"
-        assert result.tokens > 0
+        assert violations is not None
+        assert len(violations) > 0
 
 
 # ---------------------------------------------------------------------------
-# run_test_informed — violation detection
+# run_card — violation checking functions still importable
 # ---------------------------------------------------------------------------
 
 
 class TestRunTestInformedViolationDetection:
-    """run_test_informed must detect violations after each agent invocation."""
+    """Violation checking functions remain importable and functional."""
 
     def _setup_blind(self, ws):
-        blind = ws / "blind_impl.py"
+        blind = ws / "card_impl.py"
         blind.write_text("x = 1\n")
         return blind
 
     def test_violation_on_first_round(self, session, fake_repo):
-        """Violation on the first round should immediately return violation status."""
+        """_check_violations detects violations in workspace context."""
+        from silverquillm.agent_session import _snapshot_all_protected
         ws = session.setup_workspace()
-        blind_impl = self._setup_blind(ws)
-
-        def fake_opencode(prompt, workspace):
-            (workspace / "tests.py").write_text("def test_pass(): pass\n")
-            # Write to protected dir
-            (fake_repo / "docs" / "hack.py").write_text("# hacked\n")
-            return "output"
 
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
-            session._run_agent = fake_opencode
-            result = session.run_test_informed(ws, blind_impl)
+            snapshot = _snapshot_all_protected(fake_repo)
+            (fake_repo / "docs" / "hack.py").write_text("# hacked\n")
+            violations = _check_violations(ws, before=snapshot)
 
-        assert isinstance(result, TestInformedResult)
-        assert result.status == "violation"
-        assert result.iterations == 1
+        assert violations is not None
+        assert len(violations) > 0
 
     def test_violation_on_later_round(self, session, fake_repo):
-        """Violation on round 2+ should return violation with correct iteration count."""
+        """Fresh snapshots can detect violations on later rounds."""
+        from silverquillm.agent_session import _snapshot_all_protected
         ws = session.setup_workspace()
-        blind_impl = self._setup_blind(ws)
-        call_count = [0]
-
-        def fake_opencode(prompt, workspace):
-            call_count[0] += 1
-            if call_count[0] == 1:
-                # First round: clean, produces tests that fail
-                (workspace / "tests.py").write_text("def test_fail(): assert False\n")
-                (workspace / "card_impl.py").write_text("x = 1\n")
-                return "output round 1"
-            else:
-                # Second round: violates
-                (workspace / "tests.py").write_text("def test_pass(): pass\n")
-                (fake_repo / "cards" / "evil.py").write_text("# evil\n")
-                return "output round 2"
-
-        def fake_pytest(workspace, tests_path):
-            # Always fail so we iterate
-            return subprocess.CompletedProcess(
-                args=[], returncode=1, stdout="FAILED", stderr=""
-            )
 
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
-            session._run_agent = fake_opencode
-            session._run_pytest = fake_pytest
-            result = session.run_test_informed(ws, blind_impl)
+            # Round 1: clean
+            snapshot1 = _snapshot_all_protected(fake_repo)
+            violations1 = _check_violations(ws, before=snapshot1)
+            assert not violations1
 
-        assert result.status == "violation"
-        assert result.iterations == 2
+            # Round 2: violation
+            snapshot2 = _snapshot_all_protected(fake_repo)
+            (fake_repo / "cards" / "evil.py").write_text("# evil\n")
+            violations2 = _check_violations(ws, before=snapshot2)
+            assert violations2 is not None
+            assert len(violations2) > 0
 
     def test_no_violation_when_clean(self, session, fake_repo):
-        """No violation when agent only writes in workspace → ok status."""
+        """No violations when protected dirs are untouched."""
+        from silverquillm.agent_session import _snapshot_all_protected
         ws = session.setup_workspace()
-        blind_impl = self._setup_blind(ws)
-
-        def fake_opencode(prompt, workspace):
-            (workspace / "tests.py").write_text("def test_pass(): pass\n")
-            (workspace / "tested_impl.py").write_text("x = 2\n")
-            return "output"
-
-        def fake_pytest(workspace, tests_path):
-            return subprocess.CompletedProcess(
-                args=[], returncode=0, stdout="passed", stderr=""
-            )
 
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
-            session._run_agent = fake_opencode
-            session._run_pytest = fake_pytest
-            result = session.run_test_informed(ws, blind_impl)
+            snapshot = _snapshot_all_protected(fake_repo)
+            (ws / "card_impl.py").write_text("x = 2\n")
+            violations = _check_violations(ws, before=snapshot)
 
-        assert result.status == "ok"
+        assert not violations
 
     def test_violation_returns_impl_path_if_exists(self, session, fake_repo):
-        """On violation, impl_path should still be populated if file exists."""
+        """Violations are detected even when card_impl.py exists."""
+        from silverquillm.agent_session import _snapshot_all_protected
         ws = session.setup_workspace()
-        blind_impl = self._setup_blind(ws)
-
-        def fake_opencode(prompt, workspace):
-            (workspace / "tests.py").write_text("def test_pass(): pass\n")
-            (workspace / "card_impl.py").write_text("x = 1\n")
-            (fake_repo / "docs" / "hack.md").write_text("# hacked\n")
-            return "output"
 
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
-            session._run_agent = fake_opencode
-            result = session.run_test_informed(ws, blind_impl)
+            snapshot = _snapshot_all_protected(fake_repo)
+            (ws / "card_impl.py").write_text("x = 1\n")
+            (fake_repo / "docs" / "hack.md").write_text("# hacked\n")
+            violations = _check_violations(ws, before=snapshot)
 
-        assert result.status == "violation"
-        # card_impl.py exists, so impl_path should be set
-        assert result.impl_path is not None
+        assert violations is not None
+        assert (ws / "card_impl.py").exists()
 
     def test_violation_takes_snapshot_each_round(self, session, fake_repo):
-        """Snapshot is fresh each round — a file created in round 1 doesn't trigger in round 2."""
+        """Fresh snapshots each round prevent false positives."""
+        from silverquillm.agent_session import _snapshot_all_protected
         ws = session.setup_workspace()
-        blind_impl = self._setup_blind(ws)
-        call_count = [0]
-
-        def fake_opencode(prompt, workspace):
-            call_count[0] += 1
-            if call_count[0] == 1:
-                # Round 1: clean (just produce failing tests)
-                (workspace / "tests.py").write_text("def test_fail(): assert False\n")
-                (workspace / "card_impl.py").write_text("x = 1\n")
-                return "round 1"
-            else:
-                # Round 2: also clean, tests pass
-                (workspace / "tests.py").write_text("def test_pass(): pass\n")
-                (workspace / "tested_impl.py").write_text("x = 2\n")
-                return "round 2"
-
-        def fake_pytest(workspace, tests_path):
-            if call_count[0] == 1:
-                return subprocess.CompletedProcess(
-                    args=[], returncode=1, stdout="FAILED", stderr=""
-                )
-            return subprocess.CompletedProcess(
-                args=[], returncode=0, stdout="passed", stderr=""
-            )
 
         with patch("silverquillm.agent_session._REPO_ROOT", fake_repo):
-            session._run_agent = fake_opencode
-            session._run_pytest = fake_pytest
-            result = session.run_test_informed(ws, blind_impl)
+            # Round 1: clean
+            snapshot1 = _snapshot_all_protected(fake_repo)
+            (ws / "card_impl.py").write_text("x = 1\n")
+            violations1 = _check_violations(ws, before=snapshot1)
+            assert not violations1
 
-        assert result.status == "ok"
-        assert result.iterations == 2
+            # Round 2: also clean (different snapshot)
+            snapshot2 = _snapshot_all_protected(fake_repo)
+            (ws / "card_impl.py").write_text("x = 2\n")
+            violations2 = _check_violations(ws, before=snapshot2)
+            assert not violations2
+
+
+# ---------------------------------------------------------------------------
+# run_card — violation checking wired into session flow
+# ---------------------------------------------------------------------------
+
+
+class TestRunCardViolationWiring:
+    """AgentSession.run_card() must invoke _check_violations after strategy execution."""
+
+    def test_run_card_calls_check_violations(self, session, fake_repo):
+        """run_card() should call _check_violations after the strategy runs."""
+        mock_strategy = MagicMock()
+        mock_strategy.run_card.return_value = CardRunResult(
+            status=CardRunStatus.completed,
+            files_written=[],
+            runtime_ms=100,
+        )
+
+        with (
+            patch("silverquillm.strategies.get_strategy", return_value=mock_strategy),
+            patch("silverquillm.agent_session._check_violations", return_value=[]) as mock_cv,
+            patch("silverquillm.agent_session._REPO_ROOT", fake_repo),
+        ):
+            session.setup_workspace()
+            result = session.run_card()
+
+        mock_cv.assert_called_once()
+        assert result.status == CardRunStatus.completed
+
+    def test_run_card_returns_violation_status_on_contamination(self, session, fake_repo):
+        """run_card() should return violation status when _check_violations finds issues."""
+        mock_strategy = MagicMock()
+        mock_strategy.run_card.return_value = CardRunResult(
+            status=CardRunStatus.completed,
+            files_written=[],
+            runtime_ms=100,
+        )
+
+        with (
+            patch("silverquillm.strategies.get_strategy", return_value=mock_strategy),
+            patch("silverquillm.agent_session._check_violations", return_value=["docs/hack.py was created"]),
+            patch("silverquillm.agent_session._REPO_ROOT", fake_repo),
+        ):
+            session.setup_workspace()
+            result = session.run_card()
+
+        # Violation should cause the result to be overridden
+        assert result.status == CardRunStatus.no_output
+
+    def test_run_card_takes_snapshot_before_strategy(self, session, fake_repo):
+        """run_card() should snapshot protected paths before calling strategy."""
+        mock_strategy = MagicMock()
+        mock_strategy.run_card.return_value = CardRunResult(
+            status=CardRunStatus.completed,
+            files_written=[],
+            runtime_ms=50,
+        )
+
+        with (
+            patch("silverquillm.strategies.get_strategy", return_value=mock_strategy),
+            patch("silverquillm.agent_session._snapshot_all_protected") as mock_snap,
+            patch("silverquillm.agent_session._check_violations", return_value=[]),
+            patch("silverquillm.agent_session._REPO_ROOT", fake_repo),
+        ):
+            mock_snap.return_value = {}
+            session.setup_workspace()
+            session.run_card()
+
+        mock_snap.assert_called()

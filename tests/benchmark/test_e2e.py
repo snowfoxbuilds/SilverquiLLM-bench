@@ -1,7 +1,7 @@
 """Full pipeline integration test with Eager Glyphmage and Ajani's Response.
 
-Validates the end-to-end benchmark flow: workspace setup, blind implementation,
-test-informed refinement, result saving, evaluation, scoring, and leaderboard
+Validates the end-to-end benchmark flow: workspace setup, card execution via
+strategy delegation, result saving, evaluation, scoring, and leaderboard
 generation.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -20,6 +20,7 @@ from silverquillm.evaluator import run_self_eval_flat
 from silverquillm.results import init_results_dir, save_card_result, save_run_summary
 from silverquillm.scorer import Leaderboard, compute_scores, generate_leaderboard
 from silverquillm.results import save_aggregates
+from silverquillm.strategies import CardRunResult, CardRunStatus
 from tests.benchmark.test_helpers import (
     create_test_config,
     mock_opencode_blind,
@@ -65,29 +66,20 @@ class TestBenchmarkEndToEnd:
                 card_dir=card_dir,
             )
 
-            # 3b. Monkey-patch _run_agent
+            # 3b. Monkey-patch adapter.run to create both impl and test files
             blind_mock = mock_opencode_blind(card_spec)
             test_mock = mock_opencode_test_informed(card_spec)
-            call_count = {"n": 0}
 
-            def _patched_run_agent(prompt: str, workspace: Path, _bm=blind_mock, _tm=test_mock, _cc=call_count) -> str:
-                _cc["n"] += 1
-                if _cc["n"] == 1:
-                    return _bm(prompt, workspace)
+            def _patched_adapter_run(prompt: str, workspace: Path, _bm=blind_mock, _tm=test_mock) -> str:
+                # Write blind first, then test-informed on top
+                _bm(prompt, workspace)
                 return _tm(prompt, workspace)
 
-            session._run_agent = _patched_run_agent  # type: ignore[assignment]
-
-            # Also patch _run_pytest to avoid needing 'python' binary
-            def _mock_pytest(workspace: Path, tests_path: Path) -> subprocess.CompletedProcess:
-                return subprocess.CompletedProcess(
-                    args=["pytest"], returncode=0, stdout="3 passed\n", stderr=""
-                )
-
-            session._run_pytest = _mock_pytest  # type: ignore[assignment]
-
-            # 3c. Setup workspace
+            # 3c. Setup workspace (creates adapter)
             workspace = session.setup_workspace()
+
+            # Patch the adapter's run method after setup
+            session._adapter.run = _patched_adapter_run  # type: ignore[assignment]
 
             # 3d. Assert workspace contents
             assert (workspace / "card_spec.json").exists()
@@ -97,23 +89,15 @@ class TestBenchmarkEndToEnd:
             assert (workspace / "rules_overview.md").exists()
             assert (workspace / "foundations").is_dir()
 
-            # 3e. Run blind implementation
-            blind_result = session.run_blind_implementation(workspace)
-            assert blind_result.status == "ok"
-            assert blind_result.impl_path is not None
-            assert blind_result.impl_path.exists()
+            # 3e. Run card via strategy delegation
+            card_result = session.run_card()
+            assert card_result.status == CardRunStatus.completed
 
-            # 3f. Run test-informed
-            test_informed_result = session.run_test_informed(workspace, blind_result.impl_path)
-            assert test_informed_result.impl_path is not None
-            assert test_informed_result.tests_path is not None
+            # 3f. Read sources before cleanup
+            impl_source = (workspace / "card_impl.py").read_text() if (workspace / "card_impl.py").exists() else ""
+            tests_source = (workspace / "tests.py").read_text() if (workspace / "tests.py").exists() else ""
 
-            # 3g. Read sources before cleanup
-            impl_source = blind_result.impl_path.read_text()
-            tested_source = test_informed_result.impl_path.read_text()
-            tests_source = test_informed_result.tests_path.read_text()
-
-            # 3h. Cleanup
+            # 3g. Cleanup
             session.cleanup()
             assert not workspace.exists()
 
@@ -124,22 +108,22 @@ class TestBenchmarkEndToEnd:
                     "agent": config.agent.adapter,
                     "model": config.model_name,
                     "complexity_tier": "simple",
-                    "status": blind_result.status,
-                    "tokens": blind_result.tokens,
-                    "runtime_seconds": blind_result.runtime_seconds,
-                    "peak_context": blind_result.peak_context,
+                    "status": card_result.status.value,
+                    "tokens": 0,
+                    "runtime_seconds": card_result.runtime_ms / 1000,
+                    "peak_context": 0,
                 },
                 "test_result": {
-                    "impl_source": tested_source,
+                    "impl_source": impl_source,
                     "tests_source": tests_source,
                     "agent": config.agent.adapter,
                     "model": config.model_name,
                     "complexity_tier": "simple",
-                    "status": test_informed_result.status,
-                    "tokens": test_informed_result.tokens,
-                    "runtime_seconds": test_informed_result.runtime_seconds,
-                    "peak_context": test_informed_result.peak_context,
-                    "iterations": test_informed_result.iterations,
+                    "status": card_result.status.value,
+                    "tokens": 0,
+                    "runtime_seconds": card_result.runtime_ms / 1000,
+                    "peak_context": 0,
+                    "iterations": 1,
                 },
             }
 
@@ -193,7 +177,6 @@ class TestBenchmarkEndToEnd:
 
         # 8. Compute scores
         tier_data = {"11": "simple", "6": "simple"}
-        # Use real eval results from step 6
         from dataclasses import asdict
 
         eval_results_for_scorer = [asdict(er) for er in eval_results]
@@ -217,7 +200,9 @@ class TestBenchmarkEndToEnd:
         assert (results_dir / "leaderboard.md").exists()
 
     def test_workspace_contamination_detected(self, tmp_path: Path) -> None:
-        """Verify contamination detection when agent writes to a protected dir (docs/)."""
+        """Verify contamination detection via _check_violations function."""
+        from silverquillm.agent_session import _check_violations, _snapshot_all_protected
+
         card_spec = _load_card_spec("11")
         config = create_test_config(tmp_path)
         card_dir = str(_CARDS_DIR / "11")
@@ -234,13 +219,11 @@ class TestBenchmarkEndToEnd:
 
             workspace = session.setup_workspace()
 
-            def _contaminating_opencode(prompt: str, ws: Path) -> str:
-                (ws / "blind_impl.py").write_text("class Foo: pass\n")
-                (fake_docs / "_test_contamination_marker.py").write_text("# contamination\n")
-                return "done"
+            snapshot = _snapshot_all_protected(tmp_path)
+            # Simulate contamination
+            (fake_docs / "_test_contamination_marker.py").write_text("# contamination\n")
+            violations = _check_violations(workspace, before=snapshot)
 
-            session._run_agent = _contaminating_opencode  # type: ignore[assignment]
-
-            result = session.run_blind_implementation(workspace)
-            assert result.status == "violation"
+            assert violations is not None
+            assert len(violations) > 0
             session.cleanup()

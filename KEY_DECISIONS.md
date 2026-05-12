@@ -27,6 +27,12 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: Mode is a benchmark-run property, not an agent setting. Keeping strategy selection separate from adapter configuration preserves the nested `AgentConfig` convention while making the outer harness mode-agnostic.
 - **Impact**: `silverquillm/config.py`, `silverquillm/strategies.py`, agent-session consumers, config tests, and strategy tests.
 
+## AgentSession thin-wrapper convention
+- **Context**: Phase 7 removes harness-managed implementation/test feedback rounds.
+- **Decision**: `AgentSession.run_card()` is the canonical per-card execution path: setup workspace, delegate to `CardStrategy.run_card()`, run violation/postmortem bookkeeping, and harvest canonical `card_impl.py` plus optional `tests.py`. Harness-managed pytest loops, `_run_pytest()`, and per-round feedback prompts are removed.
+- **Reasoning**: The benchmark harness treats agents as black boxes; mode-specific prompting and output expectations belong in strategies, while the session wrapper owns workspace, contamination checks, postmortem logging, and artifact harvest.
+- **Impact**: `silverquillm/agent_session.py`, `silverquillm/cli.py`, agent-session tests, CLI orchestration tests, postmortem tests, violation wiring tests.
+
 ## AgentAdapter pattern
 - **Context**: Need pluggable agent adapters for different CLI tools.
 - **Decision**: ABC with `run(prompt, workspace) -> str`, `setup()`, `teardown()`. Registry-based factory via `get_adapter(config)`. Concrete adapters call `register_adapter("name", cls)` at module level. `run_with_retries` uses a single overall deadline from `timeout_per_card`.

@@ -29,3 +29,17 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Reasoning**: The strategy status must reflect the supplied timeout even if a synchronous adapter keeps running internally.
 - **Alternatives considered**: Keep the context-manager pattern; rejected because it can hang past the requested timeout.
 - **Impact**: `silverquillm/strategies.py`.
+
+## Test failure: Item 4 — Refactor agent_session.py remove harness-managed iteration
+- **Failing tests**: `test_no_run_pytest_method`, `test_no_default_max_rounds_constant`, `test_no_max_test_rounds_references_in_source`, `test_no_iteration_feedback_prompt_import`, `test_blind_mode_no_test_utils_py`
+- **Tester's intent**: Verify the old harness-managed pytest feedback loop and round-counting infrastructure is actually removed, and blind-mode workspace setup excludes test utilities.
+- **Implementer's approach**: Preserved legacy `_run_pytest`, `_DEFAULT_MAX_ROUNDS`, feedback imports, and multi-round methods to keep older tests passing, while adding a new strategy-based `run_card()` entry point.
+- **Coordinator decision**: fix implementation
+- **Reasoning**: The TODO explicitly requires deleting harness-managed iteration rather than leaving it as a compatibility path. Pre-existing tests should be migrated to the new mode-based architecture where necessary.
+
+## Test baseline note: Item 4 — audited SOS failures
+- **Context**: The item 4 verification pass reported all item-specific and related harness tests passing, with unrelated `tests/audited/` failures remaining.
+- **Decision**: Proceed with item 4 because the failures are outside the harness refactor surface and match the known audited SOS expected-failure baseline.
+- **Reasoning**: The implementation removed the legacy iteration path and preserved session bookkeeping according to targeted and related tests.
+- **Alternatives considered**: Block the harness refactor on audited card-oracle failures.
+- **Impact**: No code impact for item 4; final run stats should report the audited baseline if it remains.

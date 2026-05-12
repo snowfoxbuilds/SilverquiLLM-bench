@@ -66,7 +66,7 @@ Reference files in current codebase:
   - `silverquillm/prompts.py` — add `impl_test_mode_prompt()` combining impl + test instructions
   Testability: Unit test with mock adapter that writes both files → `completed`. Mock adapter that writes only `card_impl.py` (no tests) → `completed` (partial is still completed, eval will just skip self-eval).
 
-- [ ] **Refactor ****`agent_session.py`****: remove harness-managed iteration**
+- [x] **Refactor ****`agent_session.py`****: remove harness-managed iteration**
   Detail: The current `agent_session.py` (51KB) contains `_run_pytest`, multi-round orchestration logic, and round counting. Remove all of this:
 
   - Delete `_run_pytest()` method entirely — the harness does NOT run pytest during agent implementation rounds

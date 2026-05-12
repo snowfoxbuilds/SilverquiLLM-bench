@@ -1,14 +1,15 @@
 """Agent session manager for per-card benchmark runs.
 
-Manages workspace setup, agent adapter lifecycle, and the two-phase
-implementation flow (blind → test-informed) with contamination controls.
+Thin wrapper around :class:`~silverquillm.strategies.CardStrategy`:
+set up workspace → delegate to ``CardStrategy.run_card()`` → harvest
+files → log postmortem.
 
 The agent invocation is delegated to an :class:`~silverquillm.adapters.AgentAdapter`
 resolved from ``config.agent.adapter``.  The session itself is adapter-agnostic.
 
 Public API:
 - ``AgentSession`` — dataclass orchestrating a single card's benchmark run.
-- ``BlindResult`` / ``TestInformedResult`` — result dataclasses.
+- ``BlindResult`` / ``TestInformedResult`` — legacy result dataclasses.
 - Standalone helpers: ``setup_workspace``, ``run_blind``,
   ``run_test_informed``, ``cleanup``.
 """
@@ -28,16 +29,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-# Default iteration cap for test-informed rounds.  Previously stored as
-# ``AgentConfig.max_test_rounds``; now the agent self-manages iteration so
-# this is a hard-coded safety limit.
-_DEFAULT_MAX_ROUNDS: int = 3
-
 from silverquillm.adapters import AgentAdapter, get_adapter
 from silverquillm.config import BenchmarkConfig
 from silverquillm.prompts import (
     blind_implementation_prompt,
-    iteration_feedback_prompt,
     test_informed_prompt,
 )
 from silverquillm.template_gen import generate_template
@@ -278,10 +273,14 @@ class AgentSession:
             foundations_dst.chmod(0o555)
         
 
-        # Copy actual test_utils.py so agent can import it
-        test_utils_py = repo_root / "tests" / "test_utils.py"
-        if test_utils_py.exists():
-            shutil.copy2(test_utils_py, workspace / "test_utils.py")
+        # Copy test_utils files so agent can import/read them (impl_test mode only)
+        if self.config.mode != "blind":
+            test_utils_py = repo_root / "tests" / "test_utils.py"
+            if test_utils_py.exists():
+                shutil.copy2(test_utils_py, workspace / "test_utils.py")
+            test_utils_md = repo_root / "docs" / "test_utils.md"
+            if test_utils_md.exists():
+                shutil.copy2(test_utils_md, workspace / "test_utils.md")
 
         logger.info("Workspace created at %s", workspace)
 
@@ -339,434 +338,6 @@ class AgentSession:
         )
         return adapter.run(prompt, workspace)
 
-    # ------------------------------------------------------------------
-    # Step 1 — Blind implementation
-    # ------------------------------------------------------------------
-
-    def run_blind_implementation(self, workspace: Path) -> BlindResult:
-        """Run Step 1: blind implementation.
-
-        Launches OpenCode with the blind implementation prompt.  Collects
-        output as ``blind_impl.py``, records token counts and timing.
-
-        Parameters
-        ----------
-        workspace:
-            Path to the prepared workspace directory.
-
-        Returns
-        -------
-        BlindResult
-        """
-        prompt = blind_implementation_prompt(self.card_spec)
-        protected_snapshot = _snapshot_all_protected(_REPO_ROOT)
-        start = time.monotonic()
-
-        postmortem_path = _get_postmortem_path(self.run_dir, self.card_name)
-        raw_log_path = _get_raw_log_path(self.run_dir)
-
-        try:
-            output = self._run_agent(prompt, workspace)
-        except subprocess.TimeoutExpired:
-            elapsed = time.monotonic() - start
-            if postmortem_path:
-                _append_postmortem(
-                    postmortem_path=postmortem_path,
-                    prompt=prompt,
-                    response="TimeoutExpired",
-                    tokens=None,
-                    timing_ms=elapsed * 1000,
-                    round_num=1,
-                    status="error",
-                )
-            if raw_log_path:
-                append_raw_log(raw_log_path, self.card_name, "blind", 1, prompt, "TimeoutExpired")
-            return BlindResult(
-                impl_path=None,
-                tokens=0,
-                runtime_seconds=elapsed,
-                peak_context=0,
-                status="timeout",
-            )
-        except Exception as exc:
-            elapsed = time.monotonic() - start
-            response_text = f"{type(exc).__name__}: {exc}"
-            if postmortem_path:
-                _append_postmortem(
-                    postmortem_path=postmortem_path,
-                    prompt=prompt,
-                    response=response_text,
-                    tokens=None,
-                    timing_ms=elapsed * 1000,
-                    round_num=1,
-                    status="error",
-                )
-            if raw_log_path:
-                append_raw_log(raw_log_path, self.card_name, "blind", 1, prompt, response_text)
-            raise
-
-        elapsed = time.monotonic() - start
-
-        # Log successful invocation
-        if postmortem_path:
-            _append_postmortem(
-                postmortem_path=postmortem_path,
-                prompt=prompt,
-                response=output,
-                tokens=_estimate_tokens(output),
-                timing_ms=elapsed * 1000,
-                round_num=1,
-                status="success",
-            )
-        if raw_log_path:
-            append_raw_log(raw_log_path, self.card_name, "blind", 1, prompt, output)
-
-        # Look for implementation file produced by the agent.
-        # The agent is instructed to write to card_impl.py.
-        # Also check blind_impl.py as a fallback in case the agent uses the old name.
-        impl_path = workspace / "card_impl.py"
-        if not impl_path.exists():
-            impl_path = workspace / "blind_impl.py"
-
-        if not impl_path.exists():
-            return BlindResult(
-                impl_path=None,
-                tokens=0,
-                runtime_seconds=elapsed,
-                peak_context=0,
-                status="no_output",
-            )
-
-        # Validate syntax
-        source = impl_path.read_text()
-        try:
-            compile(source, str(impl_path), "exec")
-        except SyntaxError:
-            # Feed to correction round — but for blind phase, just record
-            return BlindResult(
-                impl_path=impl_path,
-                tokens=_estimate_tokens(output),
-                runtime_seconds=elapsed,
-                peak_context=_estimate_tokens(prompt + output),
-                status="syntax_error",
-            )
-
-        # Check for violations (writing outside workspace)
-        violations = _check_violations(
-            workspace,
-            before=protected_snapshot,
-            output_dir=Path(self.config.output_dir) if self.config.output_dir else None,
-        )
-        if violations:
-            logger.warning("Violations detected during blind implementation: %s", violations)
-            return BlindResult(
-                impl_path=None,
-                tokens=_estimate_tokens(output),
-                runtime_seconds=elapsed,
-                peak_context=_estimate_tokens(prompt + output),
-                status="violation",
-            )
-
-        tokens = _estimate_tokens(output)
-        peak = _estimate_tokens(prompt + output)
-
-        return BlindResult(
-            impl_path=impl_path,
-            tokens=tokens,
-            runtime_seconds=elapsed,
-            peak_context=peak,
-            status="ok",
-        )
-
-    # ------------------------------------------------------------------
-    # Step 2 — Test-informed implementation
-    # ------------------------------------------------------------------
-
-    def run_test_informed(
-        self,
-        workspace: Path,
-        blind_impl: Path,
-    ) -> TestInformedResult:
-        """Run Step 2: test-informed implementation with iteration.
-
-        Injects ``test_utils.md``, launches Step 2 prompt, iterates up to
-        ``_DEFAULT_MAX_ROUNDS`` times (running pytest between rounds and
-        feeding results back).
-
-        Parameters
-        ----------
-        workspace:
-            Path to the prepared workspace directory.
-        blind_impl:
-            Path to the blind implementation file from Step 1.
-
-        Returns
-        -------
-        TestInformedResult
-        """
-        repo_root = _REPO_ROOT
-
-        # Inject test_utils.md
-        test_utils_src = repo_root / "docs" / "test_utils.md"
-        if test_utils_src.exists():
-            shutil.copy2(test_utils_src, workspace / "test_utils.md")
-
-        # card_impl.py already exists from the blind phase — the agent edits it in place.
-        card_impl_path = workspace / "card_impl.py"
-
-        total_tokens = 0
-        peak_context = 0
-        rules_lookups = 0
-        iterations = 0
-        tests_passed = False
-        start = time.monotonic()
-
-        postmortem_path = _get_postmortem_path(self.run_dir, self.card_name)
-        raw_log_path = _get_raw_log_path(self.run_dir)
-
-        prompt = test_informed_prompt(
-            self.card_spec,
-            round_num=1,
-            max_rounds=_DEFAULT_MAX_ROUNDS,
-        )
-
-        try:
-            for round_num in range(1, _DEFAULT_MAX_ROUNDS + 1):
-                iterations = round_num
-
-                protected_snapshot = _snapshot_all_protected(_REPO_ROOT)
-
-                try:
-                    round_start = time.monotonic()
-                    output = self._run_agent(prompt, workspace)
-                except subprocess.TimeoutExpired:
-                    round_elapsed = time.monotonic() - round_start
-                    if postmortem_path:
-                        _append_postmortem(
-                            postmortem_path=postmortem_path,
-                            prompt=prompt,
-                            response="TimeoutExpired",
-                            tokens=None,
-                            timing_ms=round_elapsed * 1000,
-                            round_num=round_num,
-                            status="error",
-                        )
-                    if raw_log_path:
-                        append_raw_log(raw_log_path, self.card_name, "test_informed", round_num, prompt, "TimeoutExpired")
-                    return TestInformedResult(
-                        impl_path=card_impl_path if card_impl_path.exists() else None,
-                        tests_path=workspace / "tests.py" if (workspace / "tests.py").exists() else None,
-                        iterations=iterations,
-                        tokens=total_tokens,
-                        runtime_seconds=time.monotonic() - start,
-                        peak_context=peak_context,
-                        rules_lookups=rules_lookups,
-                        status="timeout",
-                    )
-                except Exception as exc:
-                    round_elapsed = time.monotonic() - round_start
-                    response_text = f"{type(exc).__name__}: {exc}"
-                    if postmortem_path:
-                        _append_postmortem(
-                            postmortem_path=postmortem_path,
-                            prompt=prompt,
-                            response=response_text,
-                            tokens=None,
-                            timing_ms=round_elapsed * 1000,
-                            round_num=round_num,
-                            status="error",
-                        )
-                    if raw_log_path:
-                        append_raw_log(raw_log_path, self.card_name, "test_informed", round_num, prompt, response_text)
-                    raise
-
-                # Update metrics for this round before checking violations
-                round_tokens = _estimate_tokens(output)
-                round_elapsed = time.monotonic() - round_start
-                total_tokens += round_tokens
-                peak_context = max(peak_context, _estimate_tokens(prompt + output))
-                rules_lookups += _count_rules_lookups(output)
-
-                # Determine test pass/fail for this round (before logging
-                # postmortem so the entry includes the result).
-                round_tests_passing: bool | None = None
-
-                # Check for violations after each agent invocation
-                violations = _check_violations(
-                    workspace,
-                    before=protected_snapshot,
-                    output_dir=Path(self.config.output_dir) if self.config.output_dir else None,
-                )
-                if violations:
-                    logger.warning(
-                        "Violations detected during test-informed round %d: %s",
-                        round_num,
-                        violations,
-                    )
-                    # Log postmortem with violation context
-                    if postmortem_path:
-                        _append_postmortem(
-                            postmortem_path=postmortem_path,
-                            prompt=prompt,
-                            response=output,
-                            tokens=round_tokens,
-                            timing_ms=round_elapsed * 1000,
-                            round_num=round_num,
-                            status="success",
-                            tests_passing=False,
-                        )
-                    if raw_log_path:
-                        append_raw_log(raw_log_path, self.card_name, "test_informed", round_num, prompt, output)
-                    return TestInformedResult(
-                        impl_path=card_impl_path if card_impl_path.exists() else None,
-                        tests_path=workspace / "tests.py" if (workspace / "tests.py").exists() else None,
-                        iterations=iterations,
-                        tokens=total_tokens,
-                        runtime_seconds=time.monotonic() - start,
-                        peak_context=peak_context,
-                        rules_lookups=rules_lookups,
-                        status="violation",
-                    )
-
-                # Check for test file
-                tests_path = workspace / "tests.py"
-                impl_path = workspace / "tested_impl.py"
-
-                # Agent may update card_impl.py directly
-                if not impl_path.exists() and card_impl_path.exists():
-                    impl_path = card_impl_path
-
-                if not tests_path.exists():
-                    # No tests produced yet — continue if more rounds
-                    if round_num < _DEFAULT_MAX_ROUNDS:
-                        # Log postmortem for this round (no test info yet)
-                        if postmortem_path:
-                            _append_postmortem(
-                                postmortem_path=postmortem_path,
-                                prompt=prompt,
-                                response=output,
-                                tokens=round_tokens,
-                                timing_ms=round_elapsed * 1000,
-                                round_num=round_num,
-                                status="success",
-                            )
-                        if raw_log_path:
-                            append_raw_log(raw_log_path, self.card_name, "test_informed", round_num, prompt, output)
-                        prompt = test_informed_prompt(
-                            self.card_spec,
-                            round_num=round_num + 1,
-                            max_rounds=_DEFAULT_MAX_ROUNDS,
-                        )
-                        continue
-
-                # Run pytest on the tests
-                if tests_path.exists():
-                    test_result = self._run_pytest(workspace, tests_path)
-
-                    # All passing → done
-                    if test_result.returncode == 0:
-                        tests_passed = True
-                        round_tests_passing = True
-                    else:
-                        round_tests_passing = False
-
-                # Log postmortem for this round
-                if postmortem_path:
-                    _append_postmortem(
-                        postmortem_path=postmortem_path,
-                        prompt=prompt,
-                        response=output,
-                        tokens=round_tokens,
-                        timing_ms=round_elapsed * 1000,
-                        round_num=round_num,
-                        status="success",
-                        tests_passing=round_tests_passing,
-                    )
-                if raw_log_path:
-                    append_raw_log(raw_log_path, self.card_name, "test_informed", round_num, prompt, output)
-
-                if tests_passed:
-                    break
-
-                # More rounds available → feed back
-                if tests_path.exists() and round_num < _DEFAULT_MAX_ROUNDS:
-                    prompt = iteration_feedback_prompt(
-                        test_output=test_result.stdout + test_result.stderr,
-                        round_num=round_num,
-                        max_rounds=_DEFAULT_MAX_ROUNDS,
-                    )
-                    continue
-
-        finally:
-            # Generate agent_thoughts.md on ALL exit paths (normal,
-            # early-return on timeout/violation, and exceptions).
-            if self.run_dir:
-                try:
-                    _generate_agent_thoughts(self.run_dir, self.card_name)
-                except Exception:
-                    logger.debug(
-                        "Failed to generate agent_thoughts.md for %s",
-                        self.card_name,
-                        exc_info=True,
-                    )
-
-        elapsed = time.monotonic() - start
-
-        # Determine final paths — card_impl.py is the canonical output
-        final_impl = None
-        if card_impl_path.exists():
-            final_impl = card_impl_path
-        elif (workspace / "tested_impl.py").exists():
-            # Fallback if agent used old name
-            final_impl = workspace / "tested_impl.py"
-
-        final_tests = workspace / "tests.py" if (workspace / "tests.py").exists() else None
-
-        # Determine final status
-        final_status = "ok" if tests_passed else "max_rounds_exhausted"
-
-        return TestInformedResult(
-            impl_path=final_impl,
-            tests_path=final_tests,
-            iterations=iterations,
-            tokens=total_tokens,
-            runtime_seconds=elapsed,
-            peak_context=peak_context,
-            rules_lookups=rules_lookups,
-            status=final_status,
-        )
-
-    # ------------------------------------------------------------------
-    # Pytest runner
-    # ------------------------------------------------------------------
-
-    def _run_pytest(
-        self,
-        workspace: Path,
-        tests_path: Path,
-    ) -> subprocess.CompletedProcess[str]:
-        """Run pytest on a test file within the workspace.
-
-        Parameters
-        ----------
-        workspace:
-            Working directory.
-        tests_path:
-            Path to the test file.
-
-        Returns
-        -------
-        subprocess.CompletedProcess
-        """
-        return subprocess.run(
-            ["python", "-m", "pytest", str(tests_path), "-v", "--tb=short"],
-            cwd=str(workspace),
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-
-    # ------------------------------------------------------------------
     # Result harvesting
     # ------------------------------------------------------------------
 
@@ -778,7 +349,7 @@ class AgentSession:
         if not self._workspace or not self._workspace.exists():
             return
         card_results_dir.mkdir(parents=True, exist_ok=True)
-        for filename in ("blind_impl.py", "tested_impl.py", "tests.py", "card_impl.py"):
+        for filename in ("card_impl.py", "tests.py"):
             src = self._workspace / filename
             if src.exists():
                 shutil.copy2(src, card_results_dir / filename)
@@ -786,6 +357,128 @@ class AgentSession:
     # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # High-level strategy-based card execution
+    # ------------------------------------------------------------------
+
+    def run_card(self) -> "CardRunResult":
+        """Execute the card using the strategy selected by ``config.mode``.
+
+        Delegates to :meth:`CardStrategy.run_card` after setting up the
+        workspace (if not already done).  Wraps the strategy call with:
+        - Protected-path snapshot & violation checking
+        - Postmortem logging and raw output
+        - ``agent_thoughts.md`` generation
+
+        Returns
+        -------
+        CardRunResult
+        """
+        from silverquillm.strategies import CardRunResult, CardRunStatus, get_strategy  # noqa: F811
+
+        if self._workspace is None:
+            self.setup_workspace()
+
+        strategy = get_strategy(self.config.mode)
+        adapter = self._get_adapter()
+        timeout = self.config.agent.timeout_per_card
+
+        # Snapshot protected paths before strategy execution
+        protected_snapshot = _snapshot_all_protected(_REPO_ROOT)
+        start = time.monotonic()
+
+        postmortem_path = _get_postmortem_path(self.run_dir, self.card_name)
+        raw_log_path = _get_raw_log_path(self.run_dir)
+
+        try:
+            result = strategy.run_card(
+                card_spec=self.card_spec,
+                workspace=self._workspace,
+                adapter=adapter,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            elapsed = time.monotonic() - start
+            if postmortem_path:
+                _append_postmortem(
+                    postmortem_path=postmortem_path,
+                    prompt="(strategy-level)",
+                    response="TimeoutExpired",
+                    tokens=None,
+                    timing_ms=elapsed * 1000,
+                    round_num=1,
+                    status="error",
+                )
+            if raw_log_path:
+                append_raw_log(raw_log_path, self.card_name, self.config.mode, 1, "(strategy-level)", "TimeoutExpired")
+            return CardRunResult(
+                status=CardRunStatus.timeout,
+                runtime_ms=int(elapsed * 1000),
+            )
+        except Exception as exc:
+            elapsed = time.monotonic() - start
+            response_text = f"{type(exc).__name__}: {exc}"
+            if postmortem_path:
+                _append_postmortem(
+                    postmortem_path=postmortem_path,
+                    prompt="(strategy-level)",
+                    response=response_text,
+                    tokens=None,
+                    timing_ms=elapsed * 1000,
+                    round_num=1,
+                    status="error",
+                )
+            if raw_log_path:
+                append_raw_log(raw_log_path, self.card_name, self.config.mode, 1, "(strategy-level)", response_text)
+            raise
+
+        elapsed = time.monotonic() - start
+
+        # Log successful strategy execution
+        if postmortem_path:
+            _append_postmortem(
+                postmortem_path=postmortem_path,
+                prompt="(strategy-level)",
+                response=f"status={result.status.value}",
+                tokens=None,
+                timing_ms=elapsed * 1000,
+                round_num=1,
+                status="success",
+            )
+        if raw_log_path:
+            append_raw_log(
+                raw_log_path, self.card_name, self.config.mode, 1,
+                "(strategy-level)", f"status={result.status.value}",
+            )
+
+        # Check for violations (agent modifying protected paths)
+        violations = _check_violations(
+            self._workspace,
+            before=protected_snapshot,
+            output_dir=Path(self.config.output_dir) if self.config.output_dir else None,
+        )
+        if violations:
+            logger.warning("Violations detected during card run: %s", violations)
+            result = CardRunResult(
+                status=CardRunStatus.no_output,
+                files_written=result.files_written,
+                runtime_ms=int(elapsed * 1000),
+                engine_modified=result.engine_modified,
+            )
+
+        # Generate agent_thoughts.md
+        if self.run_dir:
+            try:
+                _generate_agent_thoughts(self.run_dir, self.card_name)
+            except Exception:
+                logger.debug(
+                    "Failed to generate agent_thoughts.md for %s",
+                    self.card_name,
+                    exc_info=True,
+                )
+
+        return result
 
     def cleanup(self) -> None:
         """Remove the temporary workspace directory and tear down the adapter."""
@@ -1445,25 +1138,43 @@ def setup_workspace(
 
 
 def run_blind(session: AgentSession) -> BlindResult:
-    """Run the blind implementation phase.
+    """Run the blind implementation phase via strategy delegation.
 
-    Delegates to ``session.run_blind_implementation``.
+    Delegates to ``session.run_card()`` (blind mode).
     """
     if session.workspace is None:
         msg = "Workspace not set up — call setup_workspace first"
         raise RuntimeError(msg)
-    return session.run_blind_implementation(session.workspace)
+    result = session.run_card()
+    impl_path = session.workspace / "card_impl.py" if session.workspace else None
+    return BlindResult(
+        impl_path=impl_path if impl_path and impl_path.exists() else None,
+        tokens=0,
+        runtime_seconds=result.runtime_ms / 1000 if result.runtime_ms else 0,
+        peak_context=0,
+        status=result.status.value,
+    )
 
 
 def run_test_informed(session: AgentSession, blind_impl: Path) -> TestInformedResult:
-    """Run the test-informed implementation phase.
+    """Run the test-informed implementation phase via strategy delegation.
 
-    Delegates to ``session.run_test_informed``.
+    Delegates to ``session.run_card()`` (impl_test mode).
     """
     if session.workspace is None:
         msg = "Workspace not set up — call setup_workspace first"
         raise RuntimeError(msg)
-    return session.run_test_informed(session.workspace, blind_impl)
+    result = session.run_card()
+    ws = session.workspace
+    return TestInformedResult(
+        impl_path=ws / "card_impl.py" if ws and (ws / "card_impl.py").exists() else None,
+        tests_path=ws / "tests.py" if ws and (ws / "tests.py").exists() else None,
+        iterations=1,
+        tokens=0,
+        runtime_seconds=result.runtime_ms / 1000 if result.runtime_ms else 0,
+        peak_context=0,
+        status=result.status.value,
+    )
 
 
 def cleanup(session: AgentSession) -> None:

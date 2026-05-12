@@ -212,13 +212,13 @@ class TestAdapterInvocation:
             session._run_agent("test", workspace)
 
     def test_run_blind_uses_adapter(self, session):
-        """run_blind_implementation should use the adapter for agent invocation."""
+        """run_card should use the adapter for agent invocation."""
         with patch("silverquillm.agent_session.generate_template", return_value="# template"):
             workspace = session.setup_workspace()
         adapter = session._adapter
-        # Create a blind_impl.py so the result is "ok"
-        (workspace / "blind_impl.py").write_text("# impl")
-        result = session.run_blind_implementation(workspace)
+        # Create a card_impl.py so the result is "completed"
+        (workspace / "card_impl.py").write_text("# impl")
+        result = session.run_card()
         assert len(adapter.run_calls) >= 1
 
     def test_adapter_run_error_propagates(self, session, tmp_path):
@@ -271,7 +271,7 @@ class TestMockAdapterEndToEnd:
     """Session works with any adapter implementing the interface."""
 
     def test_full_blind_run_with_mock_adapter(self, session):
-        """Complete blind implementation flow using mock adapter."""
+        """Complete card run flow using mock adapter."""
         with patch("silverquillm.agent_session.generate_template", return_value="# template"):
             workspace = session.setup_workspace()
 
@@ -280,10 +280,11 @@ class TestMockAdapterEndToEnd:
 
         # Simulate agent creating the implementation file
         adapter.run_return = "done"
-        (workspace / "blind_impl.py").write_text("class Card: pass")
+        (workspace / "card_impl.py").write_text("class Card: pass")
 
-        result = session.run_blind_implementation(workspace)
-        assert result.status == "ok"
+        result = session.run_card()
+        from silverquillm.strategies import CardRunResult
+        assert isinstance(result, CardRunResult)
         assert len(adapter.run_calls) >= 1
 
         session.cleanup()

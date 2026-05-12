@@ -17,6 +17,8 @@ import click
 
 from silverquillm.agent_session import (
     AgentSession,
+    BlindResult,
+    TestInformedResult,
     commit_engine_changes,
     compute_engine_diff,
     init_run_engine,
@@ -204,14 +206,42 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
             )
             workspace = session.setup_workspace()
 
-            blind_result = session.run_blind_implementation(workspace)
+            card_run_result = session.run_card()
 
-            tested_result = None
-            if (
-                blind_result.impl_path
-                and blind_result.status in ("ok", "syntax_error")
-            ):
-                tested_result = session.run_test_informed(workspace, blind_result.impl_path)
+            # Build legacy result dicts for backward compatibility
+            from silverquillm.strategies import CardRunStatus
+            run_status = card_run_result.status.value
+            impl_path = workspace / "card_impl.py" if (workspace / "card_impl.py").exists() else None
+            runtime_s = card_run_result.runtime_ms / 1000 if card_run_result.runtime_ms else 0
+
+            if cfg.mode == "impl_test":
+                # In impl_test mode, record as a tested result
+                blind_result = BlindResult(
+                    impl_path=None,
+                    tokens=0,
+                    runtime_seconds=0,
+                    peak_context=0,
+                    status="skipped",
+                )
+                tests_path_ws = workspace / "tests.py"
+                tested_result = TestInformedResult(
+                    impl_path=impl_path,
+                    tests_path=tests_path_ws if tests_path_ws.exists() else None,
+                    iterations=1,
+                    tokens=0,
+                    runtime_seconds=runtime_s,
+                    peak_context=0,
+                    status=run_status,
+                )
+            else:
+                blind_result = BlindResult(
+                    impl_path=impl_path,
+                    tokens=0,
+                    runtime_seconds=runtime_s,
+                    peak_context=0,
+                    status=run_status,
+                )
+                tested_result = None
 
             # Read source files before cleanup destroys the workspace
             blind_dict, test_dict = _session_results_to_dicts(
@@ -247,7 +277,7 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
 
             # Record this card as completed for future regression runs
             tests_path = card_results_dir / "tests.py"
-            impl_path = card_results_dir / "tested_impl.py"
+            impl_path = card_results_dir / "card_impl.py"
             if tests_path.exists():
                 completed_cards.append(CompletedCard(
                     card_id=str(card_dir_name),
@@ -255,11 +285,10 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
                     tests_file=tests_path,
                     impl_file=impl_path if impl_path.exists() else None,
                 ))
-
-            blind_status = blind_result.status
-            tested_status = tested_result.status if tested_result else "skipped"
+            blind_status_str = blind_result.status
+            tested_status_str = tested_result.status if tested_result else "skipped"
             click.echo(
-                _sys(f"[{i}/{total}] {card_name}: blind={blind_status}, tested={tested_status}")
+                _sys(f"[{i}/{total}] {card_name}: blind={blind_status_str}, tested={tested_status_str}")
             )
         except Exception as exc:  # noqa: BLE001
             failures.append((card_name, exc))
