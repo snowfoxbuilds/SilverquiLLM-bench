@@ -277,3 +277,15 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Context**: Replays that fail to parse were silently skipped, undercounting games_attempted.
 - **Decision**: Parse failures generate a ValidationReport with a single ENGINE_ERROR divergence, counted in games_attempted and visible in summary.
 - **Impact**: `silverquillm/replay/cli.py`.
+
+## Process-group termination for adapter timeouts
+- **Context**: Item 7 enforces `timeout_per_card` at the subprocess level. Adapters must terminate not just the direct Popen process, but all child processes spawned by the agent CLI tool.
+- **Decision**: All subprocess-based adapters use `start_new_session=True` in Popen and `os.killpg()` in their `kill()` method to terminate the entire process group. SIGTERM→SIGKILL escalation with 5s grace period. `run_with_retries()` calls `self.kill()` before raising TimeoutError.
+- **Reasoning**: Agent CLI tools (opencode, claude, aider, pi) may fork worker processes. Only process-group termination ensures all descendants are terminated.
+- **Impact**: All adapters in `silverquillm/adapters/`, `silverquillm/strategies.py`, `silverquillm/adapters/base.py`.
+
+## TESTING-CONVENTIONS.md established
+- **Context**: PR #11 demonstrated a critical failure where `os.killpg()` with auto-MagicMock PID sent SIGTERM to PID group 1, terminating the container.
+- **Decision**: Created `docs/specs/TESTING-CONVENTIONS.md` with hard rules: explicit mock PIDs, patched os.killpg/os.getpgid, Event.wait instead of while-True, pytest-timeout safety net.
+- **Reasoning**: Prevent tests from terminating real processes or hanging forever.
+- **Impact**: All tests involving subprocess/timeout/signal must comply.

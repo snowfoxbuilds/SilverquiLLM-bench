@@ -127,6 +127,9 @@ class BlindStrategy(CardStrategy):
         try:
             future.result(timeout=timeout)
         except (TimeoutError, FuturesTimeoutError, subprocess.TimeoutExpired):
+            # Hard-kill the adapter's subprocess if it supports it
+            if hasattr(adapter, "kill"):
+                adapter.kill()
             pool.shutdown(wait=False, cancel_futures=True)
             elapsed_ms = int((time.monotonic() - start) * 1000)
             files = [impl_path] if impl_path.exists() else []
@@ -188,6 +191,9 @@ class ImplTestStrategy(CardStrategy):
         try:
             future.result(timeout=timeout)
         except (TimeoutError, FuturesTimeoutError, subprocess.TimeoutExpired):
+            # Hard-kill the adapter's subprocess if it supports it
+            if hasattr(adapter, "kill"):
+                adapter.kill()
             pool.shutdown(wait=False, cancel_futures=True)
             elapsed_ms = int((time.monotonic() - start) * 1000)
             files: list[Path] = []

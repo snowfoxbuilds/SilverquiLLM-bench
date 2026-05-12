@@ -100,7 +100,7 @@ Reference files in current codebase:
   - `silverquillm/agent_session.py` — add snapshot/restore functions, call them in the per-card flow
   Testability: Unit test: mock adapter that times out → engine dir is restored to pre-card state. Mock adapter that succeeds → snapshot is cleaned up.
 
-- [ ] **Enforce ****`timeout_per_card`**** (fixes Issue #14)**
+- [x] **Enforce ****`timeout_per_card`**** (fixes Issue #14)**
   Detail: Config specifies `timeout_per_card: 300` but it's never enforced — Qwen's Plains (trivial) took 28 minutes. Wrap the adapter's `run()` call with a hard timeout. On expiry: kill the subprocess, record `status: timeout` in `CardRunResult`, zero all scores for this card, trigger engine rollback (previous item).
 
   Implementation: In the `CardStrategy.run_card()` base method (or a shared utility), use `subprocess` timeout or `signal.alarm()` as a fallback. The adapter's own `run_with_retries()` in `silverquillm/adapters/base.py` already has a deadline concept — ensure it's actually enforced at the process level, not just as a soft limit.
