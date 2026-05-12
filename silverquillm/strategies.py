@@ -1,0 +1,156 @@
+"""Card execution strategies.
+
+Defines the ``CardStrategy`` abstract base class and concrete strategy
+implementations for *blind* and *impl_test* benchmark modes.  A factory
+function :func:`get_strategy` maps a mode string to the appropriate
+strategy instance.
+"""
+
+from __future__ import annotations
+
+import enum
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:  # pragma: no cover
+    from silverquillm.adapters.base import AgentAdapter
+
+
+# ---------------------------------------------------------------------------
+# CardRunResult
+# ---------------------------------------------------------------------------
+
+class CardRunStatus(enum.Enum):
+    """Outcome status for a single card run."""
+
+    completed = "completed"
+    timeout = "timeout"
+    no_output = "no_output"
+
+
+@dataclass
+class CardRunResult:
+    """Result of executing a single card through a strategy.
+
+    Attributes
+    ----------
+    status:
+        Outcome status of the card run.
+    files_written:
+        Paths written/modified during the run.
+    runtime_ms:
+        Wall-clock milliseconds elapsed.
+    engine_modified:
+        Whether the shared engine directory was modified.
+    """
+
+    status: CardRunStatus
+    files_written: list[Path] = field(default_factory=list)
+    runtime_ms: int = 0
+    engine_modified: bool = False
+
+
+# ---------------------------------------------------------------------------
+# CardStrategy ABC
+# ---------------------------------------------------------------------------
+
+class CardStrategy(ABC):
+    """Abstract base class for card execution strategies."""
+
+    @abstractmethod
+    def run_card(
+        self,
+        card_spec: dict[str, Any],
+        workspace: Path,
+        adapter: Any,
+        timeout: int,
+    ) -> CardRunResult:
+        """Execute a single card and return the result.
+
+        Parameters
+        ----------
+        card_spec:
+            Parsed card specification dictionary.
+        workspace:
+            Working directory for the card implementation.
+        adapter:
+            Agent adapter instance to drive the implementation.
+        timeout:
+            Maximum wall-clock seconds allowed for the run.
+
+        Returns
+        -------
+        CardRunResult
+            Outcome of the card execution.
+        """
+        ...  # pragma: no cover
+
+
+# ---------------------------------------------------------------------------
+# Concrete strategies
+# ---------------------------------------------------------------------------
+
+class BlindStrategy(CardStrategy):
+    """Strategy for *blind* mode — single-shot implementation with no tests."""
+
+    def run_card(
+        self,
+        card_spec: dict[str, Any],
+        workspace: Path,
+        adapter: Any,
+        timeout: int,
+    ) -> CardRunResult:
+        raise NotImplementedError("BlindStrategy.run_card is not yet implemented")
+
+
+class ImplTestStrategy(CardStrategy):
+    """Strategy for *impl_test* mode — iterative implement-then-test loop."""
+
+    def run_card(
+        self,
+        card_spec: dict[str, Any],
+        workspace: Path,
+        adapter: Any,
+        timeout: int,
+    ) -> CardRunResult:
+        raise NotImplementedError("ImplTestStrategy.run_card is not yet implemented")
+
+
+# ---------------------------------------------------------------------------
+# Factory
+# ---------------------------------------------------------------------------
+
+_STRATEGY_MAP: dict[str, type[CardStrategy]] = {
+    "blind": BlindStrategy,
+    "impl_test": ImplTestStrategy,
+}
+
+_VALID_MODES = frozenset(_STRATEGY_MAP.keys())
+
+
+def get_strategy(mode: str) -> CardStrategy:
+    """Return the appropriate :class:`CardStrategy` for *mode*.
+
+    Parameters
+    ----------
+    mode:
+        One of ``"blind"`` or ``"impl_test"``.
+
+    Returns
+    -------
+    CardStrategy
+        An instance of the matching strategy class.
+
+    Raises
+    ------
+    ValueError
+        If *mode* is not a recognised strategy name.
+    """
+    cls = _STRATEGY_MAP.get(mode)
+    if cls is None:
+        raise ValueError(
+            f"Unknown mode {mode!r}; valid modes: {sorted(_VALID_MODES)}"
+        )
+    return cls()

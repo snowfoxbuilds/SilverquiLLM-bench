@@ -48,7 +48,6 @@ def _make_config(**overrides) -> BenchmarkConfig:
         max_context=200_000,
         temperature=0.0,
         agent=AgentConfig(
-            max_test_rounds=3,
             timeout_per_card=300,
         ),
     )
@@ -342,7 +341,7 @@ class TestRunTestInformed:
         session._run_pytest = fake_pytest
         result = session.run_test_informed(ws, blind_impl)
         assert result.status == "max_rounds_exhausted"
-        assert result.iterations == session.config.agent.max_test_rounds
+        assert result.iterations == 3  # _DEFAULT_MAX_ROUNDS
 
     def test_standalone_raises_without_workspace(self, session):
         with pytest.raises(RuntimeError, match="[Ww]orkspace"):

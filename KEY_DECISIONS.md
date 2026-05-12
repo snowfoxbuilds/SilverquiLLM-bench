@@ -21,6 +21,12 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: Clean API surface; no more dual access patterns.
 - **Impact**: All test fixtures use `agent=AgentConfig(...)`. New code must use `config.agent.*`.
 
+## Mode-based CardStrategy convention
+- **Context**: Phase 7 refactors the benchmark harness away from harness-managed blind/test-informed rounds.
+- **Decision**: Benchmark mode is a top-level `BenchmarkConfig.mode` field with valid values `blind` and `impl_test`, defaulting to `impl_test` for backward compatibility. Per-card execution is selected through `silverquillm.strategies.get_strategy(mode)`, returning a `CardStrategy` implementation. `AgentConfig.max_test_rounds` was removed because agents self-manage iteration inside a single mode prompt.
+- **Reasoning**: Mode is a benchmark-run property, not an agent setting. Keeping strategy selection separate from adapter configuration preserves the nested `AgentConfig` convention while making the outer harness mode-agnostic.
+- **Impact**: `silverquillm/config.py`, `silverquillm/strategies.py`, agent-session consumers, config tests, and strategy tests.
+
 ## AgentAdapter pattern
 - **Context**: Need pluggable agent adapters for different CLI tools.
 - **Decision**: ABC with `run(prompt, workspace) -> str`, `setup()`, `teardown()`. Registry-based factory via `get_adapter(config)`. Concrete adapters call `register_adapter("name", cls)` at module level. `run_with_retries` uses a single overall deadline from `timeout_per_card`.

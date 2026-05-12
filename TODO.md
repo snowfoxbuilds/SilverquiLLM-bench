@@ -26,7 +26,7 @@ Reference files in current codebase:
 - `silverquillm/adapters/base.py` — `AgentAdapter` ABC with `run()` method
 ---
 
-- [ ] **Add ****`mode`**** to config and create ****`CardStrategy`**** ABC**
+- [x] **Add ****`mode`**** to config and create ****`CardStrategy`**** ABC**
   Detail: Add `mode: str` field to `BenchmarkConfig` in `silverquillm/config.py`. Valid values: `"blind"` and `"impl_test"`. Remove `max_test_rounds` from `AgentConfig` (no longer used — agent self-manages iteration). Create `silverquillm/strategies.py` with:
 
   - `CardStrategy` ABC with abstract method `run_card(self, card_spec, workspace, adapter, timeout) -> CardRunResult`

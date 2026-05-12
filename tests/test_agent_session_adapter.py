@@ -32,7 +32,6 @@ def _make_config(adapter_name: str = "mock_test_adapter", **overrides) -> Benchm
         temperature=0.0,
         agent=AgentConfig(
             adapter=adapter_name,
-            max_test_rounds=3,
             timeout_per_card=300,
         ),
     )

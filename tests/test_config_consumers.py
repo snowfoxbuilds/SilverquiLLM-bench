@@ -32,7 +32,7 @@ _MINIMAL = dict(
 )
 
 # Old flat attribute names that should NOT appear as direct BenchmarkConfig attributes
-_OLD_FLAT_ATTRS = ["agent_tool", "max_test_rounds", "timeout_per_card", "disable_web_search"]
+_OLD_FLAT_ATTRS = ["agent_tool", "timeout_per_card", "disable_web_search"]
 
 
 # ---------------------------------------------------------------------------
@@ -65,11 +65,10 @@ class TestBenchmarkConfigConstruction:
 
     def test_construct_with_agent_config(self) -> None:
         """Passing agent=AgentConfig(...) should set config.agent properly."""
-        ac = AgentConfig(adapter="custom", max_test_rounds=7, timeout_per_card=120)
+        ac = AgentConfig(adapter="custom", timeout_per_card=120)
         cfg = BenchmarkConfig(**_MINIMAL, agent=ac)
         assert cfg.agent is ac
         assert cfg.agent.adapter == "custom"
-        assert cfg.agent.max_test_rounds == 7
         assert cfg.agent.timeout_per_card == 120
 
     def test_default_agent_config_when_omitted(self) -> None:
@@ -77,10 +76,9 @@ class TestBenchmarkConfigConstruction:
         cfg = BenchmarkConfig(**_MINIMAL)
         assert isinstance(cfg.agent, AgentConfig)
         assert cfg.agent.adapter == "opencode"
-        assert cfg.agent.max_test_rounds == 3
 
     def test_old_flat_kwargs_rejected(self) -> None:
-        """Passing old flat kwargs (agent_tool, max_test_rounds, etc.) to BenchmarkConfig must raise TypeError."""
+        """Passing old flat kwargs (agent_tool, etc.) to BenchmarkConfig must raise TypeError."""
         with pytest.raises(TypeError):
             BenchmarkConfig(**_MINIMAL, agent_tool="foo")  # type: ignore[call-arg]
 
@@ -101,13 +99,11 @@ class TestNoOldFlatAccessInSource:
     """Scan silverquillm/ source files to ensure no code accesses config.<old_attr> directly."""
 
     # Patterns like `config.agent_tool`, `self.config.agent_tool`, etc.
-    # We look for `.agent_tool`, `.max_test_rounds`, `.timeout_per_card`, `.disable_web_search`
+    # We look for `.agent_tool`, `.timeout_per_card`, `.disable_web_search`
     # as attribute access *not* inside `config.agent.<attr>`.
     _OLD_ACCESS_PATTERNS = [
         # Matches `.agent_tool` NOT preceded by `.agent`
         re.compile(r'(?<!agent)\.agent_tool\b'),
-        # Matches `.max_test_rounds` NOT preceded by `.agent`
-        re.compile(r'(?<!agent)\.max_test_rounds\b'),
         # Matches `.timeout_per_card` NOT preceded by `.agent`
         re.compile(r'(?<!agent)\.timeout_per_card\b'),
         # Matches `.disable_web_search` NOT preceded by `.agent`
@@ -151,10 +147,10 @@ class TestAgentSessionConsumer:
         source = (_PKG_DIR / "agent_session.py").read_text()
         assert "config.agent.timeout_per_card" in source or "self.config.agent.timeout_per_card" in source
 
-    def test_agent_session_uses_nested_max_test_rounds(self) -> None:
-        """agent_session.py should reference config.agent.max_test_rounds."""
+    def test_agent_session_no_longer_uses_max_test_rounds(self) -> None:
+        """agent_session.py should no longer reference config.agent.max_test_rounds."""
         source = (_PKG_DIR / "agent_session.py").read_text()
-        assert "config.agent.max_test_rounds" in source or "self.config.agent.max_test_rounds" in source
+        assert "config.agent.max_test_rounds" not in source
 
 
 # ---------------------------------------------------------------------------
@@ -179,14 +175,13 @@ class TestNestedAccessWorks:
 
     def test_all_agent_fields_accessible(self) -> None:
         """Every AgentConfig field should be accessible through config.agent.<field>."""
-        ac = AgentConfig(adapter="test-adapter", max_test_rounds=5, timeout_per_card=120, disable_web_search=False)
+        ac = AgentConfig(adapter="test-adapter", timeout_per_card=120, disable_web_search=False)
         cfg = BenchmarkConfig(**_MINIMAL, agent=ac)
         assert cfg.agent.adapter == "test-adapter"
-        assert cfg.agent.max_test_rounds == 5
         assert cfg.agent.timeout_per_card == 120
         assert cfg.agent.disable_web_search is False
 
     def test_agent_field_names_match_expected(self) -> None:
         """AgentConfig should have exactly the expected fields."""
         names = {f.name for f in dc_fields(AgentConfig)}
-        assert names == {"adapter", "max_test_rounds", "timeout_per_card", "disable_web_search"}
+        assert names == {"adapter", "timeout_per_card", "disable_web_search"}

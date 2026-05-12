@@ -37,7 +37,6 @@ def _make_config(**overrides) -> BenchmarkConfig:
         max_context=200_000,
         temperature=0.0,
         agent=AgentConfig(
-            max_test_rounds=3,
             timeout_per_card=300,
         ),
     )

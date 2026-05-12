@@ -10,10 +10,12 @@ model_provider: "anthropic"
 max_context: 200000
 temperature: 0.0
 
+# Benchmark mode: "blind" (single-shot) or "impl_test" (iterative with tests)
+mode: "impl_test"
+
 # Agent configuration (nested block)
 agent:
   adapter: "opencode"
-  max_test_rounds: 3
   timeout_per_card: 300
   disable_web_search: true
 

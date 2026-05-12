@@ -55,7 +55,6 @@ class TestBenchmarkConfig:
         assert isinstance(cfg.max_context, int)
         assert isinstance(cfg.temperature, (int, float))
         assert isinstance(cfg.agent.adapter, str)
-        assert isinstance(cfg.agent.max_test_rounds, int)
         assert isinstance(cfg.agent.timeout_per_card, int)
         assert isinstance(cfg.agent.disable_web_search, bool)
 
@@ -68,11 +67,6 @@ class TestBenchmarkConfig:
         """temperature defaults to 0.0."""
         cfg = BenchmarkConfig(**_MINIMAL_CONFIG)
         assert cfg.temperature == 0.0
-
-    def test_default_max_test_rounds(self) -> None:
-        """max_test_rounds defaults to 3."""
-        cfg = BenchmarkConfig(**_MINIMAL_CONFIG)
-        assert cfg.agent.max_test_rounds == 3
 
     def test_default_timeout_per_card(self) -> None:
         """timeout_per_card defaults to 300."""
@@ -158,7 +152,6 @@ class TestLoadConfig:
         cfg = load_config(str(p))
         assert cfg.max_context == 200_000
         assert cfg.temperature == 0.0
-        assert cfg.agent.max_test_rounds == 3
 
     def test_override_optional_fields(self, tmp_path: Path) -> None:
         """Optional fields can be overridden via YAML."""

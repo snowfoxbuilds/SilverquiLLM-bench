@@ -28,6 +28,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+# Default iteration cap for test-informed rounds.  Previously stored as
+# ``AgentConfig.max_test_rounds``; now the agent self-manages iteration so
+# this is a hard-coded safety limit.
+_DEFAULT_MAX_ROUNDS: int = 3
+
 from silverquillm.adapters import AgentAdapter, get_adapter
 from silverquillm.config import BenchmarkConfig
 from silverquillm.prompts import (
@@ -485,7 +490,7 @@ class AgentSession:
         """Run Step 2: test-informed implementation with iteration.
 
         Injects ``test_utils.md``, launches Step 2 prompt, iterates up to
-        ``max_test_rounds`` times (running pytest between rounds and
+        ``_DEFAULT_MAX_ROUNDS`` times (running pytest between rounds and
         feeding results back).
 
         Parameters
@@ -522,11 +527,11 @@ class AgentSession:
         prompt = test_informed_prompt(
             self.card_spec,
             round_num=1,
-            max_rounds=self.config.agent.max_test_rounds,
+            max_rounds=_DEFAULT_MAX_ROUNDS,
         )
 
         try:
-            for round_num in range(1, self.config.agent.max_test_rounds + 1):
+            for round_num in range(1, _DEFAULT_MAX_ROUNDS + 1):
                 iterations = round_num
 
                 protected_snapshot = _snapshot_all_protected(_REPO_ROOT)
@@ -633,7 +638,7 @@ class AgentSession:
 
                 if not tests_path.exists():
                     # No tests produced yet — continue if more rounds
-                    if round_num < self.config.agent.max_test_rounds:
+                    if round_num < _DEFAULT_MAX_ROUNDS:
                         # Log postmortem for this round (no test info yet)
                         if postmortem_path:
                             _append_postmortem(
@@ -650,7 +655,7 @@ class AgentSession:
                         prompt = test_informed_prompt(
                             self.card_spec,
                             round_num=round_num + 1,
-                            max_rounds=self.config.agent.max_test_rounds,
+                            max_rounds=_DEFAULT_MAX_ROUNDS,
                         )
                         continue
 
@@ -684,11 +689,11 @@ class AgentSession:
                     break
 
                 # More rounds available → feed back
-                if tests_path.exists() and round_num < self.config.agent.max_test_rounds:
+                if tests_path.exists() and round_num < _DEFAULT_MAX_ROUNDS:
                     prompt = iteration_feedback_prompt(
                         test_output=test_result.stdout + test_result.stderr,
                         round_num=round_num,
-                        max_rounds=self.config.agent.max_test_rounds,
+                        max_rounds=_DEFAULT_MAX_ROUNDS,
                     )
                     continue
 

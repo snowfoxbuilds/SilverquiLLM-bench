@@ -11,13 +11,15 @@ from dataclasses import dataclass, field, fields, MISSING
 from pathlib import Path
 from typing import Any
 
+# Valid values for the top-level ``mode`` field.
+_VALID_MODES = frozenset({"blind", "impl_test"})
+
 
 @dataclass
 class AgentConfig:
     """Configuration for the agent adapter and its behaviour."""
 
     adapter: str = "opencode"
-    max_test_rounds: int = 3
     timeout_per_card: int = 300
     disable_web_search: bool = True
 
@@ -35,7 +37,7 @@ _LEGACY_AGENT_ALIASES: dict[str, str] = {
 class BenchmarkConfig:
     """Configuration for a benchmark run.
 
-    Agent-related fields (``adapter``, ``max_test_rounds``, ``timeout_per_card``,
+    Agent-related fields (``adapter``, ``timeout_per_card``,
     ``disable_web_search``) live inside a nested :class:`AgentConfig` accessible
     via the ``agent`` attribute.
     """
@@ -46,6 +48,7 @@ class BenchmarkConfig:
     model_provider: str
     max_context: int = 200_000
     temperature: float = 0.0
+    mode: str = "impl_test"
     agent: AgentConfig = field(default_factory=AgentConfig)
     card_specs_dir: str = ""
     engine_docs_path: str = ""
@@ -60,6 +63,7 @@ class BenchmarkConfig:
         model_provider: str,
         max_context: int = 200_000,
         temperature: float = 0.0,
+        mode: str = "impl_test",
         agent: AgentConfig | None = None,
         card_specs_dir: str = "",
         engine_docs_path: str = "",
@@ -77,6 +81,11 @@ class BenchmarkConfig:
         self.template_dir = template_dir
         self.output_dir = output_dir
 
+        if mode not in _VALID_MODES:
+            raise ValueError(
+                f"Invalid mode {mode!r}; must be one of {sorted(_VALID_MODES)}"
+            )
+        self.mode = mode
         self.agent = agent if agent is not None else AgentConfig()
 
 
@@ -92,7 +101,7 @@ def _build_agent_config(raw: dict[str, Any]) -> AgentConfig:
 
     Supports three styles:
     1. Nested ``agent:`` block (preferred).
-    2. Flat legacy keys (``agent_tool``, ``max_test_rounds``, …) at top level.
+    2. Flat legacy keys (``agent_tool``, …) at top level.
     3. A mix of both (nested wins on conflict).
     """
     agent_raw: dict[str, Any] = {}

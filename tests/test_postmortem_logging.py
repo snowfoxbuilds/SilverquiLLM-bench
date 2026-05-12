@@ -44,7 +44,6 @@ def _make_config(output_dir: str = "", **overrides) -> BenchmarkConfig:
         temperature=0.0,
         output_dir=output_dir,
         agent=AgentConfig(
-            max_test_rounds=3,
             timeout_per_card=300,
         ),
     )
@@ -342,7 +341,7 @@ class TestPostmortemDuringTestInformed:
         output_dir.mkdir()
         config = _make_config(
             output_dir=str(output_dir),
-            agent=AgentConfig(max_test_rounds=2, timeout_per_card=300),
+            agent=AgentConfig(timeout_per_card=300),
         )
         session = AgentSession(
             config=config,
@@ -395,7 +394,7 @@ class TestPostmortemDuringTestInformed:
         output_dir.mkdir()
         config = _make_config(
             output_dir=str(output_dir),
-            agent=AgentConfig(max_test_rounds=2, timeout_per_card=300),
+            agent=AgentConfig(timeout_per_card=300),
         )
         session = AgentSession(
             config=config,
