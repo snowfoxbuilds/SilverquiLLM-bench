@@ -152,7 +152,7 @@ Clean temp directory created per card containing card-specific files (card_spec,
 - A Target Set contains many Card Specs, each with one Complexity Tier.
 - Each agent produces one Blind Implementation and one Test-Informed Implementation per Card Spec.
 - Each card may produce Engine Extensions that persist to subsequent cards' workspaces.
-- After each card, a Regression Check re-runs all previous cards' tests against the current Persistent Engine.
+- After the full run, the evaluator runs all cards' tests against the final Persistent Engine state. Regressions are detected via test failures but not attributed to a specific card.
 - Cross-Eval tests every agent's implementations against every other agent's tests (N×N).
 - The Base Set forms the reference codebase agents can browse. No Expanded Pool — agents implement new mechanics from scratch.
 - A Draft Set may span multiple Scryfall set codes (e.g., SOS + SOA + SPG).
@@ -161,3 +161,14 @@ Clean temp directory created per card containing card-specific files (card_spec,
 - A Workspace is created per Card Spec within a run, with a writable reference to the Persistent Engine.
 - The Base Set (FDN 001–291 + SPG 074–083) is validated via Replay Validation against 17lands GRE JSON data before scored benchmark runs.
 - A Pipeline Validation Run precedes scored benchmark runs to verify the orchestration pipeline.
+- The harness does NOT run pytest during agent implementation rounds — the agent runs its own tests via its shell. All harness-level test execution flows through `evaluator.run_tests()` only.
+- Filesystem checks (does the file exist?) are the source of truth for agent output. Exit codes, stdout, and thinking traces are diagnostics only — they never gate results.
+- All evaluation is post-run. After all cards are processed, the evaluator runs all tests against the final engine state. No per-card evaluation or regression checks during the run.
+- `run_summary.json` is automatically generated at the end of every run by aggregating per-card `result.json` files. The aggregator is a pure, idempotent function.
+- The harness does NOT orchestrate test iteration rounds. The agent self-manages iteration during Step 2. The harness sends the prompt, waits for completion or timeout, then checks the filesystem.
+- Each card has one agent invocation with `timeout_per_card`. The prompt depends on the mode. Blind vs. test-informed comparison is done across separate benchmark runs (Mode 1 vs Mode 2), not within a single run.
+- On agent timeout, all scores for that card are zeroed out and the engine is rolled back to its pre-card snapshot. No partial scoring, no corrupted engine carry-forward.
+- Two benchmark modes: **Blind** (impl only, eval via external tests) and **Impl+Test** (impl + tests, agent self-iterates). Config selects mode via `mode: "blind" | "impl_test"`.
+- Per-card orchestration is encapsulated in a **CardStrategy** (strategy pattern). The outer runner loop (card ordering, engine lifecycle, snapshots, regression checks, aggregation) is mode-agnostic. v1 supports BlindStrategy and ImplTestStrategy; multi-model orchestration is a future extension.
+- Both modes produce `card_impl.py` as the canonical implementation file. Mode 2 also produces `tests.py`. No `blind_impl.py` / `tested_impl.py` distinction.
+- Audited tests are evaluation-only artifacts — never in the agent's workspace, never in results directories. Contamination control.

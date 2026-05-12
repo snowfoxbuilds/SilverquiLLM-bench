@@ -116,6 +116,27 @@ Branch: `execute-todo-with-subagents/phase5-replay-validation` → `main`
 - [x] **Replay executor (state-diff observer mode)**
 - [x] **Divergence detection and reporting**
 - [x] **CLI: ****`benchmark validate`**** command**
+## Completed 2026-05-12
+
+Phase 6: SOS Draft Set Completion & Audited Test Suites (PR #8 — 15 items, 647 audited test files)
+
+Branch: `execute-todo-with-subagents/phase6-audited-tests` → `main`
+
+- [x] **Include Mystical Archives (SOA set, cn 1–65)**
+- [x] **Include Special Guests (SPG set, cn 149–158)**
+- [x] **Enforce SOS base set draft cutoff at collector number 271**
+- [x] **Re-run classification and spec generation on updated card pool**
+- [x] **Create per-card audited test directory structure and **[**conftest.py**](http://conftest.py/)
+- [x] **Generate SOS stub card classes from card specs**
+- [x] **FDN audited tests: Batch 1 — Basic lands and vanilla/French vanilla creatures (~30 cards)**
+- [x] **FDN audited tests: Batch 2 — Simple instants and sorceries (~60 cards)**
+- [x] **FDN audited tests: Batch 3 — Creatures with triggers and activated abilities (~65 cards)**
+- [x] **FDN audited tests: Batch 4 — Enchantments, equipment, artifacts, and planeswalkers (~70 cards)**
+- [x] **FDN audited tests: Batch 5 — Non-basic lands, SPG cards, and remaining cards (~76 cards)**
+- [x] **SOS audited tests: Batch 1 — Trivial and simple complexity cards**
+- [x] **SOS audited tests: Batch 2 — Moderate complexity cards**
+- [x] **SOS audited tests: Batch 3 — Complex and extreme complexity cards**
+- [x] **Wire per-card audited tests into the evaluation pipeline**
 ## Completed 2026-05-07
 
 Phase 2.5: CLI Wiring, Contamination Controls & Integration Test (PR #3 — 11 items)
