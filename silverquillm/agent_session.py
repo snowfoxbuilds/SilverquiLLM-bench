@@ -262,6 +262,9 @@ class AgentSession:
 
         logger.info("Workspace created at %s", workspace)
 
+        # Init a git repo in the directory so that agents don't try to go to the root
+        subprocess.run(["git", "init"], cwd=str(workspace), capture_output=True)
+
         # Initialize and set up the adapter
         adapter = self._get_adapter()
         adapter.setup()

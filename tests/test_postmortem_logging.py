@@ -253,6 +253,7 @@ class TestPostmortemDuringBlind:
             config=config,
             card_spec=_SAMPLE_SPEC,
             card_dir=str(tmp_path),
+            run_dir=output_dir,
         )
 
         workspace = tmp_path / "workspace"
@@ -269,7 +270,7 @@ class TestPostmortemDuringBlind:
         result = session.run_blind_implementation(workspace)
         assert result.status == "ok"
 
-        postmortem = output_dir / "Grizzly Bears" / "postmortem.jsonl"
+        postmortem = output_dir / "cards" / "Grizzly Bears" / "postmortem.jsonl"
         assert postmortem.exists()
         entry = json.loads(postmortem.read_text().strip())
         assert entry["status"] == "success"
@@ -284,6 +285,7 @@ class TestPostmortemDuringBlind:
             config=config,
             card_spec=_SAMPLE_SPEC,
             card_dir=str(tmp_path),
+            run_dir=output_dir,
         )
 
         workspace = tmp_path / "workspace"
@@ -298,7 +300,7 @@ class TestPostmortemDuringBlind:
         result = session.run_blind_implementation(workspace)
         assert result.status == "timeout"
 
-        postmortem = output_dir / "Grizzly Bears" / "postmortem.jsonl"
+        postmortem = output_dir / "cards" / "Grizzly Bears" / "postmortem.jsonl"
         assert postmortem.exists()
         entry = json.loads(postmortem.read_text().strip())
         assert entry["status"] == "error"
@@ -346,6 +348,7 @@ class TestPostmortemDuringTestInformed:
             config=config,
             card_spec=_SAMPLE_SPEC,
             card_dir=str(tmp_path),
+            run_dir=output_dir,
         )
 
         workspace = tmp_path / "workspace"
@@ -378,7 +381,7 @@ class TestPostmortemDuringTestInformed:
         result = session.run_test_informed(workspace, blind_impl)
         assert result.status == "ok"
 
-        postmortem = output_dir / "Grizzly Bears" / "postmortem.jsonl"
+        postmortem = output_dir / "cards" / "Grizzly Bears" / "postmortem.jsonl"
         assert postmortem.exists()
         lines = postmortem.read_text().strip().splitlines()
         # At least 1 entry logged
@@ -398,6 +401,7 @@ class TestPostmortemDuringTestInformed:
             config=config,
             card_spec=_SAMPLE_SPEC,
             card_dir=str(tmp_path),
+            run_dir=output_dir,
         )
 
         workspace = tmp_path / "workspace"
@@ -416,7 +420,7 @@ class TestPostmortemDuringTestInformed:
         result = session.run_test_informed(workspace, blind_impl)
         assert result.status == "timeout"
 
-        postmortem = output_dir / "Grizzly Bears" / "postmortem.jsonl"
+        postmortem = output_dir / "cards" / "Grizzly Bears" / "postmortem.jsonl"
         assert postmortem.exists()
         entry = json.loads(postmortem.read_text().strip())
         assert entry["status"] == "error"
