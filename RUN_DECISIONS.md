@@ -15,3 +15,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Reasoning**: The item-specific tests and affected consumer tests passed; fixing audited SOS oracle/stub behavior is unrelated to the mode/strategy config refactor.
 - **Alternatives considered**: Block item 1 until every audited SOS behavior test passes.
 - **Impact**: No code impact for item 1; later audit/final test reporting should preserve this context if the full suite remains red.
+
+## Item 2 — BlindStrategy timeout enforcement
+- **Context**: `BlindStrategy.run_card()` must return `timeout` when the supplied per-card timeout expires, but the adapter interface remains synchronous and does not accept a timeout argument.
+- **Decision**: Enforce the item-level timeout by running `adapter.run()` through a `ThreadPoolExecutor` and mapping `concurrent.futures.TimeoutError`, built-in `TimeoutError`, and `subprocess.TimeoutExpired` to `CardRunStatus.timeout`.
+- **Reasoning**: This keeps the strategy API independent of specific adapter implementations while satisfying the item requirement for a hard status transition.
+- **Alternatives considered**: Rely solely on adapter-level timeout handling; rejected because the strategy's `timeout` parameter would remain unenforced.
+- **Impact**: `silverquillm/strategies.py`.

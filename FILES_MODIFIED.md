@@ -23,3 +23,9 @@ tests/test_strategies.py — 29 tests for mode field, CardStrategy ABC, CardRunR
 - `tests/benchmark/test_helpers.py` — Removed `max_test_rounds` from AgentConfig constructor
 - `tests/test_violation_wiring.py` — Removed `max_test_rounds` from AgentConfig constructor in `_make_config` fixture
 
+## Item 2: Implement BlindStrategy
+
+### Implementation
+- `silverquillm/strategies.py` — Implemented `BlindStrategy.run_card()` with prompt dispatch, timeout handling, and card_impl.py existence check
+- `silverquillm/prompts.py` — Added `blind_mode_prompt()` and `_BLIND_MODE_TEMPLATE` that omits test_utils from workspace listing
+

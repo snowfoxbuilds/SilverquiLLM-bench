@@ -9,13 +9,18 @@ strategy instance.
 from __future__ import annotations
 
 import enum
+import subprocess
+import time
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover
     from silverquillm.adapters.base import AgentAdapter
+
+from silverquillm.prompts import blind_mode_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +107,47 @@ class BlindStrategy(CardStrategy):
         adapter: Any,
         timeout: int,
     ) -> CardRunResult:
-        raise NotImplementedError("BlindStrategy.run_card is not yet implemented")
+        """Execute a card in blind mode.
+
+        Sends a single prompt to the adapter and checks whether the agent
+        produced ``card_impl.py`` in the workspace.
+
+        Returns :attr:`CardRunStatus.completed` when the file exists,
+        :attr:`CardRunStatus.no_output` when it does not, or
+        :attr:`CardRunStatus.timeout` when the adapter raises a
+        :class:`TimeoutError`.
+        """
+        start = time.monotonic()
+        prompt = blind_mode_prompt(card_spec)
+        impl_path = workspace / "card_impl.py"
+
+        try:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(adapter.run, prompt, workspace)
+                future.result(timeout=timeout)
+        except (TimeoutError, FuturesTimeoutError, subprocess.TimeoutExpired):
+            elapsed_ms = int((time.monotonic() - start) * 1000)
+            files = [impl_path] if impl_path.exists() else []
+            return CardRunResult(
+                status=CardRunStatus.timeout,
+                files_written=files,
+                runtime_ms=elapsed_ms,
+            )
+
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+
+        if impl_path.exists():
+            return CardRunResult(
+                status=CardRunStatus.completed,
+                files_written=[impl_path],
+                runtime_ms=elapsed_ms,
+            )
+
+        return CardRunResult(
+            status=CardRunStatus.no_output,
+            files_written=[],
+            runtime_ms=elapsed_ms,
+        )
 
 
 class ImplTestStrategy(CardStrategy):

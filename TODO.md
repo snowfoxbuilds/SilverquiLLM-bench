@@ -38,7 +38,7 @@ Reference files in current codebase:
 
   Testability: Unit test that `load_config()` parses `mode` correctly, rejects invalid values, defaults to `"impl_test"`. Unit test that `get_strategy()` returns correct strategy class.
 
-- [ ] **Implement ****`BlindStrategy`**
+- [x] **Implement ****`BlindStrategy`**
   Detail: In `silverquillm/strategies.py`, implement `BlindStrategy(CardStrategy)`. This strategy:
 
   1. Sends a single prompt to the agent: "Implement this card, write to `card_impl.py`. Do not write tests."

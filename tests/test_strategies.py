@@ -266,3 +266,136 @@ class TestConfigExampleYaml:
             pytest.skip("config.example.yaml not found")
         cfg = load_config(str(example))
         assert cfg.mode in ("blind", "impl_test")
+
+
+# =========================================================================
+# BlindStrategy.run_card (TODO item 2)
+# =========================================================================
+
+_SAMPLE_CARD_SPEC: dict = {
+    "name": "Lightning Bolt",
+    "mana_cost": "{R}",
+    "type_line": "Instant",
+    "oracle_text": "Lightning Bolt deals 3 damage to any target.",
+}
+
+
+class _MockAdapter:
+    """Simple mock adapter that records calls and optionally writes card_impl.py."""
+
+    def __init__(self, *, write_impl: bool = False, raise_timeout: bool = False) -> None:
+        self._write_impl = write_impl
+        self._raise_timeout = raise_timeout
+        self.calls: list[tuple[str, Path]] = []
+
+    def run(self, prompt: str, workspace: Path) -> str:
+        self.calls.append((prompt, workspace))
+        if self._raise_timeout:
+            raise TimeoutError("adapter timed out")
+        if self._write_impl:
+            (workspace / "card_impl.py").write_text("# impl\n")
+        return "done"
+
+
+class TestBlindStrategyRunCard:
+    """Tests for BlindStrategy.run_card() — the core of blind-mode execution."""
+
+    def test_completed_when_adapter_writes_card_impl(self, tmp_path: Path) -> None:
+        """When the adapter writes card_impl.py, status should be 'completed'."""
+        strategy = BlindStrategy()
+        adapter = _MockAdapter(write_impl=True)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert result.status == CardRunStatus.completed
+
+    def test_no_output_when_adapter_writes_nothing(self, tmp_path: Path) -> None:
+        """When the adapter produces no card_impl.py, status should be 'no_output'."""
+        strategy = BlindStrategy()
+        adapter = _MockAdapter(write_impl=False)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert result.status == CardRunStatus.no_output
+
+    def test_timeout_when_adapter_raises_timeout_error(self, tmp_path: Path) -> None:
+        """When the adapter raises TimeoutError, status should be 'timeout'."""
+        strategy = BlindStrategy()
+        adapter = _MockAdapter(raise_timeout=True)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert result.status == CardRunStatus.timeout
+
+    def test_timeout_with_card_impl_present(self, tmp_path: Path) -> None:
+        """If timeout occurs but card_impl.py exists (partial work), files_written should include it."""
+        strategy = BlindStrategy()
+        # Pre-create the file to simulate partial work before timeout
+        (tmp_path / "card_impl.py").write_text("# partial\n")
+        adapter = _MockAdapter(raise_timeout=True)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert result.status == CardRunStatus.timeout
+        assert any(str(p).endswith("card_impl.py") for p in result.files_written)
+
+    def test_files_written_contains_card_impl_on_completed(self, tmp_path: Path) -> None:
+        """On completed, files_written should list the card_impl.py path."""
+        strategy = BlindStrategy()
+        adapter = _MockAdapter(write_impl=True)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert len(result.files_written) >= 1
+        assert any(str(p).endswith("card_impl.py") for p in result.files_written)
+
+    def test_files_written_empty_on_no_output(self, tmp_path: Path) -> None:
+        """On no_output, files_written should be empty."""
+        strategy = BlindStrategy()
+        adapter = _MockAdapter(write_impl=False)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert result.files_written == []
+
+    def test_runtime_ms_is_non_negative(self, tmp_path: Path) -> None:
+        """runtime_ms should be a non-negative integer."""
+        strategy = BlindStrategy()
+        adapter = _MockAdapter(write_impl=True)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert isinstance(result.runtime_ms, int)
+        assert result.runtime_ms >= 0
+
+    def test_engine_modified_defaults_false(self, tmp_path: Path) -> None:
+        """engine_modified should default to False for a basic blind run."""
+        strategy = BlindStrategy()
+        adapter = _MockAdapter(write_impl=True)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert result.engine_modified is False
+
+    def test_adapter_receives_prompt_with_card_name(self, tmp_path: Path) -> None:
+        """The prompt sent to the adapter should contain the card name."""
+        strategy = BlindStrategy()
+        adapter = _MockAdapter(write_impl=True)
+        strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert len(adapter.calls) == 1
+        prompt, _ = adapter.calls[0]
+        assert "Lightning Bolt" in prompt
+
+    def test_adapter_receives_prompt_referencing_card_impl(self, tmp_path: Path) -> None:
+        """The prompt sent to the adapter should reference card_impl.py."""
+        strategy = BlindStrategy()
+        adapter = _MockAdapter(write_impl=True)
+        strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        prompt, _ = adapter.calls[0]
+        assert "card_impl.py" in prompt
+
+    def test_adapter_receives_prompt_without_test_utils(self, tmp_path: Path) -> None:
+        """The prompt in blind mode should NOT mention test_utils."""
+        strategy = BlindStrategy()
+        adapter = _MockAdapter(write_impl=True)
+        strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        prompt, _ = adapter.calls[0]
+        assert "test_utils" not in prompt
+
+    def test_adapter_called_exactly_once(self, tmp_path: Path) -> None:
+        """Blind mode sends exactly one prompt to the adapter."""
+        strategy = BlindStrategy()
+        adapter = _MockAdapter(write_impl=True)
+        strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert len(adapter.calls) == 1
+
+    def test_result_is_card_run_result(self, tmp_path: Path) -> None:
+        """run_card must return a CardRunResult instance."""
+        strategy = BlindStrategy()
+        adapter = _MockAdapter(write_impl=True)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert isinstance(result, CardRunResult)

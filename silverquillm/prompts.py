@@ -39,6 +39,34 @@ existing functionality.
 Do not rename the class. Do not write tests."""
 
 
+# ---------------------------------------------------------------------------
+# Blind-mode prompt (no test utilities)
+# ---------------------------------------------------------------------------
+
+_BLIND_MODE_TEMPLATE = """\
+You are implementing a Magic: The Gathering card for the SilverquiLLM-bench game engine.
+
+Card: {card_name}
+Mana Cost: {mana_cost}
+Type: {type_line}
+Rules Text: {oracle_text}
+
+Your workspace is the .workspace/ directory at the repo root.
+ALL files you need are in .workspace/ — do NOT look for them elsewhere.
+
+Implement this card by completing the class in .workspace/template.py.
+You have access to (all in .workspace/):
+- .workspace/template.py (starter implementation skeleton — fill in this class)
+- .workspace/card_spec.json (full card specification)
+- .workspace/engine_api.md (game engine API reference)
+- .workspace/engine/ (game engine source — you may extend if needed)
+- .workspace/base_classes.py (card base classes)
+- .workspace/rules_overview.md (MTG rules reference)
+- .workspace/foundations/ (browse working card implementations as reference)
+
+Implement this card, write to `card_impl.py`. Do not write tests."""
+
+
 def blind_implementation_prompt(card_spec: dict) -> str:
     """Build the Step 1 (blind implementation) prompt from *card_spec*.
 
@@ -54,6 +82,34 @@ def blind_implementation_prompt(card_spec: dict) -> str:
         Fully-substituted prompt with no remaining ``{placeholder}`` tokens.
     """
     return _BLIND_IMPLEMENTATION_TEMPLATE.format_map(
+        {
+            "card_name": card_spec["name"],
+            "mana_cost": card_spec["mana_cost"],
+            "type_line": card_spec["type_line"],
+            "oracle_text": card_spec["oracle_text"],
+        }
+    )
+
+
+def blind_mode_prompt(card_spec: dict) -> str:
+    """Build the blind-mode prompt from *card_spec*.
+
+    Unlike :func:`blind_implementation_prompt`, this variant omits
+    ``test_utils.py`` and ``test_utils.md`` from the workspace listing,
+    matching the blind-mode workspace that excludes test utilities.
+
+    Parameters
+    ----------
+    card_spec:
+        Card specification dictionary.  Must contain at least ``name``,
+        ``mana_cost``, ``type_line``, and ``oracle_text``.
+
+    Returns
+    -------
+    str
+        Fully-substituted prompt with no remaining ``{placeholder}`` tokens.
+    """
+    return _BLIND_MODE_TEMPLATE.format_map(
         {
             "card_name": card_spec["name"],
             "mana_cost": card_spec["mana_cost"],
