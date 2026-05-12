@@ -246,7 +246,7 @@ def _build_result_record(
     # Build implementation metrics — preserve all keys except large source
     # blobs and internal bookkeeping, so tokens/runtime/peak_context etc.
     # flow through automatically.
-    _IMPL_EXCLUDE = {"impl_source", "tests_source", "agent", "model", "complexity_tier", "tier", "iterations"}
+    _IMPL_EXCLUDE = {"impl_source", "tests_source", "agent", "model", "complexity_tier", "tier", "iterations", "violations"}
 
     blind_metrics = {
         k: v for k, v in blind_result.items() if k not in _IMPL_EXCLUDE
@@ -260,6 +260,9 @@ def _build_result_record(
     _tested_iters = test_result.get("iterations", [])
     tested_metrics["iterations"] = _tested_iters if isinstance(_tested_iters, int) else len(_tested_iters)
 
+    # Collect violations from either result dict
+    violations = blind_result.get("violations", []) or test_result.get("violations", [])
+
     # Canonical schema: implementation.blind / implementation.tested hold all
     # per-phase metrics. self_eval/audited_eval hold test-run outcomes.
     record: dict[str, Any] = {
@@ -268,6 +271,7 @@ def _build_result_record(
         "agent": agent,
         "model": model,
         "complexity_tier": complexity_tier,
+        "violations": violations,
         "implementation": {
             "blind": blind_metrics,
             "tested": tested_metrics,

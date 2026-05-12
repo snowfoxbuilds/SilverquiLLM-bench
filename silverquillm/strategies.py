@@ -55,6 +55,7 @@ class CardRunResult:
     files_written: list[Path] = field(default_factory=list)
     runtime_ms: int = 0
     engine_modified: bool = False
+    violations: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

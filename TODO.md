@@ -82,7 +82,7 @@ Reference files in current codebase:
   - `silverquillm/agent_session.py` — major refactor (remove ~40% of the file)
   Testability: Existing integration tests should still pass after refactor. New unit test: workspace setup creates correct files for each mode (blind mode has no test_utils, impl_test mode has test_utils).
 
-- [ ] **Decouple ****`harvest_results()`**** from violation status (fixes Issue #15)**
+- [x] **Decouple ****`harvest_results()`**** from violation status (fixes Issue #15)**
   Detail: Currently, `harvest_results()` in `agent_session.py` is skipped or partial when a violation is detected. Ral Zarek (#97) got a violation and its implementation files were never captured. Fix: `harvest_results()` must run unconditionally — always copy `card_impl.py` and `tests.py` from the workspace regardless of violation status. Violations annotate `result.json` but don't prevent file capture.
 
   Files to change:

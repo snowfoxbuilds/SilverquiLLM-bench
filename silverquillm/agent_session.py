@@ -465,6 +465,7 @@ class AgentSession:
                 files_written=result.files_written,
                 runtime_ms=int(elapsed * 1000),
                 engine_modified=result.engine_modified,
+                violations=violations,
             )
 
         # Generate agent_thoughts.md

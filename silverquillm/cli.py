@@ -248,6 +248,10 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
                 blind_result, tested_result, spec, cfg
             )
 
+            # Propagate violations into result dicts so result.json is annotated
+            if card_run_result.violations:
+                blind_dict["violations"] = list(card_run_result.violations)
+
             card_results_dir = run_dir / "cards" / str(card_dir_name)
             save_card_result(run_dir, card_dir_name, blind_dict, test_dict)
 

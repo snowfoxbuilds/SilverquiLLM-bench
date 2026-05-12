@@ -33,6 +33,12 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: The benchmark harness treats agents as black boxes; mode-specific prompting and output expectations belong in strategies, while the session wrapper owns workspace, contamination checks, postmortem logging, and artifact harvest.
 - **Impact**: `silverquillm/agent_session.py`, `silverquillm/cli.py`, agent-session tests, CLI orchestration tests, postmortem tests, violation wiring tests.
 
+## Violation annotation does not block artifact harvest
+- **Context**: Issue #15 showed a card with a contamination violation could lose its implementation artifacts.
+- **Decision**: `harvest_results()` runs regardless of violation status and captures canonical `card_impl.py` plus optional `tests.py`. Violations are propagated through `CardRunResult.violations` and written as a top-level `violations` list in per-card `result.json`.
+- **Reasoning**: Contamination should affect scoring/status annotations, not destroy diagnostic or evaluatable artifacts.
+- **Impact**: `silverquillm/agent_session.py`, `silverquillm/cli.py`, `silverquillm/results.py`, harvest/violation/result tests.
+
 ## AgentAdapter pattern
 - **Context**: Need pluggable agent adapters for different CLI tools.
 - **Decision**: ABC with `run(prompt, workspace) -> str`, `setup()`, `teardown()`. Registry-based factory via `get_adapter(config)`. Concrete adapters call `register_adapter("name", cls)` at module level. `run_with_retries` uses a single overall deadline from `timeout_per_card`.

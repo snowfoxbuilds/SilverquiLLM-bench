@@ -50,3 +50,14 @@ tests/test_agent_session_refactor.py — 24 tests for harness removal, run_card 
 - `tests/test_violation_wiring.py` — Added TestRunCardViolationWiring class with tests exercising run_card() violation checking flow
 - `tests/benchmark/test_e2e.py` — Updated to use run_card() with adapter mock
 
+
+## Item 5: Decouple harvest_results from violation status
+
+### Implementation
+- `silverquillm/strategies.py` — Added `violations: list[str]` field to `CardRunResult` dataclass
+- `silverquillm/agent_session.py` — Updated `run_card()` to populate `violations` field in `CardRunResult` when violations detected
+- `silverquillm/cli.py` — Propagate `card_run_result.violations` into `blind_dict` before `save_card_result()` so violations appear in `result.json`
+- `silverquillm/results.py` — `_build_result_record()` extracts violations from result dicts and includes as top-level field in result.json
+- `tests/test_results.py` — Added `TestViolationsInResultJson` class with 3 tests for violations in result.json
+- `tests/test_harvest_unconditional.py` — New test file: 7 tests verifying violations annotate result and harvest runs unconditionally
+- `tests/test_strategies.py` — Updated `test_has_expected_fields` to include `violations` in expected field set
