@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -66,6 +67,7 @@ class MockAdapter(AgentAdapter):
         self.behavior = behavior
         self.impl_source = impl_source
         self.tests_source = tests_source
+        self._stop = threading.Event()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -78,7 +80,8 @@ class MockAdapter(AgentAdapter):
         """No-op — mock adapter holds no resources."""
 
     def kill(self) -> None:
-        """No-op — mock adapter has no subprocess to kill."""
+        """Unblock any waiting timeout behavior."""
+        self._stop.set()
 
     # ------------------------------------------------------------------
     # Run
@@ -90,9 +93,9 @@ class MockAdapter(AgentAdapter):
         Returns a short string describing what the adapter did.
         """
         if self.behavior == "timeout":
-            # Sleep forever — the strategy's timeout will fire
-            time.sleep(86400)
-            return "should not reach here"
+            # Block until kill() sets the stop event or the strategy timeout fires
+            self._stop.wait(timeout=86400)
+            return ""
 
         if self.behavior == "no_output":
             # Remove any pre-seeded files so the harness detects no output

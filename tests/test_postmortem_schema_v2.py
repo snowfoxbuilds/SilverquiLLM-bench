@@ -258,7 +258,7 @@ class TestMixedEventJSONL:
     def test_mixed_events_valid_jsonl(self, tmp_path):
         """All event types can coexist in one JSONL file."""
         pm = tmp_path / "postmortem.jsonl"
-        _append_postmortem(pm, "p", "r", 10, 5.0, 1, "success")
+        _append_postmortem(pm, "p", "r", 10, 5.0, "success")
         _append_file_written(pm, "card.py", 500)
         _append_eval_result(pm, "self", passed=3, failed=1)
         _append_regression_check(pm)

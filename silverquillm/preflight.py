@@ -26,7 +26,12 @@ class PreflightError(Exception):
     """Raised when a pre-flight check fails."""
 
 
-def preflight_check(config: BenchmarkConfig, run_dir: Path) -> None:
+def preflight_check(
+    config: BenchmarkConfig,
+    run_dir: Path,
+    *,
+    skip_engine_tests: bool = False,
+) -> None:
     """Run all pre-flight checks before entering the card loop.
 
     Parameters
@@ -35,6 +40,9 @@ def preflight_check(config: BenchmarkConfig, run_dir: Path) -> None:
         Validated benchmark configuration.
     run_dir:
         The results directory for this run (must be creatable / writable).
+    skip_engine_tests:
+        When ``True``, skip the engine test suite check.  Useful for rapid
+        iteration during development when the engine is known-good.
 
     Raises
     ------
@@ -47,7 +55,8 @@ def preflight_check(config: BenchmarkConfig, run_dir: Path) -> None:
     errors.extend(_check_test_utils_import())
     errors.extend(_check_workspace(run_dir))
     errors.extend(_check_workspace_dir())
-    errors.extend(_check_engine_tests())
+    if not skip_engine_tests:
+        errors.extend(_check_engine_tests())
     errors.extend(_check_config(config))
     errors.extend(_check_card_specs_dir(config))
 

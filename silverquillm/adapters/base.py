@@ -146,12 +146,17 @@ class AgentAdapter(ABC):
     ) -> str:
         """Execute :meth:`run` enforcing a wall-clock *timeout*.
 
-        Uses ``signal.SIGALRM`` on Unix and a ``threading.Timer`` fallback
-        on Windows (which lacks SIGALRM).
+        Uses ``signal.SIGALRM`` on Unix when called from the main thread.
+        Falls back to the threading implementation on Windows or when called
+        from a non-main thread (``signal.signal`` raises ``ValueError`` in
+        non-main threads).
         """
         import sys
+        import threading
 
-        if sys.platform == "win32":
+        if sys.platform == "win32" or not (
+            threading.current_thread() is threading.main_thread()
+        ):
             return self._run_with_timeout_threading(prompt, workspace, timeout)
 
         import signal

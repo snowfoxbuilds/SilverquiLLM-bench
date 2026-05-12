@@ -445,13 +445,13 @@ class TestResultJsonSchema:
         assert ae["total"] == 2
 
     def test_result_json_errors_only_present_when_nonempty(self, tmp_path: Path):
-        """eval_errors key should only appear if there are actual errors."""
+        """errors key should only appear if there are actual errors."""
         run_dir = _make_run_dir(tmp_path, ["card-a"])
         run_post_eval(run_dir, mode="impl_test")
 
         record = json.loads((run_dir / "cards" / "card-a" / "result.json").read_text())
         # No errors expected for a passing card
-        assert "eval_errors" not in record
+        assert "errors" not in record
 
     def test_result_json_preserves_existing_fields_on_merge(self, tmp_path: Path):
         """Post-eval merges into existing result.json, preserving prior fields."""
@@ -478,7 +478,7 @@ class TestResultJsonSchema:
         assert "audited_eval" in record
 
     def test_result_json_eval_errors_recorded_for_missing_impl(self, tmp_path: Path):
-        """When impl is missing, eval_errors list is populated in result.json."""
+        """When impl is missing, errors list is populated in result.json."""
         run_dir = _make_run_dir(tmp_path, [], with_engine=True)
         card_dir = run_dir / "cards" / "broken-card"
         card_dir.mkdir()
@@ -488,8 +488,8 @@ class TestResultJsonSchema:
         run_post_eval(run_dir, mode="impl_test")
 
         record = json.loads((card_dir / "result.json").read_text())
-        assert "eval_errors" in record
-        assert len(record["eval_errors"]) > 0
+        assert "errors" in record
+        assert len(record["errors"]) > 0
 
 
 # ---------------------------------------------------------------------------

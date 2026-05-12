@@ -76,7 +76,6 @@ class TestAppendPostmortem:
             response="world",
             tokens=42,
             timing_ms=123.4,
-            round_num=1,
             status="success",
         )
         assert postmortem_path.exists()
@@ -87,7 +86,6 @@ class TestAppendPostmortem:
         assert entry["response"] == "world"
         assert entry["tokens"] == 42
         assert entry["timing_ms"] == 123.4
-        assert entry["round"] == 1
         assert entry["status"] == "success"
 
     def test_appends_multiple_entries(self, tmp_path):
@@ -99,14 +97,13 @@ class TestAppendPostmortem:
                 response=f"r{i}",
                 tokens=i * 10,
                 timing_ms=float(i),
-                round_num=i + 1,
                 status="success",
             )
         lines = postmortem_path.read_text().strip().splitlines()
         assert len(lines) == 3
         for i, line in enumerate(lines):
             entry = json.loads(line)
-            assert entry["round"] == i + 1
+            assert entry["prompt"] == f"p{i}"
 
     def test_tokens_can_be_none(self, tmp_path):
         postmortem_path = tmp_path / "postmortem.jsonl"
@@ -116,7 +113,6 @@ class TestAppendPostmortem:
             response="r",
             tokens=None,
             timing_ms=1.0,
-            round_num=1,
             status="success",
         )
         entry = json.loads(postmortem_path.read_text().strip())
@@ -130,7 +126,6 @@ class TestAppendPostmortem:
             response="error msg",
             tokens=None,
             timing_ms=50.0,
-            round_num=1,
             status="error",
         )
         entry = json.loads(postmortem_path.read_text().strip())
@@ -146,7 +141,6 @@ class TestAppendPostmortem:
             response=long_response,
             tokens=100,
             timing_ms=1.0,
-            round_num=1,
             status="success",
         )
         entry = json.loads(postmortem_path.read_text().strip())
@@ -162,7 +156,6 @@ class TestAppendPostmortem:
             response=long_response,
             tokens=100,
             timing_ms=1.0,
-            round_num=1,
             status="success",
         )
         entry = json.loads(postmortem_path.read_text().strip())
@@ -178,7 +171,6 @@ class TestAppendPostmortem:
             response=short_response,
             tokens=50,
             timing_ms=2.0,
-            round_num=1,
             status="success",
         )
         entry = json.loads(postmortem_path.read_text().strip())
@@ -193,11 +185,10 @@ class TestAppendPostmortem:
             response="r",
             tokens=10,
             timing_ms=5.0,
-            round_num=1,
             status="success",
         )
         entry = json.loads(postmortem_path.read_text().strip())
-        expected_keys = {"prompt", "response", "tokens", "timing_ms", "round", "status"}
+        expected_keys = {"prompt", "response", "tokens", "timing_ms", "status"}
         assert set(entry.keys()) == expected_keys
 
     def test_timing_ms_is_numeric(self, tmp_path):
@@ -209,7 +200,6 @@ class TestAppendPostmortem:
             response="r",
             tokens=10,
             timing_ms=0.0,
-            round_num=1,
             status="success",
         )
         entry = json.loads(postmortem_path.read_text().strip())
@@ -226,7 +216,6 @@ class TestAppendPostmortem:
                 response=f"response-{i}",
                 tokens=i,
                 timing_ms=float(i * 10),
-                round_num=i + 1,
                 status="success" if i % 2 == 0 else "error",
             )
         lines = postmortem_path.read_text().strip().splitlines()
@@ -256,14 +245,12 @@ class TestPostmortemDuringBlind:
             response="agent output",
             tokens=42,
             timing_ms=123.4,
-            round_num=1,
             status="success",
         )
 
         assert postmortem_path.exists()
         entry = json.loads(postmortem_path.read_text().strip())
         assert entry["status"] == "success"
-        assert entry["round"] == 1
         assert entry["timing_ms"] > 0
 
     def test_blind_timeout_logs_error(self, tmp_path, monkeypatch):
@@ -278,14 +265,12 @@ class TestPostmortemDuringBlind:
             response="TimeoutExpired",
             tokens=None,
             timing_ms=300000.0,
-            round_num=1,
             status="error",
         )
 
         assert postmortem_path.exists()
         entry = json.loads(postmortem_path.read_text().strip())
         assert entry["status"] == "error"
-        assert entry["round"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -420,14 +405,13 @@ class TestPostmortemDuringTestInformed:
 
         postmortem_path = output_dir / "cards" / "Grizzly Bears" / "postmortem.jsonl"
 
-        for round_num in range(1, 4):
+        for i in range(1, 4):
             _append_postmortem(
                 postmortem_path=postmortem_path,
-                prompt=f"round {round_num} prompt",
-                response=f"round {round_num} output",
-                tokens=round_num * 10,
-                timing_ms=float(round_num * 100),
-                round_num=round_num,
+                prompt=f"round {i} prompt",
+                response=f"round {i} output",
+                tokens=i * 10,
+                timing_ms=float(i * 100),
                 status="success",
             )
 
@@ -436,7 +420,7 @@ class TestPostmortemDuringTestInformed:
         assert len(lines) == 3
         entry = json.loads(lines[0])
         assert entry["status"] == "success"
-        assert entry["round"] == 1
+        assert entry["prompt"] == "round 1 prompt"
 
     def test_test_informed_timeout_logs_error(self, tmp_path, monkeypatch):
         """Timeout error entry can be logged via _append_postmortem."""
@@ -450,11 +434,9 @@ class TestPostmortemDuringTestInformed:
             response="TimeoutExpired",
             tokens=None,
             timing_ms=300000.0,
-            round_num=1,
             status="error",
         )
 
         assert postmortem_path.exists()
         entry = json.loads(postmortem_path.read_text().strip())
         assert entry["status"] == "error"
-        assert entry["round"] == 1

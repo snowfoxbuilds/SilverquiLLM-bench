@@ -254,8 +254,6 @@ def _merge_result_json(card_path: Path, card_result: CardEvalResult, mode: str =
         record["audited_eval"] = None
 
     if card_result.errors:
-        record["eval_errors"] = record.get("eval_errors", []) + card_result.errors
-        # Also store under v2 key for forward compat
         record["errors"] = record.get("errors", []) + card_result.errors
 
     result_json.write_text(json.dumps(record, indent=2, default=str))

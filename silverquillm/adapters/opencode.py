@@ -2,10 +2,10 @@
 
 Wraps the ``opencode`` CLI tool as a concrete :class:`AgentAdapter`.
 Ports logic from :func:`silverquillm.agent_session.AgentSession._run_agent`
-with the following fixes:
+with the following changes:
 
-- Removes the invalid ``--thinking`` flag.
 - Passes prompts via stdin instead of as a CLI argument.
+- Streams stdout/stderr to the terminal with ANSI colours.
 """
 
 from __future__ import annotations

@@ -436,7 +436,6 @@ class AgentSession:
                     response="TimeoutExpired",
                     tokens=None,
                     timing_ms=elapsed * 1000,
-                    round_num=1,
                     status="error",
                 )
             if raw_log_path:
@@ -458,7 +457,6 @@ class AgentSession:
                     response=response_text,
                     tokens=None,
                     timing_ms=elapsed * 1000,
-                    round_num=1,
                     status="error",
                 )
             if raw_log_path:
@@ -486,7 +484,6 @@ class AgentSession:
                 response=f"status={result.status.value}",
                 tokens=None,
                 timing_ms=elapsed * 1000,
-                round_num=1,
                 status="success",
             )
         if raw_log_path:
@@ -560,7 +557,6 @@ def _append_postmortem(
     response: str,
     tokens: int | None,
     timing_ms: float,
-    round_num: int,
     status: str,
     *,
     tests_passing: bool | None = None,
@@ -580,8 +576,6 @@ def _append_postmortem(
         Estimated token count, or ``None`` if unavailable.
     timing_ms:
         Duration of the invocation in milliseconds.
-    round_num:
-        1-based round number (1 for blind phase).
     status:
         ``"success"`` or ``"error"``.
     tests_passing:
@@ -597,7 +591,6 @@ def _append_postmortem(
         "response": response,
         "tokens": tokens,
         "timing_ms": timing_ms,
-        "round": round_num,
         "status": status,
     }
     if tests_passing is not None:
@@ -810,8 +803,7 @@ def _generate_agent_thoughts(output_dir: str | Path, card_name: str) -> Path | N
     lines.append("## Round Details")
     lines.append("")
 
-    for entry in entries:
-        round_num = entry.get("round", "?")
+    for round_num, entry in enumerate(entries, 1):
         status = entry.get("status", "unknown")
         timing_ms = entry.get("timing_ms", 0)
         prompt = entry.get("prompt", "")
@@ -905,9 +897,12 @@ def _count_rules_lookups(output: str) -> int:
 
 
 def _snapshot_mtimes(root: Path) -> dict[Path, float]:
-    """Record mtime for every file under *root*."""
+    """Record mtime for every file under *root*, skipping .git/."""
     snapshot: dict[Path, float] = {}
-    for dirpath, _dirs, files in os.walk(root):
+    git_dir = (root / ".git").resolve()
+    for dirpath, dirs, files in os.walk(root):
+        # Prune .git/ from the walk in-place to avoid descending into it
+        dirs[:] = [d for d in dirs if (Path(dirpath) / d).resolve() != git_dir]
         for fname in files:
             fpath = Path(dirpath) / fname
             try:
