@@ -201,7 +201,7 @@ class EvalResult:
   - `docs/test_utils.md` (or `tests/test_utils.md` — check which path the workspace copies from) — update all import examples
   Testability: Grep the updated file for `from tests.test_utils` — should find zero matches. Grep for `from test_utils import` — should find all examples.
 
-- [ ] **Add ****`GameState`**** to template imports (fixes Issue #12)**
+- [x] **Add `GameState`**** to template imports (fixes Issue #12)**
   Detail: Nearly every card implementation needs `from engine.game_state import GameState` for type hints. Agents waste time adding this import. Add it to the template that `silverquillm/template_gen.py` generates.
 
   Files to change:

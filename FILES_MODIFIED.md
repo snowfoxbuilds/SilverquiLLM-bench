@@ -52,3 +52,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `docs/test_utils.md` — Updated all import examples and prose from `tests.test_utils` to `test_utils`
+
+## Item 13: Add GameState to template imports (fixes Issue #12)
+
+### Implementation
+- `silverquillm/template_gen.py` — Added `from engine.game_state import GameState` to generated template import block
