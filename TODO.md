@@ -294,7 +294,7 @@ Implement the cards from their specs alone. Do not write or run tests. Focus on 
 
   Testability: Create fixture run_dir with 3 per-card result.json → verify aggregation math, JSON schema.
 
-- [ ] **Implement progress.jsonl protocol in entrypoints**
+- [x] **Implement progress.jsonl protocol in entrypoints**
   Detail: Both entrypoints write `/output/progress.jsonl` for live monitoring from the host (since /output is a mounted volume, the host can `tail -f` it).
 
   JSONL schema:

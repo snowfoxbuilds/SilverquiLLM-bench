@@ -103,3 +103,9 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `silverquillm/results.py` — Pure function generate_run_summary(run_dir, image_name, cards_dir=None) with status.json merge, external cards_dir spec lookup, and deterministic timestamp from directory name
+
+## Item 10: Implement progress.jsonl protocol in entrypoints
+
+### Implementation
+- `docker/opencode-tested/entrypoint.sh` — Added progress.jsonl events and card watcher
+- `docker/opencode-blind/entrypoint.sh` — Added progress.jsonl events and card watcher
