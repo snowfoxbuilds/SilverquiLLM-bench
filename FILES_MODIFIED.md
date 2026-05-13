@@ -80,3 +80,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `silverquillm/rules_skill.py` — simplified from 26KB/650 lines to 5.6KB/173 lines; removed inline _STUB_RULES constant, generate_rules_overview, and _RULES_OVERVIEW_CONTENT; kept same public API (download_comprehensive_rules, build_rules_index, lookup_rule); added minimal embedded fallback rules string for when both network and cache are unavailable
+
+## Item 13: Fix PROJECT_MAP.md ASCII art alignment
+
+### Implementation
+- `PROJECT_MAP.md` — realigned ASCII art boxes in architecture diagram

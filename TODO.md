@@ -328,7 +328,7 @@ except subprocess.TimeoutExpired:
   - `tests/test_rules_skill.py` — update or delete
   Testability: If simplified: grep-based tests pass. If removed: no import errors, `test_package_rename.py` updated.
 
-- [ ] **Fix PROJECT_**[**MAP.md**](http://map.md/)** ASCII art alignment**
+- [x] **Fix PROJECT_**[**MAP.md**](http://map.md/)** ASCII art alignment**
   Detail: Architecture diagram in `PROJECT_MAP.md` has misaligned box characters after PR #5 edits. Cosmetic cleanup pass needed.
 
   Files to change:
