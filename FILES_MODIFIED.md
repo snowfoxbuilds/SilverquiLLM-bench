@@ -29,3 +29,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `silverquillm/strategies.py` — removed ThreadPoolExecutor wrapping in both BlindStrategy and ImplTestStrategy; call adapter.run_with_retries(timeout=timeout, retries=0) directly to enforce timeout; removed unused concurrent.futures imports
 
+
+## Item 7: Remove stale iterations/ directory creation
+
+### Tests
+- `tests/test_no_stale_iterations.py` — verifies no stale iterations references leak into serialized results
+
+### Implementation
+- `silverquillm/results.py` — removed stale iteration-count re-addition to blind/tested metrics in `_build_result_record()`; added `iteration_count` to `_IMPL_EXCLUDE` set; updated docstrings to remove `iterations` references
+- `silverquillm/run_utils.py` — removed stale `"iterations": tested.iterations` assignment from save pipeline

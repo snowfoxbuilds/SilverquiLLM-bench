@@ -223,7 +223,7 @@ except subprocess.TimeoutExpired:
 
   ⚠️ **Testing guidance (**[**TESTING-CONVENTIONS.md**](http://testing-conventions.md/)** compliance):** All timeout tests must use `threading.Event.wait()` adapters, patch `os.getpgid`/`os.killpg`, and set explicit mock PIDs.
 
-- [ ] **Remove stale ****`iterations/`**** directory creation**
+- [x] **Remove stale ****`iterations/`**** directory creation**
   Detail: The old multi-round `run_test_informed()` flow created `iterations/` subdirectories in results. The Phase 7 refactor moved to single-prompt `ImplTestStrategy` but didn't clean up all references. Result directories still contain a stale `iterations/` folder.
 
   **Fix:**

@@ -59,7 +59,6 @@ def _session_results_to_dicts(
             "tokens": tested.tokens,
             "runtime_seconds": tested.runtime_seconds,
             "peak_context": tested.peak_context,
-            "iterations": tested.iterations,
             "rules_lookups": tested.rules_lookups,
             "agent": config.agent.adapter,
             "model": config.model_name,
