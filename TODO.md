@@ -69,7 +69,7 @@ Reference: [CONTEXT.md](http://context.md/) for vocabulary, KEY_[DECISIONS.md](h
 
   Testability: Unit test with fixture card specs under `tests/fixtures/cards/`. Verify loading, sorting, missing-card error, template detection.
 
-- [ ] **Implement ****`silverquillm/workspace.py`**** — workspace staging**
+- [x] **Implement `silverquillm/workspace.py``**** — workspace staging**
   Detail: Host-side module that builds the workspace directory before `docker run`. This is the agent's entire world — contamination control is enforced by what gets staged.
 
   `stage_workspace(cards_dir: Path, engine_dir: Path, output_dir: Path) -> tuple[Path, Path]` returns (workspace_path, output_path).

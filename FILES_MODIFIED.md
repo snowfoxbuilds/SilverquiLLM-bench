@@ -68,3 +68,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `silverquillm/card_loader.py` — Added unified layout functions with path-derived identifiers, natural dir-name sorting, and fixed is_template to only skip docstrings/ellipsis
+
+## Item 5: Implement workspace.py — workspace staging
+
+### Tests
+- `tests/test_workspace.py` — 30 tests verifying workspace structure, engine copy, FDN/SOS cards, reference docs, idempotency
+
+### Implementation
+- `silverquillm/workspace.py` — workspace staging module with `stage_workspace()` that builds Docker mount directory tree; revised to add stale cleanup, use engine_dir for base_classes.py, and copy shared tier-level helper files
