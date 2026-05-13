@@ -1,8 +1,9 @@
 """CLI entry point for the SilverquiLLM benchmark runner.
 
-Provides two commands:
+Provides commands:
 - ``benchmark run`` — launch a full benchmark run in a Docker container
 - ``benchmark smoke`` — quick smoke test to verify a Docker image works
+- ``benchmark logs`` — colorized interleaved log viewer for completed runs
 
 Entry point registered in pyproject.toml: ``benchmark = "silverquillm.cli:main"``
 """
@@ -155,11 +156,13 @@ def _harvest_results(
         except FileNotFoundError:
             pass  # diff not available
 
-    # Output files
-    for fname in ("progress.jsonl", "stdout.log", "stderr.log"):
-        src = output / fname
-        if src.exists():
-            shutil.copy2(src, run_dir / fname)
+    # Output files — copy all .log files and known structured files
+    for src in sorted(output.iterdir()):
+        if src.is_file() and (
+            src.suffix == ".log"
+            or src.name in ("progress.jsonl", "exit_code")
+        ):
+            shutil.copy2(src, run_dir / src.name)
 
     # Per-card status
     _write_card_statuses(cards_dir, workspace, run_dir, timed_out)
@@ -453,3 +456,133 @@ def smoke(image: str, cards_dir: Path | None, engine_dir: Path | None) -> None:
 
     finally:
         shutil.rmtree(staging_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# Log viewer
+# ---------------------------------------------------------------------------
+
+# ANSI color codes for log channels
+_LOG_COLORS: dict[str, str] = {
+    "system": "\033[34m",      # blue
+    "agent_stderr": "\033[90m", # gray
+    "agent_stdout": "\033[37m", # white
+    "progress": "\033[32m",     # green
+}
+_RESET = "\033[0m"
+
+# Map of log file basenames → channel names
+_LOG_CHANNELS: dict[str, str] = {
+    "system.log": "system",
+    "agent_stderr.log": "agent_stderr",
+    "agent_stdout.log": "agent_stdout",
+    "progress.jsonl": "progress",
+}
+
+
+def _parse_log_lines(
+    run_dir: Path,
+) -> list[tuple[str, str, str]]:
+    """Parse log files and return sorted (sortkey, channel, line) tuples.
+
+    Lines with ``[HH:MM:SS]`` timestamps sort chronologically.
+    Lines without timestamps sort after any timestamped line from the same file,
+    preserving file order.
+    """
+    import json as _json
+
+    entries: list[tuple[str, str, str]] = []
+
+    for fname, channel in _LOG_CHANNELS.items():
+        fpath = run_dir / fname
+        if not fpath.exists():
+            continue
+
+        lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+        last_ts = ""
+        for idx, line in enumerate(lines):
+            # Try to extract [HH:MM:SS] timestamp
+            ts_match = _re.match(r"\[(\d{2}:\d{2}:\d{2})\]", line)
+            if ts_match:
+                last_ts = ts_match.group(1)
+            elif channel == "progress":
+                # progress.jsonl lines have "ts" field
+                try:
+                    obj = _json.loads(line)
+                    iso_ts = obj.get("ts", "")
+                    if len(iso_ts) >= 19:
+                        last_ts = iso_ts[11:19]
+                except (ValueError, KeyError):
+                    pass
+
+            # Sort key: timestamp then channel priority then line index
+            priority = list(_LOG_CHANNELS.values()).index(channel)
+            sort_key = f"{last_ts}|{priority:02d}|{idx:08d}"
+            entries.append((sort_key, channel, line))
+
+    entries.sort(key=lambda e: e[0])
+    return entries
+
+
+def format_log_lines(
+    run_dir: Path,
+    *,
+    color: bool = True,
+) -> list[str]:
+    """Return formatted log lines for a run directory.
+
+    Each line is prefixed with a channel tag and optionally ANSI-colored.
+    """
+    entries = _parse_log_lines(run_dir)
+    result: list[str] = []
+    for _sort_key, channel, line in entries:
+        tag = f"[{channel}]"
+        if color:
+            c = _LOG_COLORS.get(channel, "")
+            result.append(f"{c}{tag} {line}{_RESET}")
+        else:
+            result.append(f"{tag} {line}")
+    return result
+
+
+@main.command()
+@click.option(
+    "--run",
+    "run_name",
+    required=True,
+    help="Run name (directory under results/)",
+)
+@click.option(
+    "--results-dir",
+    default=None,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="Results directory (default: results/ relative to repo root)",
+)
+@click.option(
+    "--no-color",
+    is_flag=True,
+    default=False,
+    help="Disable ANSI colors",
+)
+def logs(
+    run_name: str,
+    results_dir: Path | None,
+    no_color: bool,
+) -> None:
+    """View interleaved, colorized logs for a completed run."""
+    if results_dir is None:
+        results_dir = _REPO_ROOT / "results"
+
+    run_dir = results_dir / run_name
+    if not run_dir.is_dir():
+        click.echo(f"Run directory not found: {run_dir}", err=True)
+        raise SystemExit(1)
+
+    use_color = not no_color
+    lines = format_log_lines(run_dir, color=use_color)
+    if not lines:
+        click.echo("No log files found in run directory.", err=True)
+        raise SystemExit(1)
+
+    for line in lines:
+        click.echo(line)

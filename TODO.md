@@ -31,7 +31,7 @@ silverquillm run --image <img> --cards 001,042,105 --timeout 3600
 
   Testability: Stage workspace with `card_filter=["001", "042"]` → verify only those two SOS dirs exist in workspace. Full set when `card_filter=None`. Run summary includes filter metadata.
 
-- [ ] **Implement multi-channel output capture from agent containers**
+- [x] **Implement multi-channel output capture from agent containers**
   Detail: Currently the entrypoint captures two streams: `stdout` → `/output/stdout.log`, `stderr` → `/output/stderr.log`. This conflates agent reasoning, agent tool output, system messages, and entrypoint orchestration into two undifferentiated logs. We need structured separation for post-run analysis and live monitoring.
 
   **Available Docker channels:**
