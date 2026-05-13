@@ -63,3 +63,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `tests/test_timeout_enforcement.py` — converted `_BlockingAdapter` and `_BlockingNoKillAdapter` to proper `AgentAdapter` subclasses so they inherit `run_with_retries()`; patched `signal.signal`/`signal.alarm` on `TestRunWithRetriesDeadline` class to prevent real SIGALRM; forced threading timeout path via `_run_with_timeout` patch; patched `os.getpgid`/`os.killpg` on `test_kill_noop_*` methods for safety
+
+## Item 11: Add run_summary.json top-level aggregation
+
+### Tests
+- `tests/test_aggregator.py` — 23 tests for run-level aggregation, CLI aggregate subcommand, and edge cases
+
+### Implementation
+- No changes needed — `silverquillm/aggregator.py` already has `RunSummary`, `aggregate_run()`, and `save_run_summary_v2()`; `silverquillm/cli.py` already wires aggregation after the card loop and provides the `aggregate` subcommand
