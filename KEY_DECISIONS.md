@@ -301,3 +301,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Strategies call `adapter.run_with_retries(prompt, workspace, timeout=timeout, retries=0)` instead of bare `adapter.run()`. Timeout enforcement is the adapter layer's responsibility via `run_with_retries`.
 - **Reasoning**: `run_with_retries` already implements timeout via SIGALRM (main thread) or threading fallback, plus calls `adapter.kill()`. Using it directly avoids duplicating timeout logic in each strategy.
 - **Impact**: `silverquillm/strategies.py`, all strategy tests use mock adapters with `run_with_retries`.
+
+## Lazy target filters with game-state evaluation
+- **Context**: Target filter closures in `get_targets()` captured game state at definition time, not evaluation time.
+- **Decision**: Target filter predicates now accept `game` as a parameter and evaluate state lazily. Card implementations use property-based predicates that check current controller, zone, and card type at evaluation time. `engine/casting.py` wires `filter_fn` into target validation.
+- **Reasoning**: MTG rules require target legality to be checked at resolution time using current game state, not the state when the spell was cast.
+- **Impact**: `engine/casting.py`, 6 card implementation files in `cards/foundations/`.

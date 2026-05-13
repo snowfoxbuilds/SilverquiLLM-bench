@@ -85,3 +85,18 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `PROJECT_MAP.md` — realigned ASCII art boxes in architecture diagram
+
+## Item 14: Fix get_targets() snapshot-at-call-time issue
+
+### Tests
+- `tests/engine/test_lazy_targets.py` — 10 tests verifying lazy filter evaluation (creature added after filter creation, non-creature rejection, keyword changes, power changes, controller changes, toughness changes, card type changes, base get_targets, multiple requirements, zone removal)
+
+### Implementation
+- `engine/types.py` — Updated TargetRequirement docstring to document lazy filter convention
+- `engine/casting.py` — Wired filter_fn validation into cast_spell target selection (step 5)
+- `cards/foundations/simple_spells_batch3.py` — Replaced snapshot filter_fn lambdas with lazy predicates; restored controller/ownership checks for SnakeskinVeil, DivineResilience, BiteDown, FellingBlow, Zombify; restored different-controllers validation for RunAwayTogether in on_resolve
+- `cards/foundations/simple_spells.py` — Replaced snapshot filter_fn lambdas with lazy predicates; restored graveyard ownership check for CemeteryRecruitment
+- `cards/foundations/auras_batch2.py` — Replaced 10 snapshot filter_fn lambdas with lazy property-based predicates
+- `cards/foundations/enchantments.py` — Replaced 4 snapshot filter_fn lambdas with lazy property-based predicates
+- `cards/foundations/simple_permanents.py` — Replaced 3 snapshot filter_fn lambdas with lazy property-based predicates
+- `cards/foundations/global_enchantments.py` — Replaced 1 snapshot filter_fn lambda with lazy predicate including controller check

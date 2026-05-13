@@ -133,7 +133,7 @@ class AngelicDestiny(Aura):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="enchant creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -230,7 +230,7 @@ class BlanchwoodArmor(Aura):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="enchant creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -308,7 +308,7 @@ class TwinbladeBlessing(Aura):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="enchant creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -377,7 +377,7 @@ class StarlightSnare(Aura):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="enchant creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -451,7 +451,7 @@ class ImprisonedInTheMoon(Aura):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: bool(getattr(obj, "card_types", set()) & {CardType.CREATURE, CardType.LAND, CardType.PLANESWALKER}),
                 description="enchant creature, land, or planeswalker",
                 zone=Zone.BATTLEFIELD,
             )
@@ -532,7 +532,7 @@ class WitnessProtection(Aura):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="enchant creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -611,7 +611,7 @@ class EatenByPiranhas(Aura):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="enchant creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -685,7 +685,7 @@ class NewHorizons(Aura):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.LAND in getattr(obj, "card_types", set()),
                 description="enchant land",
                 zone=Zone.BATTLEFIELD,
             )
@@ -773,7 +773,7 @@ class OrdealOfNylea(Aura):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="enchant creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -855,7 +855,7 @@ class Confiscate(Aura):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: True,
                 description="enchant permanent",
                 zone=Zone.BATTLEFIELD,
             )

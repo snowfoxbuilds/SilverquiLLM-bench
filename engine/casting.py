@@ -177,6 +177,16 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     if target_specs:
         for spec in target_specs:
             target = player.choose_target(target_specs, spec)
+            # Validate against filter_fn if the spec provides one
+            filter_fn = getattr(spec, "filter_fn", None)
+            if filter_fn is not None and target is not None:
+                if not filter_fn(target):
+                    stack_zone.remove(card)
+                    hand.add(card)
+                    raise CastingError(
+                        f"Cannot cast {card.name!r} — chosen target does not "
+                        f"satisfy filter: {getattr(spec, 'description', '')}"
+                    )
             chosen_targets.append(target)
 
     # 5b. Protection check — reject targets that have protection from this

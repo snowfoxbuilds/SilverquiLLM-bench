@@ -89,7 +89,7 @@ class BurstLightning(Instant):
                     targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()) or hasattr(obj, "life"),
                 description="any target",
                 zone=Zone.BATTLEFIELD,
             )
@@ -129,7 +129,7 @@ class IncineratingBlast(Sorcery):
                     targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="target creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -183,7 +183,7 @@ class GiantGrowth(Instant):
                     targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="target creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -276,7 +276,7 @@ class HerosDownfall(Instant):
                     targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: bool(getattr(obj, "card_types", set()) & {CardType.CREATURE, CardType.PLANESWALKER}),
                 description="target creature or planeswalker",
                 zone=Zone.BATTLEFIELD,
             )
@@ -337,7 +337,7 @@ class Negate(Instant):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE not in getattr(getattr(obj, "source", obj), "card_types", set()),
                 description="target noncreature spell",
                 zone=Zone.STACK,
             )
@@ -378,7 +378,7 @@ class Cancel(Instant):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: True,
                 description="target spell",
                 zone=Zone.STACK,
             )
@@ -459,7 +459,7 @@ class Disenchant(Instant):
                     targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: bool(getattr(obj, "card_types", set()) & {CardType.ARTIFACT, CardType.ENCHANTMENT}),
                 description="target artifact or enchantment",
                 zone=Zone.BATTLEFIELD,
             )
@@ -503,7 +503,7 @@ class Pilfer(Sorcery):
         ]
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj, _c=controller: hasattr(obj, "life") and obj is not _c,
                 description="target opponent",
                 zone=Zone.BATTLEFIELD,
             )
@@ -579,7 +579,10 @@ class CemeteryRecruitment(Sorcery):
 
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj, _c=controller: (
+                    CardType.CREATURE in getattr(obj, "card_types", set())
+                    and getattr(obj, "owner", None) is _c
+                ),
                 description="target creature card in your graveyard",
                 zone=Zone.GRAVEYARD,
             )
