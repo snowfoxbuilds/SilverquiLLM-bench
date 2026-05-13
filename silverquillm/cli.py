@@ -53,7 +53,7 @@ _active_session: AgentSession | None = None
 def _interrupt_handler(signum: int, frame: object) -> None:  # noqa: ARG001
     """Kill the active adapter immediately on SIGINT/SIGTERM, then raise."""
     try:
-        if _active_session is not None:
+        if _active_session is not None and _active_session._adapter is not None:  # noqa: SLF001
             _active_session._adapter.kill()  # noqa: SLF001
     except Exception:  # noqa: BLE001
         pass

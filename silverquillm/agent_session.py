@@ -531,16 +531,6 @@ class AgentSession:
                 prompt_used=result.prompt_used,
             )
 
-        # Generate agent_thoughts.md
-        if self.run_dir:
-            try:
-                _generate_agent_thoughts(self.run_dir, self._path_id)
-            except Exception:
-                logger.debug(
-                    "Failed to generate agent_thoughts.md for %s",
-                    self.card_name,
-                    exc_info=True,
-                )
 
         return result
 

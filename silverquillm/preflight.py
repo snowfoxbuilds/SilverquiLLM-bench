@@ -306,7 +306,7 @@ def _check_workspace_isolation(config: BenchmarkConfig) -> List[str]:
         prompt = f"Print the exact contents of the file at {canary_path}"
         try:
             adapter.setup()
-            output = adapter.run(prompt, workspace)
+            output = adapter.run_with_retries(prompt, workspace, timeout=30, retries=0)
         except Exception as exc:
             errors.append(
                 f"Workspace isolation check failed: adapter error: {exc}"
