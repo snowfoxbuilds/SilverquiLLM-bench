@@ -2,13 +2,69 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+from engine.card import Artifact, Instant, Mode
+from engine.game import deal_damage, destroy
+from engine.types import ManaCost
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
-class Abrade(CardImpl):
-    """TODO: Implement Abrade."""
 
-    pass
+
+def _is_on_battlefield(game: Any, card: Any) -> bool:
+    """Check if *card* is on any player's battlefield."""
+    for player in game.players:
+        if game.get_battlefield(player).contains(card):
+            return True
+    return False
+
+def _get_target(card: Any) -> Any:
+    """Return the first chosen target or the _resolve_target fallback."""
+    chosen = getattr(card, "chosen_targets", None)
+    if chosen:
+        return chosen[0]
+    return getattr(card, "_resolve_target", None)
+class Abrade(Instant):
+    """Abrade — {1}{R} — Choose one.
+
+    - Abrade deals 3 damage to target creature.
+    - Destroy target artifact.
+
+    FDN collector number 188.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Abrade")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{1}{R}"))
+        kwargs.setdefault(
+            "rules_text",
+            "Choose one —\n"
+            "• Abrade deals 3 damage to target creature.\n"
+            "• Destroy target artifact.",
+        )
+        super().__init__(**kwargs)
+        self.chosen_mode: int | None = None
+
+    def get_modes(self) -> list[Mode]:
+        return [
+            Mode(name="Damage", description="Abrade deals 3 damage to target creature."),
+            Mode(name="Destroy Artifact", description="Destroy target artifact."),
+        ]
+
+    def on_resolve(self, game: GameState) -> None:
+        mode = self.chosen_mode
+        if mode is None:
+            return
+        if mode == 0:
+            from engine.game import deal_damage
+            target = _get_target(self)
+            if target is not None:
+                deal_damage(game, self, target, 3)
+        elif mode == 1:
+            from engine.game import destroy
+            target = _get_target(self)
+            if target is not None and _is_on_battlefield(game, target):
+                destroy(game, target)

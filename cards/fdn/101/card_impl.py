@@ -1,14 +1,19 @@
-"""Card implementation for Cackling Prowler."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Creature
+from engine.types import Keyword, ManaCost
 
 
-class CacklingProwler(CardImpl):
-    """TODO: Implement Cackling Prowler."""
+class CacklingProwler(Creature):
+    """Cackling Prowler."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Cackling Prowler")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{3}{G}"))
+        kwargs.setdefault("keywords", Keyword.WARD)
+        kwargs.setdefault("base_power", 4)
+        kwargs.setdefault("base_toughness", 3)
+        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Hyena", "Rogue"}
+        super().__init__(**kwargs)

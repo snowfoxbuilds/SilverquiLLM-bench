@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from cards.fdn.utils import GainLand
+from engine.types import ManaType
 
 
-class JungleHollow(CardImpl):
-    """TODO: Implement Jungle Hollow."""
+class JungleHollow(GainLand):
+    """Jungle Hollow — ETB tapped, gain 1 life, {T}: Add {B} or {G}."""
+    _mana_colors = (ManaType.BLACK, ManaType.GREEN)
+    _mana_symbols = ("B", "G")
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Jungle Hollow")
+        super().__init__(**kwargs)
+

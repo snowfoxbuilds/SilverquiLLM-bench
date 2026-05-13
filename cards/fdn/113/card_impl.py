@@ -1,14 +1,15 @@
-"""Card implementation for Sylvan Scavenging."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Enchantment
+from engine.types import ManaCost
 
 
-class SylvanScavenging(CardImpl):
-    """TODO: Implement Sylvan Scavenging."""
+class SylvanScavenging(Enchantment):
+    """Sylvan Scavenging."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Sylvan Scavenging")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{1}{G}{G}"))
+        super().__init__(**kwargs)

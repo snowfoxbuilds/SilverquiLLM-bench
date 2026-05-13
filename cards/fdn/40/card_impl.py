@@ -1,14 +1,19 @@
-"""Card implementation for High Fae Trickster."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Creature
+from engine.types import Keyword, ManaCost
 
 
-class HighFaeTrickster(CardImpl):
-    """TODO: Implement High Fae Trickster."""
+class HighFaeTrickster(Creature):
+    """High Fae Trickster."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "High Fae Trickster")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{3}{U}"))
+        kwargs.setdefault("keywords", Keyword.FLYING | Keyword.FLASH)
+        kwargs.setdefault("base_power", 4)
+        kwargs.setdefault("base_toughness", 2)
+        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Faerie", "Wizard"}
+        super().__init__(**kwargs)

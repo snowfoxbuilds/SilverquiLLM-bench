@@ -1,14 +1,19 @@
-"""Card implementation for Herald of Eternal Dawn."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Creature
+from engine.types import Keyword, ManaCost
 
 
-class HeraldOfEternalDawn(CardImpl):
-    """TODO: Implement Herald of Eternal Dawn."""
+class HeraldOfEternalDawn(Creature):
+    """Herald of Eternal Dawn."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Herald of Eternal Dawn")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{4}{W}{W}{W}"))
+        kwargs.setdefault("keywords", Keyword.FLYING | Keyword.FLASH)
+        kwargs.setdefault("base_power", 6)
+        kwargs.setdefault("base_toughness", 6)
+        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Angel"}
+        super().__init__(**kwargs)

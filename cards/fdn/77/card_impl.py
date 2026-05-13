@@ -1,14 +1,20 @@
-"""Card implementation for Zul Ashur, Lich Lord."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Creature
+from engine.types import Keyword, ManaCost, Supertype
 
 
-class ZulAshurLichLord(CardImpl):
-    """TODO: Implement Zul Ashur, Lich Lord."""
+class ZulAshurLichLord(Creature):
+    """Zul Ashur, Lich Lord."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Zul Ashur, Lich Lord")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{1}{B}"))
+        kwargs.setdefault("keywords", Keyword.WARD)
+        kwargs.setdefault("base_power", 2)
+        kwargs.setdefault("base_toughness", 2)
+        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Zombie", "Warlock"}
+        kwargs["supertypes"] = (kwargs.get("supertypes") or set()) | {Supertype.LEGENDARY}
+        super().__init__(**kwargs)

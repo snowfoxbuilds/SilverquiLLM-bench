@@ -1,14 +1,18 @@
-"""Card implementation for Hare Apparent."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Creature
+from engine.types import Keyword, ManaCost
 
 
-class HareApparent(CardImpl):
-    """TODO: Implement Hare Apparent."""
+class HareApparent(Creature):
+    """Hare Apparent."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Hare Apparent")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{1}{W}"))
+        kwargs.setdefault("base_power", 2)
+        kwargs.setdefault("base_toughness", 2)
+        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Rabbit", "Noble"}
+        super().__init__(**kwargs)

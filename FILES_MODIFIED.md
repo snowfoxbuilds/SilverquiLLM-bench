@@ -20,3 +20,24 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `docker/homelab-pi-blind/entrypoint.mjs` — Added timestamped agentStdout()/agentStderr() helpers; stderr interceptor for agent runtime capture; try/catch/finally for guaranteed exit_code
 - `docker/local-pi-blind/entrypoint.mjs` — Same multi-channel output changes as homelab variant
 - `silverquillm/cli.py` — Updated _harvest_results to copy all .log files; added `logs` command for colorized interleaved log viewing; added format_log_lines() helper
+
+## Item 3: Generate FDN card specs and templates
+
+### Tests
+- `tests/audited/fdn/` — 1487 audited FDN tests (pre-existing, all pass)
+- `tests/test_card_loader_unified.py` — Card loader tests validating FDN spec loading
+
+### Implementation
+- `scripts/generate_fdn_specs.py` — Pre-existing script that fetches Scryfall data and generates cards/fdn/ directory tree (286 subdirs with card_spec.json + card_impl.py)
+
+## Item 4: Migrate FDN card implementations into per-card templates
+
+### Tests
+- `tests/test_fdn_card_migration.py` — Migration tests: file counts, CardImpl subclasses, registry population, spot-checks
+- `tests/audited/fdn/` — 1487 audited FDN tests (all pass via conftest card_impl injection)
+- `tests/cards/` — 25 per-category card test files (all pass, still import from cards.foundations)
+
+### Implementation
+- `cards/fdn/*/card_impl.py` (286 files) — Filled per-card templates with implementations; all 286 now set default `name` from card_spec.json
+- `cards/fdn/utils.py` — Shared helpers: TapLand, GainLand, make_vanilla, _tap_cost
+- `cards/registry.py` — Added register_fdn_cards() with logging.warning on import failures (no longer silent)

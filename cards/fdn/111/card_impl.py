@@ -1,14 +1,19 @@
-"""Card implementation for Quilled Greatwurm."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Creature
+from engine.types import Keyword, ManaCost
 
 
-class QuilledGreatwurm(CardImpl):
-    """TODO: Implement Quilled Greatwurm."""
+class QuilledGreatwurm(Creature):
+    """Quilled Greatwurm."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Quilled Greatwurm")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{4}{G}{G}"))
+        kwargs.setdefault("keywords", Keyword.TRAMPLE)
+        kwargs.setdefault("base_power", 7)
+        kwargs.setdefault("base_toughness", 7)
+        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Wurm"}
+        super().__init__(**kwargs)

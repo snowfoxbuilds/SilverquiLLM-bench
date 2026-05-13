@@ -1,14 +1,18 @@
-"""Card implementation for Ajani's Pridemate."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Creature
+from engine.types import Keyword, ManaCost
 
 
-class AjanisPridemate(CardImpl):
-    """TODO: Implement Ajani's Pridemate."""
+class AjanisPridemate(Creature):
+    """Ajani's Pridemate."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Ajani's Pridemate")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{1}{W}"))
+        kwargs.setdefault("base_power", 2)
+        kwargs.setdefault("base_toughness", 2)
+        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Cat", "Soldier"}
+        super().__init__(**kwargs)

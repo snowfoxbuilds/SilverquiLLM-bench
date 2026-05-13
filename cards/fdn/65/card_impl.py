@@ -1,14 +1,15 @@
-"""Card implementation for Midnight Snack."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Enchantment
+from engine.types import ManaCost
 
 
-class MidnightSnack(CardImpl):
-    """TODO: Implement Midnight Snack."""
+class MidnightSnack(Enchantment):
+    """Midnight Snack."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Midnight Snack")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{2}{B}"))
+        super().__init__(**kwargs)

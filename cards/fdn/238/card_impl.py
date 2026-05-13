@@ -1,14 +1,18 @@
-"""Card implementation for Consuming Aberration."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Creature
+from engine.types import Keyword, ManaCost
 
 
-class ConsumingAberration(CardImpl):
-    """TODO: Implement Consuming Aberration."""
+class ConsumingAberration(Creature):
+    """Consuming Aberration."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Consuming Aberration")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{3}{U}{B}"))
+        kwargs.setdefault("base_power", 0)
+        kwargs.setdefault("base_toughness", 0)
+        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Horror"}
+        super().__init__(**kwargs)

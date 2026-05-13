@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from cards.fdn.utils import GainLand
+from engine.types import ManaType
 
 
-class DismalBackwater(CardImpl):
-    """TODO: Implement Dismal Backwater."""
+class DismalBackwater(GainLand):
+    """Dismal Backwater — ETB tapped, gain 1 life, {T}: Add {U} or {B}."""
+    _mana_colors = (ManaType.BLUE, ManaType.BLACK)
+    _mana_symbols = ("U", "B")
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Dismal Backwater")
+        super().__init__(**kwargs)
+

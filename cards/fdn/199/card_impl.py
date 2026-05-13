@@ -1,14 +1,18 @@
-"""Card implementation for Frenzied Goblin."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Creature
+from engine.types import Keyword, ManaCost
 
 
-class FrenziedGoblin(CardImpl):
-    """TODO: Implement Frenzied Goblin."""
+class FrenziedGoblin(Creature):
+    """Frenzied Goblin."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Frenzied Goblin")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{R}"))
+        kwargs.setdefault("base_power", 1)
+        kwargs.setdefault("base_toughness", 1)
+        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Goblin", "Berserker"}
+        super().__init__(**kwargs)

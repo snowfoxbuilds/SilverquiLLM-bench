@@ -1,14 +1,19 @@
-"""Card implementation for Exemplar of Light."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Creature
+from engine.types import Keyword, ManaCost
 
 
-class ExemplarOfLight(CardImpl):
-    """TODO: Implement Exemplar of Light."""
+class ExemplarOfLight(Creature):
+    """Exemplar of Light."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Exemplar of Light")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{2}{W}{W}"))
+        kwargs.setdefault("keywords", Keyword.FLYING)
+        kwargs.setdefault("base_power", 3)
+        kwargs.setdefault("base_toughness", 3)
+        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Angel"}
+        super().__init__(**kwargs)

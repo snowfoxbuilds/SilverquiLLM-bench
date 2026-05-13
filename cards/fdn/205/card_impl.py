@@ -1,14 +1,15 @@
-"""Card implementation for Seismic Rupture."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Sorcery
+from engine.types import ManaCost
 
 
-class SeismicRupture(CardImpl):
-    """TODO: Implement Seismic Rupture."""
+class SeismicRupture(Sorcery):
+    """Seismic Rupture."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Seismic Rupture")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{2}{R}"))
+        super().__init__(**kwargs)

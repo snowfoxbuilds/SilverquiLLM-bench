@@ -1,14 +1,18 @@
-"""Card implementation for Dwynen's Elite."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Creature
+from engine.types import Keyword, ManaCost
 
 
-class DwynensElite(CardImpl):
-    """TODO: Implement Dwynen's Elite."""
+class DwynensElite(Creature):
+    """Dwynen's Elite."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Dwynen's Elite")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{1}{G}"))
+        kwargs.setdefault("base_power", 2)
+        kwargs.setdefault("base_toughness", 2)
+        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Elf", "Warrior"}
+        super().__init__(**kwargs)

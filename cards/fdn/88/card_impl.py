@@ -1,14 +1,15 @@
-"""Card implementation for Goblin Negotiation."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Sorcery
+from engine.types import ManaCost
 
 
-class GoblinNegotiation(CardImpl):
-    """TODO: Implement Goblin Negotiation."""
+class GoblinNegotiation(Sorcery):
+    """Goblin Negotiation."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Goblin Negotiation")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{X}{R}{R}"))
+        super().__init__(**kwargs)

@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from cards.fdn.utils import GainLand
+from engine.types import ManaType
 
 
-class ScouredBarrens(CardImpl):
-    """TODO: Implement Scoured Barrens."""
+class ScouredBarrens(GainLand):
+    """Scoured Barrens — ETB tapped, gain 1 life, {T}: Add {W} or {B}."""
+    _mana_colors = (ManaType.WHITE, ManaType.BLACK)
+    _mana_symbols = ("W", "B")
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Scoured Barrens")
+        super().__init__(**kwargs)
+

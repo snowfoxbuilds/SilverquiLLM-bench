@@ -1,14 +1,19 @@
-"""Card implementation for Sphinx of Forgotten Lore."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Creature
+from engine.types import Keyword, ManaCost
 
 
-class SphinxOfForgottenLore(CardImpl):
-    """TODO: Implement Sphinx of Forgotten Lore."""
+class SphinxOfForgottenLore(Creature):
+    """Sphinx of Forgotten Lore."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Sphinx of Forgotten Lore")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{2}{U}{U}"))
+        kwargs.setdefault("keywords", Keyword.FLYING | Keyword.FLASH)
+        kwargs.setdefault("base_power", 3)
+        kwargs.setdefault("base_toughness", 3)
+        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Sphinx"}
+        super().__init__(**kwargs)

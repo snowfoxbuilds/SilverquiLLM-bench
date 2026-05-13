@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from cards.fdn.utils import GainLand
+from engine.types import ManaType
 
 
-class SwiftwaterCliffs(CardImpl):
-    """TODO: Implement Swiftwater Cliffs."""
+class SwiftwaterCliffs(GainLand):
+    """Swiftwater Cliffs — ETB tapped, gain 1 life, {T}: Add {U} or {R}."""
+    _mana_colors = (ManaType.BLUE, ManaType.RED)
+    _mana_symbols = ("U", "R")
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Swiftwater Cliffs")
+        super().__init__(**kwargs)
+

@@ -123,3 +123,87 @@ class CardRegistry:
 
 # Module-level default registry instance.
 default_registry: CardRegistry = CardRegistry()
+
+
+# ---------------------------------------------------------------------------
+# FDN registration — imports from per-card cards/fdn/{num}/card_impl.py
+# ---------------------------------------------------------------------------
+
+def register_fdn_cards(registry: CardRegistry | None = None) -> CardRegistry:
+    """Register all FDN card implementations from ``cards/fdn/*/card_impl.py``.
+
+    Reads each card's ``card_spec.json`` for metadata and imports the
+    implementation class from the corresponding ``card_impl.py``.
+
+    Args:
+        registry: Registry to populate.  If ``None``, uses
+            :data:`default_registry`.
+
+    Returns:
+        The populated registry.
+    """
+    import importlib
+    import json
+    import logging
+    from pathlib import Path
+
+    logger = logging.getLogger(__name__)
+
+    if registry is None:
+        registry = default_registry
+
+    fdn_dir = Path(__file__).parent / "fdn"
+    if not fdn_dir.is_dir():
+        return registry
+
+    for card_dir in sorted(fdn_dir.iterdir()):
+        spec_file = card_dir / "card_spec.json"
+        impl_file = card_dir / "card_impl.py"
+        if not spec_file.exists() or not impl_file.exists():
+            continue
+
+        with open(spec_file) as f:
+            spec = json.load(f)
+
+        # Derive class name from spec name (PascalCase, strip punctuation)
+        card_name: str = spec["name"]
+        # Import the module
+        mod_name = f"cards.fdn.{card_dir.name}.card_impl"
+        try:
+            mod = importlib.import_module(mod_name)
+        except Exception as exc:
+            logger.warning("Failed to import %s: %s", mod_name, exc)
+            continue
+
+        # Find the implementation class (first CardImpl subclass in the module)
+        impl_class = None
+        for attr_name in dir(mod):
+            obj = getattr(mod, attr_name, None)
+            if (
+                isinstance(obj, type)
+                and issubclass(obj, CardImpl)
+                and obj is not CardImpl
+                and obj.__module__ == mod.__name__
+            ):
+                impl_class = obj
+                break
+
+        if impl_class is None:
+            continue
+
+        metadata = CardMetadata(
+            name=card_name,
+            mana_cost_str=spec.get("mana_cost", ""),
+            type_line=spec.get("type_line", ""),
+            oracle_text=spec.get("oracle_text", ""),
+            power=spec.get("power"),
+            toughness=spec.get("toughness"),
+            colors=spec.get("colors", []),
+            keywords=spec.get("keywords", []),
+            rarity=spec.get("rarity", ""),
+            set_code=spec.get("set_code", "fdn"),
+            collector_number=spec.get("collector_number", ""),
+        )
+        registry.register(card_name, impl_class, metadata)
+
+    return registry

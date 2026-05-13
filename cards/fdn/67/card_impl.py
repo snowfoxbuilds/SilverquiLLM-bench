@@ -1,14 +1,15 @@
-"""Card implementation for Revenge of the Rats."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Sorcery
+from engine.types import ManaCost
 
 
-class RevengeOfTheRats(CardImpl):
-    """TODO: Implement Revenge of the Rats."""
+class RevengeOfTheRats(Sorcery):
+    """Revenge of the Rats."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Revenge of the Rats")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{2}{B}{B}"))
+        super().__init__(**kwargs)

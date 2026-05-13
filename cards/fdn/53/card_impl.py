@@ -1,14 +1,15 @@
-"""Card implementation for Uncharted Voyage."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Instant
+from engine.types import ManaCost
 
 
-class UnchartedVoyage(CardImpl):
-    """TODO: Implement Uncharted Voyage."""
+class UnchartedVoyage(Instant):
+    """Uncharted Voyage."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Uncharted Voyage")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{3}{U}"))
+        super().__init__(**kwargs)

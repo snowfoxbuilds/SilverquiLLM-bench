@@ -1,14 +1,14 @@
-"""Card implementation for Secluded Courtyard."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Land, ManaAbility
+from engine.types import ManaType, Supertype
 
 
-class SecludedCourtyard(CardImpl):
-    """TODO: Implement Secluded Courtyard."""
+class SecludedCourtyard(Land):
+    """Secluded Courtyard."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Secluded Courtyard")
+        super().__init__(**kwargs)

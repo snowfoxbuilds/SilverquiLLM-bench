@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from cards.fdn.utils import GainLand
+from engine.types import ManaType
 
 
-class WindScarredCrag(CardImpl):
-    """TODO: Implement Wind-Scarred Crag."""
+class WindScarredCrag(GainLand):
+    """Wind-Scarred Crag — ETB tapped, gain 1 life, {T}: Add {R} or {W}."""
+    _mana_colors = (ManaType.RED, ManaType.WHITE)
+    _mana_symbols = ("R", "W")
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Wind-Scarred Crag")
+        super().__init__(**kwargs)
+

@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from cards.fdn.utils import GainLand
+from engine.types import ManaType
 
 
-class BloodfellCaves(CardImpl):
-    """TODO: Implement Bloodfell Caves."""
+class BloodfellCaves(GainLand):
+    """Bloodfell Caves — ETB tapped, gain 1 life, {T}: Add {B} or {R}."""
+    _mana_colors = (ManaType.BLACK, ManaType.RED)
+    _mana_symbols = ("B", "R")
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Bloodfell Caves")
+        super().__init__(**kwargs)
+

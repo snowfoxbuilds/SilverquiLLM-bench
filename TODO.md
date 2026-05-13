@@ -110,7 +110,7 @@ pi -p "${PROMPT}" \
 
   Testability: Script runs without errors. `cards/fdn/` has one subdirectory per registered FDN card. Each has `card_spec.json` (valid JSON, required fields present) + `card_impl.py` (empty template, correct class name).
 
-- [ ] **Migrate FDN card implementations into per-card templates**
+- [x] **Migrate FDN card implementations into per-card templates**
   Detail: Assumes the `cards/fdn/{num}/card_spec.json` files and empty `card_impl.py` templates have already been generated before this TODO is run. Fill those per-card templates with implementations, using `cards/foundations/*.py` only as source material.
 
   **Important migration rule:**

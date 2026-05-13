@@ -1,14 +1,15 @@
-"""Card implementation for Lunar Insight."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Sorcery
+from engine.types import ManaCost
 
 
-class LunarInsight(CardImpl):
-    """TODO: Implement Lunar Insight."""
+class LunarInsight(Sorcery):
+    """Lunar Insight."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Lunar Insight")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{2}{U}"))
+        super().__init__(**kwargs)

@@ -331,3 +331,15 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: `cards/fdn/{collector_number}/` with `card_impl.py` + `card_spec.json`. SPG cards use `spg_` prefix (e.g., `spg_74`). Collision suffixes: `7b`, `61b`, `105b`, etc. Synthetic IDs 800+ for cards without real collector numbers.
 - **Reasoning**: Matches SOS structure. Directory name = collector number for easy lookup.
 - **Impact**: 265+ directories under `cards/fdn/`.
+
+## FDN card constructors must set default name
+- **Context**: Migrated card_impl.py constructors didn't set default `name`, causing unnamed cards on direct instantiation.
+- **Decision**: Every FDN card `__init__` must include `kwargs.setdefault("name", "<card_name>")` as its first line, reading the name from `card_spec.json`.
+- **Reasoning**: Cards should be usable via both registry and direct instantiation. The registry injects the name, but direct callers shouldn't get unnamed cards.
+- **Impact**: All 286 `cards/fdn/*/card_impl.py` files.
+
+## register_fdn_cards() logs import failures
+- **Context**: Bulk import of 286 card modules was silently swallowing errors.
+- **Decision**: Use `logging.warning()` to surface failed imports rather than raising or silently continuing. Tests verify all expected cards are registered.
+- **Reasoning**: Non-fatal logging is standard Python; tests enforce completeness separately.
+- **Impact**: `cards/registry.py`.

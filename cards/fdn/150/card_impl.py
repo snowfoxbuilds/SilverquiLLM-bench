@@ -1,14 +1,18 @@
-"""Card implementation for Aegis Turtle."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Creature
+from engine.types import Keyword, ManaCost
 
 
-class AegisTurtle(CardImpl):
-    """TODO: Implement Aegis Turtle."""
+class AegisTurtle(Creature):
+    """Aegis Turtle."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Aegis Turtle")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{U}"))
+        kwargs.setdefault("base_power", 0)
+        kwargs.setdefault("base_toughness", 5)
+        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Turtle"}
+        super().__init__(**kwargs)

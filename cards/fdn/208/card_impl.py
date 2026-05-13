@@ -1,14 +1,18 @@
-"""Card implementation for Spitfire Lagac."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Creature
+from engine.types import Keyword, ManaCost
 
 
-class SpitfireLagac(CardImpl):
-    """TODO: Implement Spitfire Lagac."""
+class SpitfireLagac(Creature):
+    """Spitfire Lagac."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Spitfire Lagac")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{3}{R}"))
+        kwargs.setdefault("base_power", 3)
+        kwargs.setdefault("base_toughness", 4)
+        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Lizard"}
+        super().__init__(**kwargs)

@@ -1,14 +1,19 @@
-"""Card implementation for Skyship Buccaneer."""
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Creature
+from engine.types import Keyword, ManaCost
 
 
-class SkyshipBuccaneer(CardImpl):
-    """TODO: Implement Skyship Buccaneer."""
+class SkyshipBuccaneer(Creature):
+    """Skyship Buccaneer."""
 
-    pass
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Skyship Buccaneer")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{3}{U}{U}"))
+        kwargs.setdefault("keywords", Keyword.FLYING)
+        kwargs.setdefault("base_power", 4)
+        kwargs.setdefault("base_toughness", 3)
+        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Human", "Pirate"}
+        super().__init__(**kwargs)

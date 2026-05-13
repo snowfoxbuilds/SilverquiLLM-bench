@@ -2,13 +2,84 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+from engine.card import Creature
+from engine.game import discard, draw_card, sacrifice
+from engine.triggers import EventType, TriggerRegistration
+from engine.types import Keyword, ManaCost
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
-class ArbiterOfWoe(CardImpl):
-    """TODO: Implement Arbiter of Woe."""
 
-    pass
+
+def _self_etb_condition(source: Any):
+    """Return a condition callable that matches only when *source* enters."""
+
+    def _condition(game: Any, data: dict) -> bool:
+        return data.get("permanent") is source
+
+    return _condition
+class ArbiterOfWoe(Creature):
+    """Arbiter of Woe — {4}{B}{B} — 5/4 — Demon — Flying
+
+    As an additional cost to cast this spell, sacrifice a creature.
+    Flying
+    When this creature enters, each opponent discards a card and loses 2 life.
+    You draw a card and gain 2 life.
+
+    FDN collector number 55.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Arbiter of Woe")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{4}{B}{B}"))
+        kwargs.setdefault("subtypes", {"Demon"})
+        kwargs.setdefault("keywords", Keyword.FLYING)
+        kwargs.setdefault("base_power", 5)
+        kwargs.setdefault("base_toughness", 4)
+        kwargs.setdefault(
+            "rules_text",
+            "As an additional cost to cast this spell, sacrifice a creature.\n"
+            "Flying\nWhen this creature enters, each opponent discards a card "
+            "and loses 2 life. You draw a card and gain 2 life.",
+        )
+        super().__init__(**kwargs)
+
+    def register_triggers(self, game: GameState) -> None:
+        from engine.triggers import EventType, TriggerRegistration
+        from engine.game import draw_card, discard
+
+        source = self
+
+        def _effect(game: GameState) -> None:
+            controller = getattr(source, "controller", None)
+            if controller is None:
+                return
+            # Each opponent discards a card and loses 2 life
+            for player in game.players:
+                if player is controller:
+                    continue
+                hand = game.get_hand(player)
+                hand_cards = hand.get_all()
+                if hand_cards:
+                    try:
+                        to_discard = player.choose_card(hand_cards)
+                    except Exception:
+                        to_discard = hand_cards[-1]
+                    discard(game, player, to_discard)
+                player.life -= 2
+            # You draw a card and gain 2 life
+            draw_card(game, controller)
+            controller.life += 2
+
+        controller = getattr(self, "controller", None) or game.active_player
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=EventType.ENTERS_BATTLEFIELD,
+            condition=_self_etb_condition(self),
+            effect=_effect,
+            source=self,
+            controller=controller,
+        ))
