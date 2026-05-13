@@ -101,7 +101,7 @@ specs = list(path.glob("*/card_spec.json"))
   - `silverquillm/preflight.py` — `_check_card_specs_dir()` function
   Testability: Unit test: create `tmp/1/card_spec.json` and `tmp/2/card_spec.json` → `_check_card_specs_dir(tmp)` passes. Unit test: empty dir → fails with clear error.
 
-- [ ] **Standardize all per-card paths on ****`card_dir_name`**
+- [x] **Standardize all per-card paths on ****`card_dir_name`**
   Detail: The harness uses two different identifiers for per-card subdirectories under `<run_dir>/cards/`:
 
   - `card_dir_name` (collector number, e.g. `"42"`) — used by `save_card_result()` and `save_card_result_v2()` in `cli.py`

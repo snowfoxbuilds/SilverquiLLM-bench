@@ -289,3 +289,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Created `docs/specs/TESTING-CONVENTIONS.md` with hard rules: explicit mock PIDs, patched os.killpg/os.getpgid, Event.wait instead of while-True, pytest-timeout safety net.
 - **Reasoning**: Prevent tests from terminating real processes or hanging forever.
 - **Impact**: All tests involving subprocess/timeout/signal must comply.
+
+## Per-card filesystem paths use card_id (collector number)
+- **Context**: Harness used both `card_name` (display name) and `card_dir_name` (collector number) for per-card subdirectories, creating duplicate directories.
+- **Decision**: All filesystem path construction uses `card_id` (collector number). `AgentSession._path_id` is the canonical accessor, falling back to `card_name` if `card_id` is empty. `card_name` remains for log messages and JSON content.
+- **Reasoning**: Collector numbers are unique, filesystem-safe, and already used by `save_card_result()`.
+- **Impact**: `silverquillm/agent_session.py`, `silverquillm/cli.py`.

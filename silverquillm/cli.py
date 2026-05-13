@@ -224,6 +224,7 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
         try:
             session = AgentSession(
                 config=cfg, card_spec=spec, card_dir=card_dir,
+                card_id=str(card_dir_name),
                 run_engine_dir=run_engine_dir,
                 run_dir=run_dir,
             )
@@ -316,7 +317,7 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
                     run_engine_dir=run_engine_dir,
                 )
                 # Emit structured regression_check event
-                pm_path = run_dir / "cards" / card_name / "postmortem.jsonl"
+                pm_path = run_dir / "cards" / str(card_dir_name) / "postmortem.jsonl"
                 _append_regression_check(
                     pm_path,
                     status="fail" if regression_result.has_failures else "pass",
@@ -357,7 +358,7 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
                  # Generate agent_thoughts.md regardless of which phases ran
                 if session.run_dir:
                     try:
-                        _generate_agent_thoughts(session.run_dir, session.card_name)
+                       _generate_agent_thoughts(session.run_dir, session._path_id)
                     except Exception:
                         logger.debug(
                             "Failed to generate agent_thoughts.md for %s",
