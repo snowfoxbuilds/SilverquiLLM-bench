@@ -1,0 +1,64 @@
+diff --git a/tests/test_timeout_enforcement.py b/tests/test_timeout_enforcement.py
+index b85e1b7..d7b6048 100644
+--- a/tests/test_timeout_enforcement.py
++++ b/tests/test_timeout_enforcement.py
+@@ -81,36 +81,54 @@ def _make_mock_proc(*, running: bool = True) -> MagicMock:
+     return mock_proc
+ 
+ 
+-class _BlockingAdapter:
++class _BlockingAdapter(AgentAdapter):
+     """Adapter whose run() blocks via threading.Event (safe, killable).
+ 
+     Per TESTING-CONVENTIONS.md: uses Event.wait(timeout=60) instead of
+     while True: time.sleep().
+     """
+ 
+-    def __init__(self) -> None:
++    def __init__(self, config: BenchmarkConfig | None = None) -> None:
++        if config is None:
++            config = _make_config(timeout=2)
++        super().__init__(config)
+         self._stop = threading.Event()
+         self.killed = False
+ 
++    def setup(self) -> None:
++        pass
++
+     def run(self, prompt: str, workspace: Path) -> str:
+         self._stop.wait(timeout=60)
+         return ""
+ 
++    def teardown(self) -> None:
++        pass
++
+     def kill(self) -> None:
+         self.killed = True
+         self._stop.set()
+ 
+ 
+-class _BlockingNoKillAdapter:
+-    """Adapter that blocks but has no kill() method."""
++class _BlockingNoKillAdapter(AgentAdapter):
++    """Adapter that blocks but has no kill() method (uses base no-op kill)."""
+ 
+-    def __init__(self) -> None:
++    def __init__(self, config: BenchmarkConfig | None = None) -> None:
++        if config is None:
++            config = _make_config(timeout=2)
++        super().__init__(config)
+         self._stop = threading.Event()
+ 
++    def setup(self) -> None:
++        pass
++
+     def run(self, prompt: str, workspace: Path) -> str:
+         self._stop.wait(timeout=60)
+         return ""
+ 
++    def teardown(self) -> None:
++        pass
++
+ 
+ # ---------------------------------------------------------------------------
+ # Tests: Strategy-level hard timeout — BlindStrategy

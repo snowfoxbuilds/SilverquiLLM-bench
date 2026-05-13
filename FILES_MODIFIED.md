@@ -55,3 +55,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `silverquillm/preflight.py` — added `_check_workspace_isolation()` function with canary UUID check; added `skip_isolation_check` parameter to `preflight_check()`; added `uuid` and `logging` imports; **revised**: adapter/setup exceptions now surface as preflight errors instead of being silently swallowed
 - `silverquillm/cli.py` — added `--skip-isolation-check` CLI flag; passed `skip_isolation_check` to `preflight_check()`
+
+## Item 10: Fix test_timeout_enforcement.py
+
+### Tests
+- `tests/test_timeout_enforcement.py` — 35 timeout enforcement tests (strategy-level, adapter kill, run_with_retries, process-group kill)
+
+### Implementation
+- `tests/test_timeout_enforcement.py` — converted `_BlockingAdapter` and `_BlockingNoKillAdapter` to proper `AgentAdapter` subclasses so they inherit `run_with_retries()`; patched `signal.signal`/`signal.alarm` on `TestRunWithRetriesDeadline` class to prevent real SIGALRM; forced threading timeout path via `_run_with_timeout` patch; patched `os.getpgid`/`os.killpg` on `test_kill_noop_*` methods for safety
