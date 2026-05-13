@@ -247,7 +247,7 @@ Implement the cards from their specs alone. Do not write or run tests. Focus on 
 
   Testability: Create fixture run_dir with known card_[impl.py](http://impl.py/) (one good, one bad) and a known engine_work/ → verify per-card result.json, verify dimension aggregates.
 
-- [ ] **Implement ****`silverquillm/results.py`**** — run summary generation**
+- [x] **Implement `silverquillm/results.py``**** — run summary generation**
   Detail: Pure, idempotent function that reads per-card `result.json` files and produces `run_summary.json`.
 
   `generate_run_summary(run_dir: Path, image_name: str) -> dict`:

@@ -98,3 +98,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `silverquillm/evaluator.py` — Added 3-dimension evaluation system (evaluate, CardResult, EngineResult, FullEvalResult) alongside retained legacy API; removed unused EvalResultV2. Revision: fixed engine_work importability by staging as engine/, added temp dir cleanup via try/finally in evaluate(), documented subprocess isolation for per-card runs.
+
+## Item 9: Implement results.py — run summary generation
+
+### Implementation
+- `silverquillm/results.py` — Pure function generate_run_summary(run_dir, image_name, cards_dir=None) with status.json merge, external cards_dir spec lookup, and deterministic timestamp from directory name
