@@ -12,7 +12,6 @@ import enum
 import subprocess
 import time
 from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -124,15 +123,12 @@ class BlindStrategy(CardStrategy):
         prompt = blind_mode_prompt(card_spec)
         impl_path = workspace / "card_impl.py"
 
-        pool = ThreadPoolExecutor(max_workers=1)
-        future = pool.submit(adapter.run, prompt, workspace)
         try:
-            output = future.result(timeout=timeout)
-        except (TimeoutError, FuturesTimeoutError, subprocess.TimeoutExpired):
+            output = adapter.run_with_retries(prompt, workspace, timeout=timeout, retries=0)
+        except (TimeoutError, subprocess.TimeoutExpired):
             # Hard-kill the adapter's subprocess if it supports it
             if hasattr(adapter, "kill"):
                 adapter.kill()
-            pool.shutdown(wait=False, cancel_futures=True)
             elapsed_ms = int((time.monotonic() - start) * 1000)
             files = [impl_path] if impl_path.exists() else []
             return CardRunResult(
@@ -142,8 +138,6 @@ class BlindStrategy(CardStrategy):
                 agent_output="",
                 prompt_used=prompt,
             )
-        else:
-            pool.shutdown(wait=False)
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
         agent_output = output if isinstance(output, str) else str(output or "")
@@ -195,15 +189,12 @@ class ImplTestStrategy(CardStrategy):
         impl_path = workspace / "card_impl.py"
         tests_path = workspace / "tests.py"
 
-        pool = ThreadPoolExecutor(max_workers=1)
-        future = pool.submit(adapter.run, prompt, workspace)
         try:
-            output = future.result(timeout=timeout)
-        except (TimeoutError, FuturesTimeoutError, subprocess.TimeoutExpired):
+            output = adapter.run_with_retries(prompt, workspace, timeout=timeout, retries=0)
+        except (TimeoutError, subprocess.TimeoutExpired):
             # Hard-kill the adapter's subprocess if it supports it
             if hasattr(adapter, "kill"):
                 adapter.kill()
-            pool.shutdown(wait=False, cancel_futures=True)
             elapsed_ms = int((time.monotonic() - start) * 1000)
             files: list[Path] = []
             if impl_path.exists():
@@ -217,8 +208,6 @@ class ImplTestStrategy(CardStrategy):
                 agent_output="",
                 prompt_used=prompt,
             )
-        else:
-            pool.shutdown(wait=False)
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
         agent_output = output if isinstance(output, str) else str(output or "")

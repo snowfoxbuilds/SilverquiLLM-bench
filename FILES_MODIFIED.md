@@ -21,3 +21,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `silverquillm/strategies.py` — added agent_output and prompt_used fields to CardRunResult; capture adapter.run() return value in both strategies
 - `silverquillm/agent_session.py` — use result.agent_output/result.prompt_used in postmortem and raw log calls; fixed postmortem status to binary success/error; preserve agent_output/prompt_used on violation path
 
+## Item 6: Replace ThreadPoolExecutor with direct adapter call
+
+### Tests
+- `tests/test_strategies.py` — existing tests verify strategies call adapter.run() and handle timeout/completion/no_output
+
+### Implementation
+- `silverquillm/strategies.py` — removed ThreadPoolExecutor wrapping in both BlindStrategy and ImplTestStrategy; call adapter.run_with_retries(timeout=timeout, retries=0) directly to enforce timeout; removed unused concurrent.futures imports
+

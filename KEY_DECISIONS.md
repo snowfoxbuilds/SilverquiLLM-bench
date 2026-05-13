@@ -295,3 +295,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: All filesystem path construction uses `card_id` (collector number). `AgentSession._path_id` is the canonical accessor, falling back to `card_name` if `card_id` is empty. `card_name` remains for log messages and JSON content.
 - **Reasoning**: Collector numbers are unique, filesystem-safe, and already used by `save_card_result()`.
 - **Impact**: `silverquillm/agent_session.py`, `silverquillm/cli.py`.
+
+## Strategies use run_with_retries for timeout enforcement
+- **Context**: Strategies previously used ThreadPoolExecutor for timeout; needed replacement.
+- **Decision**: Strategies call `adapter.run_with_retries(prompt, workspace, timeout=timeout, retries=0)` instead of bare `adapter.run()`. Timeout enforcement is the adapter layer's responsibility via `run_with_retries`.
+- **Reasoning**: `run_with_retries` already implements timeout via SIGALRM (main thread) or threading fallback, plus calls `adapter.kill()`. Using it directly avoids duplicating timeout logic in each strategy.
+- **Impact**: `silverquillm/strategies.py`, all strategy tests use mock adapters with `run_with_retries`.
