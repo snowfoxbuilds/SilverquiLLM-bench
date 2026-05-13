@@ -76,3 +76,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `silverquillm/workspace.py` — workspace staging module with `stage_workspace()` that builds Docker mount directory tree; revised to add stale cleanup, use engine_dir for base_classes.py, and copy shared tier-level helper files
+
+## Item 6: Create Docker images for opencode-tested and opencode-blind
+
+### Implementation
+- `docker/opencode-tested/Dockerfile` — Docker image definition for test-informed opencode agent
+- `docker/opencode-tested/entrypoint.sh` — Entrypoint script with test-writing prompt, engine_work instruction, and set+e wait fix
+- `docker/opencode-blind/Dockerfile` — Docker image definition for blind opencode agent
+- `docker/opencode-blind/entrypoint.sh` — Entrypoint script with spec-only prompt, engine_work instruction, and set+e wait fix

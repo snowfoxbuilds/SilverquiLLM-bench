@@ -108,7 +108,7 @@ output/                     — empty dir for progress.jsonl, stdout.log, stderr
 
   Testability: Call `stage_workspace()` → verify directory tree exists, FDN impls are non-empty, SOS impls are templates, [prompt.md](http://prompt.md/) exists, engine/ is a complete copy.
 
-- [ ] **Create Docker images: ****`docker/opencode-tested/`**** and ****`docker/opencode-blind/`**
+- [x] **Create Docker images: ****`docker/opencode-tested/`**** and ****`docker/opencode-blind/`**
   Detail: Each image IS the full agent configuration. No MODE/STRATEGY env vars. Only API keys at runtime.
 
   `docker/opencode-tested/Dockerfile`:
