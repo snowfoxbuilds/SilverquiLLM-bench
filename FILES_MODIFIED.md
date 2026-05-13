@@ -84,3 +84,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `docker/opencode-tested/entrypoint.sh` — Entrypoint script with test-writing prompt, engine_work instruction, and set+e wait fix
 - `docker/opencode-blind/Dockerfile` — Docker image definition for blind opencode agent
 - `docker/opencode-blind/entrypoint.sh` — Entrypoint script with spec-only prompt, engine_work instruction, and set+e wait fix
+
+## Item 7: Implement cli.py — run and smoke commands
+
+### Implementation
+- `silverquillm/cli.py` — Click CLI with `run` and `smoke` commands; container naming + docker stop on timeout, API-key redaction in logs, engine/ dir in smoke workspace
