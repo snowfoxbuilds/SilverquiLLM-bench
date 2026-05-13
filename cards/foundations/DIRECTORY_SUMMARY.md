@@ -43,7 +43,7 @@ Card implementations for the **Magic: The Gathering Foundations (FDN)** set. Con
 ## Patterns
 
 - **Aura implementation**: Subclass `Aura`, override `get_targets()` and `on_resolve()` to attach and register continuous effect.
-- **Targeted spells**: Override `can_cast()` for target validation. Targets via `self.chosen_targets`. Fizzle-safe `on_resolve()` checks target validity.
+- **Targeted spells**: Override `can_cast()` for target validation. Targets via `self.chosen_targets`. Fizzle-safe `on_resolve()` checks target validity. `filter_fn` lambdas use lazy predicates (evaluate properties at cast time, not definition time).
 - **Continuous effects**: Register via `game.effect_manager.add()` with appropriate `Layer`/`SubLayer` and duration.
 - **Modal spells**: Define `Mode` objects on the class; `on_resolve()` checks `self.chosen_modes`.
 - **Planeswalkers**: Define `LoyaltyAbility` objects; loyalty counter management via engine.

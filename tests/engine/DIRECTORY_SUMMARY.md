@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Unit tests for all engine modules in `engine/`. One test file per engine module, covering types, zones, players, mana, cards, casting, stack, combat, triggers, abilities, continuous effects, replacement effects, state-based actions, protection, game state, extra turns, and the game loop. ~1,050+ test functions.
+Unit tests for all engine modules in `engine/`. One test file per engine module, covering types, zones, players, mana, cards, casting, stack, combat, triggers, abilities, continuous effects, replacement effects, state-based actions, protection, game state, extra turns, lazy target evaluation, chosen_targets refactor, and the game loop. ~1,140+ test functions.
 
 ## Key Files
 
@@ -18,7 +18,7 @@ Unit tests for all engine modules in `engine/`. One test file per engine module,
 | `test_game_state.py` | GameState construction, phase/step tracking, advance_phase. |
 | `test_extra_turns.py` | Extra turns FIFO queue, granting, ordering, normal turn order resumption. |
 | `test_stack.py` | StackObject, Stack LIFO, priority_loop, SBA checking. |
-| `test_casting.py` | cast_spell, play_land, mana payment, target selection, auto-registration, cost reduction integration. |
+| `test_casting.py` | cast_spell, play_land, mana payment, target selection, auto-registration, cost reduction integration, filter_fn validation at cast time. |
 | `test_cost_reduction.py` | Cost reduction clamping, application, cast_spell integration. |
 | `test_combat.py` | Declare attackers/blockers, combat damage, first strike, double strike, trample, lifelink, deathtouch, flying/reach, menace, vigilance, protection blocking/damage checks. |
 | `test_protection.py` | 34 tests covering DEBT mnemonic (Damage, Enchanting/Equipping, Blocking, Targeting), protection from colors/types. |
@@ -32,6 +32,8 @@ Unit tests for all engine modules in `engine/`. One test file per engine module,
 | `test_cleanup.py` | End-of-turn cleanup, discard to hand size, damage clearing. |
 | `test_test_utils.py` | Validates test helper API correctness. |
 | `test_test_utils_extra.py` | Additional test utility edge cases. |
+| `test_lazy_targets.py` | 10 tests for lazy filter_fn evaluation — creature added after filter creation, non-creature rejection, keyword/power/controller/toughness/card-type changes, zone removal. |
+| `test_chosen_targets_refactor.py` | Tests for chosen_targets refactor — resolve-time target availability from StackObject.targets. |
 
 ## Dependencies
 
