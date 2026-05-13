@@ -338,7 +338,7 @@ Implement the cards from their specs alone. Do not write or run tests. Focus on 
 
   Testability: `pip install -e ".[dev]"` succeeds. `silverquillm --help` shows `run` and `smoke`.
 
-- [ ] **Clean up orphaned tests and verify full suite**
+- [x] **Clean up orphaned tests and verify full suite**
   Detail: Final cleanup pass after all above items.
 
   1. `grep -rn "from silverquillm" tests/ --include="*.py"` — find imports of deleted modules
