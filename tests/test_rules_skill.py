@@ -1,4 +1,4 @@
-"""Tests for TODO item 8: MTG rules indexer + rules_overview.md.
+"""Tests for rules_skill.py (TODO items 8 & 12).
 
 Tests verify:
 - download_comprehensive_rules returns a non-empty string.
@@ -9,6 +9,9 @@ Tests verify:
 - lookup_rule with unknown/nonsense query returns something reasonable.
 - rules_overview.md exists, is non-empty, and under 1,000 tokens.
 - rules_overview.md covers key topics: turn structure, combat, stack, zones.
+- (Item 12) Public API preserved: __all__ exports the three public functions.
+- (Item 12) Removed internals: _STUB_RULES and generate_rules_overview are gone.
+- (Item 12) Module size is reasonable (under 10KB, not the old 26KB bloat).
 """
 
 from __future__ import annotations
@@ -17,6 +20,10 @@ from pathlib import Path
 
 import pytest
 
+import inspect
+import os
+
+import silverquillm.rules_skill as rules_skill_module
 from silverquillm.rules_skill import (
     build_rules_index,
     download_comprehensive_rules,
@@ -204,4 +211,89 @@ class TestRulesOverview:
         content = RULES_OVERVIEW_PATH.read_text(encoding="utf-8").lower()
         assert "zone" in content or "zones" in content, (
             "Expected 'zone(s)' topic in rules_overview.md"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Item 12: Module simplification — public API preserved, bloat removed
+# ---------------------------------------------------------------------------
+
+
+class TestPublicAPIPreserved:
+    """Public API must remain intact after simplification."""
+
+    def test_all_exports_three_functions(self) -> None:
+        """__all__ should export exactly the three public functions."""
+        assert set(rules_skill_module.__all__) == {
+            "download_comprehensive_rules",
+            "build_rules_index",
+            "lookup_rule",
+        }
+
+    def test_download_comprehensive_rules_is_callable(self) -> None:
+        """download_comprehensive_rules must be a callable function."""
+        assert callable(download_comprehensive_rules)
+
+    def test_build_rules_index_is_callable(self) -> None:
+        """build_rules_index must be a callable function."""
+        assert callable(build_rules_index)
+
+    def test_lookup_rule_is_callable(self) -> None:
+        """lookup_rule must be a callable function."""
+        assert callable(lookup_rule)
+
+
+class TestRemovedInternals:
+    """Verify that removed internals are no longer present."""
+
+    def test_stub_rules_removed(self) -> None:
+        """_STUB_RULES inline constant should not exist in the module."""
+        assert not hasattr(rules_skill_module, "_STUB_RULES"), (
+            "_STUB_RULES should have been removed during simplification"
+        )
+
+    def test_generate_rules_overview_removed(self) -> None:
+        """generate_rules_overview function should not exist in the module."""
+        assert not hasattr(rules_skill_module, "generate_rules_overview"), (
+            "generate_rules_overview should have been removed during simplification"
+        )
+
+    def test_rules_overview_content_removed(self) -> None:
+        """_RULES_OVERVIEW_CONTENT constant should not exist in the module."""
+        assert not hasattr(rules_skill_module, "_RULES_OVERVIEW_CONTENT"), (
+            "_RULES_OVERVIEW_CONTENT should have been removed during simplification"
+        )
+
+    def test_stub_rules_not_in_source(self) -> None:
+        """The source code should not contain _STUB_RULES (inline rules blob)."""
+        src = inspect.getsource(rules_skill_module)
+        assert "_STUB_RULES" not in src, (
+            "_STUB_RULES string found in source — should have been removed"
+        )
+
+    def test_generate_rules_overview_not_in_source(self) -> None:
+        """The source code should not contain generate_rules_overview."""
+        src = inspect.getsource(rules_skill_module)
+        assert "generate_rules_overview" not in src, (
+            "generate_rules_overview found in source — should have been removed"
+        )
+
+
+class TestModuleSizeReasonable:
+    """Module should be significantly smaller after simplification."""
+
+    def test_module_under_10kb(self) -> None:
+        """rules_skill.py should be under 10KB (was 26KB before simplification)."""
+        module_path = Path(rules_skill_module.__file__)
+        size = module_path.stat().st_size
+        assert size < 10_000, (
+            f"rules_skill.py is {size} bytes — expected under 10KB after simplification"
+        )
+
+    def test_module_under_250_lines(self) -> None:
+        """rules_skill.py should be under 250 lines (was 650 before simplification)."""
+        module_path = Path(rules_skill_module.__file__)
+        line_count = len(module_path.read_text(encoding="utf-8").splitlines())
+        assert line_count < 250, (
+            f"rules_skill.py is {line_count} lines — expected under 250 after simplification"
         )

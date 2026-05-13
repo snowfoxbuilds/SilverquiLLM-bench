@@ -71,3 +71,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - No changes needed — `silverquillm/aggregator.py` already has `RunSummary`, `aggregate_run()`, and `save_run_summary_v2()`; `silverquillm/cli.py` already wires aggregation after the card loop and provides the `aggregate` subcommand
+
+## Item 12: Simplify or remove rules_skill.py
+
+### Tests
+- `tests/test_rules_skill.py` — existing 18 tests for download, index, lookup, and rules_overview.md
+- `tests/test_package_rename.py` — verifies silverquillm.rules_skill is importable
+
+### Implementation
+- `silverquillm/rules_skill.py` — simplified from 26KB/650 lines to 5.6KB/173 lines; removed inline _STUB_RULES constant, generate_rules_overview, and _RULES_OVERVIEW_CONTENT; kept same public API (download_comprehensive_rules, build_rules_index, lookup_rule); added minimal embedded fallback rules string for when both network and cache are unavailable
