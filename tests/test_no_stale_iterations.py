@@ -229,9 +229,7 @@ class TestNoIterationsDirCreationInSource:
         results_path = Path(__file__).parent.parent / "silverquillm" / "results.py"
         source = results_path.read_text()
 
-        # Check for common patterns that would create iterations/ dirs
-        assert 'mkdir' not in source or 'iterations' not in source.split('mkdir')[0].split('\n')[-1:][0] if 'mkdir' in source else True
-        # More robust: ensure "iterations" is not used in path construction with mkdir
+        # Ensure "iterations" is not used in path construction with mkdir
         lines = source.splitlines()
         for i, line in enumerate(lines):
             stripped = line.strip()

@@ -18,6 +18,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from silverquillm.adapters.base import AgentAdapter
+from silverquillm.config import AgentConfig, BenchmarkConfig
 from silverquillm.strategies import (
     BlindStrategy,
     CardRunResult,
@@ -38,12 +40,24 @@ _SAMPLE_CARD_SPEC: dict = {
 }
 
 
+def _default_config() -> BenchmarkConfig:
+    return BenchmarkConfig(
+        name="test-bench",
+        set_code="TST",
+        model_name="test-model",
+        model_provider="test",
+        max_context=200_000,
+        temperature=0.0,
+        agent=AgentConfig(timeout_per_card=300),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Mock adapters
 # ---------------------------------------------------------------------------
 
 
-class _OutputAdapter:
+class _OutputAdapter(AgentAdapter):
     """Adapter that returns a configurable output string."""
 
     def __init__(
@@ -54,10 +68,17 @@ class _OutputAdapter:
         write_tests: bool = False,
         raise_timeout: bool = False,
     ) -> None:
+        super().__init__(_default_config())
         self._output = output
         self._write_impl = write_impl
         self._write_tests = write_tests
         self._raise_timeout = raise_timeout
+
+    def setup(self) -> None:
+        pass
+
+    def teardown(self) -> None:
+        pass
 
     def run(self, prompt: str, workspace: Path) -> str:
         if self._raise_timeout:
@@ -150,8 +171,12 @@ class TestBlindStrategyOutputCapture:
         """If adapter returns a non-string, it should be converted to string."""
         strategy = BlindStrategy()
 
-        class _IntAdapter:
-            def run(self, prompt: str, workspace: Path) -> int:
+        class _IntAdapter(AgentAdapter):
+            def __init__(self):
+                super().__init__(_default_config())
+            def setup(self): pass
+            def teardown(self): pass
+            def run(self, prompt: str, workspace: Path) -> str:
                 (workspace / "card_impl.py").write_text("# impl\n")
                 return 42  # type: ignore[return-value]
 
