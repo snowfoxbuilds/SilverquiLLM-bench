@@ -1,11 +1,28 @@
 """Evaluation runner for benchmark implementations.
 
-Runs implementations against test suites for self-eval, cross-eval,
-and audited-eval scenarios.  Each pytest invocation runs in an isolated
-subprocess with a configurable timeout.
+Three post-run scoring dimensions, all using audited tests:
+
+**Dimension 1 — SOS Card Correctness:**
+  For each completed SOS card, run audited tests against the agent's card_impl.py
+  with the agent's engine modifications.
+
+**Dimension 2 — FDN Card Regression:**
+  For each FDN card with audited tests, run them against the pre-filled reference
+  card_impl.py using the agent's engine modifications. Failures indicate the
+  agent's engine changes broke existing card behavior.
+
+**Dimension 3 — Engine Regression:**
+  Run core engine tests against the agent's engine_work/. Failures indicate
+  the agent broke fundamental game mechanics.
+
+Legacy API (``run_tests``, ``run_self_eval``, ``run_cross_eval``,
+``run_audited_eval``, ``run_audited_eval_per_card``) is retained for
+backward compatibility.
 
 Public API:
-- ``EvalResult`` — dataclass holding per-card evaluation outcomes.
+- ``evaluate`` — run all three scoring dimensions and return an ``FullEvalResult``.
+- ``CardResult`` / ``EngineResult`` / ``FullEvalResult`` — result dataclasses.
+- ``EvalResult`` — legacy per-card evaluation outcome (v1 schema).
 - ``run_tests`` — low-level: execute pytest on an impl + test pair.
 - ``run_self_eval`` — run an agent's impls against its own tests.
 - ``run_cross_eval`` — run every (impl, test) pair across agents.
@@ -14,13 +31,15 @@ Public API:
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -29,8 +48,11 @@ logger = logging.getLogger(__name__)
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 __all__ = [
+    "CardResult",
+    "EngineResult",
     "EvalResult",
-    "EvalResultV2",
+    "FullEvalResult",
+    "evaluate",
     "run_tests",
     "run_self_eval",
     "run_self_eval_flat",
@@ -40,7 +62,65 @@ __all__ = [
 ]
 
 # ---------------------------------------------------------------------------
-# Result dataclasses
+# Result dataclasses — new 3-dimension schema
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class CardResult:
+    """Result of running audited tests for a single card."""
+
+    collector_number: str
+    tests_passed: int = 0
+    tests_failed: int = 0
+    tests_total: int = 0
+    pass_rate: float = 0.0
+    errors: list[str] = field(default_factory=list)
+    skipped: bool = False
+
+
+@dataclass
+class EngineResult:
+    """Result of running core engine tests."""
+
+    tests_passed: int = 0
+    tests_failed: int = 0
+    tests_total: int = 0
+    pass_rate: float = 0.0
+    errors: list[str] = field(default_factory=list)
+
+
+@dataclass
+class FullEvalResult:
+    """Aggregated result across all three evaluation dimensions."""
+
+    sos_results: dict[str, CardResult] = field(default_factory=dict)
+    fdn_results: dict[str, CardResult] = field(default_factory=dict)
+    engine_result: EngineResult = field(default_factory=EngineResult)
+
+    # Aggregate scores
+    sos_pass_rate: float = 0.0
+    fdn_pass_rate: float = 0.0
+    engine_pass_rate: float = 0.0
+
+    def compute_aggregates(self) -> None:
+        """Recompute aggregate pass rates from per-card/engine results."""
+        # SOS aggregate
+        sos_passed = sum(r.tests_passed for r in self.sos_results.values())
+        sos_total = sum(r.tests_total for r in self.sos_results.values())
+        self.sos_pass_rate = sos_passed / sos_total if sos_total > 0 else 0.0
+
+        # FDN aggregate
+        fdn_passed = sum(r.tests_passed for r in self.fdn_results.values())
+        fdn_total = sum(r.tests_total for r in self.fdn_results.values())
+        self.fdn_pass_rate = fdn_passed / fdn_total if fdn_total > 0 else 0.0
+
+        # Engine aggregate
+        self.engine_pass_rate = self.engine_result.pass_rate
+
+
+# ---------------------------------------------------------------------------
+# Legacy result dataclasses (v1 schema — retained for backward compat)
 # ---------------------------------------------------------------------------
 
 
@@ -50,7 +130,6 @@ class EvalResult:
 
     Retained for backward compatibility with existing evaluation functions
     (``run_self_eval``, ``run_cross_eval``, ``run_audited_eval``) and tests.
-    New code should prefer :class:`EvalResultV2`.
     """
 
     card_id: str
@@ -62,31 +141,6 @@ class EvalResult:
     tested_passed: int
     tested_failed: int
     tested_total: int
-    errors: list[str] = field(default_factory=list)
-
-
-@dataclass
-class EvalResultV2:
-    """Per-card evaluation outcome — v2 schema.
-
-    Replaces the blind/tested split with a mode-aware layout:
-
-    * ``implementation`` — token/runtime metrics for the generation phase.
-    * ``self_eval`` — agent's own tests against its impl (impl_test mode only).
-    * ``audited_eval`` — gold-standard tests against the impl.
-    * ``engine_diff_summary`` — human-readable summary of engine changes.
-    """
-
-    card_id: str
-    mode: str  # "blind" | "impl_test"
-    model_name: str
-    adapter: str
-    status: str  # "completed" | "timeout" | "no_output"
-    complexity_tier: str
-    implementation: dict = field(default_factory=dict)  # {tokens: {input, output, total}, runtime_ms, peak_context}
-    self_eval: dict | None = None  # {passed, failed, total} — None for blind mode
-    audited_eval: dict | None = None  # {passed, failed, total}
-    engine_diff_summary: str = ""  # human-readable summary of engine changes
     errors: list[str] = field(default_factory=list)
 
 
@@ -551,3 +605,348 @@ def run_audited_eval_per_card(
         return _parse_pytest_output(combined)
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# New 3-dimension evaluation system
+# ---------------------------------------------------------------------------
+
+
+def _prepare_engine_work(
+    run_dir: Path,
+    engine_dir: Path,
+) -> tuple[Path, Path | None]:
+    """Prepare the agent's engine directory for evaluation.
+
+    Always returns a path named ``engine/`` inside a staging directory so
+    that putting ``path.parent`` on ``PYTHONPATH`` makes ``import engine``
+    resolve correctly.
+
+    If ``run_dir/engine_work/`` exists, copy it into a staging temp dir as
+    ``engine/``.
+    If ``run_dir/engine_diff.patch`` exists, copy *engine_dir* to a temp
+    directory as ``engine/`` and apply the patch.
+    Otherwise, return *engine_dir* unchanged (no engine modifications) with
+    no temp directory to clean up.
+
+    Returns
+    -------
+    tuple[Path, Path | None]
+        ``(engine_path, staging_dir)`` where *staging_dir* is the temp
+        directory to clean up (or ``None`` if no temp dir was created).
+    """
+    engine_work = run_dir / "engine_work"
+    if engine_work.is_dir():
+        # Copy engine_work into a staging dir named "engine/" so that
+        # PYTHONPATH=staging_dir makes ``import engine`` work.
+        staging = Path(tempfile.mkdtemp(prefix="eval_engine_"))
+        shutil.copytree(engine_work, staging / "engine")
+        return staging / "engine", staging
+
+    patch_file = run_dir / "engine_diff.patch"
+    if patch_file.is_file():
+        staging = Path(tempfile.mkdtemp(prefix="eval_engine_"))
+        shutil.copytree(engine_dir, staging / "engine")
+        try:
+            subprocess.run(
+                ["git", "apply", "--directory", str(staging / "engine"), str(patch_file)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            logger.warning("Failed to apply engine_diff.patch: %s", exc.stderr)
+        return staging / "engine", staging
+
+    # No engine modifications — use the original
+    return engine_dir, None
+
+
+def _run_pytest_with_pythonpath(
+    test_path: Path,
+    pythonpath_parts: list[str],
+    timeout: int = 60,
+) -> tuple[int, int, int, list[str]]:
+    """Run pytest on *test_path* with a custom PYTHONPATH.
+
+    Returns ``(passed, failed, total, errors)``.
+    """
+    env = dict(os.environ)
+    existing = env.get("PYTHONPATH", "")
+    parts = pythonpath_parts + ([existing] if existing else [])
+    env["PYTHONPATH"] = ":".join(parts)
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "pytest",
+        str(test_path),
+        "--tb=short",
+        "-q",
+        "--no-header",
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
+        )
+        combined = result.stdout + "\n" + result.stderr
+    except subprocess.TimeoutExpired:
+        return 0, 0, 0, [f"Timeout after {timeout}s"]
+
+    return _parse_pytest_output(combined)
+
+
+def _make_card_result(
+    collector_number: str,
+    passed: int,
+    failed: int,
+    total: int,
+    errors: list[str],
+) -> CardResult:
+    """Build a :class:`CardResult` from raw pytest output."""
+    return CardResult(
+        collector_number=collector_number,
+        tests_passed=passed,
+        tests_failed=failed,
+        tests_total=total,
+        pass_rate=passed / total if total > 0 else 0.0,
+        errors=errors,
+    )
+
+
+def _eval_sos_cards(
+    run_dir: Path,
+    cards_dir: Path,
+    engine_work: Path,
+    audited_dir: Path,
+    timeout: int = 60,
+) -> dict[str, CardResult]:
+    """Dimension 1: SOS Card Correctness.
+
+    For each SOS card where status == 'completed', run audited tests
+    against the agent's card_impl.py + engine_work.
+    """
+    results: dict[str, CardResult] = {}
+
+    # Read status from run_dir
+    status_file = run_dir / "status.json"
+    if not status_file.exists():
+        logger.warning("No status.json found in %s", run_dir)
+        return results
+
+    try:
+        statuses = json.loads(status_file.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Failed to read status.json: %s", exc)
+        return results
+
+    cards_status = statuses if isinstance(statuses, dict) else {}
+
+    for cn, info in cards_status.items():
+        status = info if isinstance(info, str) else info.get("status", "")
+        if status != "completed":
+            continue
+
+        # Check for audited tests
+        test_file = audited_dir / cn / "tests.py"
+        if not test_file.exists():
+            results[cn] = CardResult(
+                collector_number=cn, skipped=True,
+                errors=[f"No audited tests at {test_file}"],
+            )
+            continue
+
+        # Find agent's card_impl.py
+        card_impl = run_dir / "cards" / cn / "card_impl.py"
+        if not card_impl.exists():
+            results[cn] = CardResult(
+                collector_number=cn,
+                errors=[f"Missing card_impl.py at {card_impl}"],
+            )
+            continue
+
+        # Set up temp dir with card_impl.py
+        tmp_dir = tempfile.mkdtemp(prefix="eval_sos_")
+        try:
+            tmp = Path(tmp_dir)
+            shutil.copy2(card_impl, tmp / "card_impl.py")
+            shutil.copy2(test_file, tmp / "tests.py")
+
+            # PYTHONPATH: tmp (card_impl), engine parent, repo root
+            pp = [str(tmp)]
+            if engine_work.exists():
+                pp.append(str(engine_work.parent))
+            pp.append(str(_REPO_ROOT))
+
+            passed, failed, total, errors = _run_pytest_with_pythonpath(
+                tmp / "tests.py", pp, timeout=timeout,
+            )
+            cr = _make_card_result(cn, passed, failed, total, errors)
+            results[cn] = cr
+
+            # Write result.json
+            result_dir = run_dir / "cards" / cn
+            result_dir.mkdir(parents=True, exist_ok=True)
+            (result_dir / "result.json").write_text(
+                json.dumps(asdict(cr), indent=2)
+            )
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    return results
+
+
+def _eval_fdn_cards(
+    cards_dir: Path,
+    engine_work: Path,
+    audited_dir: Path,
+    timeout: int = 60,
+) -> dict[str, CardResult]:
+    """Dimension 2: FDN Card Regression.
+
+    For each FDN card with audited tests, run them against the pre-filled
+    reference card_impl.py using the agent's engine_work.
+    """
+    results: dict[str, CardResult] = {}
+
+    if not audited_dir.exists():
+        return results
+
+    for test_dir in sorted(audited_dir.iterdir()):
+        if not test_dir.is_dir():
+            continue
+        test_file = test_dir / "tests.py"
+        if not test_file.exists():
+            continue
+
+        cn = test_dir.name
+
+        # Use reference FDN card_impl.py from cards_dir
+        ref_impl = cards_dir / "fdn" / cn / "card_impl.py"
+        if not ref_impl.exists():
+            results[cn] = CardResult(
+                collector_number=cn,
+                errors=[f"No reference card_impl.py at {ref_impl}"],
+            )
+            continue
+
+        tmp_dir = tempfile.mkdtemp(prefix="eval_fdn_")
+        try:
+            tmp = Path(tmp_dir)
+            shutil.copy2(ref_impl, tmp / "card_impl.py")
+            shutil.copy2(test_file, tmp / "tests.py")
+
+            pp = [str(tmp)]
+            if engine_work.exists():
+                pp.append(str(engine_work.parent))
+            pp.append(str(_REPO_ROOT))
+
+            passed, failed, total, errors = _run_pytest_with_pythonpath(
+                tmp / "tests.py", pp, timeout=timeout,
+            )
+            results[cn] = _make_card_result(cn, passed, failed, total, errors)
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    return results
+
+
+def _eval_engine(
+    engine_work: Path,
+    engine_tests_dir: Path,
+    timeout: int = 120,
+) -> EngineResult:
+    """Dimension 3: Engine Regression.
+
+    Run core engine tests against the agent's engine_work/.
+    """
+    if not engine_tests_dir.exists():
+        return EngineResult(errors=[f"No engine tests at {engine_tests_dir}"])
+
+    pp = []
+    if engine_work.exists():
+        pp.append(str(engine_work.parent))
+    pp.append(str(_REPO_ROOT))
+
+    passed, failed, total, errors = _run_pytest_with_pythonpath(
+        engine_tests_dir, pp, timeout=timeout,
+    )
+    return EngineResult(
+        tests_passed=passed,
+        tests_failed=failed,
+        tests_total=total,
+        pass_rate=passed / total if total > 0 else 0.0,
+        errors=errors,
+    )
+
+
+def evaluate(
+    run_dir: Path,
+    cards_dir: Path,
+    engine_dir: Path,
+    timeout: int = 60,
+) -> FullEvalResult:
+    """Run all three evaluation dimensions and return aggregated results.
+
+    Parameters
+    ----------
+    run_dir:
+        Path to the agent's run directory containing ``status.json``,
+        ``cards/{cn}/card_impl.py``, and optionally ``engine_work/`` or
+        ``engine_diff.patch``.
+    cards_dir:
+        Root of the cards directory (contains ``fdn/`` and ``sos/``
+        subdirectories with reference card implementations).
+    engine_dir:
+        Path to the clean engine directory (used as base when applying
+        ``engine_diff.patch``).
+    timeout:
+        Per-pytest-invocation timeout in seconds.
+
+    Returns
+    -------
+    FullEvalResult
+        Aggregated evaluation results across all three dimensions.
+    """
+    run_dir = Path(run_dir)
+    cards_dir = Path(cards_dir)
+    engine_dir = Path(engine_dir)
+
+    # Prepare engine — returns (engine_path, staging_dir_to_cleanup)
+    engine_work, staging_dir = _prepare_engine_work(run_dir, engine_dir)
+
+    # Audited test directories
+    audited_sos = _REPO_ROOT / "tests" / "audited" / "sos"
+    audited_fdn = _REPO_ROOT / "tests" / "audited" / "fdn"
+    engine_tests = _REPO_ROOT / "tests" / "engine"
+
+    result = FullEvalResult()
+
+    try:
+        # Dimension 1: SOS Card Correctness
+        result.sos_results = _eval_sos_cards(
+            run_dir, cards_dir, engine_work, audited_sos, timeout=timeout,
+        )
+
+        # Dimension 2: FDN Card Regression
+        result.fdn_results = _eval_fdn_cards(
+            cards_dir, engine_work, audited_fdn, timeout=timeout,
+        )
+
+        # Dimension 3: Engine Regression
+        result.engine_result = _eval_engine(
+            engine_work, engine_tests, timeout=timeout,
+        )
+    finally:
+        # Clean up the engine staging directory if one was created
+        if staging_dir is not None:
+            shutil.rmtree(staging_dir, ignore_errors=True)
+
+    # Compute aggregates
+    result.compute_aggregates()
+
+    return result

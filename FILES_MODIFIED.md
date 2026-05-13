@@ -89,3 +89,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `silverquillm/cli.py` — Click CLI with `run` and `smoke` commands; container naming + docker stop on timeout, API-key redaction in logs, engine/ dir in smoke workspace
+
+## Item 8: Rewrite evaluator.py — 3 evaluation dimensions
+
+### Tests
+- `tests/test_evaluator.py` — Tests legacy API (EvalResult, run_tests, run_self_eval, run_cross_eval, run_audited_eval, _parse_pytest_output)
+- `tests/test_evaluator_3dim.py` — Tests 3-dimension evaluation system (CardResult, EngineResult, FullEvalResult, evaluate)
+
+### Implementation
+- `silverquillm/evaluator.py` — Added 3-dimension evaluation system (evaluate, CardResult, EngineResult, FullEvalResult) alongside retained legacy API; removed unused EvalResultV2. Revision: fixed engine_work importability by staging as engine/, added temp dir cleanup via try/finally in evaluate(), documented subprocess isolation for per-card runs.

@@ -216,7 +216,7 @@ Implement the cards from their specs alone. Do not write or run tests. Focus on 
 
   Testability: Mock `subprocess.run` with a fake docker command that writes known files → verify harvest logic, verify run_summary.json structure. Real smoke test with a built image.
 
-- [ ] **Rewrite ****`silverquillm/evaluator.py`**** — 3 evaluation dimensions**
+- [x] **Rewrite `silverquillm/evaluator.py``**** — 3 evaluation dimensions**
   Detail: Complete rewrite. Three post-run scoring dimensions, all using audited tests. Agent-written tests are harvested as artifacts but NOT used for scoring.
 
   `evaluate(run_dir: Path, cards_dir: Path, engine_dir: Path) -> EvalResult`:
