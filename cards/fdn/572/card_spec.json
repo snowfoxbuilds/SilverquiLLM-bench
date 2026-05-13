@@ -1,9 +1,0 @@
-{
-  "name": "Disenchant",
-  "mana_cost": "{1}{W}",
-  "type_line": "Instant",
-  "oracle_text": "Destroy target artifact or enchantment.",
-  "collector_number": "572",
-  "set_code": "fdn",
-  "rarity": "common"
-}

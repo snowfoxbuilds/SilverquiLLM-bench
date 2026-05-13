@@ -1,9 +1,0 @@
-{
-  "name": "Crow of Dark Tidings",
-  "mana_cost": "{2}{B}",
-  "type_line": "Creature \u2014 Zombie Bird",
-  "oracle_text": "Flying\nWhen this creature enters or dies, mill two cards.",
-  "collector_number": "519",
-  "set_code": "fdn",
-  "rarity": "common"
-}

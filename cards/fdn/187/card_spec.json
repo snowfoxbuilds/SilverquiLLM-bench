@@ -1,9 +1,0 @@
-{
-  "name": "Zombify",
-  "mana_cost": "{3}{B}",
-  "type_line": "Sorcery",
-  "oracle_text": "Return target creature card from your graveyard to the battlefield.",
-  "collector_number": "187",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

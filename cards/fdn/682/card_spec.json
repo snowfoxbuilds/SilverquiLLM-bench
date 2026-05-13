@@ -1,9 +1,0 @@
-{
-  "name": "Three Tree Mascot",
-  "mana_cost": "{2}",
-  "type_line": "Artifact Creature \u2014 Shapeshifter",
-  "oracle_text": "Changeling. {1}: Add any color (once per turn).",
-  "collector_number": "682",
-  "set_code": "fdn",
-  "rarity": "common"
-}

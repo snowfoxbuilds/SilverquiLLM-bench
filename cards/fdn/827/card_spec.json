@@ -1,9 +1,0 @@
-{
-  "name": "Austere Command",
-  "mana_cost": "{4}{W}{W}",
-  "type_line": "Sorcery",
-  "oracle_text": "Choose two \u2014 Destroy artifacts; Destroy enchantments; Destroy small creatures; Destroy large creatures.",
-  "collector_number": "",
-  "set_code": "fdn",
-  "rarity": "rare"
-}

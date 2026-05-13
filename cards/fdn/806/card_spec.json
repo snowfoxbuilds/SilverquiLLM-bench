@@ -1,9 +1,0 @@
-{
-  "name": "Mask of Memory",
-  "mana_cost": "{2}",
-  "type_line": "Artifact \u2014 Equipment",
-  "oracle_text": "Whenever equipped creature deals combat damage to a player, you may draw two cards. If you do, discard a card.\nEquip {1}",
-  "collector_number": "",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

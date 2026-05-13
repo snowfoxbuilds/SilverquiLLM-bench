@@ -1,9 +1,0 @@
-{
-  "name": "Diamond Mare",
-  "mana_cost": "{2}",
-  "type_line": "Artifact Creature \u2014 Horse",
-  "oracle_text": "Choose a color. Cast spell of that color \u2192 gain 1 life.",
-  "collector_number": "672",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

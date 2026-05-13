@@ -1,9 +1,0 @@
-{
-  "name": "Banishing Light",
-  "mana_cost": "{2}{W}",
-  "type_line": "Enchantment",
-  "oracle_text": "When this enchantment enters, exile target nonland permanent an opponent controls until this enchantment leaves the battlefield.",
-  "collector_number": "138",
-  "set_code": "fdn",
-  "rarity": "common"
-}

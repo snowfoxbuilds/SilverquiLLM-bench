@@ -1,9 +1,0 @@
-{
-  "name": "Heraldic Banner",
-  "mana_cost": "{3}",
-  "type_line": "Artifact",
-  "oracle_text": "Choose a color. Creatures of that color get +1/+0. {T}: Add chosen color.",
-  "collector_number": "254",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

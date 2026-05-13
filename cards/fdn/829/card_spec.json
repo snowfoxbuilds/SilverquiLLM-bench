@@ -1,9 +1,0 @@
-{
-  "name": "Inscription of Insight",
-  "mana_cost": "{3}{U}",
-  "type_line": "Sorcery",
-  "oracle_text": "Kicker. Choose one (all if kicked) \u2014 Bounce; Scry+Draw; X/X token.",
-  "collector_number": "",
-  "set_code": "fdn",
-  "rarity": "rare"
-}

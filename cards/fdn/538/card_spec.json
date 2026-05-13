@@ -1,9 +1,0 @@
-{
-  "name": "Fire Elemental",
-  "mana_cost": "{3}{R}{R}",
-  "type_line": "Creature \u2014 Elemental",
-  "oracle_text": "",
-  "collector_number": "538",
-  "set_code": "fdn",
-  "rarity": "common"
-}

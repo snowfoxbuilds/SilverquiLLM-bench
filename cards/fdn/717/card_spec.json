@@ -1,9 +1,0 @@
-{
-  "name": "Impact Tremors",
-  "mana_cost": "{1}{R}",
-  "type_line": "Enchantment",
-  "oracle_text": "Whenever a creature you control enters, this enchantment deals 1 damage to each opponent.",
-  "collector_number": "717",
-  "set_code": "fdn",
-  "rarity": "common"
-}

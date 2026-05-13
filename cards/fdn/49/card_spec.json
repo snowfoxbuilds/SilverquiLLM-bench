@@ -1,9 +1,0 @@
-{
-  "name": "Rune-Sealed Wall",
-  "mana_cost": "",
-  "type_line": "Artifact Creature \u2014 Wall",
-  "oracle_text": "Defender\n{T}: Surveil 1.",
-  "collector_number": "49",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

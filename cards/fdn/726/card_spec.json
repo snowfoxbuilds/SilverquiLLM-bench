@@ -1,9 +1,0 @@
-{
-  "name": "Hedron Archive",
-  "mana_cost": "{4}",
-  "type_line": "Artifact",
-  "oracle_text": "{T}: Add {C}{C}.\n{2}, {T}, Sacrifice this artifact: Draw two cards.",
-  "collector_number": "726",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

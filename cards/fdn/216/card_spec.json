@@ -1,9 +1,0 @@
-{
-  "name": "Pursue the Past",
-  "mana_cost": "{R}{W}",
-  "type_line": "Sorcery",
-  "oracle_text": "You gain 2 life. You may discard a card. If you do, draw two cards.\nFlashback {2}{R}{W}",
-  "collector_number": "216",
-  "set_code": "fdn",
-  "rarity": "common"
-}

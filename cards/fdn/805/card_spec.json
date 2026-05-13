@@ -1,9 +1,0 @@
-{
-  "name": "Whispersilk Cloak",
-  "mana_cost": "{3}",
-  "type_line": "Artifact \u2014 Equipment",
-  "oracle_text": "Equipped creature has hexproof and can't be blocked.\nEquip {2}",
-  "collector_number": "",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

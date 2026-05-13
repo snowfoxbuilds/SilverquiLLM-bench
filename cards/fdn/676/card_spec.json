@@ -1,9 +1,0 @@
-{
-  "name": "Mazemind Tome",
-  "mana_cost": "{2}",
-  "type_line": "Artifact \u2014 Book",
-  "oracle_text": "Page counters for scry/draw. Exile at 4+ counters, gain 4 life.",
-  "collector_number": "676",
-  "set_code": "fdn",
-  "rarity": "rare"
-}

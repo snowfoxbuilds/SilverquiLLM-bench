@@ -1,9 +1,0 @@
-{
-  "name": "Sower of Chaos",
-  "mana_cost": "",
-  "type_line": "Creature \u2014 Devil",
-  "oracle_text": "{2}{R}: Target creature can't block this turn.",
-  "collector_number": "95",
-  "set_code": "fdn",
-  "rarity": "common"
-}

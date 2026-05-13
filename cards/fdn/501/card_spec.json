@@ -1,9 +1,0 @@
-{
-  "name": "Pacifism",
-  "mana_cost": "{1}{W}",
-  "type_line": "Enchantment \u2014 Aura",
-  "oracle_text": "Enchant creature\nEnchanted creature can't attack or block.",
-  "collector_number": "501",
-  "set_code": "fdn",
-  "rarity": "common"
-}

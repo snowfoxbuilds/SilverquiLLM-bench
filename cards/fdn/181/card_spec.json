@@ -1,9 +1,0 @@
-{
-  "name": "Pilfer",
-  "mana_cost": "{1}{B}",
-  "type_line": "Sorcery",
-  "oracle_text": "Target opponent reveals their hand. You choose a nonland card from it. That player discards that card.",
-  "collector_number": "181",
-  "set_code": "fdn",
-  "rarity": "common"
-}

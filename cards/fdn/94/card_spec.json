@@ -1,9 +1,0 @@
-{
-  "name": "Pox Plague",
-  "mana_cost": "{B}{B}{B}{B}{B}",
-  "type_line": "Sorcery",
-  "oracle_text": "Each player loses half their life, then discards half the cards in their hand, then sacrifices half the permanents they control of their choice. Round down each time.",
-  "collector_number": "94",
-  "set_code": "fdn",
-  "rarity": "rare"
-}

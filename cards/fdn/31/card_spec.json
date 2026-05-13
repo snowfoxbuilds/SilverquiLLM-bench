@@ -1,9 +1,0 @@
-{
-  "name": "Bigfin Bouncer",
-  "mana_cost": "{3}{U}",
-  "type_line": "Creature \u2014 Shark Pirate",
-  "oracle_text": "When this creature enters, return target creature an opponent controls to its owner's hand.",
-  "collector_number": "31",
-  "set_code": "fdn",
-  "rarity": "common"
-}

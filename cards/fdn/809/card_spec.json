@@ -1,9 +1,0 @@
-{
-  "name": "Relic of Progenitus",
-  "mana_cost": "{1}",
-  "type_line": "Artifact",
-  "oracle_text": "{T}: Target player exiles a card from their graveyard.\n{1}, Exile Relic of Progenitus: Exile all cards from all graveyards. Draw a card.",
-  "collector_number": "",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

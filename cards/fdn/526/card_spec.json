@@ -1,9 +1,0 @@
-{
-  "name": "Skeleton Archer",
-  "mana_cost": "{3}{B}",
-  "type_line": "Creature \u2014 Skeleton Archer",
-  "oracle_text": "When this creature enters, it deals 1 damage to any target.",
-  "collector_number": "526",
-  "set_code": "fdn",
-  "rarity": "common"
-}

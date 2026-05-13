@@ -1,9 +1,0 @@
-{
-  "name": "Gleaming Barrier",
-  "mana_cost": "{2}",
-  "type_line": "Artifact Creature \u2014 Wall",
-  "oracle_text": "Defender\nWhen this creature dies, create a Treasure token.",
-  "collector_number": "252",
-  "set_code": "fdn",
-  "rarity": "common"
-}

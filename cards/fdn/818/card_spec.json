@@ -1,9 +1,0 @@
-{
-  "name": "Ajani, Caller of the Pride",
-  "mana_cost": "{1}{W}{W}",
-  "type_line": "Legendary Planeswalker \u2014 Ajani",
-  "oracle_text": "+1: Put a +1/+1 counter on up to one target creature.\n-3: Target creature gains flying and double strike until end of turn.\n-8: Create X 2/2 white Cat creature tokens, where X is your life total.",
-  "collector_number": "",
-  "set_code": "fdn",
-  "rarity": "mythic"
-}

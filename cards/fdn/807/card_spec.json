@@ -1,9 +1,0 @@
-{
-  "name": "Altar of the Brood",
-  "mana_cost": "{1}",
-  "type_line": "Artifact",
-  "oracle_text": "Whenever another permanent enters the battlefield under your control, each opponent mills a card.",
-  "collector_number": "",
-  "set_code": "fdn",
-  "rarity": "rare"
-}

@@ -1,9 +1,0 @@
-{
-  "name": "Darksteel Colossus",
-  "mana_cost": "{11}",
-  "type_line": "Artifact Creature \u2014 Golem",
-  "oracle_text": "Trample, indestructible. Shuffle into library instead of graveyard.",
-  "collector_number": "671",
-  "set_code": "fdn",
-  "rarity": "mythic"
-}

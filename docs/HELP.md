@@ -1,5 +1,12 @@
 # venv
 
+python3 -m venv venv
+source venv/bin/activate
+pip install -e ".[dev]"
+
+# Docker
+docker build -t silverquillm-opencode-blind:latest docker/opencode-blind/
+
 # Testing repo
 
 pytest --ignore=tests/audited/sos/
@@ -12,3 +19,5 @@ benchmark validate data/replays/fdn/ --verbose --stop-on-divergence
 
 ## Upload results
 git add -f benchmarks/sos/results/gemma4_2026-05-12T01-59/
+
+

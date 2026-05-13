@@ -1,9 +1,0 @@
-{
-  "name": "Levitation",
-  "mana_cost": "{2}{U}{U}",
-  "type_line": "Enchantment",
-  "oracle_text": "Creatures you control have flying.",
-  "collector_number": "",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

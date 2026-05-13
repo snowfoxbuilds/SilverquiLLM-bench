@@ -1,9 +1,0 @@
-{
-  "name": "Bake into a Pie",
-  "mana_cost": "{2}{B}{B}",
-  "type_line": "Instant",
-  "oracle_text": "Destroy target creature. Create a Food token. (It's an artifact with \"{2}, {T}, Sacrifice this token: You gain 3 life.\")",
-  "collector_number": "169",
-  "set_code": "fdn",
-  "rarity": "common"
-}

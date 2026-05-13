@@ -1,9 +1,0 @@
-{
-  "name": "Treetop Snarespinner",
-  "mana_cost": "",
-  "type_line": "Creature \u2014 Spider",
-  "oracle_text": "Reach\nDeathtouch\n{2}{G}: Put a +1/+1 counter on target creature you control. Activate only as a sorcery.",
-  "collector_number": "114",
-  "set_code": "fdn",
-  "rarity": "common"
-}

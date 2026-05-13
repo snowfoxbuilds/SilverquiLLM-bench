@@ -1,9 +1,0 @@
-{
-  "name": "Charming Prince",
-  "mana_cost": "{1}{W}",
-  "type_line": "Creature \u2014 Human Noble",
-  "oracle_text": "When this creature enters, choose one \u2014 Scry 2. / You gain 3 life. / Exile another target creature you own.",
-  "collector_number": "568",
-  "set_code": "fdn",
-  "rarity": "rare"
-}

@@ -1,9 +1,0 @@
-{
-  "name": "Mild-Mannered Librarian",
-  "mana_cost": "",
-  "type_line": "Creature \u2014 Human Werewolf",
-  "oracle_text": "{3}{G}: This creature becomes a Werewolf. Put two +1/+1 counters on it and you draw a card. Activate only once.",
-  "collector_number": "228",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

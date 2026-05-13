@@ -1,9 +1,0 @@
-{
-  "name": "Group Project",
-  "mana_cost": "{1}{W}",
-  "type_line": "Sorcery",
-  "oracle_text": "Create a 2/2 red and white Spirit creature token.\nFlashback\u2014Tap three untapped creatures you control.",
-  "collector_number": "17",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

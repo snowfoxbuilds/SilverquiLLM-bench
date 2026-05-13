@@ -1,9 +1,0 @@
-{
-  "name": "Rapturous Moment",
-  "mana_cost": "{4}{U}{R}",
-  "type_line": "Sorcery",
-  "oracle_text": "Draw three cards, then discard two cards. Add {U}{U}{R}{R}{R}.",
-  "collector_number": "219",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

@@ -1,9 +1,0 @@
-{
-  "name": "Mind Stone",
-  "mana_cost": "{2}",
-  "type_line": "Artifact",
-  "oracle_text": "{T}: Add {C}.\n{1}, {T}, Sacrifice Mind Stone: Draw a card.",
-  "collector_number": "",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

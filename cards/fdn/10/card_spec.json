@@ -1,9 +1,0 @@
-{
-  "name": "Divine Resilience",
-  "mana_cost": "{W}",
-  "type_line": "Instant",
-  "oracle_text": "Kicker {2}{W}\nTarget creature you control gains indestructible until end of turn. If this spell was kicked, also put two +1/+1 counters on it.",
-  "collector_number": "10",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

@@ -1,9 +1,0 @@
-{
-  "name": "Crossway Troublemakers",
-  "mana_cost": "{5}{B}",
-  "type_line": "Creature \u2014 Vampire",
-  "oracle_text": "Attacking Vampires you control have deathtouch and lifelink.\nWhenever a Vampire you control dies, you may pay 2 life. If you do, draw a card.",
-  "collector_number": "518",
-  "set_code": "fdn",
-  "rarity": "rare"
-}

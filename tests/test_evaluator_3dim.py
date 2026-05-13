@@ -477,10 +477,10 @@ class TestEngineDiffPatch:
         with patch("silverquillm.evaluator._REPO_ROOT", tmp_path):
             result = evaluate(run_dir, cards_dir, engine_dir, timeout=10)
 
-        # Verify git apply was called at some point
+        # Verify git apply was called at some point (check command only, not env)
         git_calls = [
             c for c in mock_run.call_args_list
-            if any("git" in str(a) for a in c.args + tuple(c.kwargs.values()))
+            if c.args and any("git" in str(a) for a in c.args[0])
         ]
         assert len(git_calls) > 0, "git apply should have been called for engine_diff.patch"
 
@@ -504,10 +504,10 @@ class TestEngineDiffPatch:
         with patch("silverquillm.evaluator._REPO_ROOT", tmp_path):
             result = evaluate(run_dir, cards_dir, engine_dir, timeout=10)
 
-        # No git apply calls
+        # No git apply calls (check command only, not env)
         git_calls = [
             c for c in mock_run.call_args_list
-            if any("git" in str(a) for a in c.args + tuple(c.kwargs.values()))
+            if c.args and any("git" in str(a) for a in c.args[0])
         ]
         assert len(git_calls) == 0, "git apply should NOT be called when engine_work/ exists"
 

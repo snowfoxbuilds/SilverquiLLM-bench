@@ -1,9 +1,0 @@
-{
-  "name": "Ambush Wolf",
-  "mana_cost": "{2}{G}",
-  "type_line": "Creature \u2014 Wolf",
-  "oracle_text": "Flash\nWhen this creature enters, exile up to one target card from a graveyard.",
-  "collector_number": "98",
-  "set_code": "fdn",
-  "rarity": "common"
-}

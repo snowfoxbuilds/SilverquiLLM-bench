@@ -1,9 +1,0 @@
-{
-  "name": "Pelakka Wurm",
-  "mana_cost": "{4}{G}{G}{G}",
-  "type_line": "Creature \u2014 Wurm",
-  "oracle_text": "Trample\nWhen this creature enters, you gain 7 life.\nWhen this creature dies, draw a card.",
-  "collector_number": "720",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

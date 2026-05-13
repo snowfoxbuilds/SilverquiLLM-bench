@@ -1,9 +1,0 @@
-{
-  "name": "Campus Guide",
-  "mana_cost": "{2}",
-  "type_line": "Artifact Creature \u2014 Golem",
-  "oracle_text": "ETB: search basic land on top.",
-  "collector_number": "251",
-  "set_code": "fdn",
-  "rarity": "common"
-}

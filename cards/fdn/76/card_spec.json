@@ -1,9 +1,0 @@
-{
-  "name": "Vengeful Bloodwitch",
-  "mana_cost": "{1}{B}",
-  "type_line": "Creature \u2014 Vampire Warlock",
-  "oracle_text": "Whenever this creature or another creature you control dies, target opponent loses 1 life and you gain 1 life.",
-  "collector_number": "76",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

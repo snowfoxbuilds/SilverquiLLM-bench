@@ -1,9 +1,0 @@
-{
-  "name": "Regal Caracal",
-  "mana_cost": "{3}{W}{W}",
-  "type_line": "Creature \u2014 Cat",
-  "oracle_text": "Other Cats you control get +1/+1 and have lifelink.\nWhen this creature enters, create two 1/1 white Cat creature tokens with lifelink.",
-  "collector_number": "579",
-  "set_code": "fdn",
-  "rarity": "rare"
-}

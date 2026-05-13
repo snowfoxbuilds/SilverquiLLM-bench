@@ -1,9 +1,0 @@
-{
-  "name": "Eaten by Piranhas",
-  "mana_cost": "{1}{U}",
-  "type_line": "Enchantment \u2014 Aura",
-  "oracle_text": "Flash\nEnchant creature\nEnchanted creature loses all abilities and is a black Skeleton creature with base power and toughness 1/1.",
-  "collector_number": "507",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

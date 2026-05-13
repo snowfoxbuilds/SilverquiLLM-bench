@@ -1,9 +1,0 @@
-{
-  "name": "Untamed Hunger",
-  "mana_cost": "{2}{B}",
-  "type_line": "Enchantment \u2014 Aura",
-  "oracle_text": "Enchant creature\nEnchanted creature gets +2/+1 and has menace. (It can't be blocked except by two or more creatures.)",
-  "collector_number": "529",
-  "set_code": "fdn",
-  "rarity": "common"
-}

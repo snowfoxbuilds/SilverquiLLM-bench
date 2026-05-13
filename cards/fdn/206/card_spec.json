@@ -1,9 +1,0 @@
-{
-  "name": "Shivan Dragon",
-  "mana_cost": "",
-  "type_line": "Creature \u2014 Dragon",
-  "oracle_text": "Flying\n{R}: This creature gets +1/+0 until end of turn.",
-  "collector_number": "206",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

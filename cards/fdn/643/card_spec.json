@@ -1,9 +1,0 @@
-{
-  "name": "Primal Might",
-  "mana_cost": "{X}{G}",
-  "type_line": "Sorcery",
-  "oracle_text": "Target creature you control gets +X/+X until end of turn. Then it fights up to one target creature you don't control.",
-  "collector_number": "643",
-  "set_code": "fdn",
-  "rarity": "rare"
-}

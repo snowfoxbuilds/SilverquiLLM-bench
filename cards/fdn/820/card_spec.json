@@ -1,9 +1,0 @@
-{
-  "name": "Liliana, Dreadhorde General",
-  "mana_cost": "{4}{B}{B}",
-  "type_line": "Legendary Planeswalker \u2014 Liliana",
-  "oracle_text": "+1: Each opponent sacrifices a creature.\n-4: Draw/discard based on creatures.\n-9: Opponents keep one of each type, sacrifice rest.",
-  "collector_number": "",
-  "set_code": "fdn",
-  "rarity": "mythic"
-}

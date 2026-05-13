@@ -1,9 +1,0 @@
-{
-  "name": "Prismari Command",
-  "mana_cost": "{1}{U}{R}",
-  "type_line": "Instant",
-  "oracle_text": "Choose two \u2014 2 damage; Treasure token; Loot 2; Destroy artifact.",
-  "collector_number": "",
-  "set_code": "fdn",
-  "rarity": "rare"
-}

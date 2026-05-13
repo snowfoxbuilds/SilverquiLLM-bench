@@ -1,9 +1,0 @@
-{
-  "name": "Burglar Rat",
-  "mana_cost": "{1}{B}",
-  "type_line": "Creature \u2014 Rat",
-  "oracle_text": "When this creature enters, each opponent discards a card.",
-  "collector_number": "170",
-  "set_code": "fdn",
-  "rarity": "common"
-}

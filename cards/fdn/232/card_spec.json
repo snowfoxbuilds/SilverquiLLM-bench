@@ -1,9 +1,0 @@
-{
-  "name": "Scavenging Ooze",
-  "mana_cost": "",
-  "type_line": "Creature \u2014 Ooze",
-  "oracle_text": "{G}: Exile target card from a graveyard. If it was a creature card, put a +1/+1 counter on this creature and you gain 1 life.",
-  "collector_number": "232",
-  "set_code": "fdn",
-  "rarity": "rare"
-}

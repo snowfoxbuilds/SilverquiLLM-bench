@@ -1,9 +1,0 @@
-{
-  "name": "Hero's Downfall",
-  "mana_cost": "{1}{B}{B}",
-  "type_line": "Instant",
-  "oracle_text": "Destroy target creature or planeswalker.",
-  "collector_number": "175",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

@@ -1,9 +1,0 @@
-{
-  "name": "Cultivator's Caravan",
-  "mana_cost": "{3}",
-  "type_line": "Artifact \u2014 Vehicle",
-  "oracle_text": "{T}: Add any color. Crew 3.",
-  "collector_number": "670",
-  "set_code": "fdn",
-  "rarity": "rare"
-}

@@ -1,9 +1,0 @@
-{
-  "name": "Resolute Reinforcements",
-  "mana_cost": "{1}{W}",
-  "type_line": "Creature \u2014 Human Soldier",
-  "oracle_text": "Flash\nWhen this creature enters, create a 1/1 white Soldier creature token.",
-  "collector_number": "145",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

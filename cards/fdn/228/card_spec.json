@@ -1,9 +1,0 @@
-{
-  "name": "Social Snub",
-  "mana_cost": "{1}{W}{B}",
-  "type_line": "Sorcery",
-  "oracle_text": "When you cast this spell while you control a creature, you may copy this spell.\nEach player sacrifices a creature of their choice. Each opponent loses 1 life and you gain 1 life.",
-  "collector_number": "228",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

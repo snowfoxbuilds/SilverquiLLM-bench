@@ -1,9 +1,0 @@
-{
-  "name": "Gate Colossus",
-  "mana_cost": "{8}",
-  "type_line": "Artifact Creature \u2014 Construct",
-  "oracle_text": "Affinity for Gates. Can't be blocked by power \u2264 2.",
-  "collector_number": "675",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

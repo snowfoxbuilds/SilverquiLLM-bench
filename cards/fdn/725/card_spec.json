@@ -1,9 +1,0 @@
-{
-  "name": "Gilded Lotus",
-  "mana_cost": "{5}",
-  "type_line": "Artifact",
-  "oracle_text": "{T}: Add three mana of any one color.",
-  "collector_number": "725",
-  "set_code": "fdn",
-  "rarity": "rare"
-}

@@ -1,9 +1,0 @@
-{
-  "name": "Eaten Alive",
-  "mana_cost": "{B}",
-  "type_line": "Sorcery",
-  "oracle_text": "As an additional cost to cast this spell, sacrifice a creature or pay {3}{B}.\nExile target creature or planeswalker.",
-  "collector_number": "172",
-  "set_code": "fdn",
-  "rarity": "common"
-}

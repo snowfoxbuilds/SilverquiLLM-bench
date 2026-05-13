@@ -1,9 +1,0 @@
-{
-  "name": "Fleeting Distraction",
-  "mana_cost": "{U}",
-  "type_line": "Instant",
-  "oracle_text": "Target creature gets -1/-0 until end of turn.\nDraw a card.",
-  "collector_number": "155",
-  "set_code": "fdn",
-  "rarity": "common"
-}

@@ -1,9 +1,0 @@
-{
-  "name": "Temporal Manipulation",
-  "mana_cost": "{3}{U}{U}",
-  "type_line": "Sorcery",
-  "oracle_text": "Take an extra turn after this one.",
-  "collector_number": "82",
-  "set_code": "spg",
-  "rarity": "mythic"
-}

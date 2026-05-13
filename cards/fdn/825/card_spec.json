@@ -1,9 +1,0 @@
-{
-  "name": "Sublime Epiphany",
-  "mana_cost": "{4}{U}{U}",
-  "type_line": "Instant",
-  "oracle_text": "Choose one or more \u2014 Counter spell; Counter ability; Copy creature; Draw; Bounce.",
-  "collector_number": "",
-  "set_code": "fdn",
-  "rarity": "rare"
-}

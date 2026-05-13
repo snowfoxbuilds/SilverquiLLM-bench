@@ -1,9 +1,0 @@
-{
-  "name": "Expedition Map",
-  "mana_cost": "{1}",
-  "type_line": "Artifact",
-  "oracle_text": "{2}, {T}, Sacrifice: Search for a land card.",
-  "collector_number": "724",
-  "set_code": "fdn",
-  "rarity": "common"
-}

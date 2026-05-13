@@ -1,9 +1,0 @@
-{
-  "name": "Serra Angel",
-  "mana_cost": "{3}{W}{W}",
-  "type_line": "Creature \u2014 Angel",
-  "oracle_text": "Flying\nVigilance",
-  "collector_number": "740",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

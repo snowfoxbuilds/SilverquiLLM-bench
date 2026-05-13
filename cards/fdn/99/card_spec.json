@@ -1,9 +1,0 @@
-{
-  "name": "Apothecary Stomper",
-  "mana_cost": "{4}{G}{G}",
-  "type_line": "Creature \u2014 Elephant",
-  "oracle_text": "Vigilance. When this creature enters, choose one \u2014 Put two +1/+1 counters on target creature you control. / You gain 4 life.",
-  "collector_number": "99",
-  "set_code": "fdn",
-  "rarity": "common"
-}

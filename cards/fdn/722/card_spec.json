@@ -1,9 +1,0 @@
-{
-  "name": "Unflinching Courage",
-  "mana_cost": "{1}{G}{W}",
-  "type_line": "Enchantment \u2014 Aura",
-  "oracle_text": "Enchant creature\nEnchanted creature gets +2/+2 and has trample and lifelink. (Damage dealt by the creature also causes its controller to gain that much life.)",
-  "collector_number": "722",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

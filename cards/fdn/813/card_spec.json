@@ -1,9 +1,0 @@
-{
-  "name": "Arrest",
-  "mana_cost": "{2}{W}",
-  "type_line": "Enchantment \u2014 Aura",
-  "oracle_text": "Enchant creature\nEnchanted creature can't attack or block, and its activated abilities can't be activated.",
-  "collector_number": "",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

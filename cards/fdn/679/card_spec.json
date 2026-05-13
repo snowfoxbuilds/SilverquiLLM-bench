@@ -1,9 +1,0 @@
-{
-  "name": "Sorcerous Spyglass",
-  "mana_cost": "{2}",
-  "type_line": "Artifact",
-  "oracle_text": "As enters, choose a name. Shut off non-mana activated abilities of that name.",
-  "collector_number": "679",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

@@ -1,9 +1,0 @@
-{
-  "name": "Burrog Befuddler",
-  "mana_cost": "{1}{U}",
-  "type_line": "Creature \u2014 Frog Wizard",
-  "oracle_text": "Flash\nWhen this creature enters, target creature an opponent controls gets -1/-0 until end of turn.",
-  "collector_number": "504",
-  "set_code": "fdn",
-  "rarity": "common"
-}

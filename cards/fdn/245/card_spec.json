@@ -1,9 +1,0 @@
-{
-  "name": "Ruby, Daring Tracker",
-  "mana_cost": "",
-  "type_line": "Legendary Creature \u2014 Human Scout",
-  "oracle_text": "Haste\nWhenever Ruby attacks while you control a creature with power 4 or greater, Ruby gets +2/+2 until end of turn.\n{T}: Add {R} or {G}.",
-  "collector_number": "245",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}

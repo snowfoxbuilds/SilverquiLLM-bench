@@ -1,9 +1,0 @@
-{
-  "name": "Garruk's Uprising",
-  "mana_cost": "{2}{G}",
-  "type_line": "Enchantment",
-  "oracle_text": "When this enchantment enters, if you control a creature with power 4 or greater, draw a card.\nCreatures you control have trample.\nWhenever a creature you control with power 4 or greater enters, draw a card.",
-  "collector_number": "220",
-  "set_code": "fdn",
-  "rarity": "uncommon"
-}
