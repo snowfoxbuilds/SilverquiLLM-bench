@@ -134,7 +134,7 @@ pi -p "${PROMPT}" \
 
   Testability: All 260+ `card_impl.py` files are non-empty (not templates). Registry imports resolve. All non-SOS tests pass. No references to `cards.foundations` in `registry.py`.
 
-- [ ] **Fix container timeout: explicit ****`docker stop`**** on timeout**
+- [x] **Fix container timeout: explicit ****`docker stop`**** on timeout**
   Detail: The current spec assumes `subprocess.run(timeout=N)` and Docker's `--stop-timeout` will kill the container. Neither works:
 
   - `subprocess.run(timeout=N)` kills the local `docker run` CLI process but leaves the container running headless in the background.

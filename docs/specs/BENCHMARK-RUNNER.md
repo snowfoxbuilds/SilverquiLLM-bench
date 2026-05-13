@@ -67,7 +67,12 @@ Timeout is enforced at two levels:
 1. **Runner hard timeout** — The runner computes `deadline_utc` immediately before `docker run`, writes `/workspace/run_manifest.json`, starts the container, and enforces `timeout_seconds` from that launch point.
 2. **Docker shutdown grace period** — On timeout, the runner explicitly calls `docker stop -t 10 <container_name>`. Docker sends `SIGTERM`, waits 10 seconds, then sends `SIGKILL` if needed.
 3. **Container advisory timeout** — The container may read `/workspace/run_manifest.json` for pacing or graceful wrap-up, but benchmark correctness does not depend on it.
+
+The same graceful-stop sequence fires on `KeyboardInterrupt` (Ctrl+C): the runner calls `docker stop -t 10` so the entrypoint SIGTERM trap can flush progress events before the container is killed.
+
 On timeout, the runner still harvests partial results and the latest usable Output Snapshot. Completed cards are evaluated normally. Partial cards may be evaluated if importable but retain `partial` status.
+
+**Note on `--stop-timeout`:** The Docker `--stop-timeout` flag passed to `docker run` controls the SIGTERM→SIGKILL grace period when `docker stop` is called externally — it does *not* auto-stop the container after N seconds. The runner enforces the actual timeout via `subprocess.run(timeout=N)` and then explicitly calls `docker stop -t 10` in the timeout handler.
 
 ## Result Harvesting
 

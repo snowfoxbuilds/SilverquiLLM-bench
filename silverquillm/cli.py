@@ -238,6 +238,28 @@ def _generate_run_summary(
 
 
 # ---------------------------------------------------------------------------
+# Container lifecycle helpers
+# ---------------------------------------------------------------------------
+
+
+def _stop_container(container_name: str) -> None:
+    """Send ``docker stop -t 10`` to gracefully stop a running container.
+
+    ``-t 10`` gives the entrypoint 10 seconds after SIGTERM to flush
+    progress events before Docker escalates to SIGKILL.
+    Errors are swallowed — the container may already have exited.
+    """
+    try:
+        subprocess.run(
+            ["docker", "stop", "-t", "10", container_name],
+            capture_output=True,
+            timeout=30,
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Click CLI
 # ---------------------------------------------------------------------------
 
@@ -333,28 +355,28 @@ def run(
 
         click.echo(f"Running: {_redact_cmd(cmd)}")
 
-        # Run container, block until exit
+        # Run container, block until exit.
+        # On timeout or Ctrl+C we explicitly ``docker stop -t 10`` so the
+        # entrypoint SIGTERM trap fires (writes ``timed_out`` to
+        # progress.jsonl), Docker waits 10 s, then SIGKILL's the container.
+        # ``--rm`` ensures the container is cleaned up after stop.
         timed_out = False
+        proc = subprocess.Popen(cmd)
         try:
-            result = subprocess.run(
-                cmd,
-                timeout=timeout + 60,  # backup timeout
-            )
-            if result.returncode != 0:
+            proc.wait(timeout=timeout)
+            if proc.returncode != 0:
                 click.echo(
-                    f"Container exited with code {result.returncode}", err=True
+                    f"Container exited with code {proc.returncode}", err=True
                 )
         except subprocess.TimeoutExpired:
-            click.echo("Container timed out (backup timeout reached)", err=True)
+            click.echo("Container timed out — stopping container", err=True)
             timed_out = True
-            # Stop the container so it doesn't keep mutating workspace
-            try:
-                subprocess.run(
-                    ["docker", "stop", container_name],
-                    timeout=30,
-                )
-            except Exception:  # noqa: BLE001
-                pass
+            _stop_container(container_name)
+            proc.wait(timeout=30)
+        except KeyboardInterrupt:
+            click.echo("\nInterrupted — stopping container gracefully", err=True)
+            _stop_container(container_name)
+            raise SystemExit(130)
 
         # Harvest results
         click.echo("Harvesting results...")
@@ -426,18 +448,18 @@ def smoke(image: str, cards_dir: Path | None, engine_dir: Path | None) -> None:
         click.echo(f"Smoke test: {image}")
 
         # Run with 120s timeout
+        proc = subprocess.Popen(cmd)
         try:
-            result = subprocess.run(cmd, timeout=120)
-            exit_zero = result.returncode == 0
+            proc.wait(timeout=120)
+            exit_zero = proc.returncode == 0
         except subprocess.TimeoutExpired:
             click.echo("FAIL: Container timed out")
-            try:
-                subprocess.run(
-                    ["docker", "stop", container_name],
-                    timeout=30,
-                )
-            except Exception:  # noqa: BLE001
-                pass
+            _stop_container(container_name)
+            proc.wait(timeout=30)
+            raise SystemExit(1)
+        except KeyboardInterrupt:
+            click.echo("\nInterrupted — stopping container")
+            _stop_container(container_name)
             raise SystemExit(1)
 
         # Check results

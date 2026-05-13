@@ -41,3 +41,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `cards/fdn/*/card_impl.py` (286 files) — Filled per-card templates with implementations; all 286 now set default `name` from card_spec.json
 - `cards/fdn/utils.py` — Shared helpers: TapLand, GainLand, make_vanilla, _tap_cost
 - `cards/registry.py` — Added register_fdn_cards() with logging.warning on import failures (no longer silent)
+
+## Item 5: Fix container timeout — explicit docker stop on timeout
+
+### Tests
+- `tests/test_container_timeout.py` — 21 tests: _stop_container unit tests, run/smoke Popen-based timeout+interrupt docker stop, container naming, docker flags, harvest after timeout
+
+### Implementation
+- `silverquillm/cli.py` — Switched `run()` and `smoke()` from `subprocess.run(timeout=...)` to `subprocess.Popen()` + `proc.wait(timeout=...)` with explicit `docker stop` via `_stop_container()` on timeout/interrupt; `KeyboardInterrupt` raises `SystemExit(130)`
