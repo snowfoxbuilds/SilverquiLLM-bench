@@ -5,7 +5,7 @@
       "api": "openai-completions",
       "apiKey": "llamacpp",
       "models": [
-        { "id": "qwen-3.6" }
+        { "id": "default" }
       ]
     }
   }

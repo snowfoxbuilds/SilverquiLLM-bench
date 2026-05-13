@@ -13,7 +13,7 @@ const modelRegistry = ModelRegistry.create(authStorage);
 
 // Find local model
 console.log("Looking for model in registry...");
-const model = modelRegistry.find("llamacpp", "qwen-3.6");
+const model = modelRegistry.find("llamacpp", "default");
 if (!model) {
   console.error("FATAL: model not found in registry");
   console.error("Available:", JSON.stringify(await modelRegistry.getAvailable()));

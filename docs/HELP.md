@@ -10,18 +10,18 @@ pytest --ignore=tests/audited/sos/
 pytest --ignore=tests/audited/
 
 # Docker
-docker build -t silverquillm-qwen-pi-blind:latest docker/qwen-pi-blind/
+docker build -t silverquillm-local-pi-blind:latest docker/local-pi-blind/
 
 # Smoke
-silverquillm smoke --image silverquillm-qwen-pi-blind:latest
+silverquillm smoke --image silverquillm-local-pi-blind:latest
 
 # Test inside docker
-docker run --rm -it --network=host   -v /tmp/test-workspace:/workspace   -v /tmp/test-output:/output   --entrypoint /bin/bash   silverquillm-qwen-pi-blind:latest
+docker run --rm -it --network=host   -v /tmp/test-workspace:/workspace   -v /tmp/test-output:/output   --entrypoint /bin/bash   silverquillm-local-pi-blind:latest
 node /app/entrypoint.mjs 2>&1
 
 # Validation
 silverquillm run \
-  --image silverquillm-qwen-pi-blind:latest \
+  --image silverquillm-local-pi-blind:latest \
   --timeout 600 
 
 ## Upload results

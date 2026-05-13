@@ -2,45 +2,19 @@
 
 A benchmark for evaluating LLM coding agents by tasking them with implementing **Magic: The Gathering** cards as Python classes in a custom game engine.
 
-By using cards from the **newest MTG set** (not yet in training data), we minimize data contamination and measure genuine code-generation ability rather than memorization.
+SilverquiLLM-bench uses cards from a newly released MTG set to reduce training-data contamination and measure genuine code-generation ability: reading specs, understanding rules text, extending an engine, and producing working implementations.
 
 ---
 
 ## Why MTG Cards?
 
-Magic cards are ideal coding benchmarks because they:
+Magic cards are useful coding benchmark tasks because they:
 
-- **Span a wide difficulty range** — from vanilla creatures (trivial) to complex planeswalkers with multiple loyalty abilities (expert)
-- **Require understanding specs** — cards have precise rules text that must be translated into working code
-- **Test architectural thinking** — agents must extend the engine with reusable mechanics, not one-off hacks
-- **Have a natural test surface** — each card's behavior is well-defined and testable
-- **Resist memorization** — new sets release quarterly with novel mechanics
-
----
-
-## How It Works
-
-```
-Card Specs ──▶ Docker Container ──▶ Evaluation
-
-• Card JSON specs         • Isolated Docker container      • SOS card correctness
-• Complexity tiers        • Step 1: Blind impl              • FDN regression check
-• Engine API docs         • Step 2: Test-informed            • Engine regression check
-• Base class templates    • progress.jsonl monitoring        • Tier-weighted scoring
-                          • Engine regression check
-```
-
-### Step 1: Blind Implementation
-
-The agent receives a card spec, engine API docs, base classes, and reference implementations. It writes an implementation from scratch with **no test feedback**.
-
-### Step 2: Test-Informed Iteration
-
-The agent writes tests for its implementation, then iterates up to 3 rounds — running pytest and fixing failures each round.
-
-### Persistent Engine
-
-Cards are processed sequentially with a **shared, writable engine**. The agent can extend the engine (e.g., add a Ward mechanic) and those changes carry forward to future cards. After each card, all previous cards' tests are re-run to detect regressions.
+- **Span a wide difficulty range** — from vanilla creatures to complex cards with multiple interacting abilities
+- **Translate natural language into code** — rules text must become executable behavior
+- **Test architecture** — agents often need reusable engine extensions, not one-off hacks
+- **Have clear correctness signals** — card behavior is testable with deterministic game states
+- **Resist memorization** — new sets introduce new mechanics and fresh card text
 
 ---
 
@@ -55,49 +29,201 @@ Cards are processed sequentially with a **shared, writable engine**. The agent c
 | SPG Special Guests | 10 |
 | **Total** | **346** |
 
-Cards are classified into 5 complexity tiers: **trivial → simple → medium → complex → expert** based on keyword count, ability types, and rules text complexity.
+Cards are classified into five complexity tiers:
+
+```
+trivial → simple → medium → complex → expert
+```
+
+Complexity is based on rules text, keyword count, ability count, card type, target requirements, and zone interactions.
+
+---
+
+## How It Works
+
+```
+Stage Workspace → Run Agent Container → Snapshot Progress → Harvest workspace_final → Evaluate
+```
+
+1. **Stage Workspace**
+    - The runner creates a codebase-shaped Workspace with:
+        - FDN reference examples
+        - SOS target templates
+        - editable engine source
+        - rulebook and API docs
+        - prompt and run manifest
+2. **Run Agent Container**
+    - The Docker image is the full agent configuration.
+    - The runner launches one container for the whole run.
+    - The agent edits `/workspace/engine/` and `cards/sos/{card_id}/card_impl.py` in place.
+3. **Snapshot Progress**
+    - Every 60 seconds, the runner commits the full Workspace to a host-side Git snapshot repo.
+    - Snapshots support progress telemetry and recovery from corrupted final engine state.
+4. **Harvest Final Workspace**
+    - The official evaluation state is materialized as:
+
+```
+results/{run_name}/workspace_final/
+```
+
+1. **Evaluate**
+    - Evaluation is post-run and reads only from `workspace_final/`.
+
+---
+
+## Evaluation Dimensions
+
+SilverquiLLM-bench reports three independent evaluation dimensions.
+
+| Dimension | What it measures |
+| --- | --- |
+| **SOS Card Correctness** | Whether target SOS card implementations pass audited SOS tests |
+| **FDN Card Regression** | Whether the agent's engine changes broke filled FDN reference cards |
+| **Engine Regression** | Whether the agent's engine changes broke core game mechanics |
+
+Agent-written tests are harvested as artifacts but are not scored in v1. Self-eval, cross-eval, and test-quality scoring are deferred to a future test harvester.
+
+---
+
+## Workspace Contract
+
+The Workspace is the only evaluatable state an Agent Container can produce.
+
+Canonical layout:
+
+```
+/workspace/
+  prompt.md
+  run_manifest.json
+  rulebook.md
+  engine_api.md
+  base_classes.py
+  test_utils.md
+  engine/
+  cards/
+    fdn/
+      {card_id}/
+        card_spec.json
+        card_impl.py
+    sos/
+      {card_id}/
+        card_spec.json
+        card_impl.py
+        tests.py        # optional, agent-written in Tested Mode
+```
+
+Hard rules:
+
+- Each card's canonical implementation class must be importable from:
+
+```
+cards/{set}/{card_id}/card_impl.py
+```
+
+- Agents must not move or rename card directories.
+- FDN examples and SOS targets use the same card directory shape.
+- Agents edit `/workspace/engine/` in place.
+- There is no separate `engine_work/`.
+- `/output/` is telemetry-only and never required for evaluation.
+
+### Run Manifest
+
+Immediately before container launch, the runner writes:
+
+```json
+{
+  "timeout_seconds": 7200,
+  "deadline_utc": "2026-05-13T22:22:00Z"
+}
+```
+
+This is advisory runtime context only. It is not agent configuration.
 
 ---
 
 ## Project Structure
 
 ```
-engine/                 Core MTG rules engine
-├── game.py             Game state, turns, priority
-├── card.py             CardImpl base classes
-├── combat.py           Combat phases & damage
-├── stack.py            Spell/ability stack (LIFO)
-├── mana.py             Mana system (5 colors + colorless)
-├── zones.py            Library, hand, battlefield, graveyard, exile, etc.
-└── effects.py          Continuous effects (layer system)
+engine/                         Core MTG rules engine
+  game.py                       Game helpers and orchestration
+  turn.py                       Turn, phase, and step progression
+  card.py                       CardImpl base classes
+  casting.py                    Casting, targets, costs, resolution
+  combat.py                     Combat phases and damage
+  stack.py                      Spell/ability stack
+  mana.py                       Mana costs and payment
+  zones.py                      Zone containers and movement
+  continuous_effects.py         Layer system
+  replacement_effects.py        Replacement effects
+  state_based_actions.py        State-based actions
+  protection.py                 Protection checks
 
-cards/                  Card implementations
-├── foundations/         FDN source implementations (~264 cards)
-├── fdn/                FDN per-card dirs (card_impl.py + card_spec.json)
-├── sos/                SOS per-card dirs (card_impl.py + card_spec.json)
-└── registry.py         Card registration system
+cards/
+  registry.py                   Card registry and metadata
+  scryfall.py                   Scryfall helpers/cache
+  fdn/                          FDN reference examples
+    {card_id}/
+      card_spec.json
+      card_impl.py
+  sos/                          SOS benchmark targets
+    {card_id}/
+      card_spec.json
+      card_impl.py
 
-docker/                 Docker container images
-├── opencode-tested/    OpenCode tested-phase image
-│   └── entrypoint.sh   Card loop + progress.jsonl
-└── opencode-blind/     OpenCode blind-phase image
-    └── entrypoint.sh   Blind impl + progress.jsonl
+silverquillm/                   Benchmark runner package
+  cli.py                        CLI entry point
+  workspace.py                  Workspace staging
+  evaluator.py                  Post-run evaluation
+  results.py                    run_summary.json generation
+  card_loader.py                Card spec loading
+  replay/                       17lands replay validation
 
-silverquillm/           Benchmark runner package
-├── cli.py              CLI entry point (run, smoke)
-├── workspace.py        Workspace isolation + volume setup
-├── card_loader.py      Card spec loading from per-card dirs
-├── card_spec.py        Card spec dataclass + parsing
-├── results.py          Per-card result collection
-├── evaluator.py        SOS correctness, FDN regression, engine regression
-└── replay/             Replay validation (not yet wired to new CLI)
+docker/                         Agent container images
+  pi-blind/
+  pi-tested/
+  opencode-blind/
+  opencode-tested/
 
-benchmarks/sos/         SOS benchmark data
-├── data/               Scryfall data, classified tiers, rules
-└── results/            Per-run results directories
+tests/
+  engine/                       Core engine regression tests
+  audited/fdn/                  FDN audited regression tests
+  audited/sos/                  SOS audited correctness tests
 
-tests/                  ~3,200+ test functions across 100+ files
-docs/                   Specs, engine API reference, design docs
+docs/                           Specs, generated docs, references
+```
+
+---
+
+## Runner Artifacts
+
+Each run writes a self-contained results directory.
+
+```
+results/{run_name}/
+  workspace_final/              Official evaluation Workspace
+  snapshots/                    Host-side Git Workspace snapshots
+  snapshot_telemetry.jsonl      Filesystem-based progress telemetry
+  docker_stdout.log             Docker stdout captured by runner
+  docker_stderr.log             Docker stderr captured by runner
+  engine_diff.patch             Diff vs. host baseline engine
+  run_summary.json              Canonical machine-readable report
+  cards/                        Optional derived convenience artifacts
+```
+
+### Snapshot fallback
+
+If final engine state is unusable, the runner may walk snapshots backward and select the latest whole-Workspace snapshot whose engine passes:
+
+```
+tests/engine/
+```
+
+Fallback uses the entire selected Workspace snapshot. The runner does not combine final card implementations with an earlier engine snapshot.
+
+If no snapshot is viable, the run is marked:
+
+```
+no_viable_output_produced
 ```
 
 ---
@@ -108,145 +234,207 @@ docs/                   Specs, engine API reference, design docs
 
 - Python ≥ 3.12
 - Docker
+- An agent image, such as:
+    - `silverquillm-pi-blind:latest`
+    - `silverquillm-pi-tested:latest`
+    - `silverquillm-opencode-blind:latest`
+    - `silverquillm-opencode-tested:latest`
 
 ### Install
 
-```
+```bash
 git clone https://github.com/snowfoxbuilds/SilverquiLLM-bench.git
 cd SilverquiLLM-bench
 pip install -e ".[dev]"
 ```
 
-### Build a Docker Image
+### Build an agent image
 
-Each agent/model combination is packaged as a Docker image. The image **is** the configuration — no separate `config.yaml` needed.
-
-```
-# Build the OpenCode tested-phase image
-docker build -t silverquillm-opencode-tested:latest docker/opencode-tested/
-
-# Build the OpenCode blind-phase image
-docker build -t silverquillm-opencode-blind:latest docker/opencode-blind/
+```bash
+docker build -t silverquillm-pi-blind:latest docker/pi-blind/
+docker build -t silverquillm-pi-tested:latest docker/pi-tested/
 ```
 
-### Run
+### Smoke test an image
 
-```
-# Smoke test — run a small subset to verify the image works
-silverquillm smoke --image silverquillm-opencode-tested:latest
-
-# Full run with timeout (all cards, ~2 hours)
-silverquillm run --image silverquillm-opencode-tested:latest --timeout 7200
+```bash
+silverquillm smoke --image silverquillm-pi-blind:latest
 ```
 
-Evaluation happens automatically at the end of each run. Results are written to the workspace results directory.
+Smoke runs are container-validation only. They use a tiny synthetic Workspace and do not enter benchmark summaries or leaderboards.
+
+### Run a benchmark
+
+```bash
+silverquillm run \
+  --image silverquillm-pi-blind:latest \
+  --timeout 7200
+```
+
+### Run a development subset
+
+```bash
+silverquillm run \
+  --image silverquillm-pi-blind:latest \
+  --cards 001,042,105 \
+  --timeout 3600
+```
+
+Filtered runs are for development and pipeline validation only. They are not leaderboard-valid.
 
 ---
 
-## Evaluation Dimensions
+## Scoring and Leaderboards
 
-Implementations are evaluated across three dimensions:
+Leaderboard-valid runs require:
 
-| Dimension | What It Measures |
-| --- | --- |
-| **SOS Card Correctness** | Does the agent's card implementation match the card spec? Tested via audited gold-standard tests. |
-| **FDN Regression** | Did the agent break any existing Foundations card implementations? All FDN tests re-run after each card. |
-| **Engine Regression** | Did the agent break core engine behavior? Full engine test suite re-run after each card. |
+- full SOS Draft Set staged
+- `card_filter = null`
+- successful evaluatable `workspace_final/`
 
----
+Filtered runs, smoke runs, and `no_viable_output_produced` runs are excluded from leaderboards by default.
 
-## Docker Container Flow
-
-The benchmark uses Docker containers instead of pluggable adapters. Each container:
-
-1. Receives card specs and engine context via volume mounts
-2. Runs the agent tool (OpenCode, Claude Code, etc.) inside the container
-3. Writes implementation artifacts to a shared output volume
-4. Emits progress events to `progress.jsonl` for the host runner to monitor
-
----
-
-## Scoring
-
-Implementations are scored across three evaluation dimensions, weighted by card complexity tier:
-
-| Dimension | What It Measures |
-| --- | --- |
-| **SOS Card Correctness** | Does the agent's card implementation pass audited gold-standard tests? |
-| **FDN Regression** | Did the agent break any existing Foundations card implementations? |
-| **Engine Regression** | Did the agent break core engine behavior? |
-
-Complexity tier weights ensure that implementing a mythic rare with 5 keyword abilities scores higher than a vanilla 2/2.
+SOS Card Correctness can be complexity-weighted. FDN Card Regression and Engine Regression are reported separately rather than folded into a single composite score.
 
 ---
 
 ## Game Engine
 
-The engine implements core MTG rules (Comprehensive Rules §100–§700+) for two-player games:
+The engine implements core MTG rules for two-player games:
 
-- **Turn structure** — untap, upkeep, draw, main phases, combat (declare attackers/blockers/damage), end step, cleanup
-- **Stack & priority** — spell casting, ability activation, LIFO resolution
-- **Combat** — first/double strike, trample, damage assignment
-- **Mana system** — 5 colors + colorless, mana pools
-- **Zones** — library, hand, battlefield, graveyard, stack, exile, command zone
-- **Type system** — all MTG card types, subtypes, supertypes
-- **Continuous effects** — layer system (1–7) with timestamp ordering
-- **Triggered abilities** — auto-register on ETB, auto-unregister on leave
-- **State-based actions** — creature death, legend rule, etc.
+- turn structure
+- stack and priority
+- spell casting and resolution
+- combat
+- mana payment
+- zones
+- card types and subtypes
+- triggered abilities
+- replacement effects
+- continuous effects and layers
+- state-based actions
+- protection
+- extra turns
 
-Card implementations subclass `CardImpl` (or `Creature`, `Instant`, `Sorcery`, etc.) and use hook methods to define abilities. See `docs/engine_api.md` for the full API.
+Card implementations subclass `CardImpl` or type-specific classes such as `Creature`, `Instant`, `Sorcery`, `Artifact`, `Enchantment`, `Planeswalker`, and `Land`.
+
+---
+
+## Replay Validation
+
+The replay validation pipeline parses 17lands GRE replay data and validates engine behavior against reconstructed MTG Arena game state streams.
+
+Key ideas:
+
+- 17lands replay JSON contains full and diff GRE game state messages.
+- Seat 1 is fully validated.
+- Seat 2 uses oracle-injected public actions where hidden information is unavailable.
+- The engine is compared against reconstructed game state at GRE message boundaries.
+
+Replay Validation is for validating the FDN base engine before scored benchmark runs.
 
 ---
 
 ## Contamination Controls
 
-1. **No web access** — agents cannot fetch external resources
-2. **Fresh workspace per card** — isolated `.workspace/` directory with only permitted files
-3. **New set cards** — SOS released 2026-04-24, too new for LLM training data
-4. **No cross-agent leakage** — each model gets its own run with a fresh engine copy
-5. **Protected directories** — runner detects and rejects modifications outside the workspace
-6. **Engine regression gate** — all previous cards' tests re-run after each card
+- **New target set** — SOS released 2026-04-24.
+- **Container isolation** — agents see only the staged Workspace.
+- **Audited tests excluded** — audited tests are never mounted into the agent container.
+- **No cross-agent leakage** — each run gets its own fresh Workspace and container.
+- **Workspace snapshots are host-side** — `.git` snapshot history is not mounted into the container.
+- **FDN examples are intentional** — FDN implementations are reference examples, not contamination.
 
 ---
 
-## Output Artifacts
+## Logs and Telemetry
 
-Each run produces a self-contained results directory:
+`/output/` is optional telemetry only. It may contain:
 
 ```
-results/<run_name>/
-├── status.json                  # Run status & metadata
-├── run_summary.json             # Aggregate stats & scoring
-├── progress.jsonl               # Real-time progress events
-├── stdout.log                   # Container stdout capture
-├── stderr.log                   # Container stderr capture
-├── engine_diff.patch            # Cumulative engine changes
-└── cards/
-    └── <card_num>/
-        ├── card_impl.py         # Agent's card implementation
-        └── result.json          # Per-card eval results
+/output/
+  progress.jsonl
+  system.log
+  agent_stdout.log
+  agent_stderr.log
+  exit_code
+```
+
+The runner must tolerate `/output/` being empty.
+
+The runner independently captures Docker stdout/stderr:
+
+```
+results/{run_name}/docker_stdout.log
+results/{run_name}/docker_stderr.log
+```
+
+Live terminal logs are labeled and colorized by type when running in an interactive terminal. Use:
+
+```bash
+--color auto
+--color always
+--color never
 ```
 
 ---
 
 ## Running Tests
 
-```
-# Unit tests
+```bash
+# All tests
 pytest
 
-# With coverage
-pytest --cov=engine --cov=silverquillm
+# Engine tests
+pytest tests/engine/
 
-# Specific test file
-pytest tests/test_combat.py -v
+# FDN audited regression tests
+pytest tests/audited/fdn/
+
+# SOS audited correctness tests
+pytest tests/audited/sos/
+
+# Integration tests
+pytest -m integration
 ```
+
+Testing conventions:
+
+- no real `os.kill*()` or signal calls in unit tests
+- explicit fake PIDs for mocks
+- no infinite loops or long sleeps
+- no open-ended `game.run()` in unit tests
+- mock subprocesses in unit tests
+- use `pytest-timeout` safety limits
+
+---
+
+## Documentation
+
+Important specs:
+
+- `PROJECT-OVERVIEW.md`
+- `GAME-ENGINE.md`
+- `CARD-INTERFACE.md`
+- `TEST-SUITE.md`
+- `BENCHMARK-RUNNER.md`
+- `AGENT-CONTAINERS.md`
+- `WORKSPACE-CONTRACT.md`
+- `RUN-ARTIFACTS-AND-TELEMETRY.md`
+- `SCORING.md`
+- `TESTING-CONVENTIONS.md`
+- `17LANDS-REPLAY-SCHEMA.md`
+
+Important ADRs:
+
+- ADR-003 — Replay Validation over differential testing
+- ADR-004 — Docker Agent Containers replace Python adapters
+- ADR-005 — In-place Workspace engine with snapshot fallback
 
 ---
 
 ## Acknowledgments
 
-The game engine is inspired by [XMage](https://github.com/magefree/mage), an open-source Magic: The Gathering simulator (MIT License). The Foundations (FDN) base set card implementations reference XMage's card logic.
+The game engine is inspired by [XMage](https://github.com/magefree/mage), an open-source Magic: The Gathering simulator.
 
 ## License
 
