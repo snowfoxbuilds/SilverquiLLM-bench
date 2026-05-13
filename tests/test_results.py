@@ -6,7 +6,7 @@ Tests verify:
 - init_results_dir creates per-run directory with config.yaml and cards/ subdir.
 - init_results_dir with two different run names creates separate directories.
 - init_results_dir uses generate_run_name when run_name=None.
-- save_card_result writes blind_impl.py, tested_impl.py, tests.py, iterations/, result.json.
+- ssave_card_result writes blind_impl.py, tested_impl.py, tests.py, result.json (flat, no iterations/).
 - save_card_result result.json is valid JSON with expected schema.
 - save_card_result with EvalResult objects populates eval fields correctly.
 - save_card_result with empty/None inputs writes minimal artifacts.
@@ -241,7 +241,7 @@ class TestSaveCardResult:
         assert (card_dir / "blind_impl.py").exists()
         assert (card_dir / "tested_impl.py").exists()
         assert (card_dir / "tests.py").exists()
-        assert (card_dir / "iterations").is_dir()
+        assert not (card_dir / "iterations").exists()
         assert (card_dir / "result.json").exists()
 
     def test_result_json_is_valid(self, tmp_path: Path):
@@ -328,7 +328,8 @@ class TestSaveCardResult:
         )
         assert (card_dir / "blind_impl.py").read_text() == "# blind code\n"
 
-    def test_iterations_written(self, tmp_path: Path):
+    def test_no_iterations_dir(self, tmp_path: Path):
+        """Result directory is flat — no iterations/ subdirectory is created."""
         config = _make_config()
         run_dir = init_results_dir(config, run_name="run-1", base_dir=tmp_path)
 
@@ -337,11 +338,7 @@ class TestSaveCardResult:
         card_dir = save_card_result(
             run_dir, card_id="card_f", blind_result=blind, test_result=test,
         )
-        iters_dir = card_dir / "iterations"
-        assert iters_dir.is_dir()
-        # blind has 1 iteration, tested has 2 → iteration_1, iteration_2
-        assert (iters_dir / "iteration_1").is_dir()
-        assert (iters_dir / "iteration_2").is_dir()
+        assert not (card_dir / "iterations").exists()
 
     def test_implementation_metrics_preserved(self, tmp_path: Path):
         """Implementation metrics (tokens, runtime, peak_context, etc.) flow through to result.json."""

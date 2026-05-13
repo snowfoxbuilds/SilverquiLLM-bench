@@ -74,6 +74,16 @@ _ALLOWED_DIRS: tuple[str, ...] = ("engine",)
 # File suffixes that are never agent contamination (auto-generated artifacts).
 _IGNORED_SUFFIXES: tuple[str, ...] = (".pyc", ".pyo", ".log")
 
+_IGNORED_DIRS: frozenset[str] = frozenset({
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".tox",
+    ".eggs",
+    ".hypothesis",
+    ".nox",
+})
 
 # ---------------------------------------------------------------------------
 # Result dataclasses
@@ -902,7 +912,7 @@ def _snapshot_mtimes(root: Path) -> dict[Path, float]:
     git_dir = (root / ".git").resolve()
     for dirpath, dirs, files in os.walk(root):
         # Prune .git/ from the walk in-place to avoid descending into it
-        dirs[:] = [d for d in dirs if (Path(dirpath) / d).resolve() != git_dir]
+        dirs[:] = [d for d in dirs if (Path(dirpath) / d).resolve() != git_dir and d not in _IGNORED_DIRS]
         for fname in files:
             fpath = Path(dirpath) / fname
             try:
@@ -930,9 +940,9 @@ def _is_allowed_path(path: Path, workspace_resolved: Path, output_resolved: Path
     ``.pyc``, ``.pyo``, ``.log``).
     """
     # Auto-generated artefacts — never contamination
-    if "__pycache__" in path.parts:
-        return True
     if path.suffix in _IGNORED_SUFFIXES:
+        return True
+    if _IGNORED_DIRS.intersection(path.parts):
         return True
     try:
         resolved = path.resolve()

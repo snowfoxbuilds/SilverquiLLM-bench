@@ -241,7 +241,15 @@ def _check_card_specs_dir(config: BenchmarkConfig) -> List[str]:
         return errors
 
     # Check for at least one YAML/JSON card spec
-    spec_files = list(path.glob("*.yaml")) + list(path.glob("*.yml")) + list(path.glob("*.json"))
+    spec_files = (
+        list(path.glob("*/card_spec.json"))    # subdirectory layout: cards/1/card_spec.json
+        + list(path.glob("*/card_spec.yaml"))   # also support YAML variant
+        + list(path.glob("*.yaml"))             # flat layout fallback
+        + list(path.glob("*.yml"))
+        + list(path.glob("*.json"))
+)
+    # Filter out .gitkeep and similar non-spec files
+    spec_files = [f for f in spec_files if f.name != ".gitkeep"]
     if not spec_files:
         errors.append(f"card_specs_dir contains no card spec files: {specs_dir}")
 

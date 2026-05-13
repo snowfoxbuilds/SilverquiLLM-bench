@@ -22,10 +22,6 @@ from silverquillm.adapters.base import AgentAdapter, register_adapter
 from silverquillm.config import BenchmarkConfig
 
 
-# Repo root — resolved once at import time (matches agent_session.py convention)
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-
-
 class OpenCodeAdapter(AgentAdapter):
     """Adapter that delegates to the ``opencode`` CLI.
 
@@ -86,7 +82,7 @@ class OpenCodeAdapter(AgentAdapter):
             "temperature": self.config.temperature,
             "max_context": self.config.max_context,
             "working_directory": str(workspace),
-            "repo_root": str(_REPO_ROOT),
+            "repo_root": str(workspace), ## Do not change this. workspace is the correct root for agent
             "engine_path": str(workspace / "engine"),
             "permissions": {
                 "deny_web_fetch": deny_web,

@@ -14,6 +14,8 @@ from dataclasses import asdict
 from pathlib import Path
 
 import click
+import logging
+logger = logging.getLogger(__name__)
 
 from silverquillm.agent_session import (
     AgentSession,
@@ -24,6 +26,7 @@ from silverquillm.agent_session import (
     compute_engine_diff,
     init_run_engine,
     save_engine_final,
+    _generate_agent_thoughts,
 )
 from silverquillm.card_loader import filter_by_collectors, filter_by_prototype, load_card_specs
 from silverquillm.config import BenchmarkConfig, load_config
@@ -351,6 +354,16 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
             )
         finally:
             if session is not None:
+                 # Generate agent_thoughts.md regardless of which phases ran
+                if session.run_dir:
+                    try:
+                        _generate_agent_thoughts(session.run_dir, session.card_name)
+                    except Exception:
+                        logger.debug(
+                            "Failed to generate agent_thoughts.md for %s",
+                            session.card_name,
+                            exc_info=True,
+                        )
                 session.cleanup()
 
     # Save final engine state as a run artifact

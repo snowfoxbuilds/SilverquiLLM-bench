@@ -147,7 +147,6 @@ def save_card_result(
         ├── blind_impl.py
         ├── tested_impl.py
         ├── tests.py
-        ├── iterations/   (iteration_1/, iteration_2/, …)
         └── result.json
 
     Parameters
@@ -188,26 +187,6 @@ def save_card_result(
     tests_source = test_result.get("tests_source", "")
     if tests_source:
         (card_dir / "tests.py").write_text(tests_source)
-
-    # --- Write iterations ---
-    iterations_dir = card_dir / "iterations"
-    iterations_dir.mkdir(exist_ok=True)
-
-    for source, label in [
-        (blind_result, "blind"),
-        (test_result, "tested"),
-    ]:
-        iterations = source.get("iterations", [])
-        # iterations may be an int (count) or a list of iteration dicts
-        if isinstance(iterations, int):
-            iterations = [{} for _ in range(iterations)]
-        for i, iteration_data in enumerate(iterations, 1):
-            iter_dir = iterations_dir / f"iteration_{i}"
-            iter_dir.mkdir(exist_ok=True)
-            # Write iteration data as JSON
-            (iter_dir / f"{label}.json").write_text(
-                json.dumps(iteration_data, indent=2, default=str)
-            )
 
     # --- Build and write result.json ---
     result_record = _build_result_record(card_id, blind_result, test_result, eval_results)

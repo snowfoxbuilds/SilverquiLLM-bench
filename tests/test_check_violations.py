@@ -13,6 +13,7 @@ from unittest.mock import patch
 import pytest
 
 from silverquillm.agent_session import (
+    _IGNORED_DIRS,
     _PROTECTED_DIRS,
     _check_violations,
     _snapshot_all_protected,
@@ -350,3 +351,66 @@ class TestCheckViolationsDeletion:
 
         # No violation since the deleted file is inside workspace
         assert result == []
+
+
+# ---------------------------------------------------------------------------
+# _IGNORED_DIRS — auto-generated cache directories are never contamination
+# ---------------------------------------------------------------------------
+
+
+class TestIgnoredDirs:
+    """Files under _IGNORED_DIRS in protected dirs are not flagged."""
+
+    def test_ignored_dirs_contains_pytest_cache(self):
+        assert ".pytest_cache" in _IGNORED_DIRS
+
+    def test_ignored_dirs_contains_pycache(self):
+        assert "__pycache__" in _IGNORED_DIRS
+
+    def test_pytest_cache_in_protected_dir_not_flagged(self, tmp_path):
+        """Files created under .pytest_cache inside a protected dir are not violations."""
+        (tmp_path / "tests").mkdir()
+        cache_dir = tmp_path / "tests" / ".pytest_cache" / "v" / "cache"
+        cache_dir.mkdir(parents=True)
+
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        before = _snapshot_all_protected(tmp_path)
+
+        # Simulate pytest writing its nodeids cache file
+        (cache_dir / "nodeids").write_text("test_foo.py::test_bar")
+
+        with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
+            result = _check_violations(workspace, before=before)
+
+        assert result == []
+
+    def test_pycache_in_protected_dir_not_flagged(self, tmp_path):
+        """Files created under __pycache__ inside a protected dir are not violations."""
+        (tmp_path / "silverquillm").mkdir()
+        pycache = tmp_path / "silverquillm" / "__pycache__"
+        pycache.mkdir()
+
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        before = _snapshot_all_protected(tmp_path)
+
+        (pycache / "module.cpython-312.pyc").write_bytes(b"\xfd\xf3\r\n")
+
+        with patch("silverquillm.agent_session._REPO_ROOT", tmp_path):
+            result = _check_violations(workspace, before=before)
+
+        assert result == []
+
+    def test_snapshot_mtimes_prunes_ignored_dirs(self, tmp_path):
+        """_snapshot_mtimes does not include files under _IGNORED_DIRS."""
+        (tmp_path / ".pytest_cache").mkdir()
+        (tmp_path / ".pytest_cache" / "nodeids").write_text("data")
+        (tmp_path / "real_file.py").write_text("code")
+
+        snap = _snapshot_mtimes(tmp_path)
+
+        assert tmp_path / "real_file.py" in snap
+        assert not any(".pytest_cache" in str(p) for p in snap)
