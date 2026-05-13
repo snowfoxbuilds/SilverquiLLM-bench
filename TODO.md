@@ -181,7 +181,7 @@ _append_postmortem(
   - `silverquillm/agent_session.py` — use `result.agent_output`/`result.prompt_used` in postmortem and raw log
   Testability: Run mock adapter that returns "test output" → `postmortem.jsonl` contains "test output" in the response field. `agent_thoughts.md` has rich content (not just a status string).
 
-- [ ] **Replace ****`ThreadPoolExecutor`**** with direct adapter call in strategies**
+- [x] **Replace ****`ThreadPoolExecutor`**** with direct adapter call in strategies**
   Detail: Both `BlindStrategy` and `ImplTestStrategy` wrap the adapter call in `ThreadPoolExecutor.submit()`, which moves the adapter's `run()` method to a worker thread. The adapter streams output via `sys.stderr.write()` in `OpenCodeAdapter.run()`, but this streaming is effectively swallowed when running in a worker thread context. This caused all model thinking, tool calls, and ANSI-colored output to disappear after PR #11.
 
   The `ThreadPoolExecutor` was added for hard-timeout + kill support, but `base.py` already has `run_with_retries()` which does the same thing via `signal.SIGALRM` (main thread) or threading fallback (non-main thread), plus calls `adapter.kill()` on timeout.
@@ -276,7 +276,7 @@ except subprocess.TimeoutExpired:
   - `silverquillm/cli.py` — add `--skip-isolation-check` flag, pass to `preflight_check()`
   Testability: Unit test with mock adapter that returns the canary UUID → preflight fails. Mock adapter that returns unrelated text → preflight passes.
 
-- [ ] **Fix ****`test_timeout_enforcement.py`**** (PR #11 agent-killer tests)**
+- [x] **Fix ****`test_timeout_enforcement.py`**** (PR #11 agent-killer tests)**
   Detail: The tests in `tests/test_timeout_enforcement.py` from PR #11 have critical problems that must be fixed:
 
   **Problem 1 — ****`TestOpenCodeAdapterKill.test_kill_terminates_active_process`**** kills the container:**
@@ -300,7 +300,7 @@ except subprocess.TimeoutExpired:
   - `tests/test_timeout_enforcement.py` — rewrite all adapter mocks and kill tests per conventions
   Testability: `pytest tests/test_timeout_enforcement.py -v` completes in under 30 seconds. No real signals sent. No process groups killed.
 
-- [ ] **Add ****`run_summary.json`**** top-level aggregation**
+- [x] **Add ****`run_summary.json`**** top-level aggregation**
   Detail: Currently, results are scattered across per-card directories with no top-level summary. We designed a 4-tier schema earlier:
 
   **Tier 1 — Run metadata:** `model`, `strategy`, `timestamp`, `card_count`, `timeout_seconds`, `harness_version` (git SHA)
@@ -319,7 +319,7 @@ except subprocess.TimeoutExpired:
   - `silverquillm/results.py` — add `generate_run_summary()` function
   Testability: Run 2 cards → `run_summary.json` exists at run root, `card_count == 2`, `pass_rate` matches per-card results. Interrupt mid-run → partial summary still written.
 
-- [ ] **Simplify or remove ****`rules_skill.py`**
+- [x] **Simplify or remove ****`rules_skill.py`**
   Detail: `rules_skill.py` is a 26KB file that is over-engineered now that rules are a greppable file. Either strip it down to a simple grep helper or remove it entirely. A `test_rules_skill.py` also exists and would need updating.
 
   Files to change:
@@ -336,7 +336,7 @@ except subprocess.TimeoutExpired:
   - `PROJECT_MAP.md` — realign ASCII art boxes
   Testability: Visual inspection.
 
-- [ ] **Fix ****`get_targets()`**** snapshot-at-call-time issue**
+-[x] **Fix ****`get_targets()`**** snapshot-at-call-time issue**
   Detail: Filter closures in `get_targets()` snapshot legal targets when called, not when evaluated. Currently mitigated by `on_resolve()` re-checking legality, but could produce incorrect behavior if target validation is re-checked mid-stack (e.g. for "fizzle" checks).
 
   **Fix:** Defer filter evaluation to the point where targets are actually chosen. Make filters lazy — accept `game` state at evaluation time rather than capture time.
@@ -347,7 +347,7 @@ except subprocess.TimeoutExpired:
   - `engine/casting.py` — pass `game` to filter at evaluation time
   Testability: Unit test: add a spell to the stack that modifies legal targets → second spell's target filter should see updated state.
 
-- [ ] **Refactor ****`chosen_targets`**** off card instance**
+- [x] **Refactor ****`chosen_targets`**** off card instance**
   Detail: `chosen_targets` is stored as mutable state directly on the `CardImpl` object (`card.chosen_targets = chosen_targets` in `casting.py`, 83 hits across codebase). If card copying or cloning enters scope, targets from the original leak to the copy. The targets should live on the `StackObject` (which already has a `targets` field) and be accessed through the stack, not the card.
 
   **Fix:** Remove `card.chosen_targets` assignment in `cast_spell()`. Update `on_resolve` callbacks and card implementations to read targets from the `StackObject.targets` field instead of `self.chosen_targets`.
