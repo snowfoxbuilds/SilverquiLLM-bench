@@ -171,7 +171,7 @@ class TestCardRunResult:
 
     def test_has_expected_fields(self) -> None:
         names = {f.name for f in dc_fields(CardRunResult)}
-        assert names == {"status", "files_written", "runtime_ms", "engine_modified", "violations"}
+        assert names == {"status", "files_written", "runtime_ms", "engine_modified", "violations", "agent_output", "prompt_used"}
 
     def test_defaults(self) -> None:
         """files_written defaults to empty list, runtime_ms to 0, engine_modified to False."""

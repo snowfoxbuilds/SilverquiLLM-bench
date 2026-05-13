@@ -56,6 +56,8 @@ class CardRunResult:
     runtime_ms: int = 0
     engine_modified: bool = False
     violations: list[str] = field(default_factory=list)
+    agent_output: str = ""
+    prompt_used: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +127,7 @@ class BlindStrategy(CardStrategy):
         pool = ThreadPoolExecutor(max_workers=1)
         future = pool.submit(adapter.run, prompt, workspace)
         try:
-            future.result(timeout=timeout)
+            output = future.result(timeout=timeout)
         except (TimeoutError, FuturesTimeoutError, subprocess.TimeoutExpired):
             # Hard-kill the adapter's subprocess if it supports it
             if hasattr(adapter, "kill"):
@@ -137,23 +139,30 @@ class BlindStrategy(CardStrategy):
                 status=CardRunStatus.timeout,
                 files_written=files,
                 runtime_ms=elapsed_ms,
+                agent_output="",
+                prompt_used=prompt,
             )
         else:
             pool.shutdown(wait=False)
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
+        agent_output = output if isinstance(output, str) else str(output or "")
 
         if impl_path.exists():
             return CardRunResult(
                 status=CardRunStatus.completed,
                 files_written=[impl_path],
                 runtime_ms=elapsed_ms,
+                agent_output=agent_output,
+                prompt_used=prompt,
             )
 
         return CardRunResult(
             status=CardRunStatus.no_output,
             files_written=[],
             runtime_ms=elapsed_ms,
+            agent_output=agent_output,
+            prompt_used=prompt,
         )
 
 
@@ -189,7 +198,7 @@ class ImplTestStrategy(CardStrategy):
         pool = ThreadPoolExecutor(max_workers=1)
         future = pool.submit(adapter.run, prompt, workspace)
         try:
-            future.result(timeout=timeout)
+            output = future.result(timeout=timeout)
         except (TimeoutError, FuturesTimeoutError, subprocess.TimeoutExpired):
             # Hard-kill the adapter's subprocess if it supports it
             if hasattr(adapter, "kill"):
@@ -205,11 +214,14 @@ class ImplTestStrategy(CardStrategy):
                 status=CardRunStatus.timeout,
                 files_written=files,
                 runtime_ms=elapsed_ms,
+                agent_output="",
+                prompt_used=prompt,
             )
         else:
             pool.shutdown(wait=False)
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
+        agent_output = output if isinstance(output, str) else str(output or "")
 
         if impl_path.exists():
             files = [impl_path]
@@ -219,12 +231,16 @@ class ImplTestStrategy(CardStrategy):
                 status=CardRunStatus.completed,
                 files_written=files,
                 runtime_ms=elapsed_ms,
+                agent_output=agent_output,
+                prompt_used=prompt,
             )
 
         return CardRunResult(
             status=CardRunStatus.no_output,
             files_written=[],
             runtime_ms=elapsed_ms,
+            agent_output=agent_output,
+            prompt_used=prompt,
         )
 
 

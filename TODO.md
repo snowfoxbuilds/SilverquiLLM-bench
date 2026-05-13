@@ -141,7 +141,7 @@ pm_path = run_dir / "cards" / str(card_dir_name) / "postmortem.jsonl"
   - `silverquillm/cli.py` — pass `card_dir_name` as `card_id`, fix regression postmortem path
   Testability: Run a single card → exactly ONE subdirectory under `cards/`. Run summary reports `Cards run: 1`. Postmortem, agent_thoughts, result.json all in the same directory.
 
-- [ ] **Wire agent output through strategy → ****`CardRunResult`**** → postmortem**
+- [x] **Wire agent output through strategy → ****`CardRunResult`**** → postmortem**
   Detail: Both `BlindStrategy` and `ImplTestStrategy` call `adapter.run(prompt, workspace)` which returns the agent's full output (thinking, tool calls, responses). But the strategies **discard this return value**. `run_card()` in `AgentSession` then logs a placeholder to the postmortem: `prompt="(strategy-level)"`, `response=f"status={result.status.value}"`. This means `agent_thoughts.md` (which reads from the postmortem) is nearly empty.
 
   **Fix:**

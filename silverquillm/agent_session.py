@@ -501,16 +501,16 @@ class AgentSession:
         if postmortem_path:
             _append_postmortem(
                 postmortem_path=postmortem_path,
-                prompt="(strategy-level)",
-                response=f"status={result.status.value}",
-                tokens=None,
+                prompt=result.prompt_used or "(strategy-level)",
+                response=result.agent_output or f"status={result.status.value}",
+                tokens=_estimate_tokens(result.agent_output) if result.agent_output else None,
                 timing_ms=elapsed * 1000,
-                status="success",
+                status="success" if result.status == CardRunStatus.completed else "error",
             )
         if raw_log_path:
             append_raw_log(
                 raw_log_path, self.card_name, self.config.mode,
-                "(strategy-level)", f"status={result.status.value}",
+                result.prompt_used or "(strategy-level)", result.agent_output or f"status={result.status.value}",
             )
 
         # Check for violations (agent modifying protected paths)
@@ -527,6 +527,8 @@ class AgentSession:
                 runtime_ms=int(elapsed * 1000),
                 engine_modified=result.engine_modified,
                 violations=violations,
+                agent_output=result.agent_output,
+                prompt_used=result.prompt_used,
             )
 
         # Generate agent_thoughts.md
