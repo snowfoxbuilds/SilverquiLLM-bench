@@ -121,7 +121,7 @@ class TestSessionResultsToDicts:
         assert test_dict["status"] == "ok"
         assert test_dict["impl_source"] == "class Tested:\n    pass\n"
         assert test_dict["tests_source"] == "def test_it(): pass\n"
-        assert test_dict["iterations"] == 3
+        assert "iterations" not in test_dict  # removed per Item 7
         assert test_dict["rules_lookups"] == 2
 
     def test_none_impl_path_returns_empty_source(self) -> None:
@@ -178,6 +178,7 @@ class TestOrchestrationLoop:
             patch.object(AgentSession, "setup_workspace", fake_setup_workspace),
             patch.object(AgentSession, "run_card", fake_run_card),
             patch.object(AgentSession, "cleanup", fake_cleanup),
+            patch("silverquillm.preflight.preflight_check"),
         ]
 
     def test_orchestration_creates_result_json(self, tmp_path: Path) -> None:
@@ -186,7 +187,7 @@ class TestOrchestrationLoop:
         runner = CliRunner()
 
         patches = self._patch_session_for_stub()
-        with patches[0], patches[1], patches[2]:
+        with patches[0], patches[1], patches[2], patches[3]:
             result = runner.invoke(main, ["run", "--config", str(config_file), "--cards", "11"])
 
         assert result.exit_code == 0, f"CLI failed: {result.output}"
@@ -210,7 +211,7 @@ class TestOrchestrationLoop:
         runner = CliRunner()
 
         patches = self._patch_session_for_stub()
-        with patches[0], patches[1], patches[2]:
+        with patches[0], patches[1], patches[2], patches[3]:
             result = runner.invoke(main, ["run", "--config", str(config_file), "--cards", "11"])
 
         assert result.exit_code == 0, f"CLI failed: {result.output}"
@@ -230,7 +231,7 @@ class TestOrchestrationLoop:
         runner = CliRunner()
 
         patches = self._patch_session_for_stub()
-        with patches[0], patches[1], patches[2]:
+        with patches[0], patches[1], patches[2], patches[3]:
             result = runner.invoke(main, ["run", "--config", str(config_file), "--cards", "11"])
 
         assert result.exit_code == 0, f"CLI failed: {result.output}"
@@ -261,6 +262,7 @@ class TestOrchestrationLoop:
             patch.object(AgentSession, "setup_workspace", fake_setup_workspace),
             patch.object(AgentSession, "run_card", fake_run_card_timeout),
             patch.object(AgentSession, "cleanup", fake_cleanup),
+            patch("silverquillm.preflight.preflight_check"),
         ):
             result = runner.invoke(main, ["run", "--config", str(config_file), "--cards", "11"])
 
@@ -272,7 +274,7 @@ class TestOrchestrationLoop:
         runner = CliRunner()
 
         patches = self._patch_session_for_stub()
-        with patches[0], patches[1], patches[2]:
+        with patches[0], patches[1], patches[2], patches[3]:
             result = runner.invoke(main, ["run", "--config", str(config_file), "--cards", "11"])
 
         assert result.exit_code == 0, f"CLI failed: {result.output}"

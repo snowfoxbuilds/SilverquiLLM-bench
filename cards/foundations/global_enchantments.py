@@ -681,7 +681,10 @@ class BanishingLight(Enchantment):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj, _c=controller: (
+                    CardType.LAND not in getattr(obj, "card_types", set())
+                    and getattr(obj, "controller", None) is not _c
+                ),
                 description="nonland permanent an opponent controls",
                 zone=Zone.BATTLEFIELD,
             )

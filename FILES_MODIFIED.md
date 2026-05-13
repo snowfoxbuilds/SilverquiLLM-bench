@@ -2,88 +2,111 @@
 
 Appended by each Implementer invocation after it writes its diff. One section per TODO item.
 
-## Item 7: Enforce timeout_per_card (fixes Issue #14)
+## Item 4: Standardize per-card paths on card_dir_name
 
 ### Tests
-- `tests/test_timeout_enforcement.py` — Tests for hard timeout enforcement at strategy and adapter level
+- `tests/test_card_id_map.py` — card ID map JSON structure and build script tests
+- `tests/test_harness.py` — AgentSession integration tests (blind, impl_test, timeout, aggregation)
 
 ### Implementation
-- `silverquillm/strategies.py` — Call adapter.kill() on timeout in both BlindStrategy and ImplTestStrategy
-- `silverquillm/adapters/base.py` — Added kill() no-op to AgentAdapter; run_with_retries calls self.kill() before raising TimeoutError
-- `silverquillm/adapters/opencode.py` — Track _process, start_new_session=True, kill via os.killpg process-group
-- `silverquillm/adapters/aider.py` — Track _process, start_new_session=True, kill via os.killpg process-group
-- `silverquillm/adapters/claude_code.py` — Track _process, start_new_session=True, kill via os.killpg process-group
-- `silverquillm/adapters/pi.py` — Track _process, start_new_session=True, kill via os.killpg process-group
+- `silverquillm/agent_session.py` — added `card_id` field and `_path_id` property; updated path construction in `harvest_results()` and `run_card()` to use `_path_id`
+- `silverquillm/cli.py` — pass `card_id=str(card_dir_name)` to AgentSession; fix regression postmortem path and agent_thoughts call to use card_dir_name/_path_id
 
-## Item 8: Move all evaluation to post-run
+## Item 5: Wire agent output through strategy → CardRunResult → postmortem
 
 ### Tests
-- `tests/test_post_eval.py` — Tests for CardEvalResult dataclass, run_post_eval flow, self-eval, audited eval, result.json persistence, CLI integration
+- `tests/test_strategies.py` — updated expected fields set to include agent_output and prompt_used
 
 ### Implementation
-- `silverquillm/post_eval.py` — New module with `CardEvalResult` dataclass and `run_post_eval()` function; deterministic audited test lookup via `_resolve_audited_tests()`
-- `silverquillm/evaluator.py` — Added `engine_dir` parameter to `run_tests()` for PYTHONPATH customization
-- `silverquillm/cli.py` — Replaced inline self-eval loop with `run_post_eval()` call after card loop
+- `silverquillm/strategies.py` — added agent_output and prompt_used fields to CardRunResult; capture adapter.run() return value in both strategies
+- `silverquillm/agent_session.py` — use result.agent_output/result.prompt_used in postmortem and raw log calls; fixed postmortem status to binary success/error; preserve agent_output/prompt_used on violation path
 
-### Implementation
-- `silverquillm/evaluator.py` — Added `EvalResultV2` dataclass with mode-aware v2 schema alongside existing `EvalResult`
-- `silverquillm/results.py` — Added `save_card_result_v2()`, `load_card_result()`, and `_normalise_to_v2()` with full v1→v2 normalization including implementation flattening
-- `silverquillm/scorer.py` — Updated `_load_eval_results()` to normalise v2 records; `_v2_to_eval_dicts()` now respects mode for blind/tested column selection
-- `silverquillm/cli.py` — Wired `save_card_result_v2()` to overwrite result.json with v2 schema after card processing
-- `silverquillm/post_eval.py` — Updated `_merge_result_json()` to write v2 schema with schema_version and mode fields
-
-## Item 10: Automatic run_summary.json aggregation
+## Item 6: Replace ThreadPoolExecutor with direct adapter call
 
 ### Tests
-- `tests/test_aggregator.py` — Tests for aggregate_run() pure function, RunSummary dataclass, persistence, and idempotency
+- `tests/test_strategies.py` — existing tests verify strategies call adapter.run() and handle timeout/completion/no_output
 
 ### Implementation
-- `silverquillm/aggregator.py` — New module with RunSummary dataclass, aggregate_run() pure function, save_run_summary_v2(); revised: deterministic timestamp from result.json mtime, integer token handling, legacy status normalization
-- `silverquillm/cli.py` — Imported aggregator, call aggregate_run after post-eval in run command, added `benchmark aggregate` subcommand
+- `silverquillm/strategies.py` — removed ThreadPoolExecutor wrapping in both BlindStrategy and ImplTestStrategy; call adapter.run_with_retries(timeout=timeout, retries=0) directly to enforce timeout; removed unused concurrent.futures imports
 
-## Item 11: Allowlist-based contamination checker
+
+## Item 7: Remove stale iterations/ directory creation
 
 ### Tests
-- `tests/test_allowlist_contamination.py` — 23 tests for allowlist-based contamination detection
+- `tests/test_no_stale_iterations.py` — verifies no stale iterations references leak into serialized results
 
 ### Implementation
-- `silverquillm/agent_session.py` — Rewrote `_snapshot_all_protected()` to walk entire repo tree (not just `_PROTECTED_DIRS`); `_check_violations()` uses allowlist via `_is_allowed_path()` helper with `_ALLOWED_DIRS` (engine/) and `_IGNORED_SUFFIXES` (.pyc/.pyo/.log)
-## Item 12: Fix test_utils.md import path (fixes Issue #11)
+- `silverquillm/results.py` — removed stale iteration-count re-addition to blind/tested metrics in `_build_result_record()`; added `iteration_count` to `_IMPL_EXCLUDE` set; updated docstrings to remove `iterations` references
+- `silverquillm/run_utils.py` — removed stale `"iterations": tested.iterations` assignment from save pipeline
 
-### Implementation
-- `docs/test_utils.md` — Updated all import examples and prose from `tests.test_utils` to `test_utils`
-
-## Item 13: Add GameState to template imports (fixes Issue #12)
-
-### Implementation
-- `silverquillm/template_gen.py` — Added `from engine.game_state import GameState` to generated template import block
-
-## Item 14: Simplify postmortem schema
+## Item 8: Add signal handler for graceful interrupt cleanup
 
 ### Tests
-- `tests/test_postmortem_schema_v2.py` — 26 tests for structured event helpers and raw log schema
-- `tests/test_postmortem_logging.py` — Existing postmortem JSONL logging tests (18 tests, all passing)
+- `tests/test_signal_handler.py` — tests for signal handler registration, restoration, and interrupt behavior
 
 ### Implementation
-- `silverquillm/agent_session.py` — Added _append_file_written, _append_eval_result, _append_regression_check event helpers; removed phase/round from append_raw_log; wired _append_file_written into harvest_results()
-- `silverquillm/post_eval.py` — Wired _append_eval_result into self-eval and audited-eval paths in run_post_eval()
-- `silverquillm/cli.py` — Wired _append_regression_check into regression loop after run_regressions()
+- `silverquillm/cli.py` — added signal handler, `_active_session` tracking, `KeyboardInterrupt` handling in card loop, and signal restoration in `try`/`finally` block
 
-## Item 15: Pre-flight validation at run start
+## Item 9: Add preflight workspace isolation check
 
 ### Tests
-- `tests/test_preflight.py` — 18 tests for preflight validation (card_specs_dir, config, workspace, template imports, test_utils, happy path, error aggregation)
+- `tests/test_preflight.py` — existing preflight tests (all 27 passing)
 
 ### Implementation
-- `silverquillm/preflight.py` — New module with `preflight_check()`, `PreflightError`, and individual check functions for imports, workspace, .workspace/ dir, engine test suite, config, and card_specs_dir; revised: added `_check_engine_tests()` subprocess pytest, `_check_workspace_dir()` for .workspace/, enhanced `_check_test_utils_import()` with actual import verification
-- `silverquillm/cli.py` — Import and call `preflight_check()` before card loop in `run()` command
+- `silverquillm/preflight.py` — added `_check_workspace_isolation()` function with canary UUID check; added `skip_isolation_check` parameter to `preflight_check()`; added `uuid` and `logging` imports; **revised**: adapter/setup exceptions now surface as preflight errors instead of being silently swallowed
+- `silverquillm/cli.py` — added `--skip-isolation-check` CLI flag; passed `skip_isolation_check` to `preflight_check()`
 
-## Item 16: Smoke tests with mock adapter
+## Item 10: Fix test_timeout_enforcement.py
 
 ### Tests
-- `tests/test_harness.py` — 39 deterministic smoke tests covering full harness pipeline end-to-end
+- `tests/test_timeout_enforcement.py` — 35 timeout enforcement tests (strategy-level, adapter kill, run_with_retries, process-group kill)
 
 ### Implementation
-- `silverquillm/adapters/mock.py` — MockAdapter with configurable behaviors; derives card_name from workspace card_spec.json for registry compatibility; no_output cleans seeded files
-- `silverquillm/adapters/__init__.py` — Added mock adapter auto-import for registration
-- `silverquillm/cli.py` — Updated --dry-run flag to use MockAdapter for environment validation
+- `tests/test_timeout_enforcement.py` — converted `_BlockingAdapter` and `_BlockingNoKillAdapter` to proper `AgentAdapter` subclasses so they inherit `run_with_retries()`; patched `signal.signal`/`signal.alarm` on `TestRunWithRetriesDeadline` class to prevent real SIGALRM; forced threading timeout path via `_run_with_timeout` patch; patched `os.getpgid`/`os.killpg` on `test_kill_noop_*` methods for safety
+
+## Item 11: Add run_summary.json top-level aggregation
+
+### Tests
+- `tests/test_aggregator.py` — 23 tests for run-level aggregation, CLI aggregate subcommand, and edge cases
+
+### Implementation
+- No changes needed — `silverquillm/aggregator.py` already has `RunSummary`, `aggregate_run()`, and `save_run_summary_v2()`; `silverquillm/cli.py` already wires aggregation after the card loop and provides the `aggregate` subcommand
+
+## Item 12: Simplify or remove rules_skill.py
+
+### Tests
+- `tests/test_rules_skill.py` — existing 18 tests for download, index, lookup, and rules_overview.md
+- `tests/test_package_rename.py` — verifies silverquillm.rules_skill is importable
+
+### Implementation
+- `silverquillm/rules_skill.py` — simplified from 26KB/650 lines to 5.6KB/173 lines; removed inline _STUB_RULES constant, generate_rules_overview, and _RULES_OVERVIEW_CONTENT; kept same public API (download_comprehensive_rules, build_rules_index, lookup_rule); added minimal embedded fallback rules string for when both network and cache are unavailable
+
+## Item 13: Fix PROJECT_MAP.md ASCII art alignment
+
+### Implementation
+- `PROJECT_MAP.md` — realigned ASCII art boxes in architecture diagram
+
+## Item 14: Fix get_targets() snapshot-at-call-time issue
+
+### Tests
+- `tests/engine/test_lazy_targets.py` — 10 tests verifying lazy filter evaluation (creature added after filter creation, non-creature rejection, keyword changes, power changes, controller changes, toughness changes, card type changes, base get_targets, multiple requirements, zone removal)
+
+### Implementation
+- `engine/types.py` — Updated TargetRequirement docstring to document lazy filter convention
+- `engine/casting.py` — Wired filter_fn validation into cast_spell target selection (step 5)
+- `cards/foundations/simple_spells_batch3.py` — Replaced snapshot filter_fn lambdas with lazy predicates; restored controller/ownership checks for SnakeskinVeil, DivineResilience, BiteDown, FellingBlow, Zombify; restored different-controllers validation for RunAwayTogether in on_resolve
+- `cards/foundations/simple_spells.py` — Replaced snapshot filter_fn lambdas with lazy predicates; restored graveyard ownership check for CemeteryRecruitment
+- `cards/foundations/auras_batch2.py` — Replaced 10 snapshot filter_fn lambdas with lazy property-based predicates
+- `cards/foundations/enchantments.py` — Replaced 4 snapshot filter_fn lambdas with lazy property-based predicates
+- `cards/foundations/simple_permanents.py` — Replaced 3 snapshot filter_fn lambdas with lazy property-based predicates
+- `cards/foundations/global_enchantments.py` — Replaced 1 snapshot filter_fn lambda with lazy predicate including controller check
+
+## Item 15: Refactor chosen_targets off card instance
+
+### Tests
+- `tests/engine/test_casting.py` — existing casting pipeline tests (all 1133 engine tests pass)
+- `tests/audited/fdn/` — existing card tests (all 1487 FDN tests pass)
+
+### Implementation
+- `engine/casting.py` — `_resolve_spell()` now accepts `StackObject` and reads `obj.targets` directly (single source of truth); removed `targets_snapshot` copy; sets `card.chosen_targets = obj.targets` at resolve time
+- `engine/card.py` — updated `on_resolve` docstring to document resolve-time target availability

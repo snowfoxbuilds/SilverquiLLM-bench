@@ -171,7 +171,7 @@ class TestCardRunResult:
 
     def test_has_expected_fields(self) -> None:
         names = {f.name for f in dc_fields(CardRunResult)}
-        assert names == {"status", "files_written", "runtime_ms", "engine_modified", "violations"}
+        assert names == {"status", "files_written", "runtime_ms", "engine_modified", "violations", "agent_output", "prompt_used"}
 
     def test_defaults(self) -> None:
         """files_written defaults to empty list, runtime_ms to 0, engine_modified to False."""
@@ -281,12 +281,17 @@ _SAMPLE_CARD_SPEC: dict = {
 
 
 class _MockAdapter:
-    """Simple mock adapter that records calls and optionally writes card_impl.py."""
+    """Simple mock adapter that records calls and optionally writes card_impl.py.
+
+    Has run_with_retries() to mirror AgentAdapter — strategies must call
+    run_with_retries() instead of run() directly.
+    """
 
     def __init__(self, *, write_impl: bool = False, raise_timeout: bool = False) -> None:
         self._write_impl = write_impl
         self._raise_timeout = raise_timeout
         self.calls: list[tuple[str, Path]] = []
+        self.run_with_retries_calls: list[dict] = []
 
     def run(self, prompt: str, workspace: Path) -> str:
         self.calls.append((prompt, workspace))
@@ -295,6 +300,19 @@ class _MockAdapter:
         if self._write_impl:
             (workspace / "card_impl.py").write_text("# impl\n")
         return "done"
+
+    def run_with_retries(
+        self,
+        prompt: str,
+        workspace: Path,
+        *,
+        retries: int = 2,
+        timeout: int | None = None,
+    ) -> str:
+        self.run_with_retries_calls.append(
+            {"prompt": prompt, "workspace": workspace, "retries": retries, "timeout": timeout}
+        )
+        return self.run(prompt, workspace)
 
 
 class TestBlindStrategyRunCard:
@@ -366,8 +384,8 @@ class TestBlindStrategyRunCard:
         strategy = BlindStrategy()
         adapter = _MockAdapter(write_impl=True)
         strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
-        assert len(adapter.calls) == 1
-        prompt, _ = adapter.calls[0]
+        assert len(adapter.run_with_retries_calls) == 1
+        prompt = adapter.run_with_retries_calls[0]["prompt"]
         assert "Lightning Bolt" in prompt
 
     def test_adapter_receives_prompt_referencing_card_impl(self, tmp_path: Path) -> None:
@@ -375,7 +393,7 @@ class TestBlindStrategyRunCard:
         strategy = BlindStrategy()
         adapter = _MockAdapter(write_impl=True)
         strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
-        prompt, _ = adapter.calls[0]
+        prompt = adapter.run_with_retries_calls[0]["prompt"]
         assert "card_impl.py" in prompt
 
     def test_adapter_receives_prompt_without_test_utils(self, tmp_path: Path) -> None:
@@ -383,15 +401,15 @@ class TestBlindStrategyRunCard:
         strategy = BlindStrategy()
         adapter = _MockAdapter(write_impl=True)
         strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
-        prompt, _ = adapter.calls[0]
+        prompt = adapter.run_with_retries_calls[0]["prompt"]
         assert "test_utils" not in prompt
 
     def test_adapter_called_exactly_once(self, tmp_path: Path) -> None:
-        """Blind mode sends exactly one prompt to the adapter."""
+        """Blind mode sends exactly one prompt to the adapter via run_with_retries."""
         strategy = BlindStrategy()
         adapter = _MockAdapter(write_impl=True)
         strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
-        assert len(adapter.calls) == 1
+        assert len(adapter.run_with_retries_calls) == 1
 
     def test_result_is_card_run_result(self, tmp_path: Path) -> None:
         """run_card must return a CardRunResult instance."""
@@ -410,6 +428,7 @@ class _ImplTestMockAdapter:
     """Mock adapter for ImplTestStrategy tests.
 
     Can write card_impl.py, tests.py, or neither based on flags.
+    Has run_with_retries() to mirror AgentAdapter.
     """
 
     def __init__(
@@ -423,6 +442,7 @@ class _ImplTestMockAdapter:
         self._write_tests = write_tests
         self._raise_timeout = raise_timeout
         self.calls: list[tuple[str, Path]] = []
+        self.run_with_retries_calls: list[dict] = []
 
     def run(self, prompt: str, workspace: Path) -> str:
         self.calls.append((prompt, workspace))
@@ -433,6 +453,19 @@ class _ImplTestMockAdapter:
         if self._write_tests:
             (workspace / "tests.py").write_text("# tests\n")
         return "done"
+
+    def run_with_retries(
+        self,
+        prompt: str,
+        workspace: Path,
+        *,
+        retries: int = 2,
+        timeout: int | None = None,
+    ) -> str:
+        self.run_with_retries_calls.append(
+            {"prompt": prompt, "workspace": workspace, "retries": retries, "timeout": timeout}
+        )
+        return self.run(prompt, workspace)
 
 
 class TestImplTestStrategyRunCard:
@@ -522,18 +555,18 @@ class TestImplTestStrategyRunCard:
         assert result.files_written == []
 
     def test_adapter_called_exactly_once(self, tmp_path: Path) -> None:
-        """Impl_test mode sends exactly one prompt — agent self-manages iteration."""
+        """Impl_test mode sends exactly one prompt via run_with_retries — agent self-manages iteration."""
         strategy = ImplTestStrategy()
         adapter = _ImplTestMockAdapter(write_impl=True, write_tests=True)
         strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
-        assert len(adapter.calls) == 1
+        assert len(adapter.run_with_retries_calls) == 1
 
     def test_prompt_contains_card_name(self, tmp_path: Path) -> None:
         """The prompt sent to the adapter should contain the card name."""
         strategy = ImplTestStrategy()
         adapter = _ImplTestMockAdapter(write_impl=True)
         strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
-        prompt, _ = adapter.calls[0]
+        prompt = adapter.run_with_retries_calls[0]["prompt"]
         assert "Lightning Bolt" in prompt
 
     def test_prompt_references_card_impl_py(self, tmp_path: Path) -> None:
@@ -541,7 +574,7 @@ class TestImplTestStrategyRunCard:
         strategy = ImplTestStrategy()
         adapter = _ImplTestMockAdapter(write_impl=True)
         strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
-        prompt, _ = adapter.calls[0]
+        prompt = adapter.run_with_retries_calls[0]["prompt"]
         assert "card_impl.py" in prompt
 
     def test_prompt_references_tests_py(self, tmp_path: Path) -> None:
@@ -549,7 +582,7 @@ class TestImplTestStrategyRunCard:
         strategy = ImplTestStrategy()
         adapter = _ImplTestMockAdapter(write_impl=True)
         strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
-        prompt, _ = adapter.calls[0]
+        prompt = adapter.run_with_retries_calls[0]["prompt"]
         assert "tests.py" in prompt
 
     def test_prompt_mentions_test_utils(self, tmp_path: Path) -> None:
@@ -557,7 +590,7 @@ class TestImplTestStrategyRunCard:
         strategy = ImplTestStrategy()
         adapter = _ImplTestMockAdapter(write_impl=True)
         strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
-        prompt, _ = adapter.calls[0]
+        prompt = adapter.run_with_retries_calls[0]["prompt"]
         assert "test_utils" in prompt
 
     def test_prompt_mentions_test_utils_md(self, tmp_path: Path) -> None:
@@ -565,7 +598,7 @@ class TestImplTestStrategyRunCard:
         strategy = ImplTestStrategy()
         adapter = _ImplTestMockAdapter(write_impl=True)
         strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
-        prompt, _ = adapter.calls[0]
+        prompt = adapter.run_with_retries_calls[0]["prompt"]
         assert "test_utils.md" in prompt
 
     def test_prompt_encourages_self_iteration(self, tmp_path: Path) -> None:
@@ -573,7 +606,7 @@ class TestImplTestStrategyRunCard:
         strategy = ImplTestStrategy()
         adapter = _ImplTestMockAdapter(write_impl=True)
         strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
-        prompt, _ = adapter.calls[0]
+        prompt = adapter.run_with_retries_calls[0]["prompt"]
         assert "run tests" in prompt.lower() or "iterate" in prompt.lower()
 
     def test_prompt_does_not_mention_max_test_rounds(self, tmp_path: Path) -> None:
@@ -581,7 +614,7 @@ class TestImplTestStrategyRunCard:
         strategy = ImplTestStrategy()
         adapter = _ImplTestMockAdapter(write_impl=True)
         strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
-        prompt, _ = adapter.calls[0]
+        prompt = adapter.run_with_retries_calls[0]["prompt"]
         assert "max_test_rounds" not in prompt
         assert "max_rounds" not in prompt
 
@@ -599,3 +632,273 @@ class TestImplTestStrategyRunCard:
         adapter = _ImplTestMockAdapter(write_impl=True)
         result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
         assert isinstance(result, CardRunResult)
+
+
+# =========================================================================
+# TODO item 6: ThreadPoolExecutor removal and direct adapter calls
+# =========================================================================
+
+import inspect
+import threading
+
+
+class _KillTrackingAdapter:
+    """Mock adapter that tracks whether kill() was called.
+
+    Has run_with_retries() to mirror AgentAdapter.
+    """
+
+    def __init__(self, *, write_impl: bool = False, output: str = "adapter output") -> None:
+        self._write_impl = write_impl
+        self._output = output
+        self.calls: list[tuple[str, Path]] = []
+        self.run_with_retries_calls: list[dict] = []
+        self.kill_called = False
+
+    def run(self, prompt: str, workspace: Path) -> str:
+        self.calls.append((prompt, workspace))
+        if self._write_impl:
+            (workspace / "card_impl.py").write_text("# impl\n")
+        return self._output
+
+    def run_with_retries(
+        self,
+        prompt: str,
+        workspace: Path,
+        *,
+        retries: int = 2,
+        timeout: int | None = None,
+    ) -> str:
+        self.run_with_retries_calls.append(
+            {"prompt": prompt, "workspace": workspace, "retries": retries, "timeout": timeout}
+        )
+        return self.run(prompt, workspace)
+
+    def kill(self) -> None:
+        self.kill_called = True
+
+
+class _BlockingAdapter:
+    """Mock adapter that raises TimeoutError to simulate timeout.
+
+    Has run_with_retries() that mirrors AgentAdapter behaviour: calls
+    self.run(), and on TimeoutError calls self.kill() before re-raising.
+    Uses no time.sleep() or while True per testing conventions.
+    """
+
+    def __init__(self) -> None:
+        self.kill_called = False
+        self._event = threading.Event()
+        self.calls: list[tuple[str, Path]] = []
+        self.run_with_retries_calls: list[dict] = []
+
+    def run(self, prompt: str, workspace: Path) -> str:
+        self.calls.append((prompt, workspace))
+        raise TimeoutError("adapter timed out")
+
+    def run_with_retries(
+        self,
+        prompt: str,
+        workspace: Path,
+        *,
+        retries: int = 2,
+        timeout: int | None = None,
+    ) -> str:
+        self.run_with_retries_calls.append(
+            {"prompt": prompt, "workspace": workspace, "retries": retries, "timeout": timeout}
+        )
+        try:
+            return self.run(prompt, workspace)
+        except TimeoutError:
+            self.kill()
+            raise
+
+    def kill(self) -> None:
+        self.kill_called = True
+
+
+class TestNoThreadPoolExecutorImport:
+    """Verify ThreadPoolExecutor and FuturesTimeoutError are not used in strategies.py."""
+
+    def test_no_thread_pool_executor_import(self) -> None:
+        """strategies.py must not import ThreadPoolExecutor (removed per TODO 6)."""
+        import silverquillm.strategies as mod
+        source = inspect.getsource(mod)
+        assert "ThreadPoolExecutor" not in source
+
+    def test_no_futures_timeout_error_import(self) -> None:
+        """strategies.py must not import concurrent.futures TimeoutError."""
+        import silverquillm.strategies as mod
+        source = inspect.getsource(mod)
+        # Should not reference concurrent.futures at all
+        assert "concurrent.futures" not in source
+
+    def test_no_concurrent_futures_module_in_strategies(self) -> None:
+        """The concurrent.futures module should not appear in strategies module namespace."""
+        import silverquillm.strategies as mod
+        # Check that concurrent.futures is not among the module's imported names
+        assert not hasattr(mod, "ThreadPoolExecutor")
+        assert not hasattr(mod, "futures")
+
+
+class TestDirectAdapterCallBlind:
+    """Verify BlindStrategy calls adapter.run_with_retries() and handles timeout/kill."""
+
+    def test_adapter_run_with_retries_called(self, tmp_path: Path) -> None:
+        """BlindStrategy should call adapter.run_with_retries() (not run() directly)."""
+        strategy = BlindStrategy()
+        adapter = _KillTrackingAdapter(write_impl=True)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert len(adapter.run_with_retries_calls) == 1
+        assert result.status == CardRunStatus.completed
+
+    def test_run_with_retries_receives_timeout_and_zero_retries(self, tmp_path: Path) -> None:
+        """Strategy must pass timeout=<timeout> and retries=0 to run_with_retries."""
+        strategy = BlindStrategy()
+        adapter = _KillTrackingAdapter(write_impl=True)
+        strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=42)
+        call = adapter.run_with_retries_calls[0]
+        assert call["timeout"] == 42
+        assert call["retries"] == 0
+
+    def test_agent_output_captured_in_result(self, tmp_path: Path) -> None:
+        """adapter.run_with_retries() return value should be stored in CardRunResult.agent_output."""
+        strategy = BlindStrategy()
+        adapter = _KillTrackingAdapter(write_impl=True, output="blind output 42")
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert result.agent_output == "blind output 42"
+
+    def test_kill_called_on_timeout(self, tmp_path: Path) -> None:
+        """When adapter raises TimeoutError, adapter.kill() should be called."""
+        strategy = BlindStrategy()
+        adapter = _BlockingAdapter()
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=5)
+        assert result.status == CardRunStatus.timeout
+        assert adapter.kill_called is True
+
+    def test_kill_not_called_on_success(self, tmp_path: Path) -> None:
+        """adapter.kill() should NOT be called on successful completion."""
+        strategy = BlindStrategy()
+        adapter = _KillTrackingAdapter(write_impl=True)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert result.status == CardRunStatus.completed
+        assert adapter.kill_called is False
+
+    def test_timeout_result_has_empty_agent_output(self, tmp_path: Path) -> None:
+        """On timeout, agent_output should be empty string."""
+        strategy = BlindStrategy()
+        adapter = _BlockingAdapter()
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=5)
+        assert result.agent_output == ""
+
+    def test_run_not_called_directly_by_strategy(self, tmp_path: Path) -> None:
+        """Strategy must NOT call adapter.run() directly — only via run_with_retries()."""
+        strategy = BlindStrategy()
+
+        class _SpyAdapter(_KillTrackingAdapter):
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+                self.direct_run_calls = 0
+
+            def run(self, prompt, workspace):
+                self.direct_run_calls += 1
+                return super().run(prompt, workspace)
+
+            def run_with_retries(self, prompt, workspace, *, retries=2, timeout=None):
+                # Only count calls that come through run_with_retries
+                self.run_with_retries_calls.append(
+                    {"prompt": prompt, "workspace": workspace, "retries": retries, "timeout": timeout}
+                )
+                # Reset direct_run_calls before delegating so we only track
+                # calls that happen outside of run_with_retries
+                before = self.direct_run_calls
+                result = self.run(prompt, workspace)
+                # The run() call inside run_with_retries is expected
+                return result
+
+        adapter = _SpyAdapter(write_impl=True)
+        strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        # run_with_retries was called once, and run() was called once (from within run_with_retries)
+        assert len(adapter.run_with_retries_calls) == 1
+
+
+class TestDirectAdapterCallImplTest:
+    """Verify ImplTestStrategy calls adapter.run_with_retries() and handles timeout/kill."""
+
+    def test_adapter_run_with_retries_called(self, tmp_path: Path) -> None:
+        """ImplTestStrategy should call adapter.run_with_retries() (not run() directly)."""
+        strategy = ImplTestStrategy()
+        adapter = _KillTrackingAdapter(write_impl=True)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert len(adapter.run_with_retries_calls) == 1
+        assert result.status == CardRunStatus.completed
+
+    def test_run_with_retries_receives_timeout_and_zero_retries(self, tmp_path: Path) -> None:
+        """Strategy must pass timeout=<timeout> and retries=0 to run_with_retries."""
+        strategy = ImplTestStrategy()
+        adapter = _KillTrackingAdapter(write_impl=True)
+        strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=99)
+        call = adapter.run_with_retries_calls[0]
+        assert call["timeout"] == 99
+        assert call["retries"] == 0
+
+    def test_agent_output_captured_in_result(self, tmp_path: Path) -> None:
+        """adapter.run_with_retries() return value should be stored in CardRunResult.agent_output."""
+        strategy = ImplTestStrategy()
+        adapter = _KillTrackingAdapter(write_impl=True, output="impl_test output 99")
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert result.agent_output == "impl_test output 99"
+
+    def test_kill_called_on_timeout(self, tmp_path: Path) -> None:
+        """When adapter raises TimeoutError, adapter.kill() should be called."""
+        strategy = ImplTestStrategy()
+        adapter = _BlockingAdapter()
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=5)
+        assert result.status == CardRunStatus.timeout
+        assert adapter.kill_called is True
+
+    def test_kill_not_called_on_success(self, tmp_path: Path) -> None:
+        """adapter.kill() should NOT be called on successful completion."""
+        strategy = ImplTestStrategy()
+        adapter = _KillTrackingAdapter(write_impl=True)
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=60)
+        assert result.status == CardRunStatus.completed
+        assert adapter.kill_called is False
+
+    def test_timeout_result_has_empty_agent_output(self, tmp_path: Path) -> None:
+        """On timeout, agent_output should be empty string."""
+        strategy = ImplTestStrategy()
+        adapter = _BlockingAdapter()
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=5)
+        assert result.agent_output == ""
+
+    def test_subprocess_timeout_expired_also_handled(self, tmp_path: Path) -> None:
+        """subprocess.TimeoutExpired should also trigger timeout handling with kill()."""
+        import subprocess as sp
+
+        class _SubprocessTimeoutAdapter:
+            def __init__(self):
+                self.kill_called = False
+                self.run_with_retries_calls: list[dict] = []
+
+            def run(self, prompt, workspace):
+                raise sp.TimeoutExpired(cmd="test", timeout=5)
+
+            def run_with_retries(self, prompt, workspace, *, retries=2, timeout=None):
+                self.run_with_retries_calls.append(
+                    {"prompt": prompt, "workspace": workspace, "retries": retries, "timeout": timeout}
+                )
+                try:
+                    return self.run(prompt, workspace)
+                except sp.TimeoutExpired:
+                    self.kill()
+                    raise
+
+            def kill(self):
+                self.kill_called = True
+
+        strategy = ImplTestStrategy()
+        adapter = _SubprocessTimeoutAdapter()
+        result = strategy.run_card(_SAMPLE_CARD_SPEC, tmp_path, adapter, timeout=5)
+        assert result.status == CardRunStatus.timeout
+        assert adapter.kill_called is True

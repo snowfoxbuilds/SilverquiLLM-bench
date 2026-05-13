@@ -316,8 +316,8 @@ class TestRunCardPostmortem:
         finally:
             session.cleanup()
 
-    def test_run_card_generates_agent_thoughts(self, tmp_path, monkeypatch):
-        """run_card() must generate agent_thoughts.md after strategy execution."""
+    def test_run_card_does_not_generate_agent_thoughts(self, tmp_path, monkeypatch):
+        """run_card() must NOT generate agent_thoughts.md; cli.py's finally block owns that."""
         from unittest.mock import MagicMock, patch
         from silverquillm.strategies import CardRunResult, CardRunStatus
 
@@ -344,7 +344,9 @@ class TestRunCardPostmortem:
                 session.run_card()
 
             thoughts_path = run_dir / "cards" / "Grizzly Bears" / "agent_thoughts.md"
-            assert thoughts_path.exists(), "run_card() must generate agent_thoughts.md"
+            assert not thoughts_path.exists(), (
+                "run_card() must not generate agent_thoughts.md — that is cli.py's responsibility"
+            )
         finally:
             session.cleanup()
 

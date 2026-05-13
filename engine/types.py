@@ -241,7 +241,9 @@ class TargetRequirement:
 
     Attributes:
         filter_fn: A callable that accepts a game object and returns True
-            if the object is a legal target.
+            if the object is a legal target.  Filters should evaluate the
+            object's properties at call time (lazy) rather than capturing
+            a snapshot of legal targets when the filter is created.
         description: Human-readable description of what this targets.
         zone: The zone in which legal targets must reside.
     """

@@ -113,7 +113,7 @@ class Pacifism(Aura):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="enchant creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -205,7 +205,7 @@ class UntamedHunger(Aura):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="enchant creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -315,7 +315,7 @@ class UnflinchingCourage(Aura):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="enchant creature",
                 zone=Zone.BATTLEFIELD,
             )

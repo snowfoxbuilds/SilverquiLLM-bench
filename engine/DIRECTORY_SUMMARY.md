@@ -8,14 +8,14 @@ Core game engine for a Magic: The Gathering implementation. Contains **17 Python
 
 | File | Lines | Responsibility |
 |------|-------|---------------|
-| `types.py` | 230+ | **Foundation** — All enums (`Color`, `ManaType`, `Zone`, `Phase`, `Step`, `CardType`, `Supertype`, `Keyword`) and core dataclasses (`ManaCost` with `.parse()` and `.cmc`, `HybridManaSymbol`, `TargetRequirement`). `ManaCost.parse()` handles `{X/Y}` hybrid mana tokens. Zero internal dependencies. |
+| `types.py` | 250+ | **Foundation** — All enums (`Color`, `ManaType`, `Zone`, `Phase`, `Step`, `CardType`, `Supertype`, `Keyword`) and core dataclasses (`ManaCost` with `.parse()` and `.cmc`, `HybridManaSymbol`, `TargetRequirement` with lazy `filter_fn` convention). `ManaCost.parse()` handles `{X/Y}` hybrid mana tokens. Zero internal dependencies. |
 | `zones.py` | 168 | `ZoneContainer` (ordered list with add/remove/shuffle/top/bottom), `Zones` (per-player Zone→ZoneContainer mapping), `move_zone()` function, `move_to_zone()` (centralized zone-transition with replacement effects, event firing, trigger registration/unregistration hooks), `IllegalMoveError`. Uses identity-based (`is`) lookups. |
 | `player.py` | 167 | `Player` (ABC) with life/zones/mana_pool/has_lost properties and 5 abstract methods (`choose`, `choose_card`, `choose_attackers`, `choose_blockers`, `choose_order`). `DeterministicPlayer` with FIFO scripted choices. `ScriptExhaustedError`. |
 | `mana.py` | 200+ | `ManaPool` class — add/empty/total/get/can_pay/pay methods. Auto-pay generic costs preferring colorless mana. Backtracking hybrid mana symbol resolution in `can_pay()`/`pay()`. `last_payment_colors` property and `_MANA_TO_COLOR` mapping for Converge mechanic support. |
 | `card.py` | 490+ | `GameObject` (auto-increment ID), `CardImpl` interface (hook methods: `can_cast`, `get_targets`, `on_cast`, `on_resolve`, `get_mana_abilities`, `get_triggers`, `register_replacement_effects`, `cost_reduction(game) -> int`). Concrete subclasses: `Creature` (with `_cant_be_blocked`, `_cant_activate`, `protections` list reset in `_reset_characteristics()`), `Instant`, `Sorcery`, `Enchantment`, `Aura`, `Artifact`, `ArtifactCreature`, `Planeswalker`, `Land`. Supporting dataclasses: `ActivatedAbility`, `LoyaltyAbility`, `ManaAbility`, `ContinuousEffect`, `Mode`. |
 | `game_state.py` | 180+ | `GameState` — central state container holding players, stack, trigger/effect/replacement managers, combat state, phase/step tracking, turn number, priority index. `extra_turns: list[int]` FIFO queue for extra turn management. `_normal_next_index` for tracking normal rotation independently. `_TURN_SEQUENCE` constant. `advance_phase()` for turn progression (pops extra turns without advancing normal rotation). |
 | `stack.py` | 174 | `StackObject` dataclass, `Stack` (LIFO container), `priority_loop()` with auto-pass and stack resolution, `check_state_based_actions()` wrapper. |
-| `casting.py` | 300+ | `cast_spell()` (hand→stack→targets→cost reduction→pay mana→on_cast→push), `play_land()`, `is_sorcery_speed()`, `can_cast_at_instant_speed()`. Cost reduction via `get_cost_reduction()` / `_apply_cost_reduction()`. Protection targeting check (rejects targets with protection from the spell). Wires trigger/replacement-effect auto-registration on resolution. Uses `move_to_zone()` for spell resolution. Stores `colors_spent` on card after mana payment for Converge mechanic. |
+| `casting.py` | 340+ | `cast_spell()` (hand→stack→targets→cost reduction→pay mana→on_cast→push), `play_land()`, `is_sorcery_speed()`, `can_cast_at_instant_speed()`. Cost reduction via `get_cost_reduction()` / `_apply_cost_reduction()`. Protection targeting check (rejects targets with protection from the spell). Wires trigger/replacement-effect auto-registration on resolution. Uses `move_to_zone()` for spell resolution. Stores `colors_spent` on card after mana payment for Converge mechanic. `_resolve_spell()` reads targets from `StackObject.targets` (single source of truth) and sets `card.chosen_targets` at resolve time. Validates `filter_fn` on targets at cast time. |
 | `combat.py` | 560+ | `CombatState` dataclass, `declare_attackers_step()`, `declare_blockers_step()`, `combat_damage_step()`, `end_combat_step()`. Handles first strike, double strike, trample, lifelink, deathtouch, flying/reach, menace, vigilance, summoning sickness. Protection checks in `_can_block()` and `_deal_damage()`. |
 | `protection.py` | 166 | **Protection from qualities** — `ProtectionAbility` class (color/type/quality matching), `get_colors()`, `get_protections()`, `has_protection_from()`. DEBT helper functions: `_is_illegal_target_due_to_protection()`, `_is_illegal_block_due_to_protection()`, `_should_prevent_damage()`, `_aura_illegal_due_to_protection()`. |
 | `abilities.py` | 273 | `activate_ability()`, `tap_cost()`, `ActivatedAbilityInstance`, `LoyaltyAbilityInstance` (per-turn tracking), `AbilityError`. Mana abilities resolve immediately; non-mana go on stack. |
@@ -33,10 +33,11 @@ Core game engine for a Magic: The Gathering implementation. Contains **17 Python
 - **`Player` / `DeterministicPlayer`** — Player abstraction; deterministic variant for testing.
 - **`move_to_zone()`** — Centralized zone-transition function handling replacement effects, event firing, and trigger auto-registration/unregistration.
 - **`priority_loop()`** — Core game flow: SBA check → priority pass → stack resolution.
-- **`cast_spell()` / `play_land()`** — Entry points for playing cards. `cast_spell()` applies cost reductions and protection checks.
+- **`cast_spell()` / `play_land()`** — Entry points for playing cards. `cast_spell()` applies cost reductions, protection checks, and `filter_fn` validation.
 - **`run_turn()` / `run_game()`** — Top-level game loop orchestration.
 - **`ProtectionAbility`** — Protection from color/type/quality with DEBT mnemonic helpers.
 - **`HybridManaSymbol`** — Represents `{X/Y}` hybrid mana symbols in costs.
+- **`TargetRequirement.filter_fn`** — Lazy filter evaluated at cast time (not snapshot-at-definition-time); enables dynamic target validation.
 
 ## Dependencies
 
@@ -45,6 +46,6 @@ Core game engine for a Magic: The Gathering implementation. Contains **17 Python
 
 ## Testing
 
-- Tests in `tests/engine/` — one test file per module (e.g., `test_types.py`, `test_card.py`).
-- ~1,050+ engine-specific tests covering all modules (including hybrid mana, cost reduction, protection, extra turns).
+- Tests in `tests/engine/` — one test file per module (e.g., `test_types.py`, `test_card.py`), plus `test_lazy_targets.py` (lazy filter evaluation) and `test_chosen_targets_refactor.py` (resolve-time target availability).
+- ~1,140+ engine-specific tests covering all modules (including hybrid mana, cost reduction, protection, extra turns, lazy targets, chosen_targets refactor).
 - Test utilities in `tests/test_utils.py` for convenient game setup.

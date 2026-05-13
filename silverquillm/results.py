@@ -157,10 +157,10 @@ def save_card_result(
         Unique card identifier.
     blind_result:
         Dict with at least ``impl_source`` key (blind implementation code)
-        and optional metadata.  May also contain ``iterations``.
+        and optional metadata.
     test_result:
         Dict with ``impl_source`` (tested impl), ``tests_source`` (test
-        code), and optional ``iterations``.
+        code), and optional metadata.
     eval_results:
         List of :class:`EvalResult` (or equivalent dicts) for self/cross/audited.
 
@@ -227,19 +227,15 @@ def _build_result_record(
     # Build implementation metrics — preserve all keys except large source
     # blobs and internal bookkeeping, so tokens/runtime/peak_context etc.
     # flow through automatically.
-    _IMPL_EXCLUDE = {"impl_source", "tests_source", "agent", "model", "complexity_tier", "tier", "iterations", "violations"}
+    _IMPL_EXCLUDE = {"impl_source", "tests_source", "agent", "model", "complexity_tier", "tier", "iterations", "iteration_count", "violations"}
 
     blind_metrics = {
         k: v for k, v in blind_result.items() if k not in _IMPL_EXCLUDE
     }
-    _blind_iters = blind_result.get("iterations", [])
-    blind_metrics["iterations"] = _blind_iters if isinstance(_blind_iters, int) else len(_blind_iters)
 
     tested_metrics = {
         k: v for k, v in test_result.items() if k not in _IMPL_EXCLUDE
     }
-    _tested_iters = test_result.get("iterations", [])
-    tested_metrics["iterations"] = _tested_iters if isinstance(_tested_iters, int) else len(_tested_iters)
 
     # Collect violations from either result dict
     violations = blind_result.get("violations", []) or test_result.get("violations", [])

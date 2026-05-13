@@ -177,6 +177,16 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     if target_specs:
         for spec in target_specs:
             target = player.choose_target(target_specs, spec)
+            # Validate against filter_fn if the spec provides one
+            filter_fn = getattr(spec, "filter_fn", None)
+            if filter_fn is not None and target is not None:
+                if not filter_fn(target):
+                    stack_zone.remove(card)
+                    hand.add(card)
+                    raise CastingError(
+                        f"Cannot cast {card.name!r} — chosen target does not "
+                        f"satisfy filter: {getattr(spec, 'description', '')}"
+                    )
             chosen_targets.append(target)
 
     # 5b. Protection check — reject targets that have protection from this
@@ -192,9 +202,8 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
                 f"Cannot cast {card.name!r} — target has protection from this spell"
             )
 
-    # Store chosen targets on the card so on_resolve() can access them
-    # even after the StackObject has been popped from the stack.
-    card.chosen_targets = chosen_targets  # type: ignore[attr-defined]
+    # Targets are stored on the StackObject (not the card) and passed
+    # through the resolve pipeline via on_resolve(game, targets=...).
 
     # 6. Mana check / payment (rollback on failure)
     # Ensure the card knows its controller so that cost_reduction() hooks
@@ -223,15 +232,17 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     card.on_cast(game)
 
     # 8. Build on_resolve callback and push StackObject
-    def _on_resolve(g: GameState) -> None:
-        _resolve_spell(g, card, player)
-
     stack_obj = StackObject(
         source=card,
         controller=player,
         targets=chosen_targets,
-        on_resolve=_on_resolve,
+        on_resolve=lambda g: None,  # replaced below
     )
+
+    def _on_resolve(g: GameState) -> None:
+        _resolve_spell(g, card, player, stack_obj)
+
+    stack_obj.on_resolve = _on_resolve
     game.stack.push(stack_obj)
 
 
@@ -239,10 +250,15 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
 # Resolution (called when the stack pops)
 # ------------------------------------------------------------------
 
-def _resolve_spell(game: GameState, card: CardImpl, player: Player) -> None:
+def _resolve_spell(
+    game: GameState,
+    card: CardImpl,
+    player: Player,
+    stack_obj: StackObject,
+) -> None:
     """Resolve *card* cast by *player*.
 
-    1. Call ``card.on_resolve(game)``.
+    1. Call ``card.on_resolve(game, targets=targets)``.
     2. Remove the card from the stack zone.
     3. If the card is a permanent type, move it to the battlefield via
        :func:`~engine.zones.move_to_zone` (which handles trigger/effect
@@ -250,6 +266,13 @@ def _resolve_spell(game: GameState, card: CardImpl, player: Player) -> None:
     4. Otherwise (instant / sorcery), move it to the owner's graveyard.
     """
     from engine.zones import move_to_zone
+
+    # Read targets from the StackObject — the single source of truth.
+    # Set chosen_targets on the card just before resolution so that
+    # _get_chosen_target helpers (which read via getattr) work.
+    targets = stack_obj.targets
+    if targets is not None:
+        card.chosen_targets = targets  # type: ignore[attr-defined]
 
     card.on_resolve(game)
 

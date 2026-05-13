@@ -89,7 +89,7 @@ class HolyStrength(Aura):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="enchant creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -150,7 +150,7 @@ class UnholyStrength(Aura):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="enchant creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -222,7 +222,7 @@ class StabWound(Aura):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="enchant creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -317,7 +317,7 @@ class Arrest(Aura):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="enchant creature",
                 zone=Zone.BATTLEFIELD,
             )

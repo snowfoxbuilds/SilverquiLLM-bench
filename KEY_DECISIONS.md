@@ -289,3 +289,27 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Created `docs/specs/TESTING-CONVENTIONS.md` with hard rules: explicit mock PIDs, patched os.killpg/os.getpgid, Event.wait instead of while-True, pytest-timeout safety net.
 - **Reasoning**: Prevent tests from terminating real processes or hanging forever.
 - **Impact**: All tests involving subprocess/timeout/signal must comply.
+
+## Per-card filesystem paths use card_id (collector number)
+- **Context**: Harness used both `card_name` (display name) and `card_dir_name` (collector number) for per-card subdirectories, creating duplicate directories.
+- **Decision**: All filesystem path construction uses `card_id` (collector number). `AgentSession._path_id` is the canonical accessor, falling back to `card_name` if `card_id` is empty. `card_name` remains for log messages and JSON content.
+- **Reasoning**: Collector numbers are unique, filesystem-safe, and already used by `save_card_result()`.
+- **Impact**: `silverquillm/agent_session.py`, `silverquillm/cli.py`.
+
+## Strategies use run_with_retries for timeout enforcement
+- **Context**: Strategies previously used ThreadPoolExecutor for timeout; needed replacement.
+- **Decision**: Strategies call `adapter.run_with_retries(prompt, workspace, timeout=timeout, retries=0)` instead of bare `adapter.run()`. Timeout enforcement is the adapter layer's responsibility via `run_with_retries`.
+- **Reasoning**: `run_with_retries` already implements timeout via SIGALRM (main thread) or threading fallback, plus calls `adapter.kill()`. Using it directly avoids duplicating timeout logic in each strategy.
+- **Impact**: `silverquillm/strategies.py`, all strategy tests use mock adapters with `run_with_retries`.
+
+## Lazy target filters with game-state evaluation
+- **Context**: Target filter closures in `get_targets()` captured game state at definition time, not evaluation time.
+- **Decision**: Target filter predicates now accept `game` as a parameter and evaluate state lazily. Card implementations use property-based predicates that check current controller, zone, and card type at evaluation time. `engine/casting.py` wires `filter_fn` into target validation.
+- **Reasoning**: MTG rules require target legality to be checked at resolution time using current game state, not the state when the spell was cast.
+- **Impact**: `engine/casting.py`, 6 card implementation files in `cards/foundations/`.
+
+## StackObject.targets is single source of truth for chosen targets
+- **Context**: `card.chosen_targets` was set at cast time, creating mutable state on the card instance that could leak to copies.
+- **Decision**: `chosen_targets` assignment moved from cast-time to resolve-time. Between cast and resolve, `StackObject.targets` is the single source of truth. At resolution, `card.chosen_targets = obj.targets` is set for backward compat with `on_resolve()` callbacks.
+- **Reasoning**: Prevents target leakage on card copy/clone. Aligns with MTG rules where targets are stored on the stack object.
+- **Impact**: `engine/casting.py` (cast_spell and _resolve_spell).

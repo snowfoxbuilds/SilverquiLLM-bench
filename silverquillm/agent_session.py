@@ -176,6 +176,7 @@ class AgentSession:
     card_dir: str
     run_engine_dir: Path | None = field(default=None)
     run_dir: Path | None = field(default=None)
+    card_id: str = field(default="")
     _workspace: Path | None = field(default=None, init=False, repr=False)
     _adapter: AgentAdapter | None = field(default=None, init=False, repr=False)
 
@@ -185,6 +186,16 @@ class AgentSession:
     def card_name(self) -> str:
         """Card name derived from the spec."""
         return self.card_spec.get("name", "")
+
+    @property
+    def _path_id(self) -> str:
+        """Identifier used for per-card filesystem paths.
+
+        Prefers ``card_id`` (collector number) when set; falls back to
+        ``card_name`` for backward compatibility with sessions that don't
+        pass an explicit ``card_id``.
+        """
+        return self.card_id if self.card_id else self.card_name
 
     @property
     def workspace(self) -> Path | None:
@@ -371,7 +382,7 @@ class AgentSession:
         if not self._workspace or not self._workspace.exists():
             return
         card_results_dir.mkdir(parents=True, exist_ok=True)
-        postmortem_path = _get_postmortem_path(self.run_dir, self.card_name)
+        postmortem_path = _get_postmortem_path(self.run_dir, self._path_id)
         for filename in ("card_impl.py", "tests.py"):
             src = self._workspace / filename
             if src.exists():
@@ -424,7 +435,7 @@ class AgentSession:
 
         start = time.monotonic()
 
-        postmortem_path = _get_postmortem_path(self.run_dir, self.card_name)
+        postmortem_path = _get_postmortem_path(self.run_dir, self._path_id)
         raw_log_path = _get_raw_log_path(self.run_dir)
 
         try:
@@ -490,16 +501,16 @@ class AgentSession:
         if postmortem_path:
             _append_postmortem(
                 postmortem_path=postmortem_path,
-                prompt="(strategy-level)",
-                response=f"status={result.status.value}",
-                tokens=None,
+                prompt=result.prompt_used or "(strategy-level)",
+                response=result.agent_output or f"status={result.status.value}",
+                tokens=_estimate_tokens(result.agent_output) if result.agent_output else None,
                 timing_ms=elapsed * 1000,
-                status="success",
+                status="success" if result.status == CardRunStatus.completed else "error",
             )
         if raw_log_path:
             append_raw_log(
                 raw_log_path, self.card_name, self.config.mode,
-                "(strategy-level)", f"status={result.status.value}",
+                result.prompt_used or "(strategy-level)", result.agent_output or f"status={result.status.value}",
             )
 
         # Check for violations (agent modifying protected paths)
@@ -516,18 +527,10 @@ class AgentSession:
                 runtime_ms=int(elapsed * 1000),
                 engine_modified=result.engine_modified,
                 violations=violations,
+                agent_output=result.agent_output,
+                prompt_used=result.prompt_used,
             )
 
-        # Generate agent_thoughts.md
-        if self.run_dir:
-            try:
-                _generate_agent_thoughts(self.run_dir, self.card_name)
-            except Exception:
-                logger.debug(
-                    "Failed to generate agent_thoughts.md for %s",
-                    self.card_name,
-                    exc_info=True,
-                )
 
         return result
 

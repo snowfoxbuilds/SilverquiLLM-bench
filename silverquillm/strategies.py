@@ -12,7 +12,6 @@ import enum
 import subprocess
 import time
 from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -56,6 +55,8 @@ class CardRunResult:
     runtime_ms: int = 0
     engine_modified: bool = False
     violations: list[str] = field(default_factory=list)
+    agent_output: str = ""
+    prompt_used: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -122,38 +123,40 @@ class BlindStrategy(CardStrategy):
         prompt = blind_mode_prompt(card_spec)
         impl_path = workspace / "card_impl.py"
 
-        pool = ThreadPoolExecutor(max_workers=1)
-        future = pool.submit(adapter.run, prompt, workspace)
         try:
-            future.result(timeout=timeout)
-        except (TimeoutError, FuturesTimeoutError, subprocess.TimeoutExpired):
+            output = adapter.run_with_retries(prompt, workspace, timeout=timeout, retries=0)
+        except (TimeoutError, subprocess.TimeoutExpired):
             # Hard-kill the adapter's subprocess if it supports it
             if hasattr(adapter, "kill"):
                 adapter.kill()
-            pool.shutdown(wait=False, cancel_futures=True)
             elapsed_ms = int((time.monotonic() - start) * 1000)
             files = [impl_path] if impl_path.exists() else []
             return CardRunResult(
                 status=CardRunStatus.timeout,
                 files_written=files,
                 runtime_ms=elapsed_ms,
+                agent_output="",
+                prompt_used=prompt,
             )
-        else:
-            pool.shutdown(wait=False)
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
+        agent_output = output if isinstance(output, str) else str(output or "")
 
         if impl_path.exists():
             return CardRunResult(
                 status=CardRunStatus.completed,
                 files_written=[impl_path],
                 runtime_ms=elapsed_ms,
+                agent_output=agent_output,
+                prompt_used=prompt,
             )
 
         return CardRunResult(
             status=CardRunStatus.no_output,
             files_written=[],
             runtime_ms=elapsed_ms,
+            agent_output=agent_output,
+            prompt_used=prompt,
         )
 
 
@@ -186,15 +189,12 @@ class ImplTestStrategy(CardStrategy):
         impl_path = workspace / "card_impl.py"
         tests_path = workspace / "tests.py"
 
-        pool = ThreadPoolExecutor(max_workers=1)
-        future = pool.submit(adapter.run, prompt, workspace)
         try:
-            future.result(timeout=timeout)
-        except (TimeoutError, FuturesTimeoutError, subprocess.TimeoutExpired):
+            output = adapter.run_with_retries(prompt, workspace, timeout=timeout, retries=0)
+        except (TimeoutError, subprocess.TimeoutExpired):
             # Hard-kill the adapter's subprocess if it supports it
             if hasattr(adapter, "kill"):
                 adapter.kill()
-            pool.shutdown(wait=False, cancel_futures=True)
             elapsed_ms = int((time.monotonic() - start) * 1000)
             files: list[Path] = []
             if impl_path.exists():
@@ -205,11 +205,12 @@ class ImplTestStrategy(CardStrategy):
                 status=CardRunStatus.timeout,
                 files_written=files,
                 runtime_ms=elapsed_ms,
+                agent_output="",
+                prompt_used=prompt,
             )
-        else:
-            pool.shutdown(wait=False)
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
+        agent_output = output if isinstance(output, str) else str(output or "")
 
         if impl_path.exists():
             files = [impl_path]
@@ -219,12 +220,16 @@ class ImplTestStrategy(CardStrategy):
                 status=CardRunStatus.completed,
                 files_written=files,
                 runtime_ms=elapsed_ms,
+                agent_output=agent_output,
+                prompt_used=prompt,
             )
 
         return CardRunResult(
             status=CardRunStatus.no_output,
             files_written=[],
             runtime_ms=elapsed_ms,
+            agent_output=agent_output,
+            prompt_used=prompt,
         )
 
 

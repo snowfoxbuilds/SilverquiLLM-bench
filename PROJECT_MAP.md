@@ -15,34 +15,34 @@ The codebase is ~40,000+ lines across source and tests, with **~3,200+ test func
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                       Benchmark Runner                           │
-│  silverquillm/cli.py       — CLI entry point (run/eval/score/   │
+│  silverquillm/cli.py       — CLI entry point (run/eval/score/    │
 │                               cards/validate)                    │
-│  silverquillm/config.py    — YAML config + nested AgentConfig   │
-│  silverquillm/agent_session.py — workspace + agent lifecycle    │
+│  silverquillm/config.py    — YAML config + nested AgentConfig    │
+│  silverquillm/agent_session.py — workspace + agent lifecycle     │
 │                   │                                  │           │
-│    ┌──────────────▼──────────┐      ┌────────────────▼────────┐ │
-│    │    Card Pipeline        │      │    Eval Pipeline        │ │
-│    │                         │      │                         │ │
-│    │  card_classifier.py     │      │  evaluator.py           │ │
-│    │  card_spec.py           │      │  scorer.py (4 cats)     │ │
-│    │  card_loader.py         │      │  results.py             │ │
-│    │  template_gen.py        │      │  run_utils.py           │ │
-│    │  docs_gen.py            │      │  regression.py          │ │
-│    │  rules_skill.py         │      │                         │ │
-│    │  prompts.py             │      │                         │ │
-│    │  prototype.py           │      │                         │ │
-│    └─────────────────────────┘      └─────────────────────────┘ │
+│    ┌──────────────▼──────────┐      ┌────────────────▼────────┐  │
+│    │    Card Pipeline        │      │    Eval Pipeline        │  │
+│    │                         │      │                         │  │
+│    │  card_classifier.py     │      │  evaluator.py           │  │
+│    │  card_spec.py           │      │  scorer.py (4 cats)     │  │
+│    │  card_loader.py         │      │  results.py             │  │
+│    │  template_gen.py        │      │  run_utils.py           │  │
+│    │  docs_gen.py            │      │  regression.py          │  │
+│    │  rules_skill.py         │      │                         │  │
+│    │  prompts.py             │      │                         │  │
+│    │  prototype.py           │      │                         │  │
+│    └─────────────────────────┘      └─────────────────────────┘  │
 │                                                                  │
-│    ┌─────────────────────────────────────────────────────────┐  │
+│    ┌──────────────────────────────────────────────────────────┐  │
 │    │    Replay Validation Pipeline                            │  │
 │    │                                                          │  │
 │    │  replay/types.py      — ReplayGame, GameSnapshot, etc.   │  │
 │    │  replay/state.py      — GRE state reconstruction         │  │
 │    │  replay/parser.py     — parse_replay() entry point       │  │
 │    │  replay/executor.py   — ReplayExecutor (state-diff mode) │  │
-│    │  replay/validation.py — Divergence detection & reporting  │  │
+│    │  replay/validation.py — Divergence detection & reporting │  │
 │    │  replay/cli.py        — `benchmark validate` subcommand  │  │
-│    └─────────────────────────────────────────────────────────┘  │
+│    └──────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────┐
@@ -60,32 +60,32 @@ The codebase is ~40,000+ lines across source and tests, with **~3,200+ test func
 │  engine/game.py — create_game, run_game, helper actions          │
 │  engine/turn.py — run_turn, phase/step progression               │
 │                   │                                  │           │
-│    ┌──────────────▼──────────┐      ┌────────────────▼────────┐ │
-│    │    Core State           │      │    Game Mechanics       │ │
-│    │                         │      │                         │ │
-│    │  game_state.py          │      │  casting.py             │ │
-│    │  player.py              │      │  stack.py               │ │
-│    │  zones.py               │      │  combat.py              │ │
-│    │  mana.py                │      │  abilities.py           │ │
-│    │  types.py               │      │  triggers.py            │ │
-│    │  card.py                │      │  continuous_effects.py  │ │
-│    │                         │      │  replacement_effects.py │ │
-│    │                         │      │  state_based_actions.py │ │
-│    │                         │      │  protection.py          │ │
-│    └─────────────────────────┘      └─────────────────────────┘ │
+│    ┌──────────────▼──────────┐      ┌────────────────▼────────┐  │
+│    │    Core State           │      │    Game Mechanics       │  │
+│    │                         │      │                         │  │
+│    │  game_state.py          │      │  casting.py             │  │
+│    │  player.py              │      │  stack.py               │  │
+│    │  zones.py               │      │  combat.py              │  │
+│    │  mana.py                │      │  abilities.py           │  │
+│    │  types.py               │      │  triggers.py            │  │
+│    │  card.py                │      │  continuous_effects.py  │  │
+│    │                         │      │  replacement_effects.py │  │
+│    │                         │      │  state_based_actions.py │  │
+│    │                         │      │  protection.py          │  │
+│    └─────────────────────────┘      └─────────────────────────┘  │
 │                   │                                              │
-│    ┌──────────────▼──────────────────────────────────────────┐  │
+│    ┌──────────────▼───────────────────────────────────────────┐  │
 │    │                    Card Layer                            │  │
 │    │                                                          │  │
 │    │  cards/registry.py   — CardRegistry + CardMetadata       │  │
 │    │  cards/scryfall.py   — Scryfall API fetch + cache        │  │
-│    │  cards/foundations/  — FDN set card implementations (260+)│  │
+│    │  cards/foundations/  — FDN set card implementations(260+)│  │
 │    │    basic_lands.py        — 5 basic lands                 │  │
 │    │    simple_creatures.py   — 15 vanilla/French vanilla     │  │
 │    │    vanilla_creatures_batch2.py — 7 batch 2 creatures     │  │
 │    │    simple_spells.py      — 10 instants/sorceries         │  │
 │    │    simple_spells_batch2.py — 15 non-targeted spells      │  │
-│    │    simple_spells_batch3.py — 18 targeted spells           │  │
+│    │    simple_spells_batch3.py — 18 targeted spells          │  │
 │    │    simple_permanents.py  — 5 enchantments and artifacts  │  │
 │    │    enchantments.py       — 8 enchantments (auras+global) │  │
 │    │    auras_batch2.py       — 10 batch 2 auras              │  │
@@ -96,11 +96,11 @@ The codebase is ~40,000+ lines across source and tests, with **~3,200+ test func
 │    │    complex_spells.py     — 16 modal/X-cost/kicker cards  │  │
 │    │    artifacts.py          — 10 artifacts (mana rocks, eq.)│  │
 │    │    artifacts_batch2.py   — 27 batch 2 artifacts          │  │
-│    │    equipment.py          — 7 equipment cards              │  │
-│    │    lands.py              — 13 non-basic lands             │  │
-│    │    etb_creatures.py      — 29 ETB trigger creatures       │  │
+│    │    equipment.py          — 7 equipment cards             │  │
+│    │    lands.py              — 13 non-basic lands            │  │
+│    │    etb_creatures.py      — 29 ETB trigger creatures      │  │
 │    │    death_trigger_creatures.py — 17 death triggers        │  │
-│    │    activated_creatures.py — 19 activated abilities        │  │
+│    │    activated_creatures.py — 19 activated abilities       │  │
 │    │    special_guests.py     — 10 Special Guest (SPG) cards  │  │
 │    └──────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────┘
@@ -110,7 +110,7 @@ The codebase is ~40,000+ lines across source and tests, with **~3,200+ test func
 │                                                                  │
 │  data/sets/              — Scryfall JSON cache                   │
 │  data/replays/           — Card ID map + sample replay data      │
-│  scripts/build_card_id_map.py — Scryfall → card_id_map.json     │
+│  scripts/build_card_id_map.py — Scryfall → card_id_map.json      │
 └──────────────────────────────────────────────────────────────────┘
 ```
 

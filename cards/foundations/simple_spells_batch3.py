@@ -101,7 +101,7 @@ class JoustThrough(Instant):
                     targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="target attacking or blocking creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -162,7 +162,7 @@ class LuminousRebuke(Instant):
                     targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="target creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -213,7 +213,10 @@ class MakeYourMove(Instant):
                         targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: (
+                    bool(getattr(obj, "card_types", set()) & {CardType.ARTIFACT, CardType.ENCHANTMENT})
+                    or (CardType.CREATURE in getattr(obj, "card_types", set())
+                        and getattr(obj, "power", getattr(obj, "base_power", 0)) >= 4)),
                 description="target artifact, enchantment, or creature with power 4 or greater",
                 zone=Zone.BATTLEFIELD,
             )
@@ -259,7 +262,7 @@ class StrokeOfMidnight(Instant):
                     targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.LAND not in getattr(obj, "card_types", set()),
                 description="target nonland permanent",
                 zone=Zone.BATTLEFIELD,
             )
@@ -329,7 +332,7 @@ class BakeIntoAPie(Instant):
                     targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="target creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -403,7 +406,7 @@ class EatenAlive(Sorcery):
                     targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: bool(getattr(obj, "card_types", set()) & {CardType.CREATURE, CardType.PLANESWALKER}),
                 description="target creature or planeswalker",
                 zone=Zone.BATTLEFIELD,
             )
@@ -454,7 +457,10 @@ class BrokenWings(Instant):
                         targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: (
+                    bool(getattr(obj, "card_types", set()) & {CardType.ARTIFACT, CardType.ENCHANTMENT})
+                    or (CardType.CREATURE in getattr(obj, "card_types", set())
+                        and Keyword.FLYING in getattr(obj, "keywords", Keyword(0)))),
                 description="target artifact, enchantment, or creature with flying",
                 zone=Zone.BATTLEFIELD,
             )
@@ -510,7 +516,7 @@ class EssenceScatter(Instant):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(getattr(obj, "source", obj), "card_types", set()),
                 description="target creature spell",
                 zone=Zone.STACK,
             )
@@ -557,12 +563,12 @@ class RunAwayTogether(Instant):
         # constraint is validated at target-selection time (not per-filter).
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="target creature (first — must differ in controller from second)",
                 zone=Zone.BATTLEFIELD,
             ),
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="target creature (second — must differ in controller from first)",
                 zone=Zone.BATTLEFIELD,
             ),
@@ -574,6 +580,13 @@ class RunAwayTogether(Instant):
 
         target1 = _get_chosen_target_idx(self, game, 0)
         target2 = _get_chosen_target_idx(self, game, 1)
+
+        # Fizzle if targets don't have different controllers
+        if target1 is not None and target2 is not None:
+            ctrl1 = getattr(target1, "controller", None)
+            ctrl2 = getattr(target2, "controller", None)
+            if ctrl1 is ctrl2:
+                return  # illegal — must be different controllers
 
         for target in [target1, target2]:
             if target is None:
@@ -615,7 +628,7 @@ class SureStrike(Instant):
                     targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="target creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -685,7 +698,10 @@ class SnakeskinVeil(Instant):
                         targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj, _c=controller: (
+                    CardType.CREATURE in getattr(obj, "card_types", set())
+                    and getattr(obj, "controller", None) is _c
+                ),
                 description="target creature you control",
                 zone=Zone.BATTLEFIELD,
             )
@@ -756,7 +772,7 @@ class FleetingDistraction(Instant):
                     targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="target creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -834,7 +850,10 @@ class DivineResilience(Instant):
                         targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj, _c=controller: (
+                    CardType.CREATURE in getattr(obj, "card_types", set())
+                    and getattr(obj, "controller", None) is _c
+                ),
                 description="target creature you control",
                 zone=Zone.BATTLEFIELD,
             )
@@ -917,12 +936,18 @@ class BiteDown(Instant):
                         opp_targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=my_targets: obj in _t,
+                filter_fn=lambda obj, _c=controller: (
+                    CardType.CREATURE in getattr(obj, "card_types", set())
+                    and getattr(obj, "controller", None) is _c
+                ),
                 description="target creature you control",
                 zone=Zone.BATTLEFIELD,
             ),
             TargetRequirement(
-                filter_fn=lambda obj, _t=opp_targets: obj in _t,
+                filter_fn=lambda obj, _c=controller: (
+                    bool(getattr(obj, "card_types", set()) & {CardType.CREATURE, CardType.PLANESWALKER})
+                    and getattr(obj, "controller", None) is not _c
+                ),
                 description="target creature or planeswalker you don't control",
                 zone=Zone.BATTLEFIELD,
             ),
@@ -988,12 +1013,18 @@ class FellingBlow(Sorcery):
                         opp_targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=my_targets: obj in _t,
+                filter_fn=lambda obj, _c=controller: (
+                    CardType.CREATURE in getattr(obj, "card_types", set())
+                    and getattr(obj, "controller", None) is _c
+                ),
                 description="target creature you control",
                 zone=Zone.BATTLEFIELD,
             ),
             TargetRequirement(
-                filter_fn=lambda obj, _t=opp_targets: obj in _t,
+                filter_fn=lambda obj, _c=controller: (
+                    CardType.CREATURE in getattr(obj, "card_types", set())
+                    and getattr(obj, "controller", None) is not _c
+                ),
                 description="target creature an opponent controls",
                 zone=Zone.BATTLEFIELD,
             ),
@@ -1068,7 +1099,7 @@ class FleetingFlight(Instant):
                     targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="target creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -1144,7 +1175,7 @@ class FakeYourOwnDeath(Instant):
                     targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
                 description="target creature",
                 zone=Zone.BATTLEFIELD,
             )
@@ -1210,7 +1241,10 @@ class Zombify(Sorcery):
                     targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _t=targets: obj in _t,
+                filter_fn=lambda obj, _c=controller: (
+                    CardType.CREATURE in getattr(obj, "card_types", set())
+                    and getattr(obj, "owner", None) is _c
+                ),
                 description="target creature card in your graveyard",
                 zone=Zone.GRAVEYARD,
             )

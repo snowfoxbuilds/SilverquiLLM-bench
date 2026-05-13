@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Test root directory for the SilverquiLLM-bench project. Contains top-level test files, test utilities, and subdirectories for engine, card, benchmark integration, and per-card audited tests. Uses **pytest** as the test framework with ~3,200+ test functions total across 100+ test files, plus hundreds of per-card audited test files under `audited/`.
+Test root directory for the SilverquiLLM-bench project. Contains top-level test files, test utilities, and subdirectories for engine, card, benchmark integration, and per-card audited tests. Uses **pytest** as the test framework with ~3,500+ test functions total across 100+ test files, plus hundreds of per-card audited test files under `audited/`.
 
 ## Key Files
 
@@ -61,11 +61,14 @@ Test root directory for the SilverquiLLM-bench project. Contains top-level test 
 | `test_sos_regenerated_artifacts.py` | **SOS artifact regeneration tests** — 26 tests for 346-card pool integrity, classification, specs, docs. |
 | `test_audited_per_card.py` | **Audited per-card test runner** — Parametrized per-card test discovery and execution. |
 | `test_violation_wiring.py` | **Violation wiring tests** — Violation checks in agent runs. |
-| `test_timeout_enforcement.py` | **Timeout enforcement tests** — Hard timeout at strategy and adapter level with kill(). |
+| `test_timeout_enforcement.py` | **Timeout enforcement tests** — 35 tests for hard timeout at strategy and adapter level with kill(). |
+| `test_card_id_map.py` | **Card ID map tests** — card ID map JSON structure and build script tests. |
+| `test_no_stale_iterations.py` | **Stale iterations tests** — verifies no stale iterations references leak into serialized results. |
+| `test_signal_handler.py` | **Signal handler tests** — signal handler registration, restoration, and interrupt behavior. |
 | `test_post_eval.py` | **Post-eval tests** — CardEvalResult dataclass, run_post_eval flow, self-eval, audited eval, result.json persistence, CLI integration. |
 | `test_aggregator.py` | **Aggregator tests** — aggregate_run() pure function, RunSummary dataclass, persistence, idempotency. |
 | `test_allowlist_contamination.py` | **Allowlist contamination tests** — 23 tests for allowlist-based contamination detection. |
-| `test_preflight.py` | **Preflight tests** — 18 tests for pre-flight validation (card_specs_dir, config, workspace, template imports, test_utils, happy path, error aggregation). |
+| `test_preflight.py` | **Preflight tests** — 27 tests for pre-flight validation (card_specs_dir, config, workspace, template imports, test_utils, happy path, error aggregation, workspace isolation). |
 | `test_harness.py` | **Harness smoke tests** — 39 deterministic end-to-end tests covering full harness pipeline with MockAdapter. |
 | `test_strategies.py` | **Strategy tests** — BlindStrategy and ImplTestStrategy behavior. |
 | `test_replay_parser.py` | **Replay parser tests** — 39 tests for GRE JSON parsing: game setup, opening hands, state reconstruction, land plays, life totals, draws, ObjectIdChanged tracking. |

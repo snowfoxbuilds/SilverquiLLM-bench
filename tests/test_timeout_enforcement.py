@@ -81,35 +81,53 @@ def _make_mock_proc(*, running: bool = True) -> MagicMock:
     return mock_proc
 
 
-class _BlockingAdapter:
+class _BlockingAdapter(AgentAdapter):
     """Adapter whose run() blocks via threading.Event (safe, killable).
 
     Per TESTING-CONVENTIONS.md: uses Event.wait(timeout=60) instead of
     while True: time.sleep().
     """
 
-    def __init__(self) -> None:
+    def __init__(self, config: BenchmarkConfig | None = None) -> None:
+        if config is None:
+            config = _make_config(timeout=2)
+        super().__init__(config)
         self._stop = threading.Event()
         self.killed = False
+
+    def setup(self) -> None:
+        pass
 
     def run(self, prompt: str, workspace: Path) -> str:
         self._stop.wait(timeout=60)
         return ""
+
+    def teardown(self) -> None:
+        pass
 
     def kill(self) -> None:
         self.killed = True
         self._stop.set()
 
 
-class _BlockingNoKillAdapter:
-    """Adapter that blocks but has no kill() method."""
+class _BlockingNoKillAdapter(AgentAdapter):
+    """Adapter that blocks but has no kill() method (uses base no-op kill)."""
 
-    def __init__(self) -> None:
+    def __init__(self, config: BenchmarkConfig | None = None) -> None:
+        if config is None:
+            config = _make_config(timeout=2)
+        super().__init__(config)
         self._stop = threading.Event()
+
+    def setup(self) -> None:
+        pass
 
     def run(self, prompt: str, workspace: Path) -> str:
         self._stop.wait(timeout=60)
         return ""
+
+    def teardown(self) -> None:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -294,17 +312,35 @@ class _FailThenBlockAdapter(AgentAdapter):
         pass
 
 
+@patch("signal.alarm", return_value=0)
+@patch("signal.signal", return_value=signal.SIG_DFL)
 class TestRunWithRetriesDeadline:
-    """run_with_retries must enforce a single hard deadline across all attempts."""
+    """run_with_retries must enforce a single hard deadline across all attempts.
+
+    signal.signal and signal.alarm are patched at class level so no real
+    SIGALRM handler or alarm is installed.  We also force the threading-based
+    timeout path so that the blocking adapters are properly interrupted without
+    relying on real OS signals.
+    """
+
+    @staticmethod
+    def _force_threading_timeout(adapter, prompt, workspace, timeout):
+        """Route _run_with_timeout through the threading fallback."""
+        return adapter._run_with_timeout_threading(prompt, workspace, timeout)
 
     @pytest.mark.timeout(10)
-    def test_overall_deadline_not_multiplied_by_retries(self) -> None:
+    def test_overall_deadline_not_multiplied_by_retries(self, _sig, _alarm) -> None:
         """With timeout=2 and retries=3, total wall-clock must be ≤ ~2s, not 2*4=8s."""
         config = _make_config(timeout=2)
         adapter = _BlockingConcreteAdapter(config)
         start = time.monotonic()
-        with pytest.raises(TimeoutError):
-            adapter.run_with_retries("hi", Path("/tmp"), retries=3, timeout=2)
+        with patch.object(
+            type(adapter),
+            "_run_with_timeout",
+            lambda self, p, w, t: self._run_with_timeout_threading(p, w, t),
+        ):
+            with pytest.raises(TimeoutError):
+                adapter.run_with_retries("hi", Path("/tmp"), retries=3, timeout=2)
         elapsed = time.monotonic() - start
         # Should be bounded by ~2s + small overhead, definitely not 8s
         assert elapsed < 6, (
@@ -312,13 +348,18 @@ class TestRunWithRetriesDeadline:
         )
 
     @pytest.mark.timeout(10)
-    def test_remaining_budget_shrinks_across_retries(self) -> None:
+    def test_remaining_budget_shrinks_across_retries(self, _sig, _alarm) -> None:
         """After a failed attempt the remaining budget for next attempt is smaller."""
         config = _make_config(timeout=3)
         adapter = _FailThenBlockAdapter(config)
         start = time.monotonic()
-        with pytest.raises((TimeoutError, RuntimeError)):
-            adapter.run_with_retries("hi", Path("/tmp"), retries=1, timeout=3)
+        with patch.object(
+            type(adapter),
+            "_run_with_timeout",
+            lambda self, p, w, t: self._run_with_timeout_threading(p, w, t),
+        ):
+            with pytest.raises((TimeoutError, RuntimeError)):
+                adapter.run_with_retries("hi", Path("/tmp"), retries=1, timeout=3)
         elapsed = time.monotonic() - start
         # Total should be well under 6s (shared budget).
         assert elapsed < 8, (
@@ -326,31 +367,46 @@ class TestRunWithRetriesDeadline:
         )
 
     @pytest.mark.timeout(10)
-    def test_timeout_defaults_to_config_timeout_per_card(self) -> None:
+    def test_timeout_defaults_to_config_timeout_per_card(self, _sig, _alarm) -> None:
         """When no timeout is passed, run_with_retries uses config.agent.timeout_per_card."""
         config = _make_config(timeout=2)
         adapter = _BlockingConcreteAdapter(config)
         start = time.monotonic()
-        with pytest.raises(TimeoutError):
-            adapter.run_with_retries("hi", Path("/tmp"), retries=0)
+        with patch.object(
+            type(adapter),
+            "_run_with_timeout",
+            lambda self, p, w, t: self._run_with_timeout_threading(p, w, t),
+        ):
+            with pytest.raises(TimeoutError):
+                adapter.run_with_retries("hi", Path("/tmp"), retries=0)
         elapsed = time.monotonic() - start
         assert elapsed < 6
 
     @pytest.mark.timeout(10)
-    def test_raises_timeout_error_not_runtime_error(self) -> None:
+    def test_raises_timeout_error_not_runtime_error(self, _sig, _alarm) -> None:
         """On deadline expiry the raised exception should be TimeoutError."""
         config = _make_config(timeout=1)
         adapter = _BlockingConcreteAdapter(config)
-        with pytest.raises(TimeoutError):
-            adapter.run_with_retries("hi", Path("/tmp"), retries=0, timeout=1)
+        with patch.object(
+            type(adapter),
+            "_run_with_timeout",
+            lambda self, p, w, t: self._run_with_timeout_threading(p, w, t),
+        ):
+            with pytest.raises(TimeoutError):
+                adapter.run_with_retries("hi", Path("/tmp"), retries=0, timeout=1)
 
     @pytest.mark.timeout(10)
-    def test_run_with_retries_calls_kill_on_timeout(self) -> None:
+    def test_run_with_retries_calls_kill_on_timeout(self, _sig, _alarm) -> None:
         """run_with_retries must call self.kill() when the deadline expires."""
         config = _make_config(timeout=1)
         adapter = _BlockingConcreteAdapter(config)
-        with pytest.raises(TimeoutError):
-            adapter.run_with_retries("hi", Path("/tmp"), retries=0, timeout=1)
+        with patch.object(
+            type(adapter),
+            "_run_with_timeout",
+            lambda self, p, w, t: self._run_with_timeout_threading(p, w, t),
+        ):
+            with pytest.raises(TimeoutError):
+                adapter.run_with_retries("hi", Path("/tmp"), retries=0, timeout=1)
         assert adapter.kill_called is True, (
             "run_with_retries must call self.kill() before raising TimeoutError"
         )
@@ -423,7 +479,9 @@ class TestOpenCodeAdapterProcessGroupKill:
 
         mock_proc.terminate.assert_called()
 
-    def test_kill_noop_when_no_process(self) -> None:
+    @patch("silverquillm.adapters.opencode.os.killpg")
+    @patch("silverquillm.adapters.opencode.os.getpgid")
+    def test_kill_noop_when_no_process(self, _getpgid: MagicMock, _killpg: MagicMock) -> None:
         """kill() must not raise when no subprocess is active."""
         from silverquillm.adapters.opencode import OpenCodeAdapter
 
@@ -431,7 +489,9 @@ class TestOpenCodeAdapterProcessGroupKill:
         adapter = OpenCodeAdapter(cfg)
         adapter.kill()  # Should not raise
 
-    def test_kill_noop_when_process_already_exited(self) -> None:
+    @patch("silverquillm.adapters.opencode.os.killpg")
+    @patch("silverquillm.adapters.opencode.os.getpgid")
+    def test_kill_noop_when_process_already_exited(self, _getpgid: MagicMock, _killpg: MagicMock) -> None:
         """kill() should be safe when process already finished."""
         from silverquillm.adapters.opencode import OpenCodeAdapter
 
