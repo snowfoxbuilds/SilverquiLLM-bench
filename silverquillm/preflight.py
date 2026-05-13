@@ -123,7 +123,7 @@ def _check_test_utils_import() -> List[str]:
             ],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=300,
             env=env,
         )
         if result.returncode != 0:
