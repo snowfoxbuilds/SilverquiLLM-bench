@@ -1,0 +1,9 @@
+{
+  "name": "Angel of Finality",
+  "mana_cost": "{3}{W}",
+  "type_line": "Creature \u2014 Angel",
+  "oracle_text": "Flying\nWhen this creature enters, exile target player's graveyard.",
+  "collector_number": "136",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

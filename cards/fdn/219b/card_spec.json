@@ -1,0 +1,9 @@
+{
+  "name": "Elvish Archdruid",
+  "mana_cost": "",
+  "type_line": "Creature \u2014 Elf Druid",
+  "oracle_text": "Other Elf creatures you control get +1/+1.\n{T}: Add {G} for each Elf you control.",
+  "collector_number": "219",
+  "set_code": "fdn",
+  "rarity": "rare"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Healer's Hawk",
+  "mana_cost": "{W}",
+  "type_line": "Creature \u2014 Bird",
+  "oracle_text": "Flying\nLifelink",
+  "collector_number": "734",
+  "set_code": "fdn",
+  "rarity": "common"
+}

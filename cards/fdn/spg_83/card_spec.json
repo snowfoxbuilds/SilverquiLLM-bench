@@ -1,0 +1,9 @@
+{
+  "name": "Fiend Artisan",
+  "mana_cost": "{B/G}{B/G}",
+  "type_line": "Creature \u2014 Nightmare",
+  "oracle_text": "Fiend Artisan's power and toughness are each equal to the number of creature cards in your graveyard.\n{X}{B/G}, {T}, Sacrifice another creature: Search your library for a creature card with mana value X or less, put it onto the battlefield, then shuffle. Activate only as a sorcery.",
+  "collector_number": "83",
+  "set_code": "spg",
+  "rarity": "mythic"
+}

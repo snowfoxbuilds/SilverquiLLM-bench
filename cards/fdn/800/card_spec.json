@@ -1,0 +1,9 @@
+{
+  "name": "Sol Ring",
+  "mana_cost": "{1}",
+  "type_line": "Artifact",
+  "oracle_text": "{T}: Add {C}{C}.",
+  "collector_number": "",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

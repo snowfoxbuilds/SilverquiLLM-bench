@@ -32,3 +32,17 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `tests/benchmark/test_helpers.py` — Deleted (orphaned helper importing non-existent config module)
 - `tests/test_package_rename.py` — Removed deleted modules from _EXPECTED_SUBMODULES list
 
+
+## Item 2: Restructure FDN cards to per-collector-number layout (completion)
+
+### Tests
+- `tests/test_fdn_restructure.py` — Verifies per-card directory structure, importability, monolithic file deletion, registry
+
+### Implementation
+- `cards/fdn/*/card_impl.py` (264 files) — Made self-contained: extracted class definitions and helpers from monolithic files
+- `cards/foundations/` (24 files deleted) — Removed monolithic .py files, replaced with package-based compatibility shims
+- `cards/foundations/{module_name}/__init__.py` (22 shim packages) — Re-export card classes via importlib from new per-card locations
+- `cards/fdn/_land_bases.py` — Shared TapLand/GainLand base classes for all non-basic lands
+- `cards/fdn/547/card_impl.py` — Added SkryakerGiant legacy alias
+- `cards/fdn/spg_79/card_impl.py` — Fixed missing _COLOR_TO_MANA dict for BloomTender
+- `cards/fdn/259-271/card_impl.py` (10 land files) — Updated to import from shared _land_bases module

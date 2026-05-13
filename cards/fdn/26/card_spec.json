@@ -1,0 +1,9 @@
+{
+  "name": "Twinblade Blessing",
+  "mana_cost": "{1}{W}{W}",
+  "type_line": "Enchantment \u2014 Aura",
+  "oracle_text": "Flash\nEnchant creature\nEnchanted creature has double strike.",
+  "collector_number": "26",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

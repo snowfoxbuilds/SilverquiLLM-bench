@@ -1,0 +1,9 @@
+{
+  "name": "Icewind Elemental",
+  "mana_cost": "{4}{U}",
+  "type_line": "Creature \u2014 Elemental",
+  "oracle_text": "Flying\nWhen this creature enters, draw a card, then discard a card.",
+  "collector_number": "42",
+  "set_code": "fdn",
+  "rarity": "common"
+}

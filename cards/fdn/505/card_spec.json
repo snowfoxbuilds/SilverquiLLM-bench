@@ -1,0 +1,9 @@
+{
+  "name": "Cancel",
+  "mana_cost": "{1}{U}{U}",
+  "type_line": "Instant",
+  "oracle_text": "Counter target spell.",
+  "collector_number": "505",
+  "set_code": "fdn",
+  "rarity": "common"
+}

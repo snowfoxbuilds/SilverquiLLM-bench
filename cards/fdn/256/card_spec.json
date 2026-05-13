@@ -1,0 +1,9 @@
+{
+  "name": "Meteor Golem",
+  "mana_cost": "{7}",
+  "type_line": "Artifact Creature \u2014 Golem",
+  "oracle_text": "When this creature enters, destroy target nonland permanent an opponent controls.",
+  "collector_number": "256",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

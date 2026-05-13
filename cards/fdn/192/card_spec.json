@@ -1,0 +1,9 @@
+{
+  "name": "Burst Lightning",
+  "mana_cost": "{R}",
+  "type_line": "Instant",
+  "oracle_text": "Kicker {4}. Burst Lightning deals 2 damage to any target. If this spell was kicked, it deals 4 damage instead.",
+  "collector_number": "192",
+  "set_code": "fdn",
+  "rarity": "common"
+}

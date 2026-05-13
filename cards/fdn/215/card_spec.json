@@ -1,0 +1,9 @@
+{
+  "name": "Bushwhack",
+  "mana_cost": "{G}",
+  "type_line": "Sorcery",
+  "oracle_text": "Choose one \u2014 Search your library for a basic land card, reveal it, put it into your hand, then shuffle. / Target creature you control fights target creature you don't control.",
+  "collector_number": "215",
+  "set_code": "fdn",
+  "rarity": "common"
+}

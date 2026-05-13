@@ -1,0 +1,9 @@
+{
+  "name": "Ravenous Amulet",
+  "mana_cost": "{2}",
+  "type_line": "Artifact",
+  "oracle_text": "Sac creature: draw + soul counter. Sac self: drain.",
+  "collector_number": "131",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

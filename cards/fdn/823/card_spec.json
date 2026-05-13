@@ -1,0 +1,9 @@
+{
+  "name": "Boros Charm",
+  "mana_cost": "{R}{W}",
+  "type_line": "Instant",
+  "oracle_text": "Choose one \u2014 4 damage to player/pw; Indestructible; Double strike.",
+  "collector_number": "",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

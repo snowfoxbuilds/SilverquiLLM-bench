@@ -1,0 +1,9 @@
+{
+  "name": "Strix Lookout",
+  "mana_cost": "",
+  "type_line": "Creature \u2014 Bird",
+  "oracle_text": "Flying, vigilance\n{1}{U}, {T}: Draw a card, then discard a card.",
+  "collector_number": "52",
+  "set_code": "fdn",
+  "rarity": "common"
+}

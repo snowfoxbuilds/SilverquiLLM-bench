@@ -1,0 +1,9 @@
+{
+  "name": "Kaito, Cunning Infiltrator",
+  "mana_cost": "{1}{U}{U}",
+  "type_line": "Legendary Planeswalker \u2014 Kaito",
+  "oracle_text": "+1: Target creature can't be blocked. Draw, then discard.\n\u22122: Create a 2/1 blue Ninja creature token.\n\u22129: Emblem \u2014 spell cast \u2192 create 2/1 Ninja token.",
+  "collector_number": "44",
+  "set_code": "fdn",
+  "rarity": "mythic"
+}

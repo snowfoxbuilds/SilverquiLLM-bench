@@ -1,0 +1,9 @@
+{
+  "name": "Scrawling Crawler",
+  "mana_cost": "{3}",
+  "type_line": "Artifact Creature \u2014 Phyrexian Construct",
+  "oracle_text": "Upkeep: each player draws. Opponent draws \u2192 loses 1 life.",
+  "collector_number": "132",
+  "set_code": "fdn",
+  "rarity": "rare"
+}

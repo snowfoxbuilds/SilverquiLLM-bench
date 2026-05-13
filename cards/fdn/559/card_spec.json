@@ -1,0 +1,9 @@
+{
+  "name": "Thornweald Archer",
+  "mana_cost": "{1}{G}",
+  "type_line": "Creature \u2014 Elf Archer",
+  "oracle_text": "Reach\nDeathtouch",
+  "collector_number": "559",
+  "set_code": "fdn",
+  "rarity": "common"
+}

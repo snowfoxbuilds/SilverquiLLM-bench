@@ -1,0 +1,9 @@
+{
+  "name": "Bonesplitter",
+  "mana_cost": "{1}",
+  "type_line": "Artifact \u2014 Equipment",
+  "oracle_text": "Equipped creature gets +2/+0.\nEquip {1}",
+  "collector_number": "",
+  "set_code": "fdn",
+  "rarity": "common"
+}

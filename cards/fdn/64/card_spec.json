@@ -1,0 +1,9 @@
+{
+  "name": "Infestation Sage",
+  "mana_cost": "{B}",
+  "type_line": "Creature \u2014 Elf Warlock",
+  "oracle_text": "When this creature dies, create a 1/1 black and green Insect creature token with flying.",
+  "collector_number": "64",
+  "set_code": "fdn",
+  "rarity": "common"
+}

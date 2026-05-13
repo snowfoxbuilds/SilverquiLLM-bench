@@ -1,0 +1,9 @@
+{
+  "name": "Rapacious Dragon",
+  "mana_cost": "{4}{R}",
+  "type_line": "Creature \u2014 Dragon",
+  "oracle_text": "Flying\nWhen this creature enters, create two Treasure tokens.",
+  "collector_number": "544",
+  "set_code": "fdn",
+  "rarity": "common"
+}

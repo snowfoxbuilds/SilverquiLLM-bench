@@ -1,0 +1,9 @@
+{
+  "name": "Reclamation Sage",
+  "mana_cost": "{2}{G}",
+  "type_line": "Creature \u2014 Elf Shaman",
+  "oracle_text": "When this creature enters, you may destroy target artifact or enchantment.",
+  "collector_number": "231",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Chandra, Torch of Defiance",
+  "mana_cost": "{2}{R}{R}",
+  "type_line": "Legendary Planeswalker \u2014 Chandra",
+  "oracle_text": "+1: Exile top card, may cast or deal 2 to opponents.\n+1: Add {R}{R}.\n-3: Deal 4 damage to target creature.\n-7: Emblem \u2014 whenever you cast a spell, deal 5 to any target.",
+  "collector_number": "",
+  "set_code": "fdn",
+  "rarity": "mythic"
+}

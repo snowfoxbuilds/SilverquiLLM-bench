@@ -1,0 +1,9 @@
+{
+  "name": "Aegis Turtle",
+  "mana_cost": "{U}",
+  "type_line": "Creature \u2014 Turtle",
+  "oracle_text": "",
+  "collector_number": "150",
+  "set_code": "fdn",
+  "rarity": "common"
+}

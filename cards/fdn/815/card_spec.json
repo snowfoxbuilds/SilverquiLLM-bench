@@ -1,0 +1,9 @@
+{
+  "name": "Dictate of Heliod",
+  "mana_cost": "{3}{W}{W}",
+  "type_line": "Enchantment",
+  "oracle_text": "Flash\nCreatures you control get +2/+2.",
+  "collector_number": "",
+  "set_code": "fdn",
+  "rarity": "rare"
+}

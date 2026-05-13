@@ -1,0 +1,9 @@
+{
+  "name": "Dragon Trainer",
+  "mana_cost": "{3}{R}{R}",
+  "type_line": "Creature \u2014 Human",
+  "oracle_text": "When this creature enters, create a 4/4 red Dragon creature token with flying.",
+  "collector_number": "84",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

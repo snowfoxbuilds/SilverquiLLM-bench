@@ -1,0 +1,9 @@
+{
+  "name": "Skyraker Giant",
+  "mana_cost": "{2}{R}{R}",
+  "type_line": "Creature \u2014 Giant",
+  "oracle_text": "Reach",
+  "collector_number": "547",
+  "set_code": "fdn",
+  "rarity": "common"
+}

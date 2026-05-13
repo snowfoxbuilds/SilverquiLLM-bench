@@ -28,7 +28,7 @@ Reference: [CONTEXT.md](http://context.md/) for vocabulary, KEY_[DECISIONS.md](h
   - Run `pytest --ignore=tests/audited/ -x` to verify no import breakage.
   Testability: `pytest --ignore=tests/audited/ -x` passes. No import errors. `grep -rn` for deleted module names finds zero hits in remaining source.
 
-- [ ] **Restructure FDN cards to per-collector-number layout**
+- [x] **Restructure FDN cards to per-collector-number layout**
   Detail: FDN card implementations currently live in monolithic files under `cards/foundations/` (e.g. `activated_creatures.py`, `etb_creatures.py`, `simple_spells.py` — 21 files, 260+ cards). The target layout is `cards/fdn/{collector_number}/card_spec.json` + `cards/fdn/{collector_number}/card_impl.py`, matching the SOS per-card structure.
 
   Steps:

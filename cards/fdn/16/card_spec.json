@@ -1,0 +1,9 @@
+{
+  "name": "Helpful Hunter",
+  "mana_cost": "{1}{W}",
+  "type_line": "Creature \u2014 Cat",
+  "oracle_text": "When this creature enters, draw a card.",
+  "collector_number": "16",
+  "set_code": "fdn",
+  "rarity": "common"
+}

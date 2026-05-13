@@ -1,0 +1,9 @@
+{
+  "name": "Rugged Highlands",
+  "mana_cost": "",
+  "type_line": "Land",
+  "oracle_text": "This land enters tapped.\nWhen this land enters, you gain 1 life.\n{T}: Add {R} or {G}.",
+  "collector_number": "265",
+  "set_code": "fdn",
+  "rarity": "common"
+}

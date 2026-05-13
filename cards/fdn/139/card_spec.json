@@ -1,0 +1,9 @@
+{
+  "name": "Cathar Commando",
+  "mana_cost": "",
+  "type_line": "Creature \u2014 Human Soldier",
+  "oracle_text": "Flash\n{1}, Sacrifice this creature: Destroy target artifact or enchantment.",
+  "collector_number": "139",
+  "set_code": "fdn",
+  "rarity": "common"
+}

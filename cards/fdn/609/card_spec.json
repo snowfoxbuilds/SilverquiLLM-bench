@@ -1,0 +1,9 @@
+{
+  "name": "Midnight Reaper",
+  "mana_cost": "{2}{B}",
+  "type_line": "Creature \u2014 Zombie Knight",
+  "oracle_text": "Whenever a nontoken creature you control dies, this creature deals 1 damage to you and you draw a card.",
+  "collector_number": "609",
+  "set_code": "fdn",
+  "rarity": "rare"
+}

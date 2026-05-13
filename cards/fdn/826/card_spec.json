@@ -1,0 +1,9 @@
+{
+  "name": "Dromoka's Command",
+  "mana_cost": "{G}{W}",
+  "type_line": "Sorcery",
+  "oracle_text": "Choose two \u2014 +1/+1 counter; Fight; Sacrifice enchantment; Prevent damage.",
+  "collector_number": "",
+  "set_code": "fdn",
+  "rarity": "rare"
+}

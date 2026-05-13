@@ -1,0 +1,9 @@
+{
+  "name": "Gatekeeper of Malakir",
+  "mana_cost": "{B}{B}",
+  "type_line": "Creature \u2014 Vampire Warrior",
+  "oracle_text": "Kicker {B}. When this creature enters, if it was kicked, target player sacrifices a creature of their choice.",
+  "collector_number": "713",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

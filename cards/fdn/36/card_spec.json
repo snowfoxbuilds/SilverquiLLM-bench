@@ -1,0 +1,9 @@
+{
+  "name": "Elementalist Adept",
+  "mana_cost": "{1}{U}",
+  "type_line": "Creature \u2014 Human Wizard",
+  "oracle_text": "Flash",
+  "collector_number": "36",
+  "set_code": "fdn",
+  "rarity": "common"
+}

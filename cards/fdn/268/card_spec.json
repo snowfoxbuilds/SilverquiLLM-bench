@@ -1,0 +1,9 @@
+{
+  "name": "Swiftwater Cliffs",
+  "mana_cost": "",
+  "type_line": "Land",
+  "oracle_text": "This land enters tapped.\nWhen this land enters, you gain 1 life.\n{T}: Add {U} or {R}.",
+  "collector_number": "268",
+  "set_code": "fdn",
+  "rarity": "common"
+}

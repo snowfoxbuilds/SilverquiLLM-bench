@@ -1,0 +1,9 @@
+{
+  "name": "Prideful Parent",
+  "mana_cost": "{2}{W}",
+  "type_line": "Creature \u2014 Cat",
+  "oracle_text": "Vigilance\nWhen this creature enters, create a 1/1 white Cat creature token.",
+  "collector_number": "21",
+  "set_code": "fdn",
+  "rarity": "common"
+}

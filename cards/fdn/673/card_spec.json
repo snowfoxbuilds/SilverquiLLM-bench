@@ -1,0 +1,9 @@
+{
+  "name": "Feldon's Cane",
+  "mana_cost": "{1}",
+  "type_line": "Artifact",
+  "oracle_text": "{T}, Exile: Shuffle graveyard into library.",
+  "collector_number": "673",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

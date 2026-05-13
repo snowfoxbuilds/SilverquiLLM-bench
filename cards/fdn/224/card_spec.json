@@ -1,0 +1,9 @@
+{
+  "name": "Gnarlid Colony",
+  "mana_cost": "{1}{G}",
+  "type_line": "Creature \u2014 Beast",
+  "oracle_text": "Kicker {2}{G}. If this creature was kicked, it enters with two +1/+1 counters on it. Each creature you control with a +1/+1 counter on it has trample.",
+  "collector_number": "224",
+  "set_code": "fdn",
+  "rarity": "common"
+}

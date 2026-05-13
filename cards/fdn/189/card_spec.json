@@ -1,0 +1,9 @@
+{
+  "name": "Axgard Cavalry",
+  "mana_cost": "",
+  "type_line": "Creature \u2014 Dwarf Berserker",
+  "oracle_text": "{T}: Target creature gains haste until end of turn.",
+  "collector_number": "189",
+  "set_code": "fdn",
+  "rarity": "common"
+}

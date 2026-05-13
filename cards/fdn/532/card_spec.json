@@ -1,0 +1,9 @@
+{
+  "name": "Vampire Spawn",
+  "mana_cost": "{2}{B}",
+  "type_line": "Creature \u2014 Vampire",
+  "oracle_text": "When this creature enters, each opponent loses 2 life and you gain 2 life.",
+  "collector_number": "532",
+  "set_code": "fdn",
+  "rarity": "common"
+}

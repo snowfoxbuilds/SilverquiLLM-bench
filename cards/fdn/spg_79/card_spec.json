@@ -1,0 +1,9 @@
+{
+  "name": "Bloom Tender",
+  "mana_cost": "{1}{G}",
+  "type_line": "Creature \u2014 Elf Druid",
+  "oracle_text": "{T}: For each color among permanents you control, add one mana of that color.",
+  "collector_number": "79",
+  "set_code": "spg",
+  "rarity": "mythic"
+}

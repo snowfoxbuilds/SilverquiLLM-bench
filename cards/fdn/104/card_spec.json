@@ -1,0 +1,9 @@
+{
+  "name": "Elvish Regrower",
+  "mana_cost": "{2}{G}{G}",
+  "type_line": "Creature \u2014 Elf Druid",
+  "oracle_text": "When this creature enters, return target permanent card from your graveyard to your hand.",
+  "collector_number": "104",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

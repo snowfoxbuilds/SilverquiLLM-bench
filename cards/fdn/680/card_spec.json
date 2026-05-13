@@ -1,0 +1,9 @@
+{
+  "name": "Soul-Guide Lantern",
+  "mana_cost": "{1}",
+  "type_line": "Artifact",
+  "oracle_text": "ETB: exile graveyard card. Sac: exile opponents' graveyards or draw.",
+  "collector_number": "680",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

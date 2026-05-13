@@ -1,0 +1,9 @@
+{
+  "name": "Grim Tutor",
+  "mana_cost": "{1}{B}{B}",
+  "type_line": "Sorcery",
+  "oracle_text": "Search your library for a card, put that card into your hand, then shuffle your library. You lose 3 life.",
+  "collector_number": "76",
+  "set_code": "spg",
+  "rarity": "mythic"
+}

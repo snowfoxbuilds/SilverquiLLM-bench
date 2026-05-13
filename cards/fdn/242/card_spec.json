@@ -1,0 +1,9 @@
+{
+  "name": "Visionary's Dance",
+  "mana_cost": "{5}{U}{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "Create two 3/3 blue and red Elemental creature tokens with flying.\n{2}, Discard this card: Look at the top two cards of your library. Put one into your hand and the other into your graveyard.",
+  "collector_number": "242",
+  "set_code": "fdn",
+  "rarity": "common"
+}

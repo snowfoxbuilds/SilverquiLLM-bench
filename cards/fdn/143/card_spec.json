@@ -1,0 +1,9 @@
+{
+  "name": "Make Your Move",
+  "mana_cost": "{2}{W}",
+  "type_line": "Instant",
+  "oracle_text": "Destroy target artifact, enchantment, or creature with power 4 or greater.",
+  "collector_number": "143",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

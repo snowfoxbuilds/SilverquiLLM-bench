@@ -1,0 +1,9 @@
+{
+  "name": "Fanatical Firebrand",
+  "mana_cost": "",
+  "type_line": "Creature \u2014 Goblin Pirate",
+  "oracle_text": "Haste\n{T}, Sacrifice this creature: It deals 1 damage to any target.",
+  "collector_number": "195",
+  "set_code": "fdn",
+  "rarity": "common"
+}

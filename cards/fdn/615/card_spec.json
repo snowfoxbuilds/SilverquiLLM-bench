@@ -1,0 +1,9 @@
+{
+  "name": "Vampiric Rites",
+  "mana_cost": "{B}",
+  "type_line": "Enchantment",
+  "oracle_text": "{1}{B}, Sacrifice a creature: You gain 1 life and draw a card.",
+  "collector_number": "615",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

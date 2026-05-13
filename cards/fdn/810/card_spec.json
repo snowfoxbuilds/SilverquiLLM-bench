@@ -1,0 +1,9 @@
+{
+  "name": "Holy Strength",
+  "mana_cost": "{W}",
+  "type_line": "Enchantment \u2014 Aura",
+  "oracle_text": "Enchant creature\nEnchanted creature gets +1/+2.",
+  "collector_number": "",
+  "set_code": "fdn",
+  "rarity": "common"
+}

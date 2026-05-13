@@ -1,0 +1,9 @@
+{
+  "name": "Luminous Rebuke",
+  "mana_cost": "{4}{W}",
+  "type_line": "Instant",
+  "oracle_text": "This spell costs {3} less to cast if it targets a tapped creature.\nDestroy target creature.",
+  "collector_number": "20",
+  "set_code": "fdn",
+  "rarity": "common"
+}

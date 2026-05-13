@@ -1,0 +1,9 @@
+{
+  "name": "Vampire Nighthawk",
+  "mana_cost": "{1}{B}{B}",
+  "type_line": "Creature \u2014 Vampire Shaman",
+  "oracle_text": "Flying\nDeathtouch\nLifelink",
+  "collector_number": "757",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

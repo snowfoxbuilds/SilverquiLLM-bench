@@ -1,0 +1,9 @@
+{
+  "name": "Bishop's Soldier",
+  "mana_cost": "{1}{W}",
+  "type_line": "Creature \u2014 Vampire Soldier",
+  "oracle_text": "Lifelink",
+  "collector_number": "491",
+  "set_code": "fdn",
+  "rarity": "common"
+}

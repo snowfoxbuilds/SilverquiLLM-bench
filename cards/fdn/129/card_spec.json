@@ -1,0 +1,9 @@
+{
+  "name": "Seize the Spoils",
+  "mana_cost": "{2}{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "As an additional cost to cast this spell, discard a card.\nDraw two cards and create a Treasure token.",
+  "collector_number": "129",
+  "set_code": "fdn",
+  "rarity": "common"
+}

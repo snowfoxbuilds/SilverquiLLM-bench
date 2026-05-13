@@ -1,0 +1,9 @@
+{
+  "name": "Muse's Encouragement",
+  "mana_cost": "{4}{U}",
+  "type_line": "Instant",
+  "oracle_text": "Create a 3/3 blue and red Elemental creature token with flying.\nSurveil 2.",
+  "collector_number": "61",
+  "set_code": "fdn",
+  "rarity": "common"
+}

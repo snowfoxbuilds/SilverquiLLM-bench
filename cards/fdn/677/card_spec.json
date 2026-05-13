@@ -1,0 +1,9 @@
+{
+  "name": "Pyromancer's Goggles",
+  "mana_cost": "{5}",
+  "type_line": "Legendary Artifact",
+  "oracle_text": "{T}: Add {R}. Copy red instant/sorcery.",
+  "collector_number": "677",
+  "set_code": "fdn",
+  "rarity": "mythic"
+}

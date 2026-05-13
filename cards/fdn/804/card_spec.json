@@ -1,0 +1,9 @@
+{
+  "name": "Swiftfoot Boots",
+  "mana_cost": "{2}",
+  "type_line": "Artifact \u2014 Equipment",
+  "oracle_text": "Equipped creature has hexproof and haste.\nEquip {1}",
+  "collector_number": "",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

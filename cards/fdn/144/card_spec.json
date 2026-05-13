@@ -1,0 +1,9 @@
+{
+  "name": "Mischievous Pup",
+  "mana_cost": "{2}{W}",
+  "type_line": "Creature \u2014 Dog",
+  "oracle_text": "When this creature enters, return up to one other target permanent you control to its owner's hand.",
+  "collector_number": "144",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

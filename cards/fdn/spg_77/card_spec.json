@@ -1,0 +1,9 @@
+{
+  "name": "Embercleave",
+  "mana_cost": "{4}{R}{R}",
+  "type_line": "Legendary Artifact \u2014 Equipment",
+  "oracle_text": "Flash\nThis spell costs {1} less to cast for each attacking creature you control.\nWhen Embercleave enters the battlefield, attach it to target creature you control.\nEquipped creature gets +1/+1 and has double strike and trample.\nEquip {3}",
+  "collector_number": "77",
+  "set_code": "spg",
+  "rarity": "mythic"
+}

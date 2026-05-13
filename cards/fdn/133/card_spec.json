@@ -1,0 +1,9 @@
+{
+  "name": "Soulstone Sanctuary",
+  "mana_cost": "",
+  "type_line": "Land",
+  "oracle_text": "{T}: Add {C}.\n{4}, {T}: Put a +1/+1 counter on target creature. It gains vigilance until end of turn.",
+  "collector_number": "133",
+  "set_code": "fdn",
+  "rarity": "rare"
+}

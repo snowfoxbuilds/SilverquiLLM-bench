@@ -1,0 +1,9 @@
+{
+  "name": "Shipwreck Dowser",
+  "mana_cost": "{3}{U}{U}",
+  "type_line": "Creature \u2014 Merfolk Wizard",
+  "oracle_text": "Prowess\nWhen this creature enters, return target instant or sorcery card from your graveyard to your hand.",
+  "collector_number": "596",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

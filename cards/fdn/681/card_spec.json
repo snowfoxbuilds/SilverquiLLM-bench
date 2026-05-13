@@ -1,0 +1,9 @@
+{
+  "name": "Steel Hellkite",
+  "mana_cost": "{6}",
+  "type_line": "Artifact Creature \u2014 Dragon",
+  "oracle_text": "Flying. {2}: +1/+0. {X}: Destroy mana value X permanents.",
+  "collector_number": "681",
+  "set_code": "fdn",
+  "rarity": "rare"
+}

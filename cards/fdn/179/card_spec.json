@@ -1,0 +1,9 @@
+{
+  "name": "Painful Quandary",
+  "mana_cost": "{3}{B}{B}",
+  "type_line": "Enchantment",
+  "oracle_text": "Whenever an opponent casts a spell, that player loses 5 life unless they discard a card.",
+  "collector_number": "179",
+  "set_code": "fdn",
+  "rarity": "rare"
+}

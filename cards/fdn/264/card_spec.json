@@ -1,0 +1,9 @@
+{
+  "name": "Rogue's Passage",
+  "mana_cost": "",
+  "type_line": "Land",
+  "oracle_text": "{T}: Add {C}.\n{4}, {T}: Target creature can't be blocked this turn.",
+  "collector_number": "264",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

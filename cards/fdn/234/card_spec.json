@@ -1,0 +1,9 @@
+{
+  "name": "Vivien Reid",
+  "mana_cost": "{3}{G}{G}",
+  "type_line": "Legendary Planeswalker \u2014 Vivien",
+  "oracle_text": "+1: Look at top 4, may take creature or land.\n\u22123: Destroy target artifact, enchantment, or flyer.\n\u22128: Emblem \u2014 +2/+2, vigilance, trample, indestructible.",
+  "collector_number": "234",
+  "set_code": "fdn",
+  "rarity": "mythic"
+}

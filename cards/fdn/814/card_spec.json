@@ -1,0 +1,9 @@
+{
+  "name": "Glorious Anthem",
+  "mana_cost": "{1}{W}{W}",
+  "type_line": "Enchantment",
+  "oracle_text": "Creatures you control get +1/+1.",
+  "collector_number": "",
+  "set_code": "fdn",
+  "rarity": "rare"
+}

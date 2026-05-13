@@ -1,0 +1,9 @@
+{
+  "name": "Stab Wound",
+  "mana_cost": "{2}{B}",
+  "type_line": "Enchantment \u2014 Aura",
+  "oracle_text": "Enchant creature\nEnchanted creature gets -2/-2.\nAt the beginning of the upkeep of enchanted creature's controller, that player loses 2 life.",
+  "collector_number": "",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

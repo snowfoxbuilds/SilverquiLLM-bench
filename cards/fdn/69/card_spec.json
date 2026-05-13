@@ -1,0 +1,9 @@
+{
+  "name": "Seeker's Folly",
+  "mana_cost": "{2}{B}",
+  "type_line": "Sorcery",
+  "oracle_text": "Choose one \u2014 Target opponent discards two cards. / Creatures your opponents control get -1/-1 until end of turn.",
+  "collector_number": "69",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

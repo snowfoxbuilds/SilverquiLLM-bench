@@ -1,0 +1,9 @@
+{
+  "name": "Quick-Draw Katana",
+  "mana_cost": "{2}",
+  "type_line": "Artifact \u2014 Equipment",
+  "oracle_text": "During your turn, equipped creature gets +2/+0 and has first strike.\nEquip {2}",
+  "collector_number": "130",
+  "set_code": "fdn",
+  "rarity": "common"
+}

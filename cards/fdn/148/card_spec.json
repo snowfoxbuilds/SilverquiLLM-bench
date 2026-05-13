@@ -1,0 +1,9 @@
+{
+  "name": "Stroke of Midnight",
+  "mana_cost": "{2}{W}",
+  "type_line": "Instant",
+  "oracle_text": "Destroy target nonland permanent. Its controller creates a 1/1 white Human creature token.",
+  "collector_number": "148",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

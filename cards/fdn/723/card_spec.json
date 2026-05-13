@@ -1,0 +1,9 @@
+{
+  "name": "Adaptive Automaton",
+  "mana_cost": "{3}",
+  "type_line": "Artifact Creature \u2014 Construct",
+  "oracle_text": "Choose type. Is that type. Others of that type get +1/+1.",
+  "collector_number": "723",
+  "set_code": "fdn",
+  "rarity": "rare"
+}

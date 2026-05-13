@@ -1,0 +1,9 @@
+{
+  "name": "Fishing Pole",
+  "mana_cost": "{1}",
+  "type_line": "Artifact \u2014 Equipment",
+  "oracle_text": "Bait counters. Fish tokens.",
+  "collector_number": "128",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Goblin Oriflamme",
+  "mana_cost": "{1}{R}",
+  "type_line": "Enchantment",
+  "oracle_text": "Attacking creatures you control get +1/+0.",
+  "collector_number": "539",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

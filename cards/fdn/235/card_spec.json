@@ -1,0 +1,9 @@
+{
+  "name": "Wary Thespian",
+  "mana_cost": "{1}{G}",
+  "type_line": "Creature \u2014 Cat Druid",
+  "oracle_text": "When this creature enters or dies, surveil 1.",
+  "collector_number": "235",
+  "set_code": "fdn",
+  "rarity": "common"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Swab Goblin",
+  "mana_cost": "{1}{R}",
+  "type_line": "Creature \u2014 Goblin Pirate",
+  "oracle_text": "",
+  "collector_number": "548",
+  "set_code": "fdn",
+  "rarity": "common"
+}

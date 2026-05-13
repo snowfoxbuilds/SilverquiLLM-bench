@@ -1,0 +1,9 @@
+{
+  "name": "Inspiring Overseer",
+  "mana_cost": "{2}{W}",
+  "type_line": "Creature \u2014 Angel Cleric",
+  "oracle_text": "Flying\nWhen this creature enters, you gain 1 life and draw a card.",
+  "collector_number": "496",
+  "set_code": "fdn",
+  "rarity": "common"
+}

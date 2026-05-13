@@ -1,0 +1,9 @@
+{
+  "name": "Juggernaut",
+  "mana_cost": "{4}",
+  "type_line": "Artifact Creature \u2014 Juggernaut",
+  "oracle_text": "Attacks each combat. Can't be blocked by Walls.",
+  "collector_number": "255",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

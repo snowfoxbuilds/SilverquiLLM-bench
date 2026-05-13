@@ -1,0 +1,9 @@
+{
+  "name": "Crystal Barricade",
+  "mana_cost": "{1}{W}",
+  "type_line": "Artifact Creature \u2014 Wall",
+  "oracle_text": "Defender. You have hexproof. Prevent noncombat damage to other creatures.",
+  "collector_number": "7",
+  "set_code": "fdn",
+  "rarity": "rare"
+}

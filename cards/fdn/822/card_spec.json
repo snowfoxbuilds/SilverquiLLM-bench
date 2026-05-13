@@ -1,0 +1,9 @@
+{
+  "name": "Abzan Charm",
+  "mana_cost": "{W}{B}{G}",
+  "type_line": "Instant",
+  "oracle_text": "Choose one \u2014 Exile creature power 3+; Draw 2, lose 2; Distribute +1/+1 counters.",
+  "collector_number": "",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

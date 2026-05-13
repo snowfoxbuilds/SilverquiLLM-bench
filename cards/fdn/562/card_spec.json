@@ -1,0 +1,9 @@
+{
+  "name": "Goblin Firebomb",
+  "mana_cost": "{1}",
+  "type_line": "Artifact",
+  "oracle_text": "Flash. {7}, {T}, Sacrifice: Destroy target permanent.",
+  "collector_number": "562",
+  "set_code": "fdn",
+  "rarity": "common"
+}

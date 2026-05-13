@@ -1,0 +1,9 @@
+{
+  "name": "Chandra, Flameshaper",
+  "mana_cost": "{5}{R}{R}",
+  "type_line": "Legendary Planeswalker \u2014 Chandra",
+  "oracle_text": "+2: Add {R}{R}{R}. Exile top 3, may play one.\n+1: Create a hasty token copy of target creature.\n\u22124: Deal 8 damage divided among targets.",
+  "collector_number": "81",
+  "set_code": "fdn",
+  "rarity": "mythic"
+}

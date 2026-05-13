@@ -1,0 +1,9 @@
+{
+  "name": "Goblin Bushwhacker",
+  "mana_cost": "{R}",
+  "type_line": "Creature \u2014 Goblin Warrior",
+  "oracle_text": "Kicker {R}\nWhen Goblin Bushwhacker enters the battlefield, if it was kicked, creatures you control get +1/+0 and gain haste until end of turn.",
+  "collector_number": "78",
+  "set_code": "spg",
+  "rarity": "rare"
+}

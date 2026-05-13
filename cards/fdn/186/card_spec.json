@@ -1,0 +1,9 @@
+{
+  "name": "Embrace the Paradox",
+  "mana_cost": "{3}{G}{U}",
+  "type_line": "Instant",
+  "oracle_text": "Draw three cards. You may put a land card from your hand onto the battlefield tapped.",
+  "collector_number": "186",
+  "set_code": "fdn",
+  "rarity": "common"
+}

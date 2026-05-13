@@ -1,0 +1,9 @@
+{
+  "name": "Paradise Druid",
+  "mana_cost": "{1}{G}",
+  "type_line": "Creature \u2014 Elf Druid",
+  "oracle_text": "Paradise Druid has hexproof as long as it's untapped.\n{T}: Add one mana of any color.",
+  "collector_number": "80",
+  "set_code": "spg",
+  "rarity": "rare"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Sphinx's Tutelage",
+  "mana_cost": "{2}{U}",
+  "type_line": "Enchantment",
+  "oracle_text": "Whenever you draw a card, target opponent mills two cards, then if two nonland cards that share a color were milled this way, repeat this process.\n{5}{U}: Draw a card, then discard a card.",
+  "collector_number": "75",
+  "set_code": "spg",
+  "rarity": "rare"
+}

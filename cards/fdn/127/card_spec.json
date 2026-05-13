@@ -1,0 +1,9 @@
+{
+  "name": "Banner of Kinship",
+  "mana_cost": "{5}",
+  "type_line": "Artifact",
+  "oracle_text": "Choose type. Fellowship counters. Chosen type gets +1/+1 per counter.",
+  "collector_number": "127",
+  "set_code": "fdn",
+  "rarity": "rare"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Brave the Sands",
+  "mana_cost": "{1}{W}",
+  "type_line": "Enchantment",
+  "oracle_text": "Creatures you control have vigilance and can block an additional creature each combat.",
+  "collector_number": "",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Maalfeld Twins",
+  "mana_cost": "{5}{B}",
+  "type_line": "Creature \u2014 Zombie",
+  "oracle_text": "When this creature dies, create two 2/2 black Zombie creature tokens.",
+  "collector_number": "523",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

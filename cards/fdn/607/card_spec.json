@@ -1,0 +1,9 @@
+{
+  "name": "Kalastria Highborn",
+  "mana_cost": "{B}{B}",
+  "type_line": "Creature \u2014 Vampire Shaman",
+  "oracle_text": "Whenever this creature or another Vampire you control dies, you may pay {B}. If you do, target player loses 2 life and you gain 2 life.",
+  "collector_number": "607",
+  "set_code": "fdn",
+  "rarity": "rare"
+}

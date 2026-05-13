@@ -1,0 +1,9 @@
+{
+  "name": "Abrade",
+  "mana_cost": "{1}{R}",
+  "type_line": "Instant",
+  "oracle_text": "Choose one \u2014 Abrade deals 3 damage to target creature. / Destroy target artifact.",
+  "collector_number": "188",
+  "set_code": "fdn",
+  "rarity": "uncommon"
+}

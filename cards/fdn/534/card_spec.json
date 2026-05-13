@@ -1,0 +1,9 @@
+{
+  "name": "Carnelian Orb of Dragonkind",
+  "mana_cost": "{2}{R}",
+  "type_line": "Artifact",
+  "oracle_text": "{T}: Add {R}. If spent on Dragon, it gains haste.",
+  "collector_number": "534",
+  "set_code": "fdn",
+  "rarity": "common"
+}

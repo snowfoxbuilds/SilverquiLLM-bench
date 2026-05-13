@@ -1,0 +1,9 @@
+{
+  "name": "Unholy Strength",
+  "mana_cost": "{B}",
+  "type_line": "Enchantment \u2014 Aura",
+  "oracle_text": "Enchant creature\nEnchanted creature gets +2/+1.",
+  "collector_number": "",
+  "set_code": "fdn",
+  "rarity": "common"
+}

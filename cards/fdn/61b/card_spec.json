@@ -1,0 +1,9 @@
+{
+  "name": "High-Society Hunter",
+  "mana_cost": "{3}{B}{B}",
+  "type_line": "Creature \u2014 Vampire Noble",
+  "oracle_text": "Flying\nWhenever this creature attacks, you may sacrifice another creature. If you do, put a +1/+1 counter on this creature.\nWhenever another nontoken creature dies, draw a card.",
+  "collector_number": "61",
+  "set_code": "fdn",
+  "rarity": "rare"
+}

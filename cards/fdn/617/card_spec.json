@@ -1,0 +1,9 @@
+{
+  "name": "Wishclaw Talisman",
+  "mana_cost": "{1}{B}",
+  "type_line": "Artifact",
+  "oracle_text": "3 wish counters. Remove counter: Tutor; opponent gains control.",
+  "collector_number": "617",
+  "set_code": "fdn",
+  "rarity": "rare"
+}
