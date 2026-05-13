@@ -240,7 +240,7 @@ except subprocess.TimeoutExpired:
   - `silverquillm/results.py` — remove iteration-structured output if present
   Testability: Run mock adapter in impl_test mode → result directory is flat: `card_impl.py`, `tests.py`, `result.json`, `postmortem.jsonl`, `agent_thoughts.md`, `engine_diff.patch`. No `iterations/` subdirectory.
 
-- [ ] **Add signal handler for graceful interrupt cleanup in CLI**
+- [x] **Add signal handler for graceful interrupt cleanup in CLI**
   Detail: When the benchmark is interrupted (Ctrl+C or SIGTERM), the opencode subprocess can continue running as an orphan because it runs in its own process group (`start_new_session=True`). While `teardown()` now calls `kill()`, the signal handler ensures the active adapter is killed immediately on interrupt — before Python's default `KeyboardInterrupt` propagation, which may be blocked in I/O.
 
   **Fix:**

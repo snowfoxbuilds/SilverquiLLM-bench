@@ -38,3 +38,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `silverquillm/results.py` — removed stale iteration-count re-addition to blind/tested metrics in `_build_result_record()`; added `iteration_count` to `_IMPL_EXCLUDE` set; updated docstrings to remove `iterations` references
 - `silverquillm/run_utils.py` — removed stale `"iterations": tested.iterations` assignment from save pipeline
+
+## Item 8: Add signal handler for graceful interrupt cleanup
+
+### Tests
+- `tests/test_signal_handler.py` — tests for signal handler registration, restoration, and interrupt behavior
+
+### Implementation
+- `silverquillm/cli.py` — added signal handler, `_active_session` tracking, `KeyboardInterrupt` handling in card loop, and signal restoration in `try`/`finally` block

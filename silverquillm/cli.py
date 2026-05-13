@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import shutil
 import time
 from dataclasses import asdict
@@ -40,6 +41,23 @@ from silverquillm.scorer import compute_scores, generate_leaderboard
 from silverquillm.regression import CompletedCard, run_regressions
 from silverquillm.replay.cli import validate as validate_cmd
 from silverquillm.run_utils import _session_results_to_dicts
+
+
+# ---------------------------------------------------------------------------
+# Signal handling for graceful interrupt cleanup
+# ---------------------------------------------------------------------------
+
+_active_session: AgentSession | None = None
+
+
+def _interrupt_handler(signum: int, frame: object) -> None:  # noqa: ARG001
+    """Kill the active adapter immediately on SIGINT/SIGTERM, then raise."""
+    try:
+        if _active_session is not None:
+            _active_session._adapter.kill()  # noqa: SLF001
+    except Exception:  # noqa: BLE001
+        pass
+    raise KeyboardInterrupt
 
 
 # ---------------------------------------------------------------------------
@@ -214,158 +232,173 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
                     pass
         shutil.rmtree(stale_workspace, ignore_errors=True)
 
-    for i, spec in enumerate(specs, 1):
-        card_name = spec.get("name", "???")
-        card_dir_name = spec.get("card_dir_name", spec.get("collector_number", spec.get("number", "unknown")))
-        collector_number = spec.get("collector_number", spec.get("number", "unknown"))
-        card_dir = f"{specs_dir}/{card_dir_name}/"
+    # Register signal handlers for graceful interrupt cleanup
+    global _active_session
+    orig_sigint = signal.signal(signal.SIGINT, _interrupt_handler)
+    orig_sigterm = signal.signal(signal.SIGTERM, _interrupt_handler)
 
-        session: AgentSession | None = None
-        try:
-            session = AgentSession(
-                config=cfg, card_spec=spec, card_dir=card_dir,
-                card_id=str(card_dir_name),
-                run_engine_dir=run_engine_dir,
-                run_dir=run_dir,
-            )
-            workspace = session.setup_workspace()
+    try:
+        for i, spec in enumerate(specs, 1):
+            card_name = spec.get("name", "???")
+            card_dir_name = spec.get("card_dir_name", spec.get("collector_number", spec.get("number", "unknown")))
+            collector_number = spec.get("collector_number", spec.get("number", "unknown"))
+            card_dir = f"{specs_dir}/{card_dir_name}/"
 
-            card_run_result = session.run_card()
-
-            # Build legacy result dicts for backward compatibility
-            from silverquillm.strategies import CardRunStatus
-            run_status = card_run_result.status.value
-            impl_path = workspace / "card_impl.py" if (workspace / "card_impl.py").exists() else None
-            runtime_s = card_run_result.runtime_ms / 1000 if card_run_result.runtime_ms else 0
-
-            if cfg.mode == "impl_test":
-                # In impl_test mode, record as a tested result
-                blind_result = BlindResult(
-                    impl_path=None,
-                    tokens=0,
-                    runtime_seconds=0,
-                    peak_context=0,
-                    status="skipped",
-                )
-                tests_path_ws = workspace / "tests.py"
-                tested_result = TestInformedResult(
-                    impl_path=impl_path,
-                    tests_path=tests_path_ws if tests_path_ws.exists() else None,
-                    iterations=1,
-                    tokens=0,
-                    runtime_seconds=runtime_s,
-                    peak_context=0,
-                    status=run_status,
-                )
-            else:
-                blind_result = BlindResult(
-                    impl_path=impl_path,
-                    tokens=0,
-                    runtime_seconds=runtime_s,
-                    peak_context=0,
-                    status=run_status,
-                )
-                tested_result = None
-
-            # Read source files before cleanup destroys the workspace
-            blind_dict, test_dict = _session_results_to_dicts(
-                blind_result, tested_result, spec, cfg
-            )
-
-            # Propagate violations into result dicts so result.json is annotated
-            if card_run_result.violations:
-                blind_dict["violations"] = list(card_run_result.violations)
-
-            card_results_dir = run_dir / "cards" / str(card_dir_name)
-            save_card_result(run_dir, card_dir_name, blind_dict, test_dict)
-
-            # Overwrite result.json with v2 schema
-            _active = test_dict if cfg.mode == "impl_test" else blind_dict
-            _v2_result = EvalResultV2(
-                card_id=str(card_dir_name),
-                mode=cfg.mode,
-                model_name=_active.get("model", cfg.model_name),
-                adapter=_active.get("agent", getattr(cfg.agent, "adapter", "unknown")),
-                status=_active.get("status", "completed"),
-                complexity_tier=_active.get("complexity_tier", _active.get("tier", "unknown")),
-                implementation={
-                    "tokens": _active.get("tokens", 0),
-                    "runtime_ms": int(_active.get("runtime_seconds", 0) * 1000),
-                    "peak_context": _active.get("peak_context", 0),
-                },
-                errors=[],
-            )
-            save_card_result_v2(
-                run_dir, _v2_result,
-                impl_source=_active.get("impl_source", ""),
-                tests_source=_active.get("tests_source", ""),
-            )
-
-            # Copy raw implementation files from workspace to results dir
-            session.harvest_results(card_results_dir)
-
-            # Capture engine diff before committing changes
-            compute_engine_diff(workspace, run_engine_dir, card_results_dir)
-
-            # Commit engine changes back to run-level directory
-            commit_engine_changes(workspace, run_engine_dir)
-
-            # Run regressions against all previously-completed cards
-            if completed_cards:
-                regression_result = run_regressions(
-                    completed_cards,
-                    run_engine_dir=run_engine_dir,
-                )
-                # Emit structured regression_check event
-                pm_path = run_dir / "cards" / str(card_dir_name) / "postmortem.jsonl"
-                _append_regression_check(
-                    pm_path,
-                    status="fail" if regression_result.has_failures else "pass",
-                    cards_failed=regression_result.cards_failed,
-                    total_cards=regression_result.total_cards,
-                )
-                if regression_result.has_failures:
-                    click.echo(
-                        _warn(
-                            f"[{i}/{total}] {card_name}: "
-                            f"regressions={regression_result.cards_failed}/{regression_result.total_cards} failed"
-                        ),
-                        err=True,
-                    )
-
-            # Record this card as completed for future regression runs
-            tests_path = card_results_dir / "tests.py"
-            impl_path = card_results_dir / "card_impl.py"
-            if tests_path.exists():
-                completed_cards.append(CompletedCard(
+            session: AgentSession | None = None
+            try:
+                session = AgentSession(
+                    config=cfg, card_spec=spec, card_dir=card_dir,
                     card_id=str(card_dir_name),
-                    workspace=card_results_dir,
-                    tests_file=tests_path,
-                    impl_file=impl_path if impl_path.exists() else None,
-                ))
-            blind_status_str = blind_result.status
-            tested_status_str = tested_result.status if tested_result else "skipped"
-            click.echo(
-                _sys(f"[{i}/{total}] {card_name}: blind={blind_status_str}, tested={tested_status_str}")
-            )
-        except Exception as exc:  # noqa: BLE001
-            failures.append((card_name, exc))
-            click.echo(
-                _err(f"[{i}/{total}] {card_name}: error={exc!r}"), err=True
-            )
-        finally:
-            if session is not None:
-                 # Generate agent_thoughts.md regardless of which phases ran
-                if session.run_dir:
-                    try:
-                       _generate_agent_thoughts(session.run_dir, session._path_id)
-                    except Exception:
-                        logger.debug(
-                            "Failed to generate agent_thoughts.md for %s",
-                            session.card_name,
-                            exc_info=True,
+                    run_engine_dir=run_engine_dir,
+                    run_dir=run_dir,
+                )
+                _active_session = session
+                workspace = session.setup_workspace()
+
+                card_run_result = session.run_card()
+
+                # Build legacy result dicts for backward compatibility
+                from silverquillm.strategies import CardRunStatus
+                run_status = card_run_result.status.value
+                impl_path = workspace / "card_impl.py" if (workspace / "card_impl.py").exists() else None
+                runtime_s = card_run_result.runtime_ms / 1000 if card_run_result.runtime_ms else 0
+
+                if cfg.mode == "impl_test":
+                    # In impl_test mode, record as a tested result
+                    blind_result = BlindResult(
+                        impl_path=None,
+                        tokens=0,
+                        runtime_seconds=0,
+                        peak_context=0,
+                        status="skipped",
+                    )
+                    tests_path_ws = workspace / "tests.py"
+                    tested_result = TestInformedResult(
+                        impl_path=impl_path,
+                        tests_path=tests_path_ws if tests_path_ws.exists() else None,
+                        iterations=1,
+                        tokens=0,
+                        runtime_seconds=runtime_s,
+                        peak_context=0,
+                        status=run_status,
+                    )
+                else:
+                    blind_result = BlindResult(
+                        impl_path=impl_path,
+                        tokens=0,
+                        runtime_seconds=runtime_s,
+                        peak_context=0,
+                        status=run_status,
+                    )
+                    tested_result = None
+
+                # Read source files before cleanup destroys the workspace
+                blind_dict, test_dict = _session_results_to_dicts(
+                    blind_result, tested_result, spec, cfg
+                )
+
+                # Propagate violations into result dicts so result.json is annotated
+                if card_run_result.violations:
+                    blind_dict["violations"] = list(card_run_result.violations)
+
+                card_results_dir = run_dir / "cards" / str(card_dir_name)
+                save_card_result(run_dir, card_dir_name, blind_dict, test_dict)
+
+                # Overwrite result.json with v2 schema
+                _active = test_dict if cfg.mode == "impl_test" else blind_dict
+                _v2_result = EvalResultV2(
+                    card_id=str(card_dir_name),
+                    mode=cfg.mode,
+                    model_name=_active.get("model", cfg.model_name),
+                    adapter=_active.get("agent", getattr(cfg.agent, "adapter", "unknown")),
+                    status=_active.get("status", "completed"),
+                    complexity_tier=_active.get("complexity_tier", _active.get("tier", "unknown")),
+                    implementation={
+                        "tokens": _active.get("tokens", 0),
+                        "runtime_ms": int(_active.get("runtime_seconds", 0) * 1000),
+                        "peak_context": _active.get("peak_context", 0),
+                    },
+                    errors=[],
+                )
+                save_card_result_v2(
+                    run_dir, _v2_result,
+                    impl_source=_active.get("impl_source", ""),
+                    tests_source=_active.get("tests_source", ""),
+                )
+
+                # Copy raw implementation files from workspace to results dir
+                session.harvest_results(card_results_dir)
+
+                # Capture engine diff before committing changes
+                compute_engine_diff(workspace, run_engine_dir, card_results_dir)
+
+                # Commit engine changes back to run-level directory
+                commit_engine_changes(workspace, run_engine_dir)
+
+                # Run regressions against all previously-completed cards
+                if completed_cards:
+                    regression_result = run_regressions(
+                        completed_cards,
+                        run_engine_dir=run_engine_dir,
+                    )
+                    # Emit structured regression_check event
+                    pm_path = run_dir / "cards" / str(card_dir_name) / "postmortem.jsonl"
+                    _append_regression_check(
+                        pm_path,
+                        status="fail" if regression_result.has_failures else "pass",
+                        cards_failed=regression_result.cards_failed,
+                        total_cards=regression_result.total_cards,
+                    )
+                    if regression_result.has_failures:
+                        click.echo(
+                            _warn(
+                                f"[{i}/{total}] {card_name}: "
+                                f"regressions={regression_result.cards_failed}/{regression_result.total_cards} failed"
+                            ),
+                            err=True,
                         )
-                session.cleanup()
+
+                # Record this card as completed for future regression runs
+                tests_path = card_results_dir / "tests.py"
+                impl_path = card_results_dir / "card_impl.py"
+                if tests_path.exists():
+                    completed_cards.append(CompletedCard(
+                        card_id=str(card_dir_name),
+                        workspace=card_results_dir,
+                        tests_file=tests_path,
+                        impl_file=impl_path if impl_path.exists() else None,
+                    ))
+                blind_status_str = blind_result.status
+                tested_status_str = tested_result.status if tested_result else "skipped"
+                click.echo(
+                    _sys(f"[{i}/{total}] {card_name}: blind={blind_status_str}, tested={tested_status_str}")
+                )
+            except KeyboardInterrupt:
+                click.echo(_warn("\nInterrupted..."))
+                break
+            except Exception as exc:  # noqa: BLE001
+                failures.append((card_name, exc))
+                click.echo(
+                    _err(f"[{i}/{total}] {card_name}: error={exc!r}"), err=True
+                )
+            finally:
+                _active_session = None
+                if session is not None:
+                    # Generate agent_thoughts.md regardless of which phases ran
+                    if session.run_dir:
+                        try:
+                            _generate_agent_thoughts(session.run_dir, session._path_id)
+                        except Exception:
+                            logger.debug(
+                                "Failed to generate agent_thoughts.md for %s",
+                                session.card_name,
+                                exc_info=True,
+                            )
+                    session.cleanup()
+    finally:
+        # Restore original signal handlers
+        signal.signal(signal.SIGINT, orig_sigint)
+        signal.signal(signal.SIGTERM, orig_sigterm)
 
     # Save final engine state as a run artifact
     save_engine_final(run_engine_dir, run_dir)
