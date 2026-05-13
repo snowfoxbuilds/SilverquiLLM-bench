@@ -24,7 +24,7 @@ import pytest
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BENCHMARKS_SOS = _REPO_ROOT / "benchmarks" / "sos"
 _DATA_DIR = _BENCHMARKS_SOS / "data"
-_CARDS_DIR = _BENCHMARKS_SOS / "cards"
+_CARDS_DIR = _REPO_ROOT / "cards" / "sos"
 _SOS_JSON = _DATA_DIR / "sos.json"
 _CLASSIFIED_JSON = _DATA_DIR / "sos_classified.json"
 

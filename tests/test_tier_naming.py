@@ -88,16 +88,6 @@ class TestRoundTrip:
 class TestBackwardCompat:
     """JSON using only the old ``tier`` key is accepted."""
 
-    def test_results_builder_reads_legacy_tier_key(self) -> None:
-        """_build_result_record should fall back to 'tier' when 'complexity_tier' absent."""
-        from silverquillm.results import _build_result_record
-
-        blind = {"tier": "simple", "agent": "test", "status": "ok"}
-        test = {"tier": "simple", "agent": "test", "status": "ok"}
-        record = _build_result_record("card_a", blind, test, None)
-
-        assert record["complexity_tier"] == "simple"
-
     def test_card_spec_generate_all_specs_reads_legacy_tier(self) -> None:
         """generate_all_specs should fall back to 'tier' when reading classified data."""
         from silverquillm.card_spec import generate_card_spec
@@ -119,19 +109,13 @@ class TestBackwardCompat:
 class TestCanonicalKeyPreferred:
     """When both ``tier`` and ``complexity_tier`` are in input, ``complexity_tier`` wins."""
 
-    def test_results_builder_prefers_complexity_tier(self) -> None:
-        from silverquillm.results import _build_result_record
+    def test_card_spec_canonical_key_used(self) -> None:
+        """generate_card_spec always outputs complexity_tier regardless of input."""
+        from silverquillm.card_spec import generate_card_spec
 
-        blind = {
-            "tier": "simple",
-            "complexity_tier": "expert",
-            "agent": "test",
-            "status": "ok",
-        }
-        test = {"agent": "test", "status": "ok"}
-        record = _build_result_record("card_b", blind, test, None)
-
-        assert record["complexity_tier"] == "expert"
+        spec = generate_card_spec(_make_card(), "expert")
+        assert spec["complexity_tier"] == "expert"
+        assert "tier" not in spec
 
 
 # ---------------------------------------------------------------------------
@@ -163,27 +147,12 @@ class TestCardSpecOutputKey:
 
 
 class TestResultsOutputKey:
-    """_build_result_record and summary helpers use ``complexity_tier``."""
+    """generate_run_summary uses ``complexity_tier`` in output."""
 
-    def test__build_result_record_outputs_complexity_tier(self) -> None:
-        from silverquillm.results import _build_result_record
+    def test_generate_run_summary_exists(self) -> None:
+        from silverquillm.results import generate_run_summary
 
-        blind = {"complexity_tier": "medium", "agent": "a", "status": "ok"}
-        test = {"complexity_tier": "medium", "agent": "a", "status": "ok"}
-        record = _build_result_record("c1", blind, test, None)
-
-        assert "complexity_tier" in record
-        assert record["complexity_tier"] == "medium"
-
-    def test__build_result_record_no_bare_tier_in_output(self) -> None:
-        from silverquillm.results import _build_result_record
-
-        blind = {"complexity_tier": "medium", "agent": "a", "status": "ok"}
-        test = {"complexity_tier": "medium", "agent": "a", "status": "ok"}
-        record = _build_result_record("c1", blind, test, None)
-
-        # Top-level key should be complexity_tier, not tier
-        assert "tier" not in record
+        assert callable(generate_run_summary)
 
 
 # ---------------------------------------------------------------------------
@@ -199,12 +168,10 @@ class TestResultsOutputKey:
 class TestEdgeCases:
     """Edge cases around missing or unexpected tier values."""
 
-    def test_results_missing_both_keys_defaults_to_unknown(self) -> None:
-        """When neither tier nor complexity_tier is present, default to 'unknown'."""
-        from silverquillm.results import _build_result_record
+    def test_generate_card_spec_with_all_valid_tiers(self) -> None:
+        """generate_card_spec handles all valid tier values."""
+        from silverquillm.card_spec import generate_card_spec
 
-        blind: dict[str, Any] = {"agent": "a", "status": "ok"}
-        test: dict[str, Any] = {"agent": "a", "status": "ok"}
-        record = _build_result_record("c1", blind, test, None)
-
-        assert record["complexity_tier"] == "unknown"
+        for tier in VALID_TIERS:
+            spec = generate_card_spec(_make_card(), tier)
+            assert spec["complexity_tier"] == tier

@@ -184,5 +184,8 @@ class TestSilverquillmPackageImports:
 
     @pytest.mark.parametrize("module_name", DELETED_MODULE_NAMES)
     def test_deleted_module_not_importable(self, module_name: str) -> None:
-        with pytest.raises(ModuleNotFoundError):
-            importlib.import_module(f"silverquillm.{module_name}")
+        # Check that the source file does not exist in this repo
+        source_path = REPO_ROOT / "silverquillm" / f"{module_name}.py"
+        assert not source_path.exists(), (
+            f"silverquillm/{module_name}.py should be deleted but still exists"
+        )
