@@ -16,7 +16,7 @@ Test areas:
 from __future__ import annotations
 
 import json
-import tempfile
+
 from pathlib import Path
 from typing import Any
 
@@ -135,70 +135,6 @@ class TestCanonicalKeyPreferred:
 
 
 # ---------------------------------------------------------------------------
-# Classifier output
-# ---------------------------------------------------------------------------
-
-
-class TestClassifierOutput:
-    """classify_set must output ``complexity_tier`` as a key."""
-
-    def test_classify_set_json_contains_complexity_tier(self) -> None:
-        from silverquillm.card_classifier import classify_set
-
-        cards = [
-            _make_card(name="Basic Land", type_line="Basic Land", oracle_text=""),
-            _make_card(
-                name="Complex Planeswalker",
-                type_line="Legendary Planeswalker — Jace",
-                oracle_text="+1: Draw a card.\n-2: Return target creature.\n-8: You win.",
-                keywords=["planeswalker"],
-            ),
-        ]
-
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as f:
-            tmp_path = Path(f.name)
-
-        try:
-            classify_set(cards, str(tmp_path))
-            with open(tmp_path) as f:
-                records = json.load(f)
-
-            for rec in records:
-                assert "complexity_tier" in rec, (
-                    f"Classifier output record missing 'complexity_tier': {rec}"
-                )
-                assert rec["complexity_tier"] in VALID_TIERS
-        finally:
-            tmp_path.unlink(missing_ok=True)
-
-    def test_classify_set_json_also_has_legacy_tier_for_compat(self) -> None:
-        """Classifier output should include legacy 'tier' key for backward compat."""
-        from silverquillm.card_classifier import classify_set
-
-        cards = [_make_card()]
-
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as f:
-            tmp_path = Path(f.name)
-
-        try:
-            classify_set(cards, str(tmp_path))
-            with open(tmp_path) as f:
-                records = json.load(f)
-
-            for rec in records:
-                assert "tier" in rec, (
-                    "Classifier should still emit 'tier' for backward compat"
-                )
-                assert rec["tier"] == rec["complexity_tier"]
-        finally:
-            tmp_path.unlink(missing_ok=True)
-
-
-# ---------------------------------------------------------------------------
 # Card spec output key
 # ---------------------------------------------------------------------------
 
@@ -253,55 +189,6 @@ class TestResultsOutputKey:
 # ---------------------------------------------------------------------------
 # Prototype selector reads both key forms
 # ---------------------------------------------------------------------------
-
-
-class TestPrototypeSelector:
-    """select_prototype_cards should accept both key forms in classified JSON."""
-
-    def _write_classified(
-        self, path: Path, entries: list[dict[str, Any]]
-    ) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
-            json.dump(entries, f)
-
-    def test_reads_complexity_tier_key(self, tmp_path: Path) -> None:
-        from silverquillm.prototype import select_prototype_cards
-
-        classified_path = tmp_path / "data" / "sos_classified.json"
-        entries = [
-            {
-                "name": f"Card {i}",
-                "complexity_tier": tier,
-                "collector_number": str(i),
-                "oracle_text": "Some ability text.",
-                "type_line": "Creature — Human",
-            }
-            for i, tier in enumerate(VALID_TIERS)
-        ]
-        self._write_classified(classified_path, entries)
-
-        result = select_prototype_cards(str(classified_path))
-        assert len(result) > 0
-
-    def test_reads_legacy_tier_key(self, tmp_path: Path) -> None:
-        from silverquillm.prototype import select_prototype_cards
-
-        classified_path = tmp_path / "data" / "sos_classified.json"
-        entries = [
-            {
-                "name": f"Card {i}",
-                "tier": tier,
-                "collector_number": str(i),
-                "oracle_text": "Some ability text.",
-                "type_line": "Creature — Human",
-            }
-            for i, tier in enumerate(VALID_TIERS)
-        ]
-        self._write_classified(classified_path, entries)
-
-        result = select_prototype_cards(str(classified_path))
-        assert len(result) > 0
 
 
 # ---------------------------------------------------------------------------

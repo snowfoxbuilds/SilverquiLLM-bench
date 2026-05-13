@@ -296,61 +296,6 @@ class TestFetchSosDataWorkflow:
 # ---------------------------------------------------------------------------
 
 
-class TestClassifySetMultiSet:
-    """classify_set must include set_code in JSON records for multi-set pools."""
-
-    def test_classified_json_includes_set_code_field(self, tmp_path: Path) -> None:
-        from silverquillm.card_classifier import classify_set
-
-        cards = [
-            _make_card_metadata(name="SOS Creature", set_code="sos", collector_number="1"),
-            _make_card_metadata(name="SOA Instant", set_code="soa", collector_number="1",
-                                type_line="Instant", oracle_text="Draw a card."),
-        ]
-        out = tmp_path / "classified.json"
-        classify_set(cards, output_path=out)
-
-        with open(out) as f:
-            records = json.load(f)
-
-        for record in records:
-            assert "set_code" in record, f"set_code missing from record: {record['name']}"
-
-    def test_classified_json_preserves_distinct_set_codes(self, tmp_path: Path) -> None:
-        from silverquillm.card_classifier import classify_set
-
-        cards = [
-            _make_card_metadata(name="SOS Card", set_code="sos", collector_number="1"),
-            _make_card_metadata(name="SOA Card", set_code="soa", collector_number="1",
-                                type_line="Instant"),
-        ]
-        out = tmp_path / "classified.json"
-        classify_set(cards, output_path=out)
-
-        with open(out) as f:
-            records = json.load(f)
-
-        set_codes = {r["set_code"] for r in records}
-        assert "sos" in set_codes
-        assert "soa" in set_codes
-
-    def test_classified_json_same_cn_different_sets(self, tmp_path: Path) -> None:
-        """Two cards can share collector_number if they have different set_codes."""
-        from silverquillm.card_classifier import classify_set
-
-        cards = [
-            _make_card_metadata(name="SOS #1", set_code="sos", collector_number="1"),
-            _make_card_metadata(name="SOA #1", set_code="soa", collector_number="1"),
-        ]
-        out = tmp_path / "classified.json"
-        classify_set(cards, output_path=out)
-
-        with open(out) as f:
-            records = json.load(f)
-
-        assert len(records) == 2, "Both cards should appear in classified output"
-
-
 # ---------------------------------------------------------------------------
 # _load_classified — composite key lookup
 # ---------------------------------------------------------------------------

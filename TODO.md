@@ -10,7 +10,7 @@ Reference: [CONTEXT.md](http://context.md/) for vocabulary, KEY_[DECISIONS.md](h
 
 ---
 
-- [ ] **Delete remaining old harness code from ****`silverquillm/`**
+- [x] **Delete remaining old harness code from ****`silverquillm/`**
   Detail: The following files are dead code from the adapter-based harness and have no role in the new Docker container flow. Delete them and their corresponding tests:
 
   - `silverquillm/card_classifier.py` — complexity tier classifier (classification now happens offline, pre-baked into card_spec.json)

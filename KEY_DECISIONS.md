@@ -313,3 +313,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: `chosen_targets` assignment moved from cast-time to resolve-time. Between cast and resolve, `StackObject.targets` is the single source of truth. At resolution, `card.chosen_targets = obj.targets` is set for backward compat with `on_resolve()` callbacks.
 - **Reasoning**: Prevents target leakage on card copy/clone. Aligns with MTG rules where targets are stored on the stack object.
 - **Impact**: `engine/casting.py` (cast_spell and _resolve_spell).
+
+## Utility functions moved to card_spec.py
+- **Context**: Deleting template_gen.py orphaned `card_name_to_class_name` and `_determine_base_class` which are still used by scripts and test helpers.
+- **Decision**: Moved both functions to `silverquillm/card_spec.py` since they are card-related utilities and card_spec.py is the kept module.
+- **Reasoning**: card_spec.py is the natural home for card-related utilities. Avoids creating a new module just for two functions.
+- **Impact**: `silverquillm/card_spec.py`, `scripts/generate_audited_stubs.py`, `tests/test_integration_helpers.py`, `tests/benchmark/test_helpers.py`.
