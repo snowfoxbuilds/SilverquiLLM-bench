@@ -226,13 +226,13 @@ def main() -> None:
 @click.option("--image", required=True, help="Docker image name")
 @click.option(
     "--cards-dir",
-    default=None,
+    default="./cards",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     help="Cards directory (default: cards/ relative to repo root)",
 )
 @click.option(
     "--engine-dir",
-    default=None,
+    default="./engine",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     help="Engine directory (default: engine/ relative to repo root)",
 )
@@ -279,6 +279,7 @@ def run(
         container_name = f"silverquillm-{run_name}"
         cmd = [
             "docker", "run", "--rm",
+            "--runtime", "runc",
             "--name", container_name,
             "--network=host", # allow access to localhost APIs
             "-v", f"{workspace}:/workspace",
@@ -354,6 +355,7 @@ def smoke(image: str) -> None:
         container_name = f"silverquillm-smoke-{os.getpid()}"
         cmd = [
             "docker", "run", "--rm",
+            "--runtime", "runc",
             "--name", container_name,
             "--network=host", # allow access to localhost APIs
             "-v", f"{workspace}:/workspace",
