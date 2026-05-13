@@ -20,3 +20,5 @@ data/replays/*
 .opencode
 
 venv/
+
+.DS_Store

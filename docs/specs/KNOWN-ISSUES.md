@@ -339,3 +339,133 @@ All three caused pytest collection errors, reported as `0/1` (1 collection error
 
 - `silverquillm/agent_session.py` — `harvest_results()` should run unconditionally, not skip on violation
 - `silverquillm/cli.py` — ensure harvest is called before violation status is set, or decouple harvest from status
+---
+
+## Issue #16: `repo_root` contamination — agent can read entire repo
+
+`Status:` 🔴 Open
+
+`Root cause:` `OpenCodeAdapter.configure_opencode()` sets `"repo_root": str(_REPO_ROOT)` which points to the actual repo root (`/repos/SilverquiLLM-bench/`). The refactoring agent that wrote PR #11 confused the harness's internal `_REPO_ROOT` (where the harness finds its own files) with the agent's `repo_root` config (what the agent sees as its file boundary). Opencode uses `repo_root` as its navigation root for all glob, grep, and read operations.
+
+`Symptoms:`
+
+- Agent reads `cards/foundations/simple_spells.py`, `engine/casting.py`, `tests/test_integration.py`, etc.
+- Agent globs find 75 test files, 28 card implementations — full contamination
+- `.workspace/` is a hidden dir, so globs from repo root skip it — agent can't find its own workspace files
+- `Glob "**/card_spec.json" 0 matches` despite `card_spec.json` existing in `.workspace/`
+- Agent falls back to reading the entire repo as reference material
+`Fix:` Change `"repo_root": str(_REPO_ROOT)` to `"repo_root": str(workspace)` in `OpenCodeAdapter.configure_opencode()`. One line.
+
+`Files to change:`
+
+- `silverquillm/adapters/opencode.py` — `configure_opencode()` method
+---
+
+## Issue #17: `.pytest_cache` false contamination → `no_output`
+
+`Status:` 🔴 Open
+
+`Root cause:` The Phase 7 refactor switched contamination detection from a denylist (only flag known-bad directories) to an allowlist (flag everything not explicitly allowed). The allowlist includes `__pycache__` but not `.pytest_cache`. When the agent runs pytest during implementation, `.pytest_cache/v/cache/nodeids` is modified. The contamination checker flags this, and `run_card()` overwrites the result to `CardRunStatus.no_output`.
+
+`Symptoms:`
+
+- `Contamination violation: /repos/SilverquiLLM-bench/.pytest_cache/v/cache/nodeids was modified`
+- `tested=no_output` despite agent successfully writing `card_impl.py` and `tests.py`
+- All scores zeroed for the card
+`Fix:` Add `_IGNORED_DIRS` frozenset containing `.pytest_cache`, `.mypy_cache`, `.ruff_cache`, etc. Update `_is_allowed_path()` and `_snapshot_mtimes()` to use it.
+
+`Files to change:`
+
+- `silverquillm/agent_session.py` — `_IGNORED_DIRS`, `_is_allowed_path()`, `_snapshot_mtimes()`
+---
+
+## Issue #18: Model thinking/tool calls not visible (streaming broken)
+
+`Status:` 🔴 Open
+
+`Root cause:` Both `BlindStrategy` and `ImplTestStrategy` wrap the adapter call in `ThreadPoolExecutor.submit()`, moving the adapter's `run()` to a worker thread. Before PR #11, the adapter ran directly in the main thread and `sys.stderr.write()` calls streamed to the terminal in real time. The `ThreadPoolExecutor` effectively swallows this streaming.
+
+`Symptoms:`
+
+- No model thinking output visible during benchmark runs
+- No tool call output visible
+- No ANSI-colored streaming output
+- All output that was visible before PR #11 is gone
+`Fix:` Replace `ThreadPoolExecutor` with direct `adapter.run_with_retries()` call (already exists in `base.py` with timeout+kill support).
+
+`Files to change:`
+
+- `silverquillm/strategies.py` — both strategy classes
+---
+
+## Issue #19: `card_name` vs `card_dir_name` creates duplicate card directories
+
+`Status:` 🔴 Open
+
+`Root cause:` `save_card_result()` uses `card_dir_name` (collector number, e.g. `"42"`) for the results directory, but `_get_postmortem_path()` and `_generate_agent_thoughts()` use `card_name` (display name, e.g. `"Ajani's Response"`). This creates two separate directories for the same card.
+
+`Symptoms:`
+
+- `Cards run: 2` in run summary when only 1 card was actually run
+- Postmortem in `cards/Ajani's Response/` but result.json in `cards/42/`
+- Post-eval can't correlate postmortem with result
+`Fix:` Add `card_id` field to `AgentSession`, use it consistently for all path construction.
+
+`Files to change:`
+
+- `silverquillm/agent_session.py` — add `card_id` field, update path functions
+- `silverquillm/cli.py` — pass `card_dir_name` as `card_id`
+---
+
+## Issue #20: `agent_thoughts.md` nearly empty
+
+`Status:` 🔴 Open
+
+`Root cause:` The strategy layer calls `adapter.run()` and discards the return value. `run_card()` logs a placeholder to the postmortem: `prompt="(strategy-level)"`, `response="status=no_output"`. The `_generate_agent_thoughts()` function reads from the postmortem, so it generates a nearly empty file from this single placeholder entry.
+
+`Symptoms:`
+
+- `agent_thoughts.md` contains only a status string, not the agent's actual reasoning
+- Postmortem has one entry with no useful content
+- Unable to debug agent behavior from run artifacts
+`Fix:` Add `agent_output` and `prompt_used` fields to `CardRunResult`. Capture adapter output in strategies, pass through to postmortem logging.
+
+`Files to change:`
+
+- `silverquillm/strategies.py` — add fields, capture output
+- `silverquillm/agent_session.py` — use real output in postmortem
+---
+
+## Issue #21: Preflight `_check_card_specs_dir()` flat glob misses card specs
+
+`Status:` 🔴 Open
+
+`Root cause:` `_check_card_specs_dir()` in `preflight.py` uses `path.glob("*.json")` but card specs are in subdirectories (`cards/1/card_spec.json`). The flat glob finds nothing.
+
+`Symptoms:`
+
+- `Pre-flight checks failed: card_specs_dir contains no card spec files: benchmarks/sos/cards`
+- Benchmark run aborted before any LLM calls
+`Fix:` Change glob to `path.glob("*/card_spec.json")`.
+
+`Files to change:`
+
+- `silverquillm/preflight.py` — `_check_card_specs_dir()`
+---
+
+## Issue #22: Opencode orphan process on benchmark interrupt
+
+`Status:` 🔴 Open (partially fixed — `teardown()` now calls `kill()`, but no signal handler)
+
+`Root cause:` `OpenCodeAdapter` spawns opencode with `start_new_session=True` (separate process group). When the benchmark is Ctrl+C'd, SIGINT goes to the benchmark's process group but NOT to opencode's. `teardown()` was originally a no-op. Even after fixing `teardown()` to call `kill()`, there's no signal handler to ensure `kill()` is called immediately on interrupt — Python's `KeyboardInterrupt` propagation may be blocked in I/O.
+
+`Symptoms:`
+
+- After Ctrl+C, opencode continues running in the background
+- `ps aux | grep opencode` shows orphaned processes
+- Subsequent runs may conflict with the orphaned process
+`Fix:` Add `SIGINT`/`SIGTERM` handler in `cli.py` that calls `_active_session._adapter.kill()` before re-raising.
+
+`Files to change:`
+
+- `silverquillm/cli.py` — signal handler and `_active_session` tracking

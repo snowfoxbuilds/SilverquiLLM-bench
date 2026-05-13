@@ -1,267 +1,359 @@
 # TODO
 
-## Phase 7: Harness Architecture Refactor & Robustness
+## Phase 8: Fix PR #11 Regressions & Harden Pipeline
 
-Scope: Refactor the benchmark runner from the current harness-orchestrated multi-round model to a clean mode-based architecture where the agent is a black box (prompt in → files out). Fix known issues #11, #12, #14, #15. Add robustness infrastructure (smoke tests, pre-flight validation, allowlist contamination checker). Add post-run aggregation.
+Scope: Fix all regressions introduced by the Phase 7 harness refactor (PR #11), including workspace contamination, broken output streaming, false-positive violation detection, and empty postmortem logs. Add structural safeguards (preflight isolation check, signal handling) to prevent this class of bug from recurring. Clean up remaining backlog tech debt.
 
-This phase implements the architectural decisions settled in the 2026-05-11 grill session. See [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) Decisions section (entries tagged `[SETTLED, 2026-05-11 grill]`) and [CONTEXT.md](http://context.md/) Relationships for the canonical design.
+These are all bugs and regressions discovered during post-merge Pipeline Validation Runs on 2026-05-12. Every item was root-caused by reading the PR #11 codebase at commit `e6f0b47`. See [KNOWN-ISSUES.md](http://known-issues.md/) (Issues #10–#15) and the conversation log for full analysis.
 
-Key architectural changes:
-
-- Two benchmark modes: `blind` (impl only) and `impl_test` (impl + tests, agent self-iterates)
-- Single prompt per card, single `timeout_per_card` — harness does NOT orchestrate test rounds
-- All evaluation is post-run (no per-card eval during the run)
-- Filesystem checks are the source of truth for agent output (not exit codes or stdout)
-- Engine snapshot/rollback on timeout
-- `CardStrategy` pattern for per-card orchestration (mode-agnostic outer loop)
 Reference files in current codebase:
 
-- `silverquillm/config.py` — `BenchmarkConfig` + `AgentConfig` dataclasses
-- `silverquillm/agent_session.py` — 51KB, contains `_run_pytest`, multi-round orchestration, `harvest_results`, violation checking
-- `silverquillm/evaluator.py` — `run_tests()`, `run_self_eval()`, `run_self_eval_flat()`, `EvalResult` with blind/tested split
-- `silverquillm/cli.py` — `benchmark run` and `benchmark eval` commands, per-card eval loop
-- `silverquillm/prompts.py` — Step 1 (blind) and Step 2 (test-informed) prompt templates
-- `silverquillm/results.py` — result recording with blind/tested fields
-- `silverquillm/regression.py` — per-card regression runner
-- `silverquillm/adapters/base.py` — `AgentAdapter` ABC with `run()` method
+- `silverquillm/adapters/opencode.py` — `configure_opencode()` with wrong `repo_root`, `run()` streaming logic
+- `silverquillm/strategies.py` — `BlindStrategy`/`ImplTestStrategy` with `ThreadPoolExecutor`, `CardRunResult` missing `agent_output`
+- `silverquillm/agent_session.py` — `_is_allowed_path()` missing `.pytest_cache`, `_get_postmortem_path()` using `card_name` instead of `card_dir_name`, `_generate_agent_thoughts()` same issue
+- `silverquillm/cli.py` — regression postmortem path uses `card_name`, no signal handler for graceful interrupt
+- `silverquillm/preflight.py` — `_check_card_specs_dir()` uses flat glob but cards are in subdirectories
+- `silverquillm/adapters/base.py` — `run_with_retries()` already has timeout+kill support (use this instead of ThreadPoolExecutor)
 ---
 
-- [x] **Add ****`mode`**** to config and create ****`CardStrategy`**** ABC**
-  Detail: Add `mode: str` field to `BenchmarkConfig` in `silverquillm/config.py`. Valid values: `"blind"` and `"impl_test"`. Remove `max_test_rounds` from `AgentConfig` (no longer used — agent self-manages iteration). Create `silverquillm/strategies.py` with:
+- [x] **Fix ****`repo_root`**** contamination in ****`OpenCodeAdapter`**
+  Detail: `OpenCodeAdapter.configure_opencode()` in `silverquillm/adapters/opencode.py` sets `"repo_root": str(_REPO_ROOT)` which points to the actual repo root (`/repos/SilverquiLLM-bench/`). This tells the agent (opencode) that its file navigation boundary is the entire repo. The agent can read all existing card implementations in `cards/`, all tests in `tests/`, all engine source in `engine/`, and all harness code in `silverquillm/`. This is a **critical contamination hole** — benchmark results are meaningless when the agent can see reference implementations.
 
-  - `CardStrategy` ABC with abstract method `run_card(self, card_spec, workspace, adapter, timeout) -> CardRunResult`
-  - `CardRunResult` dataclass: `status` (enum: `completed`, `timeout`, `no_output`), `files_written` (list of Path), `runtime_ms` (int), `engine_modified` (bool)
-  - Factory function `get_strategy(mode: str) -> CardStrategy` that returns `BlindStrategy` or `ImplTestStrategy`
-  Update `load_config()` to parse `mode` from YAML (default `"impl_test"` for backward compat). Update `config.example.yaml` with the new `mode` field.
+  Additionally, `.workspace/` is a hidden directory (starts with `.`), so globs from the repo root skip it — the agent can't even find its own workspace files (`card_spec.json`, `template.py`, etc.) through the repo root's glob.
 
-  Reference `KEY_DECISIONS.md` entry "Nested AgentConfig convention" — follow the same pattern for the new field.
-
-  Testability: Unit test that `load_config()` parses `mode` correctly, rejects invalid values, defaults to `"impl_test"`. Unit test that `get_strategy()` returns correct strategy class.
-
-- [x] **Implement ****`BlindStrategy`**
-  Detail: In `silverquillm/strategies.py`, implement `BlindStrategy(CardStrategy)`. This strategy:
-
-  1. Sends a single prompt to the agent: "Implement this card, write to `card_impl.py`. Do not write tests."
-  2. After agent finishes (or timeout), checks filesystem for `card_impl.py`
-  3. Returns `CardRunResult` with `status=completed` if file exists, `no_output` if not, `timeout` if timed out
-  The prompt template should be derived from the existing blind prompt in `silverquillm/prompts.py` but updated to reference `card_impl.py` instead of `blind_impl.py`. The workspace must NOT include `test_utils.md` or `test_utils.py` (mode-dependent workspace contents per [BENCHMARK-RUNNER.md](http://benchmark-runner.md/)).
-
-  Files to change:
-
-  - `silverquillm/strategies.py` — add `BlindStrategy` class
-  - `silverquillm/prompts.py` — add `blind_mode_prompt()` that references `card_impl.py` and omits test-related instructions
-  Testability: Unit test with a mock adapter that writes `card_impl.py` → strategy returns `completed`. Mock adapter that writes nothing → `no_output`.
-
-- [x] **Implement ****`ImplTestStrategy`**
-  Detail: In `silverquillm/strategies.py`, implement `ImplTestStrategy(CardStrategy)`. This strategy:
-
-  1. Sends a single prompt: "Implement this card and write tests. Write implementation to `card_impl.py`, tests to `tests.py`. You can run tests yourself to iterate."
-  2. After agent finishes (or timeout), checks filesystem for `card_impl.py` and optionally `tests.py`
-  3. Returns `CardRunResult` with appropriate status
-  The prompt template should combine elements from the existing blind + test-informed prompts in `silverquillm/prompts.py`, updated for unified `card_impl.py` naming. The workspace includes `test_utils.md` and `test_utils.py`. No `max_test_rounds` — agent self-manages iteration.
-
-  Files to change:
-
-  - `silverquillm/strategies.py` — add `ImplTestStrategy` class
-  - `silverquillm/prompts.py` — add `impl_test_mode_prompt()` combining impl + test instructions
-  Testability: Unit test with mock adapter that writes both files → `completed`. Mock adapter that writes only `card_impl.py` (no tests) → `completed` (partial is still completed, eval will just skip self-eval).
-
-- [x] **Refactor ****`agent_session.py`****: remove harness-managed iteration**
-  Detail: The current `agent_session.py` (51KB) contains `_run_pytest`, multi-round orchestration logic, and round counting. Remove all of this:
-
-  - Delete `_run_pytest()` method entirely — the harness does NOT run pytest during agent implementation rounds
-  - Remove round-counting logic and `max_test_rounds` references
-  - Remove the iteration loop that feeds test results back to the agent
-  - Keep: workspace setup (`_setup_workspace()`), `harvest_results()`, engine management (`init_run_engine()`, `commit_engine_changes()`), postmortem logging, violation checking
-  The goal is that `agent_session.py` becomes a thin wrapper: set up workspace → delegate to `CardStrategy.run_card()` → harvest files → log postmortem. The strategy handles the prompt and agent invocation.
-
-  Refactor `harvest_results()` to look for `card_impl.py` instead of `blind_impl.py`/`tested_impl.py`.
-
-  Files to change:
-
-  - `silverquillm/agent_session.py` — major refactor (remove ~40% of the file)
-  Testability: Existing integration tests should still pass after refactor. New unit test: workspace setup creates correct files for each mode (blind mode has no test_utils, impl_test mode has test_utils).
-
-- [x] **Decouple ****`harvest_results()`**** from violation status (fixes Issue #15)**
-  Detail: Currently, `harvest_results()` in `agent_session.py` is skipped or partial when a violation is detected. Ral Zarek (#97) got a violation and its implementation files were never captured. Fix: `harvest_results()` must run unconditionally — always copy `card_impl.py` and `tests.py` from the workspace regardless of violation status. Violations annotate `result.json` but don't prevent file capture.
-
-  Files to change:
-
-  - `silverquillm/agent_session.py` — ensure `harvest_results()` is called before violation status affects control flow
-  Testability: Unit test: mock adapter writes `card_impl.py` + triggers a violation → both violation is recorded AND `card_impl.py` is harvested.
-
-- [x] **Engine snapshot and rollback on timeout**
-  Detail: Before each card starts, snapshot the run-level engine directory (e.g., `shutil.copytree(run_engine_dir, run_engine_dir.with_suffix('.snapshot'))`). If the agent times out, restore the snapshot — this prevents corrupted partial engine modifications from poisoning subsequent cards. On successful completion, delete the snapshot and commit engine changes as normal.
-
-  The snapshot/restore logic should live in `agent_session.py` alongside the existing `init_run_engine()` and `commit_engine_changes()` functions. Add `snapshot_engine(run_engine_dir) -> Path` and `restore_engine_snapshot(run_engine_dir, snapshot_dir)` functions.
-
-  Files to change:
-
-  - `silverquillm/agent_session.py` — add snapshot/restore functions, call them in the per-card flow
-  Testability: Unit test: mock adapter that times out → engine dir is restored to pre-card state. Mock adapter that succeeds → snapshot is cleaned up.
-
-- [x] **Enforce ****`timeout_per_card`**** (fixes Issue #14)**
-  Detail: Config specifies `timeout_per_card: 300` but it's never enforced — Qwen's Plains (trivial) took 28 minutes. Wrap the adapter's `run()` call with a hard timeout. On expiry: kill the subprocess, record `status: timeout` in `CardRunResult`, zero all scores for this card, trigger engine rollback (previous item).
-
-  Implementation: In the `CardStrategy.run_card()` base method (or a shared utility), use `subprocess` timeout or `signal.alarm()` as a fallback. The adapter's own `run_with_retries()` in `silverquillm/adapters/base.py` already has a deadline concept — ensure it's actually enforced at the process level, not just as a soft limit.
-
-  Files to change:
-
-  - `silverquillm/strategies.py` — timeout enforcement in `run_card()` base method
-  - `silverquillm/adapters/base.py` — verify `run_with_retries` kills subprocess on deadline
-  - `silverquillm/adapters/opencode.py` — ensure `Popen` subprocess is killed on timeout
-  Testability: Unit test: mock adapter that sleeps forever → times out at `timeout_per_card`, status is `timeout`.
-
-- [x] **Move all evaluation to post-run**
-  Detail: Currently `cli.py` runs self-eval per card inside the run loop. Refactor so the run loop ONLY does: workspace setup → [strategy.run](http://strategy.run/)_card() → harvest → postmortem → next card. After ALL cards complete, a separate evaluation phase runs all tests against the final engine state.
-
-  Create `silverquillm/post_eval.py` with:
-
-  - `run_post_eval(run_dir: Path, mode: str, audited_dir: Path | None) -> list[CardEvalResult]`
-  - For each card in `run_dir/cards/`, run `evaluator.run_tests()` with the card's `card_impl.py` against:
-    - Agent's `tests.py` (self-eval, impl_test mode only)
-    - Audited tests from `tests/audited/{set_code}/{collector_number}/tests.py` (if `audited_dir` provided)
-  - All tests run against the final engine state (the run-level engine dir as it exists after the last card)
-  - Write results to each card's `result.json`
-  Update `cli.py` to call `run_post_eval()` after the card loop instead of per-card eval.
-
-  Files to change:
-
-  - `silverquillm/post_eval.py` — new module
-  - `silverquillm/cli.py` — refactor `benchmark run` to separate card loop from eval
-  - `silverquillm/evaluator.py` — update `run_tests()` to accept `engine_dir` param for PYTHONPATH
-  Testability: Integration test: run 2 mock cards → post_eval runs all tests against final engine → results written to both cards' result.json.
-
-- [x] **Refactor ****`EvalResult`**** and ****`result.json`**** to v2 schema**
-  Detail: The current `EvalResult` in `evaluator.py` has `blind_passed`/`blind_failed`/`tested_passed`/`tested_failed` fields reflecting the old blind/tested split. Refactor to v2 schema:
+  **Fix:** Change one line:
 
   ```python
-@dataclass
-class EvalResult:
-    card_id: str
-    mode: str  # "blind" | "impl_test"
-    model_name: str
-    adapter: str
-    status: str  # "completed" | "timeout" | "no_output"
-    complexity_tier: str
-    implementation: dict  # {tokens: {input, output, total}, runtime_ms, peak_context}
-    self_eval: dict | None  # {passed, failed, total} — None for blind mode
-    audited_eval: dict | None  # {passed, failed, total}
-    engine_diff_summary: str  # human-readable summary of engine changes
-    errors: list[str]
+# BEFORE:
+"repo_root": str(_REPO_ROOT),
+# AFTER:
+"repo_root": str(workspace),
   ```
 
-  Update `silverquillm/results.py` to write v2 `result.json`. Update `silverquillm/scorer.py` to read v2 format. Keep backward-compat reading of v1 format for existing results (Gemma/Qwen runs).
+  This confines the agent's entire file navigation world to `.workspace/`, which `setup_workspace()` already populates with the curated set of files (card_spec, template, engine_[api.md](http://api.md/), base_classes, foundations, engine).
+
+  Also add explicit deny paths to the permissions block as defense-in-depth:
+
+  ```python
+"permissions": {
+    "allow_read": [str(workspace)],
+    "allow_write": [str(workspace)],
+    "deny_read": [str(_REPO_ROOT / "cards"), str(_REPO_ROOT / "tests"),
+                   str(_REPO_ROOT / "silverquillm"), str(_REPO_ROOT / "benchmarks")],
+},
+  ```
+
+  The module-level `_REPO_ROOT` constant in `opencode.py` should remain — it's still needed for the deny paths. But it must NEVER be passed as `repo_root` in the agent config.
 
   Files to change:
 
-  - `silverquillm/evaluator.py` — refactor `EvalResult` dataclass
-  - `silverquillm/results.py` — update `save_card_result()` and `load_card_result()`
-  - `silverquillm/scorer.py` — update scoring to use v2 fields
-  Testability: Unit test: v2 result.json round-trips correctly. Unit test: v1 result.json from existing runs still loads.
+  - `silverquillm/adapters/opencode.py` — `configure_opencode()` method
+  Testability: Unit test with a mock: call `configure_opencode(workspace)` and assert `config["repo_root"] == str(workspace)`. Assert `_REPO_ROOT` does NOT appear in the returned config's `repo_root` field.
 
-- [x] **Automatic ****`run_summary.json`**** aggregation**
-  Detail: After post-run evaluation completes, automatically aggregate all per-card `result.json` files into a `run_summary.json` at the run level. Create `silverquillm/aggregator.py` with:
+- [x] **Fix ****`.pytest_cache`**** and other tool-cache false contamination**
+  Detail: `_is_allowed_path()` in `silverquillm/agent_session.py` only allows `__pycache__` in its directory check. When the agent runs pytest during implementation, `.pytest_cache/v/cache/nodeids` is modified. The contamination checker flags this as a violation, and `run_card()` overwrites the result to `CardRunStatus.no_output` — even though the implementation is correct. This was the direct cause of `tested=no_output` in validation runs.
 
-  - `aggregate_run(run_dir: Path) -> RunSummary` — pure function, reads all `cards/*/result.json`, produces summary
-  - `RunSummary` dataclass with:
-    - **Run metadata:** run_id, model_name, adapter, mode, timestamp, config snapshot
-    - **Scorecard:** total_cards, cards_completed, cards_timeout, cards_no_output
-    - **Per-tier breakdown:** for each complexity_tier: card_count, completed_count, avg_audited_pass_rate
-    - **Aggregate stats:** total_tokens, total_runtime_ms, avg_tokens_per_card, avg_runtime_per_card
-    - **Per-card summary:** list of {card_id, status, self_eval_pass_rate, audited_eval_pass_rate}
-  Wire into `cli.py` as the final step of `benchmark run`. Also expose as `benchmark aggregate <run_dir>` for manual re-runs.
+  **Fix:**
 
-  Files to change:
+  1. Add a `_IGNORED_DIRS` frozenset near the existing `_IGNORED_SUFFIXES`:
+  ```python
+_IGNORED_DIRS: frozenset[str] = frozenset({
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".tox",
+    ".eggs",
+    ".hypothesis",
+    ".nox",
+})
+  ```
 
-  - `silverquillm/aggregator.py` — new module
-  - `silverquillm/cli.py` — call aggregator at end of run, add `benchmark aggregate` subcommand
-  Testability: Unit test: create mock `result.json` files → `aggregate_run()` produces correct summary. Test idempotency: running twice on same dir produces identical output.
-
-- [x] **Allowlist-based contamination checker**
-  Detail: Replace the current fragile blocklist approach in `agent_session.py`'s `_check_violations()` with an allowlist. The agent may only create/modify files within its workspace directory. Only flag modifications to explicitly protected files (card specs of other cards, audited tests, other agents' implementations). This eliminates the entire class of false-positive violations from `__pycache__`, log files, `.pyc` files, etc.
-
-  Current `_check_violations()` maintains a `_PROTECTED_DIRS` set and checks if ANY file outside the workspace was modified. Replace with:
-
-  1. After agent finishes, diff the workspace against its initial state
-  2. Any NEW files in workspace → allowed (agent output)
-  3. Any MODIFIED files in workspace → allowed (agent modified engine, etc.)
-  4. Any changes OUTSIDE workspace → violation
-  5. Exception: `engine/` modifications are allowed (agents extend the engine)
-  Files to change:
-
-  - `silverquillm/agent_session.py` — rewrite `_check_violations()` with allowlist logic
-  Testability: Unit test: agent writes `card_impl.py` in workspace → no violation. Agent modifies `engine/ward.py` → no violation. Agent modifies `tests/audited/sos/001/tests.py` → violation detected.
-
-- [x] **Fix `test_utils.md`**** import path (fixes Issue #11)**
-  Detail: Agent-facing `test_utils.md` documentation says `from tests.test_utils import ...` but workspace has flat `test_utils.py` at the root. Agents waste a correction iteration discovering this. Update all import examples to `from test_utils import create_game, set_board_state, cast_spell, ...`.
+  1. In `_is_allowed_path()`, replace `if "__pycache__" in path.parts: return True` with `if _IGNORED_DIRS.intersection(path.parts): return True`
+  2. In `_snapshot_mtimes()`, prune ignored dirs from `os.walk()` so they're never even scanned:
+  ```python
+dirs[:] = [
+    d for d in dirs
+    if (Path(dirpath) / d).resolve() != git_dir
+    and d not in _IGNORED_DIRS
+]
+  ```
 
   Files to change:
 
-  - `docs/test_utils.md` (or `tests/test_utils.md` — check which path the workspace copies from) — update all import examples
-  Testability: Grep the updated file for `from tests.test_utils` — should find zero matches. Grep for `from test_utils import` — should find all examples.
+  - `silverquillm/agent_session.py` — `_IGNORED_DIRS` constant, `_is_allowed_path()`, `_snapshot_mtimes()`
+  Testability: Unit test: create a `.pytest_cache/v/cache/nodeids` file, run `_check_violations()` → no violation. Unit test: create a file in `tests/` → violation detected (not affected by the fix).
 
-- [x] **Add `GameState`**** to template imports (fixes Issue #12)**
-  Detail: Nearly every card implementation needs `from engine.game_state import GameState` for type hints. Agents waste time adding this import. Add it to the template that `silverquillm/template_gen.py` generates.
+- [x] **Fix preflight ****`_check_card_specs_dir()`**** flat glob**
+  Detail: `_check_card_specs_dir()` in `silverquillm/preflight.py` uses `path.glob("*.json")` to find card spec files. But card specs are in subdirectories: `cards/1/card_spec.json`, `cards/2/card_spec.json`, etc. The flat glob finds nothing, causing preflight to fail with "card_specs_dir contains no card spec files".
 
-  Files to change:
+  **Fix:** Change the glob pattern:
 
-  - `silverquillm/template_gen.py` — add `from engine.game_state import GameState` to the generated template's import block
-  Testability: Generate a template for any card → verify `GameState` is in the imports.
-
-- [x] **Simplify postmortem schema**
-  Detail: The current `postmortem.jsonl` events use `round` and `phase` fields from the old multi-round model. Update to the simplified schema:
-
-  - Remove `round` and `phase` fields from all events
-  - Change `file_diff` event to `file_written` with `path` and `size_bytes` (harness only knows which files exist, not diffs)
-  - Add `eval_result` event type for post-run eval results: `{"event": "eval_result", "eval_type": "self"|"audited", "passed": N, "failed": N}`
-  - Add `regression_check` event type (future use)
-  Update the postmortem writer in `agent_session.py` and the `agent_thoughts.md` extractor.
+  ```python
+# BEFORE:
+specs = list(path.glob("*.json"))
+# AFTER:
+specs = list(path.glob("*/card_spec.json"))
+  ```
 
   Files to change:
 
-  - `silverquillm/agent_session.py` — update postmortem event emission
-  Testability: Run mock adapter → postmortem.jsonl has no `round` or `phase` fields. Has `file_written` events for each file the agent created.
+  - `silverquillm/preflight.py` — `_check_card_specs_dir()` function
+  Testability: Unit test: create `tmp/1/card_spec.json` and `tmp/2/card_spec.json` → `_check_card_specs_dir(tmp)` passes. Unit test: empty dir → fails with clear error.
 
-- [x] **Pre-flight validation at run start**
-  Detail: Before any LLM calls, verify the environment is correct. Add a `preflight_check(config, run_dir)` function that validates:
+- [ ] **Standardize all per-card paths on ****`card_dir_name`**
+  Detail: The harness uses two different identifiers for per-card subdirectories under `<run_dir>/cards/`:
 
-  - `template.py` imports resolve (can import `engine.game_state`, `engine.card`, etc.)
-  - `test_utils.py` is importable with the flat import path (`from test_utils import create_game`)
-  - Workspace directory can be created and cleaned
-  - Engine test suite passes on clean engine copy (`pytest tests/ -x -q --ignore=tests/audited`)
-  - Config is valid: `timeout_per_card > 0`, adapter exists in registry, mode is valid
-  - `card_specs_dir` exists and contains at least one card spec
-  If any check fails, abort with a clear error message before spending LLM budget.
+  - `card_dir_name` (collector number, e.g. `"42"`) — used by `save_card_result()` and `save_card_result_v2()` in `cli.py`
+  - `card_name` (display name, e.g. `"Ajani's Response"`) — used by `_get_postmortem_path()` and `_generate_agent_thoughts()` in `agent_session.py`
+  This creates TWO separate directories for the same card. The run summary then counts both, reporting `Cards run: 2` when only 1 card was run. Post-eval also can't correlate the postmortem with the result because they're in different directories.
 
-  Files to change:
+  **Fix:**
 
-  - `silverquillm/preflight.py` — new module with `preflight_check()` function
-  - `silverquillm/cli.py` — call `preflight_check()` before entering the card loop
-  Testability: Unit test: missing card_specs_dir → preflight fails with clear message. Unit test: invalid adapter name → preflight fails.
+  1. Add a `card_id: str` field to the `AgentSession` dataclass (default `""`). This stores the `card_dir_name` value and is used for ALL path construction.
+  2. In `cli.py`, pass `card_dir_name` when constructing `AgentSession`:
+  ```python
+session = AgentSession(
+    config=cfg, card_spec=spec, card_dir=card_dir,
+    card_id=str(card_dir_name),  # NEW
+    run_engine_dir=run_engine_dir, run_dir=run_dir,
+)
+  ```
 
-- [x] **Smoke tests with mock adapter (****`tests/test_harness.py`****)**
-  Detail: Comprehensive deterministic pytest tests (zero LLM calls) using a `MockAdapter` that writes pre-baked implementations from `cards/foundations/`. These test the full harness pipeline end-to-end.
+  1. In `agent_session.py`, update `run_card()` to use `self.card_id` instead of `self.card_name` in:
+    - All `_get_postmortem_path(self.run_dir, ...)` calls (~4 occurrences)
+    - `_generate_agent_thoughts(self.run_dir, ...)`
+    - `append_raw_log(raw_log_path, ...)` — use `card_id` for consistency in path, but `card_name` is fine in the JSON content
+  2. In `harvest_results()`, use `self.card_id` instead of `self.card_name` for the postmortem path.
+  3. In `cli.py`, fix the regression postmortem path:
+  ```python
+# BEFORE:
+pm_path = run_dir / "cards" / card_name / "postmortem.jsonl"
+# AFTER:
+pm_path = run_dir / "cards" / str(card_dir_name) / "postmortem.jsonl"
+  ```
 
-  Create `silverquillm/adapters/mock.py` with a `MockAdapter` that:
-
-  - Reads a known-good implementation from `cards/foundations/{card_name}.py`
-  - Writes it to `card_impl.py` in the workspace
-  - Optionally writes pre-baked `tests.py` (for impl_test mode)
-  Test cases in `tests/test_harness.py`:
-
-  1. **Blind mode happy path**: MockAdapter writes `card_impl.py` → harvest succeeds → post-eval with audited tests passes
-  2. **Impl+test mode happy path**: MockAdapter writes `card_impl.py` + `tests.py` → harvest succeeds → self-eval + audited eval both pass
-  3. **Timeout handling**: MockAdapter sleeps forever → timeout fires → status is `timeout` → engine rolled back → scores zeroed
-  4. **No output**: MockAdapter writes nothing → status is `no_output` → scores zeroed
-  5. **Violation detection**: MockAdapter writes to protected path → violation recorded → files still harvested (Issue #15 regression)
-  6. **Aggregation**: Run 3 mock cards → `run_summary.json` produced with correct aggregate stats
-  7. **Mode-dependent workspace**: Blind mode workspace has no `test_utils.md`/`test_utils.py`; impl_test mode has them
-  Also wire `--dry-run` flag in `cli.py` to use MockAdapter for quick environment validation.
+  `card_name` (display name) is still fine for log messages, markdown headings, and JSON field values — just not filesystem paths.
 
   Files to change:
 
-  - `silverquillm/adapters/mock.py` — new MockAdapter
-  - `tests/test_harness.py` — new test file with all above test cases
-  - `silverquillm/cli.py` — `--dry-run` flag uses MockAdapter
-  Testability: All tests are deterministic, zero LLM calls. Should run in < 30 seconds. Run in CI on every commit.
+  - `silverquillm/agent_session.py` — add `card_id` field, update all path-construction code
+  - `silverquillm/cli.py` — pass `card_dir_name` as `card_id`, fix regression postmortem path
+  Testability: Run a single card → exactly ONE subdirectory under `cards/`. Run summary reports `Cards run: 1`. Postmortem, agent_thoughts, result.json all in the same directory.
+
+- [ ] **Wire agent output through strategy → ****`CardRunResult`**** → postmortem**
+  Detail: Both `BlindStrategy` and `ImplTestStrategy` call `adapter.run(prompt, workspace)` which returns the agent's full output (thinking, tool calls, responses). But the strategies **discard this return value**. `run_card()` in `AgentSession` then logs a placeholder to the postmortem: `prompt="(strategy-level)"`, `response=f"status={result.status.value}"`. This means `agent_thoughts.md` (which reads from the postmortem) is nearly empty.
+
+  **Fix:**
+
+  1. Add `agent_output: str = ""` and `prompt_used: str = ""` fields to `CardRunResult` dataclass in `silverquillm/strategies.py`.
+  2. In both strategy `run_card()` methods, capture the adapter's return value and pass it through all return paths:
+  ```python
+output = adapter.run(prompt, workspace)  # capture
+# ...
+return CardRunResult(
+    status=CardRunStatus.completed,
+    agent_output=output,     # pass through
+    prompt_used=prompt,      # pass through
+    files_written=[impl_path],
+    runtime_ms=elapsed_ms,
+)
+  ```
+
+  For timeout paths, set `agent_output=""` (adapter was killed).
+
+  1. In `run_card()` in `agent_session.py`, use `result.agent_output` and `result.prompt_used` for the postmortem:
+  ```python
+_append_postmortem(
+    postmortem_path=postmortem_path,
+    prompt=result.prompt_used or "(strategy-level)",
+    response=result.agent_output or f"status={result.status.value}",
+    tokens=_estimate_tokens(result.agent_output) if result.agent_output else None,
+    timing_ms=elapsed * 1000,
+    status="success" if result.status == CardRunStatus.completed else result.status.value,
+)
+  ```
+
+  1. Do the same for the raw log `append_raw_log()` call.
+  Files to change:
+
+  - `silverquillm/strategies.py` — add fields to `CardRunResult`, capture output in both strategies
+  - `silverquillm/agent_session.py` — use `result.agent_output`/`result.prompt_used` in postmortem and raw log
+  Testability: Run mock adapter that returns "test output" → `postmortem.jsonl` contains "test output" in the response field. `agent_thoughts.md` has rich content (not just a status string).
+
+- [ ] **Replace ****`ThreadPoolExecutor`**** with direct adapter call in strategies**
+  Detail: Both `BlindStrategy` and `ImplTestStrategy` wrap the adapter call in `ThreadPoolExecutor.submit()`, which moves the adapter's `run()` method to a worker thread. The adapter streams output via `sys.stderr.write()` in `OpenCodeAdapter.run()`, but this streaming is effectively swallowed when running in a worker thread context. This caused all model thinking, tool calls, and ANSI-colored output to disappear after PR #11.
+
+  The `ThreadPoolExecutor` was added for hard-timeout + kill support, but `base.py` already has `run_with_retries()` which does the same thing via `signal.SIGALRM` (main thread) or threading fallback (non-main thread), plus calls `adapter.kill()` on timeout.
+
+  **Fix:** In both strategies, replace:
+
+  ```python
+pool = ThreadPoolExecutor(max_workers=1)
+future = pool.submit(adapter.run, prompt, workspace)
+try:
+    future.result(timeout=timeout)
+except (TimeoutError, FuturesTimeoutError, subprocess.TimeoutExpired):
+    if hasattr(adapter, "kill"): adapter.kill()
+    pool.shutdown(wait=False, cancel_futures=True)
+    ...
+  ```
+
+  With:
+
+  ```python
+try:
+    output = adapter.run_with_retries(prompt, workspace, timeout=timeout, retries=0)
+except TimeoutError:
+    if hasattr(adapter, "kill"): adapter.kill()
+    ...
+except subprocess.TimeoutExpired:
+    if hasattr(adapter, "kill"): adapter.kill()
+    ...
+  ```
+
+  Remove the `ThreadPoolExecutor` and `FuturesTimeoutError` imports if no longer used.
+
+  **This item depends on the previous item** ("Wire agent output") because `output` must be captured from the return value.
+
+  Files to change:
+
+  - `silverquillm/strategies.py` — replace `ThreadPoolExecutor` with direct call in both strategies, remove unused imports
+  Testability: Run a card → model thinking and tool calls are visible in stderr in real time. Timeout still works: mock adapter that blocks → times out → `adapter.kill()` called.
+
+  ⚠️ **Testing guidance (**[**TESTING-CONVENTIONS.md**](http://testing-conventions.md/)** compliance):** All timeout tests must use `threading.Event.wait()` adapters, patch `os.getpgid`/`os.killpg`, and set explicit mock PIDs.
+
+- [ ] **Remove stale ****`iterations/`**** directory creation**
+  Detail: The old multi-round `run_test_informed()` flow created `iterations/` subdirectories in results. The Phase 7 refactor moved to single-prompt `ImplTestStrategy` but didn't clean up all references. Result directories still contain a stale `iterations/` folder.
+
+  **Fix:**
+
+  1. Search all Python files for `iterations` directory creation: `grep -rn "iterations" silverquillm/ --include="*.py"`
+  2. Remove or update any code that creates `iterations/` subdirectories, copies files into `iterations/N/` structure, or references `iterations/` in path construction.
+  3. Check `silverquillm/prompts.py` — if `impl_test_mode_prompt()` mentions "iterations" or "rounds" in its instructions to the agent, update to reflect the single-prompt model. The agent self-manages its own internal iteration.
+  4. Check `silverquillm/results.py` — `save_card_result()` and `save_card_result_v2()` may be writing iteration-structured output.
+  5. Check `silverquillm/run_utils.py` — `_session_results_to_dicts()` may reference iteration fields.
+  Files to change:
+
+  - Any file creating `iterations/` directories (find via grep)
+  - `silverquillm/prompts.py` — update prompt language if needed
+  - `silverquillm/results.py` — remove iteration-structured output if present
+  Testability: Run mock adapter in impl_test mode → result directory is flat: `card_impl.py`, `tests.py`, `result.json`, `postmortem.jsonl`, `agent_thoughts.md`, `engine_diff.patch`. No `iterations/` subdirectory.
+
+- [ ] **Add signal handler for graceful interrupt cleanup in CLI**
+  Detail: When the benchmark is interrupted (Ctrl+C or SIGTERM), the opencode subprocess can continue running as an orphan because it runs in its own process group (`start_new_session=True`). While `teardown()` now calls `kill()`, the signal handler ensures the active adapter is killed immediately on interrupt — before Python's default `KeyboardInterrupt` propagation, which may be blocked in I/O.
+
+  **Fix:**
+
+  1. Add `_active_session: AgentSession | None = None` at module level in `silverquillm/cli.py`.
+  2. Define `_interrupt_handler(signum, frame)` that calls `_active_session._adapter.kill()` (with try/except) then raises `KeyboardInterrupt`.
+  3. Register the handler at the start of `run()` command: `signal.signal(signal.SIGINT, _interrupt_handler)` and `signal.signal(signal.SIGTERM, _interrupt_handler)`.
+  4. In the card loop, set `_active_session = session` before `run_card()` and clear it in the `finally` block.
+  5. Add `except KeyboardInterrupt: click.echo("Interrupted..."); break` to exit the card loop cleanly but still run post-loop summary/aggregation.
+  6. Restore original signal handlers after the card loop.
+  Files to change:
+
+  - `silverquillm/cli.py` — signal handler, `_active_session` tracking, `KeyboardInterrupt` handling in card loop
+  Testability: Start a benchmark run → Ctrl+C → verify no orphan opencode processes (`ps aux | grep opencode`). Verify run summary still prints (partial results). Verify `.workspace/` is cleaned up.
+
+- [ ] **Add preflight workspace isolation check**
+  Detail: The `repo_root` contamination bug (item 1) was a one-liner that went undetected for the entire PR #11 development cycle. A structural safeguard is needed to catch any future mechanism by which the agent escapes the workspace — not just `repo_root` misconfiguration, but also environment variables, symlinks, or other adapter config fields.
+
+  **Fix:** Add a deterministic canary-based check to `silverquillm/preflight.py`:
+
+  1. Create a canary file at `_REPO_ROOT / ".canary_preflight"` with a random UUID
+  2. Create a minimal workspace via `setup_workspace()` (or just `mkdir` + `git init`)
+  3. Launch the adapter with a simple prompt: `"Print the exact contents of the file at <canary_path>"`
+  4. Check the adapter's output — if the UUID appears, the agent escaped the workspace → fail preflight
+  5. Delete the canary file in a `finally` block
+  This is fully deterministic (just string matching on the UUID), fast (one short adapter call), and catches the entire class of workspace escape bugs.
+
+  Wire it into `preflight_check()` as an optional check (skip with `--skip-isolation-check` flag, since it requires a working adapter and makes an LLM call).
+
+  Files to change:
+
+  - `silverquillm/preflight.py` — add `_check_workspace_isolation()` function
+  - `silverquillm/cli.py` — add `--skip-isolation-check` flag, pass to `preflight_check()`
+  Testability: Unit test with mock adapter that returns the canary UUID → preflight fails. Mock adapter that returns unrelated text → preflight passes.
+
+- [ ] **Fix ****`test_timeout_enforcement.py`**** (PR #11 agent-killer tests)**
+  Detail: The tests in `tests/test_timeout_enforcement.py` from PR #11 have critical problems that must be fixed:
+
+  **Problem 1 — ****`TestOpenCodeAdapterKill.test_kill_terminates_active_process`**** kills the container:**
+
+  - `mock_proc = MagicMock()` → `mock_proc.pid` is auto-MagicMock → `int(MagicMock()) == 1`
+  - `os.getpgid(1)` returns process group of PID 1 (init)
+  - `os.killpg(1, SIGTERM)` sends SIGTERM to the entire container → all agents die
+  - Fix: set `mock_proc.pid = 99999` explicitly and patch `os.getpgid` + `os.killpg`
+  **Problem 2 — ****`_SleepForeverAdapter`**** uses ****`while True: time.sleep(0.1)`****:**
+
+  - If the timeout code under test is broken, these tests hang forever
+  - Fix: replace with `threading.Event.wait(timeout=60)` pattern
+  **Problem 3 — ****`_SlowConcreteAdapter`**** uses ****`time.sleep(9999)`****:**
+
+  - Same hang risk
+  - Fix: use `threading.Event.wait()` or mock `time.sleep`
+  Apply all 7 rules from [TESTING-CONVENTIONS.md](http://testing-conventions.md/) to this file. Every `os.getpgid`, `os.killpg`, `signal.signal`, `signal.alarm` call must be patched.
+
+  Files to change:
+
+  - `tests/test_timeout_enforcement.py` — rewrite all adapter mocks and kill tests per conventions
+  Testability: `pytest tests/test_timeout_enforcement.py -v` completes in under 30 seconds. No real signals sent. No process groups killed.
+
+- [ ] **Add ****`run_summary.json`**** top-level aggregation**
+  Detail: Currently, results are scattered across per-card directories with no top-level summary. We designed a 4-tier schema earlier:
+
+  **Tier 1 — Run metadata:** `model`, `strategy`, `timestamp`, `card_count`, `timeout_seconds`, `harness_version` (git SHA)
+
+  **Tier 2 — Aggregate scores:** `pass_rate`, `avg_score`, `median_score`, `cards_completed`, `cards_timed_out`, `cards_violated`, `total_runtime_ms`
+
+  **Tier 3 — Per-card summary array:** `card_id`, `card_name`, `status`, `score`, `tests_passed`, `tests_total`, `runtime_ms`, `violation`
+
+  **Tier 4 — Comparison hooks:** `previous_run_id` (optional), `delta_pass_rate`, `regressions[]`, `improvements[]`
+
+  Emit `run_summary.json` at the run directory root after all cards complete. Include partial results if interrupted (signal handler writes what's available).
+
+  Files to change:
+
+  - `silverquillm/cli.py` — generate and write `run_summary.json` after card loop
+  - `silverquillm/results.py` — add `generate_run_summary()` function
+  Testability: Run 2 cards → `run_summary.json` exists at run root, `card_count == 2`, `pass_rate` matches per-card results. Interrupt mid-run → partial summary still written.
+
+- [ ] **Simplify or remove ****`rules_skill.py`**
+  Detail: `rules_skill.py` is a 26KB file that is over-engineered now that rules are a greppable file. Either strip it down to a simple grep helper or remove it entirely. A `test_rules_skill.py` also exists and would need updating.
+
+  Files to change:
+
+  - `silverquillm/rules_skill.py` — simplify or delete
+  - `tests/test_rules_skill.py` — update or delete
+  Testability: If simplified: grep-based tests pass. If removed: no import errors, `test_package_rename.py` updated.
+
+- [ ] **Fix PROJECT_**[**MAP.md**](http://map.md/)** ASCII art alignment**
+  Detail: Architecture diagram in `PROJECT_MAP.md` has misaligned box characters after PR #5 edits. Cosmetic cleanup pass needed.
+
+  Files to change:
+
+  - `PROJECT_MAP.md` — realign ASCII art boxes
+  Testability: Visual inspection.
+
+- [ ] **Fix ****`get_targets()`**** snapshot-at-call-time issue**
+  Detail: Filter closures in `get_targets()` snapshot legal targets when called, not when evaluated. Currently mitigated by `on_resolve()` re-checking legality, but could produce incorrect behavior if target validation is re-checked mid-stack (e.g. for "fizzle" checks).
+
+  **Fix:** Defer filter evaluation to the point where targets are actually chosen. Make filters lazy — accept `game` state at evaluation time rather than capture time.
+
+  Files to change:
+
+  - Card implementations that define target filters — update to use lazy evaluation
+  - `engine/casting.py` — pass `game` to filter at evaluation time
+  Testability: Unit test: add a spell to the stack that modifies legal targets → second spell's target filter should see updated state.
+
+- [ ] **Refactor ****`chosen_targets`**** off card instance**
+  Detail: `chosen_targets` is stored as mutable state directly on the `CardImpl` object (`card.chosen_targets = chosen_targets` in `casting.py`, 83 hits across codebase). If card copying or cloning enters scope, targets from the original leak to the copy. The targets should live on the `StackObject` (which already has a `targets` field) and be accessed through the stack, not the card.
+
+  **Fix:** Remove `card.chosen_targets` assignment in `cast_spell()`. Update `on_resolve` callbacks and card implementations to read targets from the `StackObject.targets` field instead of `self.chosen_targets`.
+
+  Files to change:
+
+  - `engine/casting.py` — remove `card.chosen_targets` assignment
+  - Card implementations (83 files) that read `self.chosen_targets` — update to accept targets as parameter or read from stack
+  Testability: Grep for `chosen_targets` on card instances → 0 hits outside `StackObject`. Existing card tests still pass.

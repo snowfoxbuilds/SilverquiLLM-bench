@@ -1,3 +1,25 @@
+## Completed 2026-05-12
+
+Phase 7: Harness Architecture Refactor & Robustness (PR #11 — 16 items)
+
+Branch: `execute-todo-with-subagents/harness-refactor-20260512-071236` → `main`
+
+- [x] **Add ****`mode`**** to config and create ****`CardStrategy`**** ABC**
+- [x] **Implement ****`BlindStrategy`**
+- [x] **Implement ****`ImplTestStrategy`**
+- [x] **Refactor ****`agent_session.py`****: remove harness-managed iteration**
+- [x] **Decouple ****`harvest_results()`**** from violation status (fixes Issue #15)**
+- [x] **Engine snapshot and rollback on timeout**
+- [x] **Enforce ****`timeout_per_card`**** (fixes Issue #14)**
+- [x] **Move all evaluation to post-run**
+- [x] **Refactor ****`EvalResult`**** and ****`result.json`**** to v2 schema**
+- [x] **Automatic ****`run_summary.json`**** aggregation**
+- [x] **Allowlist-based contamination checker**
+- [x] **Fix ****`test_utils.md`**** import path (fixes Issue #11)**
+- [x] **Add ****`GameState`**** to template imports (fixes Issue #12)**
+- [x] **Simplify postmortem schema**
+- [x] **Pre-flight validation at run start**
+- [x] **Smoke tests with mock adapter (****`tests/test_harness.py`****)**
 ## Completed 2026-04-28
 
 Phase 1: Engine & Base Set (PR #1 — 24 items, 1,254 tests, 74 files)

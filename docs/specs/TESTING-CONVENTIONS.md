@@ -12,7 +12,7 @@ These conventions prevent that class of bug and others like it.
 
 The repo uses `pytest-timeout` with a global default in `pyproject.toml`:
 
-```
+```javascript
 [tool.pytest.ini_options]
 timeout = 30
 ```
@@ -90,7 +90,6 @@ Functions that must always be mocked or patched in tests:
 - `signal.signal()`, `signal.alarm()`
 - `subprocess.Popen()` (when testing kill/terminate logic)
 - Any function that sends signals to process groups
-
 ### 3. Always set explicit values on mock attributes used as system identifiers
 
 `MagicMock()` auto-creates attributes that return new `MagicMock` instances. When these are passed to system calls that coerce to `int`, `MagicMock.__int__()` returns `1` — which maps to PID 1 (init) on Linux.
@@ -123,7 +122,6 @@ Strategies:
 - Use `threading.Event.wait(timeout=5)` instead of `while True`
 - Use `@pytest.mark.timeout(10)` as a per-test safety net
 - Use `signal.alarm()` as a test-level watchdog (not the same as the code under test's alarm)
-
 ### 5. Never call `game.run()` or enter the game loop in unit tests
 
 The MTG game loop can run indefinitely if the `DeterministicPlayer` script is exhausted. Always test game logic step-by-step:
@@ -164,16 +162,15 @@ Use `tmp_path` (pytest fixture) for temporary files. Use context managers or `tr
 
 Before committing any test file, verify:
 
-- [ ]  No `while True` loops without a guaranteed exit condition
-- [ ]  No `time.sleep()` calls longer than 5 seconds
-- [ ]  No real `os.kill*()` or `signal.*()` calls — all patched
-- [ ]  All mock PIDs/process attributes set to explicit fake values (not auto-MagicMock)
-- [ ]  No `game.run()` or open-ended game loop calls
-- [ ]  No real `subprocess.Popen()` in unit tests — all mocked
-- [ ]  Test completes in under 10 seconds even if code under test is broken
-- [ ]  `tmp_path` used for all filesystem operations
-- [ ]  No background threads or timers left running after test
-
+- [ ] No `while True` loops without a guaranteed exit condition
+- [ ] No `time.sleep()` calls longer than 5 seconds
+- [ ] No real `os.kill*()` or `signal.*()` calls — all patched
+- [ ] All mock PIDs/process attributes set to explicit fake values (not auto-MagicMock)
+- [ ] No `game.run()` or open-ended game loop calls
+- [ ] No real `subprocess.Popen()` in unit tests — all mocked
+- [ ] Test completes in under 10 seconds even if code under test is broken
+- [ ] `tmp_path` used for all filesystem operations
+- [ ] No background threads or timers left running after test
 ---
 
 ## Enforcing These Conventions
