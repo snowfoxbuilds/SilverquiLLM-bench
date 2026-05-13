@@ -1,3 +1,23 @@
+## Completed 2026-05-13
+
+Phase 9: Docker Container Flow + FDN Card Restructure (PR #12 — 12 items)
+
+Branch: `execute-todo-with-subagents/phase9-docker-container-flow-20260513-082836` → `main`
+
+Status: PR open, review requested changes (README/PROJECT_MAP not updated, old files not confirmed deleted, FDN shims need tracking)
+
+- [ ] Delete remaining old harness code from `silverquillm/`
+- [ ] Restructure FDN cards to per-collector-number layout
+- [ ] Restructure SOS cards to unified `cards/` layout
+- [ ] Rewrite `silverquillm/card_loader.py` for unified card layout
+- [ ] Implement `silverquillm/workspace.py` — workspace staging
+- [ ] Create Docker images: `docker/opencode-tested/` and `docker/opencode-blind/`
+- [ ] Implement `silverquillm/cli.py` — `run` and `smoke` commands
+- [ ] Rewrite `silverquillm/evaluator.py` — 3 evaluation dimensions
+- [ ] Implement `silverquillm/results.py` — run summary generation
+- [ ] Implement progress.jsonl protocol in entrypoints
+- [ ] Update `pyproject.toml` and `README.md` for new architecture
+- [ ] Clean up orphaned tests and verify full suite
 ## Completed 2026-05-12
 
 Phase 7: Harness Architecture Refactor & Robustness (PR #11 — 16 items)

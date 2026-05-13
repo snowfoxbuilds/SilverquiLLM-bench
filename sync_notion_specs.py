@@ -10,6 +10,7 @@ Usage:
   python3 sync_notion_specs.py
 
 Requires: pip install requests
+Requires: pip install dotenv
 """
 
 import argparse

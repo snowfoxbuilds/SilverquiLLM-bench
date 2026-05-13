@@ -8,7 +8,7 @@ use these terms exactly. Updated during grilling sessions.
 
 **Agent Container**
 
-Docker image packaging a single coding agent with its CLI, entrypoint, mode (blind/tested), strategy, model selection, and prompt — the full benchmark configuration. The runner launches it with mounted volumes and API key env vars. The runner has zero knowledge of agent internals. Image name encodes the variant (e.g. `silverquillm-opencode-tested:latest`).
+Docker image packaging a single coding agent with its CLI, entrypoint, mode (blind/tested), strategy, model selection, and prompt — the full benchmark configuration. The runner launches it with mounted volumes and API key env vars. The runner has zero knowledge of agent internals. Image name encodes the variant (e.g. `silverquillm-pi-blind:latest`).
 
 *Avoid*: "agent adapter" (deprecated), "agent tool" (ambiguous)
 
@@ -72,6 +72,12 @@ Test player with scripted actions for reproducible game state setup. All benchma
 
 *Avoid*: "test player", "mock player"
 
+**Output Snapshot**
+
+Periodic runner-captured copy of the Workspace during an Agent Container run, roughly once per minute. Stored as host-side Git commits outside the container. Used for progress telemetry and as a fallback recovery point if final Workspace state is corrupted by timeout cutoff or broken engine edits.
+
+*Avoid*: "checkpoint" (overloaded with spec checkpoints), "progress log" (that's `progress.jsonl`)
+
 **Pipeline Validation Run**
 
 A benchmark run whose purpose is to validate that the orchestration pipeline works end-to-end (workspace staging, container launch, result harvesting, evaluation). Not intended to produce meaningful scores — audited tests are not required. Precedes scored benchmark runs.
@@ -90,6 +96,12 @@ Engine correctness check that replays 17lands GRE (Game Rules Engine) state stre
 
 *Avoid*: "differential testing" (deprecated XMage approach), "checkpoint validation" (we do full state comparison, not just EOT checkpoints), "aggregate CSV" (that's a different 17lands dataset)
 
+**Run Manifest**
+
+Minimal runtime facts written by the runner to `/workspace/run_manifest.json` immediately before container launch. Contains only `timeout_seconds` and `deadline_utc`; it is advisory to the Agent Container and does not configure agent behavior.
+
+*Avoid*: "config.json" (implies agent configuration), "agent config"
+
 **Self-Eval** *(deferred — v2)*
 
 Future evaluation layer: each agent's code tested against its own tests. Requires test harvester. Not part of v1 scoring.
@@ -104,7 +116,7 @@ Benchmark mode (`MODE=tested`) where the prompt instructs the agent to write tes
 
 **Writable Engine**
 
-The agent's copy of `engine/` at `/workspace/engine_work/` inside the container. Copied from the read-only `/workspace/engine/` by the entrypoint before the agent starts. The agent modifies it freely throughout the run. After the run, the runner diffs it against the original to produce `engine_diff.patch`.
+The engine source at `/workspace/engine/` inside the container. The agent modifies it in place throughout the run. The baseline engine remains on the host side, outside the container; after the run, the runner diffs the final or fallback Workspace engine against the host baseline to produce `engine_diff.patch`.
 
 *Avoid*: "persistent engine" (deprecated — implied per-card sequential accumulation), "shared engine"
 
@@ -138,7 +150,7 @@ The staged directory mounted into the agent container at `/workspace/`. Contains
 - A Benchmark Run launches one container session. The agent receives the full workload (all SOS cards) in a single Workspace.
 - FDN cards are in-context examples (filled implementations, no tests). SOS cards are benchmark targets (empty templates).
 - Each agent produces `card_impl.py` per SOS card. In Tested Mode, also `tests.py` per card.
-- The agent has a Writable Engine (`engine_work/`) and may extend it freely throughout the run.
+- The agent has a Writable Engine (`/workspace/engine/`) and may extend it freely throughout the run.
 - All evaluation is post-run. After the container exits, the evaluator runs tests against harvested implementations and the final engine state.
 - FDN Card Regression: evaluator runs `tests/audited/fdn/` against pre-filled FDN card impls + agent's final Writable Engine. Detects broken card behavior.
 - Engine Regression: evaluator runs `tests/engine/` against agent's final Writable Engine. Detects broken rules mechanics.
@@ -155,3 +167,6 @@ The staged directory mounted into the agent container at `/workspace/`. Contains
 - On container timeout, the runner harvests partial results. Completed cards are evaluated normally; unfinished cards scored as zero.
 - Two benchmark modes: **Blind** (prompt omits test instructions) and **Tested** (prompt includes test instructions). Both produce `card_impl.py`. Distinction is prompt-only for v1. Compare modes via separate runs.
 - Audited tests are evaluation-only artifacts — never in the agent's workspace, never in results directories. Contamination control.
+- The runner is the hard timeout authority. Agent Containers may read the Run Manifest for pacing, but correctness does not depend on honoring it.
+- `progress.jsonl` is optional best-effort observability. It may refine status, but it cannot make an unchanged template count as completed.
+- Output Snapshots are runner-owned, Workspace-only, and independent of Agent Container cooperation. The runner may use prior snapshot commits as fallback if final engine state is corrupted.
