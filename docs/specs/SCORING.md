@@ -1,52 +1,46 @@
-Status: SETTLED
+Status: DRAFT (rewritten for container architecture)
 
-Last updated: 2026-04-28
+Last updated: 2026-05-13
 
 # Scoring
 
-Three independent scoring categories. No composite score.
+Three evaluation dimensions. No composite score.
 
 ## Context
 
-SilverquiLLM-bench evaluates three distinct skills — implementation from spec, iterative debugging, and test writing — so each gets its own leaderboard.
+The evaluator runs audited tests against the agent's output after the container exits. The agent's own tests (if any) are harvested as artifacts but not used for scoring in v1. Blind vs. tested mode comparisons are made across separate runs (different images), not as separate scoring categories.
 
 ## Design
 
-### Category 1: Blind Implementation
+### Dimension 1: SOS Card Correctness
 
-Measures pure spec-to-code ability (no tests to guide the agent).
+Measures how well the agent implemented the target cards.
 
 | Metric | Definition |
 | --- | --- |
-| Audited test pass rate | % of audited tests passed by `blind_impl.py` across all cards |
-| Card pass rate | % of cards where `blind_impl.py` passes ALL audited tests |
-| Cross-eval pass rate | Average pass rate of `blind_impl.py` against other agents' tests |
+| Audited test pass rate | % of SOS audited tests passed by `card_impl.py` across all cards |
+| Card pass rate | % of SOS cards where `card_impl.py` passes ALL audited tests |
 | Weighted score | Card pass rate weighted by complexity tier |
 
-### Category 2: Implementation with Tests
+### Dimension 2: FDN Card Regression
 
-Measures improvement through test-driven iteration. Delta from Category 1 reveals debugging ability.
-
-| Metric | Definition |
-| --- | --- |
-| Audited test pass rate | % of audited tests passed by `tested_impl.py` across all cards |
-| Card pass rate | % of cards where `tested_impl.py` passes ALL audited tests |
-| Cross-eval pass rate | Average pass rate of `tested_impl.py` against other agents' tests |
-| Weighted score | Card pass rate weighted by complexity tier |
-| Improvement delta | Category 2 audited pass rate − Category 1 audited pass rate |
-
-### Category 3: Test Quality
-
-Measures how good the agent's tests are. Ideal tests are valid and not every agent passes them.
+Measures whether the agent's engine extensions broke existing card behavior. FDN audited tests (`tests/audited/fdn/`) are run against the pre-filled FDN `card_impl.py` files using the agent's `engine_work/`.
 
 | Metric | Definition |
 | --- | --- |
-| Audit survival rate | % of agent's tests that survived human audit (correct + non-trivial) |
-| Discrimination score | Variance in pass rates across agents' implementations (high = good differentiation) |
-| Difficulty calibration | Fraction of tests passed by some but not all agents (the "sweet spot") |
-| Coverage | % of audited test behaviors covered by agent's test suite |
+| FDN test pass rate | % of FDN audited tests that still pass against the agent's final engine |
+| FDN card pass rate | % of FDN cards where ALL audited tests still pass |
 
-A test passed by all agents is trivial. A test failed by all agents is likely wrong. The most valuable tests differentiate between strong and weak implementations.
+### Dimension 3: Engine Regression
+
+Measures whether the agent's engine extensions broke fundamental game mechanics. Core engine tests (`tests/engine/`) are run against the agent's `engine_work/`.
+
+| Metric | Definition |
+| --- | --- |
+| Engine test pass rate | % of core engine tests that still pass against the agent's final engine |
+| Engine churn | Total lines changed in `engine_diff.patch` |
+
+FDN Card Regression and Engine Regression are intertwined (both test the engine at different levels) but measure different things: Dimension 2 catches broken card behavior, Dimension 3 catches broken rules mechanics. An agent could pass all FDN card tests but fail engine tests if it hacked card-level workarounds that corrupt internal state.
 
 ### Complexity Weighting
 
@@ -58,22 +52,9 @@ A test passed by all agents is trivial. A test failed by all agents is likely wr
 | Complex | Multi-step abilities, replacement effects, modal spells | 4x |
 | Expert | Planeswalkers, complex state machines, unusual mechanics | 5x |
 
-Weighted Score = Σ(w_c × pass(c)) / Σ(w_c), where pass(c) = 1 if all audited tests pass, 0 otherwise. Applied to both Category 1 and Category 2.
+Weighted Score = Σ(w_c × pass(c)) / Σ(w_c), where pass(c) = 1 if all audited tests pass, 0 otherwise. Applied to Dimension 1 only.
 
 Tiers assigned via automated heuristics: rules text length, keyword count, ability count, target requirements, zone interactions, card type. Thresholds calibrated from target set distribution.
-
-### Category 4: Engine Extension Quality
-
-Measures the agent's ability to extend the shared engine without breaking existing cards. Only applies when the persistent-engine model is used (cards processed sequentially with a shared writable engine per run).
-
-| Metric | Definition |
-| --- | --- |
-| Regression rate | % of cards whose tests broke due to engine changes made for a later card |
-| Regression-free streak | Longest consecutive sequence of cards completed without any regression |
-| Engine churn | Total lines changed in engine/ across all cards (lower = cleaner extensions) |
-| Mechanic reuse rate | % of cards that reused an engine mechanic added by a previous card (vs. adding a new one) |
-
-A perfect score means the agent extended the engine for every card that needed it, and no engine change ever broke a previously-passing test. High churn with low regression = acceptable (the agent extended a lot but cleanly). High regression = the agent writes brittle, card-specific hacks.
 
 ### Secondary Metrics
 
@@ -85,36 +66,43 @@ A perfect score means the agent extended the engine for every card that needed i
 
 **Efficiency metrics**: Tokens per card, cost per card, time per card, pass rate per dollar.
 
-**Regression details**: Per-card list of which earlier cards' tests broke and what engine change caused it.
+**FDN regression details**: List of FDN audited tests that fail against the agent's final engine, with failure messages.
+
+**Engine regression details**: List of core engine tests that fail against the agent's final engine, with failure messages.
 
 ### Leaderboard Format
 
 ```javascript
-Category 1: Blind Implementation
-| Rank | Model          | Audited | Card Pass | Cross-Eval | Weighted |
-|------|----------------|---------|-----------|------------|----------|
-| 1    | Claude Opus 4  | 72.3%   | 48.1%     | 68.5%      | 44.2%    |
-| 2    | GPT-5          | 69.8%   | 44.0%     | 65.2%      | 40.8%    |
+SOS Card Correctness
+| Rank | Image                          | Audited | Card Pass | Weighted |
+|------|--------------------------------|---------|-----------|----------|
+| 1    | opencode-tested (opus-4)       | 72.3%   | 48.1%     | 44.2%    |
+| 2    | opencode-blind (opus-4)        | 65.1%   | 40.0%     | 36.8%    |
+| 3    | claude-code-tested (opus-4)    | 69.8%   | 44.0%     | 40.8%    |
 
-Category 2: Implementation with Tests
-| Rank | Model          | Audited | Card Pass | Cross-Eval | Weighted | Delta |
-|------|----------------|---------|-----------|------------|----------|-------|
-| 1    | Claude Opus 4  | 84.7%   | 65.2%     | 80.1%      | 61.5%    | +12.4 |
-| 2    | GPT-5          | 81.3%   | 60.8%     | 76.8%      | 57.2%    | +11.5 |
-
-Category 3: Test Quality
-| Rank | Model          | Audit Survival | Discrimination | Difficulty Cal. | Coverage |
-|------|----------------|----------------|----------------|-----------------|----------|
-| 1    | Claude Opus 4  | 82%            | 0.71           | 64%             | 68%      |
-| 2    | GPT-5          | 78%            | 0.65           | 58%             | 63%      |
+Regression Summary
+| Image                          | FDN Card Pass | Engine Pass | Engine Churn |
+|--------------------------------|---------------|-------------|-------------|
+| opencode-tested (opus-4)       | 100%          | 98.5%       | 342 lines   |
+| opencode-blind (opus-4)        | 100%          | 100%        | 128 lines   |
+| claude-code-tested (opus-4)    | 97.2%         | 95.0%       | 891 lines   |
 ```
 
 (Example format — not real results)
 
+### Future Work
+
+**Cross-eval**: Run each agent's tests against every other agent's implementations (N×N matrix). Requires a test harvester to collect and validate agent-written tests.
+
+**Self-eval**: Run each agent's tests against its own implementations. Useful for measuring self-serving test bias.
+
+**Test Quality scoring**: Audit survival rate, discrimination score, difficulty calibration, coverage. Requires cross-eval infrastructure.
+
 ## Decisions
 
-- **Three independent categories**: Blind impl, tested impl, and test quality scored separately. No composite. [SETTLED]
+- **Three evaluation dimensions**: SOS card correctness, FDN card regression, engine regression. Each measured independently. [SETTLED]
+- **Audited tests only for v1**: Agent-written tests are harvested as artifacts but not used for scoring. Cross-eval and self-eval deferred to future test harvester. [SETTLED]
+- **No blind vs. tested scoring categories**: Mode is baked into the image. Compare modes by running different images and comparing Dimension 1 results. [SETTLED]
+- **Complexity weighting on Dimension 1 only**: FDN and engine regression are pass/fail — no weighting needed. [SETTLED]
 - **Raw scores only**: No statistical significance tests or confidence intervals. [SETTLED]
-- **Difficulty calibration metric**: Rewards tests in the sweet spot (some agents pass, others don't). [SETTLED]
-- **Self-serving bias tracked**: Self-eval pass rate − cross-eval pass rate. High bias = agent writes easy tests. [SETTLED]
-- **Category 4 (Engine Extension Quality)**: Measures regression rate, engine churn, and mechanic reuse when agents extend the shared engine across cards. [SETTLED]
+- **Grilling 2026-05-13: Simplified from 4 categories**: Former Category 1 (blind) and Category 2 (tested) merged into single SOS correctness dimension. Former Category 3 (test quality) deferred. Former Category 4 (engine extension) split into FDN regression + engine regression. [SETTLED]

@@ -150,7 +150,7 @@ Use `test_utils` helpers: `create_game()`, `set_board_state()`, `cast_spell()`, 
 
 Tests that need to verify subprocess behavior should mock `subprocess.Popen` or use `unittest.mock.patch`. Real subprocess spawning creates orphan processes, port conflicts, and environment-dependent failures.
 
-**Exception:** Integration tests in `tests/test_harness.py` may use the `MockAdapter` to test the full pipeline, but even these must not spawn real LLM-calling processes.
+**Exception:** Integration tests that verify the runner pipeline may use mock adapters, but must not spawn real LLM-calling processes or Docker containers.
 
 ### 7. Clean up all resources in test teardown
 
@@ -177,5 +177,4 @@ Before committing any test file, verify:
 
 1. **`pytest-timeout = 30s`** — global hard limit in `pyproject.toml`
 2. **CI gate** — `pytest` runs on every PR; any timeout or hang fails the build
-3. **Agent instructions** — `.github/copilot-instructions.md` references this document and instructs agents to follow these conventions when writing tests
-4. **Code review** — the Reviewer subagent checks for violations of these conventions in its review pass
+3. **Agent instructions** — Agent-facing documentation references this document and instructs agents to follow these conventions when writing tests

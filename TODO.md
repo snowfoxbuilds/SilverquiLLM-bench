@@ -1,359 +1,352 @@
 # TODO
 
-## Phase 8: Fix PR #11 Regressions & Harden Pipeline
+## Phase 9: Docker Container Flow + FDN Card Restructure
 
-Scope: Fix all regressions introduced by the Phase 7 harness refactor (PR #11), including workspace contamination, broken output streaming, false-positive violation detection, and empty postmortem logs. Add structural safeguards (preflight isolation check, signal handling) to prevent this class of bug from recurring. Clean up remaining backlog tech debt.
+Scope: (1) Replace old adapter-based harness with Docker container system per [AGENT-CONTAINERS.md](http://agent-containers.md/) and [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) specs. (2) Restructure FDN cards to per-collector-number layout matching SOS structure.
 
-These are all bugs and regressions discovered during post-merge Pipeline Validation Runs on 2026-05-12. Every item was root-caused by reading the PR #11 codebase at commit `e6f0b47`. See [KNOWN-ISSUES.md](http://known-issues.md/) (Issues #10–#15) and the conversation log for full analysis.
+Old harness core files ([cli.py](http://cli.py/), [config.py](http://config.py/), [strategies.py](http://strategies.py/), agent_[session.py](http://session.py/), [preflight.py](http://preflight.py/), [prompts.py](http://prompts.py/), run_[utils.py](http://utils.py/), [results.py](http://results.py/), adapters/) have already been deleted. Remaining `silverquillm/` files: card_[classifier.py](http://classifier.py/), card_[loader.py](http://loader.py/), card_[spec.py](http://spec.py/), [evaluator.py](http://evaluator.py/), post_[eval.py](http://eval.py/), [prototype.py](http://prototype.py/), [regression.py](http://regression.py/), replay/, [scorer.py](http://scorer.py/), template_[gen.py](http://gen.py/).
 
-Reference files in current codebase:
+Reference: [CONTEXT.md](http://context.md/) for vocabulary, KEY_[DECISIONS.md](http://decisions.md/) for settled conventions, [AGENT-CONTAINERS.md](http://agent-containers.md/) for the container architecture, [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) for the host-side runner.
 
-- `silverquillm/adapters/opencode.py` — `configure_opencode()` with wrong `repo_root`, `run()` streaming logic
-- `silverquillm/strategies.py` — `BlindStrategy`/`ImplTestStrategy` with `ThreadPoolExecutor`, `CardRunResult` missing `agent_output`
-- `silverquillm/agent_session.py` — `_is_allowed_path()` missing `.pytest_cache`, `_get_postmortem_path()` using `card_name` instead of `card_dir_name`, `_generate_agent_thoughts()` same issue
-- `silverquillm/cli.py` — regression postmortem path uses `card_name`, no signal handler for graceful interrupt
-- `silverquillm/preflight.py` — `_check_card_specs_dir()` uses flat glob but cards are in subdirectories
-- `silverquillm/adapters/base.py` — `run_with_retries()` already has timeout+kill support (use this instead of ThreadPoolExecutor)
 ---
 
-- [x] **Fix ****`repo_root`**** contamination in ****`OpenCodeAdapter`**
-  Detail: `OpenCodeAdapter.configure_opencode()` in `silverquillm/adapters/opencode.py` sets `"repo_root": str(_REPO_ROOT)` which points to the actual repo root (`/repos/SilverquiLLM-bench/`). This tells the agent (opencode) that its file navigation boundary is the entire repo. The agent can read all existing card implementations in `cards/`, all tests in `tests/`, all engine source in `engine/`, and all harness code in `silverquillm/`. This is a **critical contamination hole** — benchmark results are meaningless when the agent can see reference implementations.
+- [ ] **Delete remaining old harness code from ****`silverquillm/`**
+  Detail: The following files are dead code from the adapter-based harness and have no role in the new Docker container flow. Delete them and their corresponding tests:
 
-  Additionally, `.workspace/` is a hidden directory (starts with `.`), so globs from the repo root skip it — the agent can't even find its own workspace files (`card_spec.json`, `template.py`, etc.) through the repo root's glob.
+  - `silverquillm/card_classifier.py` — complexity tier classifier (classification now happens offline, pre-baked into card_spec.json)
+  - `silverquillm/prototype.py` — prototype card selection logic (no longer needed)
+  - `silverquillm/post_eval.py` — post-evaluation aggregation (replaced by new `results.py`)
+  - `silverquillm/regression.py` — per-card regression runner (regression is now FDN + engine dimension in evaluator)
+  - `silverquillm/scorer.py` — old 4-category scoring (replaced by 3-dimension evaluator)
+  - `silverquillm/template_gen.py` — card template generation (replaced by `workspace.py` staging)
+  - Keep `silverquillm/replay/` (replay validation is independent of harness)
+  - Keep `silverquillm/card_spec.py` (CardSpec dataclass is reusable)
+  - Keep `silverquillm/evaluator.py` (will be fully rewritten in a later item)
+  - Also delete corresponding test files: `tests/test_card_classifier.py`, `tests/test_prototype.py`, `tests/test_post_eval.py`, `tests/test_regression.py`, `tests/test_scorer.py`, `tests/test_template_gen.py` (verify actual filenames via `tests/` listing before deleting).
+  - Update `silverquillm/__init__.py` to remove imports of deleted modules.
+  - Update tests to remove orphaned tests
+  - Run `pytest --ignore=tests/audited/ -x` to verify no import breakage.
+  Testability: `pytest --ignore=tests/audited/ -x` passes. No import errors. `grep -rn` for deleted module names finds zero hits in remaining source.
 
-  **Fix:** Change one line:
+- [ ] **Restructure FDN cards to per-collector-number layout**
+  Detail: FDN card implementations currently live in monolithic files under `cards/foundations/` (e.g. `activated_creatures.py`, `etb_creatures.py`, `simple_spells.py` — 21 files, 260+ cards). The target layout is `cards/fdn/{collector_number}/card_spec.json` + `cards/fdn/{collector_number}/card_impl.py`, matching the SOS per-card structure.
 
-  ```python
-# BEFORE:
-"repo_root": str(_REPO_ROOT),
-# AFTER:
-"repo_root": str(workspace),
+  Steps:
+
+  1. Write a migration script `scripts/restructure_fdn_cards.py` that:
+    - Reads `cards/registry.py` to get each FDN card's class name, collector number, and source file.
+    - For each registered FDN card, creates `cards/fdn/{collector_number}/card_impl.py` containing only that card's class and its imports.
+    - Generates `cards/fdn/{collector_number}/card_spec.json` from existing CardMetadata (name, mana_cost, type_line, oracle_text, collector_number, complexity_tier).
+    - SPG cards (collector numbers 074–083 in FDN draft set) go to `cards/fdn/spg_{collector_number}/` per KEY_DECISIONS convention for multi-set collisions.
+  2. Update `cards/registry.py` to import from the new per-card `card_impl.py` files instead of monolithic batch files.
+  3. Delete old monolithic files under `cards/foundations/` after migration.
+  4. Handle collector number collisions (KEY_DECISIONS documents `105b`, `61b` suffix convention).
+  5. Verify: `pytest tests/ --ignore=tests/audited/ -x` still passes — all card tests must resolve classes from new paths.
+  Testability: `cards/fdn/` has one subdirectory per FDN card. Each has `card_spec.json` + `card_impl.py`. Registry imports work. All existing card tests pass.
+
+- [ ] **Restructure SOS cards to unified ****`cards/`**** layout**
+  Detail: SOS card specs currently live under `benchmarks/sos/cards/{num}/card_spec.json`. Move them to `cards/sos/{collector_number}/card_spec.json` + `cards/sos/{collector_number}/card_impl.py` (empty template) so both sets share the `cards/{set}/` root.
+
+  Steps:
+
+  1. Move `benchmarks/sos/cards/{num}/card_spec.json` → `cards/sos/{num}/card_spec.json`.
+  2. Generate empty template `cards/sos/{num}/card_impl.py` for each SOS card (class skeleton from card_spec, subclassing CardImpl, with `pass` methods).
+  3. Non-SOS subset cards: SOA uses `cards/sos/soa_{num}/`, SPG uses `cards/sos/spg_{num}/` per KEY_DECISIONS.
+  4. Update `card_loader.py` to load from `cards/{set_code}/{num}/card_spec.json`.
+  5. Clean up `benchmarks/sos/cards/` (delete after migration, or keep `benchmarks/sos/fetch_data.py` if it's the Scryfall fetcher).
+  Testability: `cards/sos/` has one subdirectory per SOS card. Each has `card_spec.json` + `card_impl.py` (template). Card loader resolves all cards.
+
+- [ ] **Rewrite ****`silverquillm/card_loader.py`**** for unified card layout**
+  Detail: Consolidate card loading to work with the new `cards/{set_code}/{collector_number}/` layout. Keep `card_spec.py`'s `CardSpec` dataclass as the return type.
+
+  Functions:
+
+  - `load_card_spec(cards_dir: Path, set_code: str, collector_number: str) -> CardSpec` — loads one card spec JSON.
+  - `load_all_card_specs(cards_dir: Path, set_code: str) -> list[CardSpec]` — loads all card specs for a set, sorted by collector number.
+  - `load_card_impl(cards_dir: Path, set_code: str, collector_number: str) -> Path` — returns path to card_[impl.py](http://impl.py/).
+  - `is_template(card_impl_path: Path) -> bool` — checks if a card_[impl.py](http://impl.py/) is an empty template (for harvest comparison).
+  Files: `silverquillm/card_loader.py`.
+
+  Testability: Unit test with fixture card specs under `tests/fixtures/cards/`. Verify loading, sorting, missing-card error, template detection.
+
+- [ ] **Implement ****`silverquillm/workspace.py`**** — workspace staging**
+  Detail: Host-side module that builds the workspace directory before `docker run`. This is the agent's entire world — contamination control is enforced by what gets staged.
+
+  `stage_workspace(cards_dir: Path, engine_dir: Path, output_dir: Path) -> tuple[Path, Path]` returns (workspace_path, output_path).
+
+  Staged layout:
+
+  ```javascript
+workspace/
+  prompt.md                 — single input prompt (see below)
+  rulebook.md               — comprehensive rules reference
+  engine/                   — full engine source (read-only reference copy)
+  engine_api.md             — engine API reference doc
+  base_classes.py           — CardImpl base class source
+  test_utils.md             — test utility reference doc
+  cards/
+    fdn/{num}/              — FDN cards (filled implementations, in-context examples)
+      card_spec.json
+      card_impl.py
+    sos/{num}/              — SOS cards (empty templates, benchmark targets)
+      card_spec.json
+      card_impl.py
+output/                     — empty dir for progress.jsonl, stdout.log, stderr.log
   ```
 
-  This confines the agent's entire file navigation world to `.workspace/`, which `setup_workspace()` already populates with the curated set of files (card_spec, template, engine_[api.md](http://api.md/), base_classes, foundations, engine).
+  [prompt.md](http://prompt.md/) content (per [AGENT-CONTAINERS.md](http://agent-containers.md/)):
 
-  Also add explicit deny paths to the permissions block as defense-in-depth:
+  > Implement all SOS cards in `/workspace/cards/sos/`. Each card directory contains a `card_spec.json` with the card's details and a `card_impl.py` template to fill in.
 
-  ```python
-"permissions": {
-    "allow_read": [str(workspace)],
-    "allow_write": [str(workspace)],
-    "deny_read": [str(_REPO_ROOT / "cards"), str(_REPO_ROOT / "tests"),
-                   str(_REPO_ROOT / "silverquillm"), str(_REPO_ROOT / "benchmarks")],
-},
+  > Use the completed FDN cards in `/workspace/cards/fdn/` as implementation examples. Refer to `rulebook.md` for detailed game rules and `engine_api.md` for the engine API.
+
+  The prompt does NOT dictate ordering, strategy, or iteration. The agent decides.
+
+  Reference docs (`engine_api.md`, `base_classes.py`, `test_utils.md`, `rulebook.md`) are copied from their existing locations in the repo (check `docs/` and `engine/`).
+
+  Files: `silverquillm/workspace.py`.
+
+  Testability: Call `stage_workspace()` → verify directory tree exists, FDN impls are non-empty, SOS impls are templates, [prompt.md](http://prompt.md/) exists, engine/ is a complete copy.
+
+- [ ] **Create Docker images: ****`docker/opencode-tested/`**** and ****`docker/opencode-blind/`**
+  Detail: Each image IS the full agent configuration. No MODE/STRATEGY env vars. Only API keys at runtime.
+
+  `docker/opencode-tested/Dockerfile`:
+
+  ```docker
+FROM python:3.12-slim
+RUN apt-get update && apt-get install -y git curl diffutils && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir opencode-ai pytest
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENV OPENCODE_NON_INTERACTIVE=1
+ENV PYTHONDONTWRITEBYTECODE=1
+WORKDIR /workspace
+ENTRYPOINT ["/entrypoint.sh"]
   ```
 
-  The module-level `_REPO_ROOT` constant in `opencode.py` should remain — it's still needed for the deny paths. But it must NEVER be passed as `repo_root` in the agent config.
+  `docker/opencode-tested/entrypoint.sh`:
 
-  Files to change:
+  ```bash
+	#!/bin/bash
+	set -euo pipefail
+	mkdir -p /output
+	# Writable engine copy — agent modifies this, original stays read-only
+	cp -r /workspace/engine /workspace/engine_work
+	# Build prompt: base prompt + tested-mode instruction
+	PROMPT=$(cat /workspace/prompt.md)
+	PROMPT="${PROMPT}
 
-  - `silverquillm/adapters/opencode.py` — `configure_opencode()` method
-  Testability: Unit test with a mock: call `configure_opencode(workspace)` and assert `config["repo_root"] == str(workspace)`. Assert `_REPO_ROOT` does NOT appear in the returned config's `repo_root` field.
-
-- [x] **Fix ****`.pytest_cache`**** and other tool-cache false contamination**
-  Detail: `_is_allowed_path()` in `silverquillm/agent_session.py` only allows `__pycache__` in its directory check. When the agent runs pytest during implementation, `.pytest_cache/v/cache/nodeids` is modified. The contamination checker flags this as a violation, and `run_card()` overwrites the result to `CardRunStatus.no_output` — even though the implementation is correct. This was the direct cause of `tested=no_output` in validation runs.
-
-  **Fix:**
-
-  1. Add a `_IGNORED_DIRS` frozenset near the existing `_IGNORED_SUFFIXES`:
-  ```python
-_IGNORED_DIRS: frozenset[str] = frozenset({
-    "__pycache__",
-    ".pytest_cache",
-    ".mypy_cache",
-    ".ruff_cache",
-    ".tox",
-    ".eggs",
-    ".hypothesis",
-    ".nox",
-})
+After implementing each card, write tests in a tests.py file alongside card_impl.py and iterate until they pass. Use pytest to run your tests."
+	# Write started event
+	echo "{\"ts\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\", \"event\": \"started\"}" >> /output/progress.jsonl
+	# Trap SIGTERM for graceful shutdown on Docker timeout
+	trap 'echo "{\"ts\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\", \"event\": \"timed_out\"}" >> /output/progress.jsonl; exit 143' SIGTERM
+	# Invoke opencode with the full prompt, working directory is /workspace
+	opencode --prompt "${PROMPT}" --dir /workspace \
+	  > >(tee /output/stdout.log) \
+	  2> >(tee /output/stderr.log >&2) &
+	AGENT_PID=$!
+	wait $AGENT_PID
+	EXIT_CODE=$?
+	# Write completion event
+	if [ $EXIT_CODE -eq 0 ]; then
+	  echo "{\"ts\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\", \"event\": \"completed\"}" >> /output/progress.jsonl
+	else
+	  echo "{\"ts\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\", \"event\": \"failed\", \"exit_code\": $EXIT_CODE}" >> /output/progress.jsonl
+	fi
+	echo $EXIT_CODE > /output/exit_code
+	exit $EXIT_CODE
   ```
 
-  1. In `_is_allowed_path()`, replace `if "__pycache__" in path.parts: return True` with `if _IGNORED_DIRS.intersection(path.parts): return True`
-  2. In `_snapshot_mtimes()`, prune ignored dirs from `os.walk()` so they're never even scanned:
-  ```python
-dirs[:] = [
-    d for d in dirs
-    if (Path(dirpath) / d).resolve() != git_dir
-    and d not in _IGNORED_DIRS
-]
+  `docker/opencode-blind/Dockerfile`: Identical to opencode-tested (same base, same packages).
+
+  `docker/opencode-blind/entrypoint.sh`: Same structure but the prompt append is:
+
+  ```bash
+	PROMPT="${PROMPT}
+
+Implement the cards from their specs alone. Do not write or run tests. Focus on reading the card_spec.json, understanding the rules text, and writing correct card_impl.py files."
   ```
 
-  Files to change:
+  All other lines (engine_work copy, progress.jsonl, SIGTERM trap, opencode invocation, exit code) are identical.
 
-  - `silverquillm/agent_session.py` — `_IGNORED_DIRS` constant, `_is_allowed_path()`, `_snapshot_mtimes()`
-  Testability: Unit test: create a `.pytest_cache/v/cache/nodeids` file, run `_check_violations()` → no violation. Unit test: create a file in `tests/` → violation detected (not affected by the fix).
+  Image naming: `silverquillm-opencode-tested:latest`, `silverquillm-opencode-blind:latest`.
 
-- [x] **Fix preflight ****`_check_card_specs_dir()`**** flat glob**
-  Detail: `_check_card_specs_dir()` in `silverquillm/preflight.py` uses `path.glob("*.json")` to find card spec files. But card specs are in subdirectories: `cards/1/card_spec.json`, `cards/2/card_spec.json`, etc. The flat glob finds nothing, causing preflight to fail with "card_specs_dir contains no card spec files".
+  Runtime contract:
 
-  **Fix:** Change the glob pattern:
+  - `-v workspace:/workspace` (staged by host)
+  - `-v output:/output` (progress, logs, exit code)
+  - `-e OPENAI_API_KEY=...` `-e ANTHROPIC_API_KEY=...` (API keys only)
+  - `--stop-timeout N` (Docker-level timeout)
+  Note: The `opencode --prompt ... --dir ...` invocation is a placeholder — check the actual opencode CLI docs for the correct flags. The key requirements are: (1) pass the prompt as input, (2) set the working directory to `/workspace`, (3) run non-interactively. Adjust flags as needed.
 
-  ```python
-# BEFORE:
-specs = list(path.glob("*.json"))
-# AFTER:
-specs = list(path.glob("*/card_spec.json"))
+  Files: `docker/opencode-tested/Dockerfile`, `docker/opencode-tested/entrypoint.sh`, `docker/opencode-blind/Dockerfile`, `docker/opencode-blind/entrypoint.sh`.
+
+  Testability: `docker build -t silverquillm-opencode-tested:dev docker/opencode-tested/` succeeds. `docker run --rm -v /tmp/test-ws:/workspace -v /tmp/test-out:/output silverquillm-opencode-tested:dev` starts and writes `progress.jsonl` with a `started` event.
+
+- [ ] **Implement ****`silverquillm/cli.py`**** — ****`run`**** and ****`smoke`**** commands**
+  Detail: Two CLI commands using Click. The runner launches ONE container for the ENTIRE workload (not per-card). The agent handles all cards in a single long-running session.
+
+  `silverquillm run --image <img> --cards-dir <path> --engine-dir <path> --timeout <sec>`:
+
+  1. Call `stage_workspace(cards_dir, engine_dir, output_dir)` to build the full workspace with ALL FDN + SOS cards
+  2. Call `docker run --rm -v workspace:/workspace -v output:/output <api_key_env_args> --stop-timeout <timeout> <image>`
+  3. Block until container exits ([subprocess.run](http://subprocess.run/) with timeout=timeout+60 as backup)
+  4. Harvest artifacts from workspace:
+    - `workspace/cards/sos/*/card_impl.py` → `results/{run_name}/cards/{num}/card_impl.py`
+    - `workspace/cards/sos/*/tests.py` → `results/{run_name}/cards/{num}/tests.py` (if exists)
+    - `workspace/engine_work/` → diff against `workspace/engine/` → `results/{run_name}/engine_diff.patch`
+    - `output/progress.jsonl` → `results/{run_name}/progress.jsonl`
+    - `output/stdout.log` → `results/{run_name}/stdout.log`
+    - `output/stderr.log` → `results/{run_name}/stderr.log`
+  5. Determine per-card status: compare each `card_impl.py` against original template — if different, `completed`; if same, `no_output`
+  6. Call `evaluator.evaluate()` on harvested results (3 dimensions)
+  7. Call `results.generate_run_summary()` → `results/{run_name}/run_summary.json`
+  8. On timeout: still harvest partial results, unfinished cards marked `timeout`
+  Run name: `{image_short_name}_{ISO-timestamp}` (e.g. `opencode-tested_2026-05-14T10-30`).
+
+  `silverquillm smoke --image <img>`:
+
+  1. Stage minimal workspace: just `/workspace/prompt.md` with "Create [hello.py](http://hello.py/) that prints Hello World" and empty `/output/`
+  2. `docker run` with 120s timeout
+  3. Check: container exits 0, `/workspace/hello.py` exists
+  4. Print PASS/FAIL
+  Files: `silverquillm/cli.py`.
+
+  Testability: Mock `subprocess.run` with a fake docker command that writes known files → verify harvest logic, verify run_summary.json structure. Real smoke test with a built image.
+
+- [ ] **Rewrite ****`silverquillm/evaluator.py`**** — 3 evaluation dimensions**
+  Detail: Complete rewrite. Three post-run scoring dimensions, all using audited tests. Agent-written tests are harvested as artifacts but NOT used for scoring.
+
+  `evaluate(run_dir: Path, cards_dir: Path, engine_dir: Path) -> EvalResult`:
+
+  **Dimension 1 — SOS Card Correctness:**
+
+  For each SOS card where status=`completed`:
+
+  - Copy agent's `card_impl.py` to a temp dir
+  - Copy agent's `engine_work/` (or apply engine_diff.patch to clean engine)
+  - Run `pytest tests/audited/sos/{collector_number}/tests.py` with PYTHONPATH including the modified engine
+  - Record pass/fail per test → write `results/{run_name}/cards/{num}/result.json`
+  **Dimension 2 — FDN Card Regression:**
+
+  For each FDN card with audited tests:
+
+  - Use the PRE-FILLED FDN `card_impl.py` (not agent-written — these are reference impls)
+  - Use the agent's `engine_work/`
+  - Run `pytest tests/audited/fdn/{collector_number}/tests.py`
+  - If any fail → agent's engine modifications broke existing card behavior
+  **Dimension 3 — Engine Regression:**
+
+  - Run `pytest tests/engine/` (core engine tests, not card tests) against agent's `engine_work/`
+  - If any fail → agent's engine modifications broke fundamental game mechanics
+  Each dimension runs pytest in a subprocess with modified PYTHONPATH. Results aggregated into EvalResult dataclass.
+
+  Files: `silverquillm/evaluator.py`.
+
+  Testability: Create fixture run_dir with known card_[impl.py](http://impl.py/) (one good, one bad) and a known engine_work/ → verify per-card result.json, verify dimension aggregates.
+
+- [ ] **Implement ****`silverquillm/results.py`**** — run summary generation**
+  Detail: Pure, idempotent function that reads per-card `result.json` files and produces `run_summary.json`.
+
+  `generate_run_summary(run_dir: Path, image_name: str) -> dict`:
+
+  ```json
+{
+  "run_metadata": {
+    "image": "silverquillm-opencode-tested:latest",
+    "timestamp": "2026-05-14T10:30:00Z",
+    "card_count": 346,
+    "timeout_seconds": 7200,
+    "harness_version": "<git-sha>"
+  },
+  "sos_card_correctness": {
+    "audited_pass_rate": 0.72,
+    "card_pass_rate": 0.48,
+    "cards_completed": 340,
+    "cards_no_output": 0,
+    "cards_timed_out": 6
+  },
+  "fdn_regression": {
+    "fdn_test_pass_rate": 0.98,
+    "fdn_card_pass_rate": 0.95
+  },
+  "engine_regression": {
+    "engine_test_pass_rate": 1.0,
+    "engine_churn_lines": 342
+  },
+  "per_card": [
+    {
+      "collector_number": "1",
+      "card_name": "...",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 10
+    }
+  ]
+}
   ```
 
-  Files to change:
+  Supports partial results (timeout/interrupt → summarizes what's available).
 
-  - `silverquillm/preflight.py` — `_check_card_specs_dir()` function
-  Testability: Unit test: create `tmp/1/card_spec.json` and `tmp/2/card_spec.json` → `_check_card_specs_dir(tmp)` passes. Unit test: empty dir → fails with clear error.
+  Files: `silverquillm/results.py`.
 
-- [x] **Standardize all per-card paths on ****`card_dir_name`**
-  Detail: The harness uses two different identifiers for per-card subdirectories under `<run_dir>/cards/`:
+  Testability: Create fixture run_dir with 3 per-card result.json → verify aggregation math, JSON schema.
 
-  - `card_dir_name` (collector number, e.g. `"42"`) — used by `save_card_result()` and `save_card_result_v2()` in `cli.py`
-  - `card_name` (display name, e.g. `"Ajani's Response"`) — used by `_get_postmortem_path()` and `_generate_agent_thoughts()` in `agent_session.py`
-  This creates TWO separate directories for the same card. The run summary then counts both, reporting `Cards run: 2` when only 1 card was run. Post-eval also can't correlate the postmortem with the result because they're in different directories.
+- [ ] **Implement progress.jsonl protocol in entrypoints**
+  Detail: Both entrypoints write `/output/progress.jsonl` for live monitoring from the host (since /output is a mounted volume, the host can `tail -f` it).
 
-  **Fix:**
+  JSONL schema:
 
-  1. Add a `card_id: str` field to the `AgentSession` dataclass (default `""`). This stores the `card_dir_name` value and is used for ALL path construction.
-  2. In `cli.py`, pass `card_dir_name` when constructing `AgentSession`:
-  ```python
-session = AgentSession(
-    config=cfg, card_spec=spec, card_dir=card_dir,
-    card_id=str(card_dir_name),  # NEW
-    run_engine_dir=run_engine_dir, run_dir=run_dir,
-)
+  ```json
+{"ts": "2026-05-14T10:30:00Z", "event": "started"}
+{"ts": "...", "event": "card_started", "card_id": "042", "card_name": "Ajani's Response"}
+{"ts": "...", "event": "card_completed", "card_id": "042"}
+{"ts": "...", "event": "completed"}
   ```
 
-  1. In `agent_session.py`, update `run_card()` to use `self.card_id` instead of `self.card_name` in:
-    - All `_get_postmortem_path(self.run_dir, ...)` calls (~4 occurrences)
-    - `_generate_agent_thoughts(self.run_dir, ...)`
-    - `append_raw_log(raw_log_path, ...)` — use `card_id` for consistency in path, but `card_name` is fine in the JSON content
-  2. In `harvest_results()`, use `self.card_id` instead of `self.card_name` for the postmortem path.
-  3. In `cli.py`, fix the regression postmortem path:
-  ```python
-# BEFORE:
-pm_path = run_dir / "cards" / card_name / "postmortem.jsonl"
-# AFTER:
-pm_path = run_dir / "cards" / str(card_dir_name) / "postmortem.jsonl"
-  ```
+  The entrypoint writes `started` before invoking the agent and `completed`/`failed` after. Card-level events are best-effort — the entrypoint can monitor `/workspace/cards/sos/*/card_impl.py` modification times via a background watcher, or the agent itself can write to progress.jsonl if the prompt instructs it to.
 
-  `card_name` (display name) is still fine for log messages, markdown headings, and JSON field values — just not filesystem paths.
+  On SIGTERM (Docker timeout): trap handler writes `{"event": "timed_out"}` before exit.
 
-  Files to change:
+  Files: `docker/opencode-tested/entrypoint.sh`, `docker/opencode-blind/entrypoint.sh`.
 
-  - `silverquillm/agent_session.py` — add `card_id` field, update all path-construction code
-  - `silverquillm/cli.py` — pass `card_dir_name` as `card_id`, fix regression postmortem path
-  Testability: Run a single card → exactly ONE subdirectory under `cards/`. Run summary reports `Cards run: 1`. Postmortem, agent_thoughts, result.json all in the same directory.
+  Testability: Run entrypoint with a mock agent → verify progress.jsonl has `started` and `completed` events.
 
-- [x] **Wire agent output through strategy → ****`CardRunResult`**** → postmortem**
-  Detail: Both `BlindStrategy` and `ImplTestStrategy` call `adapter.run(prompt, workspace)` which returns the agent's full output (thinking, tool calls, responses). But the strategies **discard this return value**. `run_card()` in `AgentSession` then logs a placeholder to the postmortem: `prompt="(strategy-level)"`, `response=f"status={result.status.value}"`. This means `agent_thoughts.md` (which reads from the postmortem) is nearly empty.
+- [ ] **Update ****`pyproject.toml`**** and ****`README.md`**** for new architecture**
+  Detail:
 
-  **Fix:**
+  `pyproject.toml`:
 
-  1. Add `agent_output: str = ""` and `prompt_used: str = ""` fields to `CardRunResult` dataclass in `silverquillm/strategies.py`.
-  2. In both strategy `run_card()` methods, capture the adapter's return value and pass it through all return paths:
-  ```python
-output = adapter.run(prompt, workspace)  # capture
-# ...
-return CardRunResult(
-    status=CardRunStatus.completed,
-    agent_output=output,     # pass through
-    prompt_used=prompt,      # pass through
-    files_written=[impl_path],
-    runtime_ms=elapsed_ms,
-)
-  ```
+  - Update CLI entry point to `silverquillm = silverquillm.cli:main`
+  - Remove old `benchmark` entry point if present
+  - Remove adapter-specific dependencies
+  - Ensure `click` and `docker` (or just subprocess) are in dependencies
+  `README.md`:
 
-  For timeout paths, set `agent_output=""` (adapter was killed).
+  - Rewrite Quickstart: `silverquillm smoke --image <img>`, `silverquillm run --image <img> --timeout 7200`
+  - Document Docker image build: `docker build -t silverquillm-opencode-tested:latest docker/opencode-tested/`
+  - Document 3 evaluation dimensions
+  - Remove config.yaml references (image IS the config)
+  - Remove adapter references
+  `PROJECT_MAP.md`:
 
-  1. In `run_card()` in `agent_session.py`, use `result.agent_output` and `result.prompt_used` for the postmortem:
-  ```python
-_append_postmortem(
-    postmortem_path=postmortem_path,
-    prompt=result.prompt_used or "(strategy-level)",
-    response=result.agent_output or f"status={result.status.value}",
-    tokens=_estimate_tokens(result.agent_output) if result.agent_output else None,
-    timing_ms=elapsed * 1000,
-    status="success" if result.status == CardRunStatus.completed else result.status.value,
-)
-  ```
+  - Update architecture diagram for container flow
+  - Update file tree to show `docker/`, `cards/fdn/`, `cards/sos/`, new `silverquillm/` modules
+  Files: `pyproject.toml`, `README.md`, `PROJECT_MAP.md`.
 
-  1. Do the same for the raw log `append_raw_log()` call.
-  Files to change:
+  Testability: `pip install -e ".[dev]"` succeeds. `silverquillm --help` shows `run` and `smoke`.
 
-  - `silverquillm/strategies.py` — add fields to `CardRunResult`, capture output in both strategies
-  - `silverquillm/agent_session.py` — use `result.agent_output`/`result.prompt_used` in postmortem and raw log
-  Testability: Run mock adapter that returns "test output" → `postmortem.jsonl` contains "test output" in the response field. `agent_thoughts.md` has rich content (not just a status string).
+- [ ] **Clean up orphaned tests and verify full suite**
+  Detail: Final cleanup pass after all above items.
 
-- [x] **Replace ****`ThreadPoolExecutor`**** with direct adapter call in strategies**
-  Detail: Both `BlindStrategy` and `ImplTestStrategy` wrap the adapter call in `ThreadPoolExecutor.submit()`, which moves the adapter's `run()` method to a worker thread. The adapter streams output via `sys.stderr.write()` in `OpenCodeAdapter.run()`, but this streaming is effectively swallowed when running in a worker thread context. This caused all model thinking, tool calls, and ANSI-colored output to disappear after PR #11.
+  1. `grep -rn "from silverquillm" tests/ --include="*.py"` — find imports of deleted modules
+  2. Delete orphaned test files
+  3. Update `tests/conftest.py` if it references old fixtures
+  4. Delete `tests/test_timeout_enforcement.py` and `tests/test_harness.py` (test old adapter/strategy code)
+  5. Verify: `pytest --ignore=tests/audited/ -x` passes with 0 errors
+  6. Verify: `pytest tests/audited/fdn/ -x --limit=5` passes (spot-check FDN audited tests still work with restructured card paths)
+  Files: `tests/`.
 
-  The `ThreadPoolExecutor` was added for hard-timeout + kill support, but `base.py` already has `run_with_retries()` which does the same thing via `signal.SIGALRM` (main thread) or threading fallback (non-main thread), plus calls `adapter.kill()` on timeout.
-
-  **Fix:** In both strategies, replace:
-
-  ```python
-pool = ThreadPoolExecutor(max_workers=1)
-future = pool.submit(adapter.run, prompt, workspace)
-try:
-    future.result(timeout=timeout)
-except (TimeoutError, FuturesTimeoutError, subprocess.TimeoutExpired):
-    if hasattr(adapter, "kill"): adapter.kill()
-    pool.shutdown(wait=False, cancel_futures=True)
-    ...
-  ```
-
-  With:
-
-  ```python
-try:
-    output = adapter.run_with_retries(prompt, workspace, timeout=timeout, retries=0)
-except TimeoutError:
-    if hasattr(adapter, "kill"): adapter.kill()
-    ...
-except subprocess.TimeoutExpired:
-    if hasattr(adapter, "kill"): adapter.kill()
-    ...
-  ```
-
-  Remove the `ThreadPoolExecutor` and `FuturesTimeoutError` imports if no longer used.
-
-  **This item depends on the previous item** ("Wire agent output") because `output` must be captured from the return value.
-
-  Files to change:
-
-  - `silverquillm/strategies.py` — replace `ThreadPoolExecutor` with direct call in both strategies, remove unused imports
-  Testability: Run a card → model thinking and tool calls are visible in stderr in real time. Timeout still works: mock adapter that blocks → times out → `adapter.kill()` called.
-
-  ⚠️ **Testing guidance (**[**TESTING-CONVENTIONS.md**](http://testing-conventions.md/)** compliance):** All timeout tests must use `threading.Event.wait()` adapters, patch `os.getpgid`/`os.killpg`, and set explicit mock PIDs.
-
-- [x] **Remove stale ****`iterations/`**** directory creation**
-  Detail: The old multi-round `run_test_informed()` flow created `iterations/` subdirectories in results. The Phase 7 refactor moved to single-prompt `ImplTestStrategy` but didn't clean up all references. Result directories still contain a stale `iterations/` folder.
-
-  **Fix:**
-
-  1. Search all Python files for `iterations` directory creation: `grep -rn "iterations" silverquillm/ --include="*.py"`
-  2. Remove or update any code that creates `iterations/` subdirectories, copies files into `iterations/N/` structure, or references `iterations/` in path construction.
-  3. Check `silverquillm/prompts.py` — if `impl_test_mode_prompt()` mentions "iterations" or "rounds" in its instructions to the agent, update to reflect the single-prompt model. The agent self-manages its own internal iteration.
-  4. Check `silverquillm/results.py` — `save_card_result()` and `save_card_result_v2()` may be writing iteration-structured output.
-  5. Check `silverquillm/run_utils.py` — `_session_results_to_dicts()` may reference iteration fields.
-  Files to change:
-
-  - Any file creating `iterations/` directories (find via grep)
-  - `silverquillm/prompts.py` — update prompt language if needed
-  - `silverquillm/results.py` — remove iteration-structured output if present
-  Testability: Run mock adapter in impl_test mode → result directory is flat: `card_impl.py`, `tests.py`, `result.json`, `postmortem.jsonl`, `agent_thoughts.md`, `engine_diff.patch`. No `iterations/` subdirectory.
-
-- [x] **Add signal handler for graceful interrupt cleanup in CLI**
-  Detail: When the benchmark is interrupted (Ctrl+C or SIGTERM), the opencode subprocess can continue running as an orphan because it runs in its own process group (`start_new_session=True`). While `teardown()` now calls `kill()`, the signal handler ensures the active adapter is killed immediately on interrupt — before Python's default `KeyboardInterrupt` propagation, which may be blocked in I/O.
-
-  **Fix:**
-
-  1. Add `_active_session: AgentSession | None = None` at module level in `silverquillm/cli.py`.
-  2. Define `_interrupt_handler(signum, frame)` that calls `_active_session._adapter.kill()` (with try/except) then raises `KeyboardInterrupt`.
-  3. Register the handler at the start of `run()` command: `signal.signal(signal.SIGINT, _interrupt_handler)` and `signal.signal(signal.SIGTERM, _interrupt_handler)`.
-  4. In the card loop, set `_active_session = session` before `run_card()` and clear it in the `finally` block.
-  5. Add `except KeyboardInterrupt: click.echo("Interrupted..."); break` to exit the card loop cleanly but still run post-loop summary/aggregation.
-  6. Restore original signal handlers after the card loop.
-  Files to change:
-
-  - `silverquillm/cli.py` — signal handler, `_active_session` tracking, `KeyboardInterrupt` handling in card loop
-  Testability: Start a benchmark run → Ctrl+C → verify no orphan opencode processes (`ps aux | grep opencode`). Verify run summary still prints (partial results). Verify `.workspace/` is cleaned up.
-
-- [x] **Add preflight workspace isolation check**
-  Detail: The `repo_root` contamination bug (item 1) was a one-liner that went undetected for the entire PR #11 development cycle. A structural safeguard is needed to catch any future mechanism by which the agent escapes the workspace — not just `repo_root` misconfiguration, but also environment variables, symlinks, or other adapter config fields.
-
-  **Fix:** Add a deterministic canary-based check to `silverquillm/preflight.py`:
-
-  1. Create a canary file at `_REPO_ROOT / ".canary_preflight"` with a random UUID
-  2. Create a minimal workspace via `setup_workspace()` (or just `mkdir` + `git init`)
-  3. Launch the adapter with a simple prompt: `"Print the exact contents of the file at <canary_path>"`
-  4. Check the adapter's output — if the UUID appears, the agent escaped the workspace → fail preflight
-  5. Delete the canary file in a `finally` block
-  This is fully deterministic (just string matching on the UUID), fast (one short adapter call), and catches the entire class of workspace escape bugs.
-
-  Wire it into `preflight_check()` as an optional check (skip with `--skip-isolation-check` flag, since it requires a working adapter and makes an LLM call).
-
-  Files to change:
-
-  - `silverquillm/preflight.py` — add `_check_workspace_isolation()` function
-  - `silverquillm/cli.py` — add `--skip-isolation-check` flag, pass to `preflight_check()`
-  Testability: Unit test with mock adapter that returns the canary UUID → preflight fails. Mock adapter that returns unrelated text → preflight passes.
-
-- [x] **Fix ****`test_timeout_enforcement.py`**** (PR #11 agent-killer tests)**
-  Detail: The tests in `tests/test_timeout_enforcement.py` from PR #11 have critical problems that must be fixed:
-
-  **Problem 1 — ****`TestOpenCodeAdapterKill.test_kill_terminates_active_process`**** kills the container:**
-
-  - `mock_proc = MagicMock()` → `mock_proc.pid` is auto-MagicMock → `int(MagicMock()) == 1`
-  - `os.getpgid(1)` returns process group of PID 1 (init)
-  - `os.killpg(1, SIGTERM)` sends SIGTERM to the entire container → all agents die
-  - Fix: set `mock_proc.pid = 99999` explicitly and patch `os.getpgid` + `os.killpg`
-  **Problem 2 — ****`_SleepForeverAdapter`**** uses ****`while True: time.sleep(0.1)`****:**
-
-  - If the timeout code under test is broken, these tests hang forever
-  - Fix: replace with `threading.Event.wait(timeout=60)` pattern
-  **Problem 3 — ****`_SlowConcreteAdapter`**** uses ****`time.sleep(9999)`****:**
-
-  - Same hang risk
-  - Fix: use `threading.Event.wait()` or mock `time.sleep`
-  Apply all 7 rules from [TESTING-CONVENTIONS.md](http://testing-conventions.md/) to this file. Every `os.getpgid`, `os.killpg`, `signal.signal`, `signal.alarm` call must be patched.
-
-  Files to change:
-
-  - `tests/test_timeout_enforcement.py` — rewrite all adapter mocks and kill tests per conventions
-  Testability: `pytest tests/test_timeout_enforcement.py -v` completes in under 30 seconds. No real signals sent. No process groups killed.
-
-- [x] **Add ****`run_summary.json`**** top-level aggregation**
-  Detail: Currently, results are scattered across per-card directories with no top-level summary. We designed a 4-tier schema earlier:
-
-  **Tier 1 — Run metadata:** `model`, `strategy`, `timestamp`, `card_count`, `timeout_seconds`, `harness_version` (git SHA)
-
-  **Tier 2 — Aggregate scores:** `pass_rate`, `avg_score`, `median_score`, `cards_completed`, `cards_timed_out`, `cards_violated`, `total_runtime_ms`
-
-  **Tier 3 — Per-card summary array:** `card_id`, `card_name`, `status`, `score`, `tests_passed`, `tests_total`, `runtime_ms`, `violation`
-
-  **Tier 4 — Comparison hooks:** `previous_run_id` (optional), `delta_pass_rate`, `regressions[]`, `improvements[]`
-
-  Emit `run_summary.json` at the run directory root after all cards complete. Include partial results if interrupted (signal handler writes what's available).
-
-  Files to change:
-
-  - `silverquillm/cli.py` — generate and write `run_summary.json` after card loop
-  - `silverquillm/results.py` — add `generate_run_summary()` function
-  Testability: Run 2 cards → `run_summary.json` exists at run root, `card_count == 2`, `pass_rate` matches per-card results. Interrupt mid-run → partial summary still written.
-
-- [x] **Simplify or remove ****`rules_skill.py`**
-  Detail: `rules_skill.py` is a 26KB file that is over-engineered now that rules are a greppable file. Either strip it down to a simple grep helper or remove it entirely. A `test_rules_skill.py` also exists and would need updating.
-
-  Files to change:
-
-  - `silverquillm/rules_skill.py` — simplify or delete
-  - `tests/test_rules_skill.py` — update or delete
-  Testability: If simplified: grep-based tests pass. If removed: no import errors, `test_package_rename.py` updated.
-
-- [x] **Fix PROJECT_**[**MAP.md**](http://map.md/)** ASCII art alignment**
-  Detail: Architecture diagram in `PROJECT_MAP.md` has misaligned box characters after PR #5 edits. Cosmetic cleanup pass needed.
-
-  Files to change:
-
-  - `PROJECT_MAP.md` — realign ASCII art boxes
-  Testability: Visual inspection.
-
--[x] **Fix ****`get_targets()`**** snapshot-at-call-time issue**
-  Detail: Filter closures in `get_targets()` snapshot legal targets when called, not when evaluated. Currently mitigated by `on_resolve()` re-checking legality, but could produce incorrect behavior if target validation is re-checked mid-stack (e.g. for "fizzle" checks).
-
-  **Fix:** Defer filter evaluation to the point where targets are actually chosen. Make filters lazy — accept `game` state at evaluation time rather than capture time.
-
-  Files to change:
-
-  - Card implementations that define target filters — update to use lazy evaluation
-  - `engine/casting.py` — pass `game` to filter at evaluation time
-  Testability: Unit test: add a spell to the stack that modifies legal targets → second spell's target filter should see updated state.
-
-- [x] **Refactor ****`chosen_targets`**** off card instance**
-  Detail: `chosen_targets` is stored as mutable state directly on the `CardImpl` object (`card.chosen_targets = chosen_targets` in `casting.py`, 83 hits across codebase). If card copying or cloning enters scope, targets from the original leak to the copy. The targets should live on the `StackObject` (which already has a `targets` field) and be accessed through the stack, not the card.
-
-  **Fix:** Remove `card.chosen_targets` assignment in `cast_spell()`. Update `on_resolve` callbacks and card implementations to read targets from the `StackObject.targets` field instead of `self.chosen_targets`.
-
-  Files to change:
-
-  - `engine/casting.py` — remove `card.chosen_targets` assignment
-  - Card implementations (83 files) that read `self.chosen_targets` — update to accept targets as parameter or read from stack
-  Testability: Grep for `chosen_targets` on card instances → 0 hits outside `StackObject`. Existing card tests still pass.
+  Testability: Full non-audited test suite passes. No import errors. No references to deleted modules.

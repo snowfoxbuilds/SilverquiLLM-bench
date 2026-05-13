@@ -6,15 +6,15 @@ use these terms exactly. Updated during grilling sessions.
 
 ## Terms
 
-**Agent Adapter**
+**Agent Container**
 
-Pluggable interface (`AgentAdapter` base class) that translates the runner's prompts and workspace into a specific coding agent tool's native format. Each adapter enforces contamination controls for its tool.
+Docker image packaging a single coding agent with its CLI, entrypoint, mode (blind/tested), strategy, model selection, and prompt — the full benchmark configuration. The runner launches it with mounted volumes and API key env vars. The runner has zero knowledge of agent internals. Image name encodes the variant (e.g. `silverquillm-opencode-tested:latest`).
 
-*Avoid*: "agent tool" (ambiguous — could mean the adapter or the underlying tool itself)
+*Avoid*: "agent adapter" (deprecated), "agent tool" (ambiguous)
 
 **Audited Eval**
 
-Third evaluation layer: all agents' implementations tested against gold-standard tests. Tests are LLM-drafted, then failure-reviewed by a human — failures during benchmark runs are reviewed and corrected by hand; passing tests are accepted as-is. The authoritative measure of correctness.
+The only evaluation method in v1: audited tests run against agent output post-run. Three dimensions: SOS card correctness, FDN card regression, engine regression. Tests are LLM-drafted, then failure-reviewed by a human. The authoritative measure of correctness.
 
 *Avoid*: "gold eval", "human eval"
 
@@ -24,11 +24,11 @@ The FDN Draft Set: MTG Foundations limited format card pool (FDN 001–291 + SPG
 
 *Avoid*: "foundation cards" (use "Foundations cards" or "base set")
 
-**Blind Implementation**
+**Blind Mode**
 
-Step 1 of the benchmark: agent implements a card from its spec alone, with no tests or feedback. Saved as `blind_impl.py`.
+Benchmark mode (`MODE=blind`) where the prompt does not instruct the agent to write or run tests. The agent still has access to pytest — the distinction is prompt-only for v1. Produces `card_impl.py` per card. Compare against Tested Mode via separate runs.
 
-*Avoid*: "first pass", "initial implementation"
+*Avoid*: "blind implementation" as a noun (deprecated — was `blind_impl.py`)
 
 **Card Spec**
 
@@ -54,9 +54,9 @@ When an LLM has seen target card implementations in its training data, invalidat
 
 *Avoid*: "data leakage" (too generic)
 
-**Cross-Eval**
+**Cross-Eval** *(deferred — v2)*
 
-Second evaluation layer: each agent's code tested against every other agent's tests, producing an N×N matrix. Reveals implementation quality and test quality simultaneously.
+Future evaluation layer: each agent's code tested against every other agent's tests, producing an N×N matrix. Requires a test harvester to collect and validate agent-written tests. Not part of v1 scoring.
 
 *Avoid*: "cross-validation" (overloaded ML term)
 
@@ -72,23 +72,17 @@ Test player with scripted actions for reproducible game state setup. All benchma
 
 *Avoid*: "test player", "mock player"
 
-**Expanded Pool** *(deprecated — dropped)*
-
-Originally planned: cards from non-Foundations sets added as reference examples for mechanics absent from Foundations. Dropped — agents implement new mechanics from scratch using oracle text + comprehensive rules. Better benchmark signal.
-
-*Avoid*: using this term — it no longer applies
-
 **Pipeline Validation Run**
 
-A benchmark run whose purpose is to validate that the orchestration pipeline works end-to-end (adapter integration, workspace setup, postmortem logging, regression checks, scoring). Not intended to produce meaningful scores — audited tests are not required. Precedes scored benchmark runs.
+A benchmark run whose purpose is to validate that the orchestration pipeline works end-to-end (workspace staging, container launch, result harvesting, evaluation). Not intended to produce meaningful scores — audited tests are not required. Precedes scored benchmark runs.
 
 *Avoid*: "test run" (ambiguous), "dry run" (has a different meaning — `--dry-run` flag)
 
-**Postmortem Log**
+**Progress Log**
 
-Structured JSONL file (`postmortem.jsonl`) capturing agent output, file diffs, test results, and reasoning traces per round per card. Primary source for debugging.
+JSONL file (`progress.jsonl`) written by the agent or entrypoint to `/output/progress.jsonl` inside the container. Records per-card status updates (started, tests_passing, completed). Mounted volume allows the runner to tail it in real time. Replaces the former Postmortem Log.
 
-*Avoid*: "debug log", "session log"
+*Avoid*: "postmortem log" (deprecated — was per-round per-card structured JSONL)
 
 **Replay Validation**
 
@@ -96,41 +90,35 @@ Engine correctness check that replays 17lands GRE (Game Rules Engine) state stre
 
 *Avoid*: "differential testing" (deprecated XMage approach), "checkpoint validation" (we do full state comparison, not just EOT checkpoints), "aggregate CSV" (that's a different 17lands dataset)
 
-**Self-Eval**
+**Self-Eval** *(deferred — v2)*
 
-First evaluation layer: each agent's code tested against its own tests. Unreliable alone (agents write easy tests) but useful as a baseline.
+Future evaluation layer: each agent's code tested against its own tests. Requires test harvester. Not part of v1 scoring.
 
 *Avoid*: "self-test"
 
-**Setup Questions**
+**Tested Mode**
 
-Structured JSON file (`setup_questions.json`) agents emit to flag workspace issues (missing files, engine gaps, ambiguous specs) instead of silently failing.
+Benchmark mode (`MODE=tested`) where the prompt instructs the agent to write tests and iterate. The agent self-manages iteration — no round limits enforced by the runner. Produces `card_impl.py` + `tests.py` per card. Compare against Blind Mode via separate runs.
 
-*Avoid*: "error report"
+*Avoid*: "test-informed implementation" (deprecated — was `tested_impl.py`)
 
-**Target Set** *(deprecated — use Draft Set)*
+**Writable Engine**
 
-Formerly: the new MTG set whose cards agents must implement. Replaced by Draft Set because the benchmark card pool spans multiple Scryfall set codes (SOS + SOA + SPG), not a single set. For v1 the target Draft Set is SOS (released 2026-04-24).
+The agent's copy of `engine/` at `/workspace/engine_work/` inside the container. Copied from the read-only `/workspace/engine/` by the entrypoint before the agent starts. The agent modifies it freely throughout the run. After the run, the runner diffs it against the original to produce `engine_diff.patch`.
 
-*Avoid*: using this term in new code or specs — use "Draft Set" or "Card Pool" instead
+*Avoid*: "persistent engine" (deprecated — implied per-card sequential accumulation), "shared engine"
 
-**Test-Informed Implementation**
+**FDN Card Regression**
 
-Step 2 of the benchmark: agent writes tests and iterates on both tests and code, up to 3 rounds. Saved as `tested_impl.py` + `tests.py`.
+Post-run evaluation dimension: FDN audited tests (`tests/audited/fdn/`) run against pre-filled FDN `card_impl.py` files using the agent's final Writable Engine. Detects whether engine extensions broke existing card behavior.
 
-*Avoid*: "test-driven implementation" (not TDD — agent writes code first)
+*Avoid*: "regression check" (deprecated — was per-card sequential re-run)
 
-**Persistent Engine**
+**Engine Regression**
 
-The shared, writable copy of `engine/` that carries forward across all cards within a single benchmark run. Each run starts from the base engine; the agent's modifications accumulate as cards are processed sequentially. After each card, all previous cards' tests are re-run as a regression check.
+Post-run evaluation dimension: core engine tests (`tests/engine/`) run against the agent's final Writable Engine. Detects whether engine extensions broke fundamental game mechanics (mana, stack, combat, state-based actions, etc.). Separate from FDN Card Regression — an agent could pass all FDN card tests but fail engine tests if card-level workarounds corrupt internal state.
 
-*Avoid*: "shared engine" (use "persistent engine" or "run engine")
-
-**Regression Check**
-
-Automated re-run of all previously-completed cards' tests after each new card finishes. Catches engine modifications that break earlier cards. Regression failures are recorded per card and penalized in Category 4 scoring.
-
-*Avoid*: "regression test" (too generic — this specifically means cross-card engine regression within a run)
+*Avoid*: "engine test" alone (ambiguous — specify "engine regression tests")
 
 **Engine Extension**
 
@@ -140,35 +128,30 @@ Modification or addition to `engine/` files by the agent during a benchmark run.
 
 **Workspace**
 
-Clean temp directory created per card containing card-specific files (card_spec, template) plus a writable reference to the run's persistent engine. Fresh per card, but engine state carries forward.
+The staged directory mounted into the agent container at `/workspace/`. Contains all cards (FDN examples + SOS targets), the engine, rulebook, reference docs, and a single prompt. Created once per run by the runner's `stage_workspace()`. The agent has read-write access to the entire workspace.
 
-*Avoid*: "working directory", "sandbox"
+*Avoid*: "working directory", "sandbox", "per-card workspace" (deprecated — workspace is per-run)
 
 ## Relationships
 
-- A Benchmark Run evaluates one model + one Agent Adapter against one Target Set.
-- A Benchmark Run has one Persistent Engine that starts from the base engine and accumulates Engine Extensions across cards.
-- Cards within a run are processed sequentially, sorted by Complexity Tier.
-- A Target Set contains many Card Specs, each with one Complexity Tier.
-- Each agent produces one Blind Implementation and one Test-Informed Implementation per Card Spec.
-- Each card may produce Engine Extensions that persist to subsequent cards' workspaces.
-- After the full run, the evaluator runs all cards' tests against the final Persistent Engine state. Regressions are detected via test failures but not attributed to a specific card.
-- Cross-Eval tests every agent's implementations against every other agent's tests (N×N).
+- A Benchmark Run evaluates one Agent Container (one agent + one model) against one Draft Set.
+- A Benchmark Run launches one container session. The agent receives the full workload (all SOS cards) in a single Workspace.
+- FDN cards are in-context examples (filled implementations, no tests). SOS cards are benchmark targets (empty templates).
+- Each agent produces `card_impl.py` per SOS card. In Tested Mode, also `tests.py` per card.
+- The agent has a Writable Engine (`engine_work/`) and may extend it freely throughout the run.
+- All evaluation is post-run. After the container exits, the evaluator runs tests against harvested implementations and the final engine state.
+- FDN Card Regression: evaluator runs `tests/audited/fdn/` against pre-filled FDN card impls + agent's final Writable Engine. Detects broken card behavior.
+- Engine Regression: evaluator runs `tests/engine/` against agent's final Writable Engine. Detects broken rules mechanics.
+- Cross-Eval and Self-Eval deferred to v2 (requires test harvester).
 - The Base Set forms the reference codebase agents can browse. No Expanded Pool — agents implement new mechanics from scratch.
 - A Draft Set may span multiple Scryfall set codes (e.g., SOS + SOA + SPG).
 - Draft Set defines the card pool for Replay Validation (17lands replays are draft games).
-- Audited tests follow a uniform per-card structure: `tests/audited/{set_code}/{collector_number}/tests.py`, importing from `card_impl`. Reusable across any set.
-- A Workspace is created per Card Spec within a run, with a writable reference to the Persistent Engine.
+- All card tests follow a uniform structure: `tests/audited/{set_code}/{collector_number}/tests.py`, importing from `card_impl`. FDN and SOS tests share this structure.
 - The Base Set (FDN 001–291 + SPG 074–083) is validated via Replay Validation against 17lands GRE JSON data before scored benchmark runs.
 - A Pipeline Validation Run precedes scored benchmark runs to verify the orchestration pipeline.
-- The harness does NOT run pytest during agent implementation rounds — the agent runs its own tests via its shell. All harness-level test execution flows through `evaluator.run_tests()` only.
-- Filesystem checks (does the file exist?) are the source of truth for agent output. Exit codes, stdout, and thinking traces are diagnostics only — they never gate results.
-- All evaluation is post-run. After all cards are processed, the evaluator runs all tests against the final engine state. No per-card evaluation or regression checks during the run.
-- `run_summary.json` is automatically generated at the end of every run by aggregating per-card `result.json` files. The aggregator is a pure, idempotent function.
-- The harness does NOT orchestrate test iteration rounds. The agent self-manages iteration during Step 2. The harness sends the prompt, waits for completion or timeout, then checks the filesystem.
-- Each card has one agent invocation with `timeout_per_card`. The prompt depends on the mode. Blind vs. test-informed comparison is done across separate benchmark runs (Mode 1 vs Mode 2), not within a single run.
-- On agent timeout, all scores for that card are zeroed out and the engine is rolled back to its pre-card snapshot. No partial scoring, no corrupted engine carry-forward.
-- Two benchmark modes: **Blind** (impl only, eval via external tests) and **Impl+Test** (impl + tests, agent self-iterates). Config selects mode via `mode: "blind" | "impl_test"`.
-- Per-card orchestration is encapsulated in a **CardStrategy** (strategy pattern). The outer runner loop (card ordering, engine lifecycle, snapshots, regression checks, aggregation) is mode-agnostic. v1 supports BlindStrategy and ImplTestStrategy; multi-model orchestration is a future extension.
-- Both modes produce `card_impl.py` as the canonical implementation file. Mode 2 also produces `tests.py`. No `blind_impl.py` / `tested_impl.py` distinction.
+- Filesystem checks (does the file exist, does it differ from the template?) are the source of truth for agent output. Exit codes, stdout, and thinking traces are diagnostics only.
+- `run_summary.json` is automatically generated after evaluation by aggregating per-card `result.json` files. The aggregator is a pure, idempotent function.
+- The runner does NOT orchestrate test iteration — the agent self-manages. The runner stages, launches, harvests, evaluates.
+- On container timeout, the runner harvests partial results. Completed cards are evaluated normally; unfinished cards scored as zero.
+- Two benchmark modes: **Blind** (prompt omits test instructions) and **Tested** (prompt includes test instructions). Both produce `card_impl.py`. Distinction is prompt-only for v1. Compare modes via separate runs.
 - Audited tests are evaluation-only artifacts — never in the agent's workspace, never in results directories. Contamination control.

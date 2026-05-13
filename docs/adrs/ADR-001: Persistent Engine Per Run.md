@@ -4,41 +4,39 @@ Date: 2026-05-08
 
 ## Context
 
-The benchmark runner processes multiple cards sequentially per agent run. The original design assumed isolated workspaces per card — each card starts from a clean engine copy. However, target set cards (SOS) require mechanics not in the base engine (e.g., Ward, Magecraft). Agents need to extend the engine to implement these cards.
+SOS cards require mechanics not in the base engine (e.g., Ward, Magecraft). Agents need to extend the engine to implement these cards. The question is whether each card gets a fresh engine copy or whether modifications accumulate.
 
 ## Decision
 
-A single benchmark run uses a **persistent, writable engine** that accumulates the agent's modifications across cards. Each run starts from the same base engine, so different agents are comparable.
+A single benchmark run uses a **writable engine copy** that the agent modifies freely throughout the run. The entrypoint copies `engine/` to `engine_work/` before the agent starts. Each run starts from the same base engine, so different agents are comparable.
 
 **Per-run lifecycle:**
 
-1. Run starts → copy `engine/` to a persistent run-level directory
-2. Card N workspace gets the engine as modified by cards 1 through N-1
-3. Agent implements card N → may modify engine files
-4. Engine changes committed back to the run-level copy
-5. All previous cards' tests re-run (regression check)
-6. Repeat for all cards
+1. Runner stages workspace with read-only `engine/`
+2. Container entrypoint copies `engine/` to `engine_work/`
+3. Agent implements all SOS cards, modifying `engine_work/` as needed
+4. Runner harvests `engine_work/` and diffs against original
+5. Evaluator runs FDN audited tests against the modified engine (FDN Regression check)
 ## Trade-offs
 
 **Gains:**
 
 - Measures architectural quality — good agents write generic mechanics that benefit future cards
-- Measures forward thinking — agents that write one-off hacks get penalized by regressions
 - More realistic — real developers extend shared codebases incrementally
 - Enables Category 4 scoring (Engine Extension Quality)
+- Agent decides its own implementation order and strategy
 **Costs:**
 
-- Card ordering affects results — earlier cards shape the engine for later ones
-- A bad engine change early can cascade failures (mitigated by regression checks)
-- Harder to parallelize runs (cards must be sequential within a run)
-- Debugging is harder — failures may come from engine changes made several cards ago
+- No per-card regression attribution — only FDN tests detect engine breakage, and only post-run
+- A bad engine change can silently affect many cards (detected only at evaluation time)
+- Debugging is harder — only the final engine state is visible to the evaluator
 ## Alternatives Considered
 
-- **Isolated workspaces**: Each card gets a clean engine. Simpler, parallelizable, but can't measure engine extension quality or forward thinking. Agents would re-implement the same mechanic for every card that needs it.
-- **Checkpoint + rollback**: Persistent engine but rollback on regression. Rejected because the penalty for regressions is itself a useful signal.
+- **Isolated workspaces**: Each card gets a clean engine. Simpler, but agents would re-implement the same mechanic for every card that needs it. Can't measure engine extension quality.
+- **Checkpoint + rollback**: Persistent engine with per-card snapshots and rollback on regression. Rejected — adds complexity to the container model without proportional benefit. FDN regression check is sufficient.
 ## Consequences
 
-- Cards sorted by complexity tier (trivial → expert) so agents build up capabilities gradually
-- Regression test runner is mandatory infrastructure
-- Engine diffs captured per card for Category 4 scoring
+- FDN audited tests (`tests/audited/fdn/`) serve as the regression suite against the final engine
+- Engine diff captured as `engine_diff.patch` for Category 4 scoring
 - Each agent/model gets its own run — no cross-agent engine contamination
+- Agent manages its own card ordering within the container

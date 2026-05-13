@@ -127,8 +127,8 @@ During benchmark runs, the engine is **writable** — agents may add new mechani
 
 - The engine's architecture (hooks, events, layers) should be expressive enough that most mechanics can be implemented by adding new code rather than modifying core systems
 - Agents see `engine_api.md` and can browse the full `engine/` source in their workspace
-- Engine changes persist across cards within a single benchmark run (see [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) → Workspace Model)
-- After each card, all previous cards' tests are re-run to detect regressions
+- Engine changes persist throughout a single benchmark run — the agent manages a writable engine copy inside the container (see [AGENT-CONTAINERS.md](http://agent-containers.md/))
+- All evaluation is post-run: after the agent finishes, the evaluator runs all cards' tests against the final engine state
 - The base engine (from the repo) is the starting point for every run — different agents start from the same baseline
 **What agents typically extend:**
 
@@ -154,7 +154,7 @@ Multiplayer, sideboard/best-of-three, companion/partner, dungeons/Ring, day/nigh
 - **MIT license**: SilverquiLLM-bench and XMage are both MIT licensed. [SETTLED]
 - **DeterministicPlayer only for v1**: Pre-determined board states, no AI player. StrategyPlayer deferred. [SETTLED]
 - **Foundations card audit deferred to implementation**: Pull card list from Scryfall/MTGJson during Phase 1. [SETTLED]
-- **Engine writable during benchmark runs**: Agents may extend the engine to support new mechanics. Changes persist across cards within a run. Regression tested after each card. [SETTLED]
+- **Engine writable during benchmark runs**: Agents may extend the engine to support new mechanics. Changes persist throughout a run. Regressions detected via post-run evaluation. [SETTLED]
 - **Expanded Pool dropped**: Agents implement new mechanics from scratch using oracle text + comprehensive rules. No curated reference implementations for target set mechanics. [SETTLED]
 - **Grilling 2026-05-10: Self-ETB effects use ****`on_resolve()`****, not triggers**: `register_triggers()` fires AFTER the ETB event, so self-ETB triggers never match during normal resolution. Cards with self-ETB effects (e.g., Embercleave auto-attach) perform the action directly in `on_resolve()`. [SETTLED]
 - **Grilling 2026-05-10: P/T bonuses in Layer 7c, keywords in Layer 6**: Equipment/aura P/T bonuses use Layer 7 SubLayer.MODIFY_PT (7c). Keywords use Layer 6. Prevents CDAs (Layer 7a) from overwriting P/T bonuses. [SETTLED]

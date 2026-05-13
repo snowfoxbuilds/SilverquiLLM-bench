@@ -138,6 +138,15 @@ Branch: `execute-todo-with-subagents/phase5-replay-validation` → `main`
 - [x] **Replay executor (state-diff observer mode)**
 - [x] **Divergence detection and reporting**
 - [x] **CLI: ****`benchmark validate`**** command**
+## Completed 2026-05-13
+
+Phase 8 (partial): Fix PR #11 Regressions — 3 items completed before architecture pivot to Docker containers
+
+- [x] **Fix ****`repo_root`**** contamination in ****`OpenCodeAdapter`**
+- [x] **Fix ****`.pytest_cache`**** and other tool-cache false contamination**
+- [x] **Fix preflight ****`_check_card_specs_dir()`**** flat glob**
+Remaining Phase 8 items (standardize per-card paths, wire agent output, replace ThreadPoolExecutor, etc.) were obsoleted by the Docker container architecture pivot. Old adapter code deleted.
+
 ## Completed 2026-05-12
 
 Phase 6: SOS Draft Set Completion & Audited Test Suites (PR #8 — 15 items, 647 audited test files)
