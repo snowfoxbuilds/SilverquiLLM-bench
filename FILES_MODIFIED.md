@@ -100,3 +100,13 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `cards/foundations/enchantments.py` — Replaced 4 snapshot filter_fn lambdas with lazy property-based predicates
 - `cards/foundations/simple_permanents.py` — Replaced 3 snapshot filter_fn lambdas with lazy property-based predicates
 - `cards/foundations/global_enchantments.py` — Replaced 1 snapshot filter_fn lambda with lazy predicate including controller check
+
+## Item 15: Refactor chosen_targets off card instance
+
+### Tests
+- `tests/engine/test_casting.py` — existing casting pipeline tests (all 1133 engine tests pass)
+- `tests/audited/fdn/` — existing card tests (all 1487 FDN tests pass)
+
+### Implementation
+- `engine/casting.py` — `_resolve_spell()` now accepts `StackObject` and reads `obj.targets` directly (single source of truth); removed `targets_snapshot` copy; sets `card.chosen_targets = obj.targets` at resolve time
+- `engine/card.py` — updated `on_resolve` docstring to document resolve-time target availability

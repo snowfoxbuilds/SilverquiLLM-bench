@@ -213,7 +213,12 @@ class CardImpl(GameObject):
         """Called when the card is cast (before it goes on the stack)."""
 
     def on_resolve(self, game: GameState) -> None:
-        """Called when the spell resolves from the stack."""
+        """Called when the spell resolves from the stack.
+
+        Targets are available via ``self.chosen_targets`` — set at
+        resolve-time by :func:`~engine.casting._resolve_spell` from
+        :attr:`StackObject.targets`, or directly by test code.
+        """
 
     def get_targets(self, game: GameState) -> list[Any]:
         """Return a list of legal targets for this card."""

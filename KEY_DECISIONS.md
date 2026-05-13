@@ -307,3 +307,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Target filter predicates now accept `game` as a parameter and evaluate state lazily. Card implementations use property-based predicates that check current controller, zone, and card type at evaluation time. `engine/casting.py` wires `filter_fn` into target validation.
 - **Reasoning**: MTG rules require target legality to be checked at resolution time using current game state, not the state when the spell was cast.
 - **Impact**: `engine/casting.py`, 6 card implementation files in `cards/foundations/`.
+
+## StackObject.targets is single source of truth for chosen targets
+- **Context**: `card.chosen_targets` was set at cast time, creating mutable state on the card instance that could leak to copies.
+- **Decision**: `chosen_targets` assignment moved from cast-time to resolve-time. Between cast and resolve, `StackObject.targets` is the single source of truth. At resolution, `card.chosen_targets = obj.targets` is set for backward compat with `on_resolve()` callbacks.
+- **Reasoning**: Prevents target leakage on card copy/clone. Aligns with MTG rules where targets are stored on the stack object.
+- **Impact**: `engine/casting.py` (cast_spell and _resolve_spell).
