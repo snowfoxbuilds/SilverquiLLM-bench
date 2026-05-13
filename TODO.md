@@ -44,7 +44,7 @@ Reference: [CONTEXT.md](http://context.md/) for vocabulary, KEY_[DECISIONS.md](h
   5. Verify: `pytest tests/ --ignore=tests/audited/ -x` still passes — all card tests must resolve classes from new paths.
   Testability: `cards/fdn/` has one subdirectory per FDN card. Each has `card_spec.json` + `card_impl.py`. Registry imports work. All existing card tests pass.
 
-- [ ] **Restructure SOS cards to unified ****`cards/`**** layout**
+- [x] **Restructure SOS cards to unified ****`cards/`**** layout**
   Detail: SOS card specs currently live under `benchmarks/sos/cards/{num}/card_spec.json`. Move them to `cards/sos/{collector_number}/card_spec.json` + `cards/sos/{collector_number}/card_impl.py` (empty template) so both sets share the `cards/{set}/` root.
 
   Steps:

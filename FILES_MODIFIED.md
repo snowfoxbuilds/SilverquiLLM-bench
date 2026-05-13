@@ -46,3 +46,16 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `cards/fdn/547/card_impl.py` — Added SkryakerGiant legacy alias
 - `cards/fdn/spg_79/card_impl.py` — Fixed missing _COLOR_TO_MANA dict for BloomTender
 - `cards/fdn/259-271/card_impl.py` (10 land files) — Updated to import from shared _land_bases module
+
+
+## Item 3: Restructure SOS cards to unified cards/ layout
+
+### Implementation
+- `cards/sos/__init__.py` — Package init for SOS cards directory
+- `cards/sos/{1..271}/card_spec.json` — Copied SOS base card specs (271 files)
+- `cards/sos/{1..271}/card_impl.py` — Generated SOS base card implementation templates (271 files)
+- `cards/sos/soa_{1..65}/card_spec.json` — Copied SOA Mystical Archives card specs (65 files)
+- `cards/sos/soa_{1..65}/card_impl.py` — Generated SOA card implementation templates (65 files)
+- `cards/sos/spg_{149..158}/card_spec.json` — Copied SPG Special Guests card specs (10 files)
+- `cards/sos/spg_{149..158}/card_impl.py` — Generated SPG card implementation templates (10 files)
+- `benchmarks/sos/cards/{1..271,soa_*,spg_*}/` — Deleted 346 old card subdirectories (cleanup after migration)
