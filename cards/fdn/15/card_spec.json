@@ -1,0 +1,17 @@
+{
+  "name": "Hare Apparent",
+  "mana_cost": "{1}{W}",
+  "type_line": "Creature — Rabbit Noble",
+  "oracle_text": "When this creature enters, create a number of 1/1 white Rabbit creature tokens equal to the number of other creatures you control named Hare Apparent.\nA deck can have any number of cards named Hare Apparent.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "15",
+  "complexity_tier": "medium"
+}

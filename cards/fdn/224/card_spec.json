@@ -1,0 +1,19 @@
+{
+  "name": "Gnarlid Colony",
+  "mana_cost": "{1}{G}",
+  "type_line": "Creature — Beast",
+  "oracle_text": "Kicker {2}{G} (You may pay an additional {2}{G} as you cast this spell.)\nIf this creature was kicked, it enters with two +1/+1 counters on it.\nEach creature you control with a +1/+1 counter on it has trample. (It can deal excess combat damage to the player or planeswalker it's attacking.)",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Kicker"
+  ],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "224",
+  "complexity_tier": "complex"
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Divine Resilience",
+  "mana_cost": "{W}",
+  "type_line": "Instant",
+  "oracle_text": "Kicker {2}{W} (You may pay an additional {2}{W} as you cast this spell.)\nTarget creature you control gains indestructible until end of turn. If this spell was kicked, instead any number of target creatures you control gain indestructible until end of turn. (Damage and effects that say \"destroy\" don't destroy them.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Kicker"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "10",
+  "complexity_tier": "complex"
+}

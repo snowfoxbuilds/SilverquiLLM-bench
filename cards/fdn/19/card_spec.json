@@ -1,0 +1,17 @@
+{
+  "name": "Joust Through",
+  "mana_cost": "{W}",
+  "type_line": "Instant",
+  "oracle_text": "Joust Through deals 3 damage to target attacking or blocking creature. You gain 1 life.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "19",
+  "complexity_tier": "medium"
+}

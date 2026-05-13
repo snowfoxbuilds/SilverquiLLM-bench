@@ -1,0 +1,17 @@
+{
+  "name": "Frenzied Goblin",
+  "mana_cost": "{R}",
+  "type_line": "Creature — Goblin Berserker",
+  "oracle_text": "Whenever this creature attacks, you may pay {R}. If you do, target creature can't block this turn.",
+  "power": "1",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "199",
+  "complexity_tier": "medium"
+}

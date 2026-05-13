@@ -1,0 +1,17 @@
+{
+  "name": "Seismic Rupture",
+  "mana_cost": "{2}{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "Seismic Rupture deals 2 damage to each creature without flying.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "205",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Needletooth Pack",
+  "mana_cost": "{3}{G}{G}",
+  "type_line": "Creature — Dinosaur",
+  "oracle_text": "Morbid — At the beginning of your end step, if a creature died this turn, put two +1/+1 counters on target creature you control.",
+  "power": "4",
+  "toughness": "5",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Morbid"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "108",
+  "complexity_tier": "medium"
+}
