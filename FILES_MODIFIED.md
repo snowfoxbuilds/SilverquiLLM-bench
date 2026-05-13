@@ -59,3 +59,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `cards/sos/spg_{149..158}/card_spec.json` — Copied SPG Special Guests card specs (10 files)
 - `cards/sos/spg_{149..158}/card_impl.py` — Generated SPG card implementation templates (10 files)
 - `benchmarks/sos/cards/{1..271,soa_*,spg_*}/` — Deleted 346 old card subdirectories (cleanup after migration)
+
+## Item 4: Rewrite card_loader.py for unified card layout
+
+### Tests
+- `tests/test_card_loader.py` — Tests load_card_specs, load_prototype_cards, filter_by_collectors, filter_by_prototype
+- `tests/test_card_loader_unified.py` — Tests unified layout functions (load_card_spec, load_all_card_specs, load_card_impl, is_template)
+
+### Implementation
+- `silverquillm/card_loader.py` — Added unified layout functions with path-derived identifiers, natural dir-name sorting, and fixed is_template to only skip docstrings/ellipsis

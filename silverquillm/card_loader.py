@@ -3,16 +3,24 @@
 Pure utility functions with no side effects.  The CLI composes these
 to select which cards to run benchmarks against.
 
-Public API:
+Public API (legacy dict-based):
 - ``load_card_specs`` — walk a specs directory and return parsed card specs.
 - ``load_prototype_cards`` — load prototype_cards.json and extract collector numbers.
 - ``filter_by_collectors`` — filter specs to a given set of collector numbers.
 - ``filter_by_prototype`` — filter specs to those listed in a prototype file.
+
+Public API (unified card layout):
+- ``load_card_spec`` — load one card spec JSON from cards/{set}/{collector}/.
+- ``load_all_card_specs`` — load all card specs for a set, sorted by collector number.
+- ``load_card_impl`` — return path to card_impl.py for a given card.
+- ``is_template`` — check if a card_impl.py is an empty template.
 """
 
 from __future__ import annotations
 
+import ast
 import json
+import re
 from pathlib import Path
 
 __all__ = [
@@ -20,6 +28,10 @@ __all__ = [
     "load_prototype_cards",
     "filter_by_collectors",
     "filter_by_prototype",
+    "load_card_spec",
+    "load_all_card_specs",
+    "load_card_impl",
+    "is_template",
 ]
 
 
@@ -160,3 +172,181 @@ def _collector_number_sort_key(spec: dict) -> tuple[int, str]:
         return (0, str(int(cn)).zfill(10))
     except (ValueError, TypeError):
         return (1, cn)
+
+
+def _dir_name_sort_key(dir_name: str) -> tuple[int, int, str]:
+    """Return a sort key for directory names with natural sort order.
+
+    Pure numeric directories sort first (numerically), then directories
+    with numeric prefixes (e.g. "105b") sort by their numeric prefix,
+    then fully non-numeric names sort lexicographically at the end.
+    """
+    # Pure numeric
+    try:
+        return (0, int(dir_name), "")
+    except (ValueError, TypeError):
+        pass
+    # Numeric prefix with suffix (e.g. "105b", "7b")
+    m = re.match(r"^(\d+)(.+)$", dir_name)
+    if m:
+        return (0, int(m.group(1)), m.group(2))
+    # Fully non-numeric (e.g. "soa_1", "spg_149")
+    return (1, 0, dir_name)
+
+
+# ---------------------------------------------------------------------------
+# Unified card layout functions (cards/{set_code}/{collector_number}/)
+# ---------------------------------------------------------------------------
+
+
+def load_card_spec(cards_dir: Path, set_code: str, collector_number: str) -> dict:
+    """Load one card spec JSON from the unified layout.
+
+    Parameters
+    ----------
+    cards_dir:
+        Root cards directory (e.g. ``Path("cards")``).
+    set_code:
+        Set code subdirectory (e.g. ``"sos"``).
+    collector_number:
+        Collector number subdirectory (e.g. ``"42"`` or ``"soa_6"``).
+
+    Returns
+    -------
+    dict
+        Parsed card spec dictionary.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the card_spec.json does not exist.
+    """
+    spec_path = cards_dir / set_code / collector_number / "card_spec.json"
+    if not spec_path.exists():
+        raise FileNotFoundError(
+            f"Card spec not found: {spec_path}"
+        )
+    with open(spec_path, "r", encoding="utf-8") as f:
+        spec = json.load(f)
+    # Always use path-derived identifiers as canonical
+    spec["set_code"] = set_code
+    spec["collector_number"] = collector_number
+    return spec
+
+
+def load_all_card_specs(cards_dir: Path, set_code: str) -> list[dict]:
+    """Load all card specs for a set, sorted by collector number.
+
+    Numeric collector numbers sort first (numerically), followed by
+    non-numeric ones (lexicographically).
+
+    Parameters
+    ----------
+    cards_dir:
+        Root cards directory.
+    set_code:
+        Set code subdirectory.
+
+    Returns
+    -------
+    list[dict]
+        Sorted list of card spec dictionaries.
+    """
+    set_dir = cards_dir / set_code
+    if not set_dir.exists():
+        return []
+
+    specs: list[tuple[str, dict]] = []
+    for child in set_dir.iterdir():
+        if not child.is_dir():
+            continue
+        spec_file = child / "card_spec.json"
+        if spec_file.exists():
+            with open(spec_file, "r", encoding="utf-8") as f:
+                spec = json.load(f)
+            # Always use directory name as collector_number (canonical in unified layout)
+            spec["collector_number"] = child.name
+            if not spec.get("set_code"):
+                spec["set_code"] = set_code
+            specs.append((child.name, spec))
+
+    specs.sort(key=lambda pair: _dir_name_sort_key(pair[0]))
+    return [spec for _, spec in specs]
+
+
+def load_card_impl(cards_dir: Path, set_code: str, collector_number: str) -> Path:
+    """Return the path to card_impl.py for a given card.
+
+    Parameters
+    ----------
+    cards_dir:
+        Root cards directory.
+    set_code:
+        Set code subdirectory.
+    collector_number:
+        Collector number subdirectory.
+
+    Returns
+    -------
+    Path
+        Absolute path to the card_impl.py file.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the card_impl.py does not exist.
+    """
+    impl_path = cards_dir / set_code / collector_number / "card_impl.py"
+    if not impl_path.exists():
+        raise FileNotFoundError(
+            f"Card implementation not found: {impl_path}"
+        )
+    return impl_path
+
+
+def is_template(card_impl_path: Path) -> bool:
+    """Check if a card_impl.py is an empty template.
+
+    A file is considered a template if all methods in all classes
+    contain only ``pass`` statements (or ellipsis) and no other
+    meaningful code.
+
+    Parameters
+    ----------
+    card_impl_path:
+        Path to a card_impl.py file.
+
+    Returns
+    -------
+    bool
+        True if the file is an empty template, False otherwise.
+    """
+    source = card_impl_path.read_text(encoding="utf-8")
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+
+    # Find all function/method definitions
+    has_functions = False
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            has_functions = True
+            # Check if body is only pass/Ellipsis/docstring
+            for stmt in node.body:
+                if isinstance(stmt, ast.Pass):
+                    continue
+                if isinstance(stmt, ast.Expr):
+                    # Allow docstrings and Ellipsis only
+                    if isinstance(stmt.value, ast.Constant):
+                        if isinstance(stmt.value.value, str):
+                            continue  # docstring
+                        if stmt.value.value is ...:
+                            continue  # Ellipsis
+                    # Any other expression (e.g. function calls) means real code
+                    return False
+                # Any other statement means it's not a template
+                return False
+
+    # If there are no functions at all, it's also a template
+    return True

@@ -1,0 +1,15 @@
+{
+  "name": "Abzan Falconer",
+  "mana_cost": "{2}{W}",
+  "type_line": "Creature \u2014 Human Soldier",
+  "oracle_text": "Outlast {W}",
+  "power": "2",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": ["W"],
+  "keywords": ["Outlast"],
+  "rarity": "uncommon",
+  "set_code": "sos",
+  "collector_number": "1",
+  "complexity_tier": "moderate"
+}

@@ -56,7 +56,7 @@ Reference: [CONTEXT.md](http://context.md/) for vocabulary, KEY_[DECISIONS.md](h
   5. Clean up `benchmarks/sos/cards/` (delete after migration, or keep `benchmarks/sos/fetch_data.py` if it's the Scryfall fetcher).
   Testability: `cards/sos/` has one subdirectory per SOS card. Each has `card_spec.json` + `card_impl.py` (template). Card loader resolves all cards.
 
-- [ ] **Rewrite ****`silverquillm/card_loader.py`**** for unified card layout**
+- [x] **Rewrite `silverquillm/card_loader.py``**** for unified card layout**
   Detail: Consolidate card loading to work with the new `cards/{set_code}/{collector_number}/` layout. Keep `card_spec.py`'s `CardSpec` dataclass as the return type.
 
   Functions:
