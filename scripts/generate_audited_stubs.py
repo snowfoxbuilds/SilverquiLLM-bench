@@ -20,7 +20,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from silverquillm.template_gen import card_name_to_class_name
+from silverquillm.card_spec import card_name_to_class_name
 
 
 # ---------------------------------------------------------------------------

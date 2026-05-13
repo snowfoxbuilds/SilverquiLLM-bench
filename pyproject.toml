@@ -15,6 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
+silverquillm = "silverquillm.cli:main"
 benchmark = "silverquillm.cli:main"
 
 [project.optional-dependencies]

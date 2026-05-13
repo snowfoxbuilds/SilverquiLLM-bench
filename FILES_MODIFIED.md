@@ -2,111 +2,155 @@
 
 Appended by each Implementer invocation after it writes its diff. One section per TODO item.
 
-## Item 4: Standardize per-card paths on card_dir_name
+## Item 1: Delete remaining old harness code
+
+### Implementation
+- `silverquillm/card_classifier.py` — Deleted (dead code: complexity tier classifier)
+- `silverquillm/prototype.py` — Deleted (dead code: prototype card selection)
+- `silverquillm/post_eval.py` — Deleted (dead code: post-evaluation aggregation)
+- `silverquillm/regression.py` — Deleted (dead code: per-card regression runner)
+- `silverquillm/scorer.py` — Deleted (dead code: old 4-category scoring)
+- `silverquillm/template_gen.py` — Deleted (dead code: card template generation)
+- `silverquillm/card_spec.py` — Added `card_name_to_class_name` and `_determine_base_class` (moved from deleted template_gen.py)
+- `tests/test_card_classifier.py` — Deleted (corresponding test for deleted module)
+- `tests/test_prototype.py` — Deleted (corresponding test for deleted module)
+- `tests/test_post_eval.py` — Deleted (corresponding test for deleted module)
+- `tests/test_regression.py` — Deleted (corresponding test for deleted module)
+- `tests/test_regression_runner.py` — Deleted (orphaned test importing deleted regression module)
+- `tests/test_scorer.py` — Deleted (corresponding test for deleted module)
+- `tests/test_template_gen.py` — Deleted (corresponding test for deleted module)
+- `tests/test_cat4_scoring.py` — Deleted (orphaned test importing deleted scorer module)
+- `tests/test_tier_naming.py` — Removed TestClassifierOutput and TestPrototypeSelector classes (referenced deleted modules)
+- `tests/test_soa_mystical_archives.py` — Removed TestClassifySetMultiSet class (referenced deleted card_classifier)
+- `tests/test_integration_helpers.py` — Updated import from template_gen to card_spec
+- `tests/benchmark/test_helpers.py` — Updated import from template_gen to card_spec
+- `scripts/generate_audited_stubs.py` — Updated import from template_gen to card_spec
+- `tests/test_results.py` — Deleted (imports deleted scorer module and non-existent results module)
+- `tests/test_eval_result_v2.py` — Deleted (imports deleted scorer and post_eval modules)
+- `tests/test_postmortem_schema_v2.py` — Deleted (imports deleted post_eval module)
+- `tests/benchmark/test_e2e.py` — Deleted (imports deleted scorer module)
+- `tests/benchmark/test_helpers.py` — Deleted (orphaned helper importing non-existent config module)
+- `tests/test_package_rename.py` — Removed deleted modules from _EXPECTED_SUBMODULES list
+
+
+## Item 2: Restructure FDN cards to per-collector-number layout (completion)
 
 ### Tests
-- `tests/test_card_id_map.py` — card ID map JSON structure and build script tests
-- `tests/test_harness.py` — AgentSession integration tests (blind, impl_test, timeout, aggregation)
+- `tests/test_fdn_restructure.py` — Verifies per-card directory structure, importability, monolithic file deletion, registry
 
 ### Implementation
-- `silverquillm/agent_session.py` — added `card_id` field and `_path_id` property; updated path construction in `harvest_results()` and `run_card()` to use `_path_id`
-- `silverquillm/cli.py` — pass `card_id=str(card_dir_name)` to AgentSession; fix regression postmortem path and agent_thoughts call to use card_dir_name/_path_id
+- `cards/fdn/*/card_impl.py` (264 files) — Made self-contained: extracted class definitions and helpers from monolithic files
+- `cards/foundations/` (24 files deleted) — Removed monolithic .py files, replaced with package-based compatibility shims
+- `cards/foundations/{module_name}/__init__.py` (22 shim packages) — Re-export card classes via importlib from new per-card locations
+- `cards/fdn/_land_bases.py` — Shared TapLand/GainLand base classes for all non-basic lands
+- `cards/fdn/547/card_impl.py` — Added SkryakerGiant legacy alias
+- `cards/fdn/spg_79/card_impl.py` — Fixed missing _COLOR_TO_MANA dict for BloomTender
+- `cards/fdn/259-271/card_impl.py` (10 land files) — Updated to import from shared _land_bases module
 
-## Item 5: Wire agent output through strategy → CardRunResult → postmortem
+
+## Item 3: Restructure SOS cards to unified cards/ layout
+
+### Implementation
+- `cards/sos/__init__.py` — Package init for SOS cards directory
+- `cards/sos/{1..271}/card_spec.json` — Copied SOS base card specs (271 files)
+- `cards/sos/{1..271}/card_impl.py` — Generated SOS base card implementation templates (271 files)
+- `cards/sos/soa_{1..65}/card_spec.json` — Copied SOA Mystical Archives card specs (65 files)
+- `cards/sos/soa_{1..65}/card_impl.py` — Generated SOA card implementation templates (65 files)
+- `cards/sos/spg_{149..158}/card_spec.json` — Copied SPG Special Guests card specs (10 files)
+- `cards/sos/spg_{149..158}/card_impl.py` — Generated SPG card implementation templates (10 files)
+- `benchmarks/sos/cards/{1..271,soa_*,spg_*}/` — Deleted 346 old card subdirectories (cleanup after migration)
+
+## Item 4: Rewrite card_loader.py for unified card layout
 
 ### Tests
-- `tests/test_strategies.py` — updated expected fields set to include agent_output and prompt_used
+- `tests/test_card_loader.py` — Tests load_card_specs, load_prototype_cards, filter_by_collectors, filter_by_prototype
+- `tests/test_card_loader_unified.py` — Tests unified layout functions (load_card_spec, load_all_card_specs, load_card_impl, is_template)
 
 ### Implementation
-- `silverquillm/strategies.py` — added agent_output and prompt_used fields to CardRunResult; capture adapter.run() return value in both strategies
-- `silverquillm/agent_session.py` — use result.agent_output/result.prompt_used in postmortem and raw log calls; fixed postmortem status to binary success/error; preserve agent_output/prompt_used on violation path
+- `silverquillm/card_loader.py` — Added unified layout functions with path-derived identifiers, natural dir-name sorting, and fixed is_template to only skip docstrings/ellipsis
 
-## Item 6: Replace ThreadPoolExecutor with direct adapter call
+## Item 5: Implement workspace.py — workspace staging
 
 ### Tests
-- `tests/test_strategies.py` — existing tests verify strategies call adapter.run() and handle timeout/completion/no_output
+- `tests/test_workspace.py` — 30 tests verifying workspace structure, engine copy, FDN/SOS cards, reference docs, idempotency
 
 ### Implementation
-- `silverquillm/strategies.py` — removed ThreadPoolExecutor wrapping in both BlindStrategy and ImplTestStrategy; call adapter.run_with_retries(timeout=timeout, retries=0) directly to enforce timeout; removed unused concurrent.futures imports
+- `silverquillm/workspace.py` — workspace staging module with `stage_workspace()` that builds Docker mount directory tree; revised to add stale cleanup, use engine_dir for base_classes.py, and copy shared tier-level helper files
 
+## Item 6: Create Docker images for opencode-tested and opencode-blind
 
-## Item 7: Remove stale iterations/ directory creation
+### Implementation
+- `docker/opencode-tested/Dockerfile` — Docker image definition for test-informed opencode agent
+- `docker/opencode-tested/entrypoint.sh` — Entrypoint script with test-writing prompt, engine_work instruction, and set+e wait fix
+- `docker/opencode-blind/Dockerfile` — Docker image definition for blind opencode agent
+- `docker/opencode-blind/entrypoint.sh` — Entrypoint script with spec-only prompt, engine_work instruction, and set+e wait fix
+
+## Item 7: Implement cli.py — run and smoke commands
+
+### Implementation
+- `silverquillm/cli.py` — Click CLI with `run` and `smoke` commands; container naming + docker stop on timeout, API-key redaction in logs, engine/ dir in smoke workspace
+
+## Item 8: Rewrite evaluator.py — 3 evaluation dimensions
 
 ### Tests
-- `tests/test_no_stale_iterations.py` — verifies no stale iterations references leak into serialized results
+- `tests/test_evaluator.py` — Tests legacy API (EvalResult, run_tests, run_self_eval, run_cross_eval, run_audited_eval, _parse_pytest_output)
+- `tests/test_evaluator_3dim.py` — Tests 3-dimension evaluation system (CardResult, EngineResult, FullEvalResult, evaluate)
 
 ### Implementation
-- `silverquillm/results.py` — removed stale iteration-count re-addition to blind/tested metrics in `_build_result_record()`; added `iteration_count` to `_IMPL_EXCLUDE` set; updated docstrings to remove `iterations` references
-- `silverquillm/run_utils.py` — removed stale `"iterations": tested.iterations` assignment from save pipeline
+- `silverquillm/evaluator.py` — Added 3-dimension evaluation system (evaluate, CardResult, EngineResult, FullEvalResult) alongside retained legacy API; removed unused EvalResultV2. Revision: fixed engine_work importability by staging as engine/, added temp dir cleanup via try/finally in evaluate(), documented subprocess isolation for per-card runs.
 
-## Item 8: Add signal handler for graceful interrupt cleanup
-
-### Tests
-- `tests/test_signal_handler.py` — tests for signal handler registration, restoration, and interrupt behavior
+## Item 9: Implement results.py — run summary generation
 
 ### Implementation
-- `silverquillm/cli.py` — added signal handler, `_active_session` tracking, `KeyboardInterrupt` handling in card loop, and signal restoration in `try`/`finally` block
+- `silverquillm/results.py` — Pure function generate_run_summary(run_dir, image_name, cards_dir=None) with status.json merge, external cards_dir spec lookup, and deterministic timestamp from directory name
 
-## Item 9: Add preflight workspace isolation check
-
-### Tests
-- `tests/test_preflight.py` — existing preflight tests (all 27 passing)
+## Item 10: Implement progress.jsonl protocol in entrypoints
 
 ### Implementation
-- `silverquillm/preflight.py` — added `_check_workspace_isolation()` function with canary UUID check; added `skip_isolation_check` parameter to `preflight_check()`; added `uuid` and `logging` imports; **revised**: adapter/setup exceptions now surface as preflight errors instead of being silently swallowed
-- `silverquillm/cli.py` — added `--skip-isolation-check` CLI flag; passed `skip_isolation_check` to `preflight_check()`
+- `docker/opencode-tested/entrypoint.sh` — Added progress.jsonl events and card watcher
+- `docker/opencode-blind/entrypoint.sh` — Added progress.jsonl events and card watcher
 
-## Item 10: Fix test_timeout_enforcement.py
-
-### Tests
-- `tests/test_timeout_enforcement.py` — 35 timeout enforcement tests (strategy-level, adapter kill, run_with_retries, process-group kill)
-
-### Implementation
-- `tests/test_timeout_enforcement.py` — converted `_BlockingAdapter` and `_BlockingNoKillAdapter` to proper `AgentAdapter` subclasses so they inherit `run_with_retries()`; patched `signal.signal`/`signal.alarm` on `TestRunWithRetriesDeadline` class to prevent real SIGALRM; forced threading timeout path via `_run_with_timeout` patch; patched `os.getpgid`/`os.killpg` on `test_kill_noop_*` methods for safety
-
-## Item 11: Add run_summary.json top-level aggregation
-
-### Tests
-- `tests/test_aggregator.py` — 23 tests for run-level aggregation, CLI aggregate subcommand, and edge cases
-
-### Implementation
-- No changes needed — `silverquillm/aggregator.py` already has `RunSummary`, `aggregate_run()`, and `save_run_summary_v2()`; `silverquillm/cli.py` already wires aggregation after the card loop and provides the `aggregate` subcommand
-
-## Item 12: Simplify or remove rules_skill.py
-
-### Tests
-- `tests/test_rules_skill.py` — existing 18 tests for download, index, lookup, and rules_overview.md
-- `tests/test_package_rename.py` — verifies silverquillm.rules_skill is importable
-
-### Implementation
-- `silverquillm/rules_skill.py` — simplified from 26KB/650 lines to 5.6KB/173 lines; removed inline _STUB_RULES constant, generate_rules_overview, and _RULES_OVERVIEW_CONTENT; kept same public API (download_comprehensive_rules, build_rules_index, lookup_rule); added minimal embedded fallback rules string for when both network and cache are unavailable
-
-## Item 13: Fix PROJECT_MAP.md ASCII art alignment
-
-### Implementation
-- `PROJECT_MAP.md` — realigned ASCII art boxes in architecture diagram
-
-## Item 14: Fix get_targets() snapshot-at-call-time issue
-
-### Tests
-- `tests/engine/test_lazy_targets.py` — 10 tests verifying lazy filter evaluation (creature added after filter creation, non-creature rejection, keyword changes, power changes, controller changes, toughness changes, card type changes, base get_targets, multiple requirements, zone removal)
-
-### Implementation
-- `engine/types.py` — Updated TargetRequirement docstring to document lazy filter convention
-- `engine/casting.py` — Wired filter_fn validation into cast_spell target selection (step 5)
-- `cards/foundations/simple_spells_batch3.py` — Replaced snapshot filter_fn lambdas with lazy predicates; restored controller/ownership checks for SnakeskinVeil, DivineResilience, BiteDown, FellingBlow, Zombify; restored different-controllers validation for RunAwayTogether in on_resolve
-- `cards/foundations/simple_spells.py` — Replaced snapshot filter_fn lambdas with lazy predicates; restored graveyard ownership check for CemeteryRecruitment
-- `cards/foundations/auras_batch2.py` — Replaced 10 snapshot filter_fn lambdas with lazy property-based predicates
-- `cards/foundations/enchantments.py` — Replaced 4 snapshot filter_fn lambdas with lazy property-based predicates
-- `cards/foundations/simple_permanents.py` — Replaced 3 snapshot filter_fn lambdas with lazy property-based predicates
-- `cards/foundations/global_enchantments.py` — Replaced 1 snapshot filter_fn lambda with lazy predicate including controller check
-
-## Item 15: Refactor chosen_targets off card instance
-
-### Tests
-- `tests/engine/test_casting.py` — existing casting pipeline tests (all 1133 engine tests pass)
-- `tests/audited/fdn/` — existing card tests (all 1487 FDN tests pass)
-
-### Implementation
-- `engine/casting.py` — `_resolve_spell()` now accepts `StackObject` and reads `obj.targets` directly (single source of truth); removed `targets_snapshot` copy; sets `card.chosen_targets = obj.targets` at resolve time
-- `engine/card.py` — updated `on_resolve` docstring to document resolve-time target availability
+Item 12: Clean up orphaned tests and verify full suite
+Tests
+(no new test files — this item removes orphaned tests)
+Implementation
+tests/test_adapter_base.py — deleted orphaned test (imports removed silverquillm.adapters)
+tests/test_agent_config.py — deleted orphaned test (imports removed silverquillm.config)
+tests/test_agent_output_wiring.py — deleted orphaned test (imports removed silverquillm.adapters)
+tests/test_agent_session.py — deleted orphaned test (imports removed silverquillm.agent_session)
+tests/test_agent_session_adapter.py — deleted orphaned test (imports removed silverquillm.agent_session)
+tests/test_agent_session_refactor.py — deleted orphaned test (imports removed silverquillm.agent_session)
+tests/test_agent_thoughts.py — deleted orphaned test (imports removed silverquillm.adapters)
+tests/test_aggregator.py — deleted orphaned test (imports non-existent silverquillm.aggregator)
+tests/test_aider_adapter.py — deleted orphaned test (imports removed silverquillm.adapters)
+tests/test_allowlist_contamination.py — deleted orphaned test (imports removed silverquillm.config)
+tests/test_card_id_paths.py — deleted orphaned test (imports removed silverquillm.config)
+tests/test_card_sorting.py — deleted orphaned test (imports non-existent _sort_cards_by_tier)
+tests/test_check_violations.py — deleted orphaned test (imports removed silverquillm.post_eval)
+tests/test_claude_code_adapter.py — deleted orphaned test (imports removed silverquillm.adapters)
+tests/test_cli_config.py — deleted orphaned test (imports removed silverquillm.config)
+tests/test_cli_orchestration.py — deleted orphaned test (imports removed silverquillm.config)
+tests/test_config_consumers.py — deleted orphaned test (imports removed silverquillm.config)
+tests/test_docs_gen.py — deleted orphaned test (imports removed silverquillm.docs_gen)
+tests/test_engine_diff.py — deleted orphaned test (imports removed silverquillm.adapters)
+tests/test_engine_extensibility_prompts.py — deleted orphaned test (imports removed silverquillm.prompts)
+tests/test_engine_snapshot.py — deleted orphaned test (imports removed silverquillm.config)
+tests/test_engine_snapshot_timeout_result.py — deleted orphaned test (imports removed silverquillm.config)
+tests/test_harness.py — deleted orphaned test (explicitly listed for removal)
+tests/test_harvest_decoupled_from_violations.py — deleted orphaned test (imports removed silverquillm.post_eval)
+tests/test_harvest_unconditional.py — deleted orphaned test (imports removed silverquillm.config)
+tests/test_integration_helpers.py — deleted orphaned test (imports removed silverquillm.config)
+tests/test_no_stale_iterations.py — deleted orphaned test (imports removed silverquillm.config)
+tests/test_opencode_adapter.py — deleted orphaned test (imports removed silverquillm.adapters)
+tests/test_persistent_engine.py — deleted orphaned test (imports removed silverquillm.config)
+tests/test_pi_adapter.py — deleted orphaned test (imports removed silverquillm.adapters)
+tests/test_post_loop_eval.py — deleted orphaned test (imports non-existent save_run_summary)
+tests/test_postmortem_logging.py — deleted orphaned test (imports removed silverquillm.config)
+tests/test_preflight.py — deleted orphaned test (imports removed silverquillm.preflight)
+tests/test_prompt_filenames.py — deleted orphaned test (imports removed silverquillm.prompts)
+tests/test_prompts.py — deleted orphaned test (imports removed silverquillm.prompts)
+tests/test_rules_skill.py — deleted orphaned test (imports removed silverquillm.rules_skill)
+tests/test_signal_handler.py — deleted orphaned test (imports non-existent _interrupt_handler)
+tests/test_strategies.py — deleted orphaned test (imports removed silverquillm.strategies)
+tests/test_timeout_enforcement.py — deleted orphaned test (explicitly listed for removal)
+tests/test_violation_wiring.py — deleted orphaned test (imports removed silverquillm.post_eval)

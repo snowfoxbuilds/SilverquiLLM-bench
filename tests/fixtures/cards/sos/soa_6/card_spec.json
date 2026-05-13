@@ -1,0 +1,15 @@
+{
+  "name": "Akroma's Will",
+  "mana_cost": "{3}{W}",
+  "type_line": "Instant",
+  "oracle_text": "Choose one. If you control a commander, choose both instead.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": ["W"],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "soa",
+  "collector_number": "6",
+  "complexity_tier": "complex"
+}

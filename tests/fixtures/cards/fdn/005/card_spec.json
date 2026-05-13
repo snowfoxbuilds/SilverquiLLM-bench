@@ -1,0 +1,15 @@
+{
+  "name": "Swamp",
+  "mana_cost": "",
+  "type_line": "Basic Land \u2014 Swamp",
+  "oracle_text": "({T}: Add {B}.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "005",
+  "complexity_tier": "land"
+}

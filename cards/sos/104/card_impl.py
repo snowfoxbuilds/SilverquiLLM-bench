@@ -1,0 +1,14 @@
+"""Card implementation for Wander Off."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from engine.game_state import GameState
+
+
+class WanderOff(CardImpl):
+    """TODO: Implement Wander Off."""
+
+    pass

@@ -1,0 +1,15 @@
+{
+  "name": "Thought Vessel",
+  "mana_cost": "{2}",
+  "type_line": "Artifact",
+  "oracle_text": "You have no maximum hand size.\n{T}: Add {C}.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "spg",
+  "collector_number": "149",
+  "complexity_tier": "simple"
+}

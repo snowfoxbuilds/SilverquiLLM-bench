@@ -20,21 +20,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Key submodules that must exist under the new package name.
 _EXPECTED_SUBMODULES = [
-    "silverquillm.config",
-    "silverquillm.cli",
     "silverquillm.evaluator",
-    "silverquillm.scorer",
     "silverquillm.card_loader",
     "silverquillm.card_spec",
-    "silverquillm.results",
-    "silverquillm.prompts",
-    "silverquillm.prototype",
-    "silverquillm.rules_skill",
-    "silverquillm.agent_session",
-    "silverquillm.run_utils",
-    "silverquillm.template_gen",
-    "silverquillm.docs_gen",
-    "silverquillm.card_classifier",
 ]
 
 

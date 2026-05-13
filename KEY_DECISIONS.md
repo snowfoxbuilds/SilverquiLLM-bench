@@ -313,3 +313,21 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: `chosen_targets` assignment moved from cast-time to resolve-time. Between cast and resolve, `StackObject.targets` is the single source of truth. At resolution, `card.chosen_targets = obj.targets` is set for backward compat with `on_resolve()` callbacks.
 - **Reasoning**: Prevents target leakage on card copy/clone. Aligns with MTG rules where targets are stored on the stack object.
 - **Impact**: `engine/casting.py` (cast_spell and _resolve_spell).
+
+## Utility functions moved to card_spec.py
+- **Context**: Deleting template_gen.py orphaned `card_name_to_class_name` and `_determine_base_class` which are still used by scripts and test helpers.
+- **Decision**: Moved both functions to `silverquillm/card_spec.py` since they are card-related utilities and card_spec.py is the kept module.
+- **Reasoning**: card_spec.py is the natural home for card-related utilities. Avoids creating a new module just for two functions.
+- **Impact**: `silverquillm/card_spec.py`, `scripts/generate_audited_stubs.py`, `tests/test_integration_helpers.py`, `tests/benchmark/test_helpers.py`.
+
+## FDN card restructure: compatibility shims
+- **Context**: 26 card test files import from `cards.foundations.*`. Updating all imports is high-risk and high-churn.
+- **Decision**: Created package-based compatibility shims at `cards/foundations/{module}/__init__.py` that re-export card classes via importlib from `cards/fdn/{collector}/card_impl.py`. Actual code lives in per-card dirs.
+- **Reasoning**: Shims allow gradual migration. Tests continue to work. New code should import from `cards.fdn.{num}.card_impl`.
+- **Impact**: `cards/foundations/` still exists as a package but contains only re-export shims. Actual implementations are in `cards/fdn/`.
+
+## FDN per-card layout conventions
+- **Context**: Need consistent directory naming for per-card layout.
+- **Decision**: `cards/fdn/{collector_number}/` with `card_impl.py` + `card_spec.json`. SPG cards use `spg_` prefix (e.g., `spg_74`). Collision suffixes: `7b`, `61b`, `105b`, etc. Synthetic IDs 800+ for cards without real collector numbers.
+- **Reasoning**: Matches SOS structure. Directory name = collector number for easy lookup.
+- **Impact**: 265+ directories under `cards/fdn/`.

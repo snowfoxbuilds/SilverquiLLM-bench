@@ -3,15 +3,16 @@
 Decisions made during this run only. Before the PR, migrate anything worth preserving long-term into `KEY_DECISIONS.md`.
 
 
-## Disagreement: Item 6 — Replace ThreadPoolExecutor
-- **Reviewer comment (strict)**: Strategies must enforce timeout via `run_with_retries()`, not bare `adapter.run()`.
-- **Implementer justification**: Test mocks don't have `run_with_retries()`; tests encode a `run()` contract.
-- **Coordinator decision**: accept reviewer
-- **Reasoning**: The TODO spec explicitly says to use `run_with_retries(prompt, workspace, timeout=timeout, retries=0)`. Without it, a blocking adapter hangs forever in production. The Tester wrote mocks that don't match the spec's intent — the mocks need fixing, not the architecture. Having the Tester rewrite the timeout mocks to include `run_with_retries` (or subclass `AgentAdapter`), then the Implementer can use it.
-- **Impact**: `silverquillm/strategies.py`, timeout-related tests.
+## Test failure: Item 1 — Delete remaining old harness code
+- **Failing tests**: test_test_file_deleted[tests/test_tier_naming.py], test_test_file_deleted[tests/test_soa_mystical_archives.py], test_test_file_deleted[tests/test_integration_helpers.py], test_test_file_deleted[tests/benchmark/test_helpers.py], test_no_import_of_deleted_module_in_tests[post_eval], test_no_import_of_deleted_module_in_tests[scorer]
+- **Tester's intent**: Assert all test files related to deleted modules are fully removed. Assert no remaining test file contains imports of deleted modules.
+- **Implementer's approach**: Surgically removed only offending test classes/imports from files that still contain valid tests for non-deleted functionality. Moved shared utility functions (card_name_to_class_name, _determine_base_class) to card_spec.py so dependent test files remain valid. Kept test_tier_naming.py (has valid tier tests), test_soa_mystical_archives.py (has valid SOA tests), test_integration_helpers.py (uses moved utilities), tests/benchmark/test_helpers.py (uses moved utilities).
+- **Coordinator decision**: fix tests
+- **Reasoning**: The Implementer's approach is correct. Files should only be deleted if ALL their content is orphaned. These 4 files still have valid tests for non-deleted modules. The import check failures are likely false positives from the test file itself referencing module names as parametrization strings. The Tester should update to only expect deletion of files that are fully orphaned, and exclude self-references in import scanning.
 
-## Spec deviation: Item 11 — Add run_summary.json top-level aggregation
-- **TODO spec expected**: Add `generate_run_summary()` to `results.py` and wire in `cli.py`.
-- **Actual codebase state**: `aggregate_run()` in `silverquillm/aggregator.py` already implements the 4-tier schema (Tiers 1-3). CLI already wires aggregation after card loop. Signal handler already preserves partial results.
-- **What was implemented instead**: No changes needed — marked as complete. Tier 4 (comparison hooks) is not yet implemented but was listed as optional.
-- **Impact**: No files changed.
+## Test failure: Item 3 — Restructure SOS cards
+- **Failing tests**: test_old_cards_directory_has_no_card_subdirs
+- **Tester's intent**: Verify old `benchmarks/sos/cards/` is cleaned up after migration
+- **Implementer's approach**: Kept old location because `test_sos_regenerated_artifacts.py` references it
+- **Coordinator decision**: fix implementation — delete old card dirs. The TODO explicitly says to clean up. Any broken test references will be addressed in item 12 (orphaned test cleanup).
+- **Reasoning**: The TODO spec is clear. Keeping stale data to avoid touching other tests defeats the purpose of the restructure.

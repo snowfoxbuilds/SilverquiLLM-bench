@@ -4,7 +4,7 @@
 
 SilverquiLLM-bench is a **Magic: The Gathering game engine** built in Python, designed as a benchmark for evaluating LLM coding capabilities. The engine implements core MTG rules (comprehensive rules §100–§700+) for two-player games using cards from the **Foundations (FDN)** set.
 
-The project includes a **benchmark runner package** (`silverquillm/`) that orchestrates the full evaluation pipeline: classifying cards by complexity, generating specs and prompts for LLM agents, managing agent sessions via pluggable adapters, evaluating implementations, scoring results (4 categories), and recording artifacts. The first benchmark set is **Shadows over Sonnenthal (SOS)** with 346 cards (271 SOS base + 65 SOA Mystical Archives + 10 SPG Special Guests).
+The project includes a **benchmark runner package** (`silverquillm/`) that orchestrates the full evaluation pipeline: classifying cards by complexity, generating specs and prompts for LLM agents, managing Docker container execution, evaluating implementations across three dimensions (SOS card correctness, FDN regression, engine regression), scoring results, and recording artifacts. The first benchmark set is **Shadows over Sonnenthal (SOS)** with 346 cards (271 SOS base + 65 SOA Mystical Archives + 10 SPG Special Guests).
 
 The project also includes a **replay validation pipeline** (`silverquillm/replay/`) that parses 17lands GRE replay data from real MTG Arena games and validates the engine's behavior against ground-truth game state snapshots, detecting divergences where the engine differs from the official game client.
 
@@ -15,44 +15,43 @@ The codebase is ~40,000+ lines across source and tests, with **~3,200+ test func
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                       Benchmark Runner                           │
-│  silverquillm/cli.py       — CLI entry point (run/eval/score/    │
-│                               cards/validate)                    │
-│  silverquillm/config.py    — YAML config + nested AgentConfig    │
-│  silverquillm/agent_session.py — workspace + agent lifecycle     │
+│  silverquillm/cli.py       — CLI entry point (run, smoke)        │
+│  silverquillm/workspace.py — workspace isolation + volume setup  │
+│  silverquillm/results.py   — per-card result collection          │
 │                   │                                  │           │
 │    ┌──────────────▼──────────┐      ┌────────────────▼────────┐  │
 │    │    Card Pipeline        │      │    Eval Pipeline        │  │
 │    │                         │      │                         │  │
-│    │  card_classifier.py     │      │  evaluator.py           │  │
-│    │  card_spec.py           │      │  scorer.py (4 cats)     │  │
-│    │  card_loader.py         │      │  results.py             │  │
-│    │  template_gen.py        │      │  run_utils.py           │  │
-│    │  docs_gen.py            │      │  regression.py          │  │
-│    │  rules_skill.py         │      │                         │  │
-│    │  prompts.py             │      │                         │  │
-│    │  prototype.py           │      │                         │  │
+│    │  card_spec.py           │      │  evaluator.py           │  │
+│    │  card_loader.py         │      │  (SOS correctness,      │  │
+│    │                         │      │   FDN regression,       │  │
+│    │                         │      │   engine regression)    │  │
 │    └─────────────────────────┘      └─────────────────────────┘  │
 │                                                                  │
 │    ┌──────────────────────────────────────────────────────────┐  │
+│    │    Docker Containers (replace adapters)                  │  │
+│    │                                                          │  │
+│    │  docker/opencode-tested/  — OpenCode tested-phase image  │  │
+│    │    entrypoint.sh          — card loop + progress.jsonl   │  │
+│    │  docker/opencode-blind/   — OpenCode blind-phase image   │  │
+│    │    entrypoint.sh          — blind impl + progress.jsonl  │  │
+│    │                                                          │  │
+│    │  Host runner launches containers via subprocess           │  │
+│    │  (no docker Python package — uses docker CLI directly)   │  │
+│    └──────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│    ┌──────────────────────────────────────────────────────────┐  │
 │    │    Replay Validation Pipeline                            │  │
+│    │    (exists but not yet wired into the new CLI)           │  │
 │    │                                                          │  │
 │    │  replay/types.py      — ReplayGame, GameSnapshot, etc.   │  │
 │    │  replay/state.py      — GRE state reconstruction         │  │
 │    │  replay/parser.py     — parse_replay() entry point       │  │
 │    │  replay/executor.py   — ReplayExecutor (state-diff mode) │  │
 │    │  replay/validation.py — Divergence detection & reporting │  │
-│    │  replay/cli.py        — `benchmark validate` subcommand  │  │
+│    │  replay/cli.py        — replay validation (not yet       │  │
+│    │                         registered in CLI group)         │  │
 │    └──────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────────┐
-│  Agent Adapters (silverquillm/adapters/)                         │
-│                                                                  │
-│  base.py        — AgentAdapter ABC + registry + factory          │
-│  opencode.py    — OpenCode CLI adapter                           │
-│  claude_code.py — Claude Code CLI adapter                        │
-│  aider.py       — Aider CLI adapter                              │
-│  pi.py          — Pi CLI adapter                                 │
 └──────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────┐
@@ -79,29 +78,13 @@ The codebase is ~40,000+ lines across source and tests, with **~3,200+ test func
 │    │                                                          │  │
 │    │  cards/registry.py   — CardRegistry + CardMetadata       │  │
 │    │  cards/scryfall.py   — Scryfall API fetch + cache        │  │
-│    │  cards/foundations/  — FDN set card implementations(260+)│  │
-│    │    basic_lands.py        — 5 basic lands                 │  │
-│    │    simple_creatures.py   — 15 vanilla/French vanilla     │  │
-│    │    vanilla_creatures_batch2.py — 7 batch 2 creatures     │  │
-│    │    simple_spells.py      — 10 instants/sorceries         │  │
-│    │    simple_spells_batch2.py — 15 non-targeted spells      │  │
-│    │    simple_spells_batch3.py — 18 targeted spells          │  │
-│    │    simple_permanents.py  — 5 enchantments and artifacts  │  │
-│    │    enchantments.py       — 8 enchantments (auras+global) │  │
-│    │    auras_batch2.py       — 10 batch 2 auras              │  │
-│    │    global_enchantments.py — 10 non-aura enchantments     │  │
-│    │    planeswalkers.py      — 4 planeswalkers               │  │
-│    │    planeswalkers_batch2.py — 3 batch 2 planeswalkers     │  │
-│    │    modal_spells.py       — 8 modal spells                │  │
-│    │    complex_spells.py     — 16 modal/X-cost/kicker cards  │  │
-│    │    artifacts.py          — 10 artifacts (mana rocks, eq.)│  │
-│    │    artifacts_batch2.py   — 27 batch 2 artifacts          │  │
-│    │    equipment.py          — 7 equipment cards             │  │
-│    │    lands.py              — 13 non-basic lands            │  │
-│    │    etb_creatures.py      — 29 ETB trigger creatures      │  │
-│    │    death_trigger_creatures.py — 17 death triggers        │  │
-│    │    activated_creatures.py — 19 activated abilities       │  │
-│    │    special_guests.py     — 10 Special Guest (SPG) cards  │  │
+│    │  cards/fdn/          — FDN set (264 per-card dirs)       │  │
+│    │    {collector_number}/card_impl.py  — implementation     │  │
+│    │    {collector_number}/card_spec.json — card metadata     │  │
+│    │  cards/sos/          — SOS set (346 per-card dirs)       │  │
+│    │    {collector_number}/card_impl.py  — implementation     │  │
+│    │    {collector_number}/card_spec.json — card metadata     │  │
+│    │  cards/foundations/   — FDN source implementations       │  │
 │    └──────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────┘
 
@@ -120,15 +103,16 @@ The codebase is ~40,000+ lines across source and tests, with **~3,200+ test func
 |-----------|--------|---------|---------|
 | `engine/` | [Completed] | Core game engine (17 modules) | [engine/DIRECTORY_SUMMARY.md](engine/DIRECTORY_SUMMARY.md) |
 | `cards/` | [Completed] | Card registry and data pipeline | [cards/DIRECTORY_SUMMARY.md](cards/DIRECTORY_SUMMARY.md) |
-| `cards/foundations/` | [Completed] | FDN set card implementations (260+ cards, 21 files) | [cards/foundations/DIRECTORY_SUMMARY.md](cards/foundations/DIRECTORY_SUMMARY.md) |
-| `silverquillm/` | [Completed] | **Benchmark runner package** (18+ modules) | [silverquillm/DIRECTORY_SUMMARY.md](silverquillm/DIRECTORY_SUMMARY.md) |
-| `silverquillm/adapters/` | [Completed] | **Agent adapter system** (6 modules) | [silverquillm/adapters/DIRECTORY_SUMMARY.md](silverquillm/adapters/DIRECTORY_SUMMARY.md) |
+| `cards/foundations/` | [Completed] | FDN set source implementations (260+ cards, 21 files) | [cards/foundations/DIRECTORY_SUMMARY.md](cards/foundations/DIRECTORY_SUMMARY.md) |
+| `cards/fdn/` | [Completed] | FDN per-card directories (264 cards) | Per-card card_impl.py + card_spec.json |
+| `cards/sos/` | [Completed] | SOS per-card directories (346 cards) | Per-card card_impl.py + card_spec.json |
+| `silverquillm/` | [Completed] | **Benchmark runner package** | [silverquillm/DIRECTORY_SUMMARY.md](silverquillm/DIRECTORY_SUMMARY.md) |
 | `silverquillm/replay/` | [Completed] | **Replay validation pipeline** (7 modules) | [silverquillm/replay/DIRECTORY_SUMMARY.md](silverquillm/replay/DIRECTORY_SUMMARY.md) |
+| `docker/` | [Completed] | **Docker container images** for agent execution | |
+| `docker/opencode-tested/` | [Completed] | OpenCode tested-phase container | entrypoint.sh + progress.jsonl |
+| `docker/opencode-blind/` | [Completed] | OpenCode blind-phase container | entrypoint.sh + progress.jsonl |
 | `benchmarks/` | [Completed] | Benchmark data sets (namespace package) | [benchmarks/DIRECTORY_SUMMARY.md](benchmarks/DIRECTORY_SUMMARY.md) |
 | `benchmarks/sos/` | [Completed] | SOS benchmark set (346 cards) | [benchmarks/sos/DIRECTORY_SUMMARY.md](benchmarks/sos/DIRECTORY_SUMMARY.md) |
-| `benchmarks/sos/data/` | [Completed] | SOS raw/processed data | (covered in sos/ summary) |
-| `benchmarks/sos/cards/` | [Completed] | Per-card spec directories (346 dirs) | (covered in sos/ summary) |
-| `benchmarks/sos/results/` | [Completed] | Benchmark run outputs | (covered in sos/ summary) |
 | `data/` | [Completed] | Runtime data cache + replay data | [data/DIRECTORY_SUMMARY.md](data/DIRECTORY_SUMMARY.md) |
 | `data/replays/` | [Completed] | Card ID mapping + sample replays | (covered in data/ summary) |
 | `scripts/` | [Completed] | Utility scripts (card ID map builder) | [scripts/DIRECTORY_SUMMARY.md](scripts/DIRECTORY_SUMMARY.md) |
@@ -163,7 +147,7 @@ cards/ (depends on engine/ — implements CardImpl subclasses)
     ↑
 silverquillm/ (depends on engine/ for AST extraction and agent context; uses benchmarks/ for data)
     ↑
-silverquillm/adapters/ (depends on silverquillm/config — wraps external CLI tools)
+docker/ (standalone Docker images — contain agent tools, invoked via subprocess)
 silverquillm/replay/ (depends on engine/ for execution, data/replays/ for card ID maps)
 ```
 
@@ -180,14 +164,14 @@ silverquillm/replay/ (depends on engine/ for execution, data/replays/ for card I
 - **Cost reduction**: `CardImpl.cost_reduction(game)` hook; applied in `casting.py` before mana payment.
 - **Protection (DEBT)**: `protection.py` implements Damage, Enchanting/Equipping, Blocking, Targeting checks; integrated into `combat.py`, `casting.py`, `game.py`, `state_based_actions.py`.
 - **Extra turns**: FIFO queue in `GameState.extra_turns`; pops without advancing normal rotation.
-- **Adapter pattern**: Agent tools wrapped via `AgentAdapter` ABC with registry-based factory (`get_adapter`).
-- **Nested config**: Agent settings in `config.agent` (`AgentConfig` dataclass) — no flat top-level keys.
+- **Docker container isolation**: Agent tools run inside Docker containers; host runner uses `docker` CLI via subprocess (no `docker` Python package).
+- **Image-as-config**: The Docker image encapsulates all agent configuration — no separate `config.yaml` needed.
 - **Dual tier keys**: Both `tier` and `complexity_tier` supported; prefer `complexity_tier` in new code.
 - **Prompt templates**: Use `str.format_map` with `{placeholder}` — no f-strings with complex logic.
 - **Subprocess isolation**: Benchmark evaluation runs pytest in subprocesses — implementations never imported into runner.
 - **Persistent engine**: Engine directory writable across cards within a run; per-card diffs captured.
 - **Postmortem logging**: JSONL logging per agent run; `agent_thoughts.md` narrative generated.
-- **4-category scoring**: Blind, Tested, Audited, Engine Extension Quality.
+- **3-dimension evaluation**: SOS Card Correctness, FDN Regression, Engine Regression.
 - **Replay validation**: 17lands GRE replay parsing → engine execution → divergence detection. Dual-seat model (Seat 1 validated, Seat 2 oracle-injected).
 
 ## Testing
@@ -210,6 +194,6 @@ silverquillm/replay/ (depends on engine/ for execution, data/replays/ for card I
 - **pyproject.toml**: setuptools build, Python ≥3.12, deps: requests, pyyaml, click; dev: pytest, ruff, mypy
 - **ruff.toml**: Line length 100, target py312
 - **Type checking**: PEP 561 py.typed markers in `engine/` and `cards/`
-- **CLI entry point**: `benchmark` command → `silverquillm.cli:main`
-- **Config**: `config.example.yaml` — YAML config with nested `agent:` block including `adapter` field
+- **CLI entry point**: `silverquillm` command → `silverquillm.cli:main` (also available as `benchmark` for backward compat)
+- **Docker images**: Agent-specific Docker images in `docker/` — the image IS the config
 - **Setup questions**: `setup_questions.json` — Question bank for agent validation

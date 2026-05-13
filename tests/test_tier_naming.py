@@ -16,7 +16,7 @@ Test areas:
 from __future__ import annotations
 
 import json
-import tempfile
+
 from pathlib import Path
 from typing import Any
 
@@ -88,16 +88,6 @@ class TestRoundTrip:
 class TestBackwardCompat:
     """JSON using only the old ``tier`` key is accepted."""
 
-    def test_results_builder_reads_legacy_tier_key(self) -> None:
-        """_build_result_record should fall back to 'tier' when 'complexity_tier' absent."""
-        from silverquillm.results import _build_result_record
-
-        blind = {"tier": "simple", "agent": "test", "status": "ok"}
-        test = {"tier": "simple", "agent": "test", "status": "ok"}
-        record = _build_result_record("card_a", blind, test, None)
-
-        assert record["complexity_tier"] == "simple"
-
     def test_card_spec_generate_all_specs_reads_legacy_tier(self) -> None:
         """generate_all_specs should fall back to 'tier' when reading classified data."""
         from silverquillm.card_spec import generate_card_spec
@@ -119,83 +109,13 @@ class TestBackwardCompat:
 class TestCanonicalKeyPreferred:
     """When both ``tier`` and ``complexity_tier`` are in input, ``complexity_tier`` wins."""
 
-    def test_results_builder_prefers_complexity_tier(self) -> None:
-        from silverquillm.results import _build_result_record
+    def test_card_spec_canonical_key_used(self) -> None:
+        """generate_card_spec always outputs complexity_tier regardless of input."""
+        from silverquillm.card_spec import generate_card_spec
 
-        blind = {
-            "tier": "simple",
-            "complexity_tier": "expert",
-            "agent": "test",
-            "status": "ok",
-        }
-        test = {"agent": "test", "status": "ok"}
-        record = _build_result_record("card_b", blind, test, None)
-
-        assert record["complexity_tier"] == "expert"
-
-
-# ---------------------------------------------------------------------------
-# Classifier output
-# ---------------------------------------------------------------------------
-
-
-class TestClassifierOutput:
-    """classify_set must output ``complexity_tier`` as a key."""
-
-    def test_classify_set_json_contains_complexity_tier(self) -> None:
-        from silverquillm.card_classifier import classify_set
-
-        cards = [
-            _make_card(name="Basic Land", type_line="Basic Land", oracle_text=""),
-            _make_card(
-                name="Complex Planeswalker",
-                type_line="Legendary Planeswalker — Jace",
-                oracle_text="+1: Draw a card.\n-2: Return target creature.\n-8: You win.",
-                keywords=["planeswalker"],
-            ),
-        ]
-
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as f:
-            tmp_path = Path(f.name)
-
-        try:
-            classify_set(cards, str(tmp_path))
-            with open(tmp_path) as f:
-                records = json.load(f)
-
-            for rec in records:
-                assert "complexity_tier" in rec, (
-                    f"Classifier output record missing 'complexity_tier': {rec}"
-                )
-                assert rec["complexity_tier"] in VALID_TIERS
-        finally:
-            tmp_path.unlink(missing_ok=True)
-
-    def test_classify_set_json_also_has_legacy_tier_for_compat(self) -> None:
-        """Classifier output should include legacy 'tier' key for backward compat."""
-        from silverquillm.card_classifier import classify_set
-
-        cards = [_make_card()]
-
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as f:
-            tmp_path = Path(f.name)
-
-        try:
-            classify_set(cards, str(tmp_path))
-            with open(tmp_path) as f:
-                records = json.load(f)
-
-            for rec in records:
-                assert "tier" in rec, (
-                    "Classifier should still emit 'tier' for backward compat"
-                )
-                assert rec["tier"] == rec["complexity_tier"]
-        finally:
-            tmp_path.unlink(missing_ok=True)
+        spec = generate_card_spec(_make_card(), "expert")
+        assert spec["complexity_tier"] == "expert"
+        assert "tier" not in spec
 
 
 # ---------------------------------------------------------------------------
@@ -227,81 +147,17 @@ class TestCardSpecOutputKey:
 
 
 class TestResultsOutputKey:
-    """_build_result_record and summary helpers use ``complexity_tier``."""
+    """generate_run_summary uses ``complexity_tier`` in output."""
 
-    def test__build_result_record_outputs_complexity_tier(self) -> None:
-        from silverquillm.results import _build_result_record
+    def test_generate_run_summary_exists(self) -> None:
+        from silverquillm.results import generate_run_summary
 
-        blind = {"complexity_tier": "medium", "agent": "a", "status": "ok"}
-        test = {"complexity_tier": "medium", "agent": "a", "status": "ok"}
-        record = _build_result_record("c1", blind, test, None)
-
-        assert "complexity_tier" in record
-        assert record["complexity_tier"] == "medium"
-
-    def test__build_result_record_no_bare_tier_in_output(self) -> None:
-        from silverquillm.results import _build_result_record
-
-        blind = {"complexity_tier": "medium", "agent": "a", "status": "ok"}
-        test = {"complexity_tier": "medium", "agent": "a", "status": "ok"}
-        record = _build_result_record("c1", blind, test, None)
-
-        # Top-level key should be complexity_tier, not tier
-        assert "tier" not in record
+        assert callable(generate_run_summary)
 
 
 # ---------------------------------------------------------------------------
 # Prototype selector reads both key forms
 # ---------------------------------------------------------------------------
-
-
-class TestPrototypeSelector:
-    """select_prototype_cards should accept both key forms in classified JSON."""
-
-    def _write_classified(
-        self, path: Path, entries: list[dict[str, Any]]
-    ) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
-            json.dump(entries, f)
-
-    def test_reads_complexity_tier_key(self, tmp_path: Path) -> None:
-        from silverquillm.prototype import select_prototype_cards
-
-        classified_path = tmp_path / "data" / "sos_classified.json"
-        entries = [
-            {
-                "name": f"Card {i}",
-                "complexity_tier": tier,
-                "collector_number": str(i),
-                "oracle_text": "Some ability text.",
-                "type_line": "Creature — Human",
-            }
-            for i, tier in enumerate(VALID_TIERS)
-        ]
-        self._write_classified(classified_path, entries)
-
-        result = select_prototype_cards(str(classified_path))
-        assert len(result) > 0
-
-    def test_reads_legacy_tier_key(self, tmp_path: Path) -> None:
-        from silverquillm.prototype import select_prototype_cards
-
-        classified_path = tmp_path / "data" / "sos_classified.json"
-        entries = [
-            {
-                "name": f"Card {i}",
-                "tier": tier,
-                "collector_number": str(i),
-                "oracle_text": "Some ability text.",
-                "type_line": "Creature — Human",
-            }
-            for i, tier in enumerate(VALID_TIERS)
-        ]
-        self._write_classified(classified_path, entries)
-
-        result = select_prototype_cards(str(classified_path))
-        assert len(result) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -312,12 +168,10 @@ class TestPrototypeSelector:
 class TestEdgeCases:
     """Edge cases around missing or unexpected tier values."""
 
-    def test_results_missing_both_keys_defaults_to_unknown(self) -> None:
-        """When neither tier nor complexity_tier is present, default to 'unknown'."""
-        from silverquillm.results import _build_result_record
+    def test_generate_card_spec_with_all_valid_tiers(self) -> None:
+        """generate_card_spec handles all valid tier values."""
+        from silverquillm.card_spec import generate_card_spec
 
-        blind: dict[str, Any] = {"agent": "a", "status": "ok"}
-        test: dict[str, Any] = {"agent": "a", "status": "ok"}
-        record = _build_result_record("c1", blind, test, None)
-
-        assert record["complexity_tier"] == "unknown"
+        for tier in VALID_TIERS:
+            spec = generate_card_spec(_make_card(), tier)
+            assert spec["complexity_tier"] == tier

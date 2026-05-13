@@ -10,7 +10,7 @@ Reference: [CONTEXT.md](http://context.md/) for vocabulary, KEY_[DECISIONS.md](h
 
 ---
 
-- [ ] **Delete remaining old harness code from ****`silverquillm/`**
+- [x] **Delete remaining old harness code from ****`silverquillm/`**
   Detail: The following files are dead code from the adapter-based harness and have no role in the new Docker container flow. Delete them and their corresponding tests:
 
   - `silverquillm/card_classifier.py` — complexity tier classifier (classification now happens offline, pre-baked into card_spec.json)
@@ -28,7 +28,7 @@ Reference: [CONTEXT.md](http://context.md/) for vocabulary, KEY_[DECISIONS.md](h
   - Run `pytest --ignore=tests/audited/ -x` to verify no import breakage.
   Testability: `pytest --ignore=tests/audited/ -x` passes. No import errors. `grep -rn` for deleted module names finds zero hits in remaining source.
 
-- [ ] **Restructure FDN cards to per-collector-number layout**
+- [x] **Restructure FDN cards to per-collector-number layout**
   Detail: FDN card implementations currently live in monolithic files under `cards/foundations/` (e.g. `activated_creatures.py`, `etb_creatures.py`, `simple_spells.py` — 21 files, 260+ cards). The target layout is `cards/fdn/{collector_number}/card_spec.json` + `cards/fdn/{collector_number}/card_impl.py`, matching the SOS per-card structure.
 
   Steps:
@@ -44,7 +44,7 @@ Reference: [CONTEXT.md](http://context.md/) for vocabulary, KEY_[DECISIONS.md](h
   5. Verify: `pytest tests/ --ignore=tests/audited/ -x` still passes — all card tests must resolve classes from new paths.
   Testability: `cards/fdn/` has one subdirectory per FDN card. Each has `card_spec.json` + `card_impl.py`. Registry imports work. All existing card tests pass.
 
-- [ ] **Restructure SOS cards to unified ****`cards/`**** layout**
+- [x] **Restructure SOS cards to unified ****`cards/`**** layout**
   Detail: SOS card specs currently live under `benchmarks/sos/cards/{num}/card_spec.json`. Move them to `cards/sos/{collector_number}/card_spec.json` + `cards/sos/{collector_number}/card_impl.py` (empty template) so both sets share the `cards/{set}/` root.
 
   Steps:
@@ -56,7 +56,7 @@ Reference: [CONTEXT.md](http://context.md/) for vocabulary, KEY_[DECISIONS.md](h
   5. Clean up `benchmarks/sos/cards/` (delete after migration, or keep `benchmarks/sos/fetch_data.py` if it's the Scryfall fetcher).
   Testability: `cards/sos/` has one subdirectory per SOS card. Each has `card_spec.json` + `card_impl.py` (template). Card loader resolves all cards.
 
-- [ ] **Rewrite ****`silverquillm/card_loader.py`**** for unified card layout**
+- [x] **Rewrite `silverquillm/card_loader.py``**** for unified card layout**
   Detail: Consolidate card loading to work with the new `cards/{set_code}/{collector_number}/` layout. Keep `card_spec.py`'s `CardSpec` dataclass as the return type.
 
   Functions:
@@ -69,7 +69,7 @@ Reference: [CONTEXT.md](http://context.md/) for vocabulary, KEY_[DECISIONS.md](h
 
   Testability: Unit test with fixture card specs under `tests/fixtures/cards/`. Verify loading, sorting, missing-card error, template detection.
 
-- [ ] **Implement ****`silverquillm/workspace.py`**** — workspace staging**
+- [x] **Implement `silverquillm/workspace.py``**** — workspace staging**
   Detail: Host-side module that builds the workspace directory before `docker run`. This is the agent's entire world — contamination control is enforced by what gets staged.
 
   `stage_workspace(cards_dir: Path, engine_dir: Path, output_dir: Path) -> tuple[Path, Path]` returns (workspace_path, output_path).
@@ -108,7 +108,7 @@ output/                     — empty dir for progress.jsonl, stdout.log, stderr
 
   Testability: Call `stage_workspace()` → verify directory tree exists, FDN impls are non-empty, SOS impls are templates, [prompt.md](http://prompt.md/) exists, engine/ is a complete copy.
 
-- [ ] **Create Docker images: ****`docker/opencode-tested/`**** and ****`docker/opencode-blind/`**
+- [x] **Create Docker images: ****`docker/opencode-tested/`**** and ****`docker/opencode-blind/`**
   Detail: Each image IS the full agent configuration. No MODE/STRATEGY env vars. Only API keys at runtime.
 
   `docker/opencode-tested/Dockerfile`:
@@ -216,7 +216,7 @@ Implement the cards from their specs alone. Do not write or run tests. Focus on 
 
   Testability: Mock `subprocess.run` with a fake docker command that writes known files → verify harvest logic, verify run_summary.json structure. Real smoke test with a built image.
 
-- [ ] **Rewrite ****`silverquillm/evaluator.py`**** — 3 evaluation dimensions**
+- [x] **Rewrite `silverquillm/evaluator.py``**** — 3 evaluation dimensions**
   Detail: Complete rewrite. Three post-run scoring dimensions, all using audited tests. Agent-written tests are harvested as artifacts but NOT used for scoring.
 
   `evaluate(run_dir: Path, cards_dir: Path, engine_dir: Path) -> EvalResult`:
@@ -247,7 +247,7 @@ Implement the cards from their specs alone. Do not write or run tests. Focus on 
 
   Testability: Create fixture run_dir with known card_[impl.py](http://impl.py/) (one good, one bad) and a known engine_work/ → verify per-card result.json, verify dimension aggregates.
 
-- [ ] **Implement ****`silverquillm/results.py`**** — run summary generation**
+- [x] **Implement `silverquillm/results.py``**** — run summary generation**
   Detail: Pure, idempotent function that reads per-card `result.json` files and produces `run_summary.json`.
 
   `generate_run_summary(run_dir: Path, image_name: str) -> dict`:
@@ -294,7 +294,7 @@ Implement the cards from their specs alone. Do not write or run tests. Focus on 
 
   Testability: Create fixture run_dir with 3 per-card result.json → verify aggregation math, JSON schema.
 
-- [ ] **Implement progress.jsonl protocol in entrypoints**
+- [x] **Implement progress.jsonl protocol in entrypoints**
   Detail: Both entrypoints write `/output/progress.jsonl` for live monitoring from the host (since /output is a mounted volume, the host can `tail -f` it).
 
   JSONL schema:
@@ -314,7 +314,7 @@ Implement the cards from their specs alone. Do not write or run tests. Focus on 
 
   Testability: Run entrypoint with a mock agent → verify progress.jsonl has `started` and `completed` events.
 
-- [ ] **Update ****`pyproject.toml`**** and ****`README.md`**** for new architecture**
+- [x] **Update `pyproject.toml``**** and ****`README.md`**** for new architecture**
   Detail:
 
   `pyproject.toml`:
@@ -338,7 +338,7 @@ Implement the cards from their specs alone. Do not write or run tests. Focus on 
 
   Testability: `pip install -e ".[dev]"` succeeds. `silverquillm --help` shows `run` and `smoke`.
 
-- [ ] **Clean up orphaned tests and verify full suite**
+- [x] **Clean up orphaned tests and verify full suite**
   Detail: Final cleanup pass after all above items.
 
   1. `grep -rn "from silverquillm" tests/ --include="*.py"` — find imports of deleted modules
