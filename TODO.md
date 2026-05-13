@@ -314,7 +314,7 @@ Implement the cards from their specs alone. Do not write or run tests. Focus on 
 
   Testability: Run entrypoint with a mock agent → verify progress.jsonl has `started` and `completed` events.
 
-- [ ] **Update ****`pyproject.toml`**** and ****`README.md`**** for new architecture**
+- [x] **Update `pyproject.toml``**** and ****`README.md`**** for new architecture**
   Detail:
 
   `pyproject.toml`:

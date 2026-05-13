@@ -21,12 +21,12 @@ Magic cards are ideal coding benchmarks because they:
 ## How It Works
 
 ```
-Card Specs ──▶ Agent Session ──▶ Evaluation
+Card Specs ──▶ Docker Container ──▶ Evaluation
 
-• Card JSON specs         • Sandboxed workspace        • Self-eval (agent's own tests)
-• Complexity tiers        • Step 1: Blind impl          • Cross-eval (other agents' tests)
-• Engine API docs         • Step 2: Test-informed       • Audited eval (gold-standard tests)
-• Base class templates    • Contamination guard         • Tier-weighted scoring
+• Card JSON specs         • Isolated Docker container      • SOS card correctness
+• Complexity tiers        • Step 1: Blind impl              • FDN regression check
+• Engine API docs         • Step 2: Test-informed            • Engine regression check
+• Base class templates    • progress.jsonl monitoring        • Tier-weighted scoring
                           • Engine regression check
 ```
 
@@ -72,26 +72,31 @@ engine/                 Core MTG rules engine
 └── effects.py          Continuous effects (layer system)
 
 cards/                  Card implementations
-├── foundations/         FDN base set (~264 cards, reference implementations)
+├── foundations/         FDN source implementations (~264 cards)
+├── fdn/                FDN per-card dirs (card_impl.py + card_spec.json)
+├── sos/                SOS per-card dirs (card_impl.py + card_spec.json)
 └── registry.py         Card registration system
 
+docker/                 Docker container images
+├── opencode-tested/    OpenCode tested-phase image
+│   └── entrypoint.sh   Card loop + progress.jsonl
+└── opencode-blind/     OpenCode blind-phase image
+    └── entrypoint.sh   Blind impl + progress.jsonl
+
 silverquillm/           Benchmark runner package
-├── cli.py              CLI entry point (run, eval, score, validate)
-├── agent_session.py    Workspace setup, contamination controls, two-phase flow
-├── adapters/           Agent tool adapters (opencode, claude_code, aider, pi)
-├── prompts.py          Parameterized prompt templates
-├── evaluator.py        Self-eval, cross-eval, audited eval
-├── scorer.py           Tier-weighted scoring & leaderboard
-├── replay/             Deterministic replay validation
-└── config.py           YAML config loading
+├── cli.py              CLI entry point (run, smoke)
+├── workspace.py        Workspace isolation + volume setup
+├── card_loader.py      Card spec loading from per-card dirs
+├── card_spec.py        Card spec dataclass + parsing
+├── results.py          Per-card result collection
+├── evaluator.py        SOS correctness, FDN regression, engine regression
+└── replay/             Replay validation (not yet wired to new CLI)
 
 benchmarks/sos/         SOS benchmark data
-├── cards/              346 card specs (card_spec.json per card)
 ├── data/               Scryfall data, classified tiers, rules
-├── prototype_cards.json  5-card prototype subset for quick testing
 └── results/            Per-run results directories
 
-tests/                  ~1,400+ test functions across 35+ files
+tests/                  ~3,200+ test functions across 100+ files
 docs/                   Specs, engine API reference, design docs
 ```
 
@@ -102,7 +107,7 @@ docs/                   Specs, engine API reference, design docs
 ### Prerequisites
 
 - Python ≥ 3.12
-- [OpenCode](https://github.com/nicepkg/opencode) (or another supported agent tool)
+- Docker
 
 ### Install
 
@@ -112,91 +117,64 @@ cd SilverquiLLM-bench
 pip install -e ".[dev]"
 ```
 
-### Configure
+### Build a Docker Image
 
-Create a `config.yaml`:
+Each agent/model combination is packaged as a Docker image. The image **is** the configuration — no separate `config.yaml` needed.
 
 ```
-name: "SOS Benchmark"
-set_code: "SOS"
-model_name: "gemma-4-27b"
-model_provider: "google"
-max_context: 200000
-temperature: 0.0
-agent:
-  adapter: "opencode"
-  max_test_rounds: 3
-  timeout_per_card: 300
-  disable_web_search: true
-output_dir: "benchmarks/sos/results"
+# Build the OpenCode tested-phase image
+docker build -t silverquillm-opencode-tested:latest docker/opencode-tested/
+
+# Build the OpenCode blind-phase image
+docker build -t silverquillm-opencode-blind:latest docker/opencode-blind/
 ```
 
 ### Run
 
 ```
-# Dry run — preview selected cards
-benchmark run --config config.yaml --dry-run
+# Smoke test — run a small subset to verify the image works
+silverquillm smoke --image silverquillm-opencode-tested:latest
 
-# Run prototype subset (5 cards, ~30 min)
-benchmark run --config config.yaml --prototype
-
-# Run specific cards by ID
-benchmark run --config config.yaml --cards 6,11,97
-
-# Full run (all 346 cards)
-benchmark run --config config.yaml
+# Full run with timeout (all cards, ~2 hours)
+silverquillm run --image silverquillm-opencode-tested:latest --timeout 7200
 ```
 
-### Evaluate
-
-```
-# Self-eval on a completed run
-benchmark eval --results-dir benchmarks/sos/results/<run_name>/
-
-# Audited eval with gold-standard tests
-benchmark eval --results-dir benchmarks/sos/results/<run_name>/ --audited-dir benchmarks/sos/cards
-
-# Score and generate leaderboard
-benchmark score --results-dir benchmarks/sos/results/
-```
-
-### Validate Replays
-
-```
-# Validate deterministic replay for a card
-benchmark validate benchmarks/sos/cards/6/ --verbose
-
-# Validate all cards, stop on first divergence
-benchmark validate benchmarks/sos/cards/ --cards --stop-on-divergence
-```
+Evaluation happens automatically at the end of each run. Results are written to the workspace results directory.
 
 ---
 
-## Agent Adapters
+## Evaluation Dimensions
 
-The runner supports multiple coding agents via a pluggable adapter pattern:
+Implementations are evaluated across three dimensions:
 
-| Adapter | Tool | Notes |
-| --- | --- | --- |
-| `opencode` | [OpenCode](https://github.com/nicepkg/opencode) | Default. Tool-calling via OpenAI-compatible API |
-| `claude_code` | Claude Code | Anthropic's native CLI agent |
-| `aider` | [Aider](https://github.com/paul-gauthier/aider) | Text-based edits, good for models without tool-calling |
-| `pi` | Pi | General-purpose coding agent |
+| Dimension | What It Measures |
+| --- | --- |
+| **SOS Card Correctness** | Does the agent's card implementation match the card spec? Tested via audited gold-standard tests. |
+| **FDN Regression** | Did the agent break any existing Foundations card implementations? All FDN tests re-run after each card. |
+| **Engine Regression** | Did the agent break core engine behavior? Full engine test suite re-run after each card. |
 
-Set via `agent.adapter` in config. Each adapter translates prompts into the tool's native interface and captures output for postmortem logging.
+---
+
+## Docker Container Flow
+
+The benchmark uses Docker containers instead of pluggable adapters. Each container:
+
+1. Receives card specs and engine context via volume mounts
+2. Runs the agent tool (OpenCode, Claude Code, etc.) inside the container
+3. Writes implementation artifacts to a shared output volume
+4. Emits progress events to `progress.jsonl` for the host runner to monitor
 
 ---
 
 ## Scoring
 
-Implementations are scored across multiple categories, weighted by card complexity tier:
+Implementations are scored across three evaluation dimensions, weighted by card complexity tier:
 
-| Category | What It Measures |
+| Dimension | What It Measures |
 | --- | --- |
-| **Blind Implementation** | Can the agent implement a card from just the spec and engine docs? |
-| **Test-Informed Implementation** | Can it fix its implementation given test feedback? |
-| **Test Quality** | How good are the tests the agent writes? (measured by audited eval survival) |
-| **Engine Quality** | Are engine extensions generic and regression-free? |
+| **SOS Card Correctness** | Does the agent's card implementation pass audited gold-standard tests? |
+| **FDN Regression** | Did the agent break any existing Foundations card implementations? |
+| **Engine Regression** | Did the agent break core engine behavior? |
 
 Complexity tier weights ensure that implementing a mythic rare with 5 keyword abilities scores higher than a vanilla 2/2.
 
@@ -237,20 +215,16 @@ Each run produces a self-contained results directory:
 
 ```
 results/<run_name>/
-├── config.yaml                  # Snapshot of run configuration
-├── summary.json                 # Aggregate stats
-├── raw_agent_log.jsonl          # Full untruncated agent output
-├── run_engine/                  # Engine state during run
-├── engine_final/                # Final engine state
+├── status.json                  # Run status & metadata
+├── run_summary.json             # Aggregate stats & scoring
+├── progress.jsonl               # Real-time progress events
+├── stdout.log                   # Container stdout capture
+├── stderr.log                   # Container stderr capture
+├── engine_diff.patch            # Cumulative engine changes
 └── cards/
-    └── <card_id>/
-        ├── blind_impl.py        # Step 1 output
-        ├── tested_impl.py       # Step 2 output
-        ├── tests.py             # Agent-written tests
-        ├── result.json          # Metrics & eval results
-        ├── postmortem.jsonl     # Structured debug log
-        ├── agent_thoughts.md    # Human-readable reasoning trace
-        └── engine_diff.patch    # Engine changes for this card
+    └── <card_num>/
+        ├── card_impl.py         # Agent's card implementation
+        └── result.json          # Per-card eval results
 ```
 
 ---
