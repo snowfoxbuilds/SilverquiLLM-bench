@@ -280,6 +280,7 @@ def run(
         cmd = [
             "docker", "run", "--rm",
             "--name", container_name,
+            "--network=host", # allow access to localhost APIs
             "-v", f"{workspace}:/workspace",
             "-v", f"{output}:/output",
         ]
@@ -354,6 +355,7 @@ def smoke(image: str) -> None:
         cmd = [
             "docker", "run", "--rm",
             "--name", container_name,
+            "--network=host", # allow access to localhost APIs
             "-v", f"{workspace}:/workspace",
             "-v", f"{output}:/output",
         ]
