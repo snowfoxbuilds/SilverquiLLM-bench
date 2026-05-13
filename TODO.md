@@ -91,7 +91,7 @@ pi -p "${PROMPT}" \
 
   Testability: Run entrypoint with mock agent → verify system.log has entrypoint messages, agent_stdout.log has agent output, no cross-contamination. Verify harvest copies all log files.
 
-- [ ] **Generate FDN card specs and templates via script (spec-first migration)**
+- [x] **Generate FDN card specs and templates via script (spec-first migration)**
   Detail: Instead of migrating implementations directly, use the same spec-first pipeline we used for SOS: generate `card_spec.json` + empty `card_impl.py` templates first, then fill them.
 
   Step 1 — Script `scripts/generate_fdn_specs.py`:
