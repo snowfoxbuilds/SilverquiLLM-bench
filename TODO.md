@@ -10,7 +10,7 @@ Prerequisite: Phase 9 PR #12 must be merged first (or these items applied on top
 
 ---
 
-- [ ] **Add ****`--cards`**** filter to ****`silverquillm run`**
+- [x] **Add ****`--cards`**** filter to ****`silverquillm run`**
   Detail: Optional flag to stage only a subset of SOS cards for development and debugging. FDN cards are always staged in full (they're reference examples, not benchmark targets).
 
   CLI signature:

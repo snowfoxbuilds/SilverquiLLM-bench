@@ -20,9 +20,17 @@ __all__ = ["stage_workspace"]
 # Prompt template
 # ---------------------------------------------------------------------------
 
-_PROMPT_TEXT = """\
+_PROMPT_ALL = """\
 Implement all SOS cards in `/workspace/cards/sos/`. Each card directory contains \
 a `card_spec.json` with the card's details and a `card_impl.py` template to fill in.
+Use the completed FDN cards in `/workspace/cards/fdn/` as implementation examples. \
+Refer to `rulebook.md` for detailed game rules and `engine_api.md` for the engine API.
+"""
+
+_PROMPT_SUBSET = """\
+Implement the following SOS cards: {card_list}. Each card directory under \
+`/workspace/cards/sos/` contains a `card_spec.json` with the card's details \
+and a `card_impl.py` template to fill in.
 Use the completed FDN cards in `/workspace/cards/fdn/` as implementation examples. \
 Refer to `rulebook.md` for detailed game rules and `engine_api.md` for the engine API.
 """
@@ -45,6 +53,7 @@ def stage_workspace(
     cards_dir: Path,
     engine_dir: Path,
     output_dir: Path,
+    card_filter: list[str] | None = None,
 ) -> tuple[Path, Path]:
     """Build the workspace directory tree for a Docker agent run.
 
@@ -56,6 +65,10 @@ def stage_workspace(
         Repo ``engine/`` directory (full engine source).
     output_dir:
         Parent directory where ``workspace/`` and ``output/`` are created.
+    card_filter:
+        Optional list of SOS collector numbers to stage.  When ``None``
+        (the default), all SOS cards are staged.  FDN cards are always
+        staged in full regardless of this parameter.
 
     Returns
     -------
@@ -75,7 +88,11 @@ def stage_workspace(
     output.mkdir(parents=True, exist_ok=True)
 
     # --- prompt.md ---
-    (workspace / "prompt.md").write_text(_PROMPT_TEXT, encoding="utf-8")
+    if card_filter is not None:
+        prompt_text = _PROMPT_SUBSET.format(card_list=", ".join(card_filter))
+    else:
+        prompt_text = _PROMPT_ALL
+    (workspace / "prompt.md").write_text(prompt_text, encoding="utf-8")
 
     # --- engine/ (full copy) ---
     _copy_engine(engine_dir, workspace / "engine")
@@ -84,7 +101,7 @@ def stage_workspace(
     _copy_reference_docs(cards_dir, engine_dir, workspace)
 
     # --- cards/ ---
-    _stage_cards(cards_dir, workspace / "cards")
+    _stage_cards(cards_dir, workspace / "cards", card_filter=card_filter)
 
     return workspace, output
 
@@ -136,8 +153,20 @@ def _copy_reference_docs(cards_dir: Path, engine_dir: Path, workspace: Path) -> 
         )
 
 
-def _stage_cards(cards_dir: Path, dest_cards: Path) -> None:
-    """Copy fdn/ and sos/ card directories into workspace/cards/."""
+def _stage_cards(
+    cards_dir: Path,
+    dest_cards: Path,
+    card_filter: list[str] | None = None,
+) -> None:
+    """Copy fdn/ and sos/ card directories into workspace/cards/.
+
+    Parameters
+    ----------
+    card_filter:
+        When set, only SOS card directories whose name matches one of
+        the collector numbers in this list are staged.  FDN cards are
+        always staged in full.
+    """
     for tier in ("fdn", "sos"):
         src_tier = cards_dir / tier
         if not src_tier.exists():
@@ -162,6 +191,11 @@ def _stage_cards(cards_dir: Path, dest_cards: Path) -> None:
             impl_file = card_dir / "card_impl.py"
             if not spec_file.exists():
                 continue
+
+            # Apply card_filter for SOS tier only
+            if tier == "sos" and card_filter is not None:
+                if card_dir.name not in card_filter:
+                    continue
 
             dest_card = dest_cards / tier / card_dir.name
             dest_card.mkdir(parents=True, exist_ok=True)

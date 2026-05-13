@@ -207,9 +207,31 @@ def _evaluate_results(run_dir: Path) -> None:
     click.echo("TODO: evaluate results (Item 8)")
 
 
-def _generate_run_summary(run_dir: Path) -> None:
-    """Stub for silverquillm.results.generate_run_summary() — TODO Item 9."""
-    click.echo("TODO: generate run summary (Item 9)")
+def _generate_run_summary(
+    run_dir: Path,
+    *,
+    card_filter: list[str] | None = None,
+) -> None:
+    """Write (or update) run_summary.json with run metadata.
+
+    Currently records ``card_filter``; further fields added by TODO Item 9.
+    """
+    import json
+
+    summary_path = run_dir / "run_summary.json"
+
+    # Load existing summary if present (future items may pre-populate)
+    if summary_path.exists():
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    else:
+        summary = {}
+
+    meta = summary.setdefault("run_metadata", {})
+    meta["card_filter"] = card_filter
+
+    summary_path.write_text(
+        json.dumps(summary, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -226,13 +248,13 @@ def main() -> None:
 @click.option("--image", required=True, help="Docker image name")
 @click.option(
     "--cards-dir",
-    default="./cards",
+    default=None,
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     help="Cards directory (default: cards/ relative to repo root)",
 )
 @click.option(
     "--engine-dir",
-    default="./engine",
+    default=None,
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     help="Engine directory (default: engine/ relative to repo root)",
 )
@@ -248,12 +270,20 @@ def main() -> None:
     type=click.Path(file_okay=False, path_type=Path),
     help="Results output directory (default: results/ relative to repo root)",
 )
+@click.option(
+    "--cards",
+    "card_numbers",
+    default=None,
+    type=str,
+    help="Comma-separated SOS collector numbers to stage (default: all)",
+)
 def run(
     image: str,
     cards_dir: Path | None,
     engine_dir: Path | None,
     timeout: int,
     results_dir: Path | None,
+    card_numbers: str | None,
 ) -> None:
     """Run the full benchmark workload in a Docker container."""
     # Resolve defaults relative to repo root
@@ -264,15 +294,24 @@ def run(
     if results_dir is None:
         results_dir = _REPO_ROOT / "results"
 
+    # Parse --cards filter
+    card_filter: list[str] | None = None
+    if card_numbers is not None:
+        card_filter = [c.strip() for c in card_numbers.split(",") if c.strip()]
+
     run_name = _make_run_name(image)
     click.echo(f"Starting run: {run_name}")
     click.echo(f"Image: {image}")
     click.echo(f"Timeout: {timeout}s")
+    if card_filter is not None:
+        click.echo(f"Card filter: {', '.join(card_filter)}")
 
     # Stage workspace with all cards
     staging_dir = Path(tempfile.mkdtemp(prefix="silverquillm_run_"))
     try:
-        workspace, output = stage_workspace(cards_dir, engine_dir, staging_dir)
+        workspace, output = stage_workspace(
+            cards_dir, engine_dir, staging_dir, card_filter=card_filter,
+        )
         click.echo(f"Workspace staged at: {workspace}")
 
         # Build docker command
@@ -323,7 +362,7 @@ def run(
 
         # Evaluate and summarize (stubs)
         _evaluate_results(run_dir)
-        _generate_run_summary(run_dir)
+        _generate_run_summary(run_dir, card_filter=card_filter)
 
         click.echo(f"Run complete: {run_name}")
 
@@ -334,8 +373,24 @@ def run(
 
 @main.command()
 @click.option("--image", required=True, help="Docker image name")
-def smoke(image: str) -> None:
+@click.option(
+    "--cards-dir",
+    default=None,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="Cards directory (default: cards/ relative to repo root)",
+)
+@click.option(
+    "--engine-dir",
+    default=None,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="Engine directory (default: engine/ relative to repo root)",
+)
+def smoke(image: str, cards_dir: Path | None, engine_dir: Path | None) -> None:
     """Quick smoke test to verify a Docker image works."""
+    if cards_dir is None:
+        cards_dir = _REPO_ROOT / "cards"
+    if engine_dir is None:
+        engine_dir = _REPO_ROOT / "engine"
     staging_dir = Path(tempfile.mkdtemp(prefix="silverquillm_smoke_"))
     try:
         workspace = staging_dir / "workspace"
