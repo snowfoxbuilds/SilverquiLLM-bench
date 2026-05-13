@@ -355,8 +355,9 @@ class TestHappyPath:
         (specs_dir / "card1.yaml").write_text("id: card1")
 
         config = _make_config(card_specs_dir=str(specs_dir))
-        # Should not raise
-        preflight_check(config, tmp_path / "run")
+        # Mock workspace isolation so the real adapter isn't needed
+        with patch("silverquillm.preflight._check_workspace_isolation", return_value=[]):
+            preflight_check(config, tmp_path / "run")
 
 
 # ---------------------------------------------------------------------------
@@ -387,3 +388,220 @@ class TestErrorAggregation:
         config = _make_config(adapter="bogus_adapter")
         with pytest.raises(PreflightError, match="Pre-flight checks failed"):
             preflight_check(config, tmp_path / "run")
+
+
+# ---------------------------------------------------------------------------
+# Workspace isolation check
+# ---------------------------------------------------------------------------
+
+
+class TestWorkspaceIsolation:
+    """Tests for _check_workspace_isolation() canary-file check."""
+
+    def test_canary_file_created_with_uuid_content(self, tmp_path: Path):
+        """_check_workspace_isolation creates a canary file containing a UUID."""
+        from silverquillm.preflight import _check_workspace_isolation
+
+        config = _make_config()
+        canary_path = tmp_path / ".canary_preflight"
+        fake_uuid = "12345678-1234-5678-1234-567812345678"
+
+        mock_adapter = MagicMock()
+        mock_adapter.run.return_value = "some unrelated output"
+
+        with (
+            patch("silverquillm.preflight._REPO_ROOT", tmp_path),
+            patch("silverquillm.adapters.base.get_adapter", return_value=mock_adapter),
+            patch("silverquillm.preflight.uuid.uuid4", return_value=fake_uuid),
+        ):
+            # The canary file is created and deleted within the call,
+            # but we can verify the adapter prompt includes the canary path
+            _check_workspace_isolation(config)
+
+        # Verify adapter.run was called with a prompt referencing the canary path
+        mock_adapter.run.assert_called_once()
+        prompt_arg = mock_adapter.run.call_args[0][0]
+        assert str(canary_path) in prompt_arg
+
+    def test_canary_file_cleaned_up_after_success(self, tmp_path: Path):
+        """Canary file is deleted after a successful check (adapter returns unrelated text)."""
+        from silverquillm.preflight import _check_workspace_isolation
+
+        config = _make_config()
+        canary_path = tmp_path / ".canary_preflight"
+
+        mock_adapter = MagicMock()
+        mock_adapter.run.return_value = "nothing relevant here"
+
+        with (
+            patch("silverquillm.preflight._REPO_ROOT", tmp_path),
+            patch("silverquillm.adapters.base.get_adapter", return_value=mock_adapter),
+        ):
+            errors = _check_workspace_isolation(config)
+
+        assert errors == []
+        assert not canary_path.exists(), "Canary file should be cleaned up after check"
+
+    def test_canary_file_cleaned_up_on_adapter_exception(self, tmp_path: Path):
+        """Canary file is deleted even when the adapter raises an exception."""
+        from silverquillm.preflight import _check_workspace_isolation
+
+        config = _make_config()
+        canary_path = tmp_path / ".canary_preflight"
+
+        mock_adapter = MagicMock()
+        mock_adapter.run.side_effect = RuntimeError("adapter exploded")
+
+        with (
+            patch("silverquillm.preflight._REPO_ROOT", tmp_path),
+            patch("silverquillm.adapters.base.get_adapter", return_value=mock_adapter),
+        ):
+            errors = _check_workspace_isolation(config)
+
+        assert not canary_path.exists(), "Canary file must be cleaned up even on error"
+
+    def test_adapter_returning_uuid_reports_isolation_breach(self, tmp_path: Path):
+        """When adapter output contains the canary UUID, an isolation error is reported."""
+        from silverquillm.preflight import _check_workspace_isolation
+
+        config = _make_config()
+        fake_uuid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+
+        mock_adapter = MagicMock()
+        # The adapter returns the exact canary UUID — simulating workspace escape
+        mock_adapter.run.return_value = f"Here is the content: {fake_uuid}"
+
+        with (
+            patch("silverquillm.preflight._REPO_ROOT", tmp_path),
+            patch("silverquillm.adapters.base.get_adapter", return_value=mock_adapter),
+            patch("silverquillm.preflight.uuid.uuid4", return_value=fake_uuid),
+        ):
+            errors = _check_workspace_isolation(config)
+
+        assert len(errors) == 1
+        assert "Workspace isolation FAILED" in errors[0]
+
+    def test_adapter_returning_unrelated_text_passes(self, tmp_path: Path):
+        """When adapter output does NOT contain the canary UUID, no error is reported."""
+        from silverquillm.preflight import _check_workspace_isolation
+
+        config = _make_config()
+
+        mock_adapter = MagicMock()
+        mock_adapter.run.return_value = "I cannot read files outside my workspace."
+
+        with (
+            patch("silverquillm.preflight._REPO_ROOT", tmp_path),
+            patch("silverquillm.adapters.base.get_adapter", return_value=mock_adapter),
+        ):
+            errors = _check_workspace_isolation(config)
+
+        assert errors == []
+
+    def test_adapter_exception_handled_gracefully(self, tmp_path: Path):
+        """Adapter raising exception → surfaces as a preflight error (not silent skip)."""
+        from silverquillm.preflight import _check_workspace_isolation
+
+        config = _make_config()
+
+        mock_adapter = MagicMock()
+        mock_adapter.run.side_effect = ConnectionError("network down")
+
+        with (
+            patch("silverquillm.preflight._REPO_ROOT", tmp_path),
+            patch("silverquillm.adapters.base.get_adapter", return_value=mock_adapter),
+        ):
+            errors = _check_workspace_isolation(config)
+
+        # Adapter failure should be reported as a preflight error
+        assert len(errors) == 1
+        assert "adapter error" in errors[0]
+        assert "network down" in errors[0]
+
+    def test_adapter_returning_none_passes(self, tmp_path: Path):
+        """Adapter returning None output → no crash, no isolation error."""
+        from silverquillm.preflight import _check_workspace_isolation
+
+        config = _make_config()
+
+        mock_adapter = MagicMock()
+        mock_adapter.run.return_value = None
+
+        with (
+            patch("silverquillm.preflight._REPO_ROOT", tmp_path),
+            patch("silverquillm.adapters.base.get_adapter", return_value=mock_adapter),
+        ):
+            errors = _check_workspace_isolation(config)
+
+        assert errors == []
+
+
+# ---------------------------------------------------------------------------
+# preflight_check isolation-check gating
+# ---------------------------------------------------------------------------
+
+
+class TestIsolationCheckGating:
+    """Tests that preflight_check respects skip_isolation_check flag."""
+
+    def test_preflight_skips_isolation_when_flag_true(self, tmp_path: Path):
+        """preflight_check with skip_isolation_check=True does NOT call _check_workspace_isolation."""
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir()
+        (specs_dir / "card1.yaml").write_text("id: card1")
+        config = _make_config(card_specs_dir=str(specs_dir))
+
+        with patch(
+            "silverquillm.preflight._check_workspace_isolation"
+        ) as mock_iso:
+            preflight_check(config, tmp_path / "run", skip_isolation_check=True)
+
+        mock_iso.assert_not_called()
+
+    def test_preflight_runs_isolation_when_flag_false(self, tmp_path: Path):
+        """preflight_check with skip_isolation_check=False calls _check_workspace_isolation."""
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir()
+        (specs_dir / "card1.yaml").write_text("id: card1")
+        config = _make_config(card_specs_dir=str(specs_dir))
+
+        with patch(
+            "silverquillm.preflight._check_workspace_isolation", return_value=[]
+        ) as mock_iso:
+            preflight_check(config, tmp_path / "run", skip_isolation_check=False)
+
+        mock_iso.assert_called_once_with(config)
+
+    def test_preflight_runs_isolation_by_default(self, tmp_path: Path):
+        """preflight_check without skip_isolation_check kwarg calls _check_workspace_isolation."""
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir()
+        (specs_dir / "card1.yaml").write_text("id: card1")
+        config = _make_config(card_specs_dir=str(specs_dir))
+
+        with patch(
+            "silverquillm.preflight._check_workspace_isolation", return_value=[]
+        ) as mock_iso:
+            preflight_check(config, tmp_path / "run")
+
+        mock_iso.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# CLI --skip-isolation-check flag
+# ---------------------------------------------------------------------------
+
+
+class TestCLISkipIsolationFlag:
+    """Tests for --skip-isolation-check CLI flag."""
+
+    def test_skip_isolation_check_flag_accepted(self):
+        """CLI accepts --skip-isolation-check without error."""
+        from click.testing import CliRunner
+        from silverquillm.cli import run
+
+        runner = CliRunner()
+        # Invoke with --help to verify the flag is registered (no real run needed)
+        result = runner.invoke(run, ["--help"])
+        assert result.exit_code == 0
+        assert "--skip-isolation-check" in result.output

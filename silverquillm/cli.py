@@ -141,7 +141,8 @@ main.add_command(validate_cmd)
 @click.option("--prototype", "use_prototype", is_flag=True, default=False, help="Use prototype card selection.")
 @click.option("--dry-run", "dry_run", is_flag=True, default=False, help="Print selected cards and exit.")
 @click.option("--skip-engine-tests", "skip_engine_tests", is_flag=True, default=False, help="Skip engine test suite in pre-flight (faster iteration).")
-def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bool, skip_engine_tests: bool) -> None:
+@click.option("--skip-isolation-check", "skip_isolation_check", is_flag=True, default=False, help="Skip workspace isolation canary check in pre-flight (avoids LLM call).")
+def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bool, skip_engine_tests: bool, skip_isolation_check: bool) -> None:
     """Run benchmark against selected cards."""
     if card_ids and use_prototype:
         raise click.UsageError("--cards and --prototype are mutually exclusive.")
@@ -203,7 +204,7 @@ def run(config_path: str, card_ids: str | None, use_prototype: bool, dry_run: bo
     # Pre-flight validation before any LLM calls
     try:
         from silverquillm.preflight import preflight_check, PreflightError
-        preflight_check(cfg, Path(run_dir), skip_engine_tests=skip_engine_tests)
+        preflight_check(cfg, Path(run_dir), skip_engine_tests=skip_engine_tests, skip_isolation_check=skip_isolation_check)
     except PreflightError as exc:
         raise click.ClickException(str(exc))
 

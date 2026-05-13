@@ -256,7 +256,7 @@ except subprocess.TimeoutExpired:
   - `silverquillm/cli.py` — signal handler, `_active_session` tracking, `KeyboardInterrupt` handling in card loop
   Testability: Start a benchmark run → Ctrl+C → verify no orphan opencode processes (`ps aux | grep opencode`). Verify run summary still prints (partial results). Verify `.workspace/` is cleaned up.
 
-- [ ] **Add preflight workspace isolation check**
+- [x] **Add preflight workspace isolation check**
   Detail: The `repo_root` contamination bug (item 1) was a one-liner that went undetected for the entire PR #11 development cycle. A structural safeguard is needed to catch any future mechanism by which the agent escapes the workspace — not just `repo_root` misconfiguration, but also environment variables, symlinks, or other adapter config fields.
 
   **Fix:** Add a deterministic canary-based check to `silverquillm/preflight.py`:

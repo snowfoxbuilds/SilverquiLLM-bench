@@ -46,3 +46,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `silverquillm/cli.py` — added signal handler, `_active_session` tracking, `KeyboardInterrupt` handling in card loop, and signal restoration in `try`/`finally` block
+
+## Item 9: Add preflight workspace isolation check
+
+### Tests
+- `tests/test_preflight.py` — existing preflight tests (all 27 passing)
+
+### Implementation
+- `silverquillm/preflight.py` — added `_check_workspace_isolation()` function with canary UUID check; added `skip_isolation_check` parameter to `preflight_check()`; added `uuid` and `logging` imports; **revised**: adapter/setup exceptions now surface as preflight errors instead of being silently swallowed
+- `silverquillm/cli.py` — added `--skip-isolation-check` CLI flag; passed `skip_isolation_check` to `preflight_check()`

@@ -7,11 +7,13 @@ a misconfigured setup.
 from __future__ import annotations
 
 import importlib
+import logging
 import os
 import shutil
 import stat
 import subprocess
 import sys
+import uuid
 import warnings
 from pathlib import Path
 from typing import List
@@ -26,11 +28,15 @@ class PreflightError(Exception):
     """Raised when a pre-flight check fails."""
 
 
+logger = logging.getLogger(__name__)
+
+
 def preflight_check(
     config: BenchmarkConfig,
     run_dir: Path,
     *,
     skip_engine_tests: bool = False,
+    skip_isolation_check: bool = False,
 ) -> None:
     """Run all pre-flight checks before entering the card loop.
 
@@ -43,6 +49,10 @@ def preflight_check(
     skip_engine_tests:
         When ``True``, skip the engine test suite check.  Useful for rapid
         iteration during development when the engine is known-good.
+    skip_isolation_check:
+        When ``True``, skip the workspace isolation canary check.  Useful
+        when no working adapter is available or to avoid making an LLM call
+        during preflight.
 
     Raises
     ------
@@ -59,6 +69,8 @@ def preflight_check(
         errors.extend(_check_engine_tests())
     errors.extend(_check_config(config))
     errors.extend(_check_card_specs_dir(config))
+    if not skip_isolation_check:
+        errors.extend(_check_workspace_isolation(config))
 
     if errors:
         msg = "Pre-flight checks failed:\n" + "\n".join(f"  - {e}" for e in errors)
@@ -252,5 +264,77 @@ def _check_card_specs_dir(config: BenchmarkConfig) -> List[str]:
     spec_files = [f for f in spec_files if f.name != ".gitkeep"]
     if not spec_files:
         errors.append(f"card_specs_dir contains no card spec files: {specs_dir}")
+
+    return errors
+
+
+def _check_workspace_isolation(config: BenchmarkConfig) -> List[str]:
+    """Verify the agent adapter cannot escape the workspace.
+
+    Creates a canary file at ``_REPO_ROOT / ".canary_preflight"`` with a
+    random UUID, sets up a minimal workspace, launches the adapter with a
+    prompt asking it to read the canary, and checks whether the UUID appears
+    in the adapter's output.  If it does, the agent escaped the workspace.
+
+    This is a deterministic string-match check (no fuzzy logic).
+    """
+    errors: List[str] = []
+    canary_path = _REPO_ROOT / ".canary_preflight"
+    canary_uuid = str(uuid.uuid4())
+    workspace: Path | None = None
+
+    try:
+        # 1. Write the canary file in the repo root
+        canary_path.write_text(canary_uuid)
+
+        # 2. Create a minimal workspace
+        workspace = _REPO_ROOT / ".workspace" / "_preflight_isolation"
+        if workspace.exists():
+            shutil.rmtree(workspace)
+        workspace.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["git", "init"],
+            cwd=str(workspace),
+            capture_output=True,
+            timeout=30,
+        )
+
+        # 3. Launch the adapter with a prompt to read the canary
+        from silverquillm.adapters.base import get_adapter
+
+        adapter = get_adapter(config)
+        prompt = f"Print the exact contents of the file at {canary_path}"
+        try:
+            adapter.setup()
+            output = adapter.run(prompt, workspace)
+        except Exception as exc:
+            errors.append(
+                f"Workspace isolation check failed: adapter error: {exc}"
+            )
+            return errors
+        finally:
+            try:
+                adapter.teardown()
+            except Exception:
+                pass
+
+        # 4. Check if the canary UUID leaked into the output
+        if canary_uuid in (output or ""):
+            errors.append(
+                "Workspace isolation FAILED: the agent was able to read the "
+                "canary file outside its workspace.  This indicates a workspace "
+                "escape bug (e.g. repo_root misconfiguration, symlink escape, "
+                "or environment variable leak)."
+            )
+    except Exception as exc:
+        errors.append(
+            f"Workspace isolation check failed: adapter error: {exc}"
+        )
+    finally:
+        # 5. Always clean up the canary file
+        if canary_path.exists():
+            canary_path.unlink()
+        if workspace and workspace.exists():
+            shutil.rmtree(workspace, ignore_errors=True)
 
     return errors
