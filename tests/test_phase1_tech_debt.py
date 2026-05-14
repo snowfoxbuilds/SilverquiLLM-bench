@@ -67,7 +67,7 @@ class TestPythonVersionAlignment:
         the config itself is valid (no 'invalid target-version' errors).
         """
         result = subprocess.run(
-            ["ruff", "check", "ruff.toml", "--config", str(REPO_ROOT / "ruff.toml")],
+            [sys.executable, "-m", "ruff", "check", "ruff.toml", "--config", str(REPO_ROOT / "ruff.toml")],
             capture_output=True,
             text=True,
             cwd=REPO_ROOT,
@@ -76,56 +76,6 @@ class TestPythonVersionAlignment:
         assert "invalid" not in result.stderr.lower(), (
             f"ruff config error with py312 target: {result.stderr}"
         )
-
-
-# ===========================================================================
-# 2. Backward-compat aliases removed
-# ===========================================================================
-
-
-class TestAliasesRemoved:
-    """Old card-name aliases must no longer be importable from simple_spells."""
-
-    REMOVED_ALIASES = [
-        "LightningBolt",
-        "LavaAxe",
-        "Divination",
-        "Murder",
-        "Naturalize",
-        "MindRot",
-        "RaiseDead",
-    ]
-
-    @pytest.mark.parametrize("alias", REMOVED_ALIASES)
-    def test_alias_not_importable(self, alias: str) -> None:
-        """Importing a removed alias must raise ImportError."""
-        with pytest.raises(ImportError):
-            importlib.import_module("cards.foundations.simple_spells")
-            exec(f"from cards.foundations.simple_spells import {alias}")
-
-    def test_fdn_names_still_importable(self) -> None:
-        """The actual FDN card classes must still be importable."""
-        from cards.foundations.simple_spells import (  # noqa: F401
-            BurstLightning,
-            Cancel,
-            CemeteryRecruitment,
-            Disenchant,
-            GiantGrowth,
-            HerosDownfall,
-            IncineratingBlast,
-            Negate,
-            Pilfer,
-            QuickStudy,
-        )
-
-    def test_module_has_no_alias_attributes(self) -> None:
-        """The simple_spells module must not have any of the removed alias names."""
-        import cards.foundations.simple_spells as mod
-
-        for alias in self.REMOVED_ALIASES:
-            assert not hasattr(mod, alias), (
-                f"Alias '{alias}' should have been removed from simple_spells"
-            )
 
 
 # ===========================================================================

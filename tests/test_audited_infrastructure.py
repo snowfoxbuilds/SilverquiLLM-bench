@@ -679,7 +679,7 @@ class TestPlainsTestExecution:
 
     def test_plains_is_land_subclass(self) -> None:
         from cards.registry import CardRegistry
-        from cards.foundations.basic_lands import register_basic_lands
+        from engine.basic_lands import register_basic_lands
         from engine.card import Land
 
         registry = CardRegistry()
@@ -690,7 +690,7 @@ class TestPlainsTestExecution:
 
     def test_plains_has_mana_abilities(self) -> None:
         from cards.registry import CardRegistry
-        from cards.foundations.basic_lands import register_basic_lands
+        from engine.basic_lands import register_basic_lands
 
         registry = CardRegistry()
         register_basic_lands(registry)

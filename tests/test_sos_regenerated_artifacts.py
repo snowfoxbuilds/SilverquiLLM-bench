@@ -153,13 +153,13 @@ class TestPerCardSpecDirectories:
         for card in classified_cards:
             set_code = card.get("set_code", "sos")
             cn = card["collector_number"]
-            # Multi-set disambiguation: SOA uses "soa_<cn>", SPG uses "spg_<cn>", SOS uses "<cn>"
+            # Multi-set disambiguation: SOA uses "soa_<cn>", SPG uses "spg_<cn>", SOS uses "sos_<cn>"
             if set_code == "soa":
                 expected_dir = f"soa_{cn}"
             elif set_code == "spg":
                 expected_dir = f"spg_{cn}"
             else:
-                expected_dir = str(cn)
+                expected_dir = f"sos_{cn}"
             if expected_dir not in existing_dirs:
                 missing.append(f"{card.get('name', '?')} -> {expected_dir}")
         assert not missing, f"Missing spec directories: {missing[:10]}"
@@ -175,7 +175,7 @@ class TestPerCardSpecDirectories:
             elif set_code == "spg":
                 dir_name = f"spg_{cn}"
             else:
-                dir_name = str(cn)
+                dir_name = f"sos_{cn}"
             spec_file = _CARDS_DIR / dir_name / "card_spec.json"
             if not spec_file.exists():
                 missing.append(dir_name)
@@ -193,10 +193,10 @@ class TestPerCardSpecDirectories:
 
     def test_no_stale_sos_dirs_above_271(self) -> None:
         """No SOS spec directory for collector number > 271 should exist."""
-        # SOS dirs are plain numeric names (no prefix)
+        # SOS dirs use sos_N prefix
         for d in _CARDS_DIR.iterdir():
-            if d.is_dir() and d.name.isdigit():
-                cn = int(d.name)
+            if d.is_dir() and d.name.startswith("sos_") and d.name[4:].isdigit():
+                cn = int(d.name[4:])
                 assert cn <= 271, f"Stale SOS spec dir found: {d.name} (cn > 271)"
 
 
@@ -277,18 +277,18 @@ class TestMultiSetDisambiguation:
     """SOS/SOA/SPG directories must not collide even if collector numbers overlap."""
 
     def test_no_collision_between_sos_and_soa(self) -> None:
-        """SOS cn 1-65 dirs (plain numeric) don't collide with SOA (soa_1 through soa_65)."""
-        # SOS dirs: "1", "2", ..., "271"
+        """SOS dirs (sos_N) don't collide with SOA dirs (soa_N)."""
+        # SOS dirs: "sos_1", "sos_2", ..., "sos_271"
         # SOA dirs: "soa_1", "soa_2", ..., "soa_65"
-        sos_dirs = {d.name for d in _CARDS_DIR.iterdir() if d.is_dir() and d.name.isdigit()}
+        sos_dirs = {d.name for d in _CARDS_DIR.iterdir() if d.is_dir() and d.name.startswith("sos_")}
         soa_dirs = {d.name for d in _CARDS_DIR.iterdir() if d.is_dir() and d.name.startswith("soa_")}
         # They use different naming conventions so intersection must be empty
         assert not sos_dirs & soa_dirs
 
     def test_total_dirs_equals_sum_of_sets(self) -> None:
-        """Total directories = SOS numeric + SOA prefixed + SPG prefixed = 346."""
+        """Total directories = SOS (sos_N) + SOA (soa_N) + SPG (spg_N) = 346."""
         all_dirs = [d for d in _CARDS_DIR.iterdir() if d.is_dir()]
-        sos_dirs = [d for d in all_dirs if d.name.isdigit()]
+        sos_dirs = [d for d in all_dirs if d.name.startswith("sos_") and d.name[4:].isdigit()]
         soa_dirs = [d for d in all_dirs if d.name.startswith("soa_")]
         spg_dirs = [d for d in all_dirs if d.name.startswith("spg_")]
         assert len(sos_dirs) + len(soa_dirs) + len(spg_dirs) == 346

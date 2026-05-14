@@ -12,7 +12,7 @@ systems work together through real engine APIs:
 - Combat (declare attackers, declare blockers, combat damage, end combat)
 - Damage spells (Burst Lightning)
 - Combat tricks (Giant Growth — continuous effects, layer 7c)
-- Counter spells (Cancel — counter target spell, stack interaction)
+- Counter spells (Essence Scatter — counter target creature spell, stack interaction)
 - State-based actions (lethal damage → graveyard)
 - Continuous effects (Giant Growth until-end-of-turn, cleanup expiry)
 - Cleanup step (via engine's _do_cleanup_step — damage, effects, mana)
@@ -30,6 +30,10 @@ from cards.fdn.fdn_147.card_impl import SerraAngel
 from cards.fdn.fdn_192.card_impl import BurstLightning
 from cards.fdn.fdn_223.card_impl import GiantGrowth
 from cards.fdn.fdn_175.card_impl import HerosDownfall
+from cards.fdn.fdn_224.card_impl import GnarlidColony
+from cards.fdn.fdn_153.card_impl import EssenceScatter
+from cards.fdn.fdn_142.card_impl import HealersHawk
+from cards.fdn.fdn_114.card_impl import TreetopSnarespinner
 
 from engine.abilities import ActivatedAbilityInstance, activate_ability
 from engine.casting import cast_spell as engine_cast_spell, play_land
@@ -197,7 +201,7 @@ class TestMultiTurnIntegration:
         plains = [Plains(name="Plains") for _ in range(5)]
         forests = [Forest(name="Forest") for _ in range(3)]
         lions = SavannahLions()       # {W}     2/1
-        bear = BearCub()              # {1}{G}  2/2
+        bear = GnarlidColony()        # {1}{G}  2/2
         angel = SerraAngel()          # {3}{W}{W} 4/4 Flying Vigilance
         growth = GiantGrowth()        # {G}     +3/+3 until end of turn
 
@@ -206,7 +210,7 @@ class TestMultiTurnIntegration:
         mountains = [Mountain(name="Mountain") for _ in range(2)]
         turtle = AegisTurtle()        # {U}     0/5
         bolt = BurstLightning()       # {R}     2 damage to any target
-        cancel = Cancel()             # {1}{U}{U} counter target spell
+        cancel = EssenceScatter()     # {1}{U}  counter target creature spell
 
         # Set hands (7 cards each)
         set_board_state(game, 0, hand=[
@@ -431,9 +435,9 @@ class TestMultiTurnIntegration:
         # =============================================================
         # TURN 6 — Counterspell interaction:
         #   P1 (active) casts Serra Angel from hand.
-        #   P2 responds with Cancel → counters Serra Angel.
+        #   P2 responds with Essence Scatter → counters Serra Angel.
         #   Serra Angel ends up in P1's graveyard (countered).
-        #   Cancel ends up in P2's graveyard.
+        #   Essence Scatter ends up in P2's graveyard.
         # =============================================================
         _setup_turn(game, turn=6, active=0)
 
@@ -464,25 +468,23 @@ class TestMultiTurnIntegration:
         assert not game.get_hand(p1).contains(angel)
         assert p1.zones[Zone.STACK].contains(angel)
 
-        # P2 responds: cast Cancel targeting the angel's StackObject
-        # Cancel costs {1}{U}{U}.  P2 has Island (untapped from Turn 4 setup)
-        # and Mountain (tapped since Turn 4 — no P2 untap step ran since).
-        # Tap the available Island for {U}, supplement the rest.
+        # P2 responds: cast Essence Scatter targeting the angel's StackObject
+        # Essence Scatter costs {1}{U}.  P2 has Island (untapped from Turn 4 setup).
+        # Tap the available Island for {U}, supplement {1} generic.
         _tap_land_for_mana(game, p2, islands[0])   # {U} via real ability
-        p2.mana_pool.add(ManaType.BLUE, 1)         # supplement {U}
         p2.mana_pool.add(ManaType.COLORLESS, 1)    # supplement {1} generic
 
-        p2._script.appendleft(angel_so)  # target for Cancel
+        p2._script.appendleft(angel_so)  # target for Essence Scatter
         engine_cast_spell(game, p2, cancel)
 
-        # Stack (top-to-bottom): Cancel, Serra Angel
+        # Stack (top-to-bottom): Essence Scatter, Serra Angel
         assert len(game.stack._items) == 2
 
-        # Resolve via priority loop (LIFO: Cancel resolves first, counters Angel)
+        # Resolve via priority loop (LIFO: Essence Scatter resolves first, counters Angel)
         _resolve_stack(game)
 
         # Stack should be empty after resolution
-        assert game.stack.is_empty(), "Stack should be empty after Cancel resolves"
+        assert game.stack.is_empty(), "Stack should be empty after Essence Scatter resolves"
 
         # Serra Angel was countered → in P1's graveyard
         assert game.get_graveyard(p1).contains(angel), (
@@ -491,9 +493,9 @@ class TestMultiTurnIntegration:
         )
         assert not game.get_battlefield(p1).contains(angel)
 
-        # Cancel → in P2's graveyard
+        # Essence Scatter → in P2's graveyard
         assert game.get_graveyard(p2).contains(cancel), (
-            f"Cancel should be in graveyard; P2 gy={_graveyard_names(game, p2)}"
+            f"Essence Scatter should be in graveyard; P2 gy={_graveyard_names(game, p2)}"
         )
 
         # Hand sizes decreased by 1 each
@@ -508,11 +510,11 @@ class TestMultiTurnIntegration:
         assert p1.life == 20
         assert p2.life == 18
 
-        # P1 battlefield: Plains ×2, Forest ×1, Bear Cub
+        # P1 battlefield: Plains ×2, Forest ×1, Gnarlid Colony
         p1_bf = _battlefield_names(game, p1)
         assert p1_bf.count("Plains") == 2
         assert p1_bf.count("Forest") == 1
-        assert "Bear Cub" in p1_bf
+        assert "Gnarlid Colony" in p1_bf
         assert _count_battlefield(game, p1, CardType.CREATURE) == 1
 
         # P2 battlefield: Island ×1, Mountain ×1 (turtle is dead)
@@ -527,11 +529,11 @@ class TestMultiTurnIntegration:
         assert "Serra Angel" in p1_gy
 
         # P2 graveyard: Burst Lightning (resolved), Aegis Turtle (killed),
-        #               Cancel (resolved)
+        #               Essence Scatter (resolved)
         p2_gy = _graveyard_names(game, p2)
         assert "Burst Lightning" in p2_gy
         assert "Aegis Turtle" in p2_gy
-        assert "Cancel" in p2_gy
+        assert "Essence Scatter" in p2_gy
 
         # Giant Growth should be in P1's graveyard (resolved instant)
         assert game.get_graveyard(p1).contains(growth)
@@ -546,7 +548,7 @@ class TestMultiTurnIntegration:
         p1, p2 = game.players
 
         attacker = SavannahLions()  # 2/1
-        blocker = BearCub()         # 2/2
+        blocker = GnarlidColony()   # 2/2
 
         set_board_state(game, 0, battlefield=[attacker])
         set_board_state(game, 1, battlefield=[blocker])
@@ -610,7 +612,7 @@ class TestMultiTurnIntegration:
         game = create_game()
         p1, p2 = game.players
 
-        bear = BearCub()
+        bear = GnarlidColony()
         growth = GiantGrowth()
         forest = Forest(name="Forest")
         set_board_state(game, 0, battlefield=[bear, forest], hand=[growth])
@@ -643,13 +645,8 @@ class TestMultiTurnIntegration:
         game = create_game()
         p1, p2 = game.players
 
-        from cards.foundations.simple_creatures import (
-            HealersHawk,
-            ThornwealdArcher,
-        )
-
-        flyer = HealersHawk()   # 1/1 Flying Lifelink
-        archer = ThornwealdArcher()  # 2/1 Reach Deathtouch
+        flyer = HealersHawk()         # 1/1 Flying Lifelink
+        archer = TreetopSnarespinner()  # 1/4 Reach Deathtouch
 
         set_board_state(game, 0, battlefield=[flyer])
         set_board_state(game, 1, battlefield=[archer])
@@ -659,17 +656,17 @@ class TestMultiTurnIntegration:
         _setup_turn(game, turn=2, active=0)
         _do_combat(game, attackers=[flyer], blocker_map={archer: flyer})
 
-        # Archer (reach) can legally block the flyer
-        # Healer's Hawk 1/1 vs Thornweald Archer 2/1
-        # Hawk deals 1 damage to Archer (deathtouch doesn't help Hawk)
-        # Archer deals 2 damage to Hawk → lethal (1 toughness)
-        # Archer has 1 damage marked, 1 toughness → also lethal
+        # Snarespinner (reach) can legally block the flyer
+        # Healer's Hawk 1/1 vs Treetop Snarespinner 1/4 (Deathtouch)
+        # Hawk deals 1 damage to Snarespinner with Deathtouch → Hawk dies
+        # Snarespinner deals 1 damage to Hawk (1 toughness) → Hawk dies
+        # Snarespinner has 1 damage, 4 toughness → survives
         resolve_state_based_actions(game)
 
         assert game.get_graveyard(p1).contains(flyer)
-        assert game.get_graveyard(p2).contains(archer)
+        assert not game.get_graveyard(p2).contains(archer)
 
-        # Lifelink: P1 gains 1 life from Hawk's 1 damage
+        # Lifelink: P1 gains 1 life from Hawk's 1 damage to Snarespinner
         assert p1.life == 21
 
     def test_summoning_sickness_prevents_attack(self):
@@ -722,7 +719,7 @@ class TestMultiTurnIntegration:
         game = create_game()
         p1, p2 = game.players
 
-        bear = BearCub()
+        bear = GnarlidColony()
         set_board_state(game, 0, battlefield=[bear])
         bear.summoning_sick = False
 

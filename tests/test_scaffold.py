@@ -85,18 +85,14 @@ class TestDirectoryStructure:
         [
             "engine",
             "cards",
-            "cards/foundations",
             "tests",
             "tests/engine",
-            "tests/cards",
         ],
         ids=[
             "engine",
             "cards",
-            "cards/foundations",
             "tests",
             "tests/engine",
-            "tests/cards",
         ],
     )
     def test_directory_has_init_py(self, package_dir: str) -> None:
@@ -120,10 +116,11 @@ class TestPackageImportability:
         mod = importlib.import_module("cards")
         assert mod is not None
 
-    def test_import_cards_foundations(self) -> None:
-        """The 'cards.foundations' subpackage must be importable."""
-        mod = importlib.import_module("cards.foundations")
-        assert mod is not None
+    def test_import_cards_fdn(self) -> None:
+        """The 'cards.fdn' subpackage directory must exist."""
+        from pathlib import Path
+        fdn_dir = REPO_ROOT / "cards" / "fdn"
+        assert fdn_dir.is_dir(), "cards/fdn/ must exist"
 
 
 class TestPyTypedMarker:
