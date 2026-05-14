@@ -403,3 +403,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Use custom boolean attribute `unblockable` on the card object, applied/removed by continuous effect.
 - **Reasoning**: No formal evasion/unblockable keyword exists in the engine's type system. Combat logic would need extension to support this natively.
 - **Impact**: Any card with "can't be blocked" text must use ad-hoc attribute until engine adds native support.
+
+## Single-target spells must fizzle when target is illegal
+- **Context**: fdn_48 (Refute) and fdn_53 (Uncharted Voyage) initially resolved their additional effects even when the sole target was gone.
+- **Decision**: Add fizzle check at top of `on_resolve()` — if `chosen_targets[0]` is None or invalid, return early with no effects.
+- **Reasoning**: MTG rules: a spell with a single target is countered by the rules if that target is illegal on resolution. No effects happen.
+- **Impact**: All future single-target spells must include this fizzle guard.

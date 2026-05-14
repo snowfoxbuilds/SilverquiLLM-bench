@@ -104,7 +104,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test draw effects, bounce targets returning to hand, cost reduction conditions.
 
-- [ ] **Implement Blue new cards — batch 2 (10 creatures + spells)**
+- [x] **Implement Blue new cards — batch 2 (10 creatures + spells)**
   Detail: Remaining 10 new blue cards.
 
   Cards: #40 High Fae Trickster, #41 Homunculus Horde, #43 Inspiration from Beyond, #45 Kiora the Rising Tide, #46 Lunar Insight, #47 Mischievous Mystic, #48 Refute, #50 Skyship Buccaneer, #51 Sphinx of Forgotten Lore, #53 Uncharted Voyage.

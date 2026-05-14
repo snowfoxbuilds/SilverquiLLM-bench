@@ -84,3 +84,29 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `cards/fdn/fdn_37/card_impl.py` — Erudite Wizard: 2/3 Human Wizard with second-card-drawn-each-turn +1/+1 counter trigger
 - `cards/fdn/fdn_38/card_impl.py` — Faebloom Trick: Instant creating two Faerie tokens with reflexive tap trigger
 - `cards/fdn/fdn_39/card_impl.py` — Grappling Kraken: 5/6 Kraken with landfall tap + stun counter on opponent creature
+
+## Item 7: Implement Blue new cards — batch 2 (10 creatures + spells)
+
+### Tests
+- `tests/audited/fdn/fdn_40/tests.py` — Stub (no audited tests yet)
+- `tests/audited/fdn/fdn_41/tests.py` — Stub (no audited tests yet)
+- `tests/audited/fdn/fdn_43/tests.py` — Stub (no audited tests yet)
+- `tests/audited/fdn/fdn_45/tests.py` — Stub (no audited tests yet)
+- `tests/audited/fdn/fdn_46/tests.py` — Stub (no audited tests yet)
+- `tests/audited/fdn/fdn_47/tests.py` — Stub (no audited tests yet)
+- `tests/audited/fdn/fdn_48/tests.py` — Stub (no audited tests yet)
+- `tests/audited/fdn/fdn_50/tests.py` — Stub (no audited tests yet)
+- `tests/audited/fdn/fdn_51/tests.py` — Stub (no audited tests yet)
+- `tests/audited/fdn/fdn_53/tests.py` — Stub (no audited tests yet)
+
+### Implementation
+- `cards/fdn/fdn_40/card_impl.py` — High Fae Trickster: Flash+Flying creature with continuous effect granting controller cast-as-flash
+- `cards/fdn/fdn_41/card_impl.py` — Homunculus Horde: 2/2 with second-card-drawn trigger creating copy token
+- `cards/fdn/fdn_43/card_impl.py` — Inspiration from Beyond: Sorcery mill 3 then return instant/sorcery from graveyard (flashback stored)
+- `cards/fdn/fdn_45/card_impl.py` — Kiora, the Rising Tide: Legendary Merfolk with ETB draw/discard and threshold attack trigger creating 8/8 token
+- `cards/fdn/fdn_46/card_impl.py` — Lunar Insight: Sorcery drawing cards equal to distinct mana values among nonland permanents
+- `cards/fdn/fdn_47/card_impl.py` — Mischievous Mystic: Flying 2/1 with second-card-drawn trigger creating 1/1 Faerie token with flying
+- `cards/fdn/fdn_48/card_impl.py` — Refute: Counterspell instant that counters any spell then loots (draw+discard)
+- `cards/fdn/fdn_50/card_impl.py` — Skyship Buccaneer: Flying 4/3 with Raid ETB draw
+- `cards/fdn/fdn_51/card_impl.py` — Sphinx of Forgotten Lore: Flash+Flying with attack trigger granting flashback to graveyard instant/sorcery
+- `cards/fdn/fdn_53/card_impl.py` — Uncharted Voyage: Instant putting creature on top/bottom of owner's library then surveil 1

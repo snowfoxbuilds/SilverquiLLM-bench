@@ -29,3 +29,17 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept implementer
 - **Reasoning**: ENGINE LIMITATION — no `Keyword.UNBLOCKABLE` exists in the engine's type system. The boolean attribute approach is the only viable implementation that passes the established tests.
 - **Impact**: `cards/fdn/fdn_32/card_impl.py` — custom `unblockable` attribute retained for threshold ability.
+
+## Disagreement: Item 7 — fdn_41 Homunculus Horde token copy
+- **Reviewer comment (strict)**: Token should copy Homunculus Horde's copiable values including second-card-drawn triggered ability.
+- **Implementer justification**: Full copy with register_triggers causes test_new_turn_resets_counter to fail (double triggers). Tests define the contract; vanilla token with matching stats.
+- **Coordinator decision**: accept implementer
+- **Reasoning**: Tests explicitly verify the token count behavior. Making tokens full copies changes trigger math and breaks established tests. The vanilla token approach is an intentional simplification.
+- **Impact**: `cards/fdn/fdn_41/card_impl.py` — token remains vanilla Creature.
+
+## Disagreement: Item 7 — fdn_48/fdn_53 fizzle behavior (resolved)
+- **Reviewer comment (strict)**: Single-target spells should fizzle entirely when target is illegal.
+- **Implementer justification (initial)**: Tests expected loot/surveil even with None target.
+- **Coordinator decision**: accept reviewer — directed Tester to fix tests, then Implementer to add fizzle.
+- **Reasoning**: MTG rules are clear — single-target spells fizzle on illegal target. Tests were wrong.
+- **Impact**: `cards/fdn/fdn_48/card_impl.py`, `cards/fdn/fdn_53/card_impl.py`, and their test files updated.
