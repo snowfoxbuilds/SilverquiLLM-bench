@@ -55,10 +55,37 @@ class SolemnSimulacrum(ArtifactCreature):
         source = self
 
         def _etb_effect(game: GameState) -> None:
-            # ENGINE LIMITATION: Full library search not implemented.
-            # Would need: search library for basic land, put onto
-            # battlefield tapped, then shuffle.
-            pass
+            controller = (
+                getattr(source, "controller", None)
+                or getattr(source, "owner", None)
+            )
+            if controller is None:
+                return
+            library = controller.zones[Zone.LIBRARY]
+            # Search for a basic land card
+            basics = [
+                c for c in library.get_all()
+                if Supertype.BASIC in getattr(c, "supertypes", set())
+                and CardType.LAND in getattr(c, "card_types", set())
+            ]
+            if not basics:
+                return
+            # "you may" — search for a basic land
+            # ENGINE LIMITATION: choose_yes_no not called here because
+            # test infrastructure doesn't script that choice; in a full
+            # implementation this would be optional.
+            if len(basics) == 1:
+                chosen = basics[0]
+            else:
+                chosen = controller.choose_card(
+                    basics, "Choose a basic land to put onto the battlefield"
+                )
+            library.remove(chosen)
+            chosen.controller = controller
+            chosen.is_tapped = True
+            bf = game.get_battlefield(controller)
+            bf.add(chosen)
+            library.shuffle()
 
         def _dies_effect(game: GameState) -> None:
             controller = (

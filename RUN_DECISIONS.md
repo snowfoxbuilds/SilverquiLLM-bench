@@ -57,3 +57,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept implementer
 - **Reasoning**: Implementation correctly skips flying creatures via `deal_damage()`. The test assertion passes (flying creature takes no damage), even though it checks a non-existent field. The other 2 assertions in the same test validate `damage_marked` correctly. Minor test quality nit, not an impl bug.
 - **Impact**: `tests/audited/fdn/205/tests.py` — no change needed.
+
+## Disagreement: Item 15 — Test insufficiency for Campus Guide, Heraldic Banner, Secluded Courtyard
+- **Reviewer comment (strict)**: Tests for fdn_251 (Campus Guide), fdn_254 (Heraldic Banner), and fdn_267 (Secluded Courtyard) only check stat lines, not core Oracle behaviors (ETB search, color choice + lord, colored mana production).
+- **Implementer justification**: These are test quality issues, not impl bugs. Implementer cannot modify test files per pipeline rules. Implementations are correct per Oracle text.
+- **Coordinator decision**: accept implementer (all 3)
+- **Reasoning**: The implementations are correct. Test insufficiency is a quality audit concern (Section 6), not an implementation revision target. The Implementer is prohibited from modifying test files.
+- **Impact**: Tests for fdn_251, fdn_254, fdn_267 have low coverage — should be caught by test quality audit.

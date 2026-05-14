@@ -259,3 +259,20 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `cards/fdn/fdn_246/card_impl.py` — Swiftblade Vindicator: fixed subtypes from Warrior to Soldier
 - `cards/fdn/fdn_247/card_impl.py` — Tatyova, Benthic Druid: landfall trigger for life gain and card draw
 - `cards/fdn/fdn_248/card_impl.py` — Thousand-Year Storm: spell-cast copy trigger tracking storm count
+
+## Item 15: Artifact reprints + Secluded Courtyard (9 cards)
+
+### Tests
+- `tests/audited/fdn/fdn_249/tests.py` — stub (no audited tests yet)
+- `tests/audited/fdn/fdn_250/tests.py` — stub (no audited tests yet)
+- `tests/audited/fdn/fdn_251/tests.py` — stub (no audited tests yet)
+- `tests/audited/fdn/fdn_252/tests.py` — stub (no audited tests yet)
+- `tests/audited/fdn/fdn_253/tests.py` — stub (no audited tests yet)
+- `tests/audited/fdn/fdn_254/tests.py` — stub (no audited tests yet)
+- `tests/audited/fdn/fdn_256/tests.py` — stub (no audited tests yet)
+- `tests/audited/fdn/fdn_257/tests.py` — stub (no audited tests yet)
+- `tests/audited/fdn/fdn_267/tests.py` — stub (no audited tests yet)
+
+### Implementation
+- `cards/fdn/fdn_267/card_impl.py` — Full Secluded Courtyard Land implementation with creature type choice and two mana abilities (colorless + conditional any-color with ENGINE LIMITATION)
+- `cards/fdn/fdn_257/card_impl.py` — Solemn Simulacrum ETB now searches library for basic land, puts onto battlefield tapped, shuffles

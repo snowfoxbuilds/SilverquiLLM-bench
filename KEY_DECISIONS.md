@@ -494,3 +494,13 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Context**: Muldrotha allows casting one permanent of each type from graveyard per turn.
 - **Decision**: Track used types in `_gy_types_used_this_turn` dict, reset on upkeep. ENGINE LIMITATION: alternative casting zones not fully supported yet.
 - **Impact**: Future graveyard-casting cards.
+
+## Player.choose() signature: choose(options, description)
+- **Context**: Secluded Courtyard needs player to choose a creature type on ETB.
+- **Decision**: Engine's `Player.choose()` signature is `choose(options, description)` — options first, description second.
+- **Impact**: Any card using player choice from a list of options.
+
+## ENGINE LIMITATION: Mana spending restrictions not enforced
+- **Context**: Secluded Courtyard produces any-color mana that should only be spendable on chosen creature type.
+- **Decision**: Produce the colored mana but document the spending restriction as ENGINE LIMITATION — engine has no conditional mana spending support.
+- **Impact**: Any card with conditional mana (e.g., Cavern of Souls, Unclaimed Territory).

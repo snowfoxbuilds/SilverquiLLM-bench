@@ -214,7 +214,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test fight resolution, replacement effects doubling counters/tokens, lord P/T bonuses, cost reduction, ramp, landfall triggers. Mark complex interactions (Doubling Season, Thousand-Year Storm, Muldrotha) with `ENGINE LIMITATION` where engine support is insufficient.
 
-- [ ] **Implement Artifact reprints + Secluded Courtyard (9 cards)**
+- [x] **Implement Artifact reprints + Secluded Courtyard (9 cards)**
   Detail: 8 artifact reprints + 1 land reprint.
 
   Artifacts (8): #249 Adventuring Gear, #250 Burnished Hart, #251 Campus Guide, #252 Gleaming Barrier, #253 Goldvein Pick, #254 Heraldic Banner, #256 Meteor Golem, #257 Solemn Simulacrum.
