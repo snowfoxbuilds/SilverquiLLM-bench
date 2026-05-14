@@ -130,7 +130,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test death trigger firing, sacrifice mechanics, life total changes, discard resolution.
 
-- [ ] **Implement Red new cards (15 cards)**
+- [x] **Implement Red new cards (15 cards)**
   Detail: All 15 new red FDN cards.
 
   Cards: #78 Battlesong Berserker, #79 Boltwave, #80 Bulk Up, #82 Courageous Goblin, #83 Crackling Cyclops, #85 Electroduplicate, #86 Fiery Annihilation, #87 Goblin Boarders, #88 Goblin Negotiation, #89 Gorehorn Raider, #91 Kellan Planar Trailblazer, #93 Searslicer Goblin, #94 Slumbering Cerberus, #96 Strongbox Raider, #97 Twinflame Tyrant.

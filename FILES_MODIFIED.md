@@ -133,3 +133,22 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `cards/fdn/fdn_74/card_impl.py` — Vampire Gourmand: 2/2 Vampire with attack trigger sacrifice-for-draw and unblockable
 - `cards/fdn/fdn_75/card_impl.py` — Vampire Soulcaller: 3/2 Vampire Warlock Flying, can't block, ETB return creature from graveyard (already implemented)
 - `cards/fdn/fdn_77/card_impl.py` — Zul Ashur Lich Lord: 2/2 Legendary Zombie Warlock with Ward and tap to cast Zombie from graveyard
+
+## Item 9: Implement Red new cards (15 cards)
+
+### Implementation
+- `cards/fdn/fdn_78/card_impl.py` — Battlesong Berserker: 3/4 Human Berserker with "whenever you attack" trigger granting target creature +1/+0 and menace until EOT
+- `cards/fdn/fdn_79/card_impl.py` — Boltwave: {R} Sorcery dealing 3 damage to each opponent
+- `cards/fdn/fdn_80/card_impl.py` — Bulk Up: Instant doubling target creature's power until EOT with Flashback {4}{R}{R}
+- `cards/fdn/fdn_82/card_impl.py` — Courageous Goblin: 2/2 Goblin with conditional attack trigger (+1/+0 and menace if you control power 4+)
+- `cards/fdn/fdn_83/card_impl.py` — Crackling Cyclops: 0/4 with SPELL_CAST trigger for +3/+0 on noncreature spells
+- `cards/fdn/fdn_85/card_impl.py` — Electroduplicate: Sorcery creating token copy with haste and end-step sacrifice, Flashback {2}{R}{R}
+- `cards/fdn/fdn_86/card_impl.py` — Fiery Annihilation: Instant dealing 5 damage to creature, exiling attached Equipment, exile-on-death replacement
+- `cards/fdn/fdn_87/card_impl.py` — Goblin Boarders: 3/2 Goblin Pirate with Raid ETB +1/+1 counter
+- `cards/fdn/fdn_88/card_impl.py` — Goblin Negotiation: {X}{R}{R} Sorcery dealing X damage with excess-damage Goblin token creation
+- `cards/fdn/fdn_89/card_impl.py` — Gorehorn Raider: 4/4 with Raid ETB dealing 2 damage to any target
+- `cards/fdn/fdn_91/card_impl.py` — Kellan Planar Trailblazer: Legendary 2/1 with two activated abilities for class progression (Scout→Detective→Rogue)
+- `cards/fdn/fdn_93/card_impl.py` — Searslicer Goblin: 2/1 with Raid end-step trigger creating 1/1 Goblin token
+- `cards/fdn/fdn_94/card_impl.py` — Slumbering Cerberus: 4/2 Dog with skip_untap and Morbid end-step untap trigger
+- `cards/fdn/fdn_96/card_impl.py` — Strongbox Raider: 5/2 with Raid ETB exiling top 2, choose one playable until end of next turn
+- `cards/fdn/fdn_97/card_impl.py` — Twinflame Tyrant: 3/5 Dragon Flying with damage-doubling continuous effect for damage to opponents

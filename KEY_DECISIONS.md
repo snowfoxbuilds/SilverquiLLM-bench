@@ -421,3 +421,19 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Use `getattr(game, "creature_died_this_turn", False)` — requires game-level CREATURE_DIES handler to set it.
 - **Reasoning**: Allows morbid-like abilities to work once the game tracks deaths per turn, without blocking on engine changes.
 - **Impact**: fdn_73 (Tragic Banshee) and future morbid cards.
+
+## Mana payment API: mana_pool.pay()
+- **Context**: fdn_91 (Kellan) needed activated ability cost to pay mana. `Player.pay_mana()` doesn't exist.
+- **Decision**: Use `player.mana_pool.pay(cost)` from `engine/mana.py`.
+- **Impact**: All activated abilities with mana costs should use this API.
+
+## Damage doubling via monkey-patching deal_damage
+- **Context**: fdn_97 (Twinflame Tyrant) doubles damage to opponents. Engine has no built-in replacement effect system for damage modification.
+- **Decision**: Monkey-patch `game_module.deal_damage` in continuous effect's apply callback. Original function stored and restored on cleanup.
+- **Reasoning**: ENGINE LIMITATION — no formal damage replacement API. Monkey-patching is fragile but functional.
+- **Impact**: Future damage-modifying cards may need similar approach until engine adds replacement effects.
+
+## Current power/toughness access: use .power/.toughness properties
+- **Context**: fdn_80, fdn_82, fdn_88 used base_power/base_toughness when Oracle refers to current values.
+- **Decision**: Always use `.power` / `.toughness` properties (include counters/effects), not `.base_power` / `.base_toughness`, when Oracle text refers to a creature's power/toughness.
+- **Impact**: All cards that reference "target creature's power/toughness" must use the property, not base.
