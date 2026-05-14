@@ -361,3 +361,15 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Added `END_STEP = "end_step"` to `EventType` enum.
 - **Reasoning**: Multiple cards trigger at the beginning of the end step (delayed triggers, end-of-turn effects). This event type was missing.
 - **Impact**: `engine/triggers.py`. Future cards with end-step triggers should use `EventType.END_STEP`.
+
+## Equipment ETB targeting requires get_targets()
+- **Context**: Celestial Armor's ETB attaches to "target creature you control" but lacked a `get_targets()` method.
+- **Decision**: Equipment with ETB targeting must implement `get_targets()` returning a `TargetRequirement` with appropriate filter. `on_resolve()` must revalidate controller ownership.
+- **Reasoning**: Without `get_targets()`, the cast flow never prompts for target selection. Controller check prevents attaching to stolen creatures.
+- **Impact**: Future equipment cards with "target creature you control" ETBs.
+
+## Counter sync: _original_plus_one_counters must be updated
+- **Context**: `game.add_counter()` updates `plus_one_counters` but `effect_manager.apply_all()` resets it from `_original_plus_one_counters`.
+- **Decision**: After `add_counter()`, also sync `_original_plus_one_counters = plus_one_counters` on the permanent.
+- **Reasoning**: Without this, counters placed by triggers are lost on the next effect manager cycle.
+- **Impact**: All card implementations that add +1/+1 counters via triggers.

@@ -51,7 +51,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test each loyalty ability independently. Test loyalty counter changes. Test token creation. Test emblem persistence. Verify `get_loyalty_abilities()` returns correct costs and effects.
 
-- [ ] **Upgrade 3 simplified Equipment/Creature implementations to full oracle text**
+- [x] **Upgrade 3 simplified Equipment/Creature implementations to full oracle text**
   Detail: Remaining simplified cards — 2 equipment and 1 creature with death triggers.
 
   Cards (3):

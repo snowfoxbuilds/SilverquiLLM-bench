@@ -29,3 +29,16 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `cards/fdn/fdn_81/card_impl.py` — Full rewrite: +2 uses choose_card() to pick one exiled card as playable, +1 uses sacrifice() and END_STEP event, −4 supports _damage_assignments
 - `cards/fdn/fdn_234/card_impl.py` — Full rewrite: +1 uses choose_card() for optional creature/land selection, −3 lazy revalidation, −8 ContinuousEffect emblem
 - `engine/triggers.py` — Added END_STEP event type to EventType enum
+
+
+## Item 3: Upgrade 3 simplified Equipment/Creature implementations to full oracle text
+
+### Tests
+- `tests/audited/fdn/fdn_5/tests.py` — Stub (no audited tests yet)
+- `tests/audited/fdn/fdn_258/tests.py` — Stub (no audited tests yet)
+- `tests/audited/fdn/fdn_61/tests.py` — Stub (no audited tests yet)
+
+### Implementation
+- `cards/fdn/fdn_5/card_impl.py` — Full rewrite: ETB moved to on_resolve(), DURATION_END_OF_TURN for protection, Layer 7c P/T + Layer 6 flying; added get_targets() with TargetRequirement, controller check in on_resolve(), removed fallback logic
+- `cards/fdn/fdn_258/card_impl.py` — Cleaned up: extracted _make_equip_ability(), removed unused imports, proper Layer 6 hexproof+haste
+- `cards/fdn/fdn_61/card_impl.py` — Added attack trigger with choose_card() sacrifice + add_counter(), kept death trigger; fixed choose_card signature, synced _original_plus_one_counters
