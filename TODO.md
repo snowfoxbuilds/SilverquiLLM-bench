@@ -143,7 +143,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test damage dealt to targets, attack trigger effects, temporary buffs reset at end of turn.
 
-- [ ] **Implement Green new cards (14 cards)**
+- [x] **Implement Green new cards (14 cards)**
   Detail: All 14 new green FDN cards.
 
   Cards: #98 Ambush Wolf, #100 Beast-Kin Ranger, #101 Cackling Prowler, #102 Eager Trufflesnout, #103 Elfsworn Giant, #104 Elvish Regrower, #105 Felling Blow, #106 Loot Exuberant Explorer, #107 Mossborn Hydra, #108 Needletooth Pack, #109 Preposterous Proportions, #111 Quilled Greatwurm, #112 Spinner of Souls, #113 Sylvan Scavenging.

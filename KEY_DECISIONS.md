@@ -437,3 +437,23 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Context**: fdn_80, fdn_82, fdn_88 used base_power/base_toughness when Oracle refers to current values.
 - **Decision**: Always use `.power` / `.toughness` properties (include counters/effects), not `.base_power` / `.base_toughness`, when Oracle text refers to a creature's power/toughness.
 - **Impact**: All cards that reference "target creature's power/toughness" must use the property, not base.
+
+## "Your end step" triggers must check active_player
+- **Context**: fdn_101, fdn_108, fdn_113 triggered on every player's end step instead of only controller's.
+- **Decision**: All "At the beginning of your end step" triggers must include `game.state.active_player is controller` guard in their condition.
+- **Impact**: All future end-step triggers scoped to a player.
+
+## Land play tracking: player.land_plays_remaining
+- **Context**: fdn_106 (Loot) grants extra land drops. `additional_lands` field was not consumed by engine.
+- **Decision**: Use `player.land_plays_remaining` (or equivalent engine field) to track available land plays.
+- **Impact**: Any card granting extra land drops.
+
+## Mana value access: mana_cost.cmc
+- **Context**: Cards don't have a `mana_value` attribute. Use `card.mana_cost.cmc` for converted mana cost.
+- **Decision**: Always use `mana_cost.cmc` (or `getattr(card, 'mana_cost', ManaCost()).cmc`) for mana value checks.
+- **Impact**: All cards referencing mana value.
+
+## Combat damage triggers need per-event closures
+- **Context**: fdn_111 (Quilled Greatwurm) used shared mutable dict for trigger data, causing bugs with multiple events.
+- **Decision**: Each trigger must capture its own event data in a separate closure/snapshot, not share mutable state.
+- **Impact**: All combat damage triggers and similar multi-fire triggers.

@@ -152,3 +152,21 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `cards/fdn/fdn_94/card_impl.py` — Slumbering Cerberus: 4/2 Dog with skip_untap and Morbid end-step untap trigger
 - `cards/fdn/fdn_96/card_impl.py` — Strongbox Raider: 5/2 with Raid ETB exiling top 2, choose one playable until end of next turn
 - `cards/fdn/fdn_97/card_impl.py` — Twinflame Tyrant: 3/5 Dragon Flying with damage-doubling continuous effect for damage to opponents
+
+## Item 10: Implement Green new cards (14 cards)
+
+### Implementation
+- `cards/fdn/fdn_98/card_impl.py` — Ambush Wolf: Flash 4/2 Wolf with ETB exile from graveyard (already implemented)
+- `cards/fdn/fdn_100/card_impl.py` — Beast-Kin Ranger: 3/3 Trample Elf Ranger with +1/+0 EOT on other creature ETB
+- `cards/fdn/fdn_101/card_impl.py` — Cackling Prowler: 4/3 Ward Hyena Rogue with Morbid end-step +1/+1 counter
+- `cards/fdn/fdn_102/card_impl.py` — Eager Trufflesnout: 4/2 Trample Boar with combat damage Food token trigger
+- `cards/fdn/fdn_103/card_impl.py` — Elfsworn Giant: 5/3 Reach Giant with landfall 1/1 Elf Warrior token creation
+- `cards/fdn/fdn_104/card_impl.py` — Elvish Regrower: 4/3 Elf Druid with ETB return permanent from graveyard (already implemented)
+- `cards/fdn/fdn_105/card_impl.py` — Felling Blow: Sorcery with +1/+1 counter then one-way damage (already implemented)
+- `cards/fdn/fdn_106/card_impl.py` — Loot Exuberant Explorer: 1/4 Legendary with extra land and activated dig-for-creature ability
+- `cards/fdn/fdn_107/card_impl.py` — Mossborn Hydra: 0/0 Trample with ETB +1/+1 counter and landfall counter doubling
+- `cards/fdn/fdn_108/card_impl.py` — Needletooth Pack: 4/5 Dinosaur with Morbid end-step two +1/+1 counters on target
+- `cards/fdn/fdn_109/card_impl.py` — Preposterous Proportions: Sorcery giving +10/+10 and vigilance until EOT
+- `cards/fdn/fdn_111/card_impl.py` — Quilled Greatwurm: 7/7 Trample with combat damage +1/+1 counter trigger
+- `cards/fdn/fdn_112/card_impl.py` — Spinner of Souls: 4/3 Reach Spider with death trigger library dig (already implemented)
+- `cards/fdn/fdn_113/card_impl.py` — Sylvan Scavenging: Enchantment with modal end-step (+1/+1 counter or 3/3 Raccoon token)

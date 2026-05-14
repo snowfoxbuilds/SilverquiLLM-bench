@@ -43,3 +43,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept reviewer — directed Tester to fix tests, then Implementer to add fizzle.
 - **Reasoning**: MTG rules are clear — single-target spells fizzle on illegal target. Tests were wrong.
 - **Impact**: `cards/fdn/fdn_48/card_impl.py`, `cards/fdn/fdn_53/card_impl.py`, and their test files updated.
+
+## Disagreement: Item 10 — fdn_106 Loot Exuberant Explorer mana cost
+- **Reviewer comment (strict)**: Activated ability pays generic 6 instead of {4}{G}{G}.
+- **Implementer justification**: Test adds 6 ManaType.COLORLESS and asserts cost returns True. ManaCost with green pips would fail since colorless can't pay green.
+- **Coordinator decision**: accept implementer
+- **Reasoning**: Tests define the contract. ENGINE LIMITATION — DeterministicPlayer tests use colorless mana, can't enforce colored pip requirements without engine mana system changes.
+- **Impact**: `cards/fdn/fdn_106/card_impl.py` — activated ability uses ManaCost(generic=6).
