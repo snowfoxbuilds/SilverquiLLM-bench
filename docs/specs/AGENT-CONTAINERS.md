@@ -190,60 +190,49 @@ The runner must tolerate missing or malformed `progress.jsonl`. Filesystem artif
 5. **Cleanup** — Runner removes workspace and output directories.
 Filtered runs may stage only a subset of SOS target card directories for debugging, but FDN examples remain staged in full. Filtered runs are development or Pipeline Validation Runs, not leaderboard-valid benchmark runs.
 
+Implementation sketch:
+
 ```python
-def run_benchmark(agent_image: str, config: Config) -> BenchmarkResult:
-    workspace = stage_workspace(config)  # all cards, engine, rulebook, prompt
-    output_dir = Path(tempfile.mkdtemp())
+container_name = f"sqm-{run_name}"
+write_run_manifest(workspace, timeout_seconds=timeout, deadline_utc=deadline)
 
-    try:
-        result = subprocess.run(
-            ["docker", "run", "--rm",
-             "-v", f"{workspace}:/workspace",
-             "-v", f"{output_dir}:/output",
-             *api_key_env_args(config),
-             "--stop-timeout", str(config.timeout),
-             agent_image],
-            timeout=config.timeout + 60,
-        )
+proc = subprocess.Popen(
+    [
+        "docker", "run", "--rm", "--name", container_name,
+        "-v", f"{workspace}:/workspace",
+        "-v", f"{output_dir}:/output",
+        *api_key_env_args(),
+        image,
+    ],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    text=True,
+)
 
-        # Harvest all SOS card implementations
-        card_results = []
-        for card_dir in sorted((workspace / "cards" / "sos").iterdir()):
-            card_results.append(CardResult(
-                card_id=card_dir.name,
-                card_impl=read_if_exists(card_dir / "card_impl.py"),
-                tests=read_if_exists(card_dir / "tests.py"),
-            ))
-
-        # Diff engine modifications
-        engine_diff = diff_directories(
-            host_engine_baseline,
-            workspace / "engine",
-        )
-
-        return BenchmarkResult(
-            cards=card_results,
-            engine_diff=engine_diff,
-            progress=read_if_exists(output_dir / "progress.jsonl"),
-            stdout=read_if_exists(output_dir / "stdout.log"),
-            exit_code=result.returncode,
-        )
-
-    except subprocess.TimeoutExpired:
-        # Still harvest partial results
-        return harvest_partial(workspace, output_dir)
-    finally:
-        shutil.rmtree(workspace)
-        shutil.rmtree(output_dir)
+try:
+    stream_docker_logs_live(proc)
+    proc.wait(timeout=timeout)
+except subprocess.TimeoutExpired:
+    subprocess.run(["docker", "stop", "-t", "10", container_name], check=False)
+    proc.wait(timeout=30)
+finally:
+    selected_workspace = select_final_or_snapshot_workspace(workspace)
+    materialize_workspace_final(selected_workspace, results_dir / run_name / "workspace_final")
 ```
 
 ## Timeout Enforcement
 
-Timeouts are enforced at two levels:
+The runner owns the hard timeout. Docker's `--stop-timeout` is only a grace-period setting; it does not automatically stop a container after the benchmark timeout.
 
-1. **Docker level** — `--stop-timeout N` sends `SIGTERM` then `SIGKILL` after N seconds.
-2. **Subprocess level** — Python's `subprocess.run(timeout=N+60)` acts as a backup.
-On timeout, the runner still harvests partial results — whatever cards the agent completed before being killed are evaluated normally. The `progress.jsonl` file shows how far the agent got.
+Required timeout mechanism:
+
+1. Immediately before `docker run`, write `/workspace/run_manifest.json` with `timeout_seconds` and `deadline_utc`.
+2. Launch the container with `subprocess.Popen`, not `subprocess.run(timeout=...)`.
+3. Wait with `proc.wait(timeout=timeout_seconds)`.
+4. On `TimeoutExpired` or `KeyboardInterrupt`, call `docker stop -t 10 <container_name>`.
+5. Harvest the final Workspace and optional `/output/` telemetry after the container exits.
+6. Use snapshot fallback if the final Workspace is not viable.
+The container may read the Run Manifest for pacing or graceful shutdown, but benchmark correctness must not depend on container cooperation.
 
 ## Authentication
 

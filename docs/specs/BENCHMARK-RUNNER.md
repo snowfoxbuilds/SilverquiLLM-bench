@@ -71,14 +71,23 @@ On timeout, the runner still harvests partial results and the latest usable Outp
 
 ## Result Harvesting
 
-After the container exits, the runner walks the workspace and collects:
+After the container exits, the runner selects the official evaluation Workspace and materializes it at `results/{run_name}/workspace_final/`.
 
-- `workspace/cards/sos/*/card_impl.py` — Agent's card implementations
-- `workspace/cards/sos/*/tests.py` — Agent's test suites (tested mode)
-- `workspace/engine/` — Agent's modified engine (diffed against the host baseline engine)
-- `output/progress.jsonl` — Per-card progress log
-- `output/stdout.log` — Agent stdout
-- `output/stderr.log` — Agent stderr
+The official evaluation Workspace is either:
+
+- the final harvested Workspace, if its engine is viable, or
+- the latest viable whole-Workspace snapshot selected by snapshot fallback.
+Derived convenience artifacts may also be written, but evaluation reads from `workspace_final/`, not from legacy per-card copies.
+
+The runner also collects telemetry and debugging artifacts:
+
+- `docker_stdout.log` — host-captured Docker stdout
+- `docker_stderr.log` — host-captured Docker stderr
+- optional `/output/progress.jsonl`
+- optional `/output/system.log`
+- optional `/output/agent_stdout.log`
+- optional `/output/agent_stderr.log`
+- optional `/output/exit_code`
 `/output/` is an observability channel only. It pipes agent and process output out of the container for extra telemetry and debugging. It is not part of the official evaluation state.
 
 The Progress Log is recommended but not required. Entrypoints and agents may write `progress.jsonl` for live monitoring, but the runner must tolerate missing or malformed progress events.
@@ -165,21 +174,20 @@ Status values:
 
 ```javascript
 results/{run_name}/
-├── run_summary.json            # Aggregate stats
-├── run_manifest.json           # Timeout hint written before launch
-├── engine_diff.patch           # Full engine diff (agent vs original)
-├── progress.jsonl              # Copy of container progress log
-├── stdout.log                  # Copy of container stdout
-├── stderr.log                  # Copy of container stderr
+├── workspace_final/            # Canonical full Workspace used for evaluation
 ├── snapshots/                  # Host-side Git snapshot repo for Workspace commits
-└── cards/
-    ├── 001/
-    │   ├── card_impl.py        # Agent's implementation
-    │   ├── tests.py            # Agent's tests (tested mode only)
-    │   └── result.json         # Per-card eval results
-    ├── 002/
-    │   └── ...
-    └── ...
+├── snapshot_telemetry.jsonl    # Snapshot progress telemetry
+├── docker_stdout.log           # Host-captured Docker stdout
+├── docker_stderr.log           # Host-captured Docker stderr
+├── engine_diff.patch           # Engine diff from workspace_final/engine vs baseline
+├── run_manifest.json           # Copy of workspace_final/run_manifest.json
+├── run_summary.json            # Aggregate stats and run metadata
+├── progress.jsonl              # Optional copy from /output/, if present
+└── cards/                      # Optional derived convenience artifacts only
+    └── 001/
+        ├── card_impl.py
+        ├── tests.py
+        └── result.json
 ```
 
 Run name defaults to `{image_name}_{ISO-timestamp}` (e.g. `pi-blind_2026-05-13T01-30`). Each run is self-contained. Cross-run aggregates (multi-model leaderboard, combined cross-eval) live at the results root:
