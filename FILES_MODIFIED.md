@@ -170,3 +170,18 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `cards/fdn/fdn_111/card_impl.py` — Quilled Greatwurm: 7/7 Trample with combat damage +1/+1 counter trigger
 - `cards/fdn/fdn_112/card_impl.py` — Spinner of Souls: 4/3 Reach Spider with death trigger library dig (already implemented)
 - `cards/fdn/fdn_113/card_impl.py` — Sylvan Scavenging: Enchantment with modal end-step (+1/+1 counter or 3/3 Raccoon token)
+
+## Item 11: Implement Multicolor new cards (11 cards)
+
+### Implementation
+- `cards/fdn/fdn_115/card_impl.py` — Alesha Who Laughs at Fate: First strike + attack counter + Raid end-step graveyard recursion (MV ≤ power)
+- `cards/fdn/fdn_117/card_impl.py` — Ashroot Animist: Trample + attack trigger granting +X/+X and trample until EOT
+- `cards/fdn/fdn_118/card_impl.py` — Dreadwing Scavenger: Flying + ETB/attack loot + threshold +1/+1 and deathtouch
+- `cards/fdn/fdn_119/card_impl.py` — Elenda Saint of Dusk: Lifelink + life-based conditional P/T boost via ContinuousEffect
+- `cards/fdn/fdn_120/card_impl.py` — Fiendish Panda: Life-gain counter trigger + death trigger graveyard recursion (non-Bear, MV ≤ power)
+- `cards/fdn/fdn_121/card_impl.py` — Koma World-Eater: Uncounterable trample ward with combat damage four 3/3 Serpent token trigger
+- `cards/fdn/fdn_122/card_impl.py` — Kykar Zephyr Awakener: Noncreature spell cast modal trigger (flicker or Spirit token)
+- `cards/fdn/fdn_123/card_impl.py` — Niv-Mizzet Visionary: No max hand size + noncombat damage draw trigger with per-event closure
+- `cards/fdn/fdn_124/card_impl.py` — Perforating Artist: Deathtouch + Raid end-step punisher (sacrifice/discard/lose 3)
+- `cards/fdn/fdn_125/card_impl.py` — Wardens of the Cycle: Morbid end-step modal (gain 2 life or draw + lose 1 life)
+- `cards/fdn/fdn_126/card_impl.py` — Zimone Paradox Sculptor: Beginning-of-combat +1/+1 counters + activated ability to double counters

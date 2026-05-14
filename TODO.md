@@ -156,7 +156,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test ETB triggers, trample damage, fight resolution, ramp effects adding lands.
 
-- [ ] **Implement Multicolor new cards (11 cards)**
+- [x] **Implement Multicolor new cards (11 cards)**
   Detail: All 11 new multicolor FDN cards — legends and gold spells.
 
   Cards: #115 Alesha Who Laughs at Fate, #117 Ashroot Animist, #118 Dreadwing Scavenger, #119 Elenda Saint of Dusk, #120 Fiendish Panda, #121 Koma World-Eater, #122 Kykar Zephyr Awakener, #123 Niv-Mizzet Visionary, #124 Perforating Artist, #125 Wardens of the Cycle, #126 Zimone Paradox Sculptor.

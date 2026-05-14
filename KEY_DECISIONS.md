@@ -457,3 +457,15 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Context**: fdn_111 (Quilled Greatwurm) used shared mutable dict for trigger data, causing bugs with multiple events.
 - **Decision**: Each trigger must capture its own event data in a separate closure/snapshot, not share mutable state.
 - **Impact**: All combat damage triggers and similar multi-fire triggers.
+
+## DEALS_DAMAGE events default is_combat=True when key absent
+- **Context**: fdn_121 (Koma) needs to check combat damage. Existing tests fire DEALS_DAMAGE without `is_combat` key.
+- **Decision**: Use `data.get('is_combat', True)` — events without explicit flag treated as combat damage.
+- **Reasoning**: Backwards compatible with existing test patterns. Noncombat damage events should explicitly set `is_combat=False`.
+- **Impact**: All combat damage triggers should check this field.
+
+## Opponent modal choice: sequential offer pattern
+- **Context**: fdn_124 (Perforating Artist) — opponent chooses among sacrifice/discard/lose life.
+- **Decision**: Offer options sequentially via choose_card()/choose_yes_no(). Opponent can decline to fall through to next option.
+- **Reasoning**: Engine has no built-in modal choice API for opponents. Sequential offer is faithful to MTG rules where opponent picks.
+- **Impact**: Future "opponent chooses one" cards should use this pattern.
