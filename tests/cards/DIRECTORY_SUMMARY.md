@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Unit tests for all card implementations in `cards/` and `cards/foundations/`. Tests verify card attributes (mana cost, power/toughness, keywords), targeting, resolution effects, registry integration, and game mechanics interactions. **26 test files** covering 260+ card implementations.
+Unit tests for all card implementations in `cards/` and `cards/fdn/_legacy/`. Tests verify card attributes (mana cost, power/toughness, keywords), targeting, resolution effects, registry integration, and game mechanics interactions. **26 test files** covering 260+ card implementations.
 
 ## Key Files
 
@@ -39,5 +39,5 @@ Unit tests for all card implementations in `cards/` and `cards/foundations/`. Te
 ## Dependencies
 
 - `tests/test_utils.py` — `create_game`, `set_board_state`, `cast_spell` helpers.
-- `cards/foundations/` — Card classes under test.
+- `cards/fdn/_legacy/` — Card classes under test (migrated from `cards/foundations/`).
 - `engine/` — Game state, casting, combat, continuous effects.

@@ -8,7 +8,7 @@ Test root directory for the SilverquiLLM-bench project. Contains top-level test 
 
 | File | Responsibility |
 |------|---------------|
-| `conftest.py` | **pytest config** — `pytest_collection_modifyitems` hook to filter out benchmark functions that get collected as tests; registers `integration` marker. |
+| `conftest.py` | **pytest config** — `pytest_collection_modifyitems` hook to filter out benchmark functions that get collected as tests; registers `integration` marker for Docker-dependent integration tests. |
 | `test_utils.py` | **Test helper API** — `create_game()`, `set_board_state()`, `cast_spell()`, `advance_to_phase()`, `declare_attackers()`, `declare_blockers()`. `TestSetupError` exception. |
 | `test_integration.py` | **End-to-end integration tests** — Multi-turn game scenarios. |
 | `test_scaffold.py` | **Project scaffold validation** — pyproject.toml, directory structure, package importability. |
@@ -70,6 +70,12 @@ Test root directory for the SilverquiLLM-bench project. Contains top-level test 
 | `test_allowlist_contamination.py` | **Allowlist contamination tests** — 23 tests for allowlist-based contamination detection. |
 | `test_preflight.py` | **Preflight tests** — 27 tests for pre-flight validation (card_specs_dir, config, workspace, template imports, test_utils, happy path, error aggregation, workspace isolation). |
 | `test_harness.py` | **Harness smoke tests** — 39 deterministic end-to-end tests covering full harness pipeline with MockAdapter. |
+| `test_card_filter.py` | **Card filter tests** — `--cards` filter workspace staging, prompt content, CLI option parsing, defaults. |
+| `test_multichannel_output.py` | **Multi-channel output tests** — Log file harvesting, `format_log_lines` tagging/coloring/interleaving, `logs` CLI command. |
+| `test_container_timeout.py` | **Container timeout tests** — 21 tests: `_stop_container` unit tests, Popen-based timeout+interrupt docker stop, container naming, docker flags, harvest after timeout. |
+| `test_smoke_integration.py` | **Smoke integration tests** — Full pi-blind smoke test and lightweight container lifecycle test. Requires `integration` marker and `pytest-timeout`. |
+| `test_fdn_card_migration.py` | **FDN card migration tests** — Per-card file counts, `CardImpl` subclasses, registry population, spot-checks. |
+| `test_card_loader_unified.py` | **Unified card loader tests** — FDN spec loading validation. |
 | `test_strategies.py` | **Strategy tests** — BlindStrategy and ImplTestStrategy behavior. |
 | `test_replay_parser.py` | **Replay parser tests** — 39 tests for GRE JSON parsing: game setup, opening hands, state reconstruction, land plays, life totals, draws, ObjectIdChanged tracking. |
 | `test_replay_executor.py` | **Replay executor tests** — 23 tests for ReplayExecutor initialization, step execution, state comparison, seat 1/2 behavior. |

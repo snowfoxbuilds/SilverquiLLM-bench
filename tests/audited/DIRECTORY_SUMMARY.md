@@ -8,7 +8,7 @@ Per-card audited test directories for MTG card implementations. Each card has a 
 
 | Directory | Contents |
 |-----------|----------|
-| `fdn/` | **FDN (Foundations) audited tests** — 260+ card test directories (by collector number). Each directory has `tests.py` testing the card against its FDN implementation from `cards/foundations/`. Conftest uses `CardRegistry` to auto-inject `card_impl`. |
+| `fdn/` | **FDN (Foundations) audited tests** — 260+ card test directories (by collector number). Each directory has `tests.py` testing the card against its FDN implementation from `cards/fdn/_legacy/`. Conftest uses `CardRegistry` to auto-inject `card_impl` with module paths pointing to `cards.fdn._legacy`. |
 | `sos/` | **SOS Draft Set audited tests** — 346 card test directories (by collector key: `1/`–`271/` for SOS base, `soa_1/`–`soa_65/` for SOA, `spg_149/`–`spg_158/` for SPG). Conftest uses `cards.stubs.sos_stubs` for auto-injection. |
 
 ## Key Files
