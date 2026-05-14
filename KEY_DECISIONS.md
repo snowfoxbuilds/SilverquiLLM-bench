@@ -373,3 +373,15 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: After `add_counter()`, also sync `_original_plus_one_counters = plus_one_counters` on the permanent.
 - **Reasoning**: Without this, counters placed by triggers are lost on the next effect manager cycle.
 - **Impact**: All card implementations that add +1/+1 counters via triggers.
+
+## Once-per-turn triggers: use turn number tracking, not boolean flags
+- **Context**: Cat Collector and Exemplar of Light used boolean flags that were set once and never reset, breaking once-per-turn semantics.
+- **Decision**: Track the turn number when the ability last triggered (`_last_triggered_turn`), and compare against `game.state.turn_number`. This naturally resets each turn without needing explicit cleanup.
+- **Reasoning**: Boolean flags require an explicit reset mechanism (e.g., beginning-of-turn trigger). Turn number comparison is stateless and correct by default.
+- **Impact**: All future cards with once-per-turn triggers should use this pattern.
+
+## Player attribute effects need cleanup in unregister_triggers()
+- **Context**: Herald of Eternal Dawn sets `cant_lose`/`cant_win` on Player objects, but EffectManager doesn't reset player attributes.
+- **Decision**: Cards that modify player attributes must clean them up in `unregister_triggers()`. Mark with `ENGINE LIMITATION`.
+- **Reasoning**: The continuous effect system only resets permanent characteristics, not player attributes. Manual cleanup is the current workaround.
+- **Impact**: Any card that sets player flags (cant_lose, cant_win, etc.) must follow this pattern.

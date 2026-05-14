@@ -65,7 +65,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test equipment attach/detach, continuous effect application, equip ability activation. Test death trigger on nontoken creature death, sacrifice during attack. Use `DeterministicPlayer` for combat/decision sequences.
 
-- [ ] **Implement White new cards — batch 1 (10 creatures)**
+- [x] **Implement White new cards — batch 1 (10 creatures)**
   Detail: First 10 new white FDN creatures. Read each `card_spec.json` for oracle text.
 
   Cards: #1 Sire of Seven Deaths, #2 Arahbo the First Fang, #3 Armasaur Guide, #4 Cat Collector, #8 Dauntless Veteran, #9 Dazzling Angel, #11 Exemplar of Light, #12 Felidar Savior, #15 Hare Apparent, #17 Herald of Eternal Dawn.

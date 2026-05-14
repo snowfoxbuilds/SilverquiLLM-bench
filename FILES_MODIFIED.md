@@ -42,3 +42,17 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `cards/fdn/fdn_5/card_impl.py` — Full rewrite: ETB moved to on_resolve(), DURATION_END_OF_TURN for protection, Layer 7c P/T + Layer 6 flying; added get_targets() with TargetRequirement, controller check in on_resolve(), removed fallback logic
 - `cards/fdn/fdn_258/card_impl.py` — Cleaned up: extracted _make_equip_ability(), removed unused imports, proper Layer 6 hexproof+haste
 - `cards/fdn/fdn_61/card_impl.py` — Added attack trigger with choose_card() sacrifice + add_counter(), kept death trigger; fixed choose_card signature, synced _original_plus_one_counters
+
+## Item 4: Implement White new cards — batch 1 (10 creatures)
+
+### Implementation
+- `cards/fdn/fdn_1/card_impl.py` — Sire of Seven Deaths: 7/7 Eldrazi with 7 keywords (first strike, vigilance, menace, trample, reach, lifelink, ward)
+- `cards/fdn/fdn_2/card_impl.py` — Arahbo, the First Fang: Cat lord (+1/+1 ContinuousEffect) + ETB token trigger; self-ETB handled in on_resolve() per KEY_DECISIONS
+- `cards/fdn/fdn_3/card_impl.py` — Armasaur Guide: Vigilance + attack trigger (3+ attackers → +1/+1 counter on target)
+- `cards/fdn/fdn_4/card_impl.py` — Cat Collector: ETB creates Food token + first life-gain per turn creates Cat token (turn_number tracking for reset)
+- `cards/fdn/fdn_8/card_impl.py` — Dauntless Veteran: Attack trigger grants all creatures +1/+1 until EOT via ContinuousEffect
+- `cards/fdn/fdn_9/card_impl.py` — Dazzling Angel: Flying + ETB trigger (another creature enters → gain 1 life)
+- `cards/fdn/fdn_11/card_impl.py` — Exemplar of Light: Flying + life-gain → +1/+1 counter + once-per-turn draw (turn_number tracking for reset)
+- `cards/fdn/fdn_12/card_impl.py` — Felidar Savior: Lifelink + ETB in on_resolve() puts +1/+1 counters on up to two targets (two TargetRequirements)
+- `cards/fdn/fdn_15/card_impl.py` — Hare Apparent: ETB creates Rabbit tokens equal to other Hare Apparents you control
+- `cards/fdn/fdn_17/card_impl.py` — Herald of Eternal Dawn: Flash, Flying + continuous effect for can't-lose/can't-win with cleanup in unregister_triggers()
