@@ -23,20 +23,14 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.basic_lands import Forest, Island, Mountain, Plains
-from cards.foundations.simple_creatures import (
-    AegisTurtle,
-    BearCub,
-    SavannahLions,
-    SerraAngel,
-)
-from cards.foundations.simple_spells import (
-    BurstLightning,
-    Cancel,
-    GiantGrowth,
-    HerosDownfall,
-)
-from cards.foundations.simple_permanents import Pacifism
+from engine.basic_lands import Forest, Island, Mountain, Plains
+from cards.fdn.fdn_150.card_impl import AegisTurtle
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_147.card_impl import SerraAngel
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_223.card_impl import GiantGrowth
+from cards.fdn.fdn_175.card_impl import HerosDownfall
+
 from engine.abilities import ActivatedAbilityInstance, activate_ability
 from engine.casting import cast_spell as engine_cast_spell, play_land
 from engine.combat import (
