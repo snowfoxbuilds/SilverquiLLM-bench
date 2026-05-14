@@ -49,3 +49,13 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `silverquillm/cli.py` — Switched `run()` and `smoke()` from `subprocess.run(timeout=...)` to `subprocess.Popen()` + `proc.wait(timeout=...)` with explicit `docker stop` via `_stop_container()` on timeout/interrupt; `KeyboardInterrupt` raises `SystemExit(130)`
+
+## Item 6: Add real smoke test to test suite (integration test with local model)
+
+### Tests
+- `tests/test_smoke_integration.py` — Integration tests: full pi-blind smoke test and lightweight alpine container lifecycle test
+
+### Implementation
+- `tests/test_smoke_integration.py` — Created with test_smoke_pi_blind (full model server test) and test_smoke_container_lifecycle (lightweight Docker lifecycle test); revised: fixed Docker build path to homelab-pi-blind, lifecycle test now asserts PASS via hello.py artefact
+- `pyproject.toml` — Added `integration` marker to `[tool.pytest.ini_options]`; added `pytest-timeout` to dev dependencies
+- `tests/conftest.py` — Registered integration marker

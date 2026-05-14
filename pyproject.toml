@@ -22,6 +22,7 @@ benchmark = "silverquillm.cli:main"
 dev = [
     "pytest",
     "pytest-cov",
+    "pytest-timeout",
     "ruff",
     "mypy",
 
@@ -40,6 +41,9 @@ python_files = ["test_*.py", "tests.py"]
 # importlib mode allows tests.py files in audited test subdirectories without
 # conflicting with the top-level tests/ package name.
 addopts = "--import-mode=importlib"
+markers = [
+    "integration: requires Docker + local model server",
+]
 
 [tool.mypy]
 python_version = "3.12"

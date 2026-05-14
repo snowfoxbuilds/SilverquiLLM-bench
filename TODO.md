@@ -169,7 +169,7 @@ except subprocess.TimeoutExpired:
 
   Testability: Mock `subprocess.Popen` → simulate timeout → verify `docker stop` is called with correct container name. Verify progress.jsonl harvest still works after stop.
 
-- [ ] **Add real smoke test to test suite (integration test with local model)**
+- [x] **Add real smoke test to test suite (integration test with local model)**
   Detail: The current `silverquillm smoke` command is a manual CLI tool. Add an automated integration test that runs the full smoke test pipeline against the local llama.cpp model server.
 
   The local model server is always available at `192.168.86.22` (home server running llama.cpp with OpenAI-compatible API).
