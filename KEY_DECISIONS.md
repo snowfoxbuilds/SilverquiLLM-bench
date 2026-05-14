@@ -331,3 +331,21 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: `cards/fdn/{collector_number}/` with `card_impl.py` + `card_spec.json`. SPG cards use `spg_` prefix (e.g., `spg_74`). Collision suffixes: `7b`, `61b`, `105b`, etc. Synthetic IDs 800+ for cards without real collector numbers.
 - **Reasoning**: Matches SOS structure. Directory name = collector number for easy lookup.
 - **Impact**: 265+ directories under `cards/fdn/`.
+
+## Aura on_resolve() must revalidate target types
+- **Context**: Reviewer flagged that aura on_resolve() only checked battlefield presence, not target type validity.
+- **Decision**: All aura implementations revalidate that the target still has the required type(s) at resolution time. If the type changed, the aura fizzles.
+- **Reasoning**: MTG rules require target legality recheck at resolution. A creature that becomes a noncreature is no longer a valid target for "enchant creature."
+- **Impact**: All aura card_impl.py files follow this pattern going forward.
+
+## Continuous effect color changes belong in Layer 5
+- **Context**: Imprisoned in the Moon was applying color removal (`perm.colors = set()`) inside the Layer 4 type-changing effect.
+- **Decision**: Color changes must be in a separate `Layer.COLOR` (Layer 5) continuous effect, not bundled with type changes.
+- **Reasoning**: MTG comprehensive rules layer system (CR 613) requires color changes in Layer 5, separate from type changes in Layer 4.
+- **Impact**: Any future card that changes both types and colors needs separate effects.
+
+## ENGINE LIMITATION: EffectManager._reset_objects() does not restore name/subtypes/colors
+- **Context**: Witness Protection mutates name, subtypes, and colors directly. When the aura is removed, these mutations persist.
+- **Decision**: Mark with ENGINE LIMITATION comment. Accept the limitation for now.
+- **Reasoning**: The engine's reset-and-reapply mechanism doesn't cover name/subtypes/colors fields. A proper fix requires engine-level changes beyond card implementation scope.
+- **Impact**: Cards that override name/subtypes/colors via continuous effects will have this limitation until the engine is updated.

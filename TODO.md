@@ -22,7 +22,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 - **Audited test injection**: conftest builds registry per collector directory. Each test directory imports only its own card class.
 ---
 
-- [ ] **Upgrade 4 simplified Aura implementations to full oracle text**
+- [x] **Upgrade 4 simplified Aura implementations to full oracle text**
   Detail: These cards have existing simplified implementations in `cards/fdn/` that omit mechanics from their full oracle text. Read each card's `card_spec.json` for the full oracle text, compare against the current `card_impl.py`, identify what was simplified, and rewrite to full spec.
 
   Cards (4):
