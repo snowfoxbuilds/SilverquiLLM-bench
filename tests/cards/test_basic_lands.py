@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/basic_lands.py — Basic land implementations.
+"""Tests for cards/fdn/_legacy/basic_lands.py — Basic land implementations.
 
 Verifies:
 - Each land (Plains, Island, Swamp, Mountain, Forest) subclasses Land.
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.basic_lands import (
+from cards.fdn._legacy.basic_lands import (
     Forest,
     Island,
     Mountain,

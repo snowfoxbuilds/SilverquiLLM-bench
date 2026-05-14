@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/simple_creatures.py — Vanilla and French vanilla creatures.
+"""Tests for cards/fdn/_legacy/simple_creatures.py — Vanilla and French vanilla creatures.
 
 All 15 creatures are from the MTG Foundations (FDN) set with Scryfall-verified stats.
 
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.simple_creatures import (
+from cards.fdn._legacy.simple_creatures import (
     AegisTurtle,
     BearCub,
     BishopsSoldier,

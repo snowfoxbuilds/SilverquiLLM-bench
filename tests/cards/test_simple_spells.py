@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/simple_spells.py — Simple instants and sorceries.
+"""Tests for cards/fdn/_legacy/simple_spells.py — Simple instants and sorceries.
 
 All 10 spells are from the MTG Foundations (FDN) set with Scryfall-verified data.
 
@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.simple_spells import (
+from cards.fdn._legacy.simple_spells import (
     BurstLightning,
     Cancel,
     CemeteryRecruitment,

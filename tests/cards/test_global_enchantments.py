@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/global_enchantments.py — Batch 10 global enchantments.
+"""Tests for cards/fdn/_legacy/global_enchantments.py — Batch 10 global enchantments.
 
 Verifies:
 - Each enchantment's metadata (name, mana cost, card_types).
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.global_enchantments import (
+from cards.fdn._legacy.global_enchantments import (
     AnthemOfChampions,
     AuthorityOfTheConsuls,
     BanishingLight,

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.simple_spells_batch2 import (
+from cards.fdn._legacy.simple_spells_batch2 import (
     AntiquitiesOnTheLoose,
     EmbraceTheParadox,
     FractalAnomaly,

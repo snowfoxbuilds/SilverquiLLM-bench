@@ -59,3 +59,20 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `tests/test_smoke_integration.py` — Created with test_smoke_pi_blind (full model server test) and test_smoke_container_lifecycle (lightweight Docker lifecycle test); revised: fixed Docker build path to homelab-pi-blind, lifecycle test now asserts PASS via hello.py artefact
 - `pyproject.toml` — Added `integration` marker to `[tool.pytest.ini_options]`; added `pytest-timeout` to dev dependencies
 - `tests/conftest.py` — Registered integration marker
+
+## Item 7: Delete cards/foundations/, remove FDN compat shims, fix tests
+
+### Tests
+- `tests/test_scaffold.py` — Updated cards/foundations → cards/fdn in structure and importability tests
+- `tests/test_phase1_tech_debt.py` — Updated imports from cards.foundations to cards.fdn._legacy
+- `tests/test_integration.py` — Updated imports from cards.foundations to cards.fdn._legacy
+- `tests/test_audited_infrastructure.py` — Updated imports from cards.foundations to cards.fdn._legacy
+- `tests/audited/fdn/conftest.py` — Updated 22 register function module paths to cards.fdn._legacy
+- `tests/engine/test_lazy_targets.py` — Updated imports from cards.foundations to cards.fdn._legacy
+- `tests/cards/` (25 files) — Updated all imports and docstrings from cards.foundations to cards.fdn._legacy
+
+### Implementation
+- `cards/foundations/` (deleted) — Removed entire legacy monolithic directory (22 .py files + __init__.py + DIRECTORY_SUMMARY.md)
+- `cards/fdn/_legacy/` (created) — Moved monolithic FDN modules here; updated internal cross-imports
+- created (`cards/fdn/__init__.py` Empty init for package importability) 
+- `PROJECT_MAP.md` — Updated directory table and migration checklist to reflect cards/foundations → cards/fdn/_legacy

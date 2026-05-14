@@ -2,7 +2,7 @@
 
 Extends the initial 15 creatures in ``simple_creatures.py`` with 7 additional
 vanilla and French vanilla creatures.  All use the existing
-:func:`~cards.foundations.simple_creatures.make_vanilla` factory.
+:func:`~cards.fdn._legacy.simple_creatures.make_vanilla` factory.
 
 All 7 creatures are real cards from the MTG Foundations (FDN) set with
 Scryfall-verified stats (verified 2024-12).
@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from cards.foundations.simple_creatures import make_vanilla
+from cards.fdn._legacy.simple_creatures import make_vanilla
 from engine.card import Creature
 from engine.types import Keyword
 

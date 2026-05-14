@@ -158,9 +158,9 @@ Agent Container
 |---|---:|---|---|
 | `engine/` | Active | Core MTG game engine | Agent edits staged copy in `/workspace/engine/` during runs |
 | `cards/` | Active | Card registry and set data | Registry, Scryfall helpers, FDN/SOS card directories |
-| `cards/fdn/` | Active / migrating | FDN per-card examples | Canonical FDN Workspace structure |
+| `cards/fdn/` | Active | FDN per-card examples + legacy modules | Canonical FDN Workspace structure; `_legacy/` holds migrated monolithic modules |
 | `cards/sos/` | Active | SOS benchmark targets | Empty/template impls before agent run; agent fills `card_impl.py` |
-| `cards/foundations/` | Temporary legacy | Old monolithic FDN source | May remain in repo during migration, but should not be staged after FDN migration |
+| `cards/fdn/_legacy/` | Deprecated | Migrated monolithic FDN source | Former `cards/foundations/` files, imported as `cards.fdn._legacy.*` |
 | `silverquillm/` | Active | Benchmark runner package | CLI, workspace staging, evaluation, results |
 | `silverquillm/replay/` | Active | 17lands replay validation pipeline | Parser, state reconstruction, executor, divergence reporting |
 | `docker/` | Active | Agent container images | Image is the full agent config |
@@ -270,11 +270,11 @@ card_[impl.py](http://impl.py)
 Recommended sequence:
 
 1. Generate `cards/fdn/{card_id}/card_spec.json` and empty `card_impl.py`.
-2. Copy/port implementations from `cards/foundations/`.
+2. Copy/port implementations from per-card `cards/fdn/` directories.
 3. Move generic helpers into `cards/fdn/utils.py` if needed.
 4. Update registry and tests to use `cards/fdn/`.
-5. Stop staging `cards/foundations/` into the Workspace.
-6. Delete `cards/foundations/` once imports/tests are clean.
+5. Legacy monolithic modules live in `cards/fdn/_legacy/` (migrated from `cards/foundations/`).
+6. ✅ `cards/foundations/` deleted — all imports now use `cards.fdn._legacy.*`.
 
 ### Runner migration
 

@@ -23,20 +23,20 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.basic_lands import Forest, Island, Mountain, Plains
-from cards.foundations.simple_creatures import (
+from cards.fdn._legacy.basic_lands import Forest, Island, Mountain, Plains
+from cards.fdn._legacy.simple_creatures import (
     AegisTurtle,
     BearCub,
     SavannahLions,
     SerraAngel,
 )
-from cards.foundations.simple_spells import (
+from cards.fdn._legacy.simple_spells import (
     BurstLightning,
     Cancel,
     GiantGrowth,
     HerosDownfall,
 )
-from cards.foundations.simple_permanents import Pacifism
+from cards.fdn._legacy.simple_permanents import Pacifism
 from engine.abilities import ActivatedAbilityInstance, activate_ability
 from engine.casting import cast_spell as engine_cast_spell, play_land
 from engine.combat import (
@@ -649,7 +649,7 @@ class TestMultiTurnIntegration:
         game = create_game()
         p1, p2 = game.players
 
-        from cards.foundations.simple_creatures import (
+        from cards.fdn._legacy.simple_creatures import (
             HealersHawk,
             ThornwealdArcher,
         )

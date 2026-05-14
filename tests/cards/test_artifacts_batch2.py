@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/artifacts_batch2.py — Batch 2 artifact cards.
+"""Tests for cards/fdn/_legacy/artifacts_batch2.py — Batch 2 artifact cards.
 
 Verifies:
 - Each artifact has correct metadata (name, mana_cost, card_types, subtypes).
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.artifacts_batch2 import (
+from cards.fdn._legacy.artifacts_batch2 import (
     AdaptiveAutomaton,
     BannerOfKinship,
     CampusGuide,

@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/planeswalkers.py — Planeswalker cards.
+"""Tests for cards/fdn/_legacy/planeswalkers.py — Planeswalker cards.
 
 Verifies:
 - Each planeswalker has correct name, mana_cost, starting_loyalty, card_types.
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.planeswalkers import (
+from cards.fdn._legacy.planeswalkers import (
     AjaniCallerOfThePride,
     ChandraTorchOfDefiance,
     LilianaDreadhordeGeneral,

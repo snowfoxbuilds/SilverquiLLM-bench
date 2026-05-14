@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/vanilla_creatures_batch2.py — Batch 2 vanilla & French vanilla creatures.
+"""Tests for cards/fdn/_legacy/vanilla_creatures_batch2.py — Batch 2 vanilla & French vanilla creatures.
 
 All 7 creatures are REAL cards from the MTG Foundations (FDN) set with
 Scryfall-verified stats (verified against Scryfall API 2024-12).
@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.vanilla_creatures_batch2 import (
+from cards.fdn._legacy.vanilla_creatures_batch2 import (
     ElementalistAdept,
     FireElemental,
     Gigantosaurus,

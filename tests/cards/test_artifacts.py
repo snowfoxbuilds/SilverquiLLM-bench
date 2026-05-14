@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/artifacts.py — Artifact cards.
+"""Tests for cards/fdn/_legacy/artifacts.py — Artifact cards.
 
 Verifies:
 - Each artifact has the correct name, mana_cost, and card_types.
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.artifacts import (
+from cards.fdn._legacy.artifacts import (
     AltarOfTheBrood,
     ArcaneSigNet,
     Bonesplitter,

@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/etb_creatures.py — Batch 5 ETB creatures.
+"""Tests for cards/fdn/_legacy/etb_creatures.py — Batch 5 ETB creatures.
 
 All 29 creatures are from the MTG Foundations (FDN) set.
 
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.etb_creatures import (
+from cards.fdn._legacy.etb_creatures import (
     AmbushWolf,
     AngelOfFinality,
     ArbiterOfWoe,

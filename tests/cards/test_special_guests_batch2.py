@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/special_guests.py — SPG Batch 2.
+"""Tests for cards/fdn/_legacy/special_guests.py — SPG Batch 2.
 
 Verifies 5 complex Special Guest cards:
 - Sphinx's Tutelage: draw trigger mills, repeat on shared color, stop on mismatch, activated ability
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.special_guests import (
+from cards.fdn._legacy.special_guests import (
     AkromasMemorial,
     Embercleave,
     FiendArtisan,

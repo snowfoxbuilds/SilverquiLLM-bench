@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/enchantments.py — Enchantment cards.
+"""Tests for cards/fdn/_legacy/enchantments.py — Enchantment cards.
 
 Verifies:
 - Each enchantment has the correct name, mana_cost, card_types, and rules_text.
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.enchantments import (
+from cards.fdn._legacy.enchantments import (
     Arrest,
     BraveTheSands,
     DictateOfHeliod,

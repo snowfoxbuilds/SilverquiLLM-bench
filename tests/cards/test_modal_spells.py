@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/modal_spells.py — Modal spell cards.
+"""Tests for cards/fdn/_legacy/modal_spells.py — Modal spell cards.
 
 Verifies:
 - Each modal spell has the correct name, mana_cost, and card_types.
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.modal_spells import (
+from cards.fdn._legacy.modal_spells import (
     AbzanCharm,
     AustereCommand,
     BorosCharm,

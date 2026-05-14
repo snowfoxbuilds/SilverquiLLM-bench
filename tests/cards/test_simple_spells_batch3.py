@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/simple_spells_batch3.py — Targeted instants and sorceries.
+"""Tests for cards/fdn/_legacy/simple_spells_batch3.py — Targeted instants and sorceries.
 
 All 18 spells are from the MTG Foundations (FDN) set.
 
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.simple_spells_batch3 import (
+from cards.fdn._legacy.simple_spells_batch3 import (
     BakeIntoAPie,
     BiteDown,
     BrokenWings,

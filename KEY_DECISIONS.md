@@ -320,11 +320,11 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Reasoning**: card_spec.py is the natural home for card-related utilities. Avoids creating a new module just for two functions.
 - **Impact**: `silverquillm/card_spec.py`, `scripts/generate_audited_stubs.py`, `tests/test_integration_helpers.py`, `tests/benchmark/test_helpers.py`.
 
-## FDN card restructure: compatibility shims
-- **Context**: 26 card test files import from `cards.foundations.*`. Updating all imports is high-risk and high-churn.
-- **Decision**: Created package-based compatibility shims at `cards/foundations/{module}/__init__.py` that re-export card classes via importlib from `cards/fdn/{collector}/card_impl.py`. Actual code lives in per-card dirs.
-- **Reasoning**: Shims allow gradual migration. Tests continue to work. New code should import from `cards.fdn.{num}.card_impl`.
-- **Impact**: `cards/foundations/` still exists as a package but contains only re-export shims. Actual implementations are in `cards/fdn/`.
+## FDN card restructure: foundations deleted, legacy modules preserved
+- **Context**: `cards/foundations/` contained 21 monolithic files with shared imports. After migrating all 286 cards to per-card `cards/fdn/{num}/card_impl.py` templates, the old directory was deleted.
+- **Decision**: Deleted `cards/foundations/` entirely. Moved the monolithic source files to `cards/fdn/_legacy/` for reference. All imports updated to use `cards.fdn.*` paths.
+- **Reasoning**: Keeping stale compatibility shims adds maintenance burden and confusion. Clean break after verified migration.
+- **Impact**: `cards/foundations/` no longer exists. All imports use `cards.fdn.{num}.card_impl` or `cards.fdn._legacy.*` for shared helpers.
 
 ## FDN per-card layout conventions
 - **Context**: Need consistent directory naming for per-card layout.

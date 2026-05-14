@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/auras_batch2.py — Batch 2 aura cards.
+"""Tests for cards/fdn/_legacy/auras_batch2.py — Batch 2 aura cards.
 
 Verifies:
 - Each aura has correct metadata (name, mana_cost, card_types, subtypes, is_aura).
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.auras_batch2 import (
+from cards.fdn._legacy.auras_batch2 import (
     AngelicDestiny,
     BlanchwoodArmor,
     Confiscate,

@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/equipment.py — Equipment cards.
+"""Tests for cards/fdn/_legacy/equipment.py — Equipment cards.
 
 Verifies:
 - Each equipment has correct metadata (name, mana_cost, card_types, subtypes).
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.equipment import (
+from cards.fdn._legacy.equipment import (
     AdventuringGear,
     BasiliskCollar,
     CelestialArmor,

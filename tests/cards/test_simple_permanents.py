@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/simple_permanents.py — Simple enchantments and artifacts.
+"""Tests for cards/fdn/_legacy/simple_permanents.py — Simple enchantments and artifacts.
 
 All 5 permanents are from the MTG Foundations (FDN) set with Scryfall-verified data.
 
@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.simple_permanents import (
+from cards.fdn._legacy.simple_permanents import (
     GoblinOriflamme,
     HedronArchive,
     Pacifism,

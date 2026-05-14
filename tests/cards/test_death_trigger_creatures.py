@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/death_trigger_creatures.py — Batch 8 death-trigger creatures.
+"""Tests for cards/fdn/_legacy/death_trigger_creatures.py — Batch 8 death-trigger creatures.
 
 All 17 creatures are from the MTG Foundations (FDN) set.
 
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.death_trigger_creatures import (
+from cards.fdn._legacy.death_trigger_creatures import (
     CrosswayTroublemakers,
     CrowOfDarkTidings,
     DriverOfTheDead,

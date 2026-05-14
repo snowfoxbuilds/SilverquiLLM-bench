@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/special_guests.py — SPG Batch 1.
+"""Tests for cards/fdn/_legacy/special_guests.py — SPG Batch 1.
 
 Verifies 5 Special Guest cards:
 - Condemn: attacking creature → bottom of library, controller gains life = toughness
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.special_guests import (
+from cards.fdn._legacy.special_guests import (
     BloomTender,
     Condemn,
     GoblinBushwhacker,

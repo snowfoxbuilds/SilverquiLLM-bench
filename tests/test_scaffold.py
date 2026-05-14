@@ -3,7 +3,7 @@
 These tests confirm:
 - pyproject.toml metadata (project name, license, Python version, dependencies)
 - Package directory structure with __init__.py files
-- Importability of engine, cards, and cards.foundations packages
+- Importability of engine, cards, and cards.fdn packages
 - py.typed PEP 561 marker exists
 - ruff.toml configuration (line-length, target-version)
 """
@@ -85,7 +85,7 @@ class TestDirectoryStructure:
         [
             "engine",
             "cards",
-            "cards/foundations",
+            "cards/fdn",
             "tests",
             "tests/engine",
             "tests/cards",
@@ -93,7 +93,7 @@ class TestDirectoryStructure:
         ids=[
             "engine",
             "cards",
-            "cards/foundations",
+            "cards/fdn",
             "tests",
             "tests/engine",
             "tests/cards",
@@ -120,9 +120,9 @@ class TestPackageImportability:
         mod = importlib.import_module("cards")
         assert mod is not None
 
-    def test_import_cards_foundations(self) -> None:
-        """The 'cards.foundations' subpackage must be importable."""
-        mod = importlib.import_module("cards.foundations")
+    def test_import_cards_fdn(self) -> None:
+        """The 'cards.fdn' subpackage must be importable."""
+        mod = importlib.import_module("cards.fdn")
         assert mod is not None
 
 

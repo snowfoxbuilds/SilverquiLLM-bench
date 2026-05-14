@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/lands.py — Non-basic FDN land implementations.
+"""Tests for cards/fdn/_legacy/lands.py — Non-basic FDN land implementations.
 
 Verifies:
 - Each gain land subclasses Land and GainLand (and TapLand).
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.lands import (
+from cards.fdn._legacy.lands import (
     BloodfellCaves,
     BlossomingSands,
     DismalBackwater,

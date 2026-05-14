@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.enchantments import (
+from cards.fdn._legacy.enchantments import (
     Arrest,
     BraveTheSands,
     DictateOfHeliod,
@@ -27,7 +27,7 @@ from cards.foundations.enchantments import (
     UnholyStrength,
     register_enchantments,
 )
-from cards.foundations.artifacts import (
+from cards.fdn._legacy.artifacts import (
     AltarOfTheBrood,
     ArcaneSigNet,
     Bonesplitter,
@@ -40,14 +40,14 @@ from cards.foundations.artifacts import (
     WhispersilkCloak,
     register_artifacts,
 )
-from cards.foundations.planeswalkers import (
+from cards.fdn._legacy.planeswalkers import (
     AjaniCallerOfThePride,
     ChandraTorchOfDefiance,
     LilianaDreadhordeGeneral,
     NissaWorldwaker,
     register_planeswalkers,
 )
-from cards.foundations.modal_spells import (
+from cards.fdn._legacy.modal_spells import (
     AbzanCharm,
     AustereCommand,
     BorosCharm,

@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/planeswalkers_batch2.py — Batch 2 planeswalker cards.
+"""Tests for cards/fdn/_legacy/planeswalkers_batch2.py — Batch 2 planeswalker cards.
 
 Verifies:
 - Each planeswalker has correct name, mana_cost, starting_loyalty, card_types.
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.planeswalkers_batch2 import (
+from cards.fdn._legacy.planeswalkers_batch2 import (
     ChandraFlameshaper,
     KaitoCunningInfiltrator,
     VivienReid,

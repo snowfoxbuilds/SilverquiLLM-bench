@@ -218,7 +218,7 @@ def test_smoke_pi_blind(tmp_path):
 
   Testability: `pytest -m integration tests/test_smoke_integration.py` passes on a machine with Docker and model server at 192.168.86.22. The lightweight lifecycle test passes anywhere with Docker.
 
-- [ ] **Delete ****`cards/foundations/`****, remove FDN compat shims, fix tests**
+- [x] **Delete ****`cards/foundations/`****, remove FDN compat shims, fix tests**
   Detail: Final cleanup after migration is verified.
 
   Steps:

@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/activated_creatures.py — Batch 9 activated-ability creatures.
+"""Tests for cards/fdn/_legacy/activated_creatures.py — Batch 9 activated-ability creatures.
 
 All 19 creatures are from the MTG Foundations (FDN) set.
 
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.activated_creatures import (
+from cards.fdn._legacy.activated_creatures import (
     AxgardCavalry,
     BurnishedHart,
     CatharCommando,

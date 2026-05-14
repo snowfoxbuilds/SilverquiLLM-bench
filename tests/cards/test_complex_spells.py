@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/complex_spells.py — Modal, X-cost, and kicker spells.
+"""Tests for cards/fdn/_legacy/complex_spells.py — Modal, X-cost, and kicker spells.
 
 Verifies:
 - Each card's metadata (name, mana_cost, card_types, power/toughness for creatures).
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.complex_spells import (
+from cards.fdn._legacy.complex_spells import (
     Abrade,
     ApothecaryStomper,
     Bushwhack,

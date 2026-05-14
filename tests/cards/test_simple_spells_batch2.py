@@ -1,4 +1,4 @@
-"""Tests for cards/foundations/simple_spells_batch2.py — Batch 2 non-targeted spells.
+"""Tests for cards/fdn/_legacy/simple_spells_batch2.py — Batch 2 non-targeted spells.
 
 All 15 spells are from the MTG Foundations (FDN) set with Scryfall-verified data.
 
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from cards.foundations.simple_spells_batch2 import (
+from cards.fdn._legacy.simple_spells_batch2 import (
     AntiquitiesOnTheLoose,
     EmbraceTheParadox,
     FractalAnomaly,
