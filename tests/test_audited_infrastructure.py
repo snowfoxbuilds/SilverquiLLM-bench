@@ -107,14 +107,14 @@ class TestDirectoryStructure:
     def test_sos_has_conftest(self) -> None:
         assert (_PROJECT_ROOT / "tests" / "audited" / "sos" / "conftest.py").is_file()
 
-    def test_fdn_001_directory_exists(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "001").is_dir()
+    def test_fdn_272_directory_exists(self) -> None:
+        assert (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "fdn_272").is_dir()
 
-    def test_fdn_001_has_tests_py(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "001" / "tests.py").is_file()
+    def test_fdn_272_has_tests_py(self) -> None:
+        assert (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").is_file()
 
-    def test_fdn_001_has_init(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "001" / "__init__.py").is_file()
+    def test_fdn_272_has_init(self) -> None:
+        assert (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "fdn_272" / "__init__.py").is_file()
 
 
 class TestPyprojectConfig:
@@ -395,19 +395,19 @@ class TestSOSConftestBehavior:
 
 
 class TestSamplePlainsTest:
-    """Verify the sample Plains test under tests/audited/fdn/001/tests.py."""
+    """Verify the sample Plains test under tests/audited/fdn/fdn_272/tests.py."""
 
     def test_plains_tests_file_imports_from_card_impl(self) -> None:
-        tests_content = (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "001" / "tests.py").read_text()
+        tests_content = (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").read_text()
         assert "from card_impl import Plains" in tests_content
 
     def test_plains_tests_file_has_test_class(self) -> None:
-        tests_content = (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "001" / "tests.py").read_text()
+        tests_content = (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").read_text()
         assert "class Test" in tests_content
 
     def test_plains_tests_file_has_category_markers(self) -> None:
         """Sample audited test should use pytest.mark category markers."""
-        tests_content = (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "001" / "tests.py").read_text()
+        tests_content = (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").read_text()
         assert "pytest.mark" in tests_content, (
             "Sample audited test should use pytest.mark category markers "
             "(@pytest.mark.basic, etc.) as per audited-test conventions"
@@ -422,7 +422,7 @@ class TestWrongCardIsolation:
     """
 
     def test_fdn_wrong_class_import_raises_attributeerror(self) -> None:
-        """Requesting 'Island' from collector dir '001' (Plains) must raise AttributeError.
+        """Requesting 'Island' from collector dir 'fdn_272' (Plains) must raise AttributeError.
 
         The error message must clearly state what collector directory is active
         and what card it maps to.
@@ -432,14 +432,14 @@ class TestWrongCardIsolation:
         cn_to_entry, classname_to_class = fdn._build_collector_maps(registry)
         synthetic = fdn._make_card_impl_module(cn_to_entry, classname_to_class)
 
-        # Simulate being inside collector dir 001 by monkeypatching _detect_collector_dir
+        # Simulate being inside collector dir fdn_272 by monkeypatching _detect_collector_dir
         import unittest.mock as mock
         with mock.patch.object(
-            fdn, "_detect_collector_dir", return_value="001"
+            fdn, "_detect_collector_dir", return_value="fdn_272"
         ):
             # Rebind the module's closure to use the patched function
             synthetic_patched = fdn._make_card_impl_module(cn_to_entry, classname_to_class)
-            with pytest.raises(AttributeError, match="001.*Plains.*Island"):
+            with pytest.raises(AttributeError, match="fdn_272.*Plains.*Island"):
                 synthetic_patched.__getattr__("Island")
 
     def test_fdn_wrong_class_error_mentions_isolation_rule(self) -> None:
@@ -449,7 +449,7 @@ class TestWrongCardIsolation:
         cn_to_entry, classname_to_class = fdn._build_collector_maps(registry)
 
         import unittest.mock as mock
-        with mock.patch.object(fdn, "_detect_collector_dir", return_value="001"):
+        with mock.patch.object(fdn, "_detect_collector_dir", return_value="fdn_272"):
             synthetic = fdn._make_card_impl_module(cn_to_entry, classname_to_class)
             with pytest.raises(AttributeError, match="only import its own card"):
                 synthetic.__getattr__("Mountain")
@@ -468,10 +468,10 @@ class TestWrongCardIsolation:
 
 
 class TestFDNCollectorOverrideResolution:
-    """Verify FDN 001 resolves via collector mapping despite missing registry metadata.
+    """Verify FDN Plains resolves via collector mapping despite missing registry metadata.
 
     Plains has an empty collector_number in registry metadata.  The conftest
-    must use _COLLECTOR_DIR_OVERRIDES to map '001' → Plains.
+    must use _COLLECTOR_DIR_OVERRIDES to map 'fdn_272' → Plains.
     """
 
     def test_plains_registry_has_empty_collector_number(self) -> None:
@@ -484,37 +484,37 @@ class TestFDNCollectorOverrideResolution:
             "this test validates the override mechanism is needed"
         )
 
-    def test_001_resolves_to_plains_via_override(self) -> None:
-        """Collector dir '001' must resolve to Plains via _COLLECTOR_DIR_OVERRIDES."""
+    def test_fdn_272_resolves_to_plains_via_override(self) -> None:
+        """Collector dir 'fdn_272' must resolve to Plains via _COLLECTOR_DIR_OVERRIDES."""
         fdn = _load_fdn_conftest_module()
         registry = fdn._build_registry()
         cn_to_entry, _classname_to_class = fdn._build_collector_maps(registry)
-        assert "001" in cn_to_entry, (
-            "Collector dir '001' must be in cn_to_entry despite empty "
+        assert "fdn_272" in cn_to_entry, (
+            "Collector dir 'fdn_272' must be in cn_to_entry despite empty "
             "registry collector_number — _COLLECTOR_DIR_OVERRIDES should provide it"
         )
-        impl_class, card_name = cn_to_entry["001"]
+        impl_class, card_name = cn_to_entry["fdn_272"]
         assert card_name == "Plains"
         assert impl_class.__name__ == "Plains"
 
-    def test_001_synthetic_module_resolves_plains_class(self) -> None:
-        """Synthetic card_impl for dir '001' must return the Plains class."""
+    def test_fdn_272_synthetic_module_resolves_plains_class(self) -> None:
+        """Synthetic card_impl for dir 'fdn_272' must return the Plains class."""
         fdn = _load_fdn_conftest_module()
         registry = fdn._build_registry()
         cn_to_entry, classname_to_class = fdn._build_collector_maps(registry)
 
         import unittest.mock as mock
-        with mock.patch.object(fdn, "_detect_collector_dir", return_value="001"):
+        with mock.patch.object(fdn, "_detect_collector_dir", return_value="fdn_272"):
             synthetic = fdn._make_card_impl_module(cn_to_entry, classname_to_class)
             plains_cls = synthetic.__getattr__("Plains")
             assert plains_cls.__name__ == "Plains"
 
     def test_all_basic_lands_have_overrides(self) -> None:
-        """All five basic lands (001-005) must have override entries."""
+        """All five basic lands must have override entries keyed by cards/fdn dir name."""
         fdn = _load_fdn_conftest_module()
         overrides = fdn._COLLECTOR_DIR_OVERRIDES
-        expected = {"001": "Plains", "002": "Island", "003": "Swamp",
-                    "004": "Mountain", "005": "Forest"}
+        expected = {"fdn_272": "Plains", "fdn_274": "Island", "fdn_276": "Swamp",
+                    "fdn_278": "Mountain", "fdn_280": "Forest"}
         for cn, name in expected.items():
             assert cn in overrides, f"Override missing for {cn} ({name})"
             assert overrides[cn] == name
@@ -566,8 +566,8 @@ class TestSOSSetPrefixedResolution:
         fake_mod.register_sos_stubs = register_sos_stubs
         return fake_mod
 
-    def test_soa_prefix_maps_distinctly_from_plain_cn(self) -> None:
-        """'soa_1' and '1' must map to different cards (SOA vs SOS base)."""
+    def test_soa_prefix_maps_distinctly_from_sos_prefix(self) -> None:
+        """'soa_1' and 'sos_1' must map to different cards (SOA vs SOS base)."""
         sos = _load_sos_conftest_module()
         fake_stubs = self._make_fake_sos_stubs_module()
 
@@ -576,14 +576,14 @@ class TestSOSSetPrefixedResolution:
             sys.modules["cards.stubs.sos_stubs"] = fake_stubs
             cn_to_entry, _classname_to_class = sos._load_sos_stubs_and_build_registry()
 
-            assert "1" in cn_to_entry, "Plain cn '1' must map to SOS base card"
+            assert "sos_1" in cn_to_entry, "Set-prefixed 'sos_1' must map to SOS base card"
             assert "soa_1" in cn_to_entry, "Set-prefixed 'soa_1' must map to SOA card"
 
-            sos_class, sos_name = cn_to_entry["1"]
+            sos_class, sos_name = cn_to_entry["sos_1"]
             soa_class, soa_name = cn_to_entry["soa_1"]
             # They must resolve to different classes
             assert soa_class is not sos_class, (
-                "soa_1 and plain 1 must map to different classes"
+                "soa_1 and sos_1 must map to different classes"
             )
         finally:
             if original_stubs is not None:
@@ -610,8 +610,8 @@ class TestSOSSetPrefixedResolution:
             else:
                 sys.modules.pop("cards.stubs.sos_stubs", None)
 
-    def test_sos_base_card_has_no_set_prefix(self) -> None:
-        """SOS base set cards (set_code='sos') must NOT get a set prefix."""
+    def test_sos_base_card_uses_set_prefix(self) -> None:
+        """SOS base set cards (set_code='sos') must use the 'sos_N' prefixed form."""
         sos = _load_sos_conftest_module()
         fake_stubs = self._make_fake_sos_stubs_module()
 
@@ -620,9 +620,13 @@ class TestSOSSetPrefixedResolution:
             sys.modules["cards.stubs.sos_stubs"] = fake_stubs
             cn_to_entry, _classname_to_class = sos._load_sos_stubs_and_build_registry()
 
-            # sos_1 should NOT exist — SOS base cards use plain numeric dirs
-            assert "sos_1" not in cn_to_entry, (
-                "SOS base cards must use plain numeric dirs, not 'sos_1'"
+            # sos_1 must exist — SOS base cards use set-prefixed dirs to match cards/sos/
+            assert "sos_1" in cn_to_entry, (
+                "SOS base cards must use set-prefixed dirs (e.g. 'sos_1')"
+            )
+            # Plain numeric '1' must NOT exist — directories now mirror cards/sos/sos_N
+            assert "1" not in cn_to_entry, (
+                "Plain numeric '1' must not exist — base SOS cards use sos_N format"
             )
         finally:
             if original_stubs is not None:

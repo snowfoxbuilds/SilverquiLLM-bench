@@ -5,12 +5,13 @@ Provides automatic ``card_impl`` module injection so that tests can write::
     from card_impl import Plains
 
 The conftest detects the current card under test from the test file's parent
-collector-number directory (e.g. ``tests/audited/fdn/001/tests.py`` → ``001``),
+collector-number directory (e.g. ``tests/audited/fdn/fdn_1/tests.py`` → ``fdn_1``),
 looks up the card for that collector directory via the FDN registry, and
 exposes the correct implementation class under its class name.
 
-Basic lands (001–005) are mapped via ``_COLLECTOR_DIR_OVERRIDES`` since their
-registry entries have an empty ``collector_number``.
+Basic lands (fdn_272, fdn_274, fdn_276, fdn_278, fdn_280) are mapped via
+``_COLLECTOR_DIR_OVERRIDES`` since their registry entries have an empty
+``collector_number``.
 
 When the evaluator provides an explicit ``card_impl.py``, the conftest
 detects it and does NOT override.
@@ -30,13 +31,14 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _FDN_CARDS_DIR = _PROJECT_ROOT / "cards" / "fdn"
 
 # Maps collector-directory names to card names for cards whose registry
-# metadata has an empty collector_number (basic lands).
+# metadata has an empty collector_number (basic lands).  The directory
+# names mirror the corresponding cards/fdn/ subdirectories.
 _COLLECTOR_DIR_OVERRIDES: dict[str, str] = {
-    "001": "Plains",
-    "002": "Island",
-    "003": "Swamp",
-    "004": "Mountain",
-    "005": "Forest",
+    "fdn_272": "Plains",
+    "fdn_274": "Island",
+    "fdn_276": "Swamp",
+    "fdn_278": "Mountain",
+    "fdn_280": "Forest",
 }
 
 
@@ -156,12 +158,8 @@ def _build_collector_maps(registry) -> tuple[dict, dict]:
         classname_to_class[impl_class.__name__] = impl_class
         if meta.collector_number:
             cn = meta.collector_number
-            set_code = (meta.set_code or "").lower()
-            if set_code == "fdn" or not set_code:
-                cn_to_entry[cn] = (impl_class, card_name)
-            if set_code and set_code != "fdn":
-                prefixed = f"{set_code}_{cn}"
-                cn_to_entry[prefixed] = (impl_class, card_name)
+            set_code = (meta.set_code or "fdn").lower()
+            cn_to_entry[f"{set_code}_{cn}"] = (impl_class, card_name)
 
     # Apply overrides for basic lands (which have empty collector_number).
     for dir_key, name in _COLLECTOR_DIR_OVERRIDES.items():
@@ -176,8 +174,8 @@ def _detect_collector_dir() -> str | None:
     """Inspect the call stack to find the collector-number directory.
 
     When ``from card_impl import ClassName`` is executed from a test file like
-    ``tests/audited/fdn/001/tests.py``, the importing file's parent directory
-    name (``001``) is the collector-number directory.
+    ``tests/audited/fdn/fdn_1/tests.py``, the importing file's parent directory
+    name (``fdn_1``) is the collector-number directory.
     """
     for frame_info in inspect.stack():
         caller_file = frame_info.filename

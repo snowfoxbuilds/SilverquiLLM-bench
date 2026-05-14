@@ -5,7 +5,7 @@ Provides automatic ``card_impl`` module injection so that tests can write::
     from card_impl import SomeSOSCard
 
 The conftest detects the current card under test from the test file's parent
-collector-number directory (e.g. ``tests/audited/sos/042/tests.py`` → ``042``),
+collector-number directory (e.g. ``tests/audited/sos/sos_42/tests.py`` → ``sos_42``),
 imports ``cards.stubs.sos_stubs``, calls ``register_sos_stubs(registry)``,
 finds the card for the current collector directory, and exposes the correct
 implementation class under its class name.
@@ -102,15 +102,10 @@ def _load_sos_stubs_and_build_registry() -> tuple:
         classname_to_class[impl_class.__name__] = impl_class
         if meta.collector_number:
             cn = meta.collector_number
-            set_code = (meta.set_code or "").lower()
-            # Only base SOS cards get plain numeric keys to avoid
-            # SOA/SPG collector numbers overwriting SOS mappings.
-            if set_code == "sos" or not set_code:
-                cn_to_entry[cn] = (impl_class, card_name)
-            # SOA/SPG cards get only set-prefixed keys (e.g. "soa_1", "spg_149")
-            if set_code and set_code != "sos":
-                prefixed = f"{set_code}_{cn}"
-                cn_to_entry[prefixed] = (impl_class, card_name)
+            set_code = (meta.set_code or "sos").lower()
+            # All cards get set-prefixed keys (e.g. "sos_1", "soa_1", "spg_149")
+            # so that collector-number collisions across subsets don't overwrite.
+            cn_to_entry[f"{set_code}_{cn}"] = (impl_class, card_name)
 
     return cn_to_entry, classname_to_class
 
@@ -119,11 +114,11 @@ def _detect_collector_dir() -> str | None:
     """Inspect the call stack to find the collector-number directory.
 
     When ``from card_impl import ClassName`` is executed from a test file like
-    ``tests/audited/sos/042/tests.py``, the importing file's parent directory
-    name (``042``) is the collector-number directory.
+    ``tests/audited/sos/sos_42/tests.py``, the importing file's parent directory
+    name (``sos_42``) is the collector-number directory.
 
-    For SOS subsets, directories use a set-prefix format like ``soa_1`` or
-    ``spg_149`` to distinguish collector numbers that collide across sets.
+    Directories use a set-prefix format (``sos_N``, ``soa_N``, ``spg_N``) to
+    distinguish collector numbers that collide across subsets.
 
     Returns the directory name or ``None`` if detection fails.
     """
