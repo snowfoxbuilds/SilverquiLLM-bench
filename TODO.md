@@ -199,7 +199,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test ETB discard effects, graveyard recursion targeting, Treasure token creation, attack trigger firing, zone transitions via `move_to_zone()`.
 
-- [ ] **Implement Green + Multicolor reprints (24 cards)**
+- [x] **Implement Green + Multicolor reprints (24 cards)**
   Detail: 12 green + 12 multicolor reprint cards.
 
   Green (12): #211 Affectionate Indrik, #212 Bite Down, #216 Doubling Season, #217 Dwynen Gilt-Leaf Daen, #218 Dwynen's Elite, #221 Genesis Wave, #222 Ghalta Primal Hunger, #225 Grow from the Ashes, #226 Inspiring Call, #229 Nessian Hornbeetle, #230 Overrun, #236 Wildwood Scourge.

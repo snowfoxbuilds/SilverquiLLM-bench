@@ -232,3 +232,30 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 `cards/fdn/fdn_205/card_impl.py` - Seismic Rupture: deals 2 damage to each creature without flying 
 - `cards/fdn/fdn_208/card_impl.py` — Spitfire Lagac: landfall trigger dealing 1 to each opponent
 - `cards/fdn/fdn_210/card_impl.py` — Thrill of Possibility: instant drawing 2 cards (discard cost assumed paid during casting)
+
+## Item 14: Green + Multicolor reprints (24 cards)
+
+### Implementation
+- `cards/fdn/fdn_211/card_impl.py` — Affectionate Indrik: ETB fight target creature you don't control
+- `cards/fdn/fdn_216/card_impl.py` — Doubling Season: replacement effects for token and counter doubling
+- `cards/fdn/fdn_217/card_impl.py` — Dwynen, Gilt-Leaf Daen: Elf lord +1/+1 and attack life-gain trigger
+- `cards/fdn/fdn_218/card_impl.py` — Dwynen's Elite: ETB create 1/1 Elf Warrior token if you control another Elf
+- `cards/fdn/fdn_221/card_impl.py` — Genesis Wave: reveal top X, put permanents with MV<=X onto battlefield
+- `cards/fdn/fdn_222/card_impl.py` — Ghalta, Primal Hunger: cost reduction by total power of creatures controlled
+- `cards/fdn/fdn_225/card_impl.py` — Grow from the Ashes: search for basic land(s) with kicker, shuffle library
+- `cards/fdn/fdn_226/card_impl.py` — Inspiring Call: draw per +1/+1 counter creature, grant indestructible
+- `cards/fdn/fdn_229/card_impl.py` — Nessian Hornbeetle: beginning of combat +1/+1 if you control 4+ power creature
+- `cards/fdn/fdn_230/card_impl.py` — Overrun: +3/+3 and trample until end of turn continuous effects
+- `cards/fdn/fdn_236/card_impl.py` — Wildwood Scourge: enters with X +1/+1 counters, counter synergy marker
+- `cards/fdn/fdn_237/card_impl.py` — Balmor, Battlemage Captain: spell-cast trigger for +1/+0 and trample
+- `cards/fdn/fdn_238/card_impl.py` — Consuming Aberration: CDA P/T and spell-cast mill trigger
+- `cards/fdn/fdn_239/card_impl.py` — Empyrean Eagle: flying lord +1/+1 continuous effect
+- `cards/fdn/fdn_240/card_impl.py` — Good-Fortune Unicorn: ETB +1/+1 counter on other creatures entering
+- `cards/fdn/fdn_241/card_impl.py` — Heroic Reinforcements: create 2 Soldier tokens, +1/+1 and haste
+- `cards/fdn/fdn_242/card_impl.py` — Lathril, Blade of the Elves: combat damage token creation and tap-10-elves ability
+- `cards/fdn/fdn_243/card_impl.py` — Muldrotha, the Gravetide: graveyard casting marker (engine limitation)
+- `cards/fdn/fdn_244/card_impl.py` — Progenitus: protection from everything and graveyard replacement effect
+- `cards/fdn/fdn_245/card_impl.py` — Ruby, Daring Tracker: added attack trigger for +2/+2 with 4+ power creature
+- `cards/fdn/fdn_246/card_impl.py` — Swiftblade Vindicator: fixed subtypes from Warrior to Soldier
+- `cards/fdn/fdn_247/card_impl.py` — Tatyova, Benthic Druid: landfall trigger for life gain and card draw
+- `cards/fdn/fdn_248/card_impl.py` — Thousand-Year Storm: spell-cast copy trigger tracking storm count

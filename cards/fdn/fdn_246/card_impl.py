@@ -12,5 +12,5 @@ if TYPE_CHECKING:
 SwiftbladeVindicator = make_vanilla(
     "Swiftblade Vindicator", "{R}{W}", 1, 1,
     keywords=Keyword.DOUBLE_STRIKE | Keyword.VIGILANCE | Keyword.TRAMPLE,
-    creature_types={"Human", "Warrior"},
+    creature_types={"Human", "Soldier"},
 )

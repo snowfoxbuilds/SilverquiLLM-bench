@@ -479,3 +479,18 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Context**: Etali, Primal Storm casts exiled cards without paying mana costs.
 - **Decision**: Permanents: `move_to_zone(exile, battlefield)`. Instants/sorceries: call `on_resolve()` then `move_to_zone(exile, graveyard)` — they don't go to battlefield.
 - **Impact**: Any "cast without paying" effect for non-permanents.
+
+## Protection persistence: override _reset_characteristics()
+- **Context**: Progenitus has "protection from everything" which must survive characteristic resets.
+- **Decision**: Override `_reset_characteristics()` to reapply protection after engine resets.
+- **Impact**: Any permanent with innate protection that must persist through layer resets.
+
+## Graveyard replacement events: multiple event types
+- **Context**: Progenitus shuffles into library instead of going to graveyard.
+- **Decision**: Register replacement for `"creature_dies"`, `"sacrifice"`, and `"move_to_graveyard"` since the engine's zone-move pipeline uses all three.
+- **Impact**: Any card with graveyard replacement effects.
+
+## Muldrotha: per-turn type tracking for graveyard casting
+- **Context**: Muldrotha allows casting one permanent of each type from graveyard per turn.
+- **Decision**: Track used types in `_gy_types_used_this_turn` dict, reset on upkeep. ENGINE LIMITATION: alternative casting zones not fully supported yet.
+- **Impact**: Future graveyard-casting cards.

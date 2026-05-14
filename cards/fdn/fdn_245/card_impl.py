@@ -1,14 +1,21 @@
 """Card implementation for Ruby, Daring Tracker."""
 
 from __future__ import annotations
-import random
+
 from typing import TYPE_CHECKING, Any
-from engine.card import ActivatedAbility, ArtifactCreature, Creature, ManaAbility
-from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
+
+from engine.card import Creature, ManaAbility
+from engine.continuous_effects import (
+    ContinuousEffect,
+    DURATION_END_OF_TURN,
+    Layer,
+    SubLayer,
+)
+from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
-    from cards.registry import CardRegistry
 
 def _tap_cost(game: Any, source: Any) -> bool:
     """Generic tap-cost: check untapped, then tap."""
@@ -16,6 +23,7 @@ def _tap_cost(game: Any, source: Any) -> bool:
         return False
     source.is_tapped = True
     return True
+
 
 class RubyDaringTracker(Creature):
     """Ruby, Daring Tracker — {R}{G} — 1/2 — Human Scout
@@ -44,7 +52,48 @@ class RubyDaringTracker(Creature):
         )
         super().__init__(**kwargs)
 
-    # ENGINE LIMITATION: attack trigger (+2/+2 when attacking with 4+ power creature) not implemented — requires attack event tracking
+    def register_triggers(self, game: "GameState") -> None:
+        """Register attack trigger for +2/+2 buff."""
+        from engine.triggers import EventType, TriggerRegistration
+
+        source = self
+        controller = getattr(self, "controller", None) or game.active_player
+
+        def _condition(game: Any, data: dict) -> bool:
+            if data.get("creature") is not source:
+                return False
+            ctrl = getattr(source, "controller", None)
+            if ctrl is None:
+                return False
+            bf = game.get_battlefield(ctrl)
+            for obj in bf.get_all():
+                if CardType.CREATURE not in getattr(obj, "card_types", set()):
+                    continue
+                power = getattr(obj, "power", getattr(obj, "base_power", 0))
+                if power >= 4:
+                    return True
+            return False
+
+        def _effect(game: "GameState") -> None:
+            def _apply_buff(game: Any) -> None:
+                source.base_power += 2
+                source.base_toughness += 2
+
+            game.effect_manager.add(ContinuousEffect(
+                source=source,
+                layer=Layer.POWER_TOUGHNESS,
+                sublayer=SubLayer.MODIFY_PT,
+                apply=_apply_buff,
+                duration=DURATION_END_OF_TURN,
+            ))
+
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=EventType.ATTACKS,
+            condition=_condition,
+            effect=_effect,
+            source=self,
+            controller=controller,
+        ))
 
     def get_mana_abilities(self) -> list[ManaAbility]:
         source = self
