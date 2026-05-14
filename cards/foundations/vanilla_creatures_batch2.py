@@ -53,20 +53,9 @@ Gigantosaurus = make_vanilla(
     creature_types={"Dinosaur"},
 )
 
-QuakestriderCeratops = make_vanilla(
-    "Quakestrider Ceratops", "{3}{G}{G}{G}", 12, 8,
-    creature_types={"Dinosaur"},
-)
-
 # ---------------------------------------------------------------------------
 # Blue — French vanilla
 # ---------------------------------------------------------------------------
-
-ElementalistAdept = make_vanilla(
-    "Elementalist Adept", "{1}{U}", 2, 1,
-    keywords=Keyword.FLASH,
-    creature_types={"Human", "Wizard"},
-)
 
 # ---------------------------------------------------------------------------
 # Red — French vanilla
@@ -82,12 +71,6 @@ SkryakerGiant = make_vanilla(
 # ---------------------------------------------------------------------------
 # Multicolor — French vanilla
 # ---------------------------------------------------------------------------
-
-SwiftbladeVindicator = make_vanilla(
-    "Swiftblade Vindicator", "{R}{W}", 1, 1,
-    keywords=Keyword.DOUBLE_STRIKE | Keyword.VIGILANCE | Keyword.TRAMPLE,
-    creature_types={"Human", "Warrior"},
-)
 
 ZetalpaPrimalDawn = make_vanilla(
     "Zetalpa, Primal Dawn", "{6}{W}{W}", 4, 8,

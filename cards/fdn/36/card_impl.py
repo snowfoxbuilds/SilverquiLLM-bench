@@ -1,14 +1,15 @@
 """Card implementation for Elementalist Adept."""
 
 from __future__ import annotations
-
 from typing import TYPE_CHECKING
-
+from cards.foundations.simple_creatures import make_vanilla
+from engine.card import Creature
+from engine.types import Keyword
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from cards.registry import CardRegistry
 
-
-class ElementalistAdept(CardImpl):
-    """TODO: Implement Elementalist Adept."""
-
-    pass
+ElementalistAdept = make_vanilla(
+    "Elementalist Adept", "{1}{U}", 2, 1,
+    keywords=Keyword.FLASH,
+    creature_types={"Human", "Wizard"},
+)

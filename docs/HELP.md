@@ -8,6 +8,7 @@ pip install -e ".[dev]"
 
 pytest --ignore=tests/audited/sos/
 pytest --ignore=tests/audited/
+pytest tests/audited/
 
 # Docker
 docker build -t silverquillm-local-pi-blind:latest docker/local-pi-blind/

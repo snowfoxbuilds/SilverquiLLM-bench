@@ -93,16 +93,6 @@ def make_vanilla(
 
 # --- Vanilla creatures (no abilities) ---
 
-AegisTurtle = make_vanilla(
-    "Aegis Turtle", "{U}", 0, 5,
-    creature_types={"Turtle"},
-)
-
-SavannahLions = make_vanilla(
-    "Savannah Lions", "{W}", 2, 1,
-    creature_types={"Cat"},
-)
-
 BearCub = make_vanilla(
     "Bear Cub", "{1}{G}", 2, 2,
     creature_types={"Bear"},
@@ -119,12 +109,6 @@ HighbornVampire = make_vanilla(
 )
 
 # --- French vanilla creatures (keywords only) ---
-
-HealersHawk = make_vanilla(
-    "Healer's Hawk", "{W}", 1, 1,
-    keywords=Keyword.FLYING | Keyword.LIFELINK,
-    creature_types={"Bird"},
-)
 
 BishopsSoldier = make_vanilla(
     "Bishop's Soldier", "{1}{W}", 2, 2,
@@ -150,28 +134,10 @@ RagingRedcap = make_vanilla(
     creature_types={"Goblin", "Knight"},
 )
 
-BrazenScourge = make_vanilla(
-    "Brazen Scourge", "{1}{R}{R}", 3, 3,
-    keywords=Keyword.HASTE,
-    creature_types={"Gremlin"},
-)
-
-VampireNighthawk = make_vanilla(
-    "Vampire Nighthawk", "{1}{B}{B}", 2, 3,
-    keywords=Keyword.FLYING | Keyword.DEATHTOUCH | Keyword.LIFELINK,
-    creature_types={"Vampire", "Shaman"},
-)
-
 MagnigothSentry = make_vanilla(
     "Magnigoth Sentry", "{3}{G}", 4, 4,
     keywords=Keyword.REACH,
     creature_types={"Treefolk"},
-)
-
-SerraAngel = make_vanilla(
-    "Serra Angel", "{3}{W}{W}", 4, 4,
-    keywords=Keyword.FLYING | Keyword.VIGILANCE,
-    creature_types={"Angel"},
 )
 
 TajuruPathwarden = make_vanilla(

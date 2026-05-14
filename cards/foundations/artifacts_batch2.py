@@ -119,43 +119,6 @@ class CarnelianOrbOfDragonkind(Artifact):
         ]
 
 
-class HeraldicBanner(Artifact):
-    """Heraldic Banner — {3} — As enters, choose a color. Creatures of that
-    color get +1/+0. {T}: Add one mana of the chosen color."""
-
-    def __init__(self, **kwargs: Any) -> None:
-        kwargs.setdefault("name", "Heraldic Banner")
-        kwargs.setdefault("mana_cost", ManaCost.parse("{3}"))
-        kwargs.setdefault(
-            "rules_text",
-            "As this artifact enters, choose a color.\n"
-            "Creatures you control of the chosen color get +1/+0.\n"
-            "{T}: Add one mana of the chosen color.",
-        )
-        super().__init__(**kwargs)
-        self.chosen_color: str | None = None
-
-    def get_mana_abilities(self) -> list[ManaAbility]:
-        source = self
-
-        def _tap_cost(game: Any, src: Any) -> bool:
-            if getattr(src, "is_tapped", False):
-                return False
-            src.is_tapped = True
-            return True
-
-        def _effect(game: Any) -> None:
-            controller = source.controller
-            if controller is not None:
-                # Simplified: add colorless (color choice not modelled)
-                controller.mana_pool.add(ManaType.COLORLESS, 1)
-
-        return [
-            ManaAbility(cost=_tap_cost, mana_produced=_effect,
-                        description="{T}: Add one mana of the chosen color."),
-        ]
-
-
 class PyromancersGoggles(Artifact):
     """Pyromancer's Goggles — {5} — Legendary — {T}: Add {R}. Copy effect."""
 
@@ -194,98 +157,6 @@ class PyromancersGoggles(Artifact):
 # ---------------------------------------------------------------------------
 # Utility artifacts
 # ---------------------------------------------------------------------------
-
-class BannerOfKinship(Artifact):
-    """Banner of Kinship — {5} — As enters, choose a creature type.
-    Enters with fellowship counters. Chosen type gets +1/+1 per counter."""
-
-    def __init__(self, **kwargs: Any) -> None:
-        kwargs.setdefault("name", "Banner of Kinship")
-        kwargs.setdefault("mana_cost", ManaCost.parse("{5}"))
-        kwargs.setdefault(
-            "rules_text",
-            "As this artifact enters, choose a creature type. This artifact enters "
-            "with a fellowship counter on it for each creature you control of the "
-            "chosen type.\nCreatures you control of the chosen type get +1/+1 for "
-            "each fellowship counter on this artifact.",
-        )
-        super().__init__(**kwargs)
-        self.chosen_type: str | None = None
-        self.fellowship_counters: int = 0
-
-
-class RavenousAmulet(Artifact):
-    """Ravenous Amulet — {2} — Sacrifice creature to draw; sac self to drain."""
-
-    def __init__(self, **kwargs: Any) -> None:
-        kwargs.setdefault("name", "Ravenous Amulet")
-        kwargs.setdefault("mana_cost", ManaCost.parse("{2}"))
-        kwargs.setdefault(
-            "rules_text",
-            "{1}, {T}, Sacrifice a creature: Draw a card and put a soul counter on "
-            "this artifact. Activate only as a sorcery.\n"
-            "{4}, {T}, Sacrifice this artifact: Each opponent loses life equal to "
-            "the number of soul counters on this artifact.",
-        )
-        super().__init__(**kwargs)
-        self.soul_counters: int = 0
-
-    def get_activated_abilities(self) -> list[ActivatedAbility]:
-        source = self
-
-        def _sac_creature_cost(game: Any, src: Any) -> bool:
-            if getattr(src, "is_tapped", False):
-                return False
-            src.is_tapped = True
-            # Sacrifice a creature as part of the cost
-            from engine.game import sacrifice
-            controller = source.controller
-            if controller is not None:
-                bf = game.get_battlefield(controller)
-                creatures = [
-                    o for o in bf.get_all()
-                    if CardType.CREATURE in getattr(o, "card_types", set())
-                ]
-                if creatures:
-                    sacrifice(game, controller, creatures[0])
-            return True
-
-        def _sac_creature_effect(game: Any) -> None:
-            from engine.game import draw_card
-            controller = source.controller
-            if controller is not None:
-                draw_card(game, controller)
-                source.soul_counters += 1
-
-        def _drain_cost(game: Any, src: Any) -> bool:
-            if getattr(src, "is_tapped", False):
-                return False
-            src.is_tapped = True
-            return True
-
-        def _drain_effect(game: Any) -> None:
-            from engine.game import sacrifice
-            controller = source.controller
-            if controller is not None:
-                # Sacrifice this artifact
-                sacrifice(game, controller, source)
-                for p in game.players:
-                    if p is not controller:
-                        p.life -= source.soul_counters
-
-        return [
-            ActivatedAbility(
-                cost=_sac_creature_cost,
-                effect=_sac_creature_effect,
-                description="{1}, {T}, Sacrifice a creature: Draw a card and put a soul counter.",
-            ),
-            ActivatedAbility(
-                cost=_drain_cost,
-                effect=_drain_effect,
-                description="{4}, {T}, Sacrifice: Each opponent loses life equal to soul counters.",
-            ),
-        ]
-
 
 class GoblinFirebomb(Artifact):
     """Goblin Firebomb — {1} — Flash. {7}, {T}, Sacrifice: Destroy target permanent."""
@@ -621,26 +492,6 @@ class WishclawTalisman(Artifact):
 # Equipment (batch 2)
 # ---------------------------------------------------------------------------
 
-class FishingPole(Artifact):
-    """Fishing Pole — {1} — Equipment with bait counter mechanics."""
-
-    def __init__(self, **kwargs: Any) -> None:
-        kwargs.setdefault("name", "Fishing Pole")
-        kwargs.setdefault("mana_cost", ManaCost.parse("{1}"))
-        kwargs.setdefault("subtypes", set())
-        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Equipment"}
-        kwargs.setdefault(
-            "rules_text",
-            "Equipped creature has \"{1}, {T}, Tap Fishing Pole: Put a bait counter "
-            "on Fishing Pole.\"\nWhenever equipped creature becomes untapped, remove "
-            "a bait counter from this Equipment. If you do, create a 1/1 blue Fish "
-            "creature token.\nEquip {2}",
-        )
-        super().__init__(**kwargs)
-        self.attached_to: Any | None = None
-        self.bait_counters: int = 0
-
-
 class PiratesCutlass(Artifact):
     """Pirate's Cutlass — {3} — Equipment. ETB attach to Pirate.
     Equipped creature gets +2/+1. Equip {2}."""
@@ -703,83 +554,6 @@ class CultivatorsCaravan(Artifact):
 # ---------------------------------------------------------------------------
 # Artifact creatures
 # ---------------------------------------------------------------------------
-
-class CrystalBarricade(ArtifactCreature):
-    """Crystal Barricade — {1}{W} — 0/4 Wall. Defender. You have hexproof.
-    Prevent all noncombat damage to other creatures you control."""
-
-    def __init__(self, **kwargs: Any) -> None:
-        kwargs.setdefault("name", "Crystal Barricade")
-        kwargs.setdefault("mana_cost", ManaCost.parse("{1}{W}"))
-        kwargs.setdefault("base_power", 0)
-        kwargs.setdefault("base_toughness", 4)
-        kwargs.setdefault("subtypes", set())
-        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Wall"}
-        kwargs.setdefault("keywords", Keyword.DEFENDER)
-        kwargs.setdefault(
-            "rules_text",
-            "Defender\nYou have hexproof.\n"
-            "Prevent all noncombat damage that would be dealt to other creatures you control.",
-        )
-        super().__init__(**kwargs)
-
-
-class ScrawlingCrawler(ArtifactCreature):
-    """Scrawling Crawler — {3} — 3/2 Phyrexian Construct.
-    Upkeep: each player draws. Opponent draws → loses 1 life."""
-
-    def __init__(self, **kwargs: Any) -> None:
-        kwargs.setdefault("name", "Scrawling Crawler")
-        kwargs.setdefault("mana_cost", ManaCost.parse("{3}"))
-        kwargs.setdefault("base_power", 3)
-        kwargs.setdefault("base_toughness", 2)
-        kwargs.setdefault("subtypes", set())
-        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Phyrexian", "Construct"}
-        kwargs.setdefault(
-            "rules_text",
-            "At the beginning of your upkeep, each player draws a card.\n"
-            "Whenever an opponent draws a card, that player loses 1 life.",
-        )
-        super().__init__(**kwargs)
-
-
-class CampusGuide(ArtifactCreature):
-    """Campus Guide — {2} — 2/1 Golem. ETB: search for basic land on top."""
-
-    def __init__(self, **kwargs: Any) -> None:
-        kwargs.setdefault("name", "Campus Guide")
-        kwargs.setdefault("mana_cost", ManaCost.parse("{2}"))
-        kwargs.setdefault("base_power", 2)
-        kwargs.setdefault("base_toughness", 1)
-        kwargs.setdefault("subtypes", set())
-        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Golem"}
-        kwargs.setdefault(
-            "rules_text",
-            "When this creature enters, you may search your library for a basic "
-            "land card, reveal it, then shuffle and put that card on top.",
-        )
-        super().__init__(**kwargs)
-
-
-class Juggernaut(ArtifactCreature):
-    """Juggernaut — {4} — 5/3. Attacks each combat if able. Can't be blocked by Walls."""
-
-    def __init__(self, **kwargs: Any) -> None:
-        kwargs.setdefault("name", "Juggernaut")
-        kwargs.setdefault("mana_cost", ManaCost.parse("{4}"))
-        kwargs.setdefault("base_power", 5)
-        kwargs.setdefault("base_toughness", 3)
-        kwargs.setdefault("subtypes", set())
-        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Juggernaut"}
-        kwargs.setdefault(
-            "rules_text",
-            "This creature attacks each combat if able.\n"
-            "This creature can't be blocked by Walls.",
-        )
-        super().__init__(**kwargs)
-        self.must_attack = True
-        self.cant_be_blocked_by_walls = True
-
 
 class DarksteelColossus(ArtifactCreature):
     """Darksteel Colossus — {11} — 11/11. Trample, Indestructible.
