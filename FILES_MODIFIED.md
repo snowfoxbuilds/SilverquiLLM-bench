@@ -185,3 +185,25 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `cards/fdn/fdn_124/card_impl.py` — Perforating Artist: Deathtouch + Raid end-step punisher (sacrifice/discard/lose 3)
 - `cards/fdn/fdn_125/card_impl.py` — Wardens of the Cycle: Morbid end-step modal (gain 2 life or draw + lose 1 life)
 - `cards/fdn/fdn_126/card_impl.py` — Zimone Paradox Sculptor: Beginning-of-combat +1/+1 counters + activated ability to double counters
+
+## Item 12: Implement White + Blue reprints (18 cards)
+
+### Implementation
+- `cards/fdn/fdn_135/card_impl.py` — Ajani's Pridemate: life-gain trigger adding +1/+1 counters
+- `cards/fdn/fdn_136/card_impl.py` — Angel of Finality: already implemented (ETB exile graveyard)
+- `cards/fdn/fdn_140/card_impl.py` — Day of Judgment: board wipe destroying all creatures
+- `cards/fdn/fdn_141/card_impl.py` — Giada Font of Hope: Angel ETB counter trigger + tap mana ability
+- `cards/fdn/fdn_144/card_impl.py` — Mischievous Pup: already implemented (Flash + ETB bounce)
+- `cards/fdn/fdn_149/card_impl.py` — Youthful Valkyrie: Angel ETB +1/+1 counter trigger
+- `cards/fdn/fdn_151/card_impl.py` — Aetherize: return all attacking creatures to hand
+- `cards/fdn/fdn_152/card_impl.py` — Brineborn Cutthroat: Flash + spell-cast-on-opponent-turn counter trigger
+- `cards/fdn/fdn_154/card_impl.py` — Extravagant Replication: upkeep token copy trigger
+- `cards/fdn/fdn_157/card_impl.py` — Lightshell Duo: Prowess + ETB surveil 2
+- `cards/fdn/fdn_158/card_impl.py` — Micromancer: ETB search library for MV 1 instant/sorcery
+- `cards/fdn/fdn_159/card_impl.py` — Mocking Sprite: Flying + cost reduction continuous effect
+- `cards/fdn/fdn_160/card_impl.py` — An Offer You Can't Refuse: counter noncreature spell + Treasure tokens
+- `cards/fdn/fdn_161/card_impl.py` — Omniscience: continuous effect for free casting
+- `cards/fdn/fdn_163/card_impl.py` — Self-Reflection: token copy of creature + flashback
+- `cards/fdn/fdn_165/card_impl.py` — Think Twice: draw card + flashback
+- `cards/fdn/fdn_166/card_impl.py` — Time Stop: end the turn (exile stack, discard to hand size)
+- `cards/fdn/fdn_167/card_impl.py` — Tolarian Terror: cost_reduction per instant/sorcery in graveyard + Ward

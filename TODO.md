@@ -169,7 +169,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test multicolor mana payment, triggered ability conditions, token creation, legendary rule interactions.
 
-- [ ] **Implement White + Blue reprints (18 cards)**
+- [x] **Implement White + Blue reprints (18 cards)**
   Detail: Well-known MTG reprints — 6 white + 12 blue. Oracle text is established; implement from `card_spec.json` directly.
 
   White (6): #135 Ajani's Pridemate, #136 Angel of Finality, #140 Day of Judgment, #141 Giada Font of Hope, #144 Mischievous Pup, #149 Youthful Valkyrie.
