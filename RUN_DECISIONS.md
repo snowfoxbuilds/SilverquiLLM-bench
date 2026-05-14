@@ -22,3 +22,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept implementer
 - **Reasoning**: The test defines the contract. The ENGINE LIMITATION is correctly documented. The oracle text cost (`{2}{W}`) can't be fully modeled with the current engine's mana payment system in this context.
 - **Impact**: `cards/fdn/fdn_24/card_impl.py` — cost remains `ManaCost(generic=3)` with ENGINE LIMITATION comment.
+
+## Disagreement: Item 6 — fdn_32 "can't be blocked" implementation
+- **Reviewer comment (strict)**: Threshold writes to custom `unblockable` attribute instead of engine's combat-restriction state. Must integrate with engine's keyword/combat system.
+- **Implementer justification**: Engine has no `Keyword.UNBLOCKABLE` in its type system. Tests explicitly assert `getattr(card, 'unblockable', False) is True`. Cannot modify tests and engine lacks formal evasion system.
+- **Coordinator decision**: accept implementer
+- **Reasoning**: ENGINE LIMITATION — no `Keyword.UNBLOCKABLE` exists in the engine's type system. The boolean attribute approach is the only viable implementation that passes the established tests.
+- **Impact**: `cards/fdn/fdn_32/card_impl.py` — custom `unblockable` attribute retained for threshold ability.

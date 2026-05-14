@@ -397,3 +397,9 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Use `cost_reduction()` hook for any card with cost reduction mechanics (Affinity, "costs {X} less", etc.). Return the integer reduction amount based on game state.
 - **Reasoning**: The engine already supports this pattern. No need for ENGINE LIMITATION.
 - **Impact**: All future cards with cost reduction mechanics.
+
+## ENGINE LIMITATION: No Keyword.UNBLOCKABLE in engine type system
+- **Context**: fdn_32 threshold grants "can't be blocked". Engine lacks `Keyword.UNBLOCKABLE`.
+- **Decision**: Use custom boolean attribute `unblockable` on the card object, applied/removed by continuous effect.
+- **Reasoning**: No formal evasion/unblockable keyword exists in the engine's type system. Combat logic would need extension to support this natively.
+- **Impact**: Any card with "can't be blocked" text must use ad-hoc attribute until engine adds native support.

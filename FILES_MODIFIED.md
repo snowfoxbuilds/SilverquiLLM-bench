@@ -70,3 +70,17 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `cards/fdn/fdn_25/card_impl.py` — Sun-Blessed Healer: 3/1 Human Cleric with Lifelink, Kicker ETB returns nonland permanent MV≤2 from graveyard
 - `cards/fdn/fdn_27/card_impl.py` — Valkyrie's Call: Enchantment with death trigger returning nontoken non-Angel creatures with +1/+1 counter and Angel flying
 - `cards/fdn/fdn_28/card_impl.py` — Vanguard Seraph: 3/3 Angel Warrior with Flying and once-per-turn life-gain surveil 1 trigger
+
+## Item 6: Implement Blue new cards — batch 1 (10 creatures)
+
+### Implementation
+- `cards/fdn/fdn_29/card_impl.py` — Arcane Epiphany: Instant with cost_reduction() for Wizard control, draws 3 cards
+- `cards/fdn/fdn_30/card_impl.py` — Archmage of Runes: 3/6 Giant Wizard with SPELL_CAST trigger drawing card on instant/sorcery (ENGINE LIMITATION for cost reduction of other spells)
+- `cards/fdn/fdn_31/card_impl.py` — Bigfin Bouncer: 3/2 Shark Pirate with ETB bounce via on_resolve() and move_to_zone()
+- `cards/fdn/fdn_32/card_impl.py` — Cephalid Inkmage: 2/2 Octopus Wizard with ETB surveil 3 and threshold unblockable ContinuousEffect
+- `cards/fdn/fdn_33/card_impl.py` — Clinquant Skymage: 1/1 Bird Wizard Flying with DRAWS_CARD trigger for +1/+1 counters
+- `cards/fdn/fdn_34/card_impl.py` — Curator of Destinies: 5/5 Sphinx Flying uncounterable with ETB Fact-or-Fiction pile split
+- `cards/fdn/fdn_35/card_impl.py` — Drake Hatcher: 1/3 Human Wizard Vigilance+Prowess with combat damage incubation counters and activated ability for Drake tokens
+- `cards/fdn/fdn_37/card_impl.py` — Erudite Wizard: 2/3 Human Wizard with second-card-drawn-each-turn +1/+1 counter trigger
+- `cards/fdn/fdn_38/card_impl.py` — Faebloom Trick: Instant creating two Faerie tokens with reflexive tap trigger
+- `cards/fdn/fdn_39/card_impl.py` — Grappling Kraken: 5/6 Kraken with landfall tap + stun counter on opponent creature

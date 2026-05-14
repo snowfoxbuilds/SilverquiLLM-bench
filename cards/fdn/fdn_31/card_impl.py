@@ -1,41 +1,18 @@
 """Card implementation for Bigfin Bouncer."""
 
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
-from engine.card import ArtifactCreature, Creature
-from engine.continuous_effects import (
-    ContinuousEffect,
-    DURATION_END_OF_TURN,
-    Layer,
-    SubLayer,
-)
-from engine.types import CardType, Keyword, ManaCost, Zone
+
+from engine.card import Creature
+from engine.types import ManaCost, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
-    from cards.registry import CardRegistry
-
-def _self_etb_condition(source: Any):
-    """Return a condition callable that matches only when *source* enters."""
-
-    def _condition(game: Any, data: dict) -> bool:
-        return data.get("permanent") is source
-
-    return _condition
-def _get_chosen_target(card: Any, game: Any) -> Any:
-    chosen = getattr(card, "chosen_targets", None)
-    if chosen:
-        return chosen[0]
-    return getattr(card, "_resolve_target", None)
-def _is_on_battlefield(game: Any, card: Any) -> bool:
-    """Check if *card* is on any player's battlefield."""
-    for player in game.players:
-        if game.get_battlefield(player).contains(card):
-            return True
-    return False
 
 class BigfinBouncer(Creature):
-    """Bigfin Bouncer — {3}{U} — 3/2 — Shark Pirate
+    """Bigfin Bouncer — {3}{U} — 3/2 — Shark Pirate.
 
     When this creature enters, return target creature an opponent controls
     to its owner's hand.
@@ -51,27 +28,51 @@ class BigfinBouncer(Creature):
         kwargs.setdefault("base_toughness", 2)
         kwargs.setdefault(
             "rules_text",
-            "When this creature enters, return target creature an opponent controls "
-            "to its owner's hand.",
+            "When this creature enters, return target creature an opponent "
+            "controls to its owner's hand.",
         )
         super().__init__(**kwargs)
 
-    def register_triggers(self, game: GameState) -> None:
-        from engine.triggers import EventType, TriggerRegistration
+    def get_targets(self, game: "GameState") -> list:
+        """Choose target creature an opponent controls to bounce."""
+        controller = self.controller
+        if controller is None:
+            return []
+        targets: list = []
+        for player in game.players:
+            if player is controller:
+                continue
+            bf = game.get_battlefield(player)
+            for obj in bf.get_all():
+                from engine.types import CardType
+                card_types = getattr(obj, "card_types", set())
+                if CardType.CREATURE in card_types:
+                    targets.append(obj)
+        if not targets:
+            return []
+        # Controller chooses one target
+        chosen = controller.choose_target(targets, "creature an opponent controls") if hasattr(controller, "choose_target") else targets[0]
+        return [chosen] if chosen else []
+
+    def on_resolve(self, game: "GameState") -> None:
+        """ETB: bounce target creature an opponent controls."""
         from engine.zones import move_to_zone
 
-        source = self
+        controller = self.controller
+        if controller is None:
+            return
 
-        def _effect(game: GameState) -> None:
-            target = _get_chosen_target(source, game)
-            if target is not None and _is_on_battlefield(game, target):
+        # Get chosen target (lazy revalidation at resolution)
+        chosen = getattr(self, "chosen_targets", None)
+        target = chosen[0] if chosen else getattr(self, "_resolve_target", None)
+        if target is None:
+            return
+
+        # Verify target is still on an opponent's battlefield
+        for player in game.players:
+            if player is controller:
+                continue
+            bf = game.get_battlefield(player)
+            if bf.contains(target):
                 move_to_zone(game, target, Zone.BATTLEFIELD, Zone.HAND)
-
-        controller = getattr(self, "controller", None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(
-            event_type=EventType.ENTERS_BATTLEFIELD,
-            condition=_self_etb_condition(self),
-            effect=_effect,
-            source=self,
-            controller=controller,
-        ))
+                return

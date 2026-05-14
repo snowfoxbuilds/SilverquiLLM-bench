@@ -91,7 +91,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test spell targeting with lazy filters, temporary buff duration, graveyard interaction.
 
-- [ ] **Implement Blue new cards — batch 1 (10 creatures)**
+- [x] **Implement Blue new cards — batch 1 (10 creatures)**
   Detail: First 10 new blue FDN cards.
 
   Cards: #29 Arcane Epiphany, #30 Archmage of Runes, #31 Bigfin Bouncer, #32 Cephalid Inkmage, #33 Clinquant Skymage, #34 Curator of Destinies, #35 Drake Hatcher, #37 Erudite Wizard, #38 Faebloom Trick, #39 Grappling Kraken.
