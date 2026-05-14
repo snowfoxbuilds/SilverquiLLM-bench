@@ -78,7 +78,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test keyword presence, P/T values, triggered ability firing, token creation, lord bonuses.
 
-- [ ] **Implement White new cards — batch 2 (10 creatures + spells)**
+- [x] **Implement White new cards — batch 2 (10 creatures + spells)**
   Detail: Remaining 10 new white cards.
 
   Cards: #6 Claws Out, #10 Divine Resilience, #13 Fleeting Flight, #18 Inspiring Paladin, #22 Raise the Past, #23 Skyknight Squire, #24 Squad Rallier, #25 Sun-Blessed Healer, #27 Valkyrie's Call, #28 Vanguard Seraph.

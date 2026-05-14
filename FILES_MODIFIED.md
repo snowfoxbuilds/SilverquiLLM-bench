@@ -56,3 +56,17 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `cards/fdn/fdn_12/card_impl.py` — Felidar Savior: Lifelink + ETB in on_resolve() puts +1/+1 counters on up to two targets (two TargetRequirements)
 - `cards/fdn/fdn_15/card_impl.py` — Hare Apparent: ETB creates Rabbit tokens equal to other Hare Apparents you control
 - `cards/fdn/fdn_17/card_impl.py` — Herald of Eternal Dawn: Flash, Flying + continuous effect for can't-lose/can't-win with cleanup in unregister_triggers()
+
+## Item 5: Implement White new cards — batch 2 (10 creatures + spells)
+
+### Implementation
+- `cards/fdn/fdn_6/card_impl.py` — Claws Out: Instant with Affinity for Cats (ENGINE LIMITATION) + creatures get +2/+2 until EOT via ContinuousEffect
+- `cards/fdn/fdn_10/card_impl.py` — Divine Resilience: Instant with Kicker, grants indestructible until EOT (all targets when kicked)
+- `cards/fdn/fdn_13/card_impl.py` — Fleeting Flight: Instant combat trick with +1/+1 counter, flying until EOT, combat damage prevention (ENGINE LIMITATION)
+- `cards/fdn/fdn_18/card_impl.py` — Inspiring Paladin: 3/3 Human Knight with conditional first strike during your turn via ContinuousEffect
+- `cards/fdn/fdn_22/card_impl.py` — Raise the Past: Sorcery returning all creature cards with MV≤2 from graveyard to battlefield via move_to_zone
+- `cards/fdn/fdn_23/card_impl.py` — Skyknight Squire: 1/1 Cat Scout with ETB counter trigger and threshold flying+Knight at 3+ counters
+- `cards/fdn/fdn_24/card_impl.py` — Squad Rallier: 3/4 Human Scout with activated ability to dig top 4 for creature with power≤2
+- `cards/fdn/fdn_25/card_impl.py` — Sun-Blessed Healer: 3/1 Human Cleric with Lifelink, Kicker ETB returns nonland permanent MV≤2 from graveyard
+- `cards/fdn/fdn_27/card_impl.py` — Valkyrie's Call: Enchantment with death trigger returning nontoken non-Angel creatures with +1/+1 counter and Angel flying
+- `cards/fdn/fdn_28/card_impl.py` — Vanguard Seraph: 3/3 Angel Warrior with Flying and once-per-turn life-gain surveil 1 trigger

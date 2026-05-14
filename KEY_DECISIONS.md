@@ -385,3 +385,15 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Cards that modify player attributes must clean them up in `unregister_triggers()`. Mark with `ENGINE LIMITATION`.
 - **Reasoning**: The continuous effect system only resets permanent characteristics, not player attributes. Manual cleanup is the current workaround.
 - **Impact**: Any card that sets player flags (cant_lose, cant_win, etc.) must follow this pattern.
+
+## Library top is at end of internal list (index -1)
+- **Context**: Reviewer caught that Squad Rallier and Vanguard Seraph accessed `cards[0]` for the library top, but `ZoneContainer` stores top at the end of the list.
+- **Decision**: Always use `cards[-N:]` to read the top N cards of a library, or `zone.top()` for a single card. Never use `cards[:N]` which reads from the bottom.
+- **Reasoning**: `ZoneContainer` appends to the end, so the last element is the top.
+- **Impact**: All future card implementations that interact with library top.
+
+## cost_reduction() hook for Affinity and similar cost reductions
+- **Context**: Claws Out has "Affinity for Cats" which was initially marked ENGINE LIMITATION, but the engine supports `cost_reduction(game) -> int`.
+- **Decision**: Use `cost_reduction()` hook for any card with cost reduction mechanics (Affinity, "costs {X} less", etc.). Return the integer reduction amount based on game state.
+- **Reasoning**: The engine already supports this pattern. No need for ENGINE LIMITATION.
+- **Impact**: All future cards with cost reduction mechanics.
