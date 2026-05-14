@@ -110,3 +110,26 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `cards/fdn/fdn_50/card_impl.py` — Skyship Buccaneer: Flying 4/3 with Raid ETB draw
 - `cards/fdn/fdn_51/card_impl.py` — Sphinx of Forgotten Lore: Flash+Flying with attack trigger granting flashback to graveyard instant/sorcery
 - `cards/fdn/fdn_53/card_impl.py` — Uncharted Voyage: Instant putting creature on top/bottom of owner's library then surveil 1
+
+## Item 8: Implement Black new cards (19 cards)
+
+### Implementation
+- `cards/fdn/fdn_54/card_impl.py` — Abyssal Harvester: 3/2 Demon Warlock with tap ability to exile creature from graveyard and create Nightmare token copy
+- `cards/fdn/fdn_55/card_impl.py` — Arbiter of Woe: 5/4 Demon with additional sac cost, Flying, ETB opponents discard+lose 2, you draw+gain 2 (already implemented)
+- `cards/fdn/fdn_56/card_impl.py` — Billowing Shriekmass: 2/3 Spirit Flying with ETB mill 3 and threshold +2/+1 continuous effect
+- `cards/fdn/fdn_57/card_impl.py` — Blasphemous Edict: Sorcery with alternative cost (13+ creatures) and each player sacrifices 13 creatures
+- `cards/fdn/fdn_58/card_impl.py` — Bloodthirsty Conqueror: 5/5 Vampire Knight Flying+Deathtouch with opponent life-loss trigger for life gain
+- `cards/fdn/fdn_59/card_impl.py` — Crypt Feaster: 3/4 Zombie Menace with threshold attack trigger for +2/+0 until EOT
+- `cards/fdn/fdn_60/card_impl.py` — Gutless Plunderer: 2/2 Skeleton Pirate Deathtouch with Raid ETB look-at-top-3 mill
+- `cards/fdn/fdn_63/card_impl.py` — Infernal Vessel: 2/1 Human Cleric with death trigger returning as Demon with +1/+1 counters (already implemented)
+- `cards/fdn/fdn_65/card_impl.py` — Midnight Snack: Enchantment with Raid end-step Food token creation and sacrifice ability for life drain
+- `cards/fdn/fdn_66/card_impl.py` — Nine-Lives Familiar: 1/1 Cat with 8 revival counters and death trigger return (already implemented)
+- `cards/fdn/fdn_67/card_impl.py` — Revenge of the Rats: Sorcery creating tapped Rat tokens equal to creature cards in graveyard with flashback
+- `cards/fdn/fdn_68/card_impl.py` — Sanguine Syphoner: 1/3 Vampire Warlock with attack trigger draining 1 from each opponent
+- `cards/fdn/fdn_70/card_impl.py` — Soul-Shackled Zombie: 4/2 Zombie with ETB exile up to 2 cards from graveyard and creature-exile life drain
+- `cards/fdn/fdn_71/card_impl.py` — Stab: {B} Instant giving target creature -2/-2 until end of turn
+- `cards/fdn/fdn_72/card_impl.py` — Tinybones Bauble Burglar: 1/3 Legendary Skeleton Rogue with discard-exile trigger and tap discard ability
+- `cards/fdn/fdn_73/card_impl.py` — Tragic Banshee: 5/3 Spirit with Morbid ETB -1/-1 or -13/-13 on opponent creature
+- `cards/fdn/fdn_74/card_impl.py` — Vampire Gourmand: 2/2 Vampire with attack trigger sacrifice-for-draw and unblockable
+- `cards/fdn/fdn_75/card_impl.py` — Vampire Soulcaller: 3/2 Vampire Warlock Flying, can't block, ETB return creature from graveyard (already implemented)
+- `cards/fdn/fdn_77/card_impl.py` — Zul Ashur Lich Lord: 2/2 Legendary Zombie Warlock with Ward and tap to cast Zombie from graveyard

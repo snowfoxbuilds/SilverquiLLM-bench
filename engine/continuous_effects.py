@@ -228,6 +228,10 @@ class EffectManager:
         """Return a shallow copy of the current effects list."""
         return list(self._effects)
 
+    def get_all(self) -> list[ContinuousEffect]:
+        """Return a shallow copy of the current effects list."""
+        return list(self._effects)
+
     def get_effects_for_layer(self, layer: Layer) -> list[ContinuousEffect]:
         """Return effects belonging to a specific layer, in timestamp order."""
         return sorted(

@@ -409,3 +409,15 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Add fizzle check at top of `on_resolve()` — if `chosen_targets[0]` is None or invalid, return early with no effects.
 - **Reasoning**: MTG rules: a spell with a single target is countered by the rules if that target is illegal on resolution. No effects happen.
 - **Impact**: All future single-target spells must include this fizzle guard.
+
+## ENGINE LIMITATION: cost_reduction() cannot remove colored mana pips
+- **Context**: fdn_57 (Blasphemous Edict) has alternative cost "if 13+ creatures in graveyards, cast for {B}". cost_reduction(4) reduces {3}{B}{B} to {B}{B}, not {B}.
+- **Decision**: Accept {B}{B} as best approximation. Full alternative cost (removing colored pips) requires engine changes to casting.py.
+- **Reasoning**: Engine's cost reduction only subtracts from generic mana portion. Changing this would require modifying ManaCost arithmetic.
+- **Impact**: Any card with alternative costs that remove colored pips will be slightly overcosted.
+
+## Morbid detection pattern: getattr(game, "creature_died_this_turn", False)
+- **Context**: GameState has no built-in creature death tracking field.
+- **Decision**: Use `getattr(game, "creature_died_this_turn", False)` — requires game-level CREATURE_DIES handler to set it.
+- **Reasoning**: Allows morbid-like abilities to work once the game tracks deaths per turn, without blocking on engine changes.
+- **Impact**: fdn_73 (Tragic Banshee) and future morbid cards.

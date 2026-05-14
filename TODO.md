@@ -117,7 +117,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test counterspell resolution, planeswalker loyalty abilities, token creation.
 
-- [ ] **Implement Black new cards (19 cards)**
+- [x] **Implement Black new cards (19 cards)**
   Detail: All 19 new black FDN cards.
 
   Cards: #54 Abyssal Harvester, #55 Arbiter of Woe, #56 Billowing Shriekmass, #57 Blasphemous Edict, #58 Bloodthirsty Conqueror, #59 Crypt Feaster, #60 Gutless Plunderer, #63 Infernal Vessel, #65 Midnight Snack, #66 Nine-Lives Familiar, #67 Revenge of the Rats, #68 Sanguine Syphoner, #70 Soul-Shackled Zombie, #71 Stab, #72 Tinybones Bauble Burglar, #73 Tragic Banshee, #74 Vampire Gourmand, #75 Vampire Soulcaller, #77 Zul Ashur Lich Lord.
