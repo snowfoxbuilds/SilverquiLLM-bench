@@ -184,7 +184,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test life-gain trigger, board wipe resolution, counterspell targeting, flashback from graveyard, cost reduction calculation.
 
-- [ ] **Implement Black + Red reprints (21 cards)**
+- [x] **Implement Black + Red reprints (21 cards)**
   Detail: 9 black + 12 red reprint cards.
 
   Black (9): #170 Burglar Rat, #171 Diregraf Ghoul, #174 Fake Your Own Death, #177 Macabre Waltz, #178 Marauding Blight-Priest, #183 Rise of the Dark Realms, #184 Rune-Scarred Demon, #185 Stromkirk Bloodthief, #187 Zombify.

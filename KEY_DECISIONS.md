@@ -469,3 +469,13 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Offer options sequentially via choose_card()/choose_yes_no(). Opponent can decline to fall through to next option.
 - **Reasoning**: Engine has no built-in modal choice API for opponents. Sequential offer is faithful to MTG rules where opponent picks.
 - **Impact**: Future "opponent chooses one" cards should use this pattern.
+
+## "Can't block" attribute: _cant_block
+- **Context**: Frenzied Goblin sets a creature as unable to block.
+- **Decision**: Use `target._cant_block` (underscore prefix) — engine's `combat.py` line 118 reads `_cant_block`.
+- **Impact**: Any card that prevents blocking must use `_cant_block`, not `cant_block`.
+
+## Cast from exile: instants/sorceries must resolve then go to graveyard
+- **Context**: Etali, Primal Storm casts exiled cards without paying mana costs.
+- **Decision**: Permanents: `move_to_zone(exile, battlefield)`. Instants/sorceries: call `on_resolve()` then `move_to_zone(exile, graveyard)` — they don't go to battlefield.
+- **Impact**: Any "cast without paying" effect for non-permanents.

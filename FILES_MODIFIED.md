@@ -207,3 +207,28 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `cards/fdn/fdn_165/card_impl.py` — Think Twice: draw card + flashback
 - `cards/fdn/fdn_166/card_impl.py` — Time Stop: end the turn (exile stack, discard to hand size)
 - `cards/fdn/fdn_167/card_impl.py` — Tolarian Terror: cost_reduction per instant/sorcery in graveyard + Ward
+
+## Item 13: Implement Black + Red reprints (21 cards)
+
+### Implementation
+- `cards/fdn/fdn_170/card_impl.py` — Burglar Rat: kept existing ETB discard-each-opponent trigger
+- `cards/fdn/fdn_171/card_impl.py` — Diregraf Ghoul: 2/2 Zombie that enters tapped via on_resolve()
+- `cards/fdn/fdn_174/card_impl.py` — Fake Your Own Death: full rewrite with +2/+0 buff and CREATURE_DIES death trigger for graveyard return + Treasure
+- `cards/fdn/fdn_177/card_impl.py` — Macabre Waltz: sorcery returning up to 2 creature cards from graveyard then discard
+- `cards/fdn/fdn_178/card_impl.py` — Marauding Blight-Priest: GAINS_LIFE trigger draining each opponent 1 life
+- `cards/fdn/fdn_183/card_impl.py` — Rise of the Dark Realms: sorcery putting all creature cards from all graveyards onto battlefield
+- `cards/fdn/fdn_184/card_impl.py` — Rune-Scarred Demon: 6/6 Flying Demon with ETB library search for any card
+- `cards/fdn/fdn_185/card_impl.py` — Stromkirk Bloodthief: end step trigger with opponent life-loss check, +1/+1 counter on target Vampire
+- `cards/fdn/fdn_187/card_impl.py` — Zombify: kept existing graveyard-to-battlefield reanimation
+- `cards/fdn/fdn_190/card_impl.py` — Brass's Bounty: creates Treasure tokens equal to lands controlled
+- `cards/fdn/fdn_193/card_impl.py` — Drakuseth Maw of Flames: attack trigger dealing 4+3+3 damage to chosen targets
+- `cards/fdn/fdn_194/card_impl.py` — Etali Primal Storm: attack trigger exiling top cards and simplified free-casting
+- `cards/fdn/fdn_196/card_impl.py` — Firebrand Archer: SPELL_CAST noncreature trigger dealing 1 to each opponent
+- `cards/fdn/fdn_197/card_impl.py` — Firespitter Whelp: Flying + SPELL_CAST noncreature/Dragon trigger dealing 1 to each opponent
+- `cards/fdn/fdn_198/card_impl.py` — Flamewake Phoenix: Flying+Haste with must_attack and Ferocious graveyard recursion at beginning of combat
+- `cards/fdn/fdn_199/card_impl.py` — Frenzied Goblin: attack trigger with optional {R} payment for can't-block effect
+- `cards/fdn/fdn_202/card_impl.py` — Hidetsugu's Second Rite: instant dealing 10 if target has exactly 10 life
+- `cards/fdn/fdn_203/card_impl.py` — Involuntary Employment: gain control + untap + haste + Treasure token creation
+`cards/fdn/fdn_205/card_impl.py` - Seismic Rupture: deals 2 damage to each creature without flying 
+- `cards/fdn/fdn_208/card_impl.py` — Spitfire Lagac: landfall trigger dealing 1 to each opponent
+- `cards/fdn/fdn_210/card_impl.py` — Thrill of Possibility: instant drawing 2 cards (discard cost assumed paid during casting)

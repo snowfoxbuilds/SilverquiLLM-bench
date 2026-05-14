@@ -50,3 +50,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept implementer
 - **Reasoning**: Tests define the contract. ENGINE LIMITATION — DeterministicPlayer tests use colorless mana, can't enforce colored pip requirements without engine mana system changes.
 - **Impact**: `cards/fdn/fdn_106/card_impl.py` — activated ability uses ManaCost(generic=6).
+
+## Disagreement: Item 13 — fdn_205 Seismic Rupture test field name
+- **Reviewer comment (strict)**: Test checks `damage_taken` instead of `damage_marked` for flying creature — assertion passes vacuously.
+- **Implementer justification**: Cannot modify test files; implementation is correct; other assertions in same test use `damage_marked` correctly.
+- **Coordinator decision**: accept implementer
+- **Reasoning**: Implementation correctly skips flying creatures via `deal_damage()`. The test assertion passes (flying creature takes no damage), even though it checks a non-existent field. The other 2 assertions in the same test validate `damage_marked` correctly. Minor test quality nit, not an impl bug.
+- **Impact**: `tests/audited/fdn/205/tests.py` — no change needed.
