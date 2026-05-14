@@ -148,20 +148,23 @@ class TestAPIKeyPassthrough:
 class TestRunDefaults:
     """Verify default option values for the run command."""
 
-    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli.subprocess.Popen")
     @patch("silverquillm.cli.stage_workspace")
-    def test_default_timeout_3600(self, mock_stage, mock_subprocess, runner, tmp_path):
+    def test_default_timeout_3600(self, mock_stage, mock_popen, runner, tmp_path):
         """Default timeout should be 3600 seconds."""
         workspace = tmp_path / "workspace"
         workspace.mkdir()
         output = tmp_path / "output"
         output.mkdir()
         mock_stage.return_value = (workspace, output)
-        mock_subprocess.return_value = MagicMock(returncode=0)
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.wait.return_value = None
+        mock_popen.return_value = mock_proc
 
         result = runner.invoke(main, ["run", "--image", "test-img"])
         # The command should have been called with --stop-timeout 3600
-        call_args = mock_subprocess.call_args[0][0]
+        call_args = mock_popen.call_args[0][0]
         idx = call_args.index("--stop-timeout")
         assert call_args[idx + 1] == "3600"
 
@@ -344,9 +347,10 @@ class TestCardStatus:
 class TestTimeout:
     """When Docker container times out, partial harvest should still happen."""
 
-    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli._stop_container")
+    @patch("silverquillm.cli.subprocess.Popen")
     @patch("silverquillm.cli.stage_workspace")
-    def test_timeout_still_harvests(self, mock_stage, mock_subprocess, runner, tmp_path, cards_dir):
+    def test_timeout_still_harvests(self, mock_stage, mock_popen, mock_stop, runner, tmp_path, cards_dir):
         """TimeoutExpired should trigger harvest with timed_out=True."""
         workspace = tmp_path / "workspace"
         output = tmp_path / "output"
@@ -358,7 +362,11 @@ class TestTimeout:
         (ws_card / "card_impl.py").write_text("# modified\n")
 
         mock_stage.return_value = (workspace, output)
-        mock_subprocess.side_effect = subprocess.TimeoutExpired("docker", 3600)
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        # First wait() raises TimeoutExpired, second wait() (after docker stop) succeeds
+        mock_proc.wait.side_effect = [subprocess.TimeoutExpired("docker", 3600), None]
+        mock_popen.return_value = mock_proc
 
         result = runner.invoke(
             main,
@@ -380,41 +388,47 @@ class TestTimeout:
 class TestSmokePass:
     """Smoke command pass case: exit 0 + hello.py exists."""
 
-    @patch("silverquillm.cli.subprocess.run")
-    def test_smoke_pass(self, mock_subprocess, runner, tmp_path):
+    @patch("silverquillm.cli.subprocess.Popen")
+    def test_smoke_pass(self, mock_popen, runner, tmp_path):
         """PASS when container exits 0 and hello.py exists."""
-        mock_subprocess.return_value = MagicMock(returncode=0)
-
         # We need to create hello.py in the workspace during the "docker run"
-        # Since we mock subprocess, we simulate it via side_effect
-        def create_hello(*args, **kwargs):
+        # Since we mock Popen, we simulate it via side_effect on constructor
+        def create_hello(cmd, **kwargs):
             # Extract workspace path from the -v arg
-            cmd = args[0]
             for i, arg in enumerate(cmd):
                 if arg == "-v" and "/workspace" in cmd[i + 1]:
                     ws_path = cmd[i + 1].split(":")[0]
                     (Path(ws_path) / "hello.py").write_text("print('Hello World')\n")
                     break
-            return MagicMock(returncode=0)
+            mock_proc = MagicMock()
+            mock_proc.returncode = 0
+            mock_proc.wait.return_value = None
+            return mock_proc
 
-        mock_subprocess.side_effect = create_hello
+        mock_popen.side_effect = create_hello
 
         result = runner.invoke(main, ["smoke", "--image", "test-img"])
         assert "PASS" in result.output
 
-    @patch("silverquillm.cli.subprocess.run")
-    def test_smoke_fail_no_hello(self, mock_subprocess, runner):
+    @patch("silverquillm.cli.subprocess.Popen")
+    def test_smoke_fail_no_hello(self, mock_popen, runner):
         """FAIL when container exits 0 but no hello.py."""
-        mock_subprocess.return_value = MagicMock(returncode=0)
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.wait.return_value = None
+        mock_popen.return_value = mock_proc
 
         result = runner.invoke(main, ["smoke", "--image", "test-img"])
         assert "FAIL" in result.output
         assert "hello.py" in result.output.lower()
 
-    @patch("silverquillm.cli.subprocess.run")
-    def test_smoke_fail_nonzero_exit(self, mock_subprocess, runner):
+    @patch("silverquillm.cli.subprocess.Popen")
+    def test_smoke_fail_nonzero_exit(self, mock_popen, runner):
         """FAIL when container exits non-zero."""
-        mock_subprocess.return_value = MagicMock(returncode=1)
+        mock_proc = MagicMock()
+        mock_proc.returncode = 1
+        mock_proc.wait.return_value = None
+        mock_popen.return_value = mock_proc
 
         result = runner.invoke(main, ["smoke", "--image", "test-img"])
         assert "FAIL" in result.output
@@ -429,41 +443,47 @@ class TestSmokePass:
 class TestRunDockerArgs:
     """Verify docker command is constructed correctly."""
 
-    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli.subprocess.Popen")
     @patch("silverquillm.cli.stage_workspace")
-    def test_docker_command_contains_image(self, mock_stage, mock_subprocess, runner, tmp_path):
+    def test_docker_command_contains_image(self, mock_stage, mock_popen, runner, tmp_path):
         workspace = tmp_path / "workspace"
         output = tmp_path / "output"
         workspace.mkdir()
         output.mkdir()
         mock_stage.return_value = (workspace, output)
-        mock_subprocess.return_value = MagicMock(returncode=0)
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.wait.return_value = None
+        mock_popen.return_value = mock_proc
 
         result = runner.invoke(main, ["run", "--image", "my-img:v1"])
-        call_args = mock_subprocess.call_args[0][0]
+        call_args = mock_popen.call_args[0][0]
         assert "my-img:v1" in call_args
         assert "docker" in call_args[0]
 
-    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli.subprocess.Popen")
     @patch("silverquillm.cli.stage_workspace")
-    def test_docker_mounts_workspace_and_output(self, mock_stage, mock_subprocess, runner, tmp_path):
+    def test_docker_mounts_workspace_and_output(self, mock_stage, mock_popen, runner, tmp_path):
         workspace = tmp_path / "workspace"
         output = tmp_path / "output"
         workspace.mkdir()
         output.mkdir()
         mock_stage.return_value = (workspace, output)
-        mock_subprocess.return_value = MagicMock(returncode=0)
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.wait.return_value = None
+        mock_popen.return_value = mock_proc
 
         result = runner.invoke(main, ["run", "--image", "my-img"])
-        call_args = mock_subprocess.call_args[0][0]
+        call_args = mock_popen.call_args[0][0]
         # Should have -v for workspace and output
         v_args = [call_args[i + 1] for i, a in enumerate(call_args) if a == "-v"]
         assert any("/workspace" in v for v in v_args)
         assert any("/output" in v for v in v_args)
 
-    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli.subprocess.Popen")
     @patch("silverquillm.cli.stage_workspace")
-    def test_api_keys_in_docker_command(self, mock_stage, mock_subprocess, runner, tmp_path, monkeypatch):
+    def test_api_keys_in_docker_command(self, mock_stage, mock_popen, runner, tmp_path, monkeypatch):
         """Set API keys should be passed as -e args to docker."""
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
         workspace = tmp_path / "workspace"
@@ -471,8 +491,11 @@ class TestRunDockerArgs:
         workspace.mkdir()
         output.mkdir()
         mock_stage.return_value = (workspace, output)
-        mock_subprocess.return_value = MagicMock(returncode=0)
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.wait.return_value = None
+        mock_popen.return_value = mock_proc
 
         result = runner.invoke(main, ["run", "--image", "my-img"])
-        call_args = mock_subprocess.call_args[0][0]
+        call_args = mock_popen.call_args[0][0]
         assert "OPENAI_API_KEY=sk-test" in call_args

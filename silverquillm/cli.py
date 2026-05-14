@@ -470,7 +470,7 @@ def smoke(image: str, cards_dir: Path | None, engine_dir: Path | None) -> None:
         else:
             reasons = []
             if not exit_zero:
-                reasons.append(f"exit code {result.returncode}")
+                reasons.append(f"exit code {proc.returncode}")
             if not hello_exists:
                 reasons.append("hello.py not found")
             click.echo(f"FAIL: {', '.join(reasons)}")
