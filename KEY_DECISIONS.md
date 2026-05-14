@@ -349,3 +349,15 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: Mark with ENGINE LIMITATION comment. Accept the limitation for now.
 - **Reasoning**: The engine's reset-and-reapply mechanism doesn't cover name/subtypes/colors fields. A proper fix requires engine-level changes beyond card implementation scope.
 - **Impact**: Cards that override name/subtypes/colors via continuous effects will have this limitation until the engine is updated.
+
+## Planeswalker choose_card() for optional/multi-choice abilities
+- **Context**: Reviewer flagged that Vivien's +1 and Chandra's +2 auto-selected cards instead of letting the controller choose.
+- **Decision**: Use `controller.choose_card()` for any ability that lets a player pick from multiple options. Wrap in try/except for `ScriptExhaustedError` when `DeterministicPlayer` has no queued choice.
+- **Reasoning**: MTG rules give the controller the choice. Auto-selection is incorrect behavior.
+- **Impact**: All future card implementations with "you may" or "choose" effects must use `choose_card()`.
+
+## EventType.END_STEP added to engine/triggers.py
+- **Context**: Chandra's delayed sacrifice trigger fires at "the beginning of the next end step." The engine lacked an `END_STEP` event type.
+- **Decision**: Added `END_STEP = "end_step"` to `EventType` enum.
+- **Reasoning**: Multiple cards trigger at the beginning of the end step (delayed triggers, end-of-turn effects). This event type was missing.
+- **Impact**: `engine/triggers.py`. Future cards with end-step triggers should use `EventType.END_STEP`.

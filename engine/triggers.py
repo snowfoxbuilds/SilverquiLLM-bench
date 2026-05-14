@@ -34,6 +34,7 @@ class EventType(enum.Enum):
     BEGINNING_OF_UPKEEP = "beginning_of_upkeep"
     BEGINNING_OF_COMBAT = "beginning_of_combat"
     END_OF_TURN = "end_of_turn"
+    END_STEP = "end_step"
     CREATURE_DIES = "creature_dies"
     SPELL_CAST = "spell_cast"
     ATTACKS = "attacks"

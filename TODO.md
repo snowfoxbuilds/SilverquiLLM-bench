@@ -37,7 +37,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test aura attachment via `on_resolve()`, verify continuous effects apply and remove correctly, test enchanted creature characteristics. Use `DeterministicPlayer` to set up game states with target creatures.
 
-- [ ] **Upgrade 3 simplified Planeswalker implementations to full oracle text**
+- [x] **Upgrade 3 simplified Planeswalker implementations to full oracle text**
   Detail: These planeswalkers have existing simplified implementations with reduced loyalty abilities. Read each `card_spec.json` for full ability set and rewrite.
 
   Cards (3):
