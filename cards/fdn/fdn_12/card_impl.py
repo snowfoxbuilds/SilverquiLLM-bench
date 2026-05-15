@@ -1,36 +1,26 @@
 """Card implementation for Felidar Savior."""
 
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
-from engine.card import ArtifactCreature, Creature
-from engine.continuous_effects import (
-    ContinuousEffect,
-    DURATION_END_OF_TURN,
-    Layer,
-    SubLayer,
-)
-from engine.types import CardType, Keyword, ManaCost, Zone
+
+from engine.card import Creature
+from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
-    from cards.registry import CardRegistry
 
-def _self_etb_condition(source: Any):
-    """Return a condition callable that matches only when *source* enters."""
-
-    def _condition(game: Any, data: dict) -> bool:
-        return data.get("permanent") is source
-
-    return _condition
-def _is_on_battlefield(game: Any, card: Any) -> bool:
-    """Check if *card* is on any player's battlefield."""
+def _is_on_battlefield(game: Any, obj: Any) -> bool:
+    """Return True if *obj* is on any player's battlefield."""
     for player in game.players:
-        if game.get_battlefield(player).contains(card):
+        if game.get_battlefield(player).contains(obj):
             return True
     return False
 
+
 class FelidarSavior(Creature):
-    """Felidar Savior — {3}{W} — 2/3 — Cat Beast — Lifelink
+    """Felidar Savior — {3}{W} — 2/3 — Cat Beast — Lifelink.
 
     When this creature enters, put a +1/+1 counter on each of up to two
     other target creatures you control.
@@ -47,39 +37,58 @@ class FelidarSavior(Creature):
         kwargs.setdefault("base_toughness", 3)
         kwargs.setdefault(
             "rules_text",
-            "Lifelink\nWhen this creature enters, put a +1/+1 counter on each of "
-            "up to two other target creatures you control.",
+            "Lifelink\nWhen this creature enters, put a +1/+1 counter on "
+            "each of up to two other target creatures you control.",
         )
         super().__init__(**kwargs)
 
-    def register_triggers(self, game: GameState) -> None:
-        from engine.triggers import EventType, TriggerRegistration
-        from engine.game import add_counter
-
+    def get_targets(self, game: "GameState") -> list[Any]:
+        """Return targeting requirement: up to two other creatures you control."""
+        controller = self.controller or getattr(self, "owner", None)
         source = self
 
-        def _effect(game: GameState) -> None:
-            # Get targets from chosen_targets (up to 2)
-            chosen = getattr(source, "chosen_targets", None)
-            if not chosen:
-                targets_list = getattr(source, "_resolve_targets", None)
-                if targets_list:
-                    chosen = targets_list
-                else:
-                    target = getattr(source, "_resolve_target", None)
-                    if target is not None:
-                        chosen = [target]
-            if not chosen:
-                return
-            for target in chosen[:2]:
-                if target is not source and _is_on_battlefield(game, target):
-                    add_counter(game, target, "+1/+1", 1)
+        def _filter(obj: Any) -> bool:
+            if obj is source:
+                return False
+            if CardType.CREATURE not in getattr(obj, "card_types", set()):
+                return False
+            return getattr(obj, "controller", None) is controller
 
-        controller = getattr(self, "controller", None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(
-            event_type=EventType.ENTERS_BATTLEFIELD,
-            condition=_self_etb_condition(self),
-            effect=_effect,
-            source=self,
-            controller=controller,
-        ))
+        return [
+            TargetRequirement(
+                filter_fn=_filter,
+                description="first of up to two other target creatures you control",
+                zone=Zone.BATTLEFIELD,
+            ),
+            TargetRequirement(
+                filter_fn=_filter,
+                description="second of up to two other target creatures you control",
+                zone=Zone.BATTLEFIELD,
+            ),
+        ]
+
+    def on_resolve(self, game: "GameState") -> None:
+        """ETB: put a +1/+1 counter on each of up to two other target
+        creatures you control."""
+        from engine.game import add_counter
+
+        controller = self.controller
+        if controller is None:
+            return
+
+        # Get targets from chosen_targets (set by StackObject.targets)
+        chosen = getattr(self, "chosen_targets", None)
+        if not chosen:
+            return
+
+        for target in chosen[:2]:
+            if target is self:
+                continue
+            if not _is_on_battlefield(game, target):
+                continue
+            if getattr(target, "controller", None) is not controller:
+                continue
+            add_counter(game, target, "+1/+1", 1)
+            # Sync original counters
+            if hasattr(target, "_original_plus_one_counters"):
+                target._original_plus_one_counters = target.plus_one_counters

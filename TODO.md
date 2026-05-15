@@ -22,7 +22,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 - **Audited test injection**: conftest builds registry per collector directory. Each test directory imports only its own card class.
 ---
 
-- [ ] **Upgrade 4 simplified Aura implementations to full oracle text**
+- [x] **Upgrade 4 simplified Aura implementations to full oracle text**
   Detail: These cards have existing simplified implementations in `cards/fdn/` that omit mechanics from their full oracle text. Read each card's `card_spec.json` for the full oracle text, compare against the current `card_impl.py`, identify what was simplified, and rewrite to full spec.
 
   Cards (4):
@@ -37,7 +37,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test aura attachment via `on_resolve()`, verify continuous effects apply and remove correctly, test enchanted creature characteristics. Use `DeterministicPlayer` to set up game states with target creatures.
 
-- [ ] **Upgrade 3 simplified Planeswalker implementations to full oracle text**
+- [x] **Upgrade 3 simplified Planeswalker implementations to full oracle text**
   Detail: These planeswalkers have existing simplified implementations with reduced loyalty abilities. Read each `card_spec.json` for full ability set and rewrite.
 
   Cards (3):
@@ -51,7 +51,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test each loyalty ability independently. Test loyalty counter changes. Test token creation. Test emblem persistence. Verify `get_loyalty_abilities()` returns correct costs and effects.
 
-- [ ] **Upgrade 3 simplified Equipment/Creature implementations to full oracle text**
+- [x] **Upgrade 3 simplified Equipment/Creature implementations to full oracle text**
   Detail: Remaining simplified cards — 2 equipment and 1 creature with death triggers.
 
   Cards (3):
@@ -65,7 +65,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test equipment attach/detach, continuous effect application, equip ability activation. Test death trigger on nontoken creature death, sacrifice during attack. Use `DeterministicPlayer` for combat/decision sequences.
 
-- [ ] **Implement White new cards — batch 1 (10 creatures)**
+- [x] **Implement White new cards — batch 1 (10 creatures)**
   Detail: First 10 new white FDN creatures. Read each `card_spec.json` for oracle text.
 
   Cards: #1 Sire of Seven Deaths, #2 Arahbo the First Fang, #3 Armasaur Guide, #4 Cat Collector, #8 Dauntless Veteran, #9 Dazzling Angel, #11 Exemplar of Light, #12 Felidar Savior, #15 Hare Apparent, #17 Herald of Eternal Dawn.
@@ -78,7 +78,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test keyword presence, P/T values, triggered ability firing, token creation, lord bonuses.
 
-- [ ] **Implement White new cards — batch 2 (10 creatures + spells)**
+- [x] **Implement White new cards — batch 2 (10 creatures + spells)**
   Detail: Remaining 10 new white cards.
 
   Cards: #6 Claws Out, #10 Divine Resilience, #13 Fleeting Flight, #18 Inspiring Paladin, #22 Raise the Past, #23 Skyknight Squire, #24 Squad Rallier, #25 Sun-Blessed Healer, #27 Valkyrie's Call, #28 Vanguard Seraph.
@@ -91,7 +91,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test spell targeting with lazy filters, temporary buff duration, graveyard interaction.
 
-- [ ] **Implement Blue new cards — batch 1 (10 creatures)**
+- [x] **Implement Blue new cards — batch 1 (10 creatures)**
   Detail: First 10 new blue FDN cards.
 
   Cards: #29 Arcane Epiphany, #30 Archmage of Runes, #31 Bigfin Bouncer, #32 Cephalid Inkmage, #33 Clinquant Skymage, #34 Curator of Destinies, #35 Drake Hatcher, #37 Erudite Wizard, #38 Faebloom Trick, #39 Grappling Kraken.
@@ -104,7 +104,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test draw effects, bounce targets returning to hand, cost reduction conditions.
 
-- [ ] **Implement Blue new cards — batch 2 (10 creatures + spells)**
+- [x] **Implement Blue new cards — batch 2 (10 creatures + spells)**
   Detail: Remaining 10 new blue cards.
 
   Cards: #40 High Fae Trickster, #41 Homunculus Horde, #43 Inspiration from Beyond, #45 Kiora the Rising Tide, #46 Lunar Insight, #47 Mischievous Mystic, #48 Refute, #50 Skyship Buccaneer, #51 Sphinx of Forgotten Lore, #53 Uncharted Voyage.
@@ -117,7 +117,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test counterspell resolution, planeswalker loyalty abilities, token creation.
 
-- [ ] **Implement Black new cards (19 cards)**
+- [x] **Implement Black new cards (19 cards)**
   Detail: All 19 new black FDN cards.
 
   Cards: #54 Abyssal Harvester, #55 Arbiter of Woe, #56 Billowing Shriekmass, #57 Blasphemous Edict, #58 Bloodthirsty Conqueror, #59 Crypt Feaster, #60 Gutless Plunderer, #63 Infernal Vessel, #65 Midnight Snack, #66 Nine-Lives Familiar, #67 Revenge of the Rats, #68 Sanguine Syphoner, #70 Soul-Shackled Zombie, #71 Stab, #72 Tinybones Bauble Burglar, #73 Tragic Banshee, #74 Vampire Gourmand, #75 Vampire Soulcaller, #77 Zul Ashur Lich Lord.
@@ -130,7 +130,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test death trigger firing, sacrifice mechanics, life total changes, discard resolution.
 
-- [ ] **Implement Red new cards (15 cards)**
+- [x] **Implement Red new cards (15 cards)**
   Detail: All 15 new red FDN cards.
 
   Cards: #78 Battlesong Berserker, #79 Boltwave, #80 Bulk Up, #82 Courageous Goblin, #83 Crackling Cyclops, #85 Electroduplicate, #86 Fiery Annihilation, #87 Goblin Boarders, #88 Goblin Negotiation, #89 Gorehorn Raider, #91 Kellan Planar Trailblazer, #93 Searslicer Goblin, #94 Slumbering Cerberus, #96 Strongbox Raider, #97 Twinflame Tyrant.
@@ -143,7 +143,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test damage dealt to targets, attack trigger effects, temporary buffs reset at end of turn.
 
-- [ ] **Implement Green new cards (14 cards)**
+- [x] **Implement Green new cards (14 cards)**
   Detail: All 14 new green FDN cards.
 
   Cards: #98 Ambush Wolf, #100 Beast-Kin Ranger, #101 Cackling Prowler, #102 Eager Trufflesnout, #103 Elfsworn Giant, #104 Elvish Regrower, #105 Felling Blow, #106 Loot Exuberant Explorer, #107 Mossborn Hydra, #108 Needletooth Pack, #109 Preposterous Proportions, #111 Quilled Greatwurm, #112 Spinner of Souls, #113 Sylvan Scavenging.
@@ -156,7 +156,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test ETB triggers, trample damage, fight resolution, ramp effects adding lands.
 
-- [ ] **Implement Multicolor new cards (11 cards)**
+- [x] **Implement Multicolor new cards (11 cards)**
   Detail: All 11 new multicolor FDN cards — legends and gold spells.
 
   Cards: #115 Alesha Who Laughs at Fate, #117 Ashroot Animist, #118 Dreadwing Scavenger, #119 Elenda Saint of Dusk, #120 Fiendish Panda, #121 Koma World-Eater, #122 Kykar Zephyr Awakener, #123 Niv-Mizzet Visionary, #124 Perforating Artist, #125 Wardens of the Cycle, #126 Zimone Paradox Sculptor.
@@ -169,7 +169,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test multicolor mana payment, triggered ability conditions, token creation, legendary rule interactions.
 
-- [ ] **Implement White + Blue reprints (18 cards)**
+- [x] **Implement White + Blue reprints (18 cards)**
   Detail: Well-known MTG reprints — 6 white + 12 blue. Oracle text is established; implement from `card_spec.json` directly.
 
   White (6): #135 Ajani's Pridemate, #136 Angel of Finality, #140 Day of Judgment, #141 Giada Font of Hope, #144 Mischievous Pup, #149 Youthful Valkyrie.
@@ -184,7 +184,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test life-gain trigger, board wipe resolution, counterspell targeting, flashback from graveyard, cost reduction calculation.
 
-- [ ] **Implement Black + Red reprints (21 cards)**
+- [x] **Implement Black + Red reprints (21 cards)**
   Detail: 9 black + 12 red reprint cards.
 
   Black (9): #170 Burglar Rat, #171 Diregraf Ghoul, #174 Fake Your Own Death, #177 Macabre Waltz, #178 Marauding Blight-Priest, #183 Rise of the Dark Realms, #184 Rune-Scarred Demon, #185 Stromkirk Bloodthief, #187 Zombify.
@@ -199,7 +199,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test ETB discard effects, graveyard recursion targeting, Treasure token creation, attack trigger firing, zone transitions via `move_to_zone()`.
 
-- [ ] **Implement Green + Multicolor reprints (24 cards)**
+- [x] **Implement Green + Multicolor reprints (24 cards)**
   Detail: 12 green + 12 multicolor reprint cards.
 
   Green (12): #211 Affectionate Indrik, #212 Bite Down, #216 Doubling Season, #217 Dwynen Gilt-Leaf Daen, #218 Dwynen's Elite, #221 Genesis Wave, #222 Ghalta Primal Hunger, #225 Grow from the Ashes, #226 Inspiring Call, #229 Nessian Hornbeetle, #230 Overrun, #236 Wildwood Scourge.
@@ -214,7 +214,7 @@ Conventions (from KEY_[DECISIONS.md](http://decisions.md/) — all items MUST ho
 
   Testability: Test fight resolution, replacement effects doubling counters/tokens, lord P/T bonuses, cost reduction, ramp, landfall triggers. Mark complex interactions (Doubling Season, Thousand-Year Storm, Muldrotha) with `ENGINE LIMITATION` where engine support is insufficient.
 
-- [ ] **Implement Artifact reprints + Secluded Courtyard (9 cards)**
+- [x] **Implement Artifact reprints + Secluded Courtyard (9 cards)**
   Detail: 8 artifact reprints + 1 land reprint.
 
   Artifacts (8): #249 Adventuring Gear, #250 Burnished Hart, #251 Campus Guide, #252 Gleaming Barrier, #253 Goldvein Pick, #254 Heraldic Banner, #256 Meteor Golem, #257 Solemn Simulacrum.

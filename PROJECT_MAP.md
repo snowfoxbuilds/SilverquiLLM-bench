@@ -158,9 +158,8 @@ Agent Container
 |---|---:|---|---|
 | `engine/` | Active | Core MTG game engine | Agent edits staged copy in `/workspace/engine/` during runs |
 | `cards/` | Active | Card registry and set data | Registry, Scryfall helpers, FDN/SOS card directories |
-| `cards/fdn/` | Active / migrating | FDN per-card examples | Canonical FDN Workspace structure |
+| `cards/fdn/` | Active | FDN per-card implementations | 276 card directories with 286 `card_impl.py` files; 174 cards implemented/upgraded in Items 1–15 |
 | `cards/sos/` | Active | SOS benchmark targets | Empty/template impls before agent run; agent fills `card_impl.py` |
-| `cards/foundations/` | Temporary legacy | Old monolithic FDN source | May remain in repo during migration, but should not be staged after FDN migration |
 | `silverquillm/` | Active | Benchmark runner package | CLI, workspace staging, evaluation, results |
 | `silverquillm/replay/` | Active | 17lands replay validation pipeline | Parser, state reconstruction, executor, divergence reporting |
 | `docker/` | Active | Agent container images | Image is the full agent config |
@@ -175,7 +174,7 @@ Agent Container
 | `scripts/` | Active | Utility scripts | Card ID maps, card spec generation, migration scripts |
 | `tests/` | Active | Test root | Engine, runner, card, replay, and integration tests |
 | `tests/engine/` | Active | Core engine regression tests | Snapshot fallback viability gate |
-| `tests/audited/fdn/` | Active | FDN audited regression tests | Used for FDN Card Regression |
+| `tests/audited/fdn/` | Active | FDN audited regression tests | 286 card test directories; used for FDN Card Regression |
 | `tests/audited/sos/` | Active | SOS audited correctness tests | Used for SOS Card Correctness |
 | `tests/cards/` | Legacy / active during migration | Existing card tests | May be folded into audited structure over time |
 | `docs/` | Active | Specs and generated docs | Export target for Notion specs |
@@ -253,28 +252,17 @@ Agent Container
 
 ## Migration Notes
 
-### FDN migration
+### FDN migration (COMPLETE)
 
-Target final shape:
+FDN card implementations have been fully migrated to per-card directories:
 
 ```
-
 cards/fdn/{card_id}/
-
-card_spec.json
-
-card_[impl.py](http://impl.py)
-
+  card_spec.json
+  card_impl.py
 ```
 
-Recommended sequence:
-
-1. Generate `cards/fdn/{card_id}/card_spec.json` and empty `card_impl.py`.
-2. Copy/port implementations from `cards/foundations/`.
-3. Move generic helpers into `cards/fdn/utils.py` if needed.
-4. Update registry and tests to use `cards/fdn/`.
-5. Stop staging `cards/foundations/` into the Workspace.
-6. Delete `cards/foundations/` once imports/tests are clean.
+276 card directories with 286 `card_impl.py` files. 174 cards were newly implemented or upgraded to full oracle text across Items 1–15, covering all colors (White, Blue, Black, Red, Green), multicolor, artifacts, equipment, planeswalkers, and lands.
 
 ### Runner migration
 

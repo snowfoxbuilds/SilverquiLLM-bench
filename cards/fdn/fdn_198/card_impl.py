@@ -2,13 +2,93 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+from engine.card import Creature
+from engine.types import CardType, Keyword, ManaCost, Zone
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
-class FlamewakePhoenix(CardImpl):
-    """TODO: Implement Flamewake Phoenix."""
+class FlamewakePhoenix(Creature):
+    """Flamewake Phoenix — {1}{R}{R} — 2/2 — Phoenix — Flying, Haste.
 
-    pass
+    This creature attacks each combat if able.
+    Ferocious — At the beginning of combat on your turn, if you control a
+    creature with power 4 or greater, you may pay {R}. If you do, return
+    this card from your graveyard to the battlefield.
+
+    FDN collector number 198.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Flamewake Phoenix")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{1}{R}{R}"))
+        kwargs.setdefault("subtypes", {"Phoenix"})
+        kwargs.setdefault("keywords", Keyword.FLYING | Keyword.HASTE)
+        kwargs.setdefault("base_power", 2)
+        kwargs.setdefault("base_toughness", 2)
+        kwargs.setdefault(
+            "rules_text",
+            "Flying, haste\nThis creature attacks each combat if able.\n"
+            "Ferocious — At the beginning of combat on your turn, if you "
+            "control a creature with power 4 or greater, you may pay {R}. "
+            "If you do, return this card from your graveyard to the "
+            "battlefield.",
+        )
+        super().__init__(**kwargs)
+        self.must_attack = True
+
+    def register_triggers(self, game: "GameState") -> None:
+        """Register beginning-of-combat graveyard recursion trigger."""
+        from engine.triggers import EventType, TriggerRegistration
+        from engine.zones import move_to_zone
+
+        source = self
+        controller = getattr(self, "controller", None) or game.active_player
+
+        def _condition(game: Any, data: dict) -> bool:
+            ctrl = getattr(source, "controller", None) or getattr(source, "owner", None)
+            if ctrl is None:
+                return False
+            # Must be our turn
+            if game.active_player is not ctrl:
+                return False
+            # Must be in graveyard
+            gy = ctrl.zones[Zone.GRAVEYARD]
+            if not gy.contains(source):
+                return False
+            # Ferocious: control a creature with power 4+
+            bf = game.get_battlefield(ctrl)
+            for perm in bf.get_all():
+                if CardType.CREATURE in getattr(perm, "card_types", set()):
+                    if perm.power >= 4:
+                        return True
+            return False
+
+        def _effect(game: "GameState") -> None:
+            ctrl = getattr(source, "controller", None) or getattr(source, "owner", None)
+            if ctrl is None:
+                return
+            # May pay {R}
+            try:
+                if not ctrl.choose_yes_no("Pay {R} to return Flamewake Phoenix from graveyard?"):
+                    return
+            except Exception:
+                return
+            # Pay {R}
+            try:
+                ctrl.mana_pool.pay(ManaCost.parse("{R}"))
+            except Exception:
+                return
+            move_to_zone(game, source, Zone.GRAVEYARD, Zone.BATTLEFIELD)
+            source.controller = ctrl
+
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=EventType.BEGINNING_OF_COMBAT,
+            condition=_condition,
+            effect=_effect,
+            source=self,
+            controller=controller,
+        ))

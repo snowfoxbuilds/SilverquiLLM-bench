@@ -331,3 +331,176 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Decision**: `cards/fdn/{collector_number}/` with `card_impl.py` + `card_spec.json`. SPG cards use `spg_` prefix (e.g., `spg_74`). Collision suffixes: `7b`, `61b`, `105b`, etc. Synthetic IDs 800+ for cards without real collector numbers.
 - **Reasoning**: Matches SOS structure. Directory name = collector number for easy lookup.
 - **Impact**: 265+ directories under `cards/fdn/`.
+
+## Aura on_resolve() must revalidate target types
+- **Context**: Reviewer flagged that aura on_resolve() only checked battlefield presence, not target type validity.
+- **Decision**: All aura implementations revalidate that the target still has the required type(s) at resolution time. If the type changed, the aura fizzles.
+- **Reasoning**: MTG rules require target legality recheck at resolution. A creature that becomes a noncreature is no longer a valid target for "enchant creature."
+- **Impact**: All aura card_impl.py files follow this pattern going forward.
+
+## Continuous effect color changes belong in Layer 5
+- **Context**: Imprisoned in the Moon was applying color removal (`perm.colors = set()`) inside the Layer 4 type-changing effect.
+- **Decision**: Color changes must be in a separate `Layer.COLOR` (Layer 5) continuous effect, not bundled with type changes.
+- **Reasoning**: MTG comprehensive rules layer system (CR 613) requires color changes in Layer 5, separate from type changes in Layer 4.
+- **Impact**: Any future card that changes both types and colors needs separate effects.
+
+## ENGINE LIMITATION: EffectManager._reset_objects() does not restore name/subtypes/colors
+- **Context**: Witness Protection mutates name, subtypes, and colors directly. When the aura is removed, these mutations persist.
+- **Decision**: Mark with ENGINE LIMITATION comment. Accept the limitation for now.
+- **Reasoning**: The engine's reset-and-reapply mechanism doesn't cover name/subtypes/colors fields. A proper fix requires engine-level changes beyond card implementation scope.
+- **Impact**: Cards that override name/subtypes/colors via continuous effects will have this limitation until the engine is updated.
+
+## Planeswalker choose_card() for optional/multi-choice abilities
+- **Context**: Reviewer flagged that Vivien's +1 and Chandra's +2 auto-selected cards instead of letting the controller choose.
+- **Decision**: Use `controller.choose_card()` for any ability that lets a player pick from multiple options. Wrap in try/except for `ScriptExhaustedError` when `DeterministicPlayer` has no queued choice.
+- **Reasoning**: MTG rules give the controller the choice. Auto-selection is incorrect behavior.
+- **Impact**: All future card implementations with "you may" or "choose" effects must use `choose_card()`.
+
+## EventType.END_STEP added to engine/triggers.py
+- **Context**: Chandra's delayed sacrifice trigger fires at "the beginning of the next end step." The engine lacked an `END_STEP` event type.
+- **Decision**: Added `END_STEP = "end_step"` to `EventType` enum.
+- **Reasoning**: Multiple cards trigger at the beginning of the end step (delayed triggers, end-of-turn effects). This event type was missing.
+- **Impact**: `engine/triggers.py`. Future cards with end-step triggers should use `EventType.END_STEP`.
+
+## Equipment ETB targeting requires get_targets()
+- **Context**: Celestial Armor's ETB attaches to "target creature you control" but lacked a `get_targets()` method.
+- **Decision**: Equipment with ETB targeting must implement `get_targets()` returning a `TargetRequirement` with appropriate filter. `on_resolve()` must revalidate controller ownership.
+- **Reasoning**: Without `get_targets()`, the cast flow never prompts for target selection. Controller check prevents attaching to stolen creatures.
+- **Impact**: Future equipment cards with "target creature you control" ETBs.
+
+## Counter sync: _original_plus_one_counters must be updated
+- **Context**: `game.add_counter()` updates `plus_one_counters` but `effect_manager.apply_all()` resets it from `_original_plus_one_counters`.
+- **Decision**: After `add_counter()`, also sync `_original_plus_one_counters = plus_one_counters` on the permanent.
+- **Reasoning**: Without this, counters placed by triggers are lost on the next effect manager cycle.
+- **Impact**: All card implementations that add +1/+1 counters via triggers.
+
+## Once-per-turn triggers: use turn number tracking, not boolean flags
+- **Context**: Cat Collector and Exemplar of Light used boolean flags that were set once and never reset, breaking once-per-turn semantics.
+- **Decision**: Track the turn number when the ability last triggered (`_last_triggered_turn`), and compare against `game.state.turn_number`. This naturally resets each turn without needing explicit cleanup.
+- **Reasoning**: Boolean flags require an explicit reset mechanism (e.g., beginning-of-turn trigger). Turn number comparison is stateless and correct by default.
+- **Impact**: All future cards with once-per-turn triggers should use this pattern.
+
+## Player attribute effects need cleanup in unregister_triggers()
+- **Context**: Herald of Eternal Dawn sets `cant_lose`/`cant_win` on Player objects, but EffectManager doesn't reset player attributes.
+- **Decision**: Cards that modify player attributes must clean them up in `unregister_triggers()`. Mark with `ENGINE LIMITATION`.
+- **Reasoning**: The continuous effect system only resets permanent characteristics, not player attributes. Manual cleanup is the current workaround.
+- **Impact**: Any card that sets player flags (cant_lose, cant_win, etc.) must follow this pattern.
+
+## Library top is at end of internal list (index -1)
+- **Context**: Reviewer caught that Squad Rallier and Vanguard Seraph accessed `cards[0]` for the library top, but `ZoneContainer` stores top at the end of the list.
+- **Decision**: Always use `cards[-N:]` to read the top N cards of a library, or `zone.top()` for a single card. Never use `cards[:N]` which reads from the bottom.
+- **Reasoning**: `ZoneContainer` appends to the end, so the last element is the top.
+- **Impact**: All future card implementations that interact with library top.
+
+## cost_reduction() hook for Affinity and similar cost reductions
+- **Context**: Claws Out has "Affinity for Cats" which was initially marked ENGINE LIMITATION, but the engine supports `cost_reduction(game) -> int`.
+- **Decision**: Use `cost_reduction()` hook for any card with cost reduction mechanics (Affinity, "costs {X} less", etc.). Return the integer reduction amount based on game state.
+- **Reasoning**: The engine already supports this pattern. No need for ENGINE LIMITATION.
+- **Impact**: All future cards with cost reduction mechanics.
+
+## ENGINE LIMITATION: No Keyword.UNBLOCKABLE in engine type system
+- **Context**: fdn_32 threshold grants "can't be blocked". Engine lacks `Keyword.UNBLOCKABLE`.
+- **Decision**: Use custom boolean attribute `unblockable` on the card object, applied/removed by continuous effect.
+- **Reasoning**: No formal evasion/unblockable keyword exists in the engine's type system. Combat logic would need extension to support this natively.
+- **Impact**: Any card with "can't be blocked" text must use ad-hoc attribute until engine adds native support.
+
+## Single-target spells must fizzle when target is illegal
+- **Context**: fdn_48 (Refute) and fdn_53 (Uncharted Voyage) initially resolved their additional effects even when the sole target was gone.
+- **Decision**: Add fizzle check at top of `on_resolve()` — if `chosen_targets[0]` is None or invalid, return early with no effects.
+- **Reasoning**: MTG rules: a spell with a single target is countered by the rules if that target is illegal on resolution. No effects happen.
+- **Impact**: All future single-target spells must include this fizzle guard.
+
+## ENGINE LIMITATION: cost_reduction() cannot remove colored mana pips
+- **Context**: fdn_57 (Blasphemous Edict) has alternative cost "if 13+ creatures in graveyards, cast for {B}". cost_reduction(4) reduces {3}{B}{B} to {B}{B}, not {B}.
+- **Decision**: Accept {B}{B} as best approximation. Full alternative cost (removing colored pips) requires engine changes to casting.py.
+- **Reasoning**: Engine's cost reduction only subtracts from generic mana portion. Changing this would require modifying ManaCost arithmetic.
+- **Impact**: Any card with alternative costs that remove colored pips will be slightly overcosted.
+
+## Morbid detection pattern: getattr(game, "creature_died_this_turn", False)
+- **Context**: GameState has no built-in creature death tracking field.
+- **Decision**: Use `getattr(game, "creature_died_this_turn", False)` — requires game-level CREATURE_DIES handler to set it.
+- **Reasoning**: Allows morbid-like abilities to work once the game tracks deaths per turn, without blocking on engine changes.
+- **Impact**: fdn_73 (Tragic Banshee) and future morbid cards.
+
+## Mana payment API: mana_pool.pay()
+- **Context**: fdn_91 (Kellan) needed activated ability cost to pay mana. `Player.pay_mana()` doesn't exist.
+- **Decision**: Use `player.mana_pool.pay(cost)` from `engine/mana.py`.
+- **Impact**: All activated abilities with mana costs should use this API.
+
+## Damage doubling via monkey-patching deal_damage
+- **Context**: fdn_97 (Twinflame Tyrant) doubles damage to opponents. Engine has no built-in replacement effect system for damage modification.
+- **Decision**: Monkey-patch `game_module.deal_damage` in continuous effect's apply callback. Original function stored and restored on cleanup.
+- **Reasoning**: ENGINE LIMITATION — no formal damage replacement API. Monkey-patching is fragile but functional.
+- **Impact**: Future damage-modifying cards may need similar approach until engine adds replacement effects.
+
+## Current power/toughness access: use .power/.toughness properties
+- **Context**: fdn_80, fdn_82, fdn_88 used base_power/base_toughness when Oracle refers to current values.
+- **Decision**: Always use `.power` / `.toughness` properties (include counters/effects), not `.base_power` / `.base_toughness`, when Oracle text refers to a creature's power/toughness.
+- **Impact**: All cards that reference "target creature's power/toughness" must use the property, not base.
+
+## "Your end step" triggers must check active_player
+- **Context**: fdn_101, fdn_108, fdn_113 triggered on every player's end step instead of only controller's.
+- **Decision**: All "At the beginning of your end step" triggers must include `game.state.active_player is controller` guard in their condition.
+- **Impact**: All future end-step triggers scoped to a player.
+
+## Land play tracking: player.land_plays_remaining
+- **Context**: fdn_106 (Loot) grants extra land drops. `additional_lands` field was not consumed by engine.
+- **Decision**: Use `player.land_plays_remaining` (or equivalent engine field) to track available land plays.
+- **Impact**: Any card granting extra land drops.
+
+## Mana value access: mana_cost.cmc
+- **Context**: Cards don't have a `mana_value` attribute. Use `card.mana_cost.cmc` for converted mana cost.
+- **Decision**: Always use `mana_cost.cmc` (or `getattr(card, 'mana_cost', ManaCost()).cmc`) for mana value checks.
+- **Impact**: All cards referencing mana value.
+
+## Combat damage triggers need per-event closures
+- **Context**: fdn_111 (Quilled Greatwurm) used shared mutable dict for trigger data, causing bugs with multiple events.
+- **Decision**: Each trigger must capture its own event data in a separate closure/snapshot, not share mutable state.
+- **Impact**: All combat damage triggers and similar multi-fire triggers.
+
+## DEALS_DAMAGE events default is_combat=True when key absent
+- **Context**: fdn_121 (Koma) needs to check combat damage. Existing tests fire DEALS_DAMAGE without `is_combat` key.
+- **Decision**: Use `data.get('is_combat', True)` — events without explicit flag treated as combat damage.
+- **Reasoning**: Backwards compatible with existing test patterns. Noncombat damage events should explicitly set `is_combat=False`.
+- **Impact**: All combat damage triggers should check this field.
+
+## Opponent modal choice: sequential offer pattern
+- **Context**: fdn_124 (Perforating Artist) — opponent chooses among sacrifice/discard/lose life.
+- **Decision**: Offer options sequentially via choose_card()/choose_yes_no(). Opponent can decline to fall through to next option.
+- **Reasoning**: Engine has no built-in modal choice API for opponents. Sequential offer is faithful to MTG rules where opponent picks.
+- **Impact**: Future "opponent chooses one" cards should use this pattern.
+
+## "Can't block" attribute: _cant_block
+- **Context**: Frenzied Goblin sets a creature as unable to block.
+- **Decision**: Use `target._cant_block` (underscore prefix) — engine's `combat.py` line 118 reads `_cant_block`.
+- **Impact**: Any card that prevents blocking must use `_cant_block`, not `cant_block`.
+
+## Cast from exile: instants/sorceries must resolve then go to graveyard
+- **Context**: Etali, Primal Storm casts exiled cards without paying mana costs.
+- **Decision**: Permanents: `move_to_zone(exile, battlefield)`. Instants/sorceries: call `on_resolve()` then `move_to_zone(exile, graveyard)` — they don't go to battlefield.
+- **Impact**: Any "cast without paying" effect for non-permanents.
+
+## Protection persistence: override _reset_characteristics()
+- **Context**: Progenitus has "protection from everything" which must survive characteristic resets.
+- **Decision**: Override `_reset_characteristics()` to reapply protection after engine resets.
+- **Impact**: Any permanent with innate protection that must persist through layer resets.
+
+## Graveyard replacement events: multiple event types
+- **Context**: Progenitus shuffles into library instead of going to graveyard.
+- **Decision**: Register replacement for `"creature_dies"`, `"sacrifice"`, and `"move_to_graveyard"` since the engine's zone-move pipeline uses all three.
+- **Impact**: Any card with graveyard replacement effects.
+
+## Muldrotha: per-turn type tracking for graveyard casting
+- **Context**: Muldrotha allows casting one permanent of each type from graveyard per turn.
+- **Decision**: Track used types in `_gy_types_used_this_turn` dict, reset on upkeep. ENGINE LIMITATION: alternative casting zones not fully supported yet.
+- **Impact**: Future graveyard-casting cards.
+
+## Player.choose() signature: choose(options, description)
+- **Context**: Secluded Courtyard needs player to choose a creature type on ETB.
+- **Decision**: Engine's `Player.choose()` signature is `choose(options, description)` — options first, description second.
+- **Impact**: Any card using player choice from a list of options.
+
+## ENGINE LIMITATION: Mana spending restrictions not enforced
+- **Context**: Secluded Courtyard produces any-color mana that should only be spendable on chosen creature type.
+- **Decision**: Produce the colored mana but document the spending restriction as ENGINE LIMITATION — engine has no conditional mana spending support.
+- **Impact**: Any card with conditional mana (e.g., Cavern of Souls, Unclaimed Territory).

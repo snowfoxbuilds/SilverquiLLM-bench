@@ -1,38 +1,34 @@
 """Card implementation for Fleeting Flight."""
 
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
-from engine.card import Instant, Sorcery
+
+from engine.card import Instant
 from engine.continuous_effects import (
     ContinuousEffect,
     DURATION_END_OF_TURN,
     Layer,
-    SubLayer,
 )
 from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
-    from cards.registry import CardRegistry
 
-def _get_chosen_target(card: Any, game: Any) -> Any:
-    """Retrieve the first chosen target for a spell.
+def _is_on_battlefield(game: Any, obj: Any) -> bool:
+    """Return True if *obj* is on any player's battlefield."""
+    for player in game.players:
+        if game.get_battlefield(player).contains(obj):
+            return True
+    return False
 
-    Looks for ``chosen_targets`` (set by :func:`cast_spell` during the
-    real casting pipeline) first, then falls back to the test-backdoor
-    attribute ``_resolve_target``.
-    """
-    chosen = getattr(card, "chosen_targets", None)
-    if chosen:
-        return chosen[0]
-    return getattr(card, "_resolve_target", None)
 
 class FleetingFlight(Instant):
-    """Fleeting Flight — {W} — Put a +1/+1 counter on target creature.
-    It gains flying until end of turn. Prevent all combat damage that
-    would be dealt to it this turn.
+    """Fleeting Flight — {W} — Instant.
 
-    (Prevention shield not fully implemented.)
+    Put a +1/+1 counter on target creature. It gains flying until end of
+    turn. Prevent all combat damage that would be dealt to it this turn.
 
     FDN collector number 13.
     """
@@ -48,13 +44,8 @@ class FleetingFlight(Instant):
         )
         super().__init__(**kwargs)
 
-    def get_targets(self, game: GameState) -> list[Any]:
-        """Target creature on the battlefield."""
-        targets: list[Any] = []
-        for player in game.players:
-            for obj in game.get_battlefield(player).get_all():
-                if CardType.CREATURE in getattr(obj, "card_types", set()):
-                    targets.append(obj)
+    def get_targets(self, game: "GameState") -> list[Any]:
+        """Target creature."""
         return [
             TargetRequirement(
                 filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
@@ -63,41 +54,46 @@ class FleetingFlight(Instant):
             )
         ]
 
-    def on_resolve(self, game: GameState) -> None:
-        """Put +1/+1 counter; grant flying until EOT."""
-        target = _get_chosen_target(self, game)
+    def on_resolve(self, game: "GameState") -> None:
+        """Put +1/+1 counter, grant flying until EOT, prevent combat damage."""
+        chosen = getattr(self, "chosen_targets", None)
+        target = chosen[0] if chosen else getattr(self, "_resolve_target", None)
         if target is None:
             return
 
-        still_valid = False
-        for player in game.players:
-            if game.get_battlefield(player).contains(target):
-                if CardType.CREATURE in getattr(target, "card_types", set()):
-                    still_valid = True
-                    break
-        if not still_valid:
+        if not _is_on_battlefield(game, target):
+            return
+        if CardType.CREATURE not in getattr(target, "card_types", set()):
             return
 
-        # +1/+1 counter via plus_one_counters (not base_power mutation)
-        if hasattr(target, "plus_one_counters"):
-            target.plus_one_counters += 1
-            target._original_plus_one_counters = target.plus_one_counters  # type: ignore[attr-defined]
+        # +1/+1 counter
+        from engine.game import add_counter
 
+        add_counter(game, target, "+1/+1", 1)
+        # Sync original counters per KEY_DECISIONS
+        if hasattr(target, "_original_plus_one_counters"):
+            target._original_plus_one_counters = target.plus_one_counters
+
+        # Flying until end of turn
         creature_ref = target
 
-        def _apply_flying(game: GameState) -> None:
-            for p in game.players:
-                if game.get_battlefield(p).contains(creature_ref):
-                    creature_ref.keywords = getattr(
-                        creature_ref, "keywords", Keyword(0)
-                    ) | Keyword.FLYING
-                    return
+        def _apply_flying(game: Any) -> None:
+            if not _is_on_battlefield(game, creature_ref):
+                return
+            creature_ref.keywords = getattr(
+                creature_ref, "keywords", Keyword(0)
+            ) | Keyword.FLYING
 
-        effect = ContinuousEffect(
+        game.effect_manager.add(ContinuousEffect(
             source=self,
             layer=Layer.ABILITY,
             sublayer=None,
             apply=_apply_flying,
             duration=DURATION_END_OF_TURN,
-        )
-        game.effect_manager.add(effect)
+        ))
+
+        # ENGINE LIMITATION: "Prevent all combat damage that would be dealt
+        # to it this turn" requires a damage prevention shield / replacement
+        # effect, which the engine does not support. The flag is set on the
+        # creature but will only work if the combat system checks it.
+        creature_ref.combat_damage_prevented = True

@@ -1,33 +1,36 @@
 """Card implementation for Celestial Armor."""
 
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
+
 from engine.card import ActivatedAbility, Artifact
 from engine.continuous_effects import (
     ContinuousEffect,
+    DURATION_END_OF_TURN,
     DURATION_PERMANENT,
     Layer,
     SubLayer,
 )
-from engine.types import Keyword, ManaCost
+from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
-    from cards.registry import CardRegistry
 
-def _make_equip_ability(
-    equipment: Artifact,
-    generic_cost: int,
-) -> ActivatedAbility:
-    """Return an :class:`ActivatedAbility` representing *Equip {N}*.
+def _is_on_battlefield(game: Any, obj: Any) -> bool:
+    """Return True if *obj* is on any player's battlefield."""
+    for player in game.players:
+        if game.get_battlefield(player).contains(obj):
+            return True
+    return False
 
-    The ability pays *generic_cost* generic mana from the controller's mana
-    pool, then calls ``equipment.equip(target, game)`` to attach the
-    equipment to a target creature.  Equip is sorcery-speed only (the engine
-    should enforce timing; we document the restriction in the description).
 
-    The target creature is read from ``equipment._current_target`` which the
-    game engine is expected to set before calling the ability's effect.
+def _make_equip_ability(equipment: "CelestialArmor") -> ActivatedAbility:
+    """Equip {3}{W} — attach to target creature you control.
+
+    ENGINE LIMITATION: Equip cost is {3}{W} (colored mana), but the engine
+    only supports generic mana payment. We approximate as generic {4}.
     """
     source = equipment
 
@@ -35,9 +38,10 @@ def _make_equip_ability(
         controller = getattr(src, "controller", None)
         if controller is None:
             return False
-        if controller.mana_pool.total() < generic_cost:
+        # ENGINE LIMITATION: colored equip cost {3}{W} approximated as {4}.
+        if controller.mana_pool.total() < 4:
             return False
-        controller.mana_pool.pay(ManaCost(generic=generic_cost))
+        controller.mana_pool.pay(ManaCost(generic=4))
         return True
 
     def _effect(game: Any) -> None:
@@ -48,19 +52,18 @@ def _make_equip_ability(
     return ActivatedAbility(
         cost=_cost,
         effect=_effect,
-        description=f"Equip {{{generic_cost}}} (sorcery speed)",
+        description="Equip {3}{W} (sorcery speed)",
     )
-def _is_on_battlefield(game: Any, obj: Any) -> bool:
-    for player in game.players:
-        if game.get_battlefield(player).contains(obj):
-            return True
-    return False
+
 
 class CelestialArmor(Artifact):
-    """Celestial Armor — {2}{W} — Flash.
+    """Celestial Armor — {2}{W} — Equipment — Flash.
+
     When this Equipment enters, attach it to target creature you control.
     That creature gains hexproof and indestructible until end of turn.
-    Equipped creature gets +2/+0 and has flying. Equip {3}{W}."""
+    Equipped creature gets +2/+0 and has flying.
+    Equip {3}{W}.
+    """
 
     def __init__(self, **kwargs: Any) -> None:
         kwargs.setdefault("name", "Celestial Armor")
@@ -82,76 +85,102 @@ class CelestialArmor(Artifact):
         self._pt_effect_ref: ContinuousEffect | None = None
         self._ability_effect_ref: ContinuousEffect | None = None
 
+    # ------------------------------------------------------------------
+    # Activated abilities
+    # ------------------------------------------------------------------
+
     def get_activated_abilities(self) -> list[ActivatedAbility]:
-        # ENGINE LIMITATION: Equip cost is {3}{W} (colored mana), but the
-        # engine only supports generic mana payment. We approximate as {4}.
-        return [_make_equip_ability(self, generic_cost=4)]
+        """Return the Equip {3}{W} ability."""
+        return [_make_equip_ability(self)]
+
+    # ------------------------------------------------------------------
+    # Equip helper
+    # ------------------------------------------------------------------
 
     def equip(self, target: Any, game: Any) -> None:
+        """Attach this equipment to *target* creature and register effects."""
         self.attached_to = target
-        self._register_effect(game)
+        self._register_equip_effects(game)
 
-    def register_triggers(self, game: Any) -> None:
-        """Register ETB trigger: auto-attach to target creature and grant
-        hexproof + indestructible until end of turn."""
-        from engine.triggers import EventType, TriggerRegistration
+    # ------------------------------------------------------------------
+    # Targeting
+    # ------------------------------------------------------------------
 
-        source = self
+    def get_targets(self, game: "GameState") -> list[Any]:
+        """Return targeting requirement: target creature you control."""
+        controller = self.controller or getattr(self, "owner", None)
 
-        def _self_etb_condition(game: Any, data: dict) -> bool:
-            return data.get("permanent") is source
+        def _filter(obj: Any) -> bool:
+            if CardType.CREATURE not in getattr(obj, "card_types", set()):
+                return False
+            # Must be controlled by this spell's controller
+            return getattr(obj, "controller", None) is controller
 
-        def _effect(game: Any) -> None:
-            """Attach to a target creature and grant temporary protection."""
-            controller = source.controller
-            if controller is None:
+        return [
+            TargetRequirement(
+                filter_fn=_filter,
+                description="target creature you control",
+                zone=Zone.BATTLEFIELD,
+            )
+        ]
+
+    # ------------------------------------------------------------------
+    # ETB — per KEY_DECISIONS, self-ETB effects go in on_resolve()
+    # ------------------------------------------------------------------
+
+    def on_resolve(self, game: "GameState") -> None:
+        """ETB: attach to target creature you control, grant hexproof and
+        indestructible until end of turn."""
+        controller = self.controller
+        if controller is None:
+            return
+
+        # Determine target — use chosen_targets (from StackObject.targets)
+        target_creature = None
+        chosen = getattr(self, "chosen_targets", None)
+        if chosen:
+            target_creature = chosen[0]
+
+        if target_creature is None:
+            return
+
+        # Validate target is still a legal creature we control
+        if not _is_on_battlefield(game, target_creature):
+            return
+        if CardType.CREATURE not in getattr(target_creature, "card_types", set()):
+            return
+        # Controller check — if creature changed controllers, fizzle
+        if getattr(target_creature, "controller", None) is not controller:
+            return
+
+        # Auto-attach
+        self.equip(target_creature, game)
+
+        # Grant hexproof and indestructible until end of turn
+        protected_creature = target_creature
+
+        def _apply_protection(game: Any) -> None:
+            if not _is_on_battlefield(game, protected_creature):
                 return
-            # Find a target creature on the controller's battlefield
-            battlefield = game.get_battlefield(controller)
-            target_creature = None
-            from engine.types import CardType as _CT
-            for card in battlefield.get_all():
-                if _CT.CREATURE in getattr(card, "card_types", set()) and card is not source:
-                    target_creature = card
-                    break
-            if target_creature is None:
-                return
+            protected_creature.keywords = (
+                protected_creature.keywords | Keyword.HEXPROOF | Keyword.INDESTRUCTIBLE
+            )
 
-            # Auto-attach
-            source.equip(target_creature, game)
-
-            # Grant hexproof and indestructible until end of turn
-            # ENGINE LIMITATION: "until end of turn" effects should be
-            # removed during the cleanup step. The engine does not yet
-            # support DURATION_UNTIL_END_OF_TURN, so we use DURATION_PERMANENT
-            # and the effect will persist longer than intended.
-            protected_creature = target_creature
-
-            def _apply_protection(game: Any) -> None:
-                if not _is_on_battlefield(game, protected_creature):
-                    return
-                protected_creature.keywords = (
-                    protected_creature.keywords | Keyword.HEXPROOF | Keyword.INDESTRUCTIBLE
-                )
-
-            game.effect_manager.add(ContinuousEffect(
-                source=source,
-                layer=Layer.ABILITY,
-                sublayer=None,
-                apply=_apply_protection,
-                duration=DURATION_PERMANENT,
-            ))
-
-        controller = getattr(self, "controller", None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(
-            event_type=EventType.ENTERS_BATTLEFIELD,
-            condition=_self_etb_condition,
-            effect=_effect,
+        game.effect_manager.add(ContinuousEffect(
             source=self,
-            controller=controller,
+            layer=Layer.ABILITY,
+            sublayer=None,
+            apply=_apply_protection,
+            duration=DURATION_END_OF_TURN,
         ))
 
-    def _register_effect(self, game: Any) -> None:
+    # ------------------------------------------------------------------
+    # Continuous effects for equipped creature (+2/+0 and flying)
+    # ------------------------------------------------------------------
+
+    def _register_equip_effects(self, game: Any) -> None:
+        """Register permanent continuous effects for +2/+0 (Layer 7c) and
+        flying (Layer 6) on the equipped creature."""
         equip_ref = self
 
         def _apply_pt(game: Any) -> None:
@@ -162,7 +191,7 @@ class CelestialArmor(Artifact):
                 return
             creature.base_power += 2
 
-        def _apply_ability(game: Any) -> None:
+        def _apply_flying(game: Any) -> None:
             if not _is_on_battlefield(game, equip_ref):
                 return
             creature = equip_ref.attached_to
@@ -171,21 +200,19 @@ class CelestialArmor(Artifact):
             creature.keywords = creature.keywords | Keyword.FLYING
 
         if self._pt_effect_ref is None:
-            pt_effect = ContinuousEffect(
+            self._pt_effect_ref = game.effect_manager.add(ContinuousEffect(
                 source=equip_ref,
                 layer=Layer.POWER_TOUGHNESS,
                 sublayer=SubLayer.MODIFY_PT,
                 apply=_apply_pt,
                 duration=DURATION_PERMANENT,
-            )
-            self._pt_effect_ref = game.effect_manager.add(pt_effect)
+            ))
 
         if self._ability_effect_ref is None:
-            ability_effect = ContinuousEffect(
+            self._ability_effect_ref = game.effect_manager.add(ContinuousEffect(
                 source=equip_ref,
                 layer=Layer.ABILITY,
                 sublayer=None,
-                apply=_apply_ability,
+                apply=_apply_flying,
                 duration=DURATION_PERMANENT,
-            )
-            self._ability_effect_ref = game.effect_manager.add(ability_effect)
+            ))

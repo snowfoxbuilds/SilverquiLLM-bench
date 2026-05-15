@@ -3,12 +3,13 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature, LoyaltyAbility, Planeswalker
-from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype
+from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
 if TYPE_CHECKING:
     from engine.game_state import GameState
     from engine.player import Player
 
     from cards.registry import CardRegistry
+
 
 class KaitoCunningInfiltrator(Planeswalker):
     """Kaito, Cunning Infiltrator — {1}{U}{U} — 3 loyalty.
@@ -42,33 +43,72 @@ class KaitoCunningInfiltrator(Planeswalker):
         )
         super().__init__(**kwargs)
 
-    # ENGINE LIMITATION: combat damage trigger for loyalty counters not implemented — requires combat damage events
+    def register_triggers(self, game: Any) -> None:
+        """Register passive: combat damage to a player → loyalty counter."""
+        from engine.game import add_counter
+        from engine.triggers import EventType, TriggerRegistration
+
+        pw = self
+        controller = getattr(self, "controller", None) or game.active_player
+
+        def _combat_damage_condition(game: Any, data: dict) -> bool:
+            """Fire when a creature controlled by Kaito's controller deals damage to a player."""
+            source = data.get("source")
+            target = data.get("target")
+            # Must be combat damage
+            if not data.get("combat", False):
+                return False
+            if source is None or target is None:
+                return False
+            # Source must be a creature we control
+            source_types = getattr(source, "card_types", set())
+            if CardType.CREATURE not in source_types:
+                return False
+            if getattr(source, "controller", None) is not pw.controller:
+                return False
+            # Target must be a player (has 'life')
+            if not hasattr(target, "life"):
+                return False
+            return True
+
+        def _combat_damage_effect(game: Any) -> None:
+            """Put a loyalty counter on Kaito."""
+            add_counter(game, pw, "loyalty", 1)
+
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=EventType.DEALS_DAMAGE,
+            condition=_combat_damage_condition,
+            effect=_combat_damage_effect,
+            source=self,
+            controller=controller,
+        ))
 
     def get_loyalty_abilities(self) -> list[LoyaltyAbility]:
         pw = self
 
         def _plus1(game: Any) -> None:
             """Up to one target creature can't be blocked. Draw then discard."""
-            from engine.game import draw_card
+            from engine.game import discard, draw_card
+
+            # "Up to one" — target is optional
             target = getattr(pw, "_resolve_target", None)
             if target is not None:
                 target._cant_be_blocked = True  # type: ignore[attr-defined]
             controller = pw.controller
             if controller is not None:
-                draw_card(game, controller)
-                # Discard: remove last card from hand if any
-                from engine.types import Zone
+                # Draw a card
+                drawn = draw_card(game, controller)
+                # Then discard a card (controller chooses; simplified: discard last)
                 hand = controller.zones[Zone.HAND]
                 cards_in_hand = hand.get_all()
                 if cards_in_hand:
                     card_to_discard = cards_in_hand[-1]
-                    hand.remove(card_to_discard)
-                    gy = controller.zones[Zone.GRAVEYARD]
-                    gy.add(card_to_discard)
+                    discard(game, controller, card_to_discard)
 
         def _minus2(game: Any) -> None:
             """Create a 2/1 blue Ninja creature token."""
             from engine.game import create_token
+
             controller = pw.controller
             if controller is not None:
                 token = Creature(
@@ -81,10 +121,22 @@ class KaitoCunningInfiltrator(Planeswalker):
 
         def _minus9(game: Any) -> None:
             """Emblem — whenever a player casts a spell, create a 2/1 Ninja token."""
-            # ENGINE LIMITATION: emblem system not implemented — creates a single Ninja token as approximation
+            from engine.triggers import EventType, TriggerRegistration
             from engine.game import create_token
+
             controller = pw.controller
-            if controller is not None:
+            if controller is None:
+                return
+
+            # Create a sentinel object to act as the emblem source
+            emblem = type("Emblem", (), {"name": "Kaito Emblem"})()
+
+            def _spell_cast_condition(game: Any, data: dict) -> bool:
+                """Always fires when any player casts a spell."""
+                return True
+
+            def _spell_cast_effect(game: Any) -> None:
+                """Create a 2/1 blue Ninja creature token."""
                 token = Creature(
                     name="Ninja",
                     base_power=2,
@@ -93,11 +145,19 @@ class KaitoCunningInfiltrator(Planeswalker):
                 )
                 create_token(game, controller, token)
 
+            game.trigger_manager.register(TriggerRegistration(
+                event_type=EventType.SPELL_CAST,
+                condition=_spell_cast_condition,
+                effect=_spell_cast_effect,
+                source=emblem,
+                controller=controller,
+            ))
+
         return [
             LoyaltyAbility(
                 loyalty_cost=+1,
                 effect=_plus1,
-                description="+1: Target creature can't be blocked. Draw, then discard.",
+                description="+1: Up to one target creature can't be blocked. Draw, then discard.",
             ),
             LoyaltyAbility(
                 loyalty_cost=-2,
@@ -107,6 +167,6 @@ class KaitoCunningInfiltrator(Planeswalker):
             LoyaltyAbility(
                 loyalty_cost=-9,
                 effect=_minus9,
-                description="−9: Emblem — spell cast → create 2/1 Ninja token.",
+                description="−9: Emblem — whenever a player casts a spell, create 2/1 Ninja token.",
             ),
         ]

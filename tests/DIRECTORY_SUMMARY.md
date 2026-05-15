@@ -84,7 +84,7 @@ Test root directory for the SilverquiLLM-bench project. Contains top-level test 
 - **`engine/`** — Unit tests for all engine modules. See `tests/engine/DIRECTORY_SUMMARY.md`.
 - **`cards/`** — Unit tests for card implementations (25 test files). See `tests/cards/DIRECTORY_SUMMARY.md`.
 - **`benchmark/`** — Integration tests and helpers. See `tests/benchmark/DIRECTORY_SUMMARY.md`.
-- **`audited/`** — Per-card audited test directories. Contains `fdn/` (260+ FDN card test dirs) and `sos/` (346 SOS Draft Set card test dirs with SOA/SPG subsets). Each card has a numbered directory with `tests.py`. Conftest files inject `card_impl` fixtures via `CardRegistry` class-name mapping.
+- **`audited/`** — Per-card audited test directories. Contains `fdn/` (286 FDN card test dirs, 174 with new/upgraded implementations from Items 1–15) and `sos/` (346 SOS Draft Set card test dirs with SOA/SPG subsets). Each card has a numbered directory with `tests.py`. Conftest files inject `card_impl` fixtures via `CardRegistry` class-name mapping.
 
 ## Testing Approach
 
