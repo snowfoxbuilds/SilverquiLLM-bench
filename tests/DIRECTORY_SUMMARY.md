@@ -8,7 +8,7 @@ Test root directory for the SilverquiLLM-bench project. Contains top-level test 
 
 | File | Responsibility |
 |------|---------------|
-| `conftest.py` | **pytest config** — `pytest_collection_modifyitems` hook to filter out benchmark functions that get collected as tests; registers `integration` marker. |
+| `conftest.py` | **pytest config** — `pytest_collection_modifyitems` hook to filter out benchmark functions that get collected as tests; registers `integration` marker for tests requiring Docker/network (skipped by default). |
 | `test_utils.py` | **Test helper API** — `create_game()`, `set_board_state()`, `cast_spell()`, `advance_to_phase()`, `declare_attackers()`, `declare_blockers()`. `TestSetupError` exception. |
 | `test_integration.py` | **End-to-end integration tests** — Multi-turn game scenarios. |
 | `test_scaffold.py` | **Project scaffold validation** — pyproject.toml, directory structure, package importability. |
@@ -78,6 +78,14 @@ Test root directory for the SilverquiLLM-bench project. Contains top-level test 
 | `test_engine_extensions.py` | **Engine extension tests** — Converge mana tracking. |
 | `test_phase1_tech_debt.py` | **Tech debt validation** — Python 3.12, removed aliases. |
 | `test_test_utils_doc.py` | **test_utils doc tests** — docs/test_utils.md accuracy. |
+| `test_card_filter.py` | **Card filter tests** — `--cards` CLI option parsing, collector-number normalization, workspace filtering. |
+| `test_cli_docker.py` | **CLI Docker tests** — CLI flags, ContainerLifecycle mocking, docker args, harvest, and smoke command tests. |
+| `test_cli_lifecycle_integration.py` | **CLI lifecycle integration tests** — End-to-end tests for ContainerLifecycle integration into CLI run/smoke commands. |
+| `test_docker_entrypoints.py` | **Docker entrypoint tests** — Validates entrypoint.mjs files have system.log, agent_stdout.log, SIGTERM handler, no engine_work copy. |
+| `test_runner.py` | **Container lifecycle tests** — Poll-loop ordering, final read pass, timeout enforcement, snapshot callbacks for `ContainerLifecycle`. |
+| `test_smoke_lifecycle.py` | **Integration smoke test** — Container lifecycle smoke test using alpine image (skipped by default, requires `--run-integration`). |
+| `test_pytest_infra.py` | **Pytest infrastructure tests** — Integration marker registration, pytest-timeout configuration. |
+| `test_workspace.py` | **Workspace staging tests** — `stage_workspace` signature, workspace structure, card filtering, prompt generation. |
 
 ## Subdirectories
 

@@ -18,7 +18,7 @@ Canonical implementation constraints for this TODO:
 - The runner captures Docker stdout/stderr at the host level, streams them live, and saves them as `docker_stdout.log` and `docker_stderr.log`.
 ---
 
-- [ ] **Remove ****`--cards-dir`**** and ****`--engine-dir`**** CLI flags; hardcode repo-relative paths**
+- [x] **Remove ****`--cards-dir`**** and ****`--engine-dir`**** CLI flags; hardcode repo-relative paths**
   Detail: These flags are unnecessary — cards and engine directories are static repo-relative paths. The settled decision ([BENCHMARK-RUNNER.md](http://benchmark-runner.md/)) states: "Cards and engine source directories are repo-relative constants (`./cards`, `./engine`); they are not configurable via CLI flags."
 
   Current state:
@@ -41,7 +41,7 @@ Canonical implementation constraints for this TODO:
 
   Testability: Existing `tests/test_workspace.py` tests should be updated to match the new `stage_workspace()` signature. Verify staging still produces the correct workspace structure with hardcoded paths.
 
-- [ ] **Add ****`--cards`**** filter to ****`silverquillm run`**
+- [x] **Add ****`--cards`**** filter to ****`silverquillm run`**
   Detail: Optional flag to stage only a subset of SOS cards for development and debugging. FDN cards are always staged in full (they're reference examples, not benchmark targets). The settled decision ([BENCHMARK-RUNNER.md](http://benchmark-runner.md/)) states: "Filtered runs are not leaderboard-valid."
 
   CLI signature:
@@ -64,7 +64,7 @@ silverquillm run --image <img> --cards 001,042,105 --timeout 3600
 
   Testability: Unit test `stage_workspace()` with `card_filter=["001", "042"]` → verify only those two SOS dirs exist in `workspace/cards/sos/`. Full set when `card_filter=None` → all SOS dirs present. FDN dirs always present regardless of filter. Verify prompt text changes when filter is set.
 
-- [ ] **Write ****`run_manifest.json`**** during workspace staging**
+- [x] **Write ****`run_manifest.json`**** during workspace staging**
   Detail: The runner writes `/workspace/run_manifest.json` immediately before `docker run` with advisory timeout facts. Per [BENCHMARK-RUNNER.md](http://benchmark-runner.md/): "The Run Manifest is advisory. It is not agent configuration."
 
   The manifest contains exactly two fields:
@@ -97,7 +97,7 @@ manifest = {
 
   Testability: After `stage_workspace()` + manifest write, verify `workspace/run_manifest.json` exists and contains valid JSON with `timeout_seconds` (int) and `deadline_utc` (ISO-8601 string). Verify the file is copied to the results directory during harvest.
 
-- [ ] **Update Docker entrypoints: remove ****`engine_work`**** copy, add file-based channel separation**
+- [x] **Update Docker entrypoints: remove ****`engine_work`**** copy, add file-based channel separation**
   Detail: Current entrypoints (`docker/homelab-pi-blind/entrypoint.mjs` and `docker/local-pi-blind/entrypoint.mjs`) copy engine to `/workspace/engine_work` — this is a stale pattern. Per the spec, agents edit `/workspace/engine/` in place. There is no `engine_work`.
 
   Additionally, entrypoints should separate output into named log files in `/output/` for the runner's multi-channel monitoring. Current entrypoints write only `progress.jsonl` and `exit_code` to `/output/`.
@@ -164,7 +164,7 @@ echo $? > /output/exit_code
 
   Testability: Build the updated image, run smoke test, verify: (a) `/workspace/engine_work/` does NOT exist, (b) `/output/system.log` contains timestamped messages, (c) `/output/agent_stdout.log` contains agent output, (d) `progress.jsonl` still written. Manual verification — this runs against the real model server.
 
-- [ ] **Create ****`silverquillm/runner.py`**** with pipe-readers + poll-loop architecture**
+- [x] **Create ****`silverquillm/runner.py`**** with pipe-readers + poll-loop architecture**
   Detail: New module implementing the `ContainerLifecycle` class — the core container launch, live streaming, dual timeout enforcement, and graceful shutdown logic. This is the settled architecture from [BENCHMARK-RUNNER.md](http://benchmark-runner.md/): "Two dedicated threads drain Docker stdout/stderr pipes to host files. The main thread polls all files on a ~1s interval."
 
   Create `silverquillm/runner.py` with the following:
@@ -314,7 +314,7 @@ proc = subprocess.Popen(
   - Hang timeout: mock process writes data, then goes silent → verify `docker stop` called, `timeout_reason == "hang_timeout"`.
   - KeyboardInterrupt: raise during poll loop → verify `docker stop` called, threads joined.
   - Verify pipe reader threads are started and joined.
-- [ ] **Integrate ****`ContainerLifecycle`**** into CLI ****`run`**** and ****`smoke`**** commands; update harvest and add ****`--hang-timeout`**
+- [x] **Integrate ****`ContainerLifecycle`**** into CLI ****`run`**** and ****`smoke`**** commands; update harvest and add ****`--hang-timeout`**
   Detail: Replace the current `subprocess.run()` + `--stop-timeout` pattern in both `run` and `smoke` commands with the new `ContainerLifecycle` from `runner.py`. Also fix stale harvest logic.
 
   **`run`**** command changes in ****`silverquillm/cli.py`****:**
@@ -361,7 +361,7 @@ elif result.exit_code != 0:
 
   Testability: Existing `tests/test_cli_docker.py` tests should be updated to reflect the new `ContainerLifecycle` integration. Mock `ContainerLifecycle.run()` to return various `LifecycleResult` values and verify CLI behavior (exit codes, error messages). Test harvest produces `workspace_final/`, `docker_stdout.log`, `docker_stderr.log`, and `run_manifest.json` in the results directory.
 
-- [ ] **Add pytest ****`integration`**** marker, ****`pytest-timeout`****, and alpine smoke pipeline test**
+- [x] **Add pytest ****`integration`**** marker, ****`pytest-timeout`****, and alpine smoke pipeline test**
   Detail: Set up test infrastructure for Docker-dependent integration tests, then add a `test_smoke_container_lifecycle` that validates the smoke pipeline end-to-end using a minimal alpine image.
 
   **Infrastructure changes:**

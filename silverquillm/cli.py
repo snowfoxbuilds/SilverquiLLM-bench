@@ -9,18 +9,18 @@ Entry point registered in pyproject.toml: ``benchmark = "silverquillm.cli:main"`
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-
-import re as _re
 
 import click
 
 from silverquillm.card_loader import is_template, load_all_card_specs
+from silverquillm.runner import ContainerLifecycle
 from silverquillm.workspace import stage_workspace
 
 __all__ = ["main"]
@@ -101,8 +101,8 @@ def _harvest_results(
     output: Path,
     results_dir: Path,
     run_name: str,
-    cards_dir: Path,
     timed_out: bool = False,
+    timeout_reason: str | None = None,
 ) -> Path:
     """Copy artifacts from workspace/output into results/{run_name}/.
 
@@ -111,11 +111,15 @@ def _harvest_results(
     run_dir = results_dir / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
 
+    if timeout_reason:
+        click.echo(f"Timeout reason: {timeout_reason}")
+
     # Per-card artifacts
     sos_dir = workspace / "cards" / "sos"
     cards_out = run_dir / "cards"
     cards_out.mkdir(parents=True, exist_ok=True)
 
+    cards_dir = _REPO_ROOT / "cards"
     specs = load_all_card_specs(cards_dir, "sos")
 
     for spec in specs:
@@ -138,13 +142,13 @@ def _harvest_results(
         if tests_src.exists():
             shutil.copy2(tests_src, card_results / "tests.py")
 
-    # Engine diff
-    engine_orig = workspace / "engine"
-    engine_work = workspace / "engine_work"
-    if engine_work.exists() and engine_orig.exists():
+    # Engine diff — compare repo engine against workspace engine
+    engine_repo = _REPO_ROOT / "engine"
+    engine_ws = workspace / "engine"
+    if engine_repo.exists() and engine_ws.exists():
         try:
             diff_result = subprocess.run(
-                ["diff", "-ruN", str(engine_orig), str(engine_work)],
+                ["diff", "-ruN", str(engine_repo), str(engine_ws)],
                 capture_output=True,
                 text=True,
             )
@@ -155,27 +159,39 @@ def _harvest_results(
         except FileNotFoundError:
             pass  # diff not available
 
-    # Output files
-    for fname in ("progress.jsonl", "stdout.log", "stderr.log"):
-        src = output / fname
-        if src.exists():
-            shutil.copy2(src, run_dir / fname)
+    # Output files — copy docker_stdout.log, docker_stderr.log, and any *.log / *.jsonl
+    for src in output.iterdir():
+        if src.is_file() and (src.suffix in (".log", ".jsonl")):
+            shutil.copy2(src, run_dir / src.name)
 
     # Per-card status
-    _write_card_statuses(cards_dir, workspace, run_dir, timed_out)
+    _write_card_statuses(workspace, run_dir, timed_out)
+
+    # Materialize workspace_final/ snapshot
+    workspace_final = run_dir / "workspace_final"
+    if workspace.exists():
+        shutil.copytree(
+            workspace,
+            workspace_final,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+            dirs_exist_ok=True,
+        )
+
+    # Run manifest — copy from workspace_final (snapshot) to results dir
+    manifest_src = workspace_final / "run_manifest.json" if workspace_final.exists() else workspace / "run_manifest.json"
+    if manifest_src.exists():
+        shutil.copy2(manifest_src, run_dir / "run_manifest.json")
 
     return run_dir
 
 
 def _write_card_statuses(
-    cards_dir: Path,
     workspace: Path,
     run_dir: Path,
     timed_out: bool,
 ) -> None:
     """Determine per-card status and write status.json."""
-    import json
-
+    cards_dir = _REPO_ROOT / "cards"
     specs = load_all_card_specs(cards_dir, "sos")
     statuses: dict[str, str] = {}
 
@@ -225,18 +241,6 @@ def main() -> None:
 @main.command()
 @click.option("--image", required=True, help="Docker image name")
 @click.option(
-    "--cards-dir",
-    default="./cards",
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
-    help="Cards directory (default: cards/ relative to repo root)",
-)
-@click.option(
-    "--engine-dir",
-    default="./engine",
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
-    help="Engine directory (default: engine/ relative to repo root)",
-)
-@click.option(
     "--timeout",
     default=3600,
     type=int,
@@ -248,19 +252,34 @@ def main() -> None:
     type=click.Path(file_okay=False, path_type=Path),
     help="Results output directory (default: results/ relative to repo root)",
 )
+@click.option(
+    "--cards",
+    default=None,
+    help="Comma-separated SOS collector numbers to stage (default: all)",
+)
+@click.option(
+    "--hang-timeout",
+    default=900,
+    type=int,
+    help="Hang timeout in seconds (default: 900)",
+)
 def run(
     image: str,
-    cards_dir: Path | None,
-    engine_dir: Path | None,
     timeout: int,
     results_dir: Path | None,
+    cards: str | None,
+    hang_timeout: int = 900,
 ) -> None:
     """Run the full benchmark workload in a Docker container."""
+    # Parse --cards into a list of collector numbers
+    card_filter: list[str] | None = None
+    if cards is not None:
+        card_filter = [
+            str(int(c)) if c.isdigit() else c.strip()
+            for c in (tok.strip() for tok in cards.split(","))
+            if c
+        ]
     # Resolve defaults relative to repo root
-    if cards_dir is None:
-        cards_dir = _REPO_ROOT / "cards"
-    if engine_dir is None:
-        engine_dir = _REPO_ROOT / "engine"
     if results_dir is None:
         results_dir = _REPO_ROOT / "results"
 
@@ -272,52 +291,44 @@ def run(
     # Stage workspace with all cards
     staging_dir = Path(tempfile.mkdtemp(prefix="silverquillm_run_"))
     try:
-        workspace, output = stage_workspace(cards_dir, engine_dir, staging_dir)
+        workspace, output = stage_workspace(output_dir=staging_dir, card_filter=card_filter)
         click.echo(f"Workspace staged at: {workspace}")
 
-        # Build docker command
-        container_name = f"silverquillm-{run_name}"
-        cmd = [
-            "docker", "run", "--rm",
-            "--runtime", "runc",
-            "--name", container_name,
-            "--network=host", # allow access to localhost APIs
-            "-v", f"{workspace}:/workspace",
-            "-v", f"{output}:/output",
-        ]
-        cmd.extend(_api_key_env_args())
-        cmd.extend(["--stop-timeout", str(timeout)])
-        cmd.append(image)
+        # Write run manifest (advisory timeout facts)
+        manifest = {
+            "timeout_seconds": timeout,
+            "deadline_utc": (datetime.now(tz=timezone.utc) + timedelta(seconds=timeout)).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        }
+        (workspace / "run_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
-        click.echo(f"Running: {_redact_cmd(cmd)}")
+        # Run container via ContainerLifecycle
+        container_name = f"sqm-{run_name}"
+        lifecycle = ContainerLifecycle(
+            image=image,
+            container_name=container_name,
+            workspace=workspace,
+            output=output,
+            hard_timeout=timeout,
+            hang_timeout=hang_timeout,
+            env_args=_api_key_env_args(),
+        )
 
-        # Run container, block until exit
-        timed_out = False
-        try:
-            result = subprocess.run(
-                cmd,
-                timeout=timeout + 60,  # backup timeout
+        click.echo(f"Running container: {container_name}")
+        result = lifecycle.run()
+
+        if result.timeout_reason:
+            click.echo(f"Container timed out ({result.timeout_reason})", err=True)
+        elif result.exit_code != 0:
+            click.echo(
+                f"Container exited with code {result.exit_code}", err=True
             )
-            if result.returncode != 0:
-                click.echo(
-                    f"Container exited with code {result.returncode}", err=True
-                )
-        except subprocess.TimeoutExpired:
-            click.echo("Container timed out (backup timeout reached)", err=True)
-            timed_out = True
-            # Stop the container so it doesn't keep mutating workspace
-            try:
-                subprocess.run(
-                    ["docker", "stop", container_name],
-                    timeout=30,
-                )
-            except Exception:  # noqa: BLE001
-                pass
 
         # Harvest results
         click.echo("Harvesting results...")
         run_dir = _harvest_results(
-            workspace, output, results_dir, run_name, cards_dir, timed_out
+            workspace, output, results_dir, run_name,
+            timed_out=result.timed_out,
+            timeout_reason=result.timeout_reason,
         )
         click.echo(f"Results saved to: {run_dir}")
 
@@ -351,36 +362,26 @@ def smoke(image: str) -> None:
         # Create empty engine dir expected by Docker entrypoints
         (workspace / "engine").mkdir()
 
-        # Build docker command
-        container_name = f"silverquillm-smoke-{os.getpid()}"
-        cmd = [
-            "docker", "run", "--rm",
-            "--runtime", "runc",
-            "--name", container_name,
-            "--network=host", # allow access to localhost APIs
-            "-v", f"{workspace}:/workspace",
-            "-v", f"{output}:/output",
-        ]
-        cmd.extend(_api_key_env_args())
-        cmd.extend(["--stop-timeout", "120"])
-        cmd.append(image)
+        # Run via ContainerLifecycle
+        container_name = f"sqm-smoke-{os.getpid()}"
+        lifecycle = ContainerLifecycle(
+            image=image,
+            container_name=container_name,
+            workspace=workspace,
+            output=output,
+            hard_timeout=120,
+            hang_timeout=60,
+            env_args=_api_key_env_args(),
+        )
 
         click.echo(f"Smoke test: {image}")
+        result = lifecycle.run()
 
-        # Run with 120s timeout
-        try:
-            result = subprocess.run(cmd, timeout=120)
-            exit_zero = result.returncode == 0
-        except subprocess.TimeoutExpired:
+        if result.timeout_reason:
             click.echo("FAIL: Container timed out")
-            try:
-                subprocess.run(
-                    ["docker", "stop", container_name],
-                    timeout=30,
-                )
-            except Exception:  # noqa: BLE001
-                pass
             raise SystemExit(1)
+
+        exit_zero = result.exit_code == 0
 
         # Check results
         hello_exists = (workspace / "hello.py").exists()
@@ -390,7 +391,7 @@ def smoke(image: str) -> None:
         else:
             reasons = []
             if not exit_zero:
-                reasons.append(f"exit code {result.returncode}")
+                reasons.append(f"exit code {result.exit_code}")
             if not hello_exists:
                 reasons.append("hello.py not found")
             click.echo(f"FAIL: {', '.join(reasons)}")
