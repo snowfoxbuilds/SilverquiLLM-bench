@@ -11,8 +11,11 @@ Public API
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
+
+import click
 
 __all__ = ["stage_workspace"]
 
@@ -59,7 +62,9 @@ def stage_workspace(
     output_dir:
         Parent directory where ``workspace/`` and ``output/`` are created.
     card_filter:
-        Optional list of collector numbers to include (no-op stub).
+        Optional list of collector numbers to include for SOS cards.
+        When ``None``, all SOS cards are staged.  FDN cards are always
+        staged in full regardless of this parameter.
 
     Returns
     -------
@@ -81,7 +86,11 @@ def stage_workspace(
     output.mkdir(parents=True, exist_ok=True)
 
     # --- prompt.md ---
-    (workspace / "prompt.md").write_text(_PROMPT_TEXT, encoding="utf-8")
+    prompt_text = _prompt_text(card_filter)
+    (workspace / "prompt.md").write_text(prompt_text, encoding="utf-8")
+
+    # Echo the card filter
+    click.echo(f"Card filter: {card_filter or 'all'}")
 
     # --- engine/ (full copy) ---
     _copy_engine(engine_dir, workspace / "engine")
@@ -90,7 +99,7 @@ def stage_workspace(
     _copy_reference_docs(workspace)
 
     # --- cards/ ---
-    _stage_cards(cards_dir, workspace / "cards")
+    _stage_cards(cards_dir, workspace / "cards", card_filter=card_filter)
 
     return workspace, output
 
@@ -135,8 +144,28 @@ def _copy_reference_docs(workspace: Path) -> None:
         )
 
 
-def _stage_cards(cards_dir: Path, dest_cards: Path) -> None:
-    """Copy fdn/ and sos/ card directories into workspace/cards/."""
+def _prompt_text(card_filter: list[str] | None) -> str:
+    """Return prompt text, adjusting for card filter if set."""
+    if card_filter is not None:
+        cards_list = ", ".join(card_filter)
+        return _PROMPT_TEXT.replace(
+            "Implement all SOS cards",
+            f"Implement the following SOS cards: {cards_list}",
+        )
+    return _PROMPT_TEXT
+
+
+def _stage_cards(
+    cards_dir: Path,
+    dest_cards: Path,
+    *,
+    card_filter: list[str] | None = None,
+) -> None:
+    """Copy fdn/ and sos/ card directories into workspace/cards/.
+
+    When *card_filter* is set, only SOS cards whose collector number is in
+    the filter list are staged.  FDN cards are always staged in full.
+    """
     for tier in ("fdn", "sos"):
         src_tier = cards_dir / tier
         if not src_tier.exists():
@@ -161,6 +190,16 @@ def _stage_cards(cards_dir: Path, dest_cards: Path) -> None:
             impl_file = card_dir / "card_impl.py"
             if not spec_file.exists():
                 continue
+
+            # Apply card_filter for SOS tier only
+            if tier == "sos" and card_filter is not None:
+                spec_data = json.loads(spec_file.read_text(encoding="utf-8"))
+                cn = str(spec_data.get("collector_number", ""))
+                # Normalize: strip leading zeros for numeric values
+                cn_norm = str(int(cn)) if cn.isdigit() else cn
+                filter_norm = {str(int(f)) if f.isdigit() else f for f in card_filter}
+                if cn_norm not in filter_norm:
+                    continue
 
             dest_card = dest_cards / tier / card_dir.name
             dest_card.mkdir(parents=True, exist_ok=True)

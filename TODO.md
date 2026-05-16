@@ -41,7 +41,7 @@ Canonical implementation constraints for this TODO:
 
   Testability: Existing `tests/test_workspace.py` tests should be updated to match the new `stage_workspace()` signature. Verify staging still produces the correct workspace structure with hardcoded paths.
 
-- [ ] **Add ****`--cards`**** filter to ****`silverquillm run`**
+- [x] **Add ****`--cards`**** filter to ****`silverquillm run`**
   Detail: Optional flag to stage only a subset of SOS cards for development and debugging. FDN cards are always staged in full (they're reference examples, not benchmark targets). The settled decision ([BENCHMARK-RUNNER.md](http://benchmark-runner.md/)) states: "Filtered runs are not leaderboard-valid."
 
   CLI signature:

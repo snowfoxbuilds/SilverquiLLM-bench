@@ -236,12 +236,26 @@ def main() -> None:
     type=click.Path(file_okay=False, path_type=Path),
     help="Results output directory (default: results/ relative to repo root)",
 )
+@click.option(
+    "--cards",
+    default=None,
+    help="Comma-separated SOS collector numbers to stage (default: all)",
+)
 def run(
     image: str,
     timeout: int,
     results_dir: Path | None,
+    cards: str | None,
 ) -> None:
     """Run the full benchmark workload in a Docker container."""
+    # Parse --cards into a list of collector numbers
+    card_filter: list[str] | None = None
+    if cards is not None:
+        card_filter = [
+            str(int(c)) if c.isdigit() else c.strip()
+            for c in (tok.strip() for tok in cards.split(","))
+            if c
+        ]
     # Resolve defaults relative to repo root
     if results_dir is None:
         results_dir = _REPO_ROOT / "results"
@@ -254,7 +268,7 @@ def run(
     # Stage workspace with all cards
     staging_dir = Path(tempfile.mkdtemp(prefix="silverquillm_run_"))
     try:
-        workspace, output = stage_workspace(output_dir=staging_dir)
+        workspace, output = stage_workspace(output_dir=staging_dir, card_filter=card_filter)
         click.echo(f"Workspace staged at: {workspace}")
 
         # Build docker command

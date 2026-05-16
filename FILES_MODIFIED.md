@@ -12,3 +12,13 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `silverquillm/cli.py` — Removed cards_dir param from _harvest_results and _write_card_statuses; use _REPO_ROOT internally
 - `silverquillm/workspace.py` — Removed cards_dir/engine_dir params from stage_workspace; signature is now (output_dir, *, card_filter)
 
+## Item 2: Add --cards filter to silverquillm run
+
+### Tests
+- `tests/test_workspace.py` — Verifies stage_workspace signature and workspace structure
+- `tests/test_cli_docker.py` — Verifies CLI flags, docker args, harvest, and smoke tests
+
+### Implementation
+- `silverquillm/cli.py` — Added --cards Click option, parsed into card_filter list with zero-pad normalization, passed to stage_workspace
+- `silverquillm/workspace.py` — Implemented card_filter in _stage_cards (SOS filtering by collector_number with numeric normalization), dynamic prompt text, click.echo of filter
+
