@@ -361,7 +361,7 @@ elif result.exit_code != 0:
 
   Testability: Existing `tests/test_cli_docker.py` tests should be updated to reflect the new `ContainerLifecycle` integration. Mock `ContainerLifecycle.run()` to return various `LifecycleResult` values and verify CLI behavior (exit codes, error messages). Test harvest produces `workspace_final/`, `docker_stdout.log`, `docker_stderr.log`, and `run_manifest.json` in the results directory.
 
-- [ ] **Add pytest ****`integration`**** marker, ****`pytest-timeout`****, and alpine smoke pipeline test**
+- [x] **Add pytest ****`integration`**** marker, ****`pytest-timeout`****, and alpine smoke pipeline test**
   Detail: Set up test infrastructure for Docker-dependent integration tests, then add a `test_smoke_container_lifecycle` that validates the smoke pipeline end-to-end using a minimal alpine image.
 
   **Infrastructure changes:**

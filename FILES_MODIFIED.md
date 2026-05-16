@@ -50,3 +50,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `silverquillm/cli.py` — Replaced subprocess.run with ContainerLifecycle in run/smoke commands; updated _harvest_results with timeout_reason, engine diff, workspace_final, glob output files
 - `silverquillm/runner.py` — After pipe-reader threads join, copy docker_stdout.tmp → docker_stdout.log and docker_stderr.tmp → docker_stderr.log so _harvest_results picks them up
 
+## Item 7: Add pytest integration marker and smoke pipeline test
+
+### Tests
+- `tests/test_smoke_lifecycle.py` — Integration smoke test for container lifecycle using alpine image (skipped by default)
+
+### Implementation
+- `pyproject.toml` — Added pytest-timeout dep, integration marker, default timeout=300, addopts skip integration by default
+- `tests/test_smoke_lifecycle.py` — New file: smoke test that builds alpine image and runs silverquillm smoke CLI
+

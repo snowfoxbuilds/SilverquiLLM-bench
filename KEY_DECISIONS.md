@@ -26,3 +26,9 @@ Persistent architectural and convention decisions across runs.
 - **Decision**: After pipe threads join, runner.py copies .tmp → .log (using shutil.copy2, not rename). Harvest picks up .log files via glob.
 - **Reasoning**: Copy preserves .tmp for debugging while producing .log for harvest. Lifecycle owns the naming, keeping harvest logic simple.
 - **Impact**: `silverquillm/runner.py`, `silverquillm/cli.py` (harvest).
+
+## Integration test CLI invocation pattern
+- **Context**: Integration tests that invoke the CLI as a subprocess need to use the local checkout, not the installed package.
+- **Decision**: Use `[sys.executable, "-m", "silverquillm.cli", ...]` instead of `["silverquillm", ...]` in subprocess calls.
+- **Reasoning**: Ensures the test exercises the code from the current worktree, not a potentially stale installed entry point.
+- **Impact**: `tests/test_smoke_lifecycle.py`. Future integration tests should follow this pattern.
