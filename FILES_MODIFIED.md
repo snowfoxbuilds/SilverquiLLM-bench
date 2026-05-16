@@ -33,3 +33,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `docker/homelab-pi-blind/entrypoint.mjs` — Removed engine_work copy, added system.log logging, agent_stdout.log capture, SIGTERM handler
 - `docker/local-pi-blind/entrypoint.mjs` — Removed engine_work copy, added system.log logging, agent_stdout.log capture, SIGTERM handler
 
+## Item 5: Create silverquillm/runner.py
+
+### Tests
+- `tests/test_runner.py` — Verifies poll-loop ordering, final read pass, timeout enforcement, snapshot callbacks
+
+### Implementation
+- `silverquillm/runner.py` — New module with ContainerLifecycle class; revision fixed poll-loop ordering (read before hang-timeout check) and added final _read_and_print_new_bytes() after thread join
+

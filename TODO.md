@@ -164,7 +164,7 @@ echo $? > /output/exit_code
 
   Testability: Build the updated image, run smoke test, verify: (a) `/workspace/engine_work/` does NOT exist, (b) `/output/system.log` contains timestamped messages, (c) `/output/agent_stdout.log` contains agent output, (d) `progress.jsonl` still written. Manual verification — this runs against the real model server.
 
-- [ ] **Create ****`silverquillm/runner.py`**** with pipe-readers + poll-loop architecture**
+- [x] **Create ****`silverquillm/runner.py`**** with pipe-readers + poll-loop architecture**
   Detail: New module implementing the `ContainerLifecycle` class — the core container launch, live streaming, dual timeout enforcement, and graceful shutdown logic. This is the settled architecture from [BENCHMARK-RUNNER.md](http://benchmark-runner.md/): "Two dedicated threads drain Docker stdout/stderr pipes to host files. The main thread polls all files on a ~1s interval."
 
   Create `silverquillm/runner.py` with the following:
