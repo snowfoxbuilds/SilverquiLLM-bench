@@ -200,8 +200,8 @@ def run_turn(game: GameState) -> None:
         if current == (Phase.BEGINNING, Step.UNTAP):
             _do_untap_step(game)
         elif current == (Phase.BEGINNING, Step.UPKEEP):
-            from engine.triggers import EventType
-            game.trigger_manager.fire_event(game, EventType.BEGINNING_OF_UPKEEP)
+            from engine.events import BeginningOfUpkeepTriggeredEvent
+            game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
         elif current == (Phase.BEGINNING, Step.DRAW):
             _do_draw_step(game)
         elif game.phase == Phase.COMBAT and game.step is not None:

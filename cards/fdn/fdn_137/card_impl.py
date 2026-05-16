@@ -1,19 +1,13 @@
 """Card implementation for Authority of the Consuls."""
-
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from engine.card import ActivatedAbility, Creature, Enchantment
-from engine.continuous_effects import (
-    ContinuousEffect,
-    DURATION_PERMANENT,
-    Layer,
-    SubLayer,
-)
+from engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
 from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+from engine.events import EntersBattlefieldTriggeredEvent, GainsLifeTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
-
     from cards.registry import CardRegistry
 
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
@@ -32,21 +26,13 @@ class AuthorityOfTheConsuls(Enchantment):
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        kwargs.setdefault("name", "Authority of the Consuls")
-        kwargs.setdefault("mana_cost", ManaCost.parse("{W}"))
-        kwargs.setdefault(
-            "rules_text",
-            "Creatures your opponents control enter tapped.\n"
-            "Whenever a creature an opponent controls enters, you gain 1 life.",
-        )
+        kwargs.setdefault('name', 'Authority of the Consuls')
+        kwargs.setdefault('mana_cost', ManaCost.parse('{W}'))
+        kwargs.setdefault('rules_text', 'Creatures your opponents control enter tapped.\nWhenever a creature an opponent controls enters, you gain 1 life.')
         super().__init__(**kwargs)
         self._effect_ref: ContinuousEffect | None = None
 
     def on_resolve(self, game: GameState) -> None:
-        # ENGINE LIMITATION: The "enters tapped" static ability ideally
-        # uses a replacement effect on ETB, but we approximate it with a
-        # continuous effect that taps opponent creatures.  A proper
-        # implementation would intercept the zone-transition in move_to_zone.
         self._register_effect(game)
 
     def _register_effect(self, game: GameState) -> None:
@@ -62,57 +48,37 @@ class AuthorityOfTheConsuls(Enchantment):
                 if player is controller:
                     continue
                 for obj in game.get_battlefield(player).get_all():
-                    if CardType.CREATURE in getattr(obj, "card_types", set()):
-                        if getattr(obj, "summoning_sick", False):
+                    if CardType.CREATURE in getattr(obj, 'card_types', set()):
+                        if getattr(obj, 'summoning_sick', False):
                             obj.is_tapped = True
-
-        effect = ContinuousEffect(
-            source=enchantment_ref,
-            layer=Layer.ABILITY,
-            sublayer=None,
-            apply=_apply,
-            duration=DURATION_PERMANENT,
-        )
+        effect = ContinuousEffect(source=enchantment_ref, layer=Layer.ABILITY, sublayer=None, apply=_apply, duration=DURATION_PERMANENT)
         self._effect_ref = game.effect_manager.add(effect)
 
     def register_triggers(self, game: GameState) -> None:
-        from engine.triggers import EventType, TriggerRegistration
-
+        from engine.triggers import TriggerRegistration
         source = self
 
-        def _condition(game: Any, data: dict) -> bool:
-            permanent = data.get("permanent")
+        def _condition(game: Any, event: dict) -> bool:
+            permanent = event.permanent
             if permanent is None:
                 return False
             controller = source.controller
             if controller is None:
                 return False
-            perm_controller = getattr(permanent, "controller", None)
+            perm_controller = getattr(permanent, 'controller', None)
             if perm_controller is controller:
                 return False
-            return CardType.CREATURE in getattr(permanent, "card_types", set())
+            return CardType.CREATURE in getattr(permanent, 'card_types', set())
 
         def _effect(game: GameState) -> None:
             controller = source.controller
             if controller is None:
                 return
-            # Gain 1 life
-            if hasattr(controller, "life"):
+            if hasattr(controller, 'life'):
                 controller.life += 1
-                game.trigger_manager.fire_event(
-                    game,
-                    EventType.GAINS_LIFE,
-                    {"player": controller, "amount": 1},
-                )
-
-        controller = getattr(self, "controller", None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(
-            event_type=EventType.ENTERS_BATTLEFIELD,
-            condition=_condition,
-            effect=_effect,
-            source=self,
-            controller=controller,
-        ))
+                game.trigger_manager.fire_event(game, GainsLifeTriggeredEvent(player=controller, amount=1))
+        controller = getattr(self, 'controller', None) or game.active_player
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
 
     def register_replacement_effects(self, game: GameState) -> None:
         if self._effect_ref is None:

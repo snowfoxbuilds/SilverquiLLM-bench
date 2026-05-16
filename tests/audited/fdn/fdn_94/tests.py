@@ -1,13 +1,10 @@
 """Audited tests for FDN 94 — Slumbering Cerberus."""
-
 from __future__ import annotations
-
 from card_impl import SlumberingCerberus
 from engine.card import Creature
-from engine.triggers import EventType
 from engine.types import ManaCost, Zone
 from tests.test_utils import create_game
-
+from engine.events import EndStepTriggeredEvent
 
 class TestSlumberingCerberusBasics:
     """Basic card properties."""
@@ -18,11 +15,11 @@ class TestSlumberingCerberusBasics:
 
     def test_name(self) -> None:
         card = SlumberingCerberus(owner=None)
-        assert card.name == "Slumbering Cerberus"
+        assert card.name == 'Slumbering Cerberus'
 
     def test_mana_cost(self) -> None:
         card = SlumberingCerberus(owner=None)
-        assert card.mana_cost == ManaCost.parse("{1}{R}")
+        assert card.mana_cost == ManaCost.parse('{1}{R}')
 
     def test_power_toughness(self) -> None:
         card = SlumberingCerberus(owner=None)
@@ -31,12 +28,11 @@ class TestSlumberingCerberusBasics:
 
     def test_subtypes(self) -> None:
         card = SlumberingCerberus(owner=None)
-        assert "Dog" in card.subtypes
+        assert 'Dog' in card.subtypes
 
     def test_skip_untap_set(self) -> None:
         card = SlumberingCerberus(owner=None)
         assert card.skip_untap is True
-
 
 class TestSlumberingCerberusMorbidTrigger:
     """Morbid — end step: untap if a creature died this turn."""
@@ -55,7 +51,7 @@ class TestSlumberingCerberusMorbidTrigger:
         card.is_tapped = True
         card.register_triggers(game)
         game.creature_died_this_turn = True
-        game.trigger_manager.fire_event(game, EventType.END_STEP, {})
+        game.trigger_manager.fire_event(game, EndStepTriggeredEvent())
         self._resolve_stack(game)
         assert card.is_tapped is False
 
@@ -67,7 +63,7 @@ class TestSlumberingCerberusMorbidTrigger:
         card.is_tapped = True
         card.register_triggers(game)
         game.creature_died_this_turn = False
-        game.trigger_manager.fire_event(game, EventType.END_STEP, {})
+        game.trigger_manager.fire_event(game, EndStepTriggeredEvent())
         self._resolve_stack(game)
         assert card.is_tapped is True
 
@@ -79,6 +75,6 @@ class TestSlumberingCerberusMorbidTrigger:
         card.is_tapped = False
         card.register_triggers(game)
         game.creature_died_this_turn = True
-        game.trigger_manager.fire_event(game, EventType.END_STEP, {})
+        game.trigger_manager.fire_event(game, EndStepTriggeredEvent())
         self._resolve_stack(game)
         assert card.is_tapped is False

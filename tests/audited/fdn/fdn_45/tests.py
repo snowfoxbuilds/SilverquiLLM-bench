@@ -1,13 +1,9 @@
 """Audited tests for FDN 45 — Kiora, the Rising Tide."""
-
 from __future__ import annotations
-
 from card_impl import KioraTheRisingTide
 from engine.card import Creature
-from engine.triggers import EventType
 from engine.types import ManaCost, Supertype, Zone
 from tests.test_utils import create_game
-
 
 class TestKioraBasics:
     """Basic card properties."""
@@ -18,11 +14,11 @@ class TestKioraBasics:
 
     def test_name(self) -> None:
         card = KioraTheRisingTide(owner=None)
-        assert card.name == "Kiora, the Rising Tide"
+        assert card.name == 'Kiora, the Rising Tide'
 
     def test_mana_cost(self) -> None:
         card = KioraTheRisingTide(owner=None)
-        assert card.mana_cost == ManaCost.parse("{2}{U}")
+        assert card.mana_cost == ManaCost.parse('{2}{U}')
 
     def test_power_toughness(self) -> None:
         card = KioraTheRisingTide(owner=None)
@@ -35,9 +31,8 @@ class TestKioraBasics:
 
     def test_subtypes(self) -> None:
         card = KioraTheRisingTide(owner=None)
-        assert "Merfolk" in card.subtypes
-        assert "Noble" in card.subtypes
-
+        assert 'Merfolk' in card.subtypes
+        assert 'Noble' in card.subtypes
 
 class TestKioraETB:
     """ETB: draw 2, discard 2."""
@@ -47,12 +42,10 @@ class TestKioraETB:
         p1 = game.players[0]
         card = KioraTheRisingTide(owner=p1, controller=p1)
         for i in range(5):
-            c = Creature(name=f"Lib{i}", base_power=1, base_toughness=1, owner=p1)
+            c = Creature(name=f'Lib{i}', base_power=1, base_toughness=1, owner=p1)
             p1.zones[Zone.LIBRARY].add(c)
-        # Script: choose cards to discard (first available each time)
         hand_before = len(list(p1.zones[Zone.HAND].get_all()))
         card.on_resolve(game)
-        # Drew 2, discarded 2 → net 0 change in hand
         hand_after = len(list(p1.zones[Zone.HAND].get_all()))
         assert hand_after - hand_before == 0
 
@@ -61,7 +54,7 @@ class TestKioraETB:
         p1 = game.players[0]
         card = KioraTheRisingTide(owner=p1, controller=p1)
         for i in range(5):
-            c = Creature(name=f"Lib{i}", base_power=1, base_toughness=1, owner=p1)
+            c = Creature(name=f'Lib{i}', base_power=1, base_toughness=1, owner=p1)
             p1.zones[Zone.LIBRARY].add(c)
         card.on_resolve(game)
         gy_cards = list(p1.zones[Zone.GRAVEYARD].get_all())
@@ -72,8 +65,7 @@ class TestKioraETB:
         game = create_game()
         p1 = game.players[0]
         card = KioraTheRisingTide(owner=p1, controller=p1)
-        card.on_resolve(game)  # Should not raise
-
+        card.on_resolve(game)
 
 class TestKioraThreshold:
     """Threshold: attack with 7+ cards in graveyard creates 8/8 token."""
@@ -89,16 +81,14 @@ class TestKioraThreshold:
         p1 = game.players[0]
         card = KioraTheRisingTide(owner=p1, controller=p1)
         game.get_battlefield(p1).add(card)
-        # Fill graveyard with 7 cards
         for i in range(7):
-            c = Creature(name=f"Dead{i}", base_power=1, base_toughness=1, owner=p1)
+            c = Creature(name=f'Dead{i}', base_power=1, base_toughness=1, owner=p1)
             p1.zones[Zone.GRAVEYARD].add(c)
-        # Script: choose yes to create token
         p1._script.append(True)
         card.register_triggers(game)
-        self._fire_and_resolve(game, EventType.ATTACKS, {"attacker": card, "creature": card})
+        self._fire_and_resolve(game, EventType.ATTACKS, {'attacker': card, 'creature': card})
         bf = game.get_battlefield(p1)
-        tokens = [c for c in bf.get_all() if getattr(c, "name", "") == "Scion of the Deep"]
+        tokens = [c for c in bf.get_all() if getattr(c, 'name', '') == 'Scion of the Deep']
         assert len(tokens) == 1
 
     def test_scion_is_8_8_legendary(self) -> None:
@@ -107,13 +97,13 @@ class TestKioraThreshold:
         card = KioraTheRisingTide(owner=p1, controller=p1)
         game.get_battlefield(p1).add(card)
         for i in range(7):
-            c = Creature(name=f"Dead{i}", base_power=1, base_toughness=1, owner=p1)
+            c = Creature(name=f'Dead{i}', base_power=1, base_toughness=1, owner=p1)
             p1.zones[Zone.GRAVEYARD].add(c)
         p1._script.append(True)
         card.register_triggers(game)
-        self._fire_and_resolve(game, EventType.ATTACKS, {"attacker": card, "creature": card})
+        self._fire_and_resolve(game, EventType.ATTACKS, {'attacker': card, 'creature': card})
         bf = game.get_battlefield(p1)
-        tokens = [c for c in bf.get_all() if getattr(c, "name", "") == "Scion of the Deep"]
+        tokens = [c for c in bf.get_all() if getattr(c, 'name', '') == 'Scion of the Deep']
         token = tokens[0]
         assert token.base_power == 8
         assert token.base_toughness == 8
@@ -124,14 +114,13 @@ class TestKioraThreshold:
         p1 = game.players[0]
         card = KioraTheRisingTide(owner=p1, controller=p1)
         game.get_battlefield(p1).add(card)
-        # Only 6 cards in graveyard
         for i in range(6):
-            c = Creature(name=f"Dead{i}", base_power=1, base_toughness=1, owner=p1)
+            c = Creature(name=f'Dead{i}', base_power=1, base_toughness=1, owner=p1)
             p1.zones[Zone.GRAVEYARD].add(c)
         card.register_triggers(game)
-        self._fire_and_resolve(game, EventType.ATTACKS, {"attacker": card, "creature": card})
+        self._fire_and_resolve(game, EventType.ATTACKS, {'attacker': card, 'creature': card})
         bf = game.get_battlefield(p1)
-        tokens = [c for c in bf.get_all() if getattr(c, "name", "") == "Scion of the Deep"]
+        tokens = [c for c in bf.get_all() if getattr(c, 'name', '') == 'Scion of the Deep']
         assert len(tokens) == 0
 
     def test_may_decline_token_creation(self) -> None:
@@ -140,12 +129,11 @@ class TestKioraThreshold:
         card = KioraTheRisingTide(owner=p1, controller=p1)
         game.get_battlefield(p1).add(card)
         for i in range(7):
-            c = Creature(name=f"Dead{i}", base_power=1, base_toughness=1, owner=p1)
+            c = Creature(name=f'Dead{i}', base_power=1, base_toughness=1, owner=p1)
             p1.zones[Zone.GRAVEYARD].add(c)
-        # Script: decline
         p1._script.append(False)
         card.register_triggers(game)
-        self._fire_and_resolve(game, EventType.ATTACKS, {"attacker": card, "creature": card})
+        self._fire_and_resolve(game, EventType.ATTACKS, {'attacker': card, 'creature': card})
         bf = game.get_battlefield(p1)
-        tokens = [c for c in bf.get_all() if getattr(c, "name", "") == "Scion of the Deep"]
+        tokens = [c for c in bf.get_all() if getattr(c, 'name', '') == 'Scion of the Deep']
         assert len(tokens) == 0

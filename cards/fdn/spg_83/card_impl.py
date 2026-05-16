@@ -1,27 +1,12 @@
 """Card implementation for Fiend Artisan."""
-
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import (
-    ActivatedAbility,
-    Artifact,
-    Creature,
-    Enchantment,
-    Instant,
-    ManaAbility,
-    Sorcery,
-)
-from engine.continuous_effects import (
-    ContinuousEffect,
-    DURATION_END_OF_TURN,
-    DURATION_PERMANENT,
-    Layer,
-    SubLayer,
-)
+from engine.card import ActivatedAbility, Artifact, Creature, Enchantment, Instant, ManaAbility, Sorcery
+from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, DURATION_PERMANENT, Layer, SubLayer
 from engine.types import CardType, Color, HybridManaSymbol, Keyword, ManaCost, ManaType, Supertype, Zone
+from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
-
     from cards.registry import CardRegistry
 
 def _is_on_battlefield(game: Any, card: Any) -> bool:
@@ -30,17 +15,17 @@ def _is_on_battlefield(game: Any, card: Any) -> bool:
         if game.get_battlefield(player).contains(card):
             return True
     return False
+
 def _get_mana_value(card: Any) -> int:
     """Return the mana value (converted mana cost) of a card."""
-    mc = getattr(card, "mana_cost", None)
+    mc = getattr(card, 'mana_cost', None)
     if mc is None:
         return 0
-    total = getattr(mc, "generic", 0)
-    pips = getattr(mc, "pips", {})
+    total = getattr(mc, 'generic', 0)
+    pips = getattr(mc, 'pips', {})
     for count in pips.values():
         total += count
-    # Hybrid symbols: each hybrid symbol contributes 1 to mana value
-    hybrid = getattr(mc, "hybrid", [])
+    hybrid = getattr(mc, 'hybrid', [])
     total += len(hybrid)
     return total
 
@@ -58,20 +43,12 @@ class FiendArtisan(Creature):
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        kwargs.setdefault("name", "Fiend Artisan")
-        kwargs.setdefault("mana_cost", ManaCost.parse("{B/G}{B/G}"))
-        kwargs.setdefault("base_power", 0)
-        kwargs.setdefault("base_toughness", 0)
-        kwargs.setdefault("subtypes", {"Nightmare"})
-        kwargs.setdefault(
-            "rules_text",
-            "Fiend Artisan's power and toughness are each equal to the "
-            "number of creature cards in your graveyard.\n"
-            "{X}{B/G}, {T}, Sacrifice another creature: Search your library "
-            "for a creature card with mana value X or less, put it onto the "
-            "battlefield, then shuffle your library. Activate only as a "
-            "sorcery.",
-        )
+        kwargs.setdefault('name', 'Fiend Artisan')
+        kwargs.setdefault('mana_cost', ManaCost.parse('{B/G}{B/G}'))
+        kwargs.setdefault('base_power', 0)
+        kwargs.setdefault('base_toughness', 0)
+        kwargs.setdefault('subtypes', {'Nightmare'})
+        kwargs.setdefault('rules_text', "Fiend Artisan's power and toughness are each equal to the number of creature cards in your graveyard.\n{X}{B/G}, {T}, Sacrifice another creature: Search your library for a creature card with mana value X or less, put it onto the battlefield, then shuffle your library. Activate only as a sorcery.")
         super().__init__(**kwargs)
 
     def _graveyard_creature_count(self) -> int:
@@ -82,7 +59,7 @@ class FiendArtisan(Creature):
         graveyard = controller.zones[Zone.GRAVEYARD]
         count = 0
         for card in graveyard.get_all():
-            if CardType.CREATURE in getattr(card, "card_types", set()):
+            if CardType.CREATURE in getattr(card, 'card_types', set()):
                 count += 1
         return count
 
@@ -106,14 +83,7 @@ class FiendArtisan(Creature):
             count = source._graveyard_creature_count()
             source.base_power = count
             source.base_toughness = count
-
-        game.effect_manager.add(ContinuousEffect(
-            source=source,
-            layer=Layer.POWER_TOUGHNESS,
-            sublayer=SubLayer.CHARACTERISTIC_DEFINING,
-            apply=_apply,
-            duration=DURATION_PERMANENT,
-        ))
+        game.effect_manager.add(ContinuousEffect(source=source, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.CHARACTERISTIC_DEFINING, apply=_apply, duration=DURATION_PERMANENT))
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:
         source = self
@@ -125,103 +95,52 @@ class FiendArtisan(Creature):
             engine or test harness before calling the ability).
             """
             from engine.casting import is_sorcery_speed
-
-            controller = getattr(src, "controller", None)
+            controller = getattr(src, 'controller', None)
             if controller is None:
                 return False
-
-            # Sorcery speed only
             if not is_sorcery_speed(game, controller):
                 return False
-
-            # Must be untapped
-            if getattr(src, "is_tapped", False):
+            if getattr(src, 'is_tapped', False):
                 return False
-
-            # Must have another creature to sacrifice
             bf = game.get_battlefield(controller)
-            other_creatures = [
-                c for c in bf.get_all()
-                if CardType.CREATURE in getattr(c, "card_types", set())
-                and c is not src
-            ]
+            other_creatures = [c for c in bf.get_all() if CardType.CREATURE in getattr(c, 'card_types', set()) and c is not src]
             if not other_creatures:
                 return False
-
-            x_value = getattr(src, "_x_value", 0)
-
-            # Pay {X}{B/G} using the hybrid mana infrastructure
-            hybrid_cost = ManaCost(
-                generic=x_value,
-                hybrid=[HybridManaSymbol(option_a=ManaType.BLACK, option_b=ManaType.GREEN)],
-            )
+            x_value = getattr(src, '_x_value', 0)
+            hybrid_cost = ManaCost(generic=x_value, hybrid=[HybridManaSymbol(option_a=ManaType.BLACK, option_b=ManaType.GREEN)])
             if not controller.mana_pool.can_pay(hybrid_cost):
                 return False
             controller.mana_pool.pay(hybrid_cost)
-
-            # Tap
             src.is_tapped = True
-
-            # Sacrifice another creature (pick first available)
-            sac_target = getattr(src, "_sacrifice_target", None)
+            sac_target = getattr(src, '_sacrifice_target', None)
             if sac_target is None:
                 sac_target = other_creatures[0]
             if bf.contains(sac_target):
                 from engine.zones import move_to_zone
                 move_to_zone(game, sac_target, Zone.BATTLEFIELD, Zone.GRAVEYARD)
-
             return True
 
         def _effect(game: Any) -> None:
             controller = source.controller or source.owner
             if controller is None:
                 return
-            x_value = getattr(source, "_x_value", 0)
+            x_value = getattr(source, '_x_value', 0)
             library = controller.zones[Zone.LIBRARY]
-
-            # Search for a creature with MV <= X
-            candidates = [
-                c for c in library.get_all()
-                if CardType.CREATURE in getattr(c, "card_types", set())
-                and _get_mana_value(c) <= x_value
-            ]
-
+            candidates = [c for c in library.get_all() if CardType.CREATURE in getattr(c, 'card_types', set()) and _get_mana_value(c) <= x_value]
             if candidates:
-                # Let controller choose, or pick first
                 chosen = candidates[0]
-                if hasattr(controller, "choose_card"):
+                if hasattr(controller, 'choose_card'):
                     try:
-                        chosen = controller.choose_card(
-                            candidates,
-                            f"Search for creature with MV ≤ {x_value}",
-                        )
+                        chosen = controller.choose_card(candidates, f'Search for creature with MV ≤ {x_value}')
                     except Exception:
                         chosen = candidates[0]
                 library.remove(chosen)
                 chosen.owner = chosen.owner or controller
                 chosen.controller = controller
                 from engine.zones import move_to_zone
-                # Place onto battlefield from library
-                # Directly add to battlefield since move_to_zone expects
-                # the card to be in the source zone
                 game.get_battlefield(controller).add(chosen)
-                if hasattr(chosen, "register_triggers"):
+                if hasattr(chosen, 'register_triggers'):
                     chosen.register_triggers(game)
-                from engine.triggers import EventType
-                game.trigger_manager.fire_event(
-                    game,
-                    EventType.ENTERS_BATTLEFIELD,
-                    {"permanent": chosen, "controller": controller},
-                )
-
-            # Shuffle library
+                game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent(permanent=chosen, controller=controller))
             library.shuffle()
-
-        return [ActivatedAbility(
-            cost=_cost,
-            effect=_effect,
-            description="{X}{B/G}, {T}, Sacrifice another creature: "
-                        "Search your library for a creature card with mana "
-                        "value X or less, put it onto the battlefield, then "
-                        "shuffle. Activate only as a sorcery.",
-        )]
+        return [ActivatedAbility(cost=_cost, effect=_effect, description='{X}{B/G}, {T}, Sacrifice another creature: Search your library for a creature card with mana value X or less, put it onto the battlefield, then shuffle. Activate only as a sorcery.')]

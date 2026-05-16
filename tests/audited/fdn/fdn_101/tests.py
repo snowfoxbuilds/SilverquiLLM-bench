@@ -1,19 +1,15 @@
 """Audited tests for FDN 101 — Cackling Prowler."""
-
 from __future__ import annotations
-
 from card_impl import CacklingProwler
 from engine.card import Creature
-from engine.triggers import EventType
 from engine.types import Keyword, ManaCost
 from tests.test_utils import create_game
-
+from engine.events import EndStepTriggeredEvent
 
 def _resolve_stack(game):
     while not game.stack.is_empty():
         obj = game.stack.pop()
         obj.on_resolve(game)
-
 
 class TestCacklingProwlerBasics:
     """Basic card properties."""
@@ -24,11 +20,11 @@ class TestCacklingProwlerBasics:
 
     def test_name(self) -> None:
         card = CacklingProwler(owner=None)
-        assert card.name == "Cackling Prowler"
+        assert card.name == 'Cackling Prowler'
 
     def test_mana_cost(self) -> None:
         card = CacklingProwler(owner=None)
-        assert card.mana_cost == ManaCost.parse("{3}{G}")
+        assert card.mana_cost == ManaCost.parse('{3}{G}')
 
     def test_power_toughness(self) -> None:
         card = CacklingProwler(owner=None)
@@ -41,9 +37,8 @@ class TestCacklingProwlerBasics:
 
     def test_subtypes(self) -> None:
         card = CacklingProwler(owner=None)
-        assert "Hyena" in card.subtypes
-        assert "Rogue" in card.subtypes
-
+        assert 'Hyena' in card.subtypes
+        assert 'Rogue' in card.subtypes
 
 class TestCacklingProwlerMorbid:
     """Morbid: end step +1/+1 counter if a creature died this turn."""
@@ -55,7 +50,7 @@ class TestCacklingProwlerMorbid:
         game.get_battlefield(p1).add(prowler)
         prowler.register_triggers(game)
         game.creature_died_this_turn = True
-        game.trigger_manager.fire_event(game, EventType.END_STEP, {})
+        game.trigger_manager.fire_event(game, EndStepTriggeredEvent())
         _resolve_stack(game)
         assert prowler.plus_one_counters == 1
         assert prowler._original_plus_one_counters == 1
@@ -67,7 +62,7 @@ class TestCacklingProwlerMorbid:
         game.get_battlefield(p1).add(prowler)
         prowler.register_triggers(game)
         game.creature_died_this_turn = False
-        game.trigger_manager.fire_event(game, EventType.END_STEP, {})
+        game.trigger_manager.fire_event(game, EndStepTriggeredEvent())
         _resolve_stack(game)
         assert prowler.plus_one_counters == 0
 
@@ -78,7 +73,7 @@ class TestCacklingProwlerMorbid:
         game.get_battlefield(p1).add(prowler)
         prowler.register_triggers(game)
         game.creature_died_this_turn = True
-        game.trigger_manager.fire_event(game, EventType.END_STEP, {})
+        game.trigger_manager.fire_event(game, EndStepTriggeredEvent())
         _resolve_stack(game)
-        assert prowler.power == 5  # 4 base + 1 counter
-        assert prowler.toughness == 4  # 3 base + 1 counter
+        assert prowler.power == 5
+        assert prowler.toughness == 4

@@ -1,13 +1,10 @@
 """Audited tests for FDN 55 — Arbiter of Woe."""
-
 from __future__ import annotations
-
 from card_impl import ArbiterOfWoe
 from engine.card import Creature
-from engine.triggers import EventType
 from engine.types import Keyword, ManaCost, Zone
 from tests.test_utils import create_game
-
+from engine.events import EntersBattlefieldTriggeredEvent
 
 class TestArbiterOfWoeBasics:
     """Basic card properties."""
@@ -18,11 +15,11 @@ class TestArbiterOfWoeBasics:
 
     def test_name(self) -> None:
         card = ArbiterOfWoe(owner=None)
-        assert card.name == "Arbiter of Woe"
+        assert card.name == 'Arbiter of Woe'
 
     def test_mana_cost(self) -> None:
         card = ArbiterOfWoe(owner=None)
-        assert card.mana_cost == ManaCost.parse("{4}{B}{B}")
+        assert card.mana_cost == ManaCost.parse('{4}{B}{B}')
 
     def test_power_toughness(self) -> None:
         card = ArbiterOfWoe(owner=None)
@@ -35,8 +32,7 @@ class TestArbiterOfWoeBasics:
 
     def test_subtypes(self) -> None:
         card = ArbiterOfWoe(owner=None)
-        assert "Demon" in card.subtypes
-
+        assert 'Demon' in card.subtypes
 
 class TestArbiterOfWoeETB:
     """ETB: each opponent discards a card and loses 2 life; you draw and gain 2."""
@@ -54,11 +50,10 @@ class TestArbiterOfWoeETB:
         card = ArbiterOfWoe(owner=p1, controller=p1)
         game.get_battlefield(p1).add(card)
         card.register_triggers(game)
-        # Give p2 a card to discard
-        filler = Creature(name="Filler", base_power=1, base_toughness=1, owner=p2)
+        filler = Creature(name='Filler', base_power=1, base_toughness=1, owner=p2)
         p2.zones[Zone.HAND].add(filler)
         life_before = p2.life
-        game.trigger_manager.fire_event(game, EventType.ENTERS_BATTLEFIELD, {"permanent": card})
+        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent(permanent=card))
         self._resolve_stack(game)
         assert p2.life == life_before - 2
 
@@ -69,13 +64,12 @@ class TestArbiterOfWoeETB:
         card = ArbiterOfWoe(owner=p1, controller=p1)
         game.get_battlefield(p1).add(card)
         card.register_triggers(game)
-        filler = Creature(name="Filler", base_power=1, base_toughness=1, owner=p2)
+        filler = Creature(name='Filler', base_power=1, base_toughness=1, owner=p2)
         p2.zones[Zone.HAND].add(filler)
-        # Add library card for draw
-        lib_card = Creature(name="Lib", base_power=1, base_toughness=1, owner=p1)
+        lib_card = Creature(name='Lib', base_power=1, base_toughness=1, owner=p1)
         p1.zones[Zone.LIBRARY].add(lib_card)
         life_before = p1.life
-        game.trigger_manager.fire_event(game, EventType.ENTERS_BATTLEFIELD, {"permanent": card})
+        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent(permanent=card))
         self._resolve_stack(game)
         assert p1.life == life_before + 2
 
@@ -86,12 +80,12 @@ class TestArbiterOfWoeETB:
         card = ArbiterOfWoe(owner=p1, controller=p1)
         game.get_battlefield(p1).add(card)
         card.register_triggers(game)
-        filler = Creature(name="Filler", base_power=1, base_toughness=1, owner=p2)
+        filler = Creature(name='Filler', base_power=1, base_toughness=1, owner=p2)
         p2.zones[Zone.HAND].add(filler)
-        lib_card = Creature(name="Lib", base_power=1, base_toughness=1, owner=p1)
+        lib_card = Creature(name='Lib', base_power=1, base_toughness=1, owner=p1)
         p1.zones[Zone.LIBRARY].add(lib_card)
         hand_before = len(p1.zones[Zone.HAND].get_all())
-        game.trigger_manager.fire_event(game, EventType.ENTERS_BATTLEFIELD, {"permanent": card})
+        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent(permanent=card))
         self._resolve_stack(game)
         hand_after = len(p1.zones[Zone.HAND].get_all())
         assert hand_after == hand_before + 1
@@ -103,11 +97,11 @@ class TestArbiterOfWoeETB:
         card = ArbiterOfWoe(owner=p1, controller=p1)
         game.get_battlefield(p1).add(card)
         card.register_triggers(game)
-        filler = Creature(name="Filler", base_power=1, base_toughness=1, owner=p2)
+        filler = Creature(name='Filler', base_power=1, base_toughness=1, owner=p2)
         p2.zones[Zone.HAND].add(filler)
-        lib_card = Creature(name="Lib", base_power=1, base_toughness=1, owner=p1)
+        lib_card = Creature(name='Lib', base_power=1, base_toughness=1, owner=p1)
         p1.zones[Zone.LIBRARY].add(lib_card)
-        game.trigger_manager.fire_event(game, EventType.ENTERS_BATTLEFIELD, {"permanent": card})
+        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent(permanent=card))
         self._resolve_stack(game)
         hand_after = len(p2.zones[Zone.HAND].get_all())
         assert hand_after == 0

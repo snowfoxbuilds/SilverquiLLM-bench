@@ -1,13 +1,10 @@
 """Audited tests for FDN 68 — Sanguine Syphoner."""
-
 from __future__ import annotations
-
 from card_impl import SanguineSyphoner
 from engine.card import Creature
-from engine.triggers import EventType
 from engine.types import ManaCost, Zone
 from tests.test_utils import create_game
-
+from engine.events import AttacksTriggeredEvent
 
 class TestSanguineSyphonerBasics:
     """Basic card properties."""
@@ -18,11 +15,11 @@ class TestSanguineSyphonerBasics:
 
     def test_name(self) -> None:
         card = SanguineSyphoner(owner=None)
-        assert card.name == "Sanguine Syphoner"
+        assert card.name == 'Sanguine Syphoner'
 
     def test_mana_cost(self) -> None:
         card = SanguineSyphoner(owner=None)
-        assert card.mana_cost == ManaCost.parse("{1}{B}")
+        assert card.mana_cost == ManaCost.parse('{1}{B}')
 
     def test_power_toughness(self) -> None:
         card = SanguineSyphoner(owner=None)
@@ -31,9 +28,8 @@ class TestSanguineSyphonerBasics:
 
     def test_subtypes(self) -> None:
         card = SanguineSyphoner(owner=None)
-        assert "Vampire" in card.subtypes
-        assert "Warlock" in card.subtypes
-
+        assert 'Vampire' in card.subtypes
+        assert 'Warlock' in card.subtypes
 
 class TestSanguineSyphonerAttackTrigger:
     """Whenever attacks, each opponent loses 1 life and you gain 1."""
@@ -52,7 +48,7 @@ class TestSanguineSyphonerAttackTrigger:
         game.get_battlefield(p1).add(card)
         card.register_triggers(game)
         p2_life_before = p2.life
-        game.trigger_manager.fire_event(game, EventType.ATTACKS, {"creature": card})
+        game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=card))
         self._resolve_stack(game)
         assert p2.life == p2_life_before - 1
 
@@ -64,7 +60,7 @@ class TestSanguineSyphonerAttackTrigger:
         game.get_battlefield(p1).add(card)
         card.register_triggers(game)
         p1_life_before = p1.life
-        game.trigger_manager.fire_event(game, EventType.ATTACKS, {"creature": card})
+        game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=card))
         self._resolve_stack(game)
         assert p1.life == p1_life_before + 1
 
@@ -75,8 +71,8 @@ class TestSanguineSyphonerAttackTrigger:
         card = SanguineSyphoner(owner=p1, controller=p1)
         game.get_battlefield(p1).add(card)
         card.register_triggers(game)
-        other = Creature(name="Other", base_power=2, base_toughness=2, owner=p1, controller=p1)
+        other = Creature(name='Other', base_power=2, base_toughness=2, owner=p1, controller=p1)
         p2_life_before = p2.life
-        game.trigger_manager.fire_event(game, EventType.ATTACKS, {"creature": other})
+        game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=other))
         self._resolve_stack(game)
         assert p2.life == p2_life_before

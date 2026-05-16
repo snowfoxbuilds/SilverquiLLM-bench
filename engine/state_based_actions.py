@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
-from engine.triggers import EventType
+from engine.events import CreatureDiesReplacementEvent
 from engine.types import CardType, Supertype, Zone
 from engine.zones import ZoneContainer
 
@@ -48,22 +48,19 @@ def _move_to_graveyard(game: GameState, player: Player, obj: Any) -> None:
 
     bf = _battlefield(game, player)
     if bf.contains(obj):
+        controller = getattr(obj, "controller", player)
+        owner = getattr(obj, "owner", controller)
         move_to_zone(
             game,
             obj,
             Zone.BATTLEFIELD,
             Zone.GRAVEYARD,
-            replacement_event_type="creature_dies",
+            replacement_event=CreatureDiesReplacementEvent(
+                creature=obj, destination="graveyard",
+                controller=controller, owner=owner,
+            ),
         )
 
-
-# Mapping from replacement-effect destination strings to Zone enum values.
-_DESTINATION_ZONE_MAP: dict[str, Zone] = {
-    "graveyard": Zone.GRAVEYARD,
-    "exile": Zone.EXILE,
-    "hand": Zone.HAND,
-    "library": Zone.LIBRARY,
-}
 
 
 def _owner_of(game: GameState, obj: Any) -> Player:

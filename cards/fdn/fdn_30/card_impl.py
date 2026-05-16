@@ -1,15 +1,11 @@
 """Card implementation for Archmage of Runes."""
-
 from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
-
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
+from engine.events import SpellCastTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
-
 
 class ArchmageOfRunes(Creature):
     """Archmage of Runes — {3}{U}{U} — 3/6 — Giant Wizard.
@@ -21,55 +17,36 @@ class ArchmageOfRunes(Creature):
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        kwargs.setdefault("name", "Archmage of Runes")
-        kwargs.setdefault("mana_cost", ManaCost.parse("{3}{U}{U}"))
-        kwargs.setdefault("subtypes", {"Giant", "Wizard"})
-        kwargs.setdefault("base_power", 3)
-        kwargs.setdefault("base_toughness", 6)
-        kwargs.setdefault(
-            "rules_text",
-            "Instant and sorcery spells you cast cost {1} less to cast.\n"
-            "Whenever you cast an instant or sorcery spell, draw a card.",
-        )
+        kwargs.setdefault('name', 'Archmage of Runes')
+        kwargs.setdefault('mana_cost', ManaCost.parse('{3}{U}{U}'))
+        kwargs.setdefault('subtypes', {'Giant', 'Wizard'})
+        kwargs.setdefault('base_power', 3)
+        kwargs.setdefault('base_toughness', 6)
+        kwargs.setdefault('rules_text', 'Instant and sorcery spells you cast cost {1} less to cast.\nWhenever you cast an instant or sorcery spell, draw a card.')
         super().__init__(**kwargs)
 
-    # ENGINE LIMITATION: The cost reduction for *other* spells cast by this
-    # card's controller is not natively supported by cost_reduction() (which
-    # only reduces the cost of *this* card). The engine would need a global
-    # "other spells cost less" hook. We document this limitation here.
-    # The cost_reduction hook on THIS card is not applicable (it's a creature).
-
-    def register_triggers(self, game: "GameState") -> None:
+    def register_triggers(self, game: 'GameState') -> None:
         """Register spell-cast trigger: draw a card when you cast instant/sorcery."""
         from engine.game import draw_card
-        from engine.triggers import EventType, TriggerRegistration
-
+        from engine.triggers import TriggerRegistration
         source = self
-        controller = getattr(self, "controller", None) or game.active_player
+        controller = getattr(self, 'controller', None) or game.active_player
 
-        def _spell_cast_condition(game: Any, data: dict) -> bool:
-            ctrl = getattr(source, "controller", None)
+        def _spell_cast_condition(game: Any, event: dict) -> bool:
+            ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return False
-            # Must be a spell cast by us
-            if data.get("player") is not ctrl:
+            if event.player is not ctrl:
                 return False
-            spell = data.get("spell")
+            spell = event.spell
             if spell is None:
                 return False
-            card_types = getattr(spell, "card_types", set())
+            card_types = getattr(spell, 'card_types', set())
             return CardType.INSTANT in card_types or CardType.SORCERY in card_types
 
-        def _spell_cast_effect(game: "GameState") -> None:
-            ctrl = getattr(source, "controller", None)
+        def _spell_cast_effect(game: 'GameState') -> None:
+            ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return
             draw_card(game, ctrl)
-
-        game.trigger_manager.register(TriggerRegistration(
-            event_type=EventType.SPELL_CAST,
-            condition=_spell_cast_condition,
-            effect=_spell_cast_effect,
-            source=self,
-            controller=controller,
-        ))
+        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_spell_cast_condition, effect=_spell_cast_effect, source=self, controller=controller))

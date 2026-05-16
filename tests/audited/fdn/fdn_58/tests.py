@@ -1,13 +1,10 @@
 """Audited tests for FDN 58 — Bloodthirsty Conqueror."""
-
 from __future__ import annotations
-
 from card_impl import BloodthirstyConqueror
 from engine.card import Creature
-from engine.triggers import EventType
 from engine.types import Keyword, ManaCost, Zone
 from tests.test_utils import create_game
-
+from engine.events import LosesLifeTriggeredEvent
 
 class TestBloodthirstyConquerorBasics:
     """Basic card properties."""
@@ -18,11 +15,11 @@ class TestBloodthirstyConquerorBasics:
 
     def test_name(self) -> None:
         card = BloodthirstyConqueror(owner=None)
-        assert card.name == "Bloodthirsty Conqueror"
+        assert card.name == 'Bloodthirsty Conqueror'
 
     def test_mana_cost(self) -> None:
         card = BloodthirstyConqueror(owner=None)
-        assert card.mana_cost == ManaCost.parse("{3}{B}{B}")
+        assert card.mana_cost == ManaCost.parse('{3}{B}{B}')
 
     def test_power_toughness(self) -> None:
         card = BloodthirstyConqueror(owner=None)
@@ -36,9 +33,8 @@ class TestBloodthirstyConquerorBasics:
 
     def test_subtypes(self) -> None:
         card = BloodthirstyConqueror(owner=None)
-        assert "Vampire" in card.subtypes
-        assert "Knight" in card.subtypes
-
+        assert 'Vampire' in card.subtypes
+        assert 'Knight' in card.subtypes
 
 class TestBloodthirstyConquerorTrigger:
     """Whenever an opponent loses life, you gain that much life."""
@@ -57,7 +53,7 @@ class TestBloodthirstyConquerorTrigger:
         game.get_battlefield(p1).add(card)
         card.register_triggers(game)
         life_before = p1.life
-        game.trigger_manager.fire_event(game, EventType.LOSES_LIFE, {"player": p2, "amount": 3})
+        game.trigger_manager.fire_event(game, LosesLifeTriggeredEvent(player=p2, amount=3))
         self._resolve_stack(game)
         assert p1.life == life_before + 3
 
@@ -68,7 +64,7 @@ class TestBloodthirstyConquerorTrigger:
         game.get_battlefield(p1).add(card)
         card.register_triggers(game)
         life_before = p1.life
-        game.trigger_manager.fire_event(game, EventType.LOSES_LIFE, {"player": p1, "amount": 3})
+        game.trigger_manager.fire_event(game, LosesLifeTriggeredEvent(player=p1, amount=3))
         self._resolve_stack(game)
         assert p1.life == life_before
 
@@ -80,6 +76,6 @@ class TestBloodthirstyConquerorTrigger:
         game.get_battlefield(p1).add(card)
         card.register_triggers(game)
         life_before = p1.life
-        game.trigger_manager.fire_event(game, EventType.LOSES_LIFE, {"player": p2, "amount": 0})
+        game.trigger_manager.fire_event(game, LosesLifeTriggeredEvent(player=p2, amount=0))
         self._resolve_stack(game)
         assert p1.life == life_before

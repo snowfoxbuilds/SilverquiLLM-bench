@@ -1,20 +1,16 @@
 """Audited tests for FDN 117 — Ashroot Animist."""
-
 from __future__ import annotations
-
 from card_impl import AshrootAnimist
 from engine.card import Creature
-from engine.triggers import EventType
 from engine.types import Keyword, ManaCost
 from tests.test_utils import create_game
-
+from engine.events import AttacksTriggeredEvent
 
 def _resolve_stack(game):
     """Pop and resolve all objects on the stack."""
     while not game.stack.is_empty():
         obj = game.stack.pop()
         obj.on_resolve(game)
-
 
 class TestAshrootAnimistBasics:
     """Basic card properties."""
@@ -25,11 +21,11 @@ class TestAshrootAnimistBasics:
 
     def test_name(self) -> None:
         card = AshrootAnimist(owner=None)
-        assert card.name == "Ashroot Animist"
+        assert card.name == 'Ashroot Animist'
 
     def test_mana_cost(self) -> None:
         card = AshrootAnimist(owner=None)
-        assert card.mana_cost == ManaCost.parse("{2}{R}{G}")
+        assert card.mana_cost == ManaCost.parse('{2}{R}{G}')
 
     def test_power_toughness(self) -> None:
         card = AshrootAnimist(owner=None)
@@ -42,9 +38,8 @@ class TestAshrootAnimistBasics:
 
     def test_subtypes(self) -> None:
         card = AshrootAnimist(owner=None)
-        assert "Lizard" in card.subtypes
-        assert "Druid" in card.subtypes
-
+        assert 'Lizard' in card.subtypes
+        assert 'Druid' in card.subtypes
 
 class TestAshrootAnimistAttackTrigger:
     """Attack trigger: buff another creature."""
@@ -53,31 +48,27 @@ class TestAshrootAnimistAttackTrigger:
         game = create_game()
         p1 = game.players[0]
         animist = AshrootAnimist(owner=p1, controller=p1)
-        ally = Creature(name="Bear", base_power=2, base_toughness=2, owner=p1, controller=p1)
+        ally = Creature(name='Bear', base_power=2, base_toughness=2, owner=p1, controller=p1)
         game.get_battlefield(p1).add(animist)
         game.get_battlefield(p1).add(ally)
         animist.register_triggers(game)
         p1._script.appendleft(ally)
-        game.trigger_manager.fire_event(
-            game, EventType.ATTACKS, {"creature": animist}
-        )
+        game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=animist))
         _resolve_stack(game)
         game.effect_manager.apply_all(game)
-        assert ally.base_power >= 6  # 2 + 4 (animist power)
+        assert ally.base_power >= 6
         assert ally.base_toughness >= 6
 
     def test_grants_trample_to_target(self) -> None:
         game = create_game()
         p1 = game.players[0]
         animist = AshrootAnimist(owner=p1, controller=p1)
-        ally = Creature(name="Bear", base_power=2, base_toughness=2, owner=p1, controller=p1)
+        ally = Creature(name='Bear', base_power=2, base_toughness=2, owner=p1, controller=p1)
         game.get_battlefield(p1).add(animist)
         game.get_battlefield(p1).add(ally)
         animist.register_triggers(game)
         p1._script.appendleft(ally)
-        game.trigger_manager.fire_event(
-            game, EventType.ATTACKS, {"creature": animist}
-        )
+        game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=animist))
         _resolve_stack(game)
         game.effect_manager.apply_all(game)
         assert Keyword.TRAMPLE in ally.keywords
@@ -86,13 +77,11 @@ class TestAshrootAnimistAttackTrigger:
         game = create_game()
         p1 = game.players[0]
         animist = AshrootAnimist(owner=p1, controller=p1)
-        other = Creature(name="Bear", base_power=2, base_toughness=2, owner=p1, controller=p1)
+        other = Creature(name='Bear', base_power=2, base_toughness=2, owner=p1, controller=p1)
         game.get_battlefield(p1).add(animist)
         game.get_battlefield(p1).add(other)
         animist.register_triggers(game)
-        game.trigger_manager.fire_event(
-            game, EventType.ATTACKS, {"creature": other}
-        )
+        game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=other))
         _resolve_stack(game)
         assert other.base_power == 2
 
@@ -102,7 +91,5 @@ class TestAshrootAnimistAttackTrigger:
         animist = AshrootAnimist(owner=p1, controller=p1)
         game.get_battlefield(p1).add(animist)
         animist.register_triggers(game)
-        game.trigger_manager.fire_event(
-            game, EventType.ATTACKS, {"creature": animist}
-        )
+        game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=animist))
         _resolve_stack(game)

@@ -1,12 +1,10 @@
 """Audited tests for FDN 9 — Dazzling Angel."""
-
 from __future__ import annotations
-
 from card_impl import DazzlingAngel
 from engine.card import Creature
 from engine.types import CardType, Keyword, ManaCost
 from tests.test_utils import create_game
-
+from engine.events import EntersBattlefieldTriggeredEvent
 
 class TestDazzlingAngelBasics:
     """Basic card properties."""
@@ -17,11 +15,11 @@ class TestDazzlingAngelBasics:
 
     def test_name(self) -> None:
         card = DazzlingAngel(owner=None)
-        assert card.name == "Dazzling Angel"
+        assert card.name == 'Dazzling Angel'
 
     def test_mana_cost(self) -> None:
         card = DazzlingAngel(owner=None)
-        assert card.mana_cost == ManaCost.parse("{2}{W}")
+        assert card.mana_cost == ManaCost.parse('{2}{W}')
 
     def test_power_toughness(self) -> None:
         card = DazzlingAngel(owner=None)
@@ -34,8 +32,7 @@ class TestDazzlingAngelBasics:
 
     def test_angel_subtype(self) -> None:
         card = DazzlingAngel(owner=None)
-        assert "Angel" in card.subtypes
-
+        assert 'Angel' in card.subtypes
 
 class TestDazzlingAngelETBTrigger:
     """Whenever another creature you control enters, gain 1 life."""
@@ -53,48 +50,30 @@ class TestDazzlingAngelETBTrigger:
         bf = game.get_battlefield(p1)
         bf.add(angel)
         angel.register_triggers(game)
-        return game, angel, p1, bf
+        return (game, angel, p1, bf)
 
     def test_another_creature_entering_gains_life(self) -> None:
-        from engine.triggers import EventType
         game, angel, p1, bf = self._setup_trigger()
         initial_life = p1.life
-        other = Creature(
-            name="Bear", base_power=2, base_toughness=2,
-            owner=p1, controller=p1,
-        )
+        other = Creature(name='Bear', base_power=2, base_toughness=2, owner=p1, controller=p1)
         bf.add(other)
-        game.trigger_manager.fire_event(
-            game, EventType.ENTERS_BATTLEFIELD,
-            {"permanent": other, "controller": p1},
-        )
+        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent(permanent=other, controller=p1))
         self._resolve_stack(game)
         assert p1.life == initial_life + 1
 
     def test_self_entering_does_not_trigger(self) -> None:
-        from engine.triggers import EventType
         game, angel, p1, bf = self._setup_trigger()
         initial_life = p1.life
-        game.trigger_manager.fire_event(
-            game, EventType.ENTERS_BATTLEFIELD,
-            {"permanent": angel, "controller": p1},
-        )
+        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent(permanent=angel, controller=p1))
         self._resolve_stack(game)
         assert p1.life == initial_life
 
     def test_opponent_creature_does_not_trigger(self) -> None:
-        from engine.triggers import EventType
         game, angel, p1, bf = self._setup_trigger()
         p2 = game.players[1]
         initial_life = p1.life
-        opp_creature = Creature(
-            name="Goblin", base_power=1, base_toughness=1,
-            owner=p2, controller=p2,
-        )
+        opp_creature = Creature(name='Goblin', base_power=1, base_toughness=1, owner=p2, controller=p2)
         game.get_battlefield(p2).add(opp_creature)
-        game.trigger_manager.fire_event(
-            game, EventType.ENTERS_BATTLEFIELD,
-            {"permanent": opp_creature, "controller": p2},
-        )
+        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent(permanent=opp_creature, controller=p2))
         self._resolve_stack(game)
         assert p1.life == initial_life

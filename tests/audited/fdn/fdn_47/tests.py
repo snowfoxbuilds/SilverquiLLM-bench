@@ -1,20 +1,15 @@
 """Audited tests for FDN 47 — Mischievous Mystic."""
-
 from __future__ import annotations
-
 from card_impl import MischievousMystic
 from engine.card import Creature
-from engine.triggers import EventType
 from engine.types import Keyword, ManaCost, Zone
 from tests.test_utils import create_game
-
 
 def _fire_and_resolve(game, event_type, data):
     game.trigger_manager.fire_event(game, event_type, data)
     while not game.stack.is_empty():
         obj = game.stack.pop()
         obj.on_resolve(game)
-
 
 class TestMischievousMysticBasics:
     """Basic card properties."""
@@ -25,11 +20,11 @@ class TestMischievousMysticBasics:
 
     def test_name(self) -> None:
         card = MischievousMystic(owner=None)
-        assert card.name == "Mischievous Mystic"
+        assert card.name == 'Mischievous Mystic'
 
     def test_mana_cost(self) -> None:
         card = MischievousMystic(owner=None)
-        assert card.mana_cost == ManaCost.parse("{1}{U}")
+        assert card.mana_cost == ManaCost.parse('{1}{U}')
 
     def test_power_toughness(self) -> None:
         card = MischievousMystic(owner=None)
@@ -42,9 +37,8 @@ class TestMischievousMysticBasics:
 
     def test_subtypes(self) -> None:
         card = MischievousMystic(owner=None)
-        assert "Human" in card.subtypes
-        assert "Wizard" in card.subtypes
-
+        assert 'Human' in card.subtypes
+        assert 'Wizard' in card.subtypes
 
 class TestMischievousMysticTrigger:
     """Second draw each turn creates a 1/1 Faerie token with flying."""
@@ -56,7 +50,7 @@ class TestMischievousMysticTrigger:
         game.get_battlefield(p1).add(card)
         card.register_triggers(game)
         game.turn_number = 1
-        _fire_and_resolve(game, EventType.DRAWS_CARD, {"player": p1})
+        _fire_and_resolve(game, EventType.DRAWS_CARD, {'player': p1})
         bf_others = [c for c in game.get_battlefield(p1).get_all() if c is not card]
         assert len(bf_others) == 0
 
@@ -67,8 +61,8 @@ class TestMischievousMysticTrigger:
         game.get_battlefield(p1).add(card)
         card.register_triggers(game)
         game.turn_number = 1
-        _fire_and_resolve(game, EventType.DRAWS_CARD, {"player": p1})
-        _fire_and_resolve(game, EventType.DRAWS_CARD, {"player": p1})
+        _fire_and_resolve(game, EventType.DRAWS_CARD, {'player': p1})
+        _fire_and_resolve(game, EventType.DRAWS_CARD, {'player': p1})
         bf_others = [c for c in game.get_battlefield(p1).get_all() if c is not card]
         assert len(bf_others) == 1
 
@@ -79,8 +73,8 @@ class TestMischievousMysticTrigger:
         game.get_battlefield(p1).add(card)
         card.register_triggers(game)
         game.turn_number = 1
-        _fire_and_resolve(game, EventType.DRAWS_CARD, {"player": p1})
-        _fire_and_resolve(game, EventType.DRAWS_CARD, {"player": p1})
+        _fire_and_resolve(game, EventType.DRAWS_CARD, {'player': p1})
+        _fire_and_resolve(game, EventType.DRAWS_CARD, {'player': p1})
         bf_others = [c for c in game.get_battlefield(p1).get_all() if c is not card]
         token = bf_others[0]
         assert token.base_power == 1
@@ -95,7 +89,7 @@ class TestMischievousMysticTrigger:
         card.register_triggers(game)
         game.turn_number = 1
         for _ in range(3):
-            _fire_and_resolve(game, EventType.DRAWS_CARD, {"player": p1})
+            _fire_and_resolve(game, EventType.DRAWS_CARD, {'player': p1})
         bf_others = [c for c in game.get_battlefield(p1).get_all() if c is not card]
         assert len(bf_others) == 1
 
@@ -106,11 +100,11 @@ class TestMischievousMysticTrigger:
         game.get_battlefield(p1).add(card)
         card.register_triggers(game)
         game.turn_number = 1
-        _fire_and_resolve(game, EventType.DRAWS_CARD, {"player": p1})
-        _fire_and_resolve(game, EventType.DRAWS_CARD, {"player": p1})
+        _fire_and_resolve(game, EventType.DRAWS_CARD, {'player': p1})
+        _fire_and_resolve(game, EventType.DRAWS_CARD, {'player': p1})
         game.turn_number = 2
-        _fire_and_resolve(game, EventType.DRAWS_CARD, {"player": p1})
-        _fire_and_resolve(game, EventType.DRAWS_CARD, {"player": p1})
+        _fire_and_resolve(game, EventType.DRAWS_CARD, {'player': p1})
+        _fire_and_resolve(game, EventType.DRAWS_CARD, {'player': p1})
         bf_others = [c for c in game.get_battlefield(p1).get_all() if c is not card]
         assert len(bf_others) == 2
 
@@ -122,7 +116,7 @@ class TestMischievousMysticTrigger:
         game.get_battlefield(p1).add(card)
         card.register_triggers(game)
         game.turn_number = 1
-        _fire_and_resolve(game, EventType.DRAWS_CARD, {"player": p2})
-        _fire_and_resolve(game, EventType.DRAWS_CARD, {"player": p2})
+        _fire_and_resolve(game, EventType.DRAWS_CARD, {'player': p2})
+        _fire_and_resolve(game, EventType.DRAWS_CARD, {'player': p2})
         bf_others = [c for c in game.get_battlefield(p1).get_all() if c is not card]
         assert len(bf_others) == 0

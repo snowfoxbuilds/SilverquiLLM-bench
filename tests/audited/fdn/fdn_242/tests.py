@@ -1,30 +1,26 @@
 """Audited tests for FDN 242 — Lathril, Blade of the Elves."""
-
 from __future__ import annotations
-
 from card_impl import LathrilBladeOfTheElves
 from engine.card import Creature
-from engine.triggers import EventType
 from engine.types import CardType, Keyword, ManaCost, Supertype
 from tests.test_utils import create_game
-
+from engine.events import DealsDamageTriggeredEvent
 
 def _resolve_stack(game):
     while not game.stack.is_empty():
         obj = game.stack.pop()
         obj.on_resolve(game)
 
-
 class TestLathrilBasics:
     """Basic card properties."""
 
     def test_name(self) -> None:
         card = LathrilBladeOfTheElves(owner=None)
-        assert card.name == "Lathril, Blade of the Elves"
+        assert card.name == 'Lathril, Blade of the Elves'
 
     def test_mana_cost(self) -> None:
         card = LathrilBladeOfTheElves(owner=None)
-        assert card.mana_cost == ManaCost.parse("{2}{B}{G}")
+        assert card.mana_cost == ManaCost.parse('{2}{B}{G}')
 
     def test_power_toughness(self) -> None:
         card = LathrilBladeOfTheElves(owner=None)
@@ -41,9 +37,8 @@ class TestLathrilBasics:
 
     def test_subtypes(self) -> None:
         card = LathrilBladeOfTheElves(owner=None)
-        assert "Elf" in card.subtypes
-        assert "Noble" in card.subtypes
-
+        assert 'Elf' in card.subtypes
+        assert 'Noble' in card.subtypes
 
 class TestLathrilCombatDamageTrigger:
     """Creates tokens equal to combat damage dealt to player."""
@@ -55,16 +50,13 @@ class TestLathrilCombatDamageTrigger:
         lathril = LathrilBladeOfTheElves(owner=p1, controller=p1)
         game.get_battlefield(p1).add(lathril)
         lathril.register_triggers(game)
-        game.trigger_manager.fire_event(game, EventType.DEALS_DAMAGE, {
-            "source": lathril, "target": p2, "amount": 2
-        })
+        game.trigger_manager.fire_event(game, DealsDamageTriggeredEvent(source=lathril, target=p2, amount=2))
         _resolve_stack(game)
         bf = game.get_battlefield(p1)
-        tokens = [c for c in bf.get_all() if getattr(c, "is_token", False)]
+        tokens = [c for c in bf.get_all() if getattr(c, 'is_token', False)]
         assert len(tokens) == 2
         for t in tokens:
-            assert "Elf" in t.subtypes
-
+            assert 'Elf' in t.subtypes
 
 class TestLathrilActivatedAbility:
     """Tap + 10 elves: opponents lose 10 life, you gain 10."""
@@ -73,4 +65,3 @@ class TestLathrilActivatedAbility:
         lathril = LathrilBladeOfTheElves(owner=None)
         abilities = lathril.get_activated_abilities()
         assert len(abilities) >= 1
-

@@ -1,30 +1,26 @@
 """Audited tests for FDN 237 — Balmor, Battlemage Captain."""
-
 from __future__ import annotations
-
 from card_impl import BalmorBattlemageCaptain
 from engine.card import Creature, Instant
-from engine.triggers import EventType
 from engine.types import CardType, Keyword, ManaCost, Supertype
 from tests.test_utils import create_game
-
+from engine.events import SpellCastTriggeredEvent
 
 def _resolve_stack(game):
     while not game.stack.is_empty():
         obj = game.stack.pop()
         obj.on_resolve(game)
 
-
 class TestBalmorBasics:
     """Basic card properties."""
 
     def test_name(self) -> None:
         card = BalmorBattlemageCaptain(owner=None)
-        assert card.name == "Balmor, Battlemage Captain"
+        assert card.name == 'Balmor, Battlemage Captain'
 
     def test_mana_cost(self) -> None:
         card = BalmorBattlemageCaptain(owner=None)
-        assert card.mana_cost == ManaCost.parse("{U}{R}")
+        assert card.mana_cost == ManaCost.parse('{U}{R}')
 
     def test_power_toughness(self) -> None:
         card = BalmorBattlemageCaptain(owner=None)
@@ -41,9 +37,8 @@ class TestBalmorBasics:
 
     def test_subtypes(self) -> None:
         card = BalmorBattlemageCaptain(owner=None)
-        assert "Bird" in card.subtypes
-        assert "Wizard" in card.subtypes
-
+        assert 'Bird' in card.subtypes
+        assert 'Wizard' in card.subtypes
 
 class TestBalmorTrigger:
     """Instant/sorcery cast gives creatures +1/+0 and trample."""
@@ -53,25 +48,25 @@ class TestBalmorTrigger:
         p1 = game.players[0]
         balmor = BalmorBattlemageCaptain(owner=p1, controller=p1)
         game.get_battlefield(p1).add(balmor)
-        other = Creature(name="Bear", base_power=2, base_toughness=2, owner=p1, controller=p1)
+        other = Creature(name='Bear', base_power=2, base_toughness=2, owner=p1, controller=p1)
         game.get_battlefield(p1).add(other)
         balmor.register_triggers(game)
-        spell = Instant(name="Bolt", owner=p1, controller=p1)
-        game.trigger_manager.fire_event(game, EventType.SPELL_CAST, {"player": p1, "card": spell})
+        spell = Instant(name='Bolt', owner=p1, controller=p1)
+        game.trigger_manager.fire_event(game, SpellCastTriggeredEvent(player=p1, card=spell))
         _resolve_stack(game)
         game.effect_manager.apply_all(game)
-        assert other.base_power == 3  # 2 + 1
+        assert other.base_power == 3
 
     def test_instant_cast_grants_trample(self) -> None:
         game = create_game()
         p1 = game.players[0]
         balmor = BalmorBattlemageCaptain(owner=p1, controller=p1)
         game.get_battlefield(p1).add(balmor)
-        other = Creature(name="Bear", base_power=2, base_toughness=2, owner=p1, controller=p1)
+        other = Creature(name='Bear', base_power=2, base_toughness=2, owner=p1, controller=p1)
         game.get_battlefield(p1).add(other)
         balmor.register_triggers(game)
-        spell = Instant(name="Bolt", owner=p1, controller=p1)
-        game.trigger_manager.fire_event(game, EventType.SPELL_CAST, {"player": p1, "card": spell})
+        spell = Instant(name='Bolt', owner=p1, controller=p1)
+        game.trigger_manager.fire_event(game, SpellCastTriggeredEvent(player=p1, card=spell))
         _resolve_stack(game)
         game.effect_manager.apply_all(game)
         assert Keyword.TRAMPLE & other.keywords
@@ -82,12 +77,11 @@ class TestBalmorTrigger:
         p2 = game.players[1]
         balmor = BalmorBattlemageCaptain(owner=p1, controller=p1)
         game.get_battlefield(p1).add(balmor)
-        other = Creature(name="Bear", base_power=2, base_toughness=2, owner=p1, controller=p1)
+        other = Creature(name='Bear', base_power=2, base_toughness=2, owner=p1, controller=p1)
         game.get_battlefield(p1).add(other)
         balmor.register_triggers(game)
-        spell = Instant(name="Bolt", owner=p2, controller=p2)
-        game.trigger_manager.fire_event(game, EventType.SPELL_CAST, {"player": p2, "card": spell})
+        spell = Instant(name='Bolt', owner=p2, controller=p2)
+        game.trigger_manager.fire_event(game, SpellCastTriggeredEvent(player=p2, card=spell))
         _resolve_stack(game)
         game.effect_manager.apply_all(game)
-        assert other.base_power == 2  # unchanged
-
+        assert other.base_power == 2
