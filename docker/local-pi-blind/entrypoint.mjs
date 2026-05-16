@@ -1,5 +1,5 @@
 import { createAgentSession, AuthStorage, ModelRegistry, SessionManager } from "@earendil-works/pi-coding-agent";
-import { readFileSync, appendFileSync, writeFileSync, mkdirSync } from "fs";
+import { readFileSync, appendFileSync, writeFileSync, mkdirSync, createWriteStream } from "fs";
 
 mkdirSync("/output", { recursive: true });
 
@@ -42,13 +42,15 @@ const { session } = await createAgentSession({
   // All 4 default tools: read, bash, edit, write
 });
 
+const agentStdoutStream = createWriteStream("/output/agent_stdout.log", { flags: "a" });
+
 // Stream progress to mounted volume
 log("Session created, subscribing to events");
 session.subscribe((event) => {
   if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
     const delta = event.assistantMessageEvent.delta;
     process.stdout.write(delta);
-    appendFileSync("/output/agent_stdout.log", delta);
+    agentStdoutStream.write(delta);
   }
   if (event.type === "tool_execution_end") {
     appendFileSync("/output/progress.jsonl",

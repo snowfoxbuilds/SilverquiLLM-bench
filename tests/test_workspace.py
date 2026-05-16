@@ -165,7 +165,6 @@ class TestEngineCopy:
 # FDN cards — filled implementations
 # ------------------------------------------------------------------
 
-"""
 class TestFdnCards:
 
     def test_at_least_one_fdn_card(self, staged):
@@ -205,7 +204,6 @@ class TestFdnCards:
         some_card = next((workspace / "cards" / "fdn").iterdir())
         data = json.loads((some_card / "card_spec.json").read_text())
         assert "name" in data
-"""
 
 # ------------------------------------------------------------------
 # SOS cards — templates

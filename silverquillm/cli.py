@@ -17,8 +17,6 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import re as _re
-
 import click
 
 from silverquillm.card_loader import is_template, load_all_card_specs

@@ -144,8 +144,8 @@ class ContainerLifecycle:
             timeout_reason = None
 
         # Wait for pipe readers to finish
-        stdout_thread.join(timeout=5)
-        stderr_thread.join(timeout=5)
+        stdout_thread.join(timeout=10)
+        stderr_thread.join(timeout=10)
 
         # Final read pass to flush any remaining data
         self._read_and_print_new_bytes()
