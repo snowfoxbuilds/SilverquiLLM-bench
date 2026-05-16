@@ -533,11 +533,12 @@ class TestDockerCommand:
 class TestSnapshotCallback:
     """Snapshot callback should be invoked periodically."""
 
-    def test_snapshot_callback_called(self, workspace, output):
-        mock_proc = _make_mock_popen(exit_code=0, exit_delay=0.1)
+    def test_snapshot_callback_called_at_least_once(self, workspace, output):
+        """With _SNAPSHOT_INTERVAL=0 and a delayed exit, callback fires at least once."""
+        mock_proc = _make_mock_popen(exit_code=0, exit_delay=0.3)
         callback = MagicMock()
 
-        # Patch _SNAPSHOT_INTERVAL to 0 so it fires immediately
+        # Patch _SNAPSHOT_INTERVAL to 0 so it fires on every poll iteration
         with patch("silverquillm.runner.subprocess.Popen", return_value=mock_proc), \
              patch("silverquillm.runner.subprocess.run"), \
              patch("silverquillm.runner._SNAPSHOT_INTERVAL", 0):
@@ -551,6 +552,93 @@ class TestSnapshotCallback:
             )
             lc.run()
 
-        # Callback should have been called at least once during the poll loop
-        # (with _SNAPSHOT_INTERVAL=0 and some poll iterations before exit)
-        assert callback.call_count >= 0  # May be 0 if process exits on first poll
+        # With interval=0 and ~0.3s of polling, callback must fire at least once
+        assert callback.call_count >= 1, (
+            f"Expected snapshot callback to fire at least once, got {callback.call_count}"
+        )
+
+    def test_no_callback_when_none(self, workspace, output):
+        """When snapshot_callback is None, no error occurs."""
+        mock_proc = _make_mock_popen(exit_code=0, exit_delay=0.1)
+
+        with patch("silverquillm.runner.subprocess.Popen", return_value=mock_proc), \
+             patch("silverquillm.runner.subprocess.run"):
+            lc = ContainerLifecycle(
+                image="img",
+                container_name="ctr",
+                workspace=workspace,
+                output=output,
+                hard_timeout=300,
+                snapshot_callback=None,
+            )
+            result = lc.run()
+
+        assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# .tmp → .log copy after thread join
+# ---------------------------------------------------------------------------
+
+
+class TestTmpToLogCopy:
+    """After pipe reader threads join, .tmp files should be copied to .log."""
+
+    def test_stdout_tmp_copied_to_log(self, workspace, output):
+        """docker_stdout.tmp should be copied to docker_stdout.log."""
+        mock_proc = _make_mock_popen(stdout_data=b"stdout data\n", exit_code=0, exit_delay=0.1)
+
+        with patch("silverquillm.runner.subprocess.Popen", return_value=mock_proc), \
+             patch("silverquillm.runner.subprocess.run"):
+            lc = ContainerLifecycle(
+                image="img",
+                container_name="ctr",
+                workspace=workspace,
+                output=output,
+                hard_timeout=300,
+            )
+            lc.run()
+
+        log_file = output / "docker_stdout.log"
+        assert log_file.exists(), "docker_stdout.log should be created from .tmp"
+        assert b"stdout data" in log_file.read_bytes()
+
+    def test_stderr_tmp_copied_to_log(self, workspace, output):
+        """docker_stderr.tmp should be copied to docker_stderr.log."""
+        mock_proc = _make_mock_popen(
+            stdout_data=b"out\n", stderr_data=b"err data\n",
+            exit_code=0, exit_delay=0.1,
+        )
+
+        with patch("silverquillm.runner.subprocess.Popen", return_value=mock_proc), \
+             patch("silverquillm.runner.subprocess.run"):
+            lc = ContainerLifecycle(
+                image="img",
+                container_name="ctr",
+                workspace=workspace,
+                output=output,
+                hard_timeout=300,
+            )
+            lc.run()
+
+        log_file = output / "docker_stderr.log"
+        assert log_file.exists(), "docker_stderr.log should be created from .tmp"
+        assert b"err data" in log_file.read_bytes()
+
+    def test_tmp_files_preserved_alongside_log(self, workspace, output):
+        """Original .tmp files should still exist (copy, not rename)."""
+        mock_proc = _make_mock_popen(stdout_data=b"data\n", exit_code=0, exit_delay=0.1)
+
+        with patch("silverquillm.runner.subprocess.Popen", return_value=mock_proc), \
+             patch("silverquillm.runner.subprocess.run"):
+            lc = ContainerLifecycle(
+                image="img",
+                container_name="ctr",
+                workspace=workspace,
+                output=output,
+                hard_timeout=300,
+            )
+            lc.run()
+
+        assert (output / "docker_stdout.tmp").exists(), ".tmp should be preserved"
+        assert (output / "docker_stdout.log").exists(), ".log should be created"
