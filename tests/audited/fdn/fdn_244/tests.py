@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from card_impl import Progenitus
 from engine.card import Creature
+from engine.events import CreatureDiesReplacementEvent
 from engine.types import ManaCost, Supertype, Zone
 from tests.test_utils import create_game
 
@@ -57,8 +58,6 @@ class TestProgenitusReplacementEffect:
         prog = Progenitus(owner=p1, controller=p1)
         game.get_battlefield(p1).add(prog)
         prog.register_replacement_effects(game)
-        # The replacement should apply for move_to_graveyard events
-        event_data = {"card": prog}
-        result = game.replacement_manager.apply(game, "move_to_graveyard", event_data)
-        assert result.get("prevented") is True
-
+        event = CreatureDiesReplacementEvent(creature=prog)
+        result = game.replacement_manager.apply(game, event)
+        assert result.prevented is True

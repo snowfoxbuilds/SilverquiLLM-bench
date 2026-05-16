@@ -117,8 +117,8 @@ class BlanchwoodArmor(Aura):
         if controller is None:
             return
         bonus = _count_forests(game, controller)
-        creature.base_power += bonus
-        creature.base_toughness += bonus
+        creature.modified_power += bonus
+        creature.modified_toughness += bonus
 
     def _register_effect(self, game: GameState) -> None:
         aura_ref = self

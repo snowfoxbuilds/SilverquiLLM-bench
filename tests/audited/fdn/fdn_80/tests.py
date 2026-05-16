@@ -40,7 +40,7 @@ class TestBulkUpResolve:
         card.chosen_targets = [target]
         card.on_resolve(game)
         game.effect_manager.apply_all(game)
-        assert target.base_power == 6
+        assert target.modified_power == 6
 
     def test_doubles_power_of_1(self) -> None:
         game = create_game()
@@ -51,7 +51,7 @@ class TestBulkUpResolve:
         card.chosen_targets = [target]
         card.on_resolve(game)
         game.effect_manager.apply_all(game)
-        assert target.base_power == 2
+        assert target.modified_power == 2
 
     def test_fizzles_when_target_is_none(self) -> None:
         game = create_game()

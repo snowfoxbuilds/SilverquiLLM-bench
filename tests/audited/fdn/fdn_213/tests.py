@@ -58,14 +58,14 @@ class TestBlanchwoodArmorEffect:
     def test_one_forest_plus_one(self) -> None:
         game, aura, creature = self._setup_with_forests(1)
         game.effect_manager.apply_all(game)
-        assert creature.base_power == 3
-        assert creature.base_toughness == 3
+        assert creature.modified_power == 3
+        assert creature.modified_toughness == 3
 
     def test_three_forests_plus_three(self) -> None:
         game, aura, creature = self._setup_with_forests(3)
         game.effect_manager.apply_all(game)
-        assert creature.base_power == 5
-        assert creature.base_toughness == 5
+        assert creature.modified_power == 5
+        assert creature.modified_toughness == 5
 
     def test_opponent_forests_not_counted(self) -> None:
         game = create_game()
@@ -85,8 +85,8 @@ class TestBlanchwoodArmorEffect:
         aura.on_resolve(game)
         game.effect_manager.apply_all(game)
         # Should only get +1 from p1's single forest
-        assert creature.base_power == 3
-        assert creature.base_toughness == 3
+        assert creature.modified_power == 3
+        assert creature.modified_toughness == 3
 
     def test_effect_in_layer_7c(self) -> None:
         game, aura, creature = self._setup_with_forests(1)
@@ -98,21 +98,21 @@ class TestBlanchwoodArmorEffect:
         """Bonus should reflect current forest count on reapply."""
         game, aura, creature = self._setup_with_forests(1)
         game.effect_manager.apply_all(game)
-        assert creature.base_power == 3
+        assert creature.modified_power == 3
         # Add another forest
         p1 = game.players[0]
         game.get_battlefield(p1).add(self._make_forest(p1))
         game.effect_manager.apply_all(game)
-        assert creature.base_power == 4
-        assert creature.base_toughness == 4
+        assert creature.modified_power == 4
+        assert creature.modified_toughness == 4
 
     def test_effect_idempotent_on_reapply(self) -> None:
         """Calling apply_all twice doesn't double the bonus."""
         game, aura, creature = self._setup_with_forests(2)
         game.effect_manager.apply_all(game)
         game.effect_manager.apply_all(game)
-        assert creature.base_power == 4
-        assert creature.base_toughness == 4
+        assert creature.modified_power == 4
+        assert creature.modified_toughness == 4
 
     def test_counts_forest_subtype_not_name(self) -> None:
         """A land with Forest subtype but different name should count."""
@@ -129,6 +129,6 @@ class TestBlanchwoodArmorEffect:
         aura.chosen_targets = [creature]
         aura.on_resolve(game)
         game.effect_manager.apply_all(game)
-        assert creature.base_power == 3
-        assert creature.base_toughness == 3
+        assert creature.modified_power == 3
+        assert creature.modified_toughness == 3
 

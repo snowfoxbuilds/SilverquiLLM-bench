@@ -193,7 +193,7 @@ class TestDamagePrevention:
         """Pro-red creature takes no damage from a red source."""
         game, p1, p2 = two_player_game
         knight = _make_pro_red_creature()
-        knight.base_toughness = 4
+        knight.modified_toughness = 4
         goblin = _make_red_creature()
         deal_damage(game, goblin, knight, 3)
         assert knight.damage_marked == 0
@@ -202,7 +202,7 @@ class TestDamagePrevention:
         """Pro-red creature takes damage from a green source normally."""
         game, p1, p2 = two_player_game
         knight = _make_pro_red_creature()
-        knight.base_toughness = 4
+        knight.modified_toughness = 4
         elf = _make_green_creature()
         deal_damage(game, elf, knight, 3)
         assert knight.damage_marked == 3
@@ -372,7 +372,7 @@ class TestProtectionEdgeCases:
         """
         game, p1, p2 = two_player_game
         knight = _make_pro_red_creature()
-        knight.base_toughness = 4
+        knight.modified_toughness = 4
         # A white source deals damage — should go through
         white_source = _make_creature(colors={Color.WHITE})
         deal_damage(game, white_source, knight, 2)

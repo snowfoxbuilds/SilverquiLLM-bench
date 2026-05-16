@@ -99,8 +99,8 @@ class ElvishArchdruid(Creature):
                     CardType.CREATURE in getattr(card, "card_types", set())
                     and "Elf" in getattr(card, "subtypes", set())
                 ):
-                    card.base_power = getattr(card, "_original_base_power", card.base_power) + 1
-                    card.base_toughness = getattr(card, "_original_base_toughness", card.base_toughness) + 1
+                    card.modified_power = card.base_power + 1
+                    card.modified_toughness = card.base_toughness + 1
 
         effect = ContinuousEffect(
             source=source,

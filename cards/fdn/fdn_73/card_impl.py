@@ -77,8 +77,8 @@ class TragicBanshee(Creature):
         modifier = -13 if morbid else -1
 
         def _apply(game: Any) -> None:
-            target.base_power = target.base_power + modifier
-            target.base_toughness = target.base_toughness + modifier
+            target.modified_power = target.modified_power + modifier
+            target.modified_toughness = target.modified_toughness + modifier
 
         game.effect_manager.add(ContinuousEffect(
             source=self,

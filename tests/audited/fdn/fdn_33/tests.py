@@ -1,12 +1,10 @@
 """Audited tests for FDN 33 — Clinquant Skymage."""
-
 from __future__ import annotations
-
 from card_impl import ClinquantSkymage
 from engine.card import Creature
 from engine.types import Keyword, ManaCost, Zone
 from tests.test_utils import create_game
-
+from engine.events import DrawsCardTriggeredEvent
 
 class TestClinquantSkymageBasics:
     """Basic card properties."""
@@ -17,11 +15,11 @@ class TestClinquantSkymageBasics:
 
     def test_name(self) -> None:
         card = ClinquantSkymage(owner=None)
-        assert card.name == "Clinquant Skymage"
+        assert card.name == 'Clinquant Skymage'
 
     def test_mana_cost(self) -> None:
         card = ClinquantSkymage(owner=None)
-        assert card.mana_cost == ManaCost.parse("{3}{U}")
+        assert card.mana_cost == ManaCost.parse('{3}{U}')
 
     def test_power_toughness(self) -> None:
         card = ClinquantSkymage(owner=None)
@@ -34,9 +32,8 @@ class TestClinquantSkymageBasics:
 
     def test_subtypes(self) -> None:
         card = ClinquantSkymage(owner=None)
-        assert "Bird" in card.subtypes
-        assert "Wizard" in card.subtypes
-
+        assert 'Bird' in card.subtypes
+        assert 'Wizard' in card.subtypes
 
 class TestClinquantSkymageDrawTrigger:
     """Whenever you draw a card, put a +1/+1 counter on this creature."""
@@ -53,36 +50,27 @@ class TestClinquantSkymageDrawTrigger:
         skymage = ClinquantSkymage(owner=p1, controller=p1)
         game.get_battlefield(p1).add(skymage)
         skymage.register_triggers(game)
-        return game, skymage, p1
+        return (game, skymage, p1)
 
     def test_gets_counter_on_draw(self) -> None:
-        from engine.triggers import EventType
         game, skymage, p1 = self._setup()
         initial = skymage.plus_one_counters
-        game.trigger_manager.fire_event(
-            game, EventType.DRAWS_CARD, {"player": p1},
-        )
+        game.trigger_manager.fire_event(game, DrawsCardTriggeredEvent(player=p1))
         self._resolve_stack(game)
         assert skymage.plus_one_counters == initial + 1
 
     def test_multiple_draws_multiple_counters(self) -> None:
-        from engine.triggers import EventType
         game, skymage, p1 = self._setup()
         initial = skymage.plus_one_counters
         for _ in range(3):
-            game.trigger_manager.fire_event(
-                game, EventType.DRAWS_CARD, {"player": p1},
-            )
+            game.trigger_manager.fire_event(game, DrawsCardTriggeredEvent(player=p1))
             self._resolve_stack(game)
         assert skymage.plus_one_counters == initial + 3
 
     def test_no_counter_on_opponent_draw(self) -> None:
-        from engine.triggers import EventType
         game, skymage, p1 = self._setup()
         p2 = game.players[1]
         initial = skymage.plus_one_counters
-        game.trigger_manager.fire_event(
-            game, EventType.DRAWS_CARD, {"player": p2},
-        )
+        game.trigger_manager.fire_event(game, DrawsCardTriggeredEvent(player=p2))
         self._resolve_stack(game)
         assert skymage.plus_one_counters == initial

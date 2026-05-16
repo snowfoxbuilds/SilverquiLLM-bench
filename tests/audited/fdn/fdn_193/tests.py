@@ -1,19 +1,15 @@
 """Audited tests for FDN 193 — Drakuseth, Maw of Flames."""
-
 from __future__ import annotations
-
 from card_impl import DrakusethMawOfFlames
 from engine.card import Creature
-from engine.triggers import EventType
 from engine.types import Keyword, ManaCost
 from tests.test_utils import create_game
-
+from engine.events import AttacksTriggeredEvent
 
 def _resolve_stack(game):
     while not game.stack.is_empty():
         obj = game.stack.pop()
         obj.on_resolve(game)
-
 
 class TestDrakusethBasics:
     """Basic card properties."""
@@ -24,11 +20,11 @@ class TestDrakusethBasics:
 
     def test_name(self) -> None:
         card = DrakusethMawOfFlames(owner=None)
-        assert card.name == "Drakuseth, Maw of Flames"
+        assert card.name == 'Drakuseth, Maw of Flames'
 
     def test_mana_cost(self) -> None:
         card = DrakusethMawOfFlames(owner=None)
-        assert card.mana_cost == ManaCost.parse("{4}{R}{R}{R}")
+        assert card.mana_cost == ManaCost.parse('{4}{R}{R}{R}')
 
     def test_power_toughness(self) -> None:
         card = DrakusethMawOfFlames(owner=None)
@@ -41,12 +37,11 @@ class TestDrakusethBasics:
 
     def test_subtypes(self) -> None:
         card = DrakusethMawOfFlames(owner=None)
-        assert "Dragon" in card.subtypes
+        assert 'Dragon' in card.subtypes
 
     def test_is_legendary(self) -> None:
         card = DrakusethMawOfFlames(owner=None)
-        assert "Legendary" in getattr(card, "supertypes", set())
-
+        assert 'Legendary' in getattr(card, 'supertypes', set())
 
 class TestDrakusethAttackTrigger:
     """Whenever Drakuseth attacks, deals 4 to one target and 3 to up to two others."""
@@ -58,15 +53,12 @@ class TestDrakusethAttackTrigger:
         drake = DrakusethMawOfFlames(owner=p1, controller=p1)
         game.get_battlefield(p1).add(drake)
         drake.register_triggers(game)
-        # Script p1's choices: choose p2 for 4 damage, then p2 for 3, then p2 for 3
-        # (DeterministicPlayer.choose_card picks from script)
         from engine.player import DeterministicPlayer
         if isinstance(p1, DeterministicPlayer):
-            p1._script.append(p2)  # 4 damage target
-            p1._script.append(p2)  # first 3 damage target
-            p1._script.append(p2)  # second 3 damage target
+            p1._script.append(p2)
+            p1._script.append(p2)
+            p1._script.append(p2)
         p2_life_before = p2.life
-        game.trigger_manager.fire_event(game, EventType.ATTACKS, {"creature": drake})
+        game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=drake))
         _resolve_stack(game)
-        # At minimum, 4 damage to p2
         assert p2.life <= p2_life_before - 4

@@ -79,7 +79,7 @@ class SureStrike(Instant):
         def _apply_buff(game: GameState) -> None:
             for p in game.players:
                 if game.get_battlefield(p).contains(creature_ref):
-                    creature_ref.base_power += 3
+                    creature_ref.modified_power += 3
                     creature_ref.keywords = getattr(
                         creature_ref, "keywords", Keyword(0)
                     ) | Keyword.FIRST_STRIKE

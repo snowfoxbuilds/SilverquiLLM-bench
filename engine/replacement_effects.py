@@ -10,6 +10,9 @@ outcome.  Key design differences from triggers:
   event to avoid infinite loops.
 - **Player choice**: when multiple replacements apply to the same event,
   the affected player chooses the order via ``Player.choose``.
+- **Subtype matching**: a replacement registered for a parent event class
+  (e.g. ``MoveToGraveyardReplacementEvent``) fires for any subtype
+  (e.g. ``CreatureDiesReplacementEvent``).
 
 Public API:
 
@@ -23,6 +26,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable
 
+from engine.events import ReplacementEvent
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
     from engine.player import Player
@@ -33,42 +38,26 @@ class ReplacementEffect:
     """Describes a single replacement effect.
 
     Attributes:
-        event_type: The event type string this replacement watches for
-            (e.g. ``"creature_dies"``).
+        event_type: The event class (or a base class) this replacement
+            watches for.  A replacement registered for a parent class
+            also fires when the event is an instance of a subclass.
         source: The game object (card / permanent) that owns this effect.
-        condition: Optional callable ``(game, event_data) -> bool`` that
-            must return ``True`` for the replacement to apply.  ``None``
-            means the replacement always applies for its event type.
-        replacement: Callable ``(game, event_data) -> event_data`` that
-            receives the current event data dict and returns a (possibly
-            modified) version.  This callable implements the "instead"
-            logic.
-        controller: The player who controls the source.  Used to determine
-            who the "affected player" is when multiple replacements compete.
+        condition: Optional callable ``(game, event) -> bool`` that must
+            return ``True`` for the replacement to apply.
+        replacement: Callable ``(game, event) -> event`` that receives the
+            current event object and returns a (possibly modified) version.
+        controller: The player who controls the source.
     """
 
-    event_type: str
+    event_type: type[ReplacementEvent]
     source: Any
     condition: Callable[..., bool] | None
-    replacement: Callable[..., dict[str, Any]]
-    controller: Player | None = None
+    replacement: Callable[..., ReplacementEvent]
+    controller: Any = None
 
 
 class ReplacementManager:
-    """Central registry for replacement effects.
-
-    Replacement effects are registered when a permanent enters the
-    battlefield (via ``card.register_replacement_effects(game)``) and
-    unregistered when the source leaves.
-
-    :meth:`apply` checks all registered effects matching the given
-    event type, evaluates conditions, and applies the matching
-    replacements to the event data.  If multiple replacements match,
-    the affected player chooses the application order.
-
-    Each replacement effect can apply at most **once per event** to
-    prevent infinite self-replacement loops.
-    """
+    """Central registry for replacement effects."""
 
     def __init__(self) -> None:
         self._effects: list[ReplacementEffect] = []
@@ -78,79 +67,52 @@ class ReplacementManager:
     # ------------------------------------------------------------------
 
     def register(self, effect: ReplacementEffect) -> None:
-        """Register a replacement effect.
-
-        Parameters:
-            effect: The :class:`ReplacementEffect` to add.
-        """
+        """Register a replacement effect."""
         self._effects.append(effect)
 
     def unregister(self, source: Any) -> None:
-        """Remove all replacement effects registered by *source* (identity-based).
-
-        Called when a permanent leaves the battlefield.
-
-        Parameters:
-            source: The game object whose effects should be removed.
-        """
+        """Remove all replacement effects registered by *source*."""
         self._effects = [e for e in self._effects if e.source is not source]
 
     # ------------------------------------------------------------------
     # Application
     # ------------------------------------------------------------------
 
-    def apply(
-        self,
-        game: GameState,
-        event_type: str,
-        event_data: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Apply matching replacement effects to *event_data*.
+    def apply(self, game: GameState, event: ReplacementEvent) -> ReplacementEvent:
+        """Apply matching replacement effects to *event*.
 
-        1. Collect all registered effects whose ``event_type`` matches and
-           whose ``condition`` (if any) returns ``True``.
-        2. If multiple effects match, the affected player chooses the order
-           via ``Player.choose``.
-        3. Each chosen effect's ``replacement`` callable is invoked with
-           ``(game, event_data)`` and the result replaces the current
-           ``event_data``.
-        4. **Self-replacement prevention**: each effect is applied at most
-           once per invocation.
+        1. Collect all registered effects whose ``event_type`` is a
+           superclass of (or equal to) the event's class and whose
+           ``condition`` returns ``True``.
+        2. If multiple effects match, the affected player chooses the order.
+        3. Each chosen effect's ``replacement`` callable is invoked and
+           the result replaces the current event.
+        4. Each effect applies at most once per invocation.
 
         Parameters:
             game: The current game state.
-            event_type: The event type string (e.g. ``"creature_dies"``).
-            event_data: A mutable dict of event-specific data.
+            event: The typed event object to potentially modify.
 
         Returns:
-            The (possibly modified) *event_data* dict after all applicable
-            replacements have been applied.
+            The (possibly modified) event after all applicable replacements.
         """
-        # Track which effects have already been applied (self-replacement prevention).
-        applied: set[int] = set()  # ids of ReplacementEffect objects
+        applied: set[int] = set()
 
-        # Iterate: after each application, re-check for newly applicable effects.
-        # This allows chained replacements while preventing self-loops.
         while True:
-            matching = self._collect_matching(game, event_type, event_data, applied)
+            matching = self._collect_matching(game, event, applied)
             if not matching:
                 break
 
             if len(matching) == 1:
                 chosen = matching[0]
             else:
-                # Affected player chooses order.  Determine affected player
-                # from event_data, falling back to active player.
-                affected = self._get_affected_player(game, event_data)
-                chosen = affected.choose(
-                    matching,
-                    "Choose replacement effect order",
-                )
+                affected = self._get_affected_player(game, event)
+                chosen = affected.choose(matching, "Choose replacement effect order")
 
             applied.add(id(chosen))
-            event_data = chosen.replacement(game, event_data)
+            event = chosen.replacement(game, event)
 
-        return event_data
+        return event
 
     # ------------------------------------------------------------------
     # Queries
@@ -161,7 +123,7 @@ class ReplacementManager:
         return list(self._effects)
 
     def get_effects_for_source(self, source: Any) -> list[ReplacementEffect]:
-        """Return all effects registered by *source* (identity-based)."""
+        """Return all effects registered by *source*."""
         return [e for e in self._effects if e.source is source]
 
     def clear(self) -> None:
@@ -175,35 +137,29 @@ class ReplacementManager:
     def _collect_matching(
         self,
         game: GameState,
-        event_type: str,
-        event_data: dict[str, Any],
+        event: ReplacementEvent,
         applied: set[int],
     ) -> list[ReplacementEffect]:
-        """Collect effects matching *event_type* that haven't been applied yet."""
+        """Collect effects matching the event type that haven't been applied."""
         matching: list[ReplacementEffect] = []
         for effect in self._effects:
             if id(effect) in applied:
                 continue
-            if effect.event_type != event_type:
+            if not isinstance(event, effect.event_type):
                 continue
             if effect.condition is not None:
-                if not effect.condition(game, event_data):
+                if not effect.condition(game, event):
                     continue
             matching.append(effect)
         return matching
 
     @staticmethod
-    def _get_affected_player(
-        game: GameState,
-        event_data: dict[str, Any],
-    ) -> Any:
-        """Determine the affected player for ordering choices.
-
-        Checks ``event_data`` for ``"player"`` or ``"controller"`` keys;
-        falls back to the game's active player.
-        """
-        if "player" in event_data:
-            return event_data["player"]
-        if "controller" in event_data:
-            return event_data["controller"]
+    def _get_affected_player(game: GameState, event: ReplacementEvent) -> Any:
+        """Determine the affected player for ordering choices."""
+        player = getattr(event, "player", None)
+        if player is not None:
+            return player
+        controller = getattr(event, "controller", None)
+        if controller is not None:
+            return controller
         return game.active_player

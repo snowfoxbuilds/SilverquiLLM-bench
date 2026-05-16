@@ -72,8 +72,8 @@ class BillowingShriekmass(Creature):
         source = self
 
         def _apply(game: Any) -> None:
-            source.base_power = source.base_power + 2
-            source.base_toughness = source.base_toughness + 1
+            source.modified_power = source.modified_power + 2
+            source.modified_toughness = source.modified_toughness + 1
 
         from engine.continuous_effects import DURATION_PERMANENT
 

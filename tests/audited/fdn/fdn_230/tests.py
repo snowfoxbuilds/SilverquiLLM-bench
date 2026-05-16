@@ -35,8 +35,8 @@ class TestOverrunResolve:
         spell = Overrun(owner=p1, controller=p1)
         spell.on_resolve(game)
         game.effect_manager.apply_all(game)
-        assert c1.base_power == 5
-        assert c1.base_toughness == 5
+        assert c1.modified_power == 5
+        assert c1.modified_toughness == 5
 
     def test_grants_trample(self) -> None:
         game = create_game()

@@ -78,8 +78,8 @@ class GiantGrowth(Instant):
             # Only apply if the creature is still on the battlefield.
             for p in game.players:
                 if game.get_battlefield(p).contains(creature_ref):
-                    creature_ref.base_power += 3
-                    creature_ref.base_toughness += 3
+                    creature_ref.modified_power += 3
+                    creature_ref.modified_toughness += 3
                     return
 
         effect = ContinuousEffect(

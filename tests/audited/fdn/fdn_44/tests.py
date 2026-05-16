@@ -1,15 +1,11 @@
 """Audited tests for FDN 44 — Kaito, Cunning Infiltrator."""
-
 from __future__ import annotations
-
 import pytest
-
 from card_impl import KaitoCunningInfiltrator
 from engine.card import Creature, Planeswalker
-from engine.triggers import EventType
 from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
 from tests.test_utils import create_game, set_board_state
-
+from engine.events import DealsDamageTriggeredEvent, SpellCastTriggeredEvent
 
 class TestKaitoBasics:
     """Basic card properties."""
@@ -21,7 +17,7 @@ class TestKaitoBasics:
 
     def test_mana_cost(self) -> None:
         card = KaitoCunningInfiltrator(owner=None)
-        assert card.mana_cost == ManaCost.parse("{1}{U}{U}")
+        assert card.mana_cost == ManaCost.parse('{1}{U}{U}')
 
     def test_starting_loyalty_is_3(self) -> None:
         card = KaitoCunningInfiltrator(owner=None)
@@ -34,7 +30,7 @@ class TestKaitoBasics:
 
     def test_has_kaito_subtype(self) -> None:
         card = KaitoCunningInfiltrator(owner=None)
-        assert "Kaito" in card.subtypes
+        assert 'Kaito' in card.subtypes
 
     def test_has_three_loyalty_abilities(self) -> None:
         card = KaitoCunningInfiltrator(owner=None)
@@ -47,7 +43,6 @@ class TestKaitoBasics:
         assert abilities[0].loyalty_cost == +1
         assert abilities[1].loyalty_cost == -2
         assert abilities[2].loyalty_cost == -9
-
 
 class TestKaitoPassive:
     """Passive: combat damage to a player → loyalty counter."""
@@ -62,18 +57,12 @@ class TestKaitoPassive:
         game = create_game()
         p1 = game.players[0]
         kaito = KaitoCunningInfiltrator(owner=p1, controller=p1)
-        creature = Creature(name="Bear", base_power=2, base_toughness=2, owner=p1, controller=p1)
+        creature = Creature(name='Bear', base_power=2, base_toughness=2, owner=p1, controller=p1)
         game.get_battlefield(p1).add(kaito)
         game.get_battlefield(p1).add(creature)
         kaito.register_triggers(game)
-
         initial_loyalty = kaito.loyalty
-        # Simulate combat damage event from our creature to opposing player
-        game.trigger_manager.fire_event(
-            game,
-            EventType.DEALS_DAMAGE,
-            {"source": creature, "target": game.players[1], "amount": 2, "combat": True},
-        )
+        game.trigger_manager.fire_event(game, DealsDamageTriggeredEvent(source=creature, target=game.players[1], amount=2, combat=True))
         self._resolve_stack(game)
         assert kaito.loyalty == initial_loyalty + 1
 
@@ -82,18 +71,13 @@ class TestKaitoPassive:
         p1 = game.players[0]
         p2 = game.players[1]
         kaito = KaitoCunningInfiltrator(owner=p1, controller=p1)
-        creature = Creature(name="Bear", base_power=2, base_toughness=2, owner=p1, controller=p1)
-        target_creature = Creature(name="Wall", base_power=0, base_toughness=4, owner=p2, controller=p2)
+        creature = Creature(name='Bear', base_power=2, base_toughness=2, owner=p1, controller=p1)
+        target_creature = Creature(name='Wall', base_power=0, base_toughness=4, owner=p2, controller=p2)
         game.get_battlefield(p1).add(kaito)
         game.get_battlefield(p1).add(creature)
         kaito.register_triggers(game)
-
         initial_loyalty = kaito.loyalty
-        game.trigger_manager.fire_event(
-            game,
-            EventType.DEALS_DAMAGE,
-            {"source": creature, "target": target_creature, "amount": 2},
-        )
+        game.trigger_manager.fire_event(game, DealsDamageTriggeredEvent(source=creature, target=target_creature, amount=2))
         self._resolve_stack(game)
         assert kaito.loyalty == initial_loyalty
 
@@ -102,18 +86,12 @@ class TestKaitoPassive:
         game = create_game()
         p1 = game.players[0]
         kaito = KaitoCunningInfiltrator(owner=p1, controller=p1)
-        creature = Creature(name="Pinger", base_power=1, base_toughness=1, owner=p1, controller=p1)
+        creature = Creature(name='Pinger', base_power=1, base_toughness=1, owner=p1, controller=p1)
         game.get_battlefield(p1).add(kaito)
         game.get_battlefield(p1).add(creature)
         kaito.register_triggers(game)
-
         initial_loyalty = kaito.loyalty
-        # Noncombat damage to opposing player — combat=False
-        game.trigger_manager.fire_event(
-            game,
-            EventType.DEALS_DAMAGE,
-            {"source": creature, "target": game.players[1], "amount": 1, "combat": False},
-        )
+        game.trigger_manager.fire_event(game, DealsDamageTriggeredEvent(source=creature, target=game.players[1], amount=1, combat=False))
         self._resolve_stack(game)
         assert kaito.loyalty == initial_loyalty
 
@@ -122,20 +100,14 @@ class TestKaitoPassive:
         p1 = game.players[0]
         p2 = game.players[1]
         kaito = KaitoCunningInfiltrator(owner=p1, controller=p1)
-        opp_creature = Creature(name="Goblin", base_power=1, base_toughness=1, owner=p2, controller=p2)
+        opp_creature = Creature(name='Goblin', base_power=1, base_toughness=1, owner=p2, controller=p2)
         game.get_battlefield(p1).add(kaito)
         game.get_battlefield(p2).add(opp_creature)
         kaito.register_triggers(game)
-
         initial_loyalty = kaito.loyalty
-        game.trigger_manager.fire_event(
-            game,
-            EventType.DEALS_DAMAGE,
-            {"source": opp_creature, "target": p1, "amount": 1},
-        )
+        game.trigger_manager.fire_event(game, DealsDamageTriggeredEvent(source=opp_creature, target=p1, amount=1))
         self._resolve_stack(game)
         assert kaito.loyalty == initial_loyalty
-
 
 class TestKaitoPlus1:
     """+1: can't be blocked + loot (draw then discard)."""
@@ -145,19 +117,13 @@ class TestKaitoPlus1:
         p1 = game.players[0]
         kaito = KaitoCunningInfiltrator(owner=p1, controller=p1)
         game.get_battlefield(p1).add(kaito)
-
-        # Put cards in library and hand
-        lib_card = Creature(name="Fish", base_power=1, base_toughness=1, owner=p1)
+        lib_card = Creature(name='Fish', base_power=1, base_toughness=1, owner=p1)
         p1.zones[Zone.LIBRARY].add(lib_card)
-        hand_card = Creature(name="Otter", base_power=1, base_toughness=1, owner=p1)
+        hand_card = Creature(name='Otter', base_power=1, base_toughness=1, owner=p1)
         p1.zones[Zone.HAND].add(hand_card)
-
         abilities = kaito.get_loyalty_abilities()
         plus1 = abilities[0]
         plus1.effect(game)
-
-        # Should have drawn (Fish goes to hand), then discarded one
-        # Net hand size may be same (draw 1, discard 1) but graveyard has a card
         graveyard = p1.zones[Zone.GRAVEYARD]
         assert len(graveyard) == 1
 
@@ -166,18 +132,12 @@ class TestKaitoPlus1:
         p1 = game.players[0]
         kaito = KaitoCunningInfiltrator(owner=p1, controller=p1)
         game.get_battlefield(p1).add(kaito)
-
-        lib_card = Creature(name="Fish", base_power=1, base_toughness=1, owner=p1)
+        lib_card = Creature(name='Fish', base_power=1, base_toughness=1, owner=p1)
         p1.zones[Zone.LIBRARY].add(lib_card)
-
         abilities = kaito.get_loyalty_abilities()
         plus1 = abilities[0]
         plus1.effect(game)
-
-        # After draw+discard with only drawn card in hand, hand should be empty
-        # and graveyard should have the discarded card
         assert len(p1.zones[Zone.GRAVEYARD]) == 1
-
 
 class TestKaitoMinus2:
     """−2: Create a 2/1 blue Ninja creature token."""
@@ -187,16 +147,14 @@ class TestKaitoMinus2:
         p1 = game.players[0]
         kaito = KaitoCunningInfiltrator(owner=p1, controller=p1)
         game.get_battlefield(p1).add(kaito)
-
         abilities = kaito.get_loyalty_abilities()
         minus2 = abilities[1]
         minus2.effect(game)
-
         bf = game.get_battlefield(p1)
-        tokens = [c for c in bf.get_all() if getattr(c, "is_token", False)]
+        tokens = [c for c in bf.get_all() if getattr(c, 'is_token', False)]
         assert len(tokens) == 1
         token = tokens[0]
-        assert token.name == "Ninja"
+        assert token.name == 'Ninja'
         assert token.base_power == 2
         assert token.base_toughness == 1
 
@@ -205,16 +163,13 @@ class TestKaitoMinus2:
         p1 = game.players[0]
         kaito = KaitoCunningInfiltrator(owner=p1, controller=p1)
         game.get_battlefield(p1).add(kaito)
-
         abilities = kaito.get_loyalty_abilities()
         abilities[1].effect(game)
-
         bf = game.get_battlefield(p1)
-        tokens = [c for c in bf.get_all() if getattr(c, "is_token", False)]
+        tokens = [c for c in bf.get_all() if getattr(c, 'is_token', False)]
         token = tokens[0]
         assert CardType.CREATURE in token.card_types
-        assert "Ninja" in token.subtypes
-
+        assert 'Ninja' in token.subtypes
 
 class TestKaitoMinus9:
     """−9: Emblem — whenever a player casts a spell, create 2/1 Ninja token."""
@@ -229,20 +184,15 @@ class TestKaitoMinus9:
         p1 = game.players[0]
         kaito = KaitoCunningInfiltrator(owner=p1, controller=p1)
         game.get_battlefield(p1).add(kaito)
-
         abilities = kaito.get_loyalty_abilities()
         minus9 = abilities[2]
         minus9.effect(game)
-
-        # Fire a spell cast event and check token appears
-        game.trigger_manager.fire_event(
-            game, EventType.SPELL_CAST, {"player": game.players[1], "spell": None}
-        )
+        game.trigger_manager.fire_event(game, SpellCastTriggeredEvent(player=game.players[1], spell=None))
         self._resolve_stack(game)
         bf = game.get_battlefield(p1)
-        tokens = [c for c in bf.get_all() if getattr(c, "is_token", False)]
+        tokens = [c for c in bf.get_all() if getattr(c, 'is_token', False)]
         assert len(tokens) == 1
-        assert tokens[0].name == "Ninja"
+        assert tokens[0].name == 'Ninja'
         assert tokens[0].base_power == 2
         assert tokens[0].base_toughness == 1
 
@@ -251,20 +201,12 @@ class TestKaitoMinus9:
         p1 = game.players[0]
         kaito = KaitoCunningInfiltrator(owner=p1, controller=p1)
         game.get_battlefield(p1).add(kaito)
-
         abilities = kaito.get_loyalty_abilities()
         abilities[2].effect(game)
-
-        # Both players cast spells
-        game.trigger_manager.fire_event(
-            game, EventType.SPELL_CAST, {"player": p1, "spell": None}
-        )
+        game.trigger_manager.fire_event(game, SpellCastTriggeredEvent(player=p1, spell=None))
         self._resolve_stack(game)
-        game.trigger_manager.fire_event(
-            game, EventType.SPELL_CAST, {"player": game.players[1], "spell": None}
-        )
+        game.trigger_manager.fire_event(game, SpellCastTriggeredEvent(player=game.players[1], spell=None))
         self._resolve_stack(game)
         bf = game.get_battlefield(p1)
-        tokens = [c for c in bf.get_all() if getattr(c, "is_token", False)]
+        tokens = [c for c in bf.get_all() if getattr(c, 'is_token', False)]
         assert len(tokens) == 2
-

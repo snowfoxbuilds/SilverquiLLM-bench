@@ -1,20 +1,16 @@
 """Audited tests for FDN 124 — Perforating Artist."""
-
 from __future__ import annotations
-
 from card_impl import PerforatingArtist
 from engine.card import Creature
-from engine.triggers import EventType
 from engine.types import Keyword, ManaCost, Zone
 from tests.test_utils import create_game
-
+from engine.events import EndStepTriggeredEvent
 
 def _resolve_stack(game):
     """Pop and resolve all objects on the stack."""
     while not game.stack.is_empty():
         obj = game.stack.pop()
         obj.on_resolve(game)
-
 
 class TestPerforatingArtistBasics:
     """Basic card properties."""
@@ -25,11 +21,11 @@ class TestPerforatingArtistBasics:
 
     def test_name(self) -> None:
         card = PerforatingArtist(owner=None)
-        assert card.name == "Perforating Artist"
+        assert card.name == 'Perforating Artist'
 
     def test_mana_cost(self) -> None:
         card = PerforatingArtist(owner=None)
-        assert card.mana_cost == ManaCost.parse("{1}{B}{R}")
+        assert card.mana_cost == ManaCost.parse('{1}{B}{R}')
 
     def test_power_toughness(self) -> None:
         card = PerforatingArtist(owner=None)
@@ -42,8 +38,7 @@ class TestPerforatingArtistBasics:
 
     def test_subtypes(self) -> None:
         card = PerforatingArtist(owner=None)
-        assert "Devil" in card.subtypes
-
+        assert 'Devil' in card.subtypes
 
 class TestPerforatingArtistRaid:
     """Raid end-step trigger: opponents lose 3 life or sacrifice/discard."""
@@ -60,7 +55,7 @@ class TestPerforatingArtistRaid:
         game.attacked_this_turn = True
         p1.attacked_this_turn = True
         p2_life_before = p2.life
-        game.trigger_manager.fire_event(game, EventType.END_STEP, {})
+        game.trigger_manager.fire_event(game, EndStepTriggeredEvent())
         _resolve_stack(game)
         assert p2.life == p2_life_before - 3
 
@@ -75,7 +70,7 @@ class TestPerforatingArtistRaid:
         game.attacked_this_turn = False
         p1.attacked_this_turn = False
         p2_life_before = p2.life
-        game.trigger_manager.fire_event(game, EventType.END_STEP, {})
+        game.trigger_manager.fire_event(game, EndStepTriggeredEvent())
         _resolve_stack(game)
         assert p2.life == p2_life_before
 
@@ -91,7 +86,7 @@ class TestPerforatingArtistRaid:
         game.attacked_this_turn = True
         p1.attacked_this_turn = True
         p2_life_before = p2.life
-        game.trigger_manager.fire_event(game, EventType.END_STEP, {})
+        game.trigger_manager.fire_event(game, EndStepTriggeredEvent())
         _resolve_stack(game)
         assert p2.life == p2_life_before
 
@@ -102,7 +97,7 @@ class TestPerforatingArtistRaid:
         p2 = game.players[1]
         artist = PerforatingArtist(owner=p1, controller=p1)
         game.get_battlefield(p1).add(artist)
-        token = Creature(name="Token", base_power=1, base_toughness=1, owner=p2, controller=p2)
+        token = Creature(name='Token', base_power=1, base_toughness=1, owner=p2, controller=p2)
         game.get_battlefield(p2).add(token)
         artist.register_triggers(game)
         game.active_player_index = 0
@@ -110,7 +105,7 @@ class TestPerforatingArtistRaid:
         p1.attacked_this_turn = True
         p2._script.appendleft(token)
         p2_life_before = p2.life
-        game.trigger_manager.fire_event(game, EventType.END_STEP, {})
+        game.trigger_manager.fire_event(game, EndStepTriggeredEvent())
         _resolve_stack(game)
         assert p2.life == p2_life_before
         assert not game.get_battlefield(p2).contains(token)

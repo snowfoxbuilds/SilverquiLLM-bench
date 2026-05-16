@@ -39,7 +39,7 @@ class TestFellingBlowResolve:
         spell.chosen_targets = [my_creature, opp_creature]
         spell.on_resolve(game)
         assert my_creature.plus_one_counters == 1
-        assert my_creature._original_plus_one_counters == 1
+        assert my_creature._base_plus_one_counters == 1
 
     def test_deals_damage_equal_to_power_after_counter(self) -> None:
         game = create_game()

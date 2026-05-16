@@ -15,8 +15,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from engine.events import (
+    CreatureDiesReplacementEvent,
+    DealsDamageTriggeredEvent,
+    DrawsCardTriggeredEvent,
+    EntersBattlefieldTriggeredEvent,
+    GainsLifeTriggeredEvent,
+    LosesLifeTriggeredEvent,
+    PermanentDestroyedReplacementEvent,
+    SacrificeReplacementEvent,
+)
 from engine.game_state import GameState
-from engine.triggers import EventType
 from engine.turn import run_turn
 from engine.types import Zone
 from engine.zones import move_to_zone
@@ -135,14 +144,12 @@ def deal_damage(game: GameState, source: Any, target: Any, amount: int) -> None:
         # Fire damage trigger
         game.trigger_manager.fire_event(
             game,
-            EventType.DEALS_DAMAGE,
-            {"source": source, "target": target, "amount": amount},
+            DealsDamageTriggeredEvent(source=source, target=target, amount=amount),
         )
         # Fire loses-life trigger
         game.trigger_manager.fire_event(
             game,
-            EventType.LOSES_LIFE,
-            {"player": target, "amount": amount},
+            LosesLifeTriggeredEvent(player=target, amount=amount),
         )
     elif hasattr(target, "damage_marked"):
         # Target is a creature
@@ -156,8 +163,7 @@ def deal_damage(game: GameState, source: Any, target: Any, amount: int) -> None:
         # Fire damage trigger
         game.trigger_manager.fire_event(
             game,
-            EventType.DEALS_DAMAGE,
-            {"source": source, "target": target, "amount": amount},
+            DealsDamageTriggeredEvent(source=source, target=target, amount=amount),
         )
 
     # Lifelink: controller of source gains life equal to damage dealt
@@ -200,19 +206,31 @@ def destroy(game: GameState, permanent: Any) -> None:
     if not bf.contains(permanent):
         return
 
-    # Determine the replacement event type based on card type
     from engine.types import CardType
 
     card_types = getattr(permanent, "card_types", set())
     is_creature = CardType.CREATURE in card_types
-    event_type_str = "creature_dies" if is_creature else "permanent_destroyed"
+    owner = getattr(permanent, "owner", controller)
+
+    if is_creature:
+        repl_event: CreatureDiesReplacementEvent | PermanentDestroyedReplacementEvent = (
+            CreatureDiesReplacementEvent(
+                creature=permanent, destination="graveyard",
+                controller=controller, owner=owner,
+            )
+        )
+    else:
+        repl_event = PermanentDestroyedReplacementEvent(
+            permanent=permanent, destination="graveyard",
+            controller=controller, owner=owner,
+        )
 
     move_to_zone(
         game,
         permanent,
         Zone.BATTLEFIELD,
         Zone.GRAVEYARD,
-        replacement_event_type=event_type_str,
+        replacement_event=repl_event,
     )
 
 
@@ -233,12 +251,16 @@ def sacrifice(game: GameState, player: Player, permanent: Any) -> None:
     if not bf.contains(permanent):
         return
 
+    owner = getattr(permanent, "owner", player)
     move_to_zone(
         game,
         permanent,
         Zone.BATTLEFIELD,
         Zone.GRAVEYARD,
-        replacement_event_type="sacrifice",
+        replacement_event=SacrificeReplacementEvent(
+            permanent=permanent, destination="graveyard",
+            controller=player, owner=owner,
+        ),
     )
 
 
@@ -307,8 +329,7 @@ def draw_card(game: GameState, player: Player) -> Any | None:
     if hasattr(game, "trigger_manager"):
         game.trigger_manager.fire_event(
             game,
-            EventType.DRAWS_CARD,
-            {"player": player, "card": card},
+            DrawsCardTriggeredEvent(player=player, card=card),
         )
 
     return card
@@ -351,12 +372,9 @@ def create_token(game: GameState, player: Player, token: Any) -> None:
     battlefield = game.get_battlefield(player)
     battlefield.add(token)
 
-    from engine.triggers import EventType as _ET
-
     game.trigger_manager.fire_event(
         game,
-        _ET.ENTERS_BATTLEFIELD,
-        {"permanent": token, "controller": player},
+        EntersBattlefieldTriggeredEvent(permanent=token, controller=player),
     )
 
     # Register triggers/replacement effects after the ETB event.

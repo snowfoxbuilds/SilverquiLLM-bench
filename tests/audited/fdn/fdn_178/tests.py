@@ -1,19 +1,15 @@
 """Audited tests for FDN 178 — Marauding Blight-Priest."""
-
 from __future__ import annotations
-
 from card_impl import MaraudingBlightPriest
 from engine.card import Creature
-from engine.triggers import EventType
 from engine.types import ManaCost
 from tests.test_utils import create_game
-
+from engine.events import GainsLifeTriggeredEvent
 
 def _resolve_stack(game):
     while not game.stack.is_empty():
         obj = game.stack.pop()
         obj.on_resolve(game)
-
 
 class TestMaraudingBlightPriestBasics:
     """Basic card properties."""
@@ -24,11 +20,11 @@ class TestMaraudingBlightPriestBasics:
 
     def test_name(self) -> None:
         card = MaraudingBlightPriest(owner=None)
-        assert card.name == "Marauding Blight-Priest"
+        assert card.name == 'Marauding Blight-Priest'
 
     def test_mana_cost(self) -> None:
         card = MaraudingBlightPriest(owner=None)
-        assert card.mana_cost == ManaCost.parse("{2}{B}")
+        assert card.mana_cost == ManaCost.parse('{2}{B}')
 
     def test_power_toughness(self) -> None:
         card = MaraudingBlightPriest(owner=None)
@@ -37,9 +33,8 @@ class TestMaraudingBlightPriestBasics:
 
     def test_subtypes(self) -> None:
         card = MaraudingBlightPriest(owner=None)
-        assert "Vampire" in card.subtypes
-        assert "Cleric" in card.subtypes
-
+        assert 'Vampire' in card.subtypes
+        assert 'Cleric' in card.subtypes
 
 class TestMaraudingBlightPriestTrigger:
     """Whenever you gain life, each opponent loses 1 life."""
@@ -52,7 +47,7 @@ class TestMaraudingBlightPriestTrigger:
         game.get_battlefield(p1).add(priest)
         priest.register_triggers(game)
         p2_life_before = p2.life
-        game.trigger_manager.fire_event(game, EventType.GAINS_LIFE, {"player": p1})
+        game.trigger_manager.fire_event(game, GainsLifeTriggeredEvent(player=p1))
         _resolve_stack(game)
         assert p2.life == p2_life_before - 1
 
@@ -64,6 +59,6 @@ class TestMaraudingBlightPriestTrigger:
         game.get_battlefield(p1).add(priest)
         priest.register_triggers(game)
         p1_life_before = p1.life
-        game.trigger_manager.fire_event(game, EventType.GAINS_LIFE, {"player": p2})
+        game.trigger_manager.fire_event(game, GainsLifeTriggeredEvent(player=p2))
         _resolve_stack(game)
         assert p1.life == p1_life_before

@@ -1,19 +1,15 @@
 """Audited tests for FDN 112 — Spinner of Souls."""
-
 from __future__ import annotations
-
 from card_impl import SpinnerOfSouls
 from engine.card import Creature, Instant
-from engine.triggers import EventType
 from engine.types import CardType, Keyword, ManaCost, Zone
 from tests.test_utils import create_game
-
+from engine.events import CreatureDiesTriggeredEvent
 
 def _resolve_stack(game):
     while not game.stack.is_empty():
         obj = game.stack.pop()
         obj.on_resolve(game)
-
 
 class TestSpinnerOfSoulsBasics:
     """Basic card properties."""
@@ -24,11 +20,11 @@ class TestSpinnerOfSoulsBasics:
 
     def test_name(self) -> None:
         card = SpinnerOfSouls(owner=None)
-        assert card.name == "Spinner of Souls"
+        assert card.name == 'Spinner of Souls'
 
     def test_mana_cost(self) -> None:
         card = SpinnerOfSouls(owner=None)
-        assert card.mana_cost == ManaCost.parse("{2}{G}")
+        assert card.mana_cost == ManaCost.parse('{2}{G}')
 
     def test_power_toughness(self) -> None:
         card = SpinnerOfSouls(owner=None)
@@ -41,9 +37,8 @@ class TestSpinnerOfSoulsBasics:
 
     def test_subtypes(self) -> None:
         card = SpinnerOfSouls(owner=None)
-        assert "Spider" in card.subtypes
-        assert "Spirit" in card.subtypes
-
+        assert 'Spider' in card.subtypes
+        assert 'Spirit' in card.subtypes
 
 class TestSpinnerOfSoulsDiesTrigger:
     """When another nontoken creature you control dies, reveal until creature found."""
@@ -54,16 +49,12 @@ class TestSpinnerOfSoulsDiesTrigger:
         spinner = SpinnerOfSouls(owner=p1, controller=p1)
         game.get_battlefield(p1).add(spinner)
         spinner.register_triggers(game)
-        # Library: noncreature on top, creature below
-        noncreature = Instant(name="Shock", owner=p1)
-        creature_in_lib = Creature(name="Bear", base_power=2, base_toughness=2, owner=p1)
-        p1.zones[Zone.LIBRARY].add(creature_in_lib)  # bottom
-        p1.zones[Zone.LIBRARY].add(noncreature)  # top
-        dying = Creature(name="Dying", base_power=1, base_toughness=1, owner=p1, controller=p1)
-        game.trigger_manager.fire_event(
-            game, EventType.CREATURE_DIES,
-            {"creature": dying, "controller": p1}
-        )
+        noncreature = Instant(name='Shock', owner=p1)
+        creature_in_lib = Creature(name='Bear', base_power=2, base_toughness=2, owner=p1)
+        p1.zones[Zone.LIBRARY].add(creature_in_lib)
+        p1.zones[Zone.LIBRARY].add(noncreature)
+        dying = Creature(name='Dying', base_power=1, base_toughness=1, owner=p1, controller=p1)
+        game.trigger_manager.fire_event(game, CreatureDiesTriggeredEvent(creature=dying, controller=p1))
         _resolve_stack(game)
         assert p1.zones[Zone.HAND].contains(creature_in_lib)
 
@@ -73,17 +64,13 @@ class TestSpinnerOfSoulsDiesTrigger:
         spinner = SpinnerOfSouls(owner=p1, controller=p1)
         game.get_battlefield(p1).add(spinner)
         spinner.register_triggers(game)
-        noncreature = Instant(name="Shock", owner=p1)
-        creature_in_lib = Creature(name="Bear", base_power=2, base_toughness=2, owner=p1)
+        noncreature = Instant(name='Shock', owner=p1)
+        creature_in_lib = Creature(name='Bear', base_power=2, base_toughness=2, owner=p1)
         p1.zones[Zone.LIBRARY].add(creature_in_lib)
         p1.zones[Zone.LIBRARY].add(noncreature)
-        dying = Creature(name="Dying", base_power=1, base_toughness=1, owner=p1, controller=p1)
-        game.trigger_manager.fire_event(
-            game, EventType.CREATURE_DIES,
-            {"creature": dying, "controller": p1}
-        )
+        dying = Creature(name='Dying', base_power=1, base_toughness=1, owner=p1, controller=p1)
+        game.trigger_manager.fire_event(game, CreatureDiesTriggeredEvent(creature=dying, controller=p1))
         _resolve_stack(game)
-        # Noncreature should be in library (at bottom)
         assert p1.zones[Zone.LIBRARY].contains(noncreature)
 
     def test_self_dying_does_not_trigger(self) -> None:
@@ -92,12 +79,9 @@ class TestSpinnerOfSoulsDiesTrigger:
         spinner = SpinnerOfSouls(owner=p1, controller=p1)
         game.get_battlefield(p1).add(spinner)
         spinner.register_triggers(game)
-        creature_in_lib = Creature(name="Bear", base_power=2, base_toughness=2, owner=p1)
+        creature_in_lib = Creature(name='Bear', base_power=2, base_toughness=2, owner=p1)
         p1.zones[Zone.LIBRARY].add(creature_in_lib)
-        game.trigger_manager.fire_event(
-            game, EventType.CREATURE_DIES,
-            {"creature": spinner, "controller": p1}
-        )
+        game.trigger_manager.fire_event(game, CreatureDiesTriggeredEvent(creature=spinner, controller=p1))
         _resolve_stack(game)
         assert not p1.zones[Zone.HAND].contains(creature_in_lib)
 
@@ -107,14 +91,11 @@ class TestSpinnerOfSoulsDiesTrigger:
         spinner = SpinnerOfSouls(owner=p1, controller=p1)
         game.get_battlefield(p1).add(spinner)
         spinner.register_triggers(game)
-        creature_in_lib = Creature(name="Bear", base_power=2, base_toughness=2, owner=p1)
+        creature_in_lib = Creature(name='Bear', base_power=2, base_toughness=2, owner=p1)
         p1.zones[Zone.LIBRARY].add(creature_in_lib)
-        token = Creature(name="Token", base_power=1, base_toughness=1, owner=p1, controller=p1)
+        token = Creature(name='Token', base_power=1, base_toughness=1, owner=p1, controller=p1)
         token.is_token = True
-        game.trigger_manager.fire_event(
-            game, EventType.CREATURE_DIES,
-            {"creature": token, "controller": p1}
-        )
+        game.trigger_manager.fire_event(game, CreatureDiesTriggeredEvent(creature=token, controller=p1))
         _resolve_stack(game)
         assert not p1.zones[Zone.HAND].contains(creature_in_lib)
 
@@ -125,12 +106,9 @@ class TestSpinnerOfSoulsDiesTrigger:
         spinner = SpinnerOfSouls(owner=p1, controller=p1)
         game.get_battlefield(p1).add(spinner)
         spinner.register_triggers(game)
-        creature_in_lib = Creature(name="Bear", base_power=2, base_toughness=2, owner=p1)
+        creature_in_lib = Creature(name='Bear', base_power=2, base_toughness=2, owner=p1)
         p1.zones[Zone.LIBRARY].add(creature_in_lib)
-        opp_creature = Creature(name="Opp", base_power=1, base_toughness=1, owner=p2, controller=p2)
-        game.trigger_manager.fire_event(
-            game, EventType.CREATURE_DIES,
-            {"creature": opp_creature, "controller": p2}
-        )
+        opp_creature = Creature(name='Opp', base_power=1, base_toughness=1, owner=p2, controller=p2)
+        game.trigger_manager.fire_event(game, CreatureDiesTriggeredEvent(creature=opp_creature, controller=p2))
         _resolve_stack(game)
         assert not p1.zones[Zone.HAND].contains(creature_in_lib)

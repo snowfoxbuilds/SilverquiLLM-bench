@@ -46,7 +46,7 @@ class HeartfireImmolator(Creature):
                 return False
             controller.mana_pool.pay(ManaCost.parse("{R}"))
             # Snapshot power before sacrifice (last known information)
-            src._snapshot_power = getattr(src, "power", src.base_power)
+            src._snapshot_power = getattr(src, "power", src.modified_power)
             # Sacrifice self
             from engine.game import sacrifice
             sacrifice(game, controller, src)
@@ -59,7 +59,7 @@ class HeartfireImmolator(Creature):
             if target is None:
                 return
             # Use last-known power (snapshotted during cost payment)
-            dmg = getattr(source, "_snapshot_power", source.base_power)
+            dmg = getattr(source, "_snapshot_power", source.modified_power)
             deal_damage(game, source, target, dmg)
 
         return [ActivatedAbility(

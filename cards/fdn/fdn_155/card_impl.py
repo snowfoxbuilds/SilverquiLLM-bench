@@ -81,7 +81,7 @@ class FleetingDistraction(Instant):
         def _apply_debuff(game: GameState) -> None:
             for p in game.players:
                 if game.get_battlefield(p).contains(creature_ref):
-                    creature_ref.base_power -= 1
+                    creature_ref.modified_power -= 1
                     return
 
         effect = ContinuousEffect(

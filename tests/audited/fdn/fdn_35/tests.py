@@ -1,12 +1,10 @@
 """Audited tests for FDN 35 — Drake Hatcher."""
-
 from __future__ import annotations
-
 from card_impl import DrakeHatcher
 from engine.card import Creature
 from engine.types import Keyword, ManaCost
 from tests.test_utils import create_game
-
+from engine.events import DealsDamageTriggeredEvent
 
 class TestDrakeHatcherBasics:
     """Basic card properties."""
@@ -17,11 +15,11 @@ class TestDrakeHatcherBasics:
 
     def test_name(self) -> None:
         card = DrakeHatcher(owner=None)
-        assert card.name == "Drake Hatcher"
+        assert card.name == 'Drake Hatcher'
 
     def test_mana_cost(self) -> None:
         card = DrakeHatcher(owner=None)
-        assert card.mana_cost == ManaCost.parse("{1}{U}")
+        assert card.mana_cost == ManaCost.parse('{1}{U}')
 
     def test_power_toughness(self) -> None:
         card = DrakeHatcher(owner=None)
@@ -38,9 +36,8 @@ class TestDrakeHatcherBasics:
 
     def test_subtypes(self) -> None:
         card = DrakeHatcher(owner=None)
-        assert "Human" in card.subtypes
-        assert "Wizard" in card.subtypes
-
+        assert 'Human' in card.subtypes
+        assert 'Wizard' in card.subtypes
 
 class TestDrakeHatcherCombatDamageTrigger:
     """Whenever this deals combat damage to a player, add incubation counters."""
@@ -58,28 +55,19 @@ class TestDrakeHatcherCombatDamageTrigger:
         hatcher = DrakeHatcher(owner=p1, controller=p1)
         game.get_battlefield(p1).add(hatcher)
         hatcher.register_triggers(game)
-        return game, hatcher, p1, p2
+        return (game, hatcher, p1, p2)
 
     def test_gains_incubation_counters_on_combat_damage(self) -> None:
-        from engine.triggers import EventType
         game, hatcher, p1, p2 = self._setup()
-        game.trigger_manager.fire_event(
-            game, EventType.DEALS_DAMAGE,
-            {"source": hatcher, "target": p2, "is_combat": True, "amount": 1},
-        )
+        game.trigger_manager.fire_event(game, DealsDamageTriggeredEvent(source=hatcher, target=p2, is_combat=True, amount=1))
         self._resolve_stack(game)
         assert hatcher.incubation_counters >= 1
 
     def test_no_counters_on_non_combat_damage(self) -> None:
-        from engine.triggers import EventType
         game, hatcher, p1, p2 = self._setup()
-        game.trigger_manager.fire_event(
-            game, EventType.DEALS_DAMAGE,
-            {"source": hatcher, "target": p2, "is_combat": False, "amount": 1},
-        )
+        game.trigger_manager.fire_event(game, DealsDamageTriggeredEvent(source=hatcher, target=p2, is_combat=False, amount=1))
         self._resolve_stack(game)
         assert hatcher.incubation_counters == 0
-
 
 class TestDrakeHatcherActivatedAbility:
     """Remove three incubation counters: Create 2/2 Drake token with flying."""
@@ -96,7 +84,6 @@ class TestDrakeHatcherActivatedAbility:
         game.get_battlefield(p1).add(hatcher)
         hatcher.incubation_counters = 2
         ability = hatcher.get_activated_abilities()[0]
-        # Cost should fail with only 2 counters
         result = ability.cost(game, hatcher)
         assert result is False
         assert hatcher.incubation_counters == 2
@@ -113,7 +100,7 @@ class TestDrakeHatcherActivatedAbility:
         assert hatcher.incubation_counters == 0
         ability.effect(game)
         bf = game.get_battlefield(p1)
-        tokens = [c for c in bf.get_all() if getattr(c, "name", "") == "Drake"]
+        tokens = [c for c in bf.get_all() if getattr(c, 'name', '') == 'Drake']
         assert len(tokens) == 1
         assert tokens[0].base_power == 2
         assert tokens[0].base_toughness == 2

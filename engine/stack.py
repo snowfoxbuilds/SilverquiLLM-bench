@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -66,6 +67,49 @@ class Stack:
     def objects(self) -> list[StackObject]:
         """Return all stack objects ordered from top to bottom."""
         return list(reversed(self._items))
+
+
+def copy_spell(
+    game: GameState,
+    original: StackObject,
+    controller: Player,
+    new_targets: list[Any] | None = None,
+) -> StackObject:
+    """Create a copy of a spell on the stack (for storm and similar effects).
+
+    Shallow-copies the source card so the copy has independent state
+    (chosen_targets, etc.) while sharing class method bindings.  Binds
+    on_resolve to call the copied card's on_resolve directly — no zone
+    movement, which is correct for spell copies.
+
+    Args:
+        game: The current game state.
+        original: The StackObject being copied.
+        controller: The player who controls the copy.
+        new_targets: Optional replacement targets.  If ``None``, the
+            original's target list is cloned.
+
+    Returns:
+        A new StackObject representing the copy ready to be pushed.
+    """
+    copied_card = copy.copy(original.source)
+    copied_card.controller = controller
+    copied_card.owner = getattr(original.source, "owner", controller)
+
+    targets = new_targets if new_targets is not None else list(original.targets)
+
+    copy_obj = StackObject(
+        source=copied_card,
+        controller=controller,
+        targets=targets,
+    )
+
+    def _copy_resolve(g: GameState) -> None:
+        copied_card.chosen_targets = copy_obj.targets
+        copied_card.on_resolve(g)
+
+    copy_obj.on_resolve = _copy_resolve
+    return copy_obj
 
 
 def check_state_based_actions(game: GameState) -> None:

@@ -182,7 +182,7 @@ def move_to_zone(
     from_zone: Zone,
     to_zone: Zone,
     *,
-    replacement_event_type: str | None = None,
+    replacement_event: Any | None = None,
 ) -> None:
     """High-level zone transition with trigger/replacement-effect hooks.
 
@@ -192,34 +192,38 @@ def move_to_zone(
 
     Steps:
     1. Consult replacement effects for zone-change redirection (if
-       *replacement_event_type* is supplied and the card is leaving the
-       battlefield for the graveyard).  The replacement may change the
-       destination zone (e.g. exile instead of graveyard).
+       *replacement_event* is supplied and the card is leaving the
+       battlefield).  The replacement may change the destination zone
+       (e.g. exile instead of graveyard) or set ``prevented = True`` to
+       signal that it handled the zone move directly.
     2. Remove *card* from the source zone.
     3. Add *card* to the (possibly redirected) destination zone.
     4. If leaving the battlefield:
-       a. Fire ``LEAVES_BATTLEFIELD`` event.
-       b. Fire ``CREATURE_DIES`` if the card is a creature **and** the
-          final destination is the graveyard (per KEY_DECISIONS).
+       a. Fire ``LeavesBattlefieldTriggeredEvent``.
+       b. Fire ``CreatureDiesTriggeredEvent`` if the card is a creature
+          **and** the final destination is the graveyard.
        c. Unregister triggers and replacement effects (fires happen
           **before** unregister so self-referencing triggers still match).
     5. If entering the battlefield:
        a. Register triggers (``register_triggers``) and replacement
           effects (``register_replacement_effects``).
-       b. Fire ``ENTERS_BATTLEFIELD`` event.
+       b. Fire ``EntersBattlefieldTriggeredEvent``.
 
     Parameters:
         game: The current game state.
         card: The game object being moved.
         from_zone: The :class:`Zone` the card is currently in.
         to_zone: The intended destination :class:`Zone`.
-        replacement_event_type: Optional string passed to the replacement
-            manager (e.g. ``"creature_dies"``, ``"sacrifice"``,
-            ``"permanent_destroyed"``).  When ``None``, no replacement
-            effects are consulted (useful for simple moves like casting
-            resolution or exile-from-graveyard).
+        replacement_event: Optional typed replacement-event object
+            (e.g. ``CreatureDiesReplacementEvent``).  When ``None``,
+            no replacement effects are consulted (useful for simple
+            moves like casting resolution or exile-from-graveyard).
     """
-    from engine.triggers import EventType
+    from engine.events import (
+        CreatureDiesTriggeredEvent,
+        EntersBattlefieldTriggeredEvent,
+        LeavesBattlefieldTriggeredEvent,
+    )
 
     controller = getattr(card, "controller", None)
     owner = getattr(card, "owner", controller)
@@ -256,20 +260,11 @@ def move_to_zone(
 
     # --- Replacement effects (zone-change redirection) ---
     dest_zone = to_zone
-    if replacement_event_type is not None and leaving_battlefield:
-        card_types = getattr(card, "card_types", set())
-        is_creature = CardType.CREATURE in card_types
-
-        event_data: dict[str, Any] = {
-            "creature" if is_creature else "permanent": card,
-            "destination": _ZONE_TO_DESTINATION.get(to_zone, "graveyard"),
-            "controller": controller,
-            "owner": owner,
-        }
-        event_data = game.replacement_manager.apply(
-            game, replacement_event_type, event_data,
-        )
-        destination_str = event_data.get("destination", "graveyard")
+    if replacement_event is not None and leaving_battlefield:
+        replacement_event = game.replacement_manager.apply(game, replacement_event)
+        if getattr(replacement_event, "prevented", False):
+            return
+        destination_str = getattr(replacement_event, "destination", "graveyard")
         dest_zone = _DESTINATION_ZONE_MAP.get(destination_str, to_zone)
 
     # --- Perform the zone move ---
@@ -291,14 +286,12 @@ def move_to_zone(
         # Fire events BEFORE unregistering (KEY_DECISIONS convention).
         game.trigger_manager.fire_event(
             game,
-            EventType.LEAVES_BATTLEFIELD,
-            {"permanent": card, "controller": controller},
+            LeavesBattlefieldTriggeredEvent(permanent=card, controller=controller),
         )
         if is_creature and dest_zone == Zone.GRAVEYARD:
             game.trigger_manager.fire_event(
                 game,
-                EventType.CREATURE_DIES,
-                {"creature": card, "controller": controller, "owner": owner},
+                CreatureDiesTriggeredEvent(creature=card, controller=controller, owner=owner),
             )
 
         # Now unregister triggers and replacement effects.
@@ -313,8 +306,10 @@ def move_to_zone(
         # triggers that watch for ENTERS_BATTLEFIELD will still fire.
         game.trigger_manager.fire_event(
             game,
-            EventType.ENTERS_BATTLEFIELD,
-            {"permanent": card, "controller": controller if controller is not None else owner},
+            EntersBattlefieldTriggeredEvent(
+                permanent=card,
+                controller=controller if controller is not None else owner,
+            ),
         )
         if hasattr(card, "register_triggers"):
             card.register_triggers(game)
@@ -322,10 +317,10 @@ def move_to_zone(
             card.register_replacement_effects(game)
 
 
-# Reverse mapping: Zone enum → destination string for replacement events.
-_ZONE_TO_DESTINATION: dict[Zone, str] = {
-    Zone.GRAVEYARD: "graveyard",
-    Zone.EXILE: "exile",
-    Zone.HAND: "hand",
-    Zone.LIBRARY: "library",
+# Destination string → Zone for replacement-effect zone redirection.
+_DESTINATION_ZONE_MAP: dict[str, Zone] = {
+    "graveyard": Zone.GRAVEYARD,
+    "exile": Zone.EXILE,
+    "hand": Zone.HAND,
+    "library": Zone.LIBRARY,
 }

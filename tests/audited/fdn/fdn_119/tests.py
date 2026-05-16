@@ -68,8 +68,8 @@ class TestElendaLifeBonus:
         game.get_battlefield(p1).add(elenda)
         elenda.register_triggers(game)
         game.effect_manager.apply_all(game)
-        assert elenda.base_power >= 5
-        assert elenda.base_toughness >= 5
+        assert elenda.modified_power >= 5
+        assert elenda.modified_toughness >= 5
 
     def test_gains_menace_when_life_above_starting(self) -> None:
         game = create_game(player1_life=22)
@@ -90,5 +90,5 @@ class TestElendaLifeBonus:
         elenda.register_triggers(game)
         game.effect_manager.apply_all(game)
         # +1 from > starting + +5 from >= starting+10 = +6 total
-        assert elenda.base_power >= 10
-        assert elenda.base_toughness >= 10
+        assert elenda.modified_power >= 10
+        assert elenda.modified_toughness >= 10

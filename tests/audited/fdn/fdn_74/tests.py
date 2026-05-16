@@ -1,13 +1,10 @@
 """Audited tests for FDN 74 — Vampire Gourmand."""
-
 from __future__ import annotations
-
 from card_impl import VampireGourmand
 from engine.card import Creature
-from engine.triggers import EventType
 from engine.types import CardType, ManaCost, Zone
 from tests.test_utils import create_game
-
+from engine.events import AttacksTriggeredEvent
 
 class TestVampireGourmandBasics:
     """Basic card properties."""
@@ -18,11 +15,11 @@ class TestVampireGourmandBasics:
 
     def test_name(self) -> None:
         card = VampireGourmand(owner=None)
-        assert card.name == "Vampire Gourmand"
+        assert card.name == 'Vampire Gourmand'
 
     def test_mana_cost(self) -> None:
         card = VampireGourmand(owner=None)
-        assert card.mana_cost == ManaCost.parse("{1}{B}")
+        assert card.mana_cost == ManaCost.parse('{1}{B}')
 
     def test_power_toughness(self) -> None:
         card = VampireGourmand(owner=None)
@@ -31,8 +28,7 @@ class TestVampireGourmandBasics:
 
     def test_subtypes(self) -> None:
         card = VampireGourmand(owner=None)
-        assert "Vampire" in card.subtypes
-
+        assert 'Vampire' in card.subtypes
 
 class TestVampireGourmandAttackTrigger:
     """Whenever attacks, may sacrifice another creature for draw + unblockable."""
@@ -48,15 +44,13 @@ class TestVampireGourmandAttackTrigger:
         p1 = game.players[0]
         card = VampireGourmand(owner=p1, controller=p1)
         game.get_battlefield(p1).add(card)
-        # Another creature to sacrifice
-        fodder = Creature(name="Fodder", base_power=1, base_toughness=1, owner=p1, controller=p1)
+        fodder = Creature(name='Fodder', base_power=1, base_toughness=1, owner=p1, controller=p1)
         game.get_battlefield(p1).add(fodder)
         card.register_triggers(game)
-        # Add library card for draw
-        lib_card = Creature(name="Lib", base_power=1, base_toughness=1, owner=p1)
+        lib_card = Creature(name='Lib', base_power=1, base_toughness=1, owner=p1)
         p1.zones[Zone.LIBRARY].add(lib_card)
         hand_before = len(p1.zones[Zone.HAND].get_all())
-        game.trigger_manager.fire_event(game, EventType.ATTACKS, {"creature": card})
+        game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=card))
         self._resolve_stack(game)
         hand_after = len(p1.zones[Zone.HAND].get_all())
         assert hand_after == hand_before + 1
@@ -66,12 +60,12 @@ class TestVampireGourmandAttackTrigger:
         p1 = game.players[0]
         card = VampireGourmand(owner=p1, controller=p1)
         game.get_battlefield(p1).add(card)
-        fodder = Creature(name="Fodder", base_power=1, base_toughness=1, owner=p1, controller=p1)
+        fodder = Creature(name='Fodder', base_power=1, base_toughness=1, owner=p1, controller=p1)
         game.get_battlefield(p1).add(fodder)
         card.register_triggers(game)
-        lib_card = Creature(name="Lib", base_power=1, base_toughness=1, owner=p1)
+        lib_card = Creature(name='Lib', base_power=1, base_toughness=1, owner=p1)
         p1.zones[Zone.LIBRARY].add(lib_card)
-        game.trigger_manager.fire_event(game, EventType.ATTACKS, {"creature": card})
+        game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=card))
         self._resolve_stack(game)
         assert not game.get_battlefield(p1).contains(fodder)
 
@@ -82,10 +76,9 @@ class TestVampireGourmandAttackTrigger:
         game.get_battlefield(p1).add(card)
         card.register_triggers(game)
         hand_before = len(p1.zones[Zone.HAND].get_all())
-        game.trigger_manager.fire_event(game, EventType.ATTACKS, {"creature": card})
+        game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=card))
         self._resolve_stack(game)
         hand_after = len(p1.zones[Zone.HAND].get_all())
-        # No draw since no sacrifice possible
         assert hand_after == hand_before
 
     def test_cant_be_blocked_after_sacrifice(self) -> None:
@@ -93,11 +86,11 @@ class TestVampireGourmandAttackTrigger:
         p1 = game.players[0]
         card = VampireGourmand(owner=p1, controller=p1)
         game.get_battlefield(p1).add(card)
-        fodder = Creature(name="Fodder", base_power=1, base_toughness=1, owner=p1, controller=p1)
+        fodder = Creature(name='Fodder', base_power=1, base_toughness=1, owner=p1, controller=p1)
         game.get_battlefield(p1).add(fodder)
         card.register_triggers(game)
-        lib_card = Creature(name="Lib", base_power=1, base_toughness=1, owner=p1)
+        lib_card = Creature(name='Lib', base_power=1, base_toughness=1, owner=p1)
         p1.zones[Zone.LIBRARY].add(lib_card)
-        game.trigger_manager.fire_event(game, EventType.ATTACKS, {"creature": card})
+        game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=card))
         self._resolve_stack(game)
-        assert getattr(card, "_cant_be_blocked", False) is True
+        assert getattr(card, '_cant_be_blocked', False) is True

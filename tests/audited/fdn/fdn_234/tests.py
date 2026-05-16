@@ -266,8 +266,8 @@ class TestVivienMinus8:
 
         game.effect_manager.apply_all(game)
 
-        assert creature.base_power == 4
-        assert creature.base_toughness == 4
+        assert creature.modified_power == 4
+        assert creature.modified_toughness == 4
 
     def test_minus8_gives_vigilance(self) -> None:
         game, p1 = self._setup_emblem()
@@ -313,7 +313,7 @@ class TestVivienMinus8:
         game.get_battlefield(p1).add(creature)
 
         game.effect_manager.apply_all(game)
-        assert creature.base_power == 3
-        assert creature.base_toughness == 3
+        assert creature.modified_power == 3
+        assert creature.modified_toughness == 3
         assert Keyword.VIGILANCE in creature.keywords
 

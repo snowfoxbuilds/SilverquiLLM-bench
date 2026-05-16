@@ -46,8 +46,8 @@ class TestHeroicReinforcementsResolve:
         spell = HeroicReinforcements(owner=p1, controller=p1)
         spell.on_resolve(game)
         game.effect_manager.apply_all(game)
-        assert c1.base_power == 3
-        assert c1.base_toughness == 3
+        assert c1.modified_power == 3
+        assert c1.modified_toughness == 3
 
     def test_grants_haste(self) -> None:
         game = create_game()

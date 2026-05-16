@@ -250,8 +250,11 @@ class Creature(CardImpl):
     """A creature card.
 
     Attributes:
-        base_power: The printed power value.
-        base_toughness: The printed toughness value.
+        base_power: The printed power value (rule 208.1). Immutable after init.
+        base_toughness: The printed toughness value. Immutable after init.
+        modified_power: Current power after continuous effects (Layer 7c), before counters.
+            Reset to ``base_power`` each effect cycle; continuous effects write here.
+        modified_toughness: Current toughness after continuous effects, before counters.
         damage_marked: Amount of damage currently marked on this creature.
         is_tapped: Whether the creature is tapped.
         summoning_sick: Whether the creature has summoning sickness.
@@ -291,6 +294,8 @@ class Creature(CardImpl):
         )
         self.base_power: int = base_power
         self.base_toughness: int = base_toughness
+        self.modified_power: int = base_power
+        self.modified_toughness: int = base_toughness
         self.damage_marked: int = 0
         self.is_tapped: bool = False
         self.summoning_sick: bool = True
@@ -300,19 +305,16 @@ class Creature(CardImpl):
         self.minus_one_counters: int = 0
         self.is_token: bool = False
         self.dealt_deathtouch_damage: bool = False
-        # Snapshot original P/T and counter values for continuous-effect reset.
-        self._original_base_power: int = base_power
-        self._original_base_toughness: int = base_toughness
-        self._original_plus_one_counters: int = 0
-        self._original_minus_one_counters: int = 0
+        self._base_plus_one_counters: int = 0
+        self._base_minus_one_counters: int = 0
 
     def _reset_characteristics(self) -> None:
         """Reset creature characteristics to pre-effect values."""
         super()._reset_characteristics()
-        self.base_power = self._original_base_power
-        self.base_toughness = self._original_base_toughness
-        self.plus_one_counters = self._original_plus_one_counters
-        self.minus_one_counters = self._original_minus_one_counters
+        self.modified_power = self.base_power
+        self.modified_toughness = self.base_toughness
+        self.plus_one_counters = self._base_plus_one_counters
+        self.minus_one_counters = self._base_minus_one_counters
         # Reset combat-restriction flags set by continuous effects (e.g. Pacifism).
         # These are reapplied by active effects during apply_all().
         self._cant_attack: bool = False
@@ -337,12 +339,12 @@ class Creature(CardImpl):
     @property
     def power(self) -> int:
         """Current power including counter modifications."""
-        return self.base_power + self.plus_one_counters - self.minus_one_counters
+        return self.modified_power + self.plus_one_counters - self.minus_one_counters
 
     @property
     def toughness(self) -> int:
         """Current toughness including counter modifications."""
-        return self.base_toughness + self.plus_one_counters - self.minus_one_counters
+        return self.modified_toughness + self.plus_one_counters - self.minus_one_counters
 
 
 # ---------------------------------------------------------------------------

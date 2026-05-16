@@ -64,8 +64,8 @@ class ClawsOut(Instant):
             for obj in battlefield.get_all():
                 if CardType.CREATURE not in getattr(obj, "card_types", set()):
                     continue
-                obj.base_power += 2
-                obj.base_toughness += 2
+                obj.modified_power += 2
+                obj.modified_toughness += 2
 
         game.effect_manager.add(ContinuousEffect(
             source=self,

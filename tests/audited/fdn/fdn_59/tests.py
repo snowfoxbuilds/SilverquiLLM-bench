@@ -1,13 +1,10 @@
 """Audited tests for FDN 59 — Crypt Feaster."""
-
 from __future__ import annotations
-
 from card_impl import CryptFeaster
 from engine.card import Creature
-from engine.triggers import EventType
 from engine.types import Keyword, ManaCost, Zone
 from tests.test_utils import create_game
-
+from engine.events import AttacksTriggeredEvent
 
 class TestCryptFeasterBasics:
     """Basic card properties."""
@@ -18,11 +15,11 @@ class TestCryptFeasterBasics:
 
     def test_name(self) -> None:
         card = CryptFeaster(owner=None)
-        assert card.name == "Crypt Feaster"
+        assert card.name == 'Crypt Feaster'
 
     def test_mana_cost(self) -> None:
         card = CryptFeaster(owner=None)
-        assert card.mana_cost == ManaCost.parse("{3}{B}")
+        assert card.mana_cost == ManaCost.parse('{3}{B}')
 
     def test_power_toughness(self) -> None:
         card = CryptFeaster(owner=None)
@@ -35,8 +32,7 @@ class TestCryptFeasterBasics:
 
     def test_subtypes(self) -> None:
         card = CryptFeaster(owner=None)
-        assert "Zombie" in card.subtypes
-
+        assert 'Zombie' in card.subtypes
 
 class TestCryptFeasterThreshold:
     """Threshold attack trigger: +2/+0 if 7+ cards in graveyard."""
@@ -53,14 +49,11 @@ class TestCryptFeasterThreshold:
         card = CryptFeaster(owner=p1, controller=p1)
         game.get_battlefield(p1).add(card)
         card.register_triggers(game)
-        # Only 6 cards in graveyard
         for i in range(6):
-            c = Creature(name=f"GY{i}", base_power=1, base_toughness=1, owner=p1)
+            c = Creature(name=f'GY{i}', base_power=1, base_toughness=1, owner=p1)
             p1.zones[Zone.GRAVEYARD].add(c)
-        game.trigger_manager.fire_event(game, EventType.ATTACKS, {"creature": card})
+        game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=card))
         self._resolve_stack(game)
-        # No effect should be added (stack was empty or no trigger fired)
-        # Check that no continuous effect was added for this source
         effects = game.effect_manager.get_all() if hasattr(game.effect_manager, 'get_all') else []
         source_effects = [e for e in effects if getattr(e, 'source', None) is card]
         assert len(source_effects) == 0
@@ -72,11 +65,10 @@ class TestCryptFeasterThreshold:
         game.get_battlefield(p1).add(card)
         card.register_triggers(game)
         for i in range(7):
-            c = Creature(name=f"GY{i}", base_power=1, base_toughness=1, owner=p1)
+            c = Creature(name=f'GY{i}', base_power=1, base_toughness=1, owner=p1)
             p1.zones[Zone.GRAVEYARD].add(c)
-        game.trigger_manager.fire_event(game, EventType.ATTACKS, {"creature": card})
+        game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=card))
         self._resolve_stack(game)
-        # A continuous effect should be applied
         effects = game.effect_manager.get_all() if hasattr(game.effect_manager, 'get_all') else []
         source_effects = [e for e in effects if getattr(e, 'source', None) is card]
         assert len(source_effects) >= 1
@@ -88,10 +80,10 @@ class TestCryptFeasterThreshold:
         game.get_battlefield(p1).add(card)
         card.register_triggers(game)
         for i in range(7):
-            c = Creature(name=f"GY{i}", base_power=1, base_toughness=1, owner=p1)
+            c = Creature(name=f'GY{i}', base_power=1, base_toughness=1, owner=p1)
             p1.zones[Zone.GRAVEYARD].add(c)
-        other = Creature(name="Other", base_power=2, base_toughness=2, owner=p1, controller=p1)
-        game.trigger_manager.fire_event(game, EventType.ATTACKS, {"creature": other})
+        other = Creature(name='Other', base_power=2, base_toughness=2, owner=p1, controller=p1)
+        game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=other))
         self._resolve_stack(game)
         effects = game.effect_manager.get_all() if hasattr(game.effect_manager, 'get_all') else []
         source_effects = [e for e in effects if getattr(e, 'source', None) is card]

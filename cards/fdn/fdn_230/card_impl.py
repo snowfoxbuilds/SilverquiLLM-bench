@@ -48,8 +48,8 @@ class Overrun(Sorcery):
             bf = game.get_battlefield(controller)
             for obj in bf.get_all():
                 if CardType.CREATURE in getattr(obj, "card_types", set()):
-                    obj.base_power += 3
-                    obj.base_toughness += 3
+                    obj.modified_power += 3
+                    obj.modified_toughness += 3
 
         game.effect_manager.add(ContinuousEffect(
             source=self,

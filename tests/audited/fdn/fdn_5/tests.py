@@ -96,7 +96,7 @@ class TestCelestialArmorEquipEffects:
     def test_equipped_creature_gets_plus2_power(self) -> None:
         game, armor, creature, p1 = self._setup_equipped()
         game.effect_manager.apply_all(game)
-        assert creature.base_power == 4  # 2 + 2
+        assert creature.modified_power == 4  # 2 + 2
 
     def test_equipped_creature_has_flying(self) -> None:
         game, armor, creature, p1 = self._setup_equipped()

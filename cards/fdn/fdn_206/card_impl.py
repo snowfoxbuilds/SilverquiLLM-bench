@@ -47,7 +47,7 @@ class ShivanDragon(Creature):
         # ENGINE LIMITATION: pump modifies base_power; no end-of-turn cleanup mechanism in engine
         def _effect(game: Any) -> None:
             # +1/+0 until end of turn — boost base_power
-            source.base_power += 1
+            source.modified_power += 1
 
         return [ActivatedAbility(
             cost=_cost,

@@ -71,8 +71,8 @@ class TestKellanActivatedAbilities:
         abilities[1].effect(game)
         assert "Rogue" in card.subtypes
         assert "Detective" not in card.subtypes
-        assert card.base_power == 3
-        assert card.base_toughness == 2
+        assert card.modified_power == 3
+        assert card.modified_toughness == 2
         kw = getattr(card, "keywords", Keyword(0)) or Keyword(0)
         assert kw & Keyword.DOUBLE_STRIKE
 

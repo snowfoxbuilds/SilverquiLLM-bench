@@ -198,20 +198,20 @@ class TestEOTEffectRemoval:
             source=creature,
             layer=Layer.POWER_TOUGHNESS,
             sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(creature, "base_power", creature._original_base_power + 3)
-            or setattr(creature, "base_toughness", creature._original_base_toughness + 3),
+            apply=lambda g: setattr(creature, "modified_power", creature.base_power + 3)
+            or setattr(creature, "modified_toughness", creature.base_toughness + 3),
             duration=DURATION_END_OF_TURN,
         )
         game.effect_manager.add(effect)
         # Apply once to verify effect is active
         game.effect_manager.apply_all(game)
-        assert creature.base_power == 5
+        assert creature.modified_power == 5
 
         _do_cleanup_step(game)
 
         # After cleanup, the effect should be removed and P/T reverted
-        assert creature.base_power == 2
-        assert creature.base_toughness == 2
+        assert creature.modified_power == 2
+        assert creature.modified_toughness == 2
 
     def test_permanent_effect_not_removed(self) -> None:
         """A DURATION_PERMANENT effect survives cleanup."""
@@ -224,19 +224,19 @@ class TestEOTEffectRemoval:
             source=creature,
             layer=Layer.POWER_TOUGHNESS,
             sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(creature, "base_power", creature._original_base_power + 1)
-            or setattr(creature, "base_toughness", creature._original_base_toughness + 1),
+            apply=lambda g: setattr(creature, "modified_power", creature.base_power + 1)
+            or setattr(creature, "modified_toughness", creature.base_toughness + 1),
             duration=DURATION_PERMANENT,
         )
         game.effect_manager.add(effect)
         game.effect_manager.apply_all(game)
-        assert creature.base_power == 3
+        assert creature.modified_power == 3
 
         _do_cleanup_step(game)
 
         # Permanent effect remains — P/T should still be boosted
-        assert creature.base_power == 3
-        assert creature.base_toughness == 3
+        assert creature.modified_power == 3
+        assert creature.modified_toughness == 3
 
     def test_multiple_eot_effects_all_removed(self) -> None:
         """Multiple EOT effects are all removed during a single cleanup."""
@@ -250,14 +250,14 @@ class TestEOTEffectRemoval:
             source=c1,
             layer=Layer.POWER_TOUGHNESS,
             sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(c1, "base_power", c1._original_base_power + 2),
+            apply=lambda g: setattr(c1, "modified_power", c1.base_power + 2),
             duration=DURATION_END_OF_TURN,
         )
         effect2 = ContinuousEffect(
             source=c2,
             layer=Layer.POWER_TOUGHNESS,
             sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(c2, "base_power", c2._original_base_power + 2),
+            apply=lambda g: setattr(c2, "modified_power", c2.base_power + 2),
             duration=DURATION_END_OF_TURN,
         )
         game.effect_manager.add(effect1)
@@ -265,8 +265,8 @@ class TestEOTEffectRemoval:
 
         _do_cleanup_step(game)
 
-        assert c1.base_power == 2
-        assert c2.base_power == 3
+        assert c1.modified_power == 2
+        assert c2.modified_power == 3
 
     def test_effects_reapplied_after_removal(self) -> None:
         """After removing expired effects, remaining effects are reapplied correctly."""
@@ -279,16 +279,16 @@ class TestEOTEffectRemoval:
             source=creature,
             layer=Layer.POWER_TOUGHNESS,
             sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(creature, "base_power", creature._original_base_power + 1)
-            or setattr(creature, "base_toughness", creature._original_base_toughness + 1),
+            apply=lambda g: setattr(creature, "modified_power", creature.base_power + 1)
+            or setattr(creature, "modified_toughness", creature.base_toughness + 1),
             duration=DURATION_PERMANENT,
         )
         eot_effect = ContinuousEffect(
             source=creature,
             layer=Layer.POWER_TOUGHNESS,
             sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(creature, "base_power", creature.base_power + 3)
-            or setattr(creature, "base_toughness", creature.base_toughness + 3),
+            apply=lambda g: setattr(creature, "modified_power", creature.modified_power + 3)
+            or setattr(creature, "modified_toughness", creature.modified_toughness + 3),
             duration=DURATION_END_OF_TURN,
         )
         game.effect_manager.add(perm_effect)
@@ -297,8 +297,8 @@ class TestEOTEffectRemoval:
         _do_cleanup_step(game)
 
         # Only permanent effect remains: 2 + 1 = 3
-        assert creature.base_power == 3
-        assert creature.base_toughness == 3
+        assert creature.modified_power == 3
+        assert creature.modified_toughness == 3
 
 
 # ===========================================================================
@@ -475,8 +475,8 @@ class TestSBACheckDuringCleanup:
             source=creature,
             layer=Layer.POWER_TOUGHNESS,
             sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(creature, "base_power", creature._original_base_power + 3)
-            or setattr(creature, "base_toughness", creature._original_base_toughness + 3),
+            apply=lambda g: setattr(creature, "modified_power", creature.base_power + 3)
+            or setattr(creature, "modified_toughness", creature.base_toughness + 3),
             duration=DURATION_END_OF_TURN,
         )
         game.effect_manager.add(effect)
@@ -494,8 +494,8 @@ class TestSBACheckDuringCleanup:
         # so the creature should survive as a 1/1 with 0 damage.
         assert bf.contains(creature)
         assert creature.damage_marked == 0
-        assert creature.base_power == 1
-        assert creature.base_toughness == 1
+        assert creature.modified_power == 1
+        assert creature.modified_toughness == 1
 
     def test_zero_toughness_creature_dies_after_eot_buff_expires(self) -> None:
         """A creature whose toughness drops to 0 after EOT buff expires dies via SBA.
@@ -510,14 +510,14 @@ class TestSBACheckDuringCleanup:
         _place_on_battlefield(game, p1, creature)
         # Give it a -1/-1 counter (would make it 1/0 without help)
         creature.minus_one_counters = 1
-        creature._original_minus_one_counters = 1
+        creature._base_minus_one_counters = 1
 
         # EOT buff that gives +0/+1 toughness to keep it alive
         effect = ContinuousEffect(
             source=creature,
             layer=Layer.POWER_TOUGHNESS,
             sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(creature, "base_toughness", creature._original_base_toughness + 1),
+            apply=lambda g: setattr(creature, "modified_toughness", creature.base_toughness + 1),
             duration=DURATION_END_OF_TURN,
         )
         game.effect_manager.add(effect)
@@ -554,8 +554,8 @@ class TestCleanupIntegration:
 
         # Simulate Giant Growth: +3/+3 until end of turn
         def giant_growth_apply(g):
-            bear.base_power = bear._original_base_power + 3
-            bear.base_toughness = bear._original_base_toughness + 3
+            bear.modified_power = bear.base_power + 3
+            bear.modified_toughness = bear.base_toughness + 3
 
         effect = ContinuousEffect(
             source=bear,
@@ -624,7 +624,7 @@ class TestCleanupIntegration:
             source=creature,
             layer=Layer.POWER_TOUGHNESS,
             sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(creature, "base_power", creature._original_base_power + 2),
+            apply=lambda g: setattr(creature, "modified_power", creature.base_power + 2),
             duration=DURATION_END_OF_TURN,
         )
         game.effect_manager.add(effect)
@@ -638,7 +638,7 @@ class TestCleanupIntegration:
         assert creature.is_attacking is False  # Combat flag cleared
         assert creature.dealt_deathtouch_damage is False  # Deathtouch flag cleared
         assert p1.mana_pool.total() == 0  # Mana emptied
-        assert creature.base_power == 2  # EOT effect removed
+        assert creature.modified_power == 2  # EOT effect removed
 
     def test_max_hand_size_constant_is_7(self) -> None:
         """MAX_HAND_SIZE is defined as 7."""
@@ -672,13 +672,13 @@ class TestReCleanupLoop:
         doomed = _make_creature("Doomed", 2, 1)
         _place_on_battlefield(game, p1, doomed)
         doomed.minus_one_counters = 1
-        doomed._original_minus_one_counters = 1
+        doomed._base_minus_one_counters = 1
 
         effect = ContinuousEffect(
             source=doomed,
             layer=Layer.POWER_TOUGHNESS,
             sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(doomed, "base_toughness", doomed._original_base_toughness + 1),
+            apply=lambda g: setattr(doomed, "modified_toughness", doomed.base_toughness + 1),
             duration=DURATION_END_OF_TURN,
         )
         game.effect_manager.add(effect)

@@ -1,12 +1,10 @@
 """Audited tests for FDN 3 — Armasaur Guide."""
-
 from __future__ import annotations
-
 from card_impl import ArmasaurGuide
 from engine.card import Creature
 from engine.types import CardType, Keyword, ManaCost
 from tests.test_utils import create_game
-
+from engine.events import AttacksTriggeredEvent
 
 class TestArmasaurGuideBasics:
     """Basic card properties."""
@@ -17,11 +15,11 @@ class TestArmasaurGuideBasics:
 
     def test_name(self) -> None:
         card = ArmasaurGuide(owner=None)
-        assert card.name == "Armasaur Guide"
+        assert card.name == 'Armasaur Guide'
 
     def test_mana_cost(self) -> None:
         card = ArmasaurGuide(owner=None)
-        assert card.mana_cost == ManaCost.parse("{4}{W}")
+        assert card.mana_cost == ManaCost.parse('{4}{W}')
 
     def test_power_toughness(self) -> None:
         card = ArmasaurGuide(owner=None)
@@ -34,8 +32,7 @@ class TestArmasaurGuideBasics:
 
     def test_dinosaur_subtype(self) -> None:
         card = ArmasaurGuide(owner=None)
-        assert "Dinosaur" in card.subtypes
-
+        assert 'Dinosaur' in card.subtypes
 
 class TestArmasaurGuideAttackTrigger:
     """Attack with 3+ creatures → +1/+1 counter on target."""
@@ -54,36 +51,25 @@ class TestArmasaurGuideAttackTrigger:
         bf = game.get_battlefield(p1)
         bf.add(guide)
         for i in range(num_attackers - 1):
-            c = Creature(
-                name=f"Soldier{i}", base_power=1, base_toughness=1,
-                owner=p1, controller=p1,
-            )
+            c = Creature(name=f'Soldier{i}', base_power=1, base_toughness=1, owner=p1, controller=p1)
             bf.add(c)
             creatures.append(c)
         guide.register_triggers(game)
-        # Mark all as attacking
         for c in creatures:
             c.is_attacking = True
-        return game, guide, creatures, p1
+        return (game, guide, creatures, p1)
 
     def test_trigger_fires_with_3_attackers(self) -> None:
-        from engine.triggers import EventType
         game, guide, creatures, p1 = self._setup_attack(3)
-        # Script the choose_card to pick guide as target
         p1._script.appendleft(guide)
         initial_counters = guide.plus_one_counters
-        game.trigger_manager.fire_event(
-            game, EventType.ATTACKS, {"creature": guide},
-        )
+        game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=guide))
         self._resolve_stack(game)
         assert guide.plus_one_counters == initial_counters + 1
 
     def test_trigger_does_not_fire_with_2_attackers(self) -> None:
-        from engine.triggers import EventType
         game, guide, creatures, p1 = self._setup_attack(2)
         initial_counters = guide.plus_one_counters
-        game.trigger_manager.fire_event(
-            game, EventType.ATTACKS, {"creature": guide},
-        )
+        game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=guide))
         self._resolve_stack(game)
         assert guide.plus_one_counters == initial_counters
