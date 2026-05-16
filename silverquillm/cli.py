@@ -9,11 +9,12 @@ Entry point registered in pyproject.toml: ``benchmark = "silverquillm.cli:main"`
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import re as _re
@@ -164,6 +165,11 @@ def _harvest_results(
     # Per-card status
     _write_card_statuses(workspace, run_dir, timed_out)
 
+    # Run manifest
+    manifest_src = workspace / "run_manifest.json"
+    if manifest_src.exists():
+        shutil.copy2(manifest_src, run_dir / "run_manifest.json")
+
     return run_dir
 
 
@@ -173,8 +179,6 @@ def _write_card_statuses(
     timed_out: bool,
 ) -> None:
     """Determine per-card status and write status.json."""
-    import json
-
     cards_dir = _REPO_ROOT / "cards"
     specs = load_all_card_specs(cards_dir, "sos")
     statuses: dict[str, str] = {}
@@ -270,6 +274,13 @@ def run(
     try:
         workspace, output = stage_workspace(output_dir=staging_dir, card_filter=card_filter)
         click.echo(f"Workspace staged at: {workspace}")
+
+        # Write run manifest (advisory timeout facts)
+        manifest = {
+            "timeout_seconds": timeout,
+            "deadline_utc": (datetime.now(tz=timezone.utc) + timedelta(seconds=timeout)).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        }
+        (workspace / "run_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
         # Build docker command
         container_name = f"silverquillm-{run_name}"

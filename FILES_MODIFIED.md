@@ -22,3 +22,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `silverquillm/cli.py` — Added --cards Click option, parsed into card_filter list with zero-pad normalization, passed to stage_workspace
 - `silverquillm/workspace.py` — Implemented card_filter in _stage_cards (SOS filtering by collector_number with numeric normalization), dynamic prompt text, click.echo of filter
 
+## Item 3: Write run_manifest.json during workspace staging
+
+### Implementation
+- `silverquillm/cli.py` — Write run_manifest.json (timeout_seconds + deadline_utc) after staging, copy it in _harvest_results; moved json import to module level
+

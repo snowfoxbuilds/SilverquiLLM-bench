@@ -64,7 +64,7 @@ silverquillm run --image <img> --cards 001,042,105 --timeout 3600
 
   Testability: Unit test `stage_workspace()` with `card_filter=["001", "042"]` → verify only those two SOS dirs exist in `workspace/cards/sos/`. Full set when `card_filter=None` → all SOS dirs present. FDN dirs always present regardless of filter. Verify prompt text changes when filter is set.
 
-- [ ] **Write ****`run_manifest.json`**** during workspace staging**
+- [x] **Write ****`run_manifest.json`**** during workspace staging**
   Detail: The runner writes `/workspace/run_manifest.json` immediately before `docker run` with advisory timeout facts. Per [BENCHMARK-RUNNER.md](http://benchmark-runner.md/): "The Run Manifest is advisory. It is not agent configuration."
 
   The manifest contains exactly two fields:

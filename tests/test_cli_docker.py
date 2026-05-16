@@ -437,3 +437,131 @@ class TestRunDockerArgs:
         result = runner.invoke(main, ["run", "--image", "my-img"])
         call_args = mock_subprocess.call_args[0][0]
         assert "OPENAI_API_KEY=sk-test" in call_args
+
+
+# ---------------------------------------------------------------------------
+# Test: run_manifest.json — writing and harvesting
+# ---------------------------------------------------------------------------
+
+
+class TestRunManifest:
+    """run_manifest.json should be written during staging and harvested."""
+
+    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli.stage_workspace")
+    def test_manifest_written_before_docker_run(self, mock_stage, mock_subprocess, runner, tmp_path):
+        """run_manifest.json should exist in workspace after staging."""
+        workspace = tmp_path / "workspace"
+        output = tmp_path / "output"
+        workspace.mkdir()
+        output.mkdir()
+        mock_stage.return_value = (workspace, output)
+        mock_subprocess.return_value = MagicMock(returncode=0)
+
+        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "300"])
+
+        manifest_path = workspace / "run_manifest.json"
+        assert manifest_path.exists(), "run_manifest.json should be written to workspace"
+
+    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli.stage_workspace")
+    def test_manifest_is_valid_json(self, mock_stage, mock_subprocess, runner, tmp_path):
+        """run_manifest.json must be valid JSON."""
+        workspace = tmp_path / "workspace"
+        output = tmp_path / "output"
+        workspace.mkdir()
+        output.mkdir()
+        mock_stage.return_value = (workspace, output)
+        mock_subprocess.return_value = MagicMock(returncode=0)
+
+        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "600"])
+
+        manifest = json.loads((workspace / "run_manifest.json").read_text())
+        assert isinstance(manifest, dict)
+
+    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli.stage_workspace")
+    def test_manifest_has_timeout_seconds_int(self, mock_stage, mock_subprocess, runner, tmp_path):
+        """timeout_seconds must be an int matching the --timeout flag."""
+        workspace = tmp_path / "workspace"
+        output = tmp_path / "output"
+        workspace.mkdir()
+        output.mkdir()
+        mock_stage.return_value = (workspace, output)
+        mock_subprocess.return_value = MagicMock(returncode=0)
+
+        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "420"])
+
+        manifest = json.loads((workspace / "run_manifest.json").read_text())
+        assert "timeout_seconds" in manifest
+        assert isinstance(manifest["timeout_seconds"], int)
+        assert manifest["timeout_seconds"] == 420
+
+    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli.stage_workspace")
+    def test_manifest_has_deadline_utc_iso8601(self, mock_stage, mock_subprocess, runner, tmp_path):
+        """deadline_utc must be an ISO-8601 string ending in 'Z'."""
+        workspace = tmp_path / "workspace"
+        output = tmp_path / "output"
+        workspace.mkdir()
+        output.mkdir()
+        mock_stage.return_value = (workspace, output)
+        mock_subprocess.return_value = MagicMock(returncode=0)
+
+        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "300"])
+
+        manifest = json.loads((workspace / "run_manifest.json").read_text())
+        assert "deadline_utc" in manifest
+        deadline = manifest["deadline_utc"]
+        assert isinstance(deadline, str)
+        assert deadline.endswith("Z"), f"deadline_utc should end with 'Z', got: {deadline}"
+        # Verify it's parseable as ISO-8601
+        from datetime import datetime, timezone
+        dt = datetime.fromisoformat(deadline.replace("Z", "+00:00"))
+        assert dt.tzinfo is not None
+
+    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli.stage_workspace")
+    def test_manifest_has_exactly_two_fields(self, mock_stage, mock_subprocess, runner, tmp_path):
+        """run_manifest.json must contain exactly two fields."""
+        workspace = tmp_path / "workspace"
+        output = tmp_path / "output"
+        workspace.mkdir()
+        output.mkdir()
+        mock_stage.return_value = (workspace, output)
+        mock_subprocess.return_value = MagicMock(returncode=0)
+
+        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "300"])
+
+        manifest = json.loads((workspace / "run_manifest.json").read_text())
+        assert set(manifest.keys()) == {"timeout_seconds", "deadline_utc"}
+
+    def test_harvest_copies_manifest_to_results(self, tmp_path):
+        """_harvest_results should copy run_manifest.json to run results dir."""
+        workspace = tmp_path / "ws" / "workspace"
+        output = tmp_path / "ws" / "output"
+        results = tmp_path / "results"
+        workspace.mkdir(parents=True)
+        output.mkdir(parents=True)
+
+        # Write a manifest in workspace
+        manifest_data = {"timeout_seconds": 300, "deadline_utc": "2025-01-01T00:05:00Z"}
+        (workspace / "run_manifest.json").write_text(json.dumps(manifest_data))
+
+        run_dir = _harvest_results(workspace, output, results, "test-run", timed_out=False)
+
+        harvested = run_dir / "run_manifest.json"
+        assert harvested.exists(), "run_manifest.json should be copied to results"
+        assert json.loads(harvested.read_text()) == manifest_data
+
+    def test_harvest_without_manifest_does_not_crash(self, tmp_path):
+        """_harvest_results should not fail if run_manifest.json is absent."""
+        workspace = tmp_path / "ws" / "workspace"
+        output = tmp_path / "ws" / "output"
+        results = tmp_path / "results"
+        workspace.mkdir(parents=True)
+        output.mkdir(parents=True)
+
+        # No manifest written — should not raise
+        run_dir = _harvest_results(workspace, output, results, "test-run", timed_out=False)
+        assert not (run_dir / "run_manifest.json").exists()
