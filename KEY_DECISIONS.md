@@ -14,3 +14,9 @@ Persistent architectural and convention decisions across runs.
 - **Decision**: Normalize via `str(int(x))` at both CLI parsing and workspace staging for defense-in-depth.
 - **Reasoning**: Simple, handles all zero-padding cases, preserves non-numeric collector numbers as-is.
 - **Impact**: `silverquillm/cli.py`, `silverquillm/workspace.py`.
+
+## Docker entrypoint output channel pattern
+- **Context**: Entrypoints needed structured output separation for multi-channel monitoring.
+- **Decision**: JavaScript entrypoints use `log()` helper writing to `/output/system.log`, tee agent output to `/output/agent_stdout.log`, and include SIGTERM handler writing `timed_out` to `progress.jsonl`.
+- **Reasoning**: Matches the spec's file-based channel separation. Docker logs still capture agent output via `process.stdout.write()`.
+- **Impact**: `docker/homelab-pi-blind/entrypoint.mjs`, `docker/local-pi-blind/entrypoint.mjs`. Future bash entrypoints should follow the reference pattern in the TODO.

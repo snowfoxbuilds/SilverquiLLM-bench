@@ -97,7 +97,7 @@ manifest = {
 
   Testability: After `stage_workspace()` + manifest write, verify `workspace/run_manifest.json` exists and contains valid JSON with `timeout_seconds` (int) and `deadline_utc` (ISO-8601 string). Verify the file is copied to the results directory during harvest.
 
-- [ ] **Update Docker entrypoints: remove ****`engine_work`**** copy, add file-based channel separation**
+- [x] **Update Docker entrypoints: remove ****`engine_work`**** copy, add file-based channel separation**
   Detail: Current entrypoints (`docker/homelab-pi-blind/entrypoint.mjs` and `docker/local-pi-blind/entrypoint.mjs`) copy engine to `/workspace/engine_work` — this is a stale pattern. Per the spec, agents edit `/workspace/engine/` in place. There is no `engine_work`.
 
   Additionally, entrypoints should separate output into named log files in `/output/` for the runner's multi-channel monitoring. Current entrypoints write only `progress.jsonl` and `exit_code` to `/output/`.

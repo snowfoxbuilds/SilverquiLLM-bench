@@ -1,26 +1,38 @@
 import { createAgentSession, AuthStorage, ModelRegistry, SessionManager } from "@earendil-works/pi-coding-agent";
-import { readFileSync, appendFileSync, writeFileSync, cpSync } from "fs";
+import { readFileSync, appendFileSync, writeFileSync, mkdirSync } from "fs";
 
-console.log("Starting entrypoint...");
+mkdirSync("/output", { recursive: true });
 
-// Copy engine to writable location
-cpSync("/workspace/engine", "/workspace/engine_work", { recursive: true });
+function log(msg) {
+  const ts = new Date().toISOString().substring(11, 19);
+  appendFileSync("/output/system.log", `[${ts}] ${msg}\n`);
+}
+
+process.on("SIGTERM", () => {
+  log("Received SIGTERM, shutting down");
+  appendFileSync("/output/progress.jsonl",
+    JSON.stringify({ ts: new Date().toISOString(), status: "timed_out" }) + "\n"
+  );
+  process.exit(0);
+});
+
+log("Starting entrypoint");
 
 // Set up Pi
-console.log("Engine copied, setting up Pi...");
 const authStorage = AuthStorage.create();
 const modelRegistry = ModelRegistry.create(authStorage);
 
 // Find local model
-console.log("Looking for model in registry...");
+log("Looking for model in registry");
 const model = modelRegistry.find("llamacpp", "default");
 if (!model) {
+  log("FATAL: model not found in registry");
   console.error("FATAL: model not found in registry");
   console.error("Available:", JSON.stringify(await modelRegistry.getAvailable()));
   process.exit(1);
 }
 
-console.log("Model found, creating session...");
+log("Model found, creating session");
 const { session } = await createAgentSession({
   cwd: "/workspace",
   model,
@@ -31,10 +43,12 @@ const { session } = await createAgentSession({
 });
 
 // Stream progress to mounted volume
-console.log("Session created, subscribing to events...");
+log("Session created, subscribing to events");
 session.subscribe((event) => {
   if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
-    process.stdout.write(event.assistantMessageEvent.delta);
+    const delta = event.assistantMessageEvent.delta;
+    process.stdout.write(delta);
+    appendFileSync("/output/agent_stdout.log", delta);
   }
   if (event.type === "tool_execution_end") {
     appendFileSync("/output/progress.jsonl",
@@ -44,11 +58,10 @@ session.subscribe((event) => {
 });
 
 // Read prompt and go
-console.log("Starting session with prompt...");
+log("Starting session with prompt");
 const prompt = readFileSync("/workspace/prompt.md", "utf-8");
-const result =await session.prompt(prompt);
-console.log("Session result:", JSON.stringify(result, null, 2));
+const result = await session.prompt(prompt);
+log("Session complete");
 
-console.log("Session complete, writing exit code...");
 writeFileSync("/output/exit_code", "0");
 process.exit(0);

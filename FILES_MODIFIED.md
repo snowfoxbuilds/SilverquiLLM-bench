@@ -27,3 +27,9 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `silverquillm/cli.py` — Write run_manifest.json (timeout_seconds + deadline_utc) after staging, copy it in _harvest_results; moved json import to module level
 
+## Item 4: Update Docker entrypoints
+
+### Implementation
+- `docker/homelab-pi-blind/entrypoint.mjs` — Removed engine_work copy, added system.log logging, agent_stdout.log capture, SIGTERM handler
+- `docker/local-pi-blind/entrypoint.mjs` — Removed engine_work copy, added system.log logging, agent_stdout.log capture, SIGTERM handler
+
