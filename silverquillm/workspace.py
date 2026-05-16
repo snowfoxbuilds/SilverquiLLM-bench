@@ -17,6 +17,12 @@ from pathlib import Path
 __all__ = ["stage_workspace"]
 
 # ---------------------------------------------------------------------------
+# Repo root — resolved once at import time
+# ---------------------------------------------------------------------------
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# ---------------------------------------------------------------------------
 # Prompt template
 # ---------------------------------------------------------------------------
 
@@ -42,26 +48,26 @@ _RULEBOOK_SRC = "docs/rulebook.md"
 
 
 def stage_workspace(
-    cards_dir: Path,
-    engine_dir: Path,
     output_dir: Path,
+    *,
+    card_filter: list[str] | None = None,
 ) -> tuple[Path, Path]:
     """Build the workspace directory tree for a Docker agent run.
 
     Parameters
     ----------
-    cards_dir:
-        Repo ``cards/`` directory containing ``fdn/`` and ``sos/`` sub-dirs.
-    engine_dir:
-        Repo ``engine/`` directory (full engine source).
     output_dir:
         Parent directory where ``workspace/`` and ``output/`` are created.
+    card_filter:
+        Optional list of collector numbers to include (no-op stub).
 
     Returns
     -------
     tuple[Path, Path]
         ``(workspace_path, output_path)`` — both guaranteed to exist.
     """
+    cards_dir = _REPO_ROOT / "cards"
+    engine_dir = _REPO_ROOT / "engine"
     workspace = output_dir / "workspace"
     output = output_dir / "output"
 
@@ -81,7 +87,7 @@ def stage_workspace(
     _copy_engine(engine_dir, workspace / "engine")
 
     # --- reference docs ---
-    _copy_reference_docs(cards_dir, engine_dir, workspace)
+    _copy_reference_docs(workspace)
 
     # --- cards/ ---
     _stage_cards(cards_dir, workspace / "cards")
@@ -105,17 +111,10 @@ def _copy_engine(engine_dir: Path, dest: Path) -> None:
     )
 
 
-def _copy_reference_docs(cards_dir: Path, engine_dir: Path, workspace: Path) -> None:
+def _copy_reference_docs(workspace: Path) -> None:
     """Copy reference docs into the workspace root."""
-    # Resolve repo root from cards_dir (cards/ sits at repo root)
-    repo_root = cards_dir.parent
-
     for dest_name, rel_src in _REFERENCE_DOCS.items():
-        # Use engine_dir for base_classes.py instead of hardcoded repo path
-        if dest_name == "base_classes.py":
-            src = engine_dir / "card.py"
-        else:
-            src = repo_root / rel_src
+        src = _REPO_ROOT / rel_src
         if src.exists():
             shutil.copy2(src, workspace / dest_name)
         else:
@@ -126,7 +125,7 @@ def _copy_reference_docs(cards_dir: Path, engine_dir: Path, workspace: Path) -> 
             )
 
     # rulebook.md
-    rulebook_src = repo_root / _RULEBOOK_SRC
+    rulebook_src = _REPO_ROOT / _RULEBOOK_SRC
     if rulebook_src.exists():
         shutil.copy2(rulebook_src, workspace / "rulebook.md")
     else:

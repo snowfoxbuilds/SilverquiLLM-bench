@@ -18,7 +18,7 @@ Canonical implementation constraints for this TODO:
 - The runner captures Docker stdout/stderr at the host level, streams them live, and saves them as `docker_stdout.log` and `docker_stderr.log`.
 ---
 
-- [ ] **Remove ****`--cards-dir`**** and ****`--engine-dir`**** CLI flags; hardcode repo-relative paths**
+- [x] **Remove ****`--cards-dir`**** and ****`--engine-dir`**** CLI flags; hardcode repo-relative paths**
   Detail: These flags are unnecessary — cards and engine directories are static repo-relative paths. The settled decision ([BENCHMARK-RUNNER.md](http://benchmark-runner.md/)) states: "Cards and engine source directories are repo-relative constants (`./cards`, `./engine`); they are not configurable via CLI flags."
 
   Current state:

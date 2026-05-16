@@ -101,7 +101,6 @@ def _harvest_results(
     output: Path,
     results_dir: Path,
     run_name: str,
-    cards_dir: Path,
     timed_out: bool = False,
 ) -> Path:
     """Copy artifacts from workspace/output into results/{run_name}/.
@@ -116,6 +115,7 @@ def _harvest_results(
     cards_out = run_dir / "cards"
     cards_out.mkdir(parents=True, exist_ok=True)
 
+    cards_dir = _REPO_ROOT / "cards"
     specs = load_all_card_specs(cards_dir, "sos")
 
     for spec in specs:
@@ -162,13 +162,12 @@ def _harvest_results(
             shutil.copy2(src, run_dir / fname)
 
     # Per-card status
-    _write_card_statuses(cards_dir, workspace, run_dir, timed_out)
+    _write_card_statuses(workspace, run_dir, timed_out)
 
     return run_dir
 
 
 def _write_card_statuses(
-    cards_dir: Path,
     workspace: Path,
     run_dir: Path,
     timed_out: bool,
@@ -176,6 +175,7 @@ def _write_card_statuses(
     """Determine per-card status and write status.json."""
     import json
 
+    cards_dir = _REPO_ROOT / "cards"
     specs = load_all_card_specs(cards_dir, "sos")
     statuses: dict[str, str] = {}
 
@@ -225,18 +225,6 @@ def main() -> None:
 @main.command()
 @click.option("--image", required=True, help="Docker image name")
 @click.option(
-    "--cards-dir",
-    default="./cards",
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
-    help="Cards directory (default: cards/ relative to repo root)",
-)
-@click.option(
-    "--engine-dir",
-    default="./engine",
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
-    help="Engine directory (default: engine/ relative to repo root)",
-)
-@click.option(
     "--timeout",
     default=3600,
     type=int,
@@ -250,17 +238,11 @@ def main() -> None:
 )
 def run(
     image: str,
-    cards_dir: Path | None,
-    engine_dir: Path | None,
     timeout: int,
     results_dir: Path | None,
 ) -> None:
     """Run the full benchmark workload in a Docker container."""
     # Resolve defaults relative to repo root
-    if cards_dir is None:
-        cards_dir = _REPO_ROOT / "cards"
-    if engine_dir is None:
-        engine_dir = _REPO_ROOT / "engine"
     if results_dir is None:
         results_dir = _REPO_ROOT / "results"
 
@@ -272,7 +254,7 @@ def run(
     # Stage workspace with all cards
     staging_dir = Path(tempfile.mkdtemp(prefix="silverquillm_run_"))
     try:
-        workspace, output = stage_workspace(cards_dir, engine_dir, staging_dir)
+        workspace, output = stage_workspace(output_dir=staging_dir)
         click.echo(f"Workspace staged at: {workspace}")
 
         # Build docker command
@@ -317,7 +299,7 @@ def run(
         # Harvest results
         click.echo("Harvesting results...")
         run_dir = _harvest_results(
-            workspace, output, results_dir, run_name, cards_dir, timed_out
+            workspace, output, results_dir, run_name, timed_out
         )
         click.echo(f"Results saved to: {run_dir}")
 

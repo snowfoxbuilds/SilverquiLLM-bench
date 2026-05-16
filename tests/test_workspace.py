@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
 from pathlib import Path
@@ -18,19 +19,48 @@ def repo_root() -> Path:
 
 
 @pytest.fixture()
-def cards_dir(repo_root: Path) -> Path:
-    return repo_root / "cards"
-
-
-@pytest.fixture()
 def engine_dir(repo_root: Path) -> Path:
     return repo_root / "engine"
 
 
 @pytest.fixture()
-def staged(cards_dir: Path, engine_dir: Path, tmp_path: Path):
-    """Run stage_workspace and return (workspace, output) paths."""
-    return stage_workspace(cards_dir, engine_dir, tmp_path)
+def staged(tmp_path: Path):
+    """Run stage_workspace with new signature and return (workspace, output) paths."""
+    return stage_workspace(tmp_path)
+
+
+# ------------------------------------------------------------------
+# Signature — cards_dir / engine_dir must NOT be accepted
+# ------------------------------------------------------------------
+
+
+class TestStageWorkspaceSignature:
+    """stage_workspace must only accept output_dir and card_filter."""
+
+    def test_signature_has_output_dir_as_first_positional(self):
+        sig = inspect.signature(stage_workspace)
+        params = list(sig.parameters.keys())
+        assert params[0] == "output_dir"
+
+    def test_signature_does_not_accept_cards_dir(self):
+        sig = inspect.signature(stage_workspace)
+        assert "cards_dir" not in sig.parameters
+
+    def test_signature_does_not_accept_engine_dir(self):
+        sig = inspect.signature(stage_workspace)
+        assert "engine_dir" not in sig.parameters
+
+    def test_signature_accepts_card_filter_keyword(self):
+        sig = inspect.signature(stage_workspace)
+        assert "card_filter" in sig.parameters
+        param = sig.parameters["card_filter"]
+        assert param.kind == inspect.Parameter.KEYWORD_ONLY
+
+    def test_callable_with_just_output_dir(self, tmp_path):
+        """stage_workspace(output_dir) should work without extra args."""
+        ws, out = stage_workspace(tmp_path)
+        assert ws.exists()
+        assert out.exists()
 
 
 # ------------------------------------------------------------------
@@ -283,21 +313,21 @@ class TestOutputDirectory:
 class TestIdempotency:
     """Calling stage_workspace twice should not fail."""
 
-    def test_can_restage(self, cards_dir, engine_dir, tmp_path):
-        ws1, out1 = stage_workspace(cards_dir, engine_dir, tmp_path)
-        ws2, out2 = stage_workspace(cards_dir, engine_dir, tmp_path)
+    def test_can_restage(self, tmp_path):
+        ws1, out1 = stage_workspace(tmp_path)
+        ws2, out2 = stage_workspace(tmp_path)
         assert ws1 == ws2
         assert out1 == out2
         assert ws2.exists()
 
-    def test_independent_copies_with_different_output_dirs(self, cards_dir, engine_dir, tmp_path):
+    def test_independent_copies_with_different_output_dirs(self, tmp_path):
         """Two calls with different output dirs create independent workspaces."""
         dir1 = tmp_path / "run1"
         dir1.mkdir()
         dir2 = tmp_path / "run2"
         dir2.mkdir()
-        ws1, out1 = stage_workspace(cards_dir, engine_dir, dir1)
-        ws2, out2 = stage_workspace(cards_dir, engine_dir, dir2)
+        ws1, out1 = stage_workspace(dir1)
+        ws2, out2 = stage_workspace(dir2)
         assert ws1 != ws2
         assert out1 != out2
         assert ws1.exists()
