@@ -62,7 +62,7 @@ class TestKomaCombatDamage:
         koma = KomaWorldEater(owner=p1, controller=p1)
         game.get_battlefield(p1).add(koma)
         koma.register_triggers(game)
-        game.trigger_manager.fire_event(game, DealsDamageTriggeredEvent(source=koma, target=p2, amount=8))
+        game.trigger_manager.fire_event(game, DealsDamageTriggeredEvent(source=koma, target=p2, amount=8, is_combat=True))
         _resolve_stack(game)
         bf = game.get_battlefield(p1)
         tokens = [c for c in bf.get_all() if getattr(c, 'name', '') == "Koma's Coil"]
@@ -75,7 +75,7 @@ class TestKomaCombatDamage:
         koma = KomaWorldEater(owner=p1, controller=p1)
         game.get_battlefield(p1).add(koma)
         koma.register_triggers(game)
-        game.trigger_manager.fire_event(game, DealsDamageTriggeredEvent(source=koma, target=p2, amount=8))
+        game.trigger_manager.fire_event(game, DealsDamageTriggeredEvent(source=koma, target=p2, amount=8, is_combat=True))
         _resolve_stack(game)
         bf = game.get_battlefield(p1)
         tokens = [c for c in bf.get_all() if getattr(c, 'name', '') == "Koma's Coil"]

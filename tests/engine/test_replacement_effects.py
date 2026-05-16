@@ -17,6 +17,7 @@ Verifies:
 - Edge cases: no matching replacements, empty manager, clear, query helpers.
 """
 from __future__ import annotations
+from dataclasses import dataclass
 from typing import Any
 import pytest
 from engine.card import CardImpl, Creature
@@ -24,7 +25,24 @@ from engine.game_state import GameState
 from engine.player import DeterministicPlayer
 from engine.replacement_effects import ReplacementEffect, ReplacementManager
 from engine.types import CardType, Zone
-from engine.events import CreatureDiesReplacementEvent
+from engine.events import AddCounterReplacementEvent, CreateTokenReplacementEvent, CreatureDiesReplacementEvent, MoveToGraveyardReplacementEvent, ReplacementEvent
+
+
+@dataclass
+class _XEvent(ReplacementEvent):
+    """Generic test replacement event for ReplacementManager mechanics tests."""
+    player: Any = None
+    controller: Any = None
+    value: Any = None
+    a: bool = False
+    b: bool = False
+    applied: bool = False
+    replaced: bool = False
+    amount: int = 0
+    prevented: bool = False
+    source: Any = None
+    destination: str = 'graveyard'
+    creature: Any = None
 
 @pytest.fixture()
 def players() -> list[DeterministicPlayer]:
@@ -59,7 +77,7 @@ class TestReplacementEffectDataclass:
         condition = lambda g, e: True
         replacement = lambda g, e: e
         effect = ReplacementEffect(event_type=CreatureDiesReplacementEvent, source=source, condition=condition, replacement=replacement, controller=controller)
-        assert effect.event_type == 'creature_dies'
+        assert effect.event_type is CreatureDiesReplacementEvent
         assert effect.source is source
         assert effect.condition is condition
         assert effect.replacement is replacement
@@ -75,10 +93,10 @@ class TestReplacementEffectDataclass:
         effect = ReplacementEffect(event_type='damage', source=object(), condition=None, replacement=_noop_replacement)
         assert effect.controller is None
 
-    def test_event_type_is_string(self) -> None:
-        """event_type should be a string."""
+    def test_event_type_is_class(self) -> None:
+        """event_type should be a ReplacementEvent subclass."""
         effect = ReplacementEffect(event_type=CreatureDiesReplacementEvent, source=object(), condition=None, replacement=_noop_replacement)
-        assert isinstance(effect.event_type, str)
+        assert issubclass(effect.event_type, ReplacementEvent)
 
 class TestReplacementManagerRegister:
     """ReplacementManager.register adds effects to the internal registry."""
@@ -161,61 +179,61 @@ class TestReplacementManagerApply:
     def test_apply_matching_event_type_modifies_data(self, manager: ReplacementManager, game: GameState) -> None:
         """Replacement matching event_type should modify event_data."""
 
-        def exile_instead(g: Any, event: dict[str, Any]) -> dict[str, Any]:
+        def exile_instead(g: Any, event: Any) -> Any:
             event.destination = 'exile'
             return event
         manager.register(ReplacementEffect(event_type=CreatureDiesReplacementEvent, source=object(), condition=None, replacement=exile_instead))
-        result = manager.apply(game, 'creature_dies', {'destination': 'graveyard'})
-        assert result['destination'] == 'exile'
+        result = manager.apply(game, CreatureDiesReplacementEvent(destination='graveyard'))
+        assert result.destination == 'exile'
 
     def test_apply_non_matching_event_type_unchanged(self, manager: ReplacementManager, game: GameState) -> None:
         """Non-matching event_type should leave event_data unchanged."""
         call_count = 0
 
-        def should_not_be_called(g: Any, event: dict[str, Any]) -> dict[str, Any]:
+        def should_not_be_called(g: Any, event: Any) -> Any:
             nonlocal call_count
             call_count += 1
             return event
         manager.register(ReplacementEffect(event_type=CreatureDiesReplacementEvent, source=object(), condition=None, replacement=should_not_be_called))
-        original = {'destination': 'graveyard', 'creature': 'Bear'}
-        result = manager.apply(game, 'deals_damage', original)
-        assert result['destination'] == 'graveyard'
+        original = _XEvent()
+        result = manager.apply(game, original)
+        assert result is original
         assert call_count == 0
 
     def test_apply_with_condition_false_skips_replacement(self, manager: ReplacementManager, game: GameState) -> None:
         """Replacement with condition returning False should not apply."""
         call_count = 0
 
-        def replacement(g: Any, event: dict[str, Any]) -> dict[str, Any]:
+        def replacement(g: Any, event: Any) -> Any:
             nonlocal call_count
             call_count += 1
             event.replaced = True
             return event
-        manager.register(ReplacementEffect(event_type=CreatureDiesReplacementEvent, source=object(), condition=lambda g, event: False, replacement=replacement))
-        result = manager.apply(game, 'creature_dies', {'replaced': False})
-        assert result['replaced'] is False
+        manager.register(ReplacementEffect(event_type=_XEvent, source=object(), condition=lambda g, event: False, replacement=replacement))
+        result = manager.apply(game, _XEvent(replaced=False))
+        assert result.replaced is False
         assert call_count == 0
 
     def test_apply_with_condition_true_applies_replacement(self, manager: ReplacementManager, game: GameState) -> None:
         """Replacement with condition returning True should apply."""
 
-        def replacement(g: Any, event: dict[str, Any]) -> dict[str, Any]:
+        def replacement(g: Any, event: Any) -> Any:
             event.replaced = True
             return event
-        manager.register(ReplacementEffect(event_type=CreatureDiesReplacementEvent, source=object(), condition=lambda g, event: True, replacement=replacement))
-        result = manager.apply(game, 'creature_dies', {'replaced': False})
-        assert result['replaced'] is True
+        manager.register(ReplacementEffect(event_type=_XEvent, source=object(), condition=lambda g, event: True, replacement=replacement))
+        result = manager.apply(game, _XEvent(replaced=False))
+        assert result.replaced is True
 
     def test_apply_condition_receives_game_and_event_data(self, manager: ReplacementManager, game: GameState) -> None:
-        """Condition callable should receive (game, event_data) arguments."""
+        """Condition callable should receive (game, event) arguments."""
         received_args: list[Any] = []
 
-        def recording_condition(g: Any, event: dict[str, Any]) -> bool:
+        def recording_condition(g: Any, event: Any) -> bool:
             received_args.append((g, event))
             return False
         manager.register(ReplacementEffect(event_type=CreatureDiesReplacementEvent, source=object(), condition=recording_condition, replacement=_noop_replacement))
-        event_data = {'creature': 'Bear'}
-        manager.apply(game, 'creature_dies', event_data)
+        event_data = CreatureDiesReplacementEvent()
+        manager.apply(game, event_data)
         assert len(received_args) == 1
         assert received_args[0][0] is game
         assert received_args[0][1] is event_data
@@ -223,27 +241,26 @@ class TestReplacementManagerApply:
     def test_apply_condition_none_means_always_applies(self, manager: ReplacementManager, game: GameState) -> None:
         """If condition is None, the replacement should always apply for its event_type."""
 
-        def replacement(g: Any, event: dict[str, Any]) -> dict[str, Any]:
+        def replacement(g: Any, event: Any) -> Any:
             event.applied = True
             return event
-        manager.register(ReplacementEffect(event_type=CreatureDiesReplacementEvent, source=object(), condition=None, replacement=replacement))
-        result = manager.apply(game, 'creature_dies', {'applied': False})
-        assert result['applied'] is True
+        manager.register(ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=replacement))
+        result = manager.apply(game, _XEvent(applied=False))
+        assert result.applied is True
 
     def test_apply_empty_manager_returns_event_data_unchanged(self, manager: ReplacementManager, game: GameState) -> None:
         """Empty manager should return event_data as-is."""
-        original = {'destination': 'graveyard'}
-        result = manager.apply(game, 'creature_dies', original)
+        original = CreatureDiesReplacementEvent()
+        result = manager.apply(game, original)
         assert result is original
-        assert result['destination'] == 'graveyard'
+        assert result.destination == 'graveyard'
 
     def test_apply_no_matching_replacements_returns_unchanged(self, manager: ReplacementManager, game: GameState) -> None:
         """If no effects match (wrong event_type), event_data should be unchanged."""
-        manager.register(ReplacementEffect(event_type='damage', source=object(), condition=None, replacement=lambda g, event: {**event, 'changed': True}))
-        original = {'value': 42}
-        result = manager.apply(game, 'creature_dies', original)
+        manager.register(ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=lambda g, event: event))
+        original = CreatureDiesReplacementEvent()
+        result = manager.apply(game, original)
         assert result is original
-        assert 'changed' not in result
 
 class TestMultipleReplacements:
     """When multiple replacements apply to the same event, all are applied."""
@@ -261,16 +278,16 @@ class TestMultipleReplacements:
             applied_order.append('B')
             event.b = True
             return event
-        manager.register(ReplacementEffect(event_type=CreatureDiesReplacementEvent, source=object(), condition=None, replacement=repl_a))
-        manager.register(ReplacementEffect(event_type=CreatureDiesReplacementEvent, source=object(), condition=None, replacement=repl_b))
+        manager.register(ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=repl_a))
+        manager.register(ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=repl_b))
         alice = game.players[0]
         alice._script.extend([None])
         effects = manager.get_effects()
         alice._script.clear()
         alice._script.append(effects[0])
-        result = manager.apply(game, 'creature_dies', {'player': alice, 'a': False, 'b': False})
-        assert result['a'] is True
-        assert result['b'] is True
+        result = manager.apply(game, _XEvent(player=alice, a=False, b=False))
+        assert result.a is True
+        assert result.b is True
         assert len(applied_order) == 2
 
     def test_player_chooses_order_when_multiple_match(self, game: GameState, manager: ReplacementManager) -> None:
@@ -286,14 +303,14 @@ class TestMultipleReplacements:
             return event
         src1 = object()
         src2 = object()
-        eff1 = ReplacementEffect(event_type=CreatureDiesReplacementEvent, source=src1, condition=None, replacement=repl_first)
-        eff2 = ReplacementEffect(event_type=CreatureDiesReplacementEvent, source=src2, condition=None, replacement=repl_second)
+        eff1 = ReplacementEffect(event_type=_XEvent, source=src1, condition=None, replacement=repl_first)
+        eff2 = ReplacementEffect(event_type=_XEvent, source=src2, condition=None, replacement=repl_second)
         manager.register(eff1)
         manager.register(eff2)
         alice = game.players[0]
         alice._script.clear()
         alice._script.append(eff2)
-        result = manager.apply(game, 'creature_dies', {'player': alice})
+        result = manager.apply(game, _XEvent(player=alice))
         assert applied_order == ['second', 'first']
 
 class TestSelfReplacementPrevention:
@@ -308,7 +325,7 @@ class TestSelfReplacementPrevention:
             call_count += 1
             return event
         manager.register(ReplacementEffect(event_type=CreatureDiesReplacementEvent, source=object(), condition=None, replacement=self_triggering_replacement))
-        manager.apply(game, 'creature_dies', {'destination': 'graveyard'})
+        manager.apply(game, CreatureDiesReplacementEvent())
         assert call_count == 1
 
     def test_two_effects_each_apply_exactly_once(self, manager: ReplacementManager, game: GameState) -> None:
@@ -322,14 +339,14 @@ class TestSelfReplacementPrevention:
         def repl_b(g: Any, event: dict[str, Any]) -> dict[str, Any]:
             counts['b'] += 1
             return event
-        eff_a = ReplacementEffect(event_type='x', source=object(), condition=None, replacement=repl_a)
-        eff_b = ReplacementEffect(event_type='x', source=object(), condition=None, replacement=repl_b)
+        eff_a = ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=repl_a)
+        eff_b = ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=repl_b)
         manager.register(eff_a)
         manager.register(eff_b)
         alice = game.players[0]
         alice._script.clear()
         alice._script.append(eff_a)
-        manager.apply(game, 'x', {'player': alice})
+        manager.apply(game, _XEvent(player=alice))
         assert counts['a'] == 1
         assert counts['b'] == 1
 
@@ -343,9 +360,9 @@ class TestInsteadSemantics:
             event.destination = 'exile'
             return event
         manager.register(ReplacementEffect(event_type=CreatureDiesReplacementEvent, source=object(), condition=None, replacement=exile_instead))
-        result = manager.apply(game, 'creature_dies', {'creature': 'Bear', 'destination': 'graveyard'})
-        assert result['destination'] == 'exile'
-        assert result['creature'] == 'Bear'
+        result = manager.apply(game, CreatureDiesReplacementEvent(creature='Bear'))
+        assert result.destination == 'exile'
+        assert result.creature == 'Bear'
 
     def test_damage_prevention_replacement(self, game: GameState, manager: ReplacementManager) -> None:
         """'If damage would be dealt, prevent it' → damage reduced to 0."""
@@ -354,10 +371,10 @@ class TestInsteadSemantics:
             event.amount = 0
             event.prevented = True
             return event
-        manager.register(ReplacementEffect(event_type='deals_damage', source=object(), condition=None, replacement=prevent_damage))
-        result = manager.apply(game, 'deals_damage', {'amount': 5, 'source': 'Lightning', 'prevented': False})
-        assert result['amount'] == 0
-        assert result['prevented'] is True
+        manager.register(ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=prevent_damage))
+        result = manager.apply(game, _XEvent(amount=5, source='Lightning', prevented=False))
+        assert result.amount == 0
+        assert result.prevented is True
 
     def test_conditional_exile_only_for_specific_creature(self, game: GameState, manager: ReplacementManager) -> None:
         """Conditional replacement: only exile specific creature, not all."""
@@ -371,10 +388,10 @@ class TestInsteadSemantics:
             event.destination = 'exile'
             return event
         manager.register(ReplacementEffect(event_type=CreatureDiesReplacementEvent, source=object(), condition=only_for_bear, replacement=exile_instead))
-        result_bear = manager.apply(game, 'creature_dies', {'creature': bear, 'destination': 'graveyard'})
-        assert result_bear['destination'] == 'exile'
-        result_elf = manager.apply(game, 'creature_dies', {'creature': elf, 'destination': 'graveyard'})
-        assert result_elf['destination'] == 'graveyard'
+        result_bear = manager.apply(game, CreatureDiesReplacementEvent(creature=bear))
+        assert result_bear.destination == 'exile'
+        result_elf = manager.apply(game, CreatureDiesReplacementEvent(creature=elf))
+        assert result_elf.destination == 'graveyard'
 
 class TestNoStackInteraction:
     """Replacement effects don't use the stack — they modify events inline."""
@@ -387,7 +404,7 @@ class TestNoStackInteraction:
             return event
         manager.register(ReplacementEffect(event_type=CreatureDiesReplacementEvent, source=object(), condition=None, replacement=exile_instead))
         assert game.stack.is_empty()
-        manager.apply(game, 'creature_dies', {'destination': 'graveyard'})
+        manager.apply(game, CreatureDiesReplacementEvent())
         assert game.stack.is_empty()
 
 class TestGameStateIntegration:
@@ -496,40 +513,40 @@ class TestAffectedPlayerDetermination:
     def test_affected_player_from_event_data_player_key(self, game: GameState, manager: ReplacementManager) -> None:
         """If event_data has 'player' key, that player chooses order."""
         applied_order: list[str] = []
-        eff_a = ReplacementEffect(event_type='x', source=object(), condition=None, replacement=lambda g, event: (applied_order.append('A'), event)[1])
-        eff_b = ReplacementEffect(event_type='x', source=object(), condition=None, replacement=lambda g, event: (applied_order.append('B'), event)[1])
+        eff_a = ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=lambda g, event: (applied_order.append('A'), event)[1])
+        eff_b = ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=lambda g, event: (applied_order.append('B'), event)[1])
         manager.register(eff_a)
         manager.register(eff_b)
         alice = game.players[0]
         alice._script.clear()
         alice._script.append(eff_b)
-        manager.apply(game, 'x', {'player': alice})
+        manager.apply(game, _XEvent(player=alice))
         assert applied_order == ['B', 'A']
 
     def test_affected_player_from_event_data_controller_key(self, game: GameState, manager: ReplacementManager) -> None:
         """If event_data has 'controller' key (no 'player'), that controller chooses."""
         applied_order: list[str] = []
-        eff_a = ReplacementEffect(event_type='x', source=object(), condition=None, replacement=lambda g, event: (applied_order.append('A'), event)[1])
-        eff_b = ReplacementEffect(event_type='x', source=object(), condition=None, replacement=lambda g, event: (applied_order.append('B'), event)[1])
+        eff_a = ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=lambda g, event: (applied_order.append('A'), event)[1])
+        eff_b = ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=lambda g, event: (applied_order.append('B'), event)[1])
         manager.register(eff_a)
         manager.register(eff_b)
         bob = game.players[1]
         bob._script.clear()
         bob._script.append(eff_a)
-        manager.apply(game, 'x', {'controller': bob})
+        manager.apply(game, _XEvent(controller=bob))
         assert applied_order == ['A', 'B']
 
     def test_affected_player_falls_back_to_active_player(self, game: GameState, manager: ReplacementManager) -> None:
         """If event_data has neither 'player' nor 'controller', active player chooses."""
         applied_order: list[str] = []
-        eff_a = ReplacementEffect(event_type='x', source=object(), condition=None, replacement=lambda g, event: (applied_order.append('A'), event)[1])
-        eff_b = ReplacementEffect(event_type='x', source=object(), condition=None, replacement=lambda g, event: (applied_order.append('B'), event)[1])
+        eff_a = ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=lambda g, event: (applied_order.append('A'), event)[1])
+        eff_b = ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=lambda g, event: (applied_order.append('B'), event)[1])
         manager.register(eff_a)
         manager.register(eff_b)
         active = game.active_player
         active._script.clear()
         active._script.append(eff_b)
-        manager.apply(game, 'x', {'value': 42})
+        manager.apply(game, _XEvent(value=42))
         assert applied_order == ['B', 'A']
 
 class TestSBAUnregistersReplacements:

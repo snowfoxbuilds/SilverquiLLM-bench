@@ -2,6 +2,7 @@
 from __future__ import annotations
 from card_impl import KioraTheRisingTide
 from engine.card import Creature
+from engine.events import AttacksTriggeredEvent
 from engine.types import ManaCost, Supertype, Zone
 from tests.test_utils import create_game
 
@@ -70,8 +71,8 @@ class TestKioraETB:
 class TestKioraThreshold:
     """Threshold: attack with 7+ cards in graveyard creates 8/8 token."""
 
-    def _fire_and_resolve(self, game, event_type, data):
-        game.trigger_manager.fire_event(game, event_type, data)
+    def _fire_and_resolve(self, game, event):
+        game.trigger_manager.fire_event(game, event)
         while not game.stack.is_empty():
             obj = game.stack.pop()
             obj.on_resolve(game)
@@ -86,7 +87,7 @@ class TestKioraThreshold:
             p1.zones[Zone.GRAVEYARD].add(c)
         p1._script.append(True)
         card.register_triggers(game)
-        self._fire_and_resolve(game, EventType.ATTACKS, {'attacker': card, 'creature': card})
+        self._fire_and_resolve(game, AttacksTriggeredEvent(creature=card))
         bf = game.get_battlefield(p1)
         tokens = [c for c in bf.get_all() if getattr(c, 'name', '') == 'Scion of the Deep']
         assert len(tokens) == 1
@@ -101,7 +102,7 @@ class TestKioraThreshold:
             p1.zones[Zone.GRAVEYARD].add(c)
         p1._script.append(True)
         card.register_triggers(game)
-        self._fire_and_resolve(game, EventType.ATTACKS, {'attacker': card, 'creature': card})
+        self._fire_and_resolve(game, AttacksTriggeredEvent(creature=card))
         bf = game.get_battlefield(p1)
         tokens = [c for c in bf.get_all() if getattr(c, 'name', '') == 'Scion of the Deep']
         token = tokens[0]
@@ -118,7 +119,7 @@ class TestKioraThreshold:
             c = Creature(name=f'Dead{i}', base_power=1, base_toughness=1, owner=p1)
             p1.zones[Zone.GRAVEYARD].add(c)
         card.register_triggers(game)
-        self._fire_and_resolve(game, EventType.ATTACKS, {'attacker': card, 'creature': card})
+        self._fire_and_resolve(game, AttacksTriggeredEvent(creature=card))
         bf = game.get_battlefield(p1)
         tokens = [c for c in bf.get_all() if getattr(c, 'name', '') == 'Scion of the Deep']
         assert len(tokens) == 0
@@ -133,7 +134,7 @@ class TestKioraThreshold:
             p1.zones[Zone.GRAVEYARD].add(c)
         p1._script.append(False)
         card.register_triggers(game)
-        self._fire_and_resolve(game, EventType.ATTACKS, {'attacker': card, 'creature': card})
+        self._fire_and_resolve(game, AttacksTriggeredEvent(creature=card))
         bf = game.get_battlefield(p1)
         tokens = [c for c in bf.get_all() if getattr(c, 'name', '') == 'Scion of the Deep']
         assert len(tokens) == 0

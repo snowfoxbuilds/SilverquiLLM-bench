@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
 from engine.protection import ProtectionAbility
+from engine.events import MoveToGraveyardReplacementEvent
 from engine.replacement_effects import ReplacementEffect
 from engine.types import ManaCost, Supertype, Zone
 if TYPE_CHECKING:
@@ -60,5 +61,4 @@ class Progenitus(Creature):
             event.prevented = True
             return event
         controller = getattr(self, 'controller', None)
-        for event_type in ('move_to_graveyard', 'creature_dies', 'sacrifice'):
-            game.replacement_manager.register(ReplacementEffect(event_type=event_type, source=self, condition=_condition, replacement=_replacement, controller=controller))
+        game.replacement_manager.register(ReplacementEffect(event_type=MoveToGraveyardReplacementEvent, source=self, condition=_condition, replacement=_replacement, controller=controller))

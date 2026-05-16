@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from card_impl import HighSocietyHunter
 from engine.card import Creature
+from engine.events import AttacksTriggeredEvent, CreatureDiesTriggeredEvent
 from engine.types import CardType, Keyword, ManaCost
 from tests.test_utils import create_game
 
@@ -50,21 +51,21 @@ class TestHighSocietyHunterAttackTrigger:
     def test_registers_attack_trigger(self) -> None:
         game, hunter, p1 = self._setup_attack()
         triggers = game.trigger_manager.get_triggers_for_source(hunter)
-        attack_triggers = [t for t in triggers if t.event_type == EventType.ATTACKS]
+        attack_triggers = [t for t in triggers if t.event_type is AttacksTriggeredEvent]
         assert len(attack_triggers) >= 1
 
     def test_attack_trigger_condition_fires_for_self(self) -> None:
         game, hunter, p1 = self._setup_attack()
         triggers = game.trigger_manager.get_triggers_for_source(hunter)
-        reg = [t for t in triggers if t.event_type == EventType.ATTACKS][0]
-        assert reg.condition(game, {'creature': hunter}) is True
+        reg = [t for t in triggers if t.event_type is AttacksTriggeredEvent][0]
+        assert reg.condition(game, AttacksTriggeredEvent(creature=hunter)) is True
 
     def test_attack_trigger_condition_does_not_fire_for_other(self) -> None:
         game, hunter, p1 = self._setup_attack()
         other = Creature(name='Bear', base_power=2, base_toughness=2, owner=p1, controller=p1)
         triggers = game.trigger_manager.get_triggers_for_source(hunter)
-        reg = [t for t in triggers if t.event_type == EventType.ATTACKS][0]
-        assert reg.condition(game, {'creature': other}) is False
+        reg = [t for t in triggers if t.event_type is AttacksTriggeredEvent][0]
+        assert reg.condition(game, AttacksTriggeredEvent(creature=other)) is False
 
     def test_sacrifice_adds_plus_one_counter(self) -> None:
         """When attack trigger fires with a sacrifice target, add counter."""
@@ -78,7 +79,7 @@ class TestHighSocietyHunterAttackTrigger:
         hunter.register_triggers(game)
         p1._script.append(fodder)
         triggers = game.trigger_manager.get_triggers_for_source(hunter)
-        reg = [t for t in triggers if t.event_type == EventType.ATTACKS][0]
+        reg = [t for t in triggers if t.event_type is AttacksTriggeredEvent][0]
         reg.effect(game)
         assert hunter.plus_one_counters >= 1
 
@@ -91,7 +92,7 @@ class TestHighSocietyHunterAttackTrigger:
         bf.add(hunter)
         hunter.register_triggers(game)
         triggers = game.trigger_manager.get_triggers_for_source(hunter)
-        reg = [t for t in triggers if t.event_type == EventType.ATTACKS][0]
+        reg = [t for t in triggers if t.event_type is AttacksTriggeredEvent][0]
         reg.effect(game)
         assert hunter.plus_one_counters == 0
 
@@ -107,7 +108,7 @@ class TestHighSocietyHunterAttackTrigger:
         hunter.register_triggers(game)
         p1._script.append(None)
         triggers = game.trigger_manager.get_triggers_for_source(hunter)
-        reg = [t for t in triggers if t.event_type == EventType.ATTACKS][0]
+        reg = [t for t in triggers if t.event_type is AttacksTriggeredEvent][0]
         reg.effect(game)
         assert hunter.plus_one_counters == 0
 
@@ -126,7 +127,7 @@ class TestHighSocietyHunterDeathTrigger:
     def test_registers_death_trigger(self) -> None:
         game, hunter, p1 = self._setup_death()
         triggers = game.trigger_manager.get_triggers_for_source(hunter)
-        death_triggers = [t for t in triggers if t.event_type == EventType.CREATURE_DIES]
+        death_triggers = [t for t in triggers if t.event_type is CreatureDiesTriggeredEvent]
         assert len(death_triggers) >= 1
 
     def test_death_condition_fires_for_other_nontoken(self) -> None:
@@ -134,22 +135,22 @@ class TestHighSocietyHunterDeathTrigger:
         other = Creature(name='Bear', base_power=2, base_toughness=2, owner=p1, controller=p1)
         other.is_token = False
         triggers = game.trigger_manager.get_triggers_for_source(hunter)
-        reg = [t for t in triggers if t.event_type == EventType.CREATURE_DIES][0]
-        assert reg.condition(game, {'creature': other}) is True
+        reg = [t for t in triggers if t.event_type is CreatureDiesTriggeredEvent][0]
+        assert reg.condition(game, CreatureDiesTriggeredEvent(creature=other)) is True
 
     def test_death_condition_does_not_fire_for_self(self) -> None:
         game, hunter, p1 = self._setup_death()
         triggers = game.trigger_manager.get_triggers_for_source(hunter)
-        reg = [t for t in triggers if t.event_type == EventType.CREATURE_DIES][0]
-        assert reg.condition(game, {'creature': hunter}) is False
+        reg = [t for t in triggers if t.event_type is CreatureDiesTriggeredEvent][0]
+        assert reg.condition(game, CreatureDiesTriggeredEvent(creature=hunter)) is False
 
     def test_death_condition_does_not_fire_for_token(self) -> None:
         game, hunter, p1 = self._setup_death()
         token = Creature(name='Token', base_power=1, base_toughness=1, owner=p1, controller=p1)
         token.is_token = True
         triggers = game.trigger_manager.get_triggers_for_source(hunter)
-        reg = [t for t in triggers if t.event_type == EventType.CREATURE_DIES][0]
-        assert reg.condition(game, {'creature': token}) is False
+        reg = [t for t in triggers if t.event_type is CreatureDiesTriggeredEvent][0]
+        assert reg.condition(game, CreatureDiesTriggeredEvent(creature=token)) is False
 
     def test_death_trigger_draws_card(self) -> None:
         """When death effect fires, controller draws a card."""
@@ -160,7 +161,7 @@ class TestHighSocietyHunterDeathTrigger:
         p1.zones[Zone.LIBRARY].add(lib_card)
         hand_count_before = len(p1.zones[Zone.HAND].get_all())
         triggers = game.trigger_manager.get_triggers_for_source(hunter)
-        reg = [t for t in triggers if t.event_type == EventType.CREATURE_DIES][0]
+        reg = [t for t in triggers if t.event_type is CreatureDiesTriggeredEvent][0]
         reg.effect(game)
         hand_count_after = len(p1.zones[Zone.HAND].get_all())
         assert hand_count_after == hand_count_before + 1

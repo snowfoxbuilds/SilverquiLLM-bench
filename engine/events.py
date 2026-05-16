@@ -104,6 +104,7 @@ class SpellCastTriggeredEvent(TriggeredEvent):
 @dataclass
 class AttacksTriggeredEvent(TriggeredEvent):
     creature: Any = None
+    attacker: Any = None
 
 
 @dataclass

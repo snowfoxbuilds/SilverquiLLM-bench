@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from card_impl import DoublingSeason
 from engine.card import Creature, Enchantment
+from engine.events import AddCounterReplacementEvent, CreateTokenReplacementEvent
 from engine.replacement_effects import ReplacementEffect
 from engine.types import ManaCost
 from tests.test_utils import create_game
@@ -34,9 +35,9 @@ class TestDoublingSeasonTokenDoubling:
         ds = DoublingSeason(owner=p1, controller=p1)
         game.get_battlefield(p1).add(ds)
         ds.register_replacement_effects(game)
-        event_data = {"player": p1, "count": 3}
-        event_data = game.replacement_manager.apply(game, "create_token", event_data)
-        assert event_data["count"] == 6
+        event = CreateTokenReplacementEvent(player=p1, count=3)
+        result = game.replacement_manager.apply(game, event)
+        assert result.count == 6
 
     def test_does_not_double_opponent_tokens(self) -> None:
         game = create_game()
@@ -45,9 +46,9 @@ class TestDoublingSeasonTokenDoubling:
         ds = DoublingSeason(owner=p1, controller=p1)
         game.get_battlefield(p1).add(ds)
         ds.register_replacement_effects(game)
-        event_data = {"player": p2, "count": 3}
-        event_data = game.replacement_manager.apply(game, "create_token", event_data)
-        assert event_data["count"] == 3
+        event = CreateTokenReplacementEvent(player=p2, count=3)
+        result = game.replacement_manager.apply(game, event)
+        assert result.count == 3
 
 
 class TestDoublingSeasonCounterDoubling:
@@ -61,9 +62,9 @@ class TestDoublingSeasonCounterDoubling:
         ds.register_replacement_effects(game)
         creature = Creature(name="Bear", base_power=2, base_toughness=2, owner=p1, controller=p1)
         game.get_battlefield(p1).add(creature)
-        event_data = {"permanent": creature, "amount": 2}
-        event_data = game.replacement_manager.apply(game, "add_counter", event_data)
-        assert event_data["amount"] == 4
+        event = AddCounterReplacementEvent(permanent=creature, amount=2)
+        result = game.replacement_manager.apply(game, event)
+        assert result.amount == 4
 
     def test_does_not_double_opponent_counters(self) -> None:
         game = create_game()
@@ -74,7 +75,6 @@ class TestDoublingSeasonCounterDoubling:
         ds.register_replacement_effects(game)
         creature = Creature(name="Bear", base_power=2, base_toughness=2, owner=p2, controller=p2)
         game.get_battlefield(p2).add(creature)
-        event_data = {"permanent": creature, "amount": 2}
-        event_data = game.replacement_manager.apply(game, "add_counter", event_data)
-        assert event_data["amount"] == 2
-
+        event = AddCounterReplacementEvent(permanent=creature, amount=2)
+        result = game.replacement_manager.apply(game, event)
+        assert result.amount == 2
