@@ -31,17 +31,19 @@ The Docker image *is* the full agent configuration — it bakes in the agent CLI
 ```bash
 python -m silverquillm run \
   --image silverquillm-pi-blind:latest \
-  --cards-dir ./cards \
-  --engine-dir ./engine \
-  --timeout 7200
+  --timeout 7200 \
+  --hang-timeout 900 \
+  --cards 001,042,105
 ```
 
 | Argument | Description |
 | --- | --- |
 | `--image` | Docker image to run (encodes agent + mode + strategy) |
-| `--cards-dir` | Path to cards directory (contains `fdn/` and `sos/` subdirectories) |
-| `--engine-dir` | Path to engine source |
-| `--timeout` | Total run timeout in seconds |
+| `--timeout` | Hard Timeout: total run time limit in seconds |
+| `--hang-timeout` | Hang Timeout: seconds of no file activity before stopping (default: 900) |
+| `--cards` | Comma-separated SOS collector numbers to stage (default: all). Filtered runs are not leaderboard-valid |
+
+Cards and engine source directories are repo-relative constants (`./cards`, `./engine`); they are not configurable via CLI flags.
 
 ## Workspace Staging
 
@@ -62,11 +64,12 @@ FDN and SOS card directories share the same structure (`card_spec.json` + `card_
 
 The runner calls `docker run` with the workspace and output directories mounted as volumes, and API credentials passed as environment variables. The call blocks until the container exits.
 
-Timeout is enforced at two levels:
+Timeout is enforced at multiple levels:
 
-1. **Runner hard timeout** — The runner computes `deadline_utc` immediately before `docker run`, writes `/workspace/run_manifest.json`, starts the container, and enforces `timeout_seconds` from that launch point.
-2. **Docker shutdown grace period** — On timeout, the runner explicitly calls `docker stop -t 10 <container_name>`. Docker sends `SIGTERM`, waits 10 seconds, then sends `SIGKILL` if needed.
-3. **Container advisory timeout** — The container may read `/workspace/run_manifest.json` for pacing or graceful wrap-up, but benchmark correctness does not depend on it.
+1. **Hard Timeout** — The runner records the start time (monotonic clock), computes `deadline_utc`, writes `/workspace/run_manifest.json`, and checks elapsed time each poll iteration. When the deadline passes, the runner stops the container.
+2. **Hang Timeout** — The runner tracks the last modification time across all monitored files (Docker pipe dumps, `/output/` files). If no file activity occurs for `--hang-timeout` seconds (default 900), the runner stops the container. This catches agent death, API outages, and infinite loops without false-positiving on long thinking pauses.
+3. **Docker shutdown grace period** — On either timeout (or `KeyboardInterrupt`), the runner calls `docker stop -t 10 <container_name>`. Docker sends `SIGTERM`, waits 10 seconds, then sends `SIGKILL` if needed.
+4. **Container advisory timeout** — The container may read `/workspace/run_manifest.json` for pacing or graceful wrap-up, but benchmark correctness does not depend on it.
 On timeout, the runner still harvests partial results and the latest usable Output Snapshot. Completed cards are evaluated normally. Partial cards may be evaluated if importable but retain `partial` status.
 
 ## Result Harvesting
@@ -271,6 +274,12 @@ The runner tracks per-run metrics (not per-card, since the agent manages its own
 - **Live logs are labeled and colorized**: The runner prefixes live Docker stdout/stderr lines with stream labels and colors different output types for readability. Saved log files remain split by stream and do not require ANSI color codes. [SETTLED]
 - **Color defaults to auto**: Live log colorization uses `--color auto` by default: enabled for interactive TTY output, disabled for pipes/CI. Support `--color always` and `--color never` overrides. [SETTLED]
 - **No post-run log viewer for v1**: Live labeled/colorized streaming plus saved split logs and `snapshot_telemetry.jsonl` are sufficient for v1. A separate `logs --run` viewer is deferred until the runner is stable. [SETTLED]
+- **Runner uses pipe-readers + poll-loop architecture**: Two dedicated threads drain Docker stdout/stderr pipes to host files. The main thread polls all files (Docker log dumps, `/output/` files) on a ~1s interval for colorized terminal output, checks timeouts, and runs snapshots. This avoids pipe buffer deadlock while keeping the main loop single-threaded and simple. [SETTLED]
+- **Timeout is clock-based, not proc.wait-based**: The main thread checks `time.monotonic()` against the deadline each poll iteration, rather than using `proc.wait(timeout)`. This decouples timeout from the Popen API and enables future pause/resume via `docker pause`/`docker unpause`. [SETTLED]
+- **Two timeout types: Hard Timeout + Hang Timeout**: Hard Timeout (`--timeout`) is the overall run time limit. Hang Timeout (`--hang-timeout`, default 900s) triggers when no monitored file has been modified for the configured period. Either timeout causes `docker stop -t 10`. `run_summary.json` records `timeout_reason`. [SETTLED]
+- **Hang Timeout resets on any monitored file activity**: The hang clock resets on any file modification across all monitored sources (Docker stdout/stderr dumps, `/output/system.log`, `/output/progress.jsonl`, `/output/agent_stdout.log`, `/output/agent_stderr.log`). This catches true agent death without false-positiving on long thinking pauses. [SETTLED]
+- **Cards and engine paths are repo-relative constants**: Source directories (`./cards`, `./engine`) are hardcoded repo-relative paths. No `--cards-dir` or `--engine-dir` CLI flags. [SETTLED]
+- **User Prompt is runner-written**: The runner writes `/workspace/prompt.md` (the User Prompt) at staging time. System Prompts are baked into the Docker image's entrypoint. The runner adjusts the User Prompt for filtered runs. [SETTLED]
 - **FDN and SOS share the same card directory contract**: FDN examples and SOS targets use the same `cards/{set}/{card_id}/card_spec.json` + `card_impl.py` structure. FDN implementations are filled reference code; SOS implementations start as templates. [SETTLED]
 - **FDN card implementations are mostly self-contained**: FDN card-specific logic lives in each card's `card_impl.py`. Generic reusable helpers may live in `cards/fdn/utils.py`, but avoid cross-card imports between `cards/fdn/{card_id}/card_impl.py` files so examples remain easy for agents to understand and copy. [SETTLED]
 - **Card class location is the hard contract**: Helpers are allowed, including shared `cards/{set}/utils.py` files, but each card's implementation class must live in that card's expected `cards/{set}/{card_id}/card_impl.py` file. Evaluation assumes the canonical class is importable from the expected file/folder. [SETTLED]

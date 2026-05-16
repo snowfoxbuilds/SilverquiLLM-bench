@@ -25,7 +25,7 @@ The benchmark now treats agents as black-box containers working in a real codeba
   engine/
   cards/
     fdn/
-      {card_id}/
+      fdn_{collector_number}/
         card_spec.json
         card_impl.py
     sos/
@@ -55,6 +55,8 @@ Each card keeps its canonical implementation in:
 ```plain text
 cards/{set}/{card_id}/card_impl.py
 ```
+
+FDN card directories use the `fdn_` prefix: `cards/fdn/fdn_{collector_number}/card_impl.py`. SOS card directories use collector number or set-prefixed keys for non-SOS cards in the Draft Set (e.g., `soa_1`, `spg_149`).
 
 The canonical implementation class for a card must be importable from that file. The agent must not move or rename card directories.
 
@@ -101,6 +103,10 @@ cards/sos/{card_id}/card_impl.py file. Do not move or rename card directories.
 ```
 
 The prompt does not need to mention shared helper files.
+
+### Scryfall subset cache validation
+
+The SOS Draft Set pulls fixed collector-number subsets from related Scryfall sets (SOA Mystical Archives, SPG Special Guests). Cache files use query-specific names (`soa_cn1-65.json`, `spg_cn149-158.json`) rather than generic whole-set names like `soa.json`. Freshness checks use exact sorted collector-number equality: one row for every expected collector number, no gaps, duplicates, or extra rows. Generic cache names risk reading unrelated full-set data or overwriting caches other callers expect.
 
 ### Legacy Foundations layout
 

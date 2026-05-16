@@ -105,7 +105,7 @@ The prompt does not dictate ordering, strategy, or iteration approach. The agent
 
 ## Entrypoint: Orchestration Layer
 
-The entrypoint script owns all orchestration decisions. The agent CLI, mode (blind vs. tested), and strategy (all-at-once, sequential, by-tier) are all baked into the Docker image. The only runtime inputs are API credentials and an optional timeout hint.
+The entrypoint script owns all orchestration decisions. The agent CLI, mode (blind vs. tested), strategy (all-at-once, sequential, by-tier), and System Prompts are all baked into the Docker image. The runner writes the User Prompt to `/workspace/prompt.md` at staging time. The only other runtime inputs are API credentials and an advisory Run Manifest.
 
 ```bash
 #!/bin/bash
@@ -138,7 +138,7 @@ The contract between the runner and any agent image is defined entirely by mount
 | Output dir | Volume mount (`/output`) | Agent/process output channel for extra telemetry: progress logs, stdout, stderr, exit code |
 | API credentials | Env vars | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc. |
 
-Agent CLI, mode, strategy, model selection, and prompt are all baked into the image. The runner passes only the workspace, output directory, and API keys.
+Agent CLI, mode, strategy, model selection, and System Prompts are all baked into the image. The runner writes the User Prompt (`/workspace/prompt.md`) at staging time and passes the workspace, output directory, and API keys.
 
 ### Outputs (harvested by runner)
 

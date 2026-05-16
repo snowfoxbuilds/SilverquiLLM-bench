@@ -144,6 +144,30 @@ The staged directory mounted into the agent container at `/workspace/`. Contains
 
 *Avoid*: "working directory", "sandbox", "per-card workspace" (deprecated — workspace is per-run)
 
+**Hard Timeout**
+
+Overall wall-clock time limit for a benchmark run, enforced by the runner via monotonic clock check in the main poll loop. The runner writes `timeout_seconds` and `deadline_utc` to the Run Manifest before launch and stops the container when the deadline passes. CLI flag: `--timeout`.
+
+*Avoid*: "container timeout" (ambiguous — could mean Docker's `--stop-timeout` grace period)
+
+**Hang Timeout**
+
+Secondary timeout that triggers when no monitored file activity (Docker pipe output, `/output/` files) occurs for a configurable period during a benchmark run. Catches catastrophic agent failures (process death, API outage, infinite loops) without false-positiving on long thinking pauses. CLI flag: `--hang-timeout`.
+
+*Avoid*: "idle timeout" (implies workspace-only activity check)
+
+**System Prompt**
+
+Agent-optimization instructions baked into the Docker image's entrypoint. Controls how the agent executes (iteration strategy, mode-specific behavior, tool configuration). Not written by the runner. Contrast with User Prompt.
+
+*Avoid*: "agent prompt" (ambiguous — could mean either prompt layer)
+
+**User Prompt**
+
+Task-specific instruction written by the runner to `/workspace/prompt.md` at staging time. Describes what the agent should implement (e.g., "Implement all SOS cards in `/workspace/cards/sos/`"). Adjusted for filtered runs to list only staged cards. Contrast with System Prompt.
+
+*Avoid*: "task prompt", "workspace prompt"
+
 ## Relationships
 
 - A Benchmark Run evaluates one Agent Container (one agent + one model) against one Draft Set.
@@ -170,3 +194,5 @@ The staged directory mounted into the agent container at `/workspace/`. Contains
 - The runner is the hard timeout authority. Agent Containers may read the Run Manifest for pacing, but correctness does not depend on honoring it.
 - `progress.jsonl` is optional best-effort observability. It may refine status, but it cannot make an unchanged template count as completed.
 - Output Snapshots are runner-owned, Workspace-only, and independent of Agent Container cooperation. The runner may use prior snapshot commits as fallback if final engine state is corrupted.
+- The runner writes the User Prompt to `/workspace/prompt.md`; Agent Containers bake System Prompts into their entrypoints.
+- Hard Timeout and Hang Timeout are independent — either can trigger `docker stop -t 10` to end a benchmark run.

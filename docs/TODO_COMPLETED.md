@@ -1,3 +1,22 @@
+## Completed 2026-05-15
+
+Phase 10: FDN Card Implementations (174 cards)
+
+- [x] **Upgrade 4 simplified Aura implementations to full oracle text**
+- [x] **Upgrade 3 simplified Planeswalker implementations to full oracle text**
+- [x] **Upgrade 3 simplified Equipment/Creature implementations to full oracle text**
+- [x] **Implement White new cards — batch 1 (10 creatures)**
+- [x] **Implement White new cards — batch 2 (10 creatures + spells)**
+- [x] **Implement Blue new cards — batch 1 (10 creatures)**
+- [x] **Implement Blue new cards — batch 2 (10 creatures + spells)**
+- [x] **Implement Black new cards (19 cards)**
+- [x] **Implement Red new cards (15 cards)**
+- [x] **Implement Green new cards (14 cards)**
+- [x] **Implement Multicolor new cards (11 cards)**
+- [x] **Implement White + Blue reprints (18 cards)**
+- [x] **Implement Black + Red reprints (21 cards)**
+- [x] **Implement Green + Multicolor reprints (24 cards)**
+- [x] **Implement Artifact reprints + Secluded Courtyard (9 cards)**
 ## Completed 2026-05-13
 
 Phase 9: Docker Container Flow + FDN Card Restructure (PR #12 — 12 items)
