@@ -41,3 +41,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `silverquillm/runner.py` — New module with ContainerLifecycle class; revision fixed poll-loop ordering (read before hang-timeout check) and added final _read_and_print_new_bytes() after thread join
 
+## Item 6: Integrate ContainerLifecycle into CLI
+
+### Tests
+- `tests/test_cli_docker.py` — Updated mocks from subprocess.run to ContainerLifecycle; updated harvest log names
+
+### Implementation
+- `silverquillm/cli.py` — Replaced subprocess.run with ContainerLifecycle in run/smoke commands; updated _harvest_results with timeout_reason, engine diff, workspace_final, glob output files
+- `silverquillm/runner.py` — After pipe-reader threads join, copy docker_stdout.tmp → docker_stdout.log and docker_stderr.tmp → docker_stderr.log so _harvest_results picks them up
+

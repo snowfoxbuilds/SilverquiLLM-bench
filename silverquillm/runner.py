@@ -7,6 +7,7 @@ timeout enforcement, and snapshot callbacks.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import threading
 import time
@@ -148,6 +149,14 @@ class ContainerLifecycle:
 
         # Final read pass to flush any remaining data
         self._read_and_print_new_bytes()
+
+        # Copy .tmp capture files to .log so harvest picks them up
+        for tmp_path, log_name in [
+            (self._stdout_path, "docker_stdout.log"),
+            (self._stderr_path, "docker_stderr.log"),
+        ]:
+            if tmp_path.exists():
+                shutil.copy2(tmp_path, tmp_path.parent / log_name)
 
         # Get exit code (may need to wait briefly after docker stop)
         exit_code = proc.poll()

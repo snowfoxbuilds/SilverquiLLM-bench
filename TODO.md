@@ -314,7 +314,7 @@ proc = subprocess.Popen(
   - Hang timeout: mock process writes data, then goes silent → verify `docker stop` called, `timeout_reason == "hang_timeout"`.
   - KeyboardInterrupt: raise during poll loop → verify `docker stop` called, threads joined.
   - Verify pipe reader threads are started and joined.
-- [ ] **Integrate ****`ContainerLifecycle`**** into CLI ****`run`**** and ****`smoke`**** commands; update harvest and add ****`--hang-timeout`**
+- [x] **Integrate ****`ContainerLifecycle`**** into CLI ****`run`**** and ****`smoke`**** commands; update harvest and add ****`--hang-timeout`**
   Detail: Replace the current `subprocess.run()` + `--stop-timeout` pattern in both `run` and `smoke` commands with the new `ContainerLifecycle` from `runner.py`. Also fix stale harvest logic.
 
   **`run`**** command changes in ****`silverquillm/cli.py`****:**

@@ -16,3 +16,9 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Coordinator decision**: accept implementer (defer harvest update to item 6)
 - **Reasoning**: The TODO explicitly splits this work: Item 4 updates entrypoints, Item 6 updates harvest to "Also copy any `/output/*.log` and `/output/*.jsonl` files." The harvest changes are intentionally scoped to item 6 where the full `ContainerLifecycle` integration happens.
 - **Impact**: Harvest will be updated in item 6. Until then, new log files exist in containers but aren't collected.
+
+## Spec deviation: Item 6 — Integrate ContainerLifecycle into CLI
+- **TODO spec expected**: Full replacement of subprocess.run() with ContainerLifecycle in both run and smoke commands, plus harvest updates.
+- **Actual codebase state**: Implementer only added --hang-timeout flag, deferring the core replacement because existing tests mock subprocess.run.
+- **What was implemented instead**: Sending back to Implementer with directives to complete the full replacement. Existing tests will be updated by the Tester afterward.
+- **Impact**: silverquillm/cli.py

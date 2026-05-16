@@ -20,3 +20,9 @@ Persistent architectural and convention decisions across runs.
 - **Decision**: JavaScript entrypoints use `log()` helper writing to `/output/system.log`, tee agent output to `/output/agent_stdout.log`, and include SIGTERM handler writing `timed_out` to `progress.jsonl`.
 - **Reasoning**: Matches the spec's file-based channel separation. Docker logs still capture agent output via `process.stdout.write()`.
 - **Impact**: `docker/homelab-pi-blind/entrypoint.mjs`, `docker/local-pi-blind/entrypoint.mjs`. Future bash entrypoints should follow the reference pattern in the TODO.
+
+## Docker log file naming: .tmp + .log copy
+- **Context**: ContainerLifecycle pipe readers write to docker_stdout.tmp/docker_stderr.tmp during container run.
+- **Decision**: After pipe threads join, runner.py copies .tmp → .log (using shutil.copy2, not rename). Harvest picks up .log files via glob.
+- **Reasoning**: Copy preserves .tmp for debugging while producing .log for harvest. Lifecycle owns the naming, keeping harvest logic simple.
+- **Impact**: `silverquillm/runner.py`, `silverquillm/cli.py` (harvest).

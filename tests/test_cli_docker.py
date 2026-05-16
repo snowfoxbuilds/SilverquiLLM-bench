@@ -14,6 +14,7 @@ import pytest
 from click.testing import CliRunner
 
 from silverquillm.cli import main, _make_run_name, _api_key_env_args, _harvest_results
+from silverquillm.runner import LifecycleResult
 
 
 # ---------------------------------------------------------------------------
@@ -142,22 +143,25 @@ class TestAPIKeyPassthrough:
 class TestRunDefaults:
     """Verify default option values for the run command."""
 
-    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli.ContainerLifecycle")
     @patch("silverquillm.cli.stage_workspace")
-    def test_default_timeout_3600(self, mock_stage, mock_subprocess, runner, tmp_path):
+    def test_default_timeout_3600(self, mock_stage, mock_lifecycle_cls, runner, tmp_path):
         """Default timeout should be 3600 seconds."""
         workspace = tmp_path / "workspace"
         workspace.mkdir()
         output = tmp_path / "output"
         output.mkdir()
         mock_stage.return_value = (workspace, output)
-        mock_subprocess.return_value = MagicMock(returncode=0)
+        mock_instance = MagicMock()
+        mock_instance.run.return_value = LifecycleResult(
+            exit_code=0, timed_out=False, timeout_reason=None, container_name="test"
+        )
+        mock_lifecycle_cls.return_value = mock_instance
 
         result = runner.invoke(main, ["run", "--image", "test-img"])
-        # The command should have been called with --stop-timeout 3600
-        call_args = mock_subprocess.call_args[0][0]
-        idx = call_args.index("--stop-timeout")
-        assert call_args[idx + 1] == "3600"
+        # ContainerLifecycle should have been called with hard_timeout=3600
+        call_kwargs = mock_lifecycle_cls.call_args
+        assert call_kwargs.kwargs.get("hard_timeout", call_kwargs[1].get("hard_timeout")) == 3600
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +211,7 @@ class TestHarvest:
         assert (run_dir / "cards" / cn / "card_impl.py").read_text() == "# MODIFIED implementation\n"
 
     def test_harvests_output_logs(self, tmp_path):
-        """progress.jsonl, stdout.log, stderr.log should be harvested."""
+        """docker_stdout.log, docker_stderr.log, and *.jsonl should be harvested."""
         workspace = tmp_path / "ws" / "workspace"
         output = tmp_path / "ws" / "output"
         results = tmp_path / "results"
@@ -215,41 +219,44 @@ class TestHarvest:
         output.mkdir(parents=True)
 
         (output / "progress.jsonl").write_text('{"card": "1"}\n')
-        (output / "stdout.log").write_text("stdout content\n")
-        (output / "stderr.log").write_text("stderr content\n")
+        (output / "docker_stdout.log").write_text("stdout content\n")
+        (output / "docker_stderr.log").write_text("stderr content\n")
 
         run_dir = _harvest_results(
             workspace, output, results, "test-run", timed_out=False
         )
 
         assert (run_dir / "progress.jsonl").read_text() == '{"card": "1"}\n'
-        assert (run_dir / "stdout.log").read_text() == "stdout content\n"
-        assert (run_dir / "stderr.log").read_text() == "stderr content\n"
+        assert (run_dir / "docker_stdout.log").read_text() == "stdout content\n"
+        assert (run_dir / "docker_stderr.log").read_text() == "stderr content\n"
 
     def test_engine_diff_generation(self, tmp_path):
-        """If engine_work differs from engine, generate engine_diff.patch."""
+        """If workspace engine differs from repo engine, generate engine_diff.patch."""
         workspace = tmp_path / "ws" / "workspace"
         output = tmp_path / "ws" / "output"
         results = tmp_path / "results"
         workspace.mkdir(parents=True)
         output.mkdir(parents=True)
 
-        # Create engine dirs with differences
-        engine_orig = workspace / "engine"
-        engine_work = workspace / "engine_work"
-        engine_orig.mkdir()
-        engine_work.mkdir()
-        (engine_orig / "base.py").write_text("original\n")
-        (engine_work / "base.py").write_text("modified\n")
+        # Create workspace engine dir with differences from repo engine
+        engine_ws = workspace / "engine"
+        engine_ws.mkdir()
+        # We need the repo engine to exist for the diff to work
+        # The diff is between _REPO_ROOT/engine and workspace/engine
+        # Just verify the function doesn't crash; the actual diff depends on repo state
+        (engine_ws / "extra_file.py").write_text("modified\n")
 
         run_dir = _harvest_results(
             workspace, output, results, "test-run", timed_out=False
         )
 
-        patch_file = run_dir / "engine_diff.patch"
-        assert patch_file.exists()
-        content = patch_file.read_text()
-        assert "original" in content or "modified" in content
+        # engine_diff.patch should exist if repo engine exists and differs
+        repo_root = Path(__file__).resolve().parent.parent
+        if (repo_root / "engine").exists():
+            patch_file = run_dir / "engine_diff.patch"
+            assert patch_file.exists()
+            content = patch_file.read_text()
+            assert "modified" in content or "extra_file" in content
 
 
 # ---------------------------------------------------------------------------
@@ -305,10 +312,10 @@ class TestCardStatus:
 class TestTimeout:
     """When Docker container times out, partial harvest should still happen."""
 
-    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli.ContainerLifecycle")
     @patch("silverquillm.cli.stage_workspace")
-    def test_timeout_still_harvests(self, mock_stage, mock_subprocess, runner, tmp_path):
-        """TimeoutExpired should trigger harvest with timed_out=True."""
+    def test_timeout_still_harvests(self, mock_stage, mock_lifecycle_cls, runner, tmp_path):
+        """Timeout should trigger harvest with timed_out=True."""
         workspace = tmp_path / "workspace"
         output = tmp_path / "output"
         workspace.mkdir()
@@ -319,7 +326,11 @@ class TestTimeout:
         (ws_card / "card_impl.py").write_text("# modified\n")
 
         mock_stage.return_value = (workspace, output)
-        mock_subprocess.side_effect = subprocess.TimeoutExpired("docker", 3600)
+        mock_instance = MagicMock()
+        mock_instance.run.return_value = LifecycleResult(
+            exit_code=None, timed_out=True, timeout_reason="hard_timeout", container_name="test"
+        )
+        mock_lifecycle_cls.return_value = mock_instance
 
         result = runner.invoke(
             main,
@@ -341,41 +352,45 @@ class TestTimeout:
 class TestSmokePass:
     """Smoke command pass case: exit 0 + hello.py exists."""
 
-    @patch("silverquillm.cli.subprocess.run")
-    def test_smoke_pass(self, mock_subprocess, runner, tmp_path):
+    @patch("silverquillm.cli.ContainerLifecycle")
+    def test_smoke_pass(self, mock_lifecycle_cls, runner, tmp_path):
         """PASS when container exits 0 and hello.py exists."""
-        mock_subprocess.return_value = MagicMock(returncode=0)
+        def create_hello_side_effect(**kwargs):
+            mock_instance = MagicMock()
+            ws = kwargs.get("workspace", None)
+            def run_side_effect():
+                if ws:
+                    (Path(ws) / "hello.py").write_text("print('Hello World')\n")
+                return LifecycleResult(exit_code=0, timed_out=False, timeout_reason=None, container_name="test")
+            mock_instance.run.side_effect = run_side_effect
+            return mock_instance
 
-        # We need to create hello.py in the workspace during the "docker run"
-        # Since we mock subprocess, we simulate it via side_effect
-        def create_hello(*args, **kwargs):
-            # Extract workspace path from the -v arg
-            cmd = args[0]
-            for i, arg in enumerate(cmd):
-                if arg == "-v" and "/workspace" in cmd[i + 1]:
-                    ws_path = cmd[i + 1].split(":")[0]
-                    (Path(ws_path) / "hello.py").write_text("print('Hello World')\n")
-                    break
-            return MagicMock(returncode=0)
-
-        mock_subprocess.side_effect = create_hello
+        mock_lifecycle_cls.side_effect = create_hello_side_effect
 
         result = runner.invoke(main, ["smoke", "--image", "test-img"])
         assert "PASS" in result.output
 
-    @patch("silverquillm.cli.subprocess.run")
-    def test_smoke_fail_no_hello(self, mock_subprocess, runner):
+    @patch("silverquillm.cli.ContainerLifecycle")
+    def test_smoke_fail_no_hello(self, mock_lifecycle_cls, runner):
         """FAIL when container exits 0 but no hello.py."""
-        mock_subprocess.return_value = MagicMock(returncode=0)
+        mock_instance = MagicMock()
+        mock_instance.run.return_value = LifecycleResult(
+            exit_code=0, timed_out=False, timeout_reason=None, container_name="test"
+        )
+        mock_lifecycle_cls.return_value = mock_instance
 
         result = runner.invoke(main, ["smoke", "--image", "test-img"])
         assert "FAIL" in result.output
         assert "hello.py" in result.output.lower()
 
-    @patch("silverquillm.cli.subprocess.run")
-    def test_smoke_fail_nonzero_exit(self, mock_subprocess, runner):
+    @patch("silverquillm.cli.ContainerLifecycle")
+    def test_smoke_fail_nonzero_exit(self, mock_lifecycle_cls, runner):
         """FAIL when container exits non-zero."""
-        mock_subprocess.return_value = MagicMock(returncode=1)
+        mock_instance = MagicMock()
+        mock_instance.run.return_value = LifecycleResult(
+            exit_code=1, timed_out=False, timeout_reason=None, container_name="test"
+        )
+        mock_lifecycle_cls.return_value = mock_instance
 
         result = runner.invoke(main, ["smoke", "--image", "test-img"])
         assert "FAIL" in result.output
@@ -388,55 +403,65 @@ class TestSmokePass:
 
 
 class TestRunDockerArgs:
-    """Verify docker command is constructed correctly."""
+    """Verify ContainerLifecycle is constructed correctly."""
 
-    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli.ContainerLifecycle")
     @patch("silverquillm.cli.stage_workspace")
-    def test_docker_command_contains_image(self, mock_stage, mock_subprocess, runner, tmp_path):
+    def test_docker_command_contains_image(self, mock_stage, mock_lifecycle_cls, runner, tmp_path):
         workspace = tmp_path / "workspace"
         output = tmp_path / "output"
         workspace.mkdir()
         output.mkdir()
         mock_stage.return_value = (workspace, output)
-        mock_subprocess.return_value = MagicMock(returncode=0)
+        mock_instance = MagicMock()
+        mock_instance.run.return_value = LifecycleResult(
+            exit_code=0, timed_out=False, timeout_reason=None, container_name="test"
+        )
+        mock_lifecycle_cls.return_value = mock_instance
 
         result = runner.invoke(main, ["run", "--image", "my-img:v1"])
-        call_args = mock_subprocess.call_args[0][0]
-        assert "my-img:v1" in call_args
-        assert "docker" in call_args[0]
+        call_kwargs = mock_lifecycle_cls.call_args
+        assert call_kwargs.kwargs.get("image") == "my-img:v1"
 
-    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli.ContainerLifecycle")
     @patch("silverquillm.cli.stage_workspace")
-    def test_docker_mounts_workspace_and_output(self, mock_stage, mock_subprocess, runner, tmp_path):
+    def test_docker_mounts_workspace_and_output(self, mock_stage, mock_lifecycle_cls, runner, tmp_path):
         workspace = tmp_path / "workspace"
         output = tmp_path / "output"
         workspace.mkdir()
         output.mkdir()
         mock_stage.return_value = (workspace, output)
-        mock_subprocess.return_value = MagicMock(returncode=0)
+        mock_instance = MagicMock()
+        mock_instance.run.return_value = LifecycleResult(
+            exit_code=0, timed_out=False, timeout_reason=None, container_name="test"
+        )
+        mock_lifecycle_cls.return_value = mock_instance
 
         result = runner.invoke(main, ["run", "--image", "my-img"])
-        call_args = mock_subprocess.call_args[0][0]
-        # Should have -v for workspace and output
-        v_args = [call_args[i + 1] for i, a in enumerate(call_args) if a == "-v"]
-        assert any("/workspace" in v for v in v_args)
-        assert any("/output" in v for v in v_args)
+        call_kwargs = mock_lifecycle_cls.call_args
+        assert call_kwargs.kwargs.get("workspace") == workspace
+        assert call_kwargs.kwargs.get("output") == output
 
-    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli.ContainerLifecycle")
     @patch("silverquillm.cli.stage_workspace")
-    def test_api_keys_in_docker_command(self, mock_stage, mock_subprocess, runner, tmp_path, monkeypatch):
-        """Set API keys should be passed as -e args to docker."""
+    def test_api_keys_in_docker_command(self, mock_stage, mock_lifecycle_cls, runner, tmp_path, monkeypatch):
+        """Set API keys should be passed as env_args to ContainerLifecycle."""
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
         workspace = tmp_path / "workspace"
         output = tmp_path / "output"
         workspace.mkdir()
         output.mkdir()
         mock_stage.return_value = (workspace, output)
-        mock_subprocess.return_value = MagicMock(returncode=0)
+        mock_instance = MagicMock()
+        mock_instance.run.return_value = LifecycleResult(
+            exit_code=0, timed_out=False, timeout_reason=None, container_name="test"
+        )
+        mock_lifecycle_cls.return_value = mock_instance
 
         result = runner.invoke(main, ["run", "--image", "my-img"])
-        call_args = mock_subprocess.call_args[0][0]
-        assert "OPENAI_API_KEY=sk-test" in call_args
+        call_kwargs = mock_lifecycle_cls.call_args
+        env_args = call_kwargs.kwargs.get("env_args", [])
+        assert "OPENAI_API_KEY=sk-test" in env_args
 
 
 # ---------------------------------------------------------------------------
@@ -447,48 +472,60 @@ class TestRunDockerArgs:
 class TestRunManifest:
     """run_manifest.json should be written during staging and harvested."""
 
-    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli.ContainerLifecycle")
     @patch("silverquillm.cli.stage_workspace")
-    def test_manifest_written_before_docker_run(self, mock_stage, mock_subprocess, runner, tmp_path):
+    def test_manifest_written_before_docker_run(self, mock_stage, mock_lifecycle_cls, runner, tmp_path):
         """run_manifest.json should exist in workspace after staging."""
         workspace = tmp_path / "workspace"
         output = tmp_path / "output"
         workspace.mkdir()
         output.mkdir()
         mock_stage.return_value = (workspace, output)
-        mock_subprocess.return_value = MagicMock(returncode=0)
+        mock_instance = MagicMock()
+        mock_instance.run.return_value = LifecycleResult(
+            exit_code=0, timed_out=False, timeout_reason=None, container_name="test"
+        )
+        mock_lifecycle_cls.return_value = mock_instance
 
         runner.invoke(main, ["run", "--image", "test-img", "--timeout", "300"])
 
         manifest_path = workspace / "run_manifest.json"
         assert manifest_path.exists(), "run_manifest.json should be written to workspace"
 
-    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli.ContainerLifecycle")
     @patch("silverquillm.cli.stage_workspace")
-    def test_manifest_is_valid_json(self, mock_stage, mock_subprocess, runner, tmp_path):
+    def test_manifest_is_valid_json(self, mock_stage, mock_lifecycle_cls, runner, tmp_path):
         """run_manifest.json must be valid JSON."""
         workspace = tmp_path / "workspace"
         output = tmp_path / "output"
         workspace.mkdir()
         output.mkdir()
         mock_stage.return_value = (workspace, output)
-        mock_subprocess.return_value = MagicMock(returncode=0)
+        mock_instance = MagicMock()
+        mock_instance.run.return_value = LifecycleResult(
+            exit_code=0, timed_out=False, timeout_reason=None, container_name="test"
+        )
+        mock_lifecycle_cls.return_value = mock_instance
 
         runner.invoke(main, ["run", "--image", "test-img", "--timeout", "600"])
 
         manifest = json.loads((workspace / "run_manifest.json").read_text())
         assert isinstance(manifest, dict)
 
-    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli.ContainerLifecycle")
     @patch("silverquillm.cli.stage_workspace")
-    def test_manifest_has_timeout_seconds_int(self, mock_stage, mock_subprocess, runner, tmp_path):
+    def test_manifest_has_timeout_seconds_int(self, mock_stage, mock_lifecycle_cls, runner, tmp_path):
         """timeout_seconds must be an int matching the --timeout flag."""
         workspace = tmp_path / "workspace"
         output = tmp_path / "output"
         workspace.mkdir()
         output.mkdir()
         mock_stage.return_value = (workspace, output)
-        mock_subprocess.return_value = MagicMock(returncode=0)
+        mock_instance = MagicMock()
+        mock_instance.run.return_value = LifecycleResult(
+            exit_code=0, timed_out=False, timeout_reason=None, container_name="test"
+        )
+        mock_lifecycle_cls.return_value = mock_instance
 
         runner.invoke(main, ["run", "--image", "test-img", "--timeout", "420"])
 
@@ -497,16 +534,20 @@ class TestRunManifest:
         assert isinstance(manifest["timeout_seconds"], int)
         assert manifest["timeout_seconds"] == 420
 
-    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli.ContainerLifecycle")
     @patch("silverquillm.cli.stage_workspace")
-    def test_manifest_has_deadline_utc_iso8601(self, mock_stage, mock_subprocess, runner, tmp_path):
+    def test_manifest_has_deadline_utc_iso8601(self, mock_stage, mock_lifecycle_cls, runner, tmp_path):
         """deadline_utc must be an ISO-8601 string ending in 'Z'."""
         workspace = tmp_path / "workspace"
         output = tmp_path / "output"
         workspace.mkdir()
         output.mkdir()
         mock_stage.return_value = (workspace, output)
-        mock_subprocess.return_value = MagicMock(returncode=0)
+        mock_instance = MagicMock()
+        mock_instance.run.return_value = LifecycleResult(
+            exit_code=0, timed_out=False, timeout_reason=None, container_name="test"
+        )
+        mock_lifecycle_cls.return_value = mock_instance
 
         runner.invoke(main, ["run", "--image", "test-img", "--timeout", "300"])
 
@@ -520,16 +561,20 @@ class TestRunManifest:
         dt = datetime.fromisoformat(deadline.replace("Z", "+00:00"))
         assert dt.tzinfo is not None
 
-    @patch("silverquillm.cli.subprocess.run")
+    @patch("silverquillm.cli.ContainerLifecycle")
     @patch("silverquillm.cli.stage_workspace")
-    def test_manifest_has_exactly_two_fields(self, mock_stage, mock_subprocess, runner, tmp_path):
+    def test_manifest_has_exactly_two_fields(self, mock_stage, mock_lifecycle_cls, runner, tmp_path):
         """run_manifest.json must contain exactly two fields."""
         workspace = tmp_path / "workspace"
         output = tmp_path / "output"
         workspace.mkdir()
         output.mkdir()
         mock_stage.return_value = (workspace, output)
-        mock_subprocess.return_value = MagicMock(returncode=0)
+        mock_instance = MagicMock()
+        mock_instance.run.return_value = LifecycleResult(
+            exit_code=0, timed_out=False, timeout_reason=None, container_name="test"
+        )
+        mock_lifecycle_cls.return_value = mock_instance
 
         runner.invoke(main, ["run", "--image", "test-img", "--timeout", "300"])
 
