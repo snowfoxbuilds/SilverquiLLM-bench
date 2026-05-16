@@ -53,7 +53,7 @@ class TestCacklingProwlerMorbid:
         game.trigger_manager.fire_event(game, EndStepTriggeredEvent())
         _resolve_stack(game)
         assert prowler.plus_one_counters == 1
-        assert prowler._original_plus_one_counters == 1
+        assert prowler._base_plus_one_counters == 1
 
     def test_no_counter_when_no_creature_died(self) -> None:
         game = create_game()

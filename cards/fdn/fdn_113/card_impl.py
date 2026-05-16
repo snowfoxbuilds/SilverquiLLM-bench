@@ -72,7 +72,7 @@ class SylvanScavenging(Enchantment):
                     target = creatures[0]
                 if target is not None and _is_on_battlefield(game, target):
                     add_counter(game, target, '+1/+1')
-                    target._original_plus_one_counters = target.plus_one_counters
+                    target._base_plus_one_counters = target.plus_one_counters
             elif chosen_mode == 'token' and has_power_4:
                 token = Creature(name='Raccoon', subtypes={'Raccoon'}, base_power=3, base_toughness=3, rules_text='')
                 create_token(game, ctrl, token)

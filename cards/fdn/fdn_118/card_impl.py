@@ -88,8 +88,8 @@ class DreadwingScavenger(Creature):
             graveyard = ctrl.zones[Zone.GRAVEYARD]
             gy_count = len(list(graveyard.get_all()))
             if gy_count >= 7:
-                source.base_power += 1
-                source.base_toughness += 1
+                source.modified_power += 1
+                source.modified_toughness += 1
                 source.keywords = (getattr(source, 'keywords', None) or Keyword(0)) | Keyword.DEATHTOUCH
         self._threshold_effect_ref = game.effect_manager.add(ContinuousEffect(source=self, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT, apply=_apply_threshold, duration=DURATION_PERMANENT))
 

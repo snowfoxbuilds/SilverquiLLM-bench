@@ -42,8 +42,8 @@ class TestGoldveinPickEquipEffect:
         game.get_battlefield(p1).add(creature)
         pick.equip(creature, game)
         game.effect_manager.apply_all(game)
-        assert creature.base_power >= 3
-        assert creature.base_toughness >= 3
+        assert creature.modified_power >= 3
+        assert creature.modified_toughness >= 3
 
 class TestGoldveinPickCombatDamage:
     """Whenever equipped creature deals combat damage to a player, create Treasure."""

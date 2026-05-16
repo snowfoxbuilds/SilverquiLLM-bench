@@ -138,8 +138,8 @@ class WitnessProtection(Aura):
 
     def _apply_pt_set(self, creature: Any) -> None:
         """Layer 7b: Set base power and toughness to 1/1."""
-        creature.base_power = 1
-        creature.base_toughness = 1
+        creature.modified_power = 1
+        creature.modified_toughness = 1
 
     def _register_effects(self, game: GameState) -> None:
         aura_ref = self

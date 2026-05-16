@@ -43,8 +43,8 @@ class ExemplarOfLight(Creature):
 
         def _gain_life_effect(game: 'GameState') -> None:
             add_counter(game, source, '+1/+1', 1)
-            if hasattr(source, '_original_plus_one_counters'):
-                source._original_plus_one_counters = source.plus_one_counters
+            if hasattr(source, '_base_plus_one_counters'):
+                source._base_plus_one_counters = source.plus_one_counters
             current_turn = getattr(game, 'turn_number', 0)
             if getattr(source, '_exemplar_drew_on_turn', -1) != current_turn:
                 source._exemplar_drew_on_turn = current_turn

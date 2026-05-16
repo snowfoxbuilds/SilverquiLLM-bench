@@ -65,8 +65,8 @@ class Stab(Instant):
             return
 
         def _apply(game: Any) -> None:
-            target.base_power = target.base_power - 2
-            target.base_toughness = target.base_toughness - 2
+            target.modified_power = target.modified_power - 2
+            target.modified_toughness = target.modified_toughness - 2
 
         game.effect_manager.add(ContinuousEffect(
             source=self,

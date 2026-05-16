@@ -44,7 +44,7 @@ class AjaniCallerOfThePride(Planeswalker):
             target = getattr(pw, "_resolve_target", None)
             if target is not None and hasattr(target, "plus_one_counters"):
                 target.plus_one_counters += 1
-                target._original_plus_one_counters = target.plus_one_counters
+                target._base_plus_one_counters = target.plus_one_counters
 
         def _minus3(game: Any) -> None:
             # Target creature gains flying and double strike until end of turn.

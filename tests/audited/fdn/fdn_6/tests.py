@@ -42,20 +42,20 @@ class TestClawsOutOnResolve:
         game, p1, c1, c2, spell = self._setup()
         spell.on_resolve(game)
         game.effect_manager.apply_all(game)
-        assert c1.base_power == 4
+        assert c1.modified_power == 4
 
     def test_creature_gets_plus_2_toughness(self) -> None:
         game, p1, c1, c2, spell = self._setup()
         spell.on_resolve(game)
         game.effect_manager.apply_all(game)
-        assert c1.base_toughness == 4
+        assert c1.modified_toughness == 4
 
     def test_multiple_creatures_buffed(self) -> None:
         game, p1, c1, c2, spell = self._setup()
         spell.on_resolve(game)
         game.effect_manager.apply_all(game)
-        assert c2.base_power == 3
-        assert c2.base_toughness == 3
+        assert c2.modified_power == 3
+        assert c2.modified_toughness == 3
 
     def test_opponent_creatures_not_buffed(self) -> None:
         game, p1, c1, c2, spell = self._setup()

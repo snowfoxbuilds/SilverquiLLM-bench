@@ -71,8 +71,8 @@ class ArahboTheFirstFang(Creature):
                         continue
                     if 'Cat' not in getattr(obj, 'subtypes', set()):
                         continue
-                    obj.base_power += 1
-                    obj.base_toughness += 1
+                    obj.modified_power += 1
+                    obj.modified_toughness += 1
             self._lord_effect_ref = game.effect_manager.add(ContinuousEffect(source=self, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT, apply=_apply_lord, duration=DURATION_PERMANENT))
 
         def _etb_condition(game: Any, event: dict) -> bool:

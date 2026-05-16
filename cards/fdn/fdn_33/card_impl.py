@@ -40,6 +40,6 @@ class ClinquantSkymage(Creature):
 
         def _draw_effect(game: 'GameState') -> None:
             add_counter(game, source, '+1/+1', 1)
-            if hasattr(source, '_original_plus_one_counters'):
-                source._original_plus_one_counters = source.plus_one_counters
+            if hasattr(source, '_base_plus_one_counters'):
+                source._base_plus_one_counters = source.plus_one_counters
         game.trigger_manager.register(TriggerRegistration(event_type=DrawsCardTriggeredEvent, condition=_draw_condition, effect=_draw_effect, source=self, controller=controller))

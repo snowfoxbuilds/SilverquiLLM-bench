@@ -97,7 +97,7 @@ class QuickDrawKatana(Artifact):
             if creature is None or not _is_on_battlefield(game, creature):
                 return
             if _is_controllers_turn(game):
-                creature.base_power += 2
+                creature.modified_power += 2
 
         def _apply_ability(game: Any) -> None:
             if not _is_on_battlefield(game, equip_ref):

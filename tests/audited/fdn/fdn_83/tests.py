@@ -51,7 +51,7 @@ class TestCracklingCyclopsSpellTrigger:
         power_before = card.base_power
         game.trigger_manager.fire_event(game, SpellCastTriggeredEvent(spell=spell, player=p1))
         self._resolve_stack(game)
-        assert card.base_power == power_before + 3
+        assert card.modified_power == power_before + 3
 
     def test_no_trigger_on_creature_spell(self) -> None:
         game = create_game()
@@ -90,4 +90,4 @@ class TestCracklingCyclopsSpellTrigger:
         self._resolve_stack(game)
         game.trigger_manager.fire_event(game, SpellCastTriggeredEvent(spell=spell2, player=p1))
         self._resolve_stack(game)
-        assert card.base_power == 6
+        assert card.modified_power == 6

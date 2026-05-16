@@ -72,8 +72,8 @@ class ValkyrieSCall(Enchantment):
             creature.controller = owner
             move_to_zone(game, creature, Zone.GRAVEYARD, Zone.BATTLEFIELD)
             add_counter(game, creature, '+1/+1', 1)
-            if hasattr(creature, '_original_plus_one_counters'):
-                creature._original_plus_one_counters = creature.plus_one_counters
+            if hasattr(creature, '_base_plus_one_counters'):
+                creature._base_plus_one_counters = creature.plus_one_counters
             creature_ref = creature
 
             def _apply_angel(game: Any) -> None:

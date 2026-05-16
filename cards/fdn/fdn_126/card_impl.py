@@ -62,7 +62,7 @@ class ZimoneParadoxSculptor(Creature):
                     targets_chosen.append(chosen)
             for target in targets_chosen:
                 add_counter(game, target, '+1/+1')
-                target._original_plus_one_counters = target.plus_one_counters
+                target._base_plus_one_counters = target.plus_one_counters
         game.trigger_manager.register(TriggerRegistration(event_type=BeginningOfCombatTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
 
     def get_activated_abilities(self, game: 'GameState') -> list:
@@ -93,7 +93,7 @@ class ZimoneParadoxSculptor(Creature):
                 if plus_one > 0:
                     from engine.game import add_counter
                     add_counter(game, target, '+1/+1', plus_one)
-                    target._original_plus_one_counters = target.plus_one_counters
+                    target._base_plus_one_counters = target.plus_one_counters
                 minus_one = getattr(target, 'minus_one_counters', 0)
                 if minus_one > 0:
                     from engine.game import add_counter as _add

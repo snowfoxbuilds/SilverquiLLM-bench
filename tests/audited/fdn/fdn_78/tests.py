@@ -53,7 +53,7 @@ class TestBattlesongBerserkerAttackTrigger:
         power_before = target.base_power
         game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=card))
         self._resolve_stack(game)
-        assert target.base_power == power_before + 1
+        assert target.modified_power == power_before + 1
 
     def test_target_creature_gains_menace(self) -> None:
         game = create_game()
@@ -80,7 +80,7 @@ class TestBattlesongBerserkerAttackTrigger:
         power_before = card.base_power
         game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=card))
         self._resolve_stack(game)
-        assert card.base_power == power_before + 1
+        assert card.modified_power == power_before + 1
 
     def test_does_not_trigger_for_opponent_attack(self) -> None:
         """Trigger only fires when controller's creature attacks."""

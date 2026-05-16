@@ -62,8 +62,8 @@ class EmpyreanEagle(Creature):
                     continue
                 kw = getattr(obj, "keywords", Keyword(0))
                 if kw & Keyword.FLYING:
-                    obj.base_power += 1
-                    obj.base_toughness += 1
+                    obj.modified_power += 1
+                    obj.modified_toughness += 1
 
         game.effect_manager.add(ContinuousEffect(
             source=self,

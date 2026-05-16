@@ -46,7 +46,7 @@ class GnarlidColony(Creature):
         def _etb_effect(g: GameState) -> None:
             if self.kicked:
                 self.plus_one_counters += 2
-                self._original_plus_one_counters = self.plus_one_counters
+                self._base_plus_one_counters = self.plus_one_counters
         reg = TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_etb_effect, source=self, controller=self.controller or self.owner)
         game.trigger_manager.register(reg)
 

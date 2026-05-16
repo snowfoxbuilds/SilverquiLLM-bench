@@ -52,8 +52,8 @@ class TestDwynenLordEffect:
         game.get_battlefield(p1).add(elf)
         dwynen.register_triggers(game)
         game.effect_manager.apply_all(game)
-        assert elf.base_power == 2
-        assert elf.base_toughness == 2
+        assert elf.modified_power == 2
+        assert elf.modified_toughness == 2
 
     def test_does_not_buff_self(self) -> None:
         game = create_game()

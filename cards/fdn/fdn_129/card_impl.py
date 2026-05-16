@@ -93,8 +93,8 @@ class LeylineAxe(Artifact):
             creature = equip_ref.attached_to
             if creature is None or not _is_on_battlefield(game, creature):
                 return
-            creature.base_power += 1
-            creature.base_toughness += 1
+            creature.modified_power += 1
+            creature.modified_toughness += 1
 
         def _apply_ability(game: Any) -> None:
             if not _is_on_battlefield(game, equip_ref):

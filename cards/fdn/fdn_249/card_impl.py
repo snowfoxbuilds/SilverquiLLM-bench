@@ -96,8 +96,8 @@ class AdventuringGear(Artifact):
                     return
                 if c is None or not _is_on_battlefield(game, c):
                     return
-                c.base_power += 2
-                c.base_toughness += 2
+                c.modified_power += 2
+                c.modified_toughness += 2
             game.effect_manager.add(ContinuousEffect(source=equip_ref, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT, apply=_apply_landfall_pt, duration=DURATION_PERMANENT))
         controller = getattr(self, 'controller', None) or game.active_player
         game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

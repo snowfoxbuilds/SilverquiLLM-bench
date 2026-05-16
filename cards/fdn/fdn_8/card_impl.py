@@ -58,7 +58,7 @@ class DauntlessVeteran(Creature):
                 for obj in battlefield.get_all():
                     if CardType.CREATURE not in getattr(obj, 'card_types', set()):
                         continue
-                    obj.base_power += 1
-                    obj.base_toughness += 1
+                    obj.modified_power += 1
+                    obj.modified_toughness += 1
             game.effect_manager.add(ContinuousEffect(source=source, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT, apply=_apply_buff, duration=DURATION_END_OF_TURN))
         game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller))

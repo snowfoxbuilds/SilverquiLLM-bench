@@ -35,8 +35,8 @@ class TestPreposterousProportionsResolve:
         game.get_battlefield(p1).add(c1)
         spell.on_resolve(game)
         game.effect_manager.apply_all(game)
-        assert c1.base_power == 12  # 2 + 10
-        assert c1.base_toughness == 12  # 2 + 10
+        assert c1.modified_power == 12  # 2 + 10
+        assert c1.modified_toughness == 12  # 2 + 10
 
     def test_creatures_gain_vigilance(self) -> None:
         game = create_game()
@@ -58,8 +58,8 @@ class TestPreposterousProportionsResolve:
         game.get_battlefield(p1).add(c2)
         spell.on_resolve(game)
         game.effect_manager.apply_all(game)
-        assert c1.base_power == 12
-        assert c2.base_power == 13
+        assert c1.modified_power == 12
+        assert c2.modified_power == 13
 
     def test_opponent_creatures_not_affected(self) -> None:
         game = create_game()

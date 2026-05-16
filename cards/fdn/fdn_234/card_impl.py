@@ -140,8 +140,8 @@ class VivienReid(Planeswalker):
                 bf = game.get_battlefield(controller)
                 for obj in bf.get_all():
                     if CardType.CREATURE in getattr(obj, "card_types", set()):
-                        obj.base_power += 2
-                        obj.base_toughness += 2
+                        obj.modified_power += 2
+                        obj.modified_toughness += 2
 
             game.effect_manager.add(ContinuousEffect(
                 source=emblem,

@@ -51,7 +51,7 @@ class TestCourageousGoblinAttackTrigger:
         power_before = card.base_power
         game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=card))
         self._resolve_stack(game)
-        assert card.base_power == power_before + 1
+        assert card.modified_power == power_before + 1
 
     def test_gains_menace_with_power_4_creature(self) -> None:
         game = create_game()

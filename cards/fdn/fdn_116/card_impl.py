@@ -53,8 +53,8 @@ class AnthemOfChampions(Enchantment):
                 return
             for obj in game.get_battlefield(controller).get_all():
                 if CardType.CREATURE in getattr(obj, "card_types", set()):
-                    obj.base_power += 1
-                    obj.base_toughness += 1
+                    obj.modified_power += 1
+                    obj.modified_toughness += 1
 
         effect = ContinuousEffect(
             source=enchantment_ref,

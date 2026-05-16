@@ -47,8 +47,8 @@ class TestEmpyreanEagleLord:
         game.get_battlefield(p1).add(flyer)
         eagle.register_triggers(game)
         game.effect_manager.apply_all(game)
-        assert flyer.base_power == 2
-        assert flyer.base_toughness == 2
+        assert flyer.modified_power == 2
+        assert flyer.modified_toughness == 2
 
     def test_does_not_buff_self(self) -> None:
         game = create_game()

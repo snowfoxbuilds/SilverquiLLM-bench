@@ -43,7 +43,7 @@ class TestSylvanScavengingEndStep:
         game.trigger_manager.fire_event(game, EndStepTriggeredEvent())
         _resolve_stack(game)
         assert creature.plus_one_counters == 1
-        assert creature._original_plus_one_counters == 1
+        assert creature._base_plus_one_counters == 1
 
     def test_token_mode_creates_raccoon(self) -> None:
         game = create_game()

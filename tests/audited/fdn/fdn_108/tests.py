@@ -51,7 +51,7 @@ class TestNeedletoothPackMorbid:
         game.trigger_manager.fire_event(game, EndStepTriggeredEvent())
         _resolve_stack(game)
         assert pack.plus_one_counters == 2
-        assert pack._original_plus_one_counters == 2
+        assert pack._base_plus_one_counters == 2
 
     def test_no_counters_when_no_creature_died(self) -> None:
         game = create_game()
@@ -78,7 +78,7 @@ class TestNeedletoothPackMorbid:
         game.trigger_manager.fire_event(game, EndStepTriggeredEvent())
         _resolve_stack(game)
         assert other.plus_one_counters == 2
-        assert other._original_plus_one_counters == 2
+        assert other._base_plus_one_counters == 2
 
     def test_counter_increases_power_and_toughness(self) -> None:
         game = create_game()

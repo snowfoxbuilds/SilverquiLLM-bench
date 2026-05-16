@@ -58,5 +58,5 @@ class NeedletoothPack(Creature):
                 target = creatures[0]
             if target is not None and _is_on_battlefield(game, target):
                 add_counter(game, target, '+1/+1', 2)
-                target._original_plus_one_counters = target.plus_one_counters
+                target._base_plus_one_counters = target.plus_one_counters
         game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

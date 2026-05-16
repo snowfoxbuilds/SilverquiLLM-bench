@@ -50,7 +50,7 @@ class TestMossbornHydraETB:
         game.get_battlefield(p1).add(hydra)
         hydra.on_resolve(game)
         assert hydra.plus_one_counters == 1
-        assert hydra._original_plus_one_counters == 1
+        assert hydra._base_plus_one_counters == 1
 
     def test_power_toughness_with_counter(self) -> None:
         game = create_game()
@@ -76,7 +76,7 @@ class TestMossbornHydraLandfall:
         game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent(permanent=land))
         _resolve_stack(game)
         assert hydra.plus_one_counters == 2
-        assert hydra._original_plus_one_counters == 2
+        assert hydra._base_plus_one_counters == 2
 
     def test_landfall_doubles_again(self) -> None:
         """Two lands = double twice: 1 -> 2 -> 4."""

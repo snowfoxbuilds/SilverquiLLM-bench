@@ -54,8 +54,8 @@ class TestRubyAttackTrigger:
         game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=ruby))
         _resolve_stack(game)
         game.effect_manager.apply_all(game)
-        assert ruby.base_power == 3
-        assert ruby.base_toughness == 4
+        assert ruby.modified_power == 3
+        assert ruby.modified_toughness == 4
 
     def test_no_buff_without_big_creature(self) -> None:
         game = create_game()

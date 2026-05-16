@@ -44,8 +44,8 @@ class TestConsumingAberrationCDA:
             p2.zones[Zone.GRAVEYARD].add(card)
         aberration.register_triggers(game)
         game.effect_manager.apply_all(game)
-        assert aberration.base_power == 3
-        assert aberration.base_toughness == 3
+        assert aberration.modified_power == 3
+        assert aberration.modified_toughness == 3
 
 class TestConsumingAberrationMillTrigger:
     """Whenever you cast a spell, mill opponents until a land."""

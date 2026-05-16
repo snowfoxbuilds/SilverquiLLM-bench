@@ -82,7 +82,7 @@ class SnakeskinVeil(Instant):
         # +1/+1 counter via plus_one_counters (not base_power mutation)
         if hasattr(target, "plus_one_counters"):
             target.plus_one_counters += 1
-            target._original_plus_one_counters = target.plus_one_counters  # type: ignore[attr-defined]
+            target._base_plus_one_counters = target.plus_one_counters  # type: ignore[attr-defined]
 
         creature_ref = target
 

@@ -54,7 +54,7 @@ class TestBeastKinRangerTrigger:
         game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent(permanent=other))
         _resolve_stack(game)
         game.effect_manager.apply_all(game)
-        assert ranger.base_power == 4
+        assert ranger.modified_power == 4
 
     def test_self_entering_does_not_trigger(self) -> None:
         game = create_game()
@@ -93,4 +93,4 @@ class TestBeastKinRangerTrigger:
             game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent(permanent=c))
             _resolve_stack(game)
         game.effect_manager.apply_all(game)
-        assert ranger.base_power == 6
+        assert ranger.modified_power == 6

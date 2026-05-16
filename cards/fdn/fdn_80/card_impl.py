@@ -61,7 +61,7 @@ class BulkUp(Instant):
         current_power = target.power
 
         def _apply(game: Any) -> None:
-            target.base_power += current_power
+            target.modified_power += current_power
 
         game.effect_manager.add(ContinuousEffect(
             source=self,

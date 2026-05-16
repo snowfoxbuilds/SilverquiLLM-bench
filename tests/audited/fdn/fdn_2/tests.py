@@ -54,8 +54,8 @@ class TestArahboLordEffect:
 
     def test_cat_gets_plus_one(self) -> None:
         game, arahbo, cat, non_cat, p1 = self._setup_lord()
-        assert cat.base_power == 2
-        assert cat.base_toughness == 2
+        assert cat.modified_power == 2
+        assert cat.modified_toughness == 2
 
     def test_non_cat_not_buffed(self) -> None:
         game, arahbo, cat, non_cat, p1 = self._setup_lord()

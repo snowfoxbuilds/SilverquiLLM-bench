@@ -73,8 +73,8 @@ class TestAdventuringGearLandfall:
             obj = game.stack.pop()
             obj.on_resolve(game)
         game.effect_manager.apply_all(game)
-        assert creature.base_power >= 4
-        assert creature.base_toughness >= 4
+        assert creature.modified_power >= 4
+        assert creature.modified_toughness >= 4
 
     def test_no_trigger_if_not_equipped(self) -> None:
         game = create_game()

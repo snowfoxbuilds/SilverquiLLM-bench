@@ -90,7 +90,7 @@ class TestSkyknightSquireThreshold:
         game.get_battlefield(p1).add(squire)
         squire.register_triggers(game)
         add_counter(game, squire, '+1/+1', count)
-        squire._original_plus_one_counters = squire.plus_one_counters
+        squire._base_plus_one_counters = squire.plus_one_counters
         return (game, p1, squire)
 
     def test_three_counters_gains_flying(self) -> None:

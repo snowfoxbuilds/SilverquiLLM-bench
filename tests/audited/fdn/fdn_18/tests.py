@@ -64,7 +64,7 @@ class TestInspiringPaladinFirstStrike:
         other = Creature(name="Bear", base_power=2, base_toughness=2, owner=p1, controller=p1)
         game.get_battlefield(p1).add(other)
         add_counter(game, other, "+1/+1", 1)
-        other._original_plus_one_counters = other.plus_one_counters
+        other._base_plus_one_counters = other.plus_one_counters
         game.active_player_index = 0
         game.effect_manager.apply_all(game)
         assert Keyword.FIRST_STRIKE in other.keywords

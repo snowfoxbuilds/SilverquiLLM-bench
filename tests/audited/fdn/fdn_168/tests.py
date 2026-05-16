@@ -85,12 +85,12 @@ class TestWitnessProtectionEffect:
     def test_base_power_becomes_1(self) -> None:
         game, aura, creature = self._setup_attached()
         game.effect_manager.apply_all(game)
-        assert creature.base_power == 1
+        assert creature.modified_power == 1
 
     def test_base_toughness_becomes_1(self) -> None:
         game, aura, creature = self._setup_attached()
         game.effect_manager.apply_all(game)
-        assert creature.base_toughness == 1
+        assert creature.modified_toughness == 1
 
     def test_type_effect_in_layer_4(self) -> None:
         game, aura, creature = self._setup_attached()
@@ -120,7 +120,7 @@ class TestWitnessProtectionEffect:
         game, aura, creature = self._setup_attached()
         game.effect_manager.apply_all(game)
         game.effect_manager.apply_all(game)
-        assert creature.base_power == 1
-        assert creature.base_toughness == 1
+        assert creature.modified_power == 1
+        assert creature.modified_toughness == 1
         assert creature.name == "Legitimate Businessperson"
 

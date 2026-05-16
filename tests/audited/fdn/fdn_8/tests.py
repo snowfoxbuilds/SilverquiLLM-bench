@@ -57,16 +57,16 @@ class TestDauntlessVeteranAttackTrigger:
         game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=vet))
         self._resolve_stack(game)
         game.effect_manager.apply_all(game)
-        assert ally.base_power == 3
-        assert ally.base_toughness == 3
+        assert ally.modified_power == 3
+        assert ally.modified_toughness == 3
 
     def test_attack_buffs_self_too(self) -> None:
         game, vet, ally, p1 = self._setup_attack()
         game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=vet))
         self._resolve_stack(game)
         game.effect_manager.apply_all(game)
-        assert vet.base_power == 3
-        assert vet.base_toughness == 3
+        assert vet.modified_power == 3
+        assert vet.modified_toughness == 3
 
     def test_no_buff_when_other_creature_attacks(self) -> None:
         game, vet, ally, p1 = self._setup_attack()

@@ -52,8 +52,8 @@ class PreposterousProportions(Sorcery):
             for c in creatures:
                 for player in game.players:
                     if game.get_battlefield(player).contains(c):
-                        c.base_power += 10
-                        c.base_toughness += 10
+                        c.modified_power += 10
+                        c.modified_toughness += 10
                         break
 
         def _apply_vigilance(game: Any) -> None:

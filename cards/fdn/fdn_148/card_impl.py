@@ -35,9 +35,9 @@ def _create_human_token(game: GameState, player: Any) -> Any:
         name="Human Token",
         mana_cost=ManaCost(),
         rules_text="",
+        base_power=1,
+        base_toughness=1,
     )
-    token.base_power = 1
-    token.base_toughness = 1
     token.card_types = {CardType.CREATURE}
     create_token(game, player, token)
     return token

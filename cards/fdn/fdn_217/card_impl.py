@@ -54,8 +54,8 @@ class DwynenGiltLeafDaen(Creature):
                     continue
                 if 'Elf' not in getattr(obj, 'subtypes', set()):
                     continue
-                obj.base_power += 1
-                obj.base_toughness += 1
+                obj.modified_power += 1
+                obj.modified_toughness += 1
         game.effect_manager.add(ContinuousEffect(source=self, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT, apply=_apply_lord, duration=DURATION_PERMANENT))
 
         def _attack_condition(game: Any, event: dict) -> bool:

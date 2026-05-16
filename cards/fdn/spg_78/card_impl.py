@@ -62,13 +62,13 @@ class GoblinBushwhacker(Creature):
             def _apply(game_state: Any) -> None:
                 for creature in affected:
                     if _is_on_battlefield(game_state, creature):
-                        creature.base_power += 1
+                        creature.modified_power += 1
                         creature.keywords = creature.keywords | Keyword.HASTE
 
             def _remove(game_state: Any) -> None:
                 for creature in affected:
                     if _is_on_battlefield(game_state, creature):
-                        creature.base_power -= 1
+                        creature.modified_power -= 1
                         creature.keywords = Keyword(creature.keywords & ~Keyword.HASTE)
             g.effect_manager.add(ContinuousEffect(source=source, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT, apply=_apply, duration=DURATION_END_OF_TURN))
         reg = TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_etb_effect, source=self, controller=self.controller or self.owner)

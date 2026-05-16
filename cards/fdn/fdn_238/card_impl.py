@@ -51,8 +51,8 @@ class ConsumingAberration(Creature):
                 if player is not ctrl:
                     gy = player.zones[Zone.GRAVEYARD]
                     count += len(list(gy.get_all()))
-            source.base_power = count
-            source.base_toughness = count
+            source.modified_power = count
+            source.modified_toughness = count
         game.effect_manager.add(ContinuousEffect(source=self, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.CHARACTERISTIC_DEFINING, apply=_apply_cda, duration=DURATION_PERMANENT))
 
         def _condition(game: Any, event: dict) -> bool:

@@ -72,14 +72,14 @@ class ElendaSaintOfDusk(Creature):
             starting_life = getattr(ctrl, "starting_life", 20)
             current_life = getattr(ctrl, "life", 20)
             if current_life > starting_life:
-                source.base_power += 1
-                source.base_toughness += 1
+                source.modified_power += 1
+                source.modified_toughness += 1
                 source.keywords = (
                     getattr(source, "keywords", None) or Keyword(0)
                 ) | Keyword.MENACE
             if current_life >= starting_life + 10:
-                source.base_power += 5
-                source.base_toughness += 5
+                source.modified_power += 5
+                source.modified_toughness += 5
 
         self._life_effect_ref = game.effect_manager.add(ContinuousEffect(
             source=self,

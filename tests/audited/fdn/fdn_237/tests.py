@@ -55,7 +55,7 @@ class TestBalmorTrigger:
         game.trigger_manager.fire_event(game, SpellCastTriggeredEvent(player=p1, card=spell))
         _resolve_stack(game)
         game.effect_manager.apply_all(game)
-        assert other.base_power == 3
+        assert other.modified_power == 3
 
     def test_instant_cast_grants_trample(self) -> None:
         game = create_game()

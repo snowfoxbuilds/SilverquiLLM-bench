@@ -76,8 +76,8 @@ class SeekersFolly(Sorcery):
                 for opponent in opponents:
                     for obj in game.get_battlefield(opponent).get_all():
                         if CardType.CREATURE in getattr(obj, "card_types", set()):
-                            obj.base_power -= 1
-                            obj.base_toughness -= 1
+                            obj.modified_power -= 1
+                            obj.modified_toughness -= 1
 
             game.effect_manager.add(ContinuousEffect(
                 source=spell_ref,

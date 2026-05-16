@@ -56,7 +56,7 @@ class TestQuilledGreatwurmCombatDamage:
         game.trigger_manager.fire_event(game, DealsDamageTriggeredEvent(source=attacker, target=p2, amount=3, is_combat=True))
         _resolve_stack(game)
         assert attacker.plus_one_counters == 3
-        assert attacker._original_plus_one_counters == 3
+        assert attacker._base_plus_one_counters == 3
 
     def test_noncombat_damage_does_not_trigger(self) -> None:
         game = create_game()

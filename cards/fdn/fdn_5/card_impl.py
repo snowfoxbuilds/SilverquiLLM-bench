@@ -189,7 +189,7 @@ class CelestialArmor(Artifact):
             creature = equip_ref.attached_to
             if creature is None or not _is_on_battlefield(game, creature):
                 return
-            creature.base_power += 2
+            creature.modified_power += 2
 
         def _apply_flying(game: Any) -> None:
             if not _is_on_battlefield(game, equip_ref):

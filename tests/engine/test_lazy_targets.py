@@ -151,7 +151,7 @@ class TestLazyTargetFilter:
         assert filter_fn(creature) is False
 
         # Pump power to 4 — should now pass
-        creature.base_power = 4
+        creature.modified_power = 4
         assert filter_fn(creature) is True
 
     def test_controller_based_filter_sees_controller_change(self) -> None:
@@ -191,7 +191,7 @@ class TestLazyTargetFilter:
         req = TargetRequirement(
             filter_fn=lambda obj: (
                 CardType.CREATURE in getattr(obj, "card_types", set())
-                and getattr(obj, "base_toughness", 0) <= 2
+                and getattr(obj, "modified_toughness", 0) <= 2
             ),
             description="creature with toughness 2 or less",
             zone=Zone.BATTLEFIELD,
@@ -201,7 +201,7 @@ class TestLazyTargetFilter:
         assert filter_fn(creature) is True
 
         # Pump toughness above threshold
-        creature.base_toughness = 5
+        creature.modified_toughness = 5
         assert filter_fn(creature) is False
 
     def test_filter_evaluates_current_card_types(self) -> None:
@@ -254,7 +254,7 @@ class TestLazyTargetFilter:
         req_small = TargetRequirement(
             filter_fn=lambda obj: (
                 CardType.CREATURE in getattr(obj, "card_types", set())
-                and getattr(obj, "base_power", 0) < 4
+                and getattr(obj, "modified_power", 0) < 4
             ),
             description="creature with power less than 4",
             zone=Zone.BATTLEFIELD,
@@ -262,7 +262,7 @@ class TestLazyTargetFilter:
         req_big = TargetRequirement(
             filter_fn=lambda obj: (
                 CardType.CREATURE in getattr(obj, "card_types", set())
-                and getattr(obj, "base_power", 0) >= 4
+                and getattr(obj, "modified_power", 0) >= 4
             ),
             description="creature with power 4 or greater",
             zone=Zone.BATTLEFIELD,
@@ -275,7 +275,7 @@ class TestLazyTargetFilter:
         assert req_big.filter_fn(creature_b) is True
 
         # Change Alpha's power to 6 — both filters should see it
-        creature_a.base_power = 6
+        creature_a.modified_power = 6
         assert req_small.filter_fn(creature_a) is False
         assert req_big.filter_fn(creature_a) is True
 

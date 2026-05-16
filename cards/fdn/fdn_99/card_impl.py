@@ -67,7 +67,7 @@ class ApothecaryStomper(Creature):
                     target = self
                 if hasattr(target, 'plus_one_counters'):
                     target.plus_one_counters += 2
-                    target._original_plus_one_counters = target.plus_one_counters
+                    target._base_plus_one_counters = target.plus_one_counters
             elif mode == 1:
                 controller.life += 4
         reg = TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_etb_effect, source=self, controller=self.controller or self.owner)

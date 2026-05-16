@@ -57,7 +57,7 @@ class BalmorBattlemageCaptain(Creature):
                 bf = game.get_battlefield(ctrl)
                 for obj in bf.get_all():
                     if CardType.CREATURE in getattr(obj, 'card_types', set()):
-                        obj.base_power += 1
+                        obj.modified_power += 1
 
             def _apply_trample(game: Any) -> None:
                 bf = game.get_battlefield(ctrl)

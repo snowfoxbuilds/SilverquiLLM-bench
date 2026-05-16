@@ -504,3 +504,13 @@ Persistent across runs. Records architectural decisions, conventions, and long-l
 - **Context**: Secluded Courtyard produces any-color mana that should only be spendable on chosen creature type.
 - **Decision**: Produce the colored mana but document the spending restriction as ENGINE LIMITATION — engine has no conditional mana spending support.
 - **Impact**: Any card with conditional mana (e.g., Cavern of Souls, Unclaimed Territory).
+
+## P/T attribute rename: base/modified alignment with MTG rules
+- **Context**: `base_power` was the mutable working value modified by continuous effects; `_original_base_power` was the printed value — opposite of MTG rules terminology where "base" means printed (rule 208.1).
+- **Decision**: Renamed attributes across the full engine and card corpus:
+  - `_original_base_power` / `_original_base_toughness` → deleted; `base_power` / `base_toughness` now hold the printed/immutable value
+  - `base_power` / `base_toughness` (old mutable working field) → `modified_power` / `modified_toughness`
+  - `_original_plus_one_counters` / `_original_minus_one_counters` → `_base_plus_one_counters` / `_base_minus_one_counters`
+  - `power` and `toughness` properties unchanged; now read from `modified_power` / `modified_toughness`
+- **Reasoning**: `base_power` meaning "printed value" matches MTG rule 208.1. `modified_power` clarifies this is the Layer 7c working value before counter adjustments. Eliminates confusion for anyone familiar with the rules.
+- **Impact**: `engine/card.py`, ~75 card implementations in `cards/fdn/`, all continuous-effect test files, and audited tests that checked modified values via the old `base_power` name. Counter-sync pattern `_original_plus_one_counters = plus_one_counters` becomes `_base_plus_one_counters = plus_one_counters` in all card impls. Constructor parameter names (`base_power=`, `base_toughness=`) and `hasattr(c, "base_power")` creature checks in `engine/combat.py` are unchanged.

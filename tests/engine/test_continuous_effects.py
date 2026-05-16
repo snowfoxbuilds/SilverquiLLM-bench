@@ -618,8 +618,8 @@ class TestLayer7cPTModification:
         creature = _make_creature(power=2, toughness=2)
 
         def buff(g):
-            creature.base_power += 2
-            creature.base_toughness += 2
+            creature.modified_power += 2
+            creature.modified_toughness += 2
 
         eff = ContinuousEffect(
             source="giant_growth", layer=Layer.POWER_TOUGHNESS,
@@ -636,8 +636,8 @@ class TestLayer7cPTModification:
         creature = _make_creature(power=3, toughness=3)
 
         def debuff(g):
-            creature.base_power -= 1
-            creature.base_toughness -= 1
+            creature.modified_power -= 1
+            creature.modified_toughness -= 1
 
         eff = ContinuousEffect(
             source="weakness", layer=Layer.POWER_TOUGHNESS,
@@ -654,12 +654,12 @@ class TestLayer7cPTModification:
         creature = _make_creature(power=2, toughness=2)
 
         def buff_one(g):
-            creature.base_power += 1
-            creature.base_toughness += 1
+            creature.modified_power += 1
+            creature.modified_toughness += 1
 
         def buff_two(g):
-            creature.base_power += 1
-            creature.base_toughness += 1
+            creature.modified_power += 1
+            creature.modified_toughness += 1
 
         eff1 = ContinuousEffect(
             source="s1", layer=Layer.POWER_TOUGHNESS,
@@ -742,8 +742,8 @@ class TestMultiLayerEffects:
             order.append("ability")
 
         def buff_pt(g):
-            creature.base_power += 2
-            creature.base_toughness += 2
+            creature.modified_power += 2
+            creature.modified_toughness += 2
             order.append("pt")
 
         # Add in scrambled order
@@ -774,8 +774,8 @@ class TestMultiLayerEffects:
         order = []
 
         def modify_pt(g):
-            creature.base_power += 1
-            creature.base_toughness += 1
+            creature.modified_power += 1
+            creature.modified_toughness += 1
             order.append("7c")
 
         def apply_counters(g):
@@ -871,8 +871,8 @@ class TestGameStateIntegration:
         creature = _make_creature(power=2, toughness=2)
 
         def buff(g):
-            creature.base_power += 2
-            creature.base_toughness += 2
+            creature.modified_power += 2
+            creature.modified_toughness += 2
 
         eff = ContinuousEffect(
             source="aura", layer=Layer.POWER_TOUGHNESS,
@@ -897,8 +897,8 @@ class TestDurationScenarios:
         creature = _make_creature(power=2, toughness=2)
 
         def buff(g):
-            creature.base_power += 3
-            creature.base_toughness += 3
+            creature.modified_power += 3
+            creature.modified_toughness += 3
 
         eff = ContinuousEffect(
             source="giant_growth", layer=Layer.POWER_TOUGHNESS,

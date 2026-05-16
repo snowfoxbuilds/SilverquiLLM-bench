@@ -63,6 +63,6 @@ class ArmasaurGuide(Creature):
             if target is None:
                 return
             add_counter(game, target, '+1/+1', 1)
-            if hasattr(target, '_original_plus_one_counters'):
-                target._original_plus_one_counters = target.plus_one_counters
+            if hasattr(target, '_base_plus_one_counters'):
+                target._base_plus_one_counters = target.plus_one_counters
         game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller))

@@ -55,8 +55,8 @@ class KellanPlanarTrailblazer(Creature):
             if 'Detective' not in getattr(source, 'subtypes', set()):
                 return
             source.subtypes = {'Human', 'Faerie', 'Rogue'}
-            source.base_power = 3
-            source.base_toughness = 2
+            source.modified_power = 3
+            source.modified_toughness = 2
             source.keywords = (getattr(source, 'keywords', None) or Keyword(0)) | Keyword.DOUBLE_STRIKE
         return [ActivatedAbility(cost=_cost_scout, effect=_effect_scout, description='{1}{R}: Become Detective with combat damage exile ability.'), ActivatedAbility(cost=_cost_detective, effect=_effect_detective, description='{2}{R}: Become 3/2 Rogue with double strike.')]
 

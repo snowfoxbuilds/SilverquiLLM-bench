@@ -31,7 +31,7 @@ class MossbornHydra(Creature):
         """ETB: enters with a +1/+1 counter."""
         from engine.game import add_counter
         add_counter(game, self, '+1/+1')
-        self._original_plus_one_counters = self.plus_one_counters
+        self._base_plus_one_counters = self.plus_one_counters
 
     def register_triggers(self, game: 'GameState') -> None:
         from engine.triggers import TriggerRegistration
@@ -58,5 +58,5 @@ class MossbornHydra(Creature):
             current = getattr(source, 'plus_one_counters', 0)
             if current > 0:
                 source.plus_one_counters = current * 2
-                source._original_plus_one_counters = source.plus_one_counters
+                source._base_plus_one_counters = source.plus_one_counters
         game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_landfall_condition, effect=_landfall_effect, source=self, controller=controller))

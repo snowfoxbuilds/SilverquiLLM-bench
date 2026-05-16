@@ -58,6 +58,6 @@ class BeastKinRanger(Creature):
 
             def _apply(game: Any) -> None:
                 if _is_on_battlefield(game, creature_ref):
-                    creature_ref.base_power += 1
+                    creature_ref.modified_power += 1
             game.effect_manager.add(ContinuousEffect(source=source, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT, apply=_apply, duration=DURATION_END_OF_TURN))
         game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

@@ -50,7 +50,7 @@ class DrakeHatcher(Creature):
             return True
 
         def _damage_effect(game: 'GameState') -> None:
-            amount = _captured.get('amount', getattr(source, 'power', source.base_power))
+            amount = _captured.get('amount', getattr(source, 'power', source.modified_power))
             source.incubation_counters = getattr(source, 'incubation_counters', 0) + amount
         game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_damage_condition, effect=_damage_effect, source=self, controller=controller))
 

@@ -116,7 +116,7 @@ class FellingBlow(Sorcery):
         # +1/+1 counter via plus_one_counters (not base_power mutation)
         if hasattr(source_creature, "plus_one_counters"):
             source_creature.plus_one_counters += 1
-            source_creature._original_plus_one_counters = source_creature.plus_one_counters  # type: ignore[attr-defined]
+            source_creature._base_plus_one_counters = source_creature.plus_one_counters  # type: ignore[attr-defined]
 
         if target_valid:
             power = getattr(source_creature, "power", getattr(source_creature, "base_power", 0))

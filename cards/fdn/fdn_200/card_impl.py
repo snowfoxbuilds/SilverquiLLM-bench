@@ -60,7 +60,7 @@ class GoblinSurprise(Instant):
             def _apply_pump(game: GameState) -> None:
                 for obj in game.get_battlefield(controller_ref).get_all():
                     if CardType.CREATURE in getattr(obj, "card_types", set()):
-                        obj.base_power += 2
+                        obj.modified_power += 2
 
             game.effect_manager.add(ContinuousEffect(
                 source=spell_ref,

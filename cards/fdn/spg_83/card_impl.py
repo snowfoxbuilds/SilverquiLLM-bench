@@ -81,8 +81,8 @@ class FiendArtisan(Creature):
             if not _is_on_battlefield(g, source):
                 return
             count = source._graveyard_creature_count()
-            source.base_power = count
-            source.base_toughness = count
+            source.modified_power = count
+            source.modified_toughness = count
         game.effect_manager.add(ContinuousEffect(source=source, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.CHARACTERISTIC_DEFINING, apply=_apply, duration=DURATION_PERMANENT))
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:

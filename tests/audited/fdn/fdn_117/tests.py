@@ -56,8 +56,8 @@ class TestAshrootAnimistAttackTrigger:
         game.trigger_manager.fire_event(game, AttacksTriggeredEvent(creature=animist))
         _resolve_stack(game)
         game.effect_manager.apply_all(game)
-        assert ally.base_power >= 6
-        assert ally.base_toughness >= 6
+        assert ally.modified_power >= 6
+        assert ally.modified_toughness >= 6
 
     def test_grants_trample_to_target(self) -> None:
         game = create_game()

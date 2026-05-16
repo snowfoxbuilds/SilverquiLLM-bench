@@ -77,8 +77,8 @@ class Embercleave(Artifact):
             creature = equip_ref.attached_to
             if creature is None or not _is_on_battlefield(g, creature):
                 return
-            creature.base_power += 1
-            creature.base_toughness += 1
+            creature.modified_power += 1
+            creature.modified_toughness += 1
         if self._effect_ref is None:
             effect_kw = ContinuousEffect(source=equip_ref, layer=Layer.ABILITY, sublayer=None, apply=_apply_keywords, duration=DURATION_PERMANENT)
             game.effect_manager.add(effect_kw)

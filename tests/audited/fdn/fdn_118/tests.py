@@ -84,8 +84,8 @@ class TestDreadwingScavengerThreshold:
             p1.zones[Zone.GRAVEYARD].add(c)
         scav.register_triggers(game)
         game.effect_manager.apply_all(game)
-        assert scav.base_power >= 3
-        assert scav.base_toughness >= 3
+        assert scav.modified_power >= 3
+        assert scav.modified_toughness >= 3
         assert Keyword.DEATHTOUCH in scav.keywords
 
     def test_threshold_inactive_with_fewer_cards(self) -> None:
