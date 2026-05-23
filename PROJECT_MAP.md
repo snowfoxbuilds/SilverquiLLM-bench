@@ -13,7 +13,7 @@ The project has three major parts:
 2. **Benchmark runner** — A Docker-container-based orchestration harness that stages a Workspace, runs one black-box agent container, snapshots progress, harvests `workspace_final/`, and evaluates outputs.
 3. **Replay validation** — A 17lands GRE replay pipeline for validating engine behavior against real MTG Arena game state streams.
 
-The benchmark architecture now treats the **Workspace** as the only evaluatable state. Agents modify files in `/workspace/` directly, including `/workspace/engine/` and `cards/sos/{card_id}/card_impl.py`. The runner snapshots the full Workspace every 60 seconds, materializes the official evaluation state as `results/{run_name}/workspace_final/`, and evaluates from that directory.
+The benchmark architecture now treats the **Workspace** as the only evaluatable state. Agents modify files in `/workspace/` directly, including `/workspace/engine/` and `cards/sos/{card_id}/card_impl.py`. The runner snapshots the full Workspace every 60 seconds, materializes the official evaluation state as `docker/<image_dir>/results/<run_name>/workspace_final/`, and evaluates from that directory.
 
 ## Current Canonical Architecture
 
@@ -75,7 +75,7 @@ Agent Container
 
 │                                                                      │
 
-│  results/{run_name}/                                                 │
+│  docker/<image_dir>/results/<run_name>/                              │
 
 │    ├── workspace_final/        # official evaluation Workspace        │
 

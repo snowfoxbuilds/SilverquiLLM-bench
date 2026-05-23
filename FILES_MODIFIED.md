@@ -17,3 +17,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `README.md` — Replaced all `results/{run_name}/...` references with `docker/<image_dir>/results/<run_name>/...` and added `<image_dir>` derivation note
+
+## Item 4: Update PROJECT_MAP.md — results path references
+
+### Implementation
+- `PROJECT_MAP.md` — Replaced `results/{run_name}/` with `docker/<image_dir>/results/<run_name>/` in overview paragraph and architecture diagram

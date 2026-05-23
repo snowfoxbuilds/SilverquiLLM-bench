@@ -205,3 +205,34 @@ class TestReadmeResultsPaths:
         assert "docker/" in self.content, (
             "README.md should reference 'docker/' paths after migration"
         )
+
+
+class TestProjectMapResultsPaths:
+    """Verify PROJECT_MAP.md has migrated results path references."""
+
+    @pytest.fixture(autouse=True)
+    def _load_project_map(self) -> None:
+        """Read PROJECT_MAP.md content."""
+        project_map_path = REPO_ROOT / "PROJECT_MAP.md"
+        assert project_map_path.exists(), "PROJECT_MAP.md must exist at repo root"
+        self.content = project_map_path.read_text(encoding="utf-8")
+
+    def test_no_old_results_run_name_pattern(self) -> None:
+        """PROJECT_MAP.md must not contain literal 'results/{run_name}' (old path format)."""
+        # The old pattern "results/{run_name}/" without the docker prefix must be gone.
+        # We search for occurrences that are NOT preceded by docker/<image_dir>/
+        lines_with_old_pattern = [
+            (i + 1, line)
+            for i, line in enumerate(self.content.splitlines())
+            if "results/{run_name}" in line and "docker/" not in line
+        ]
+        assert lines_with_old_pattern == [], (
+            f"PROJECT_MAP.md still contains old 'results/{{run_name}}' references "
+            f"(not under docker/) at lines: {[ln for ln, _ in lines_with_old_pattern]}"
+        )
+
+    def test_contains_docker_results_path(self) -> None:
+        """PROJECT_MAP.md should reference the new docker/<image_dir>/results/<run_name>/ path."""
+        assert "docker/" in self.content and "results/" in self.content, (
+            "PROJECT_MAP.md should contain docker/*/results/ path references"
+        )
