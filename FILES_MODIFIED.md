@@ -30,3 +30,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `docs/specs/RUN-ARTIFACTS-AND-TELEMETRY.md` — Already contains new docker/<image-dir>/results/<run_name>/ paths (no changes needed)
 - `docs/specs/WORKSPACE-CONTRACT.md` — Already contains new docker/<image-dir>/results/<run_name>/ paths (no changes needed)
 - `docs/specs/AGENT-CONTAINERS.md` — Already contains new docker/<image-dir>/results/<run_name>/ paths (no changes needed)
+
+## Item 6: Update docs/specs/TEST-SUITE.md — results path and stale engine_work/ reference
+
+### Implementation
+- `docs/specs/TEST-SUITE.md` — Updated results path to docker/<image_dir>/results/<run_name>/cards/{card_id}/ and replaced engine_work/ with workspace_final/engine/
