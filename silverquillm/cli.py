@@ -79,16 +79,41 @@ def _api_key_env_args() -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Image helpers
+# ---------------------------------------------------------------------------
+
+
+def _image_dir(image: str) -> str:
+    """Strip ``silverquillm-`` prefix and ``:tag`` suffix from Docker image name.
+
+    Examples:
+        silverquillm-local-pi-blind:latest → local-pi-blind
+        ghcr.io/user/silverquillm-pi-blind:latest → pi-blind
+        my-custom-image:v2 → my-custom-image
+    """
+    short = image.rsplit("/", 1)[-1].split(":")[0]
+    if short.startswith("silverquillm-"):
+        short = short[len("silverquillm-"):]
+    return short
+
+
+def _image_results_dir(image: str) -> Path:
+    """Return the per-image results directory under docker/."""
+    return _REPO_ROOT / "docker" / _image_dir(image) / "results"
+
+
+# ---------------------------------------------------------------------------
 # Run-name generation
 # ---------------------------------------------------------------------------
 
 
-def _make_run_name(image: str) -> str:
-    """Generate a run name from image short name + ISO timestamp."""
-    # Extract short name: last component, strip tag
-    short = image.rsplit("/", 1)[-1].split(":")[0]
+def _make_run_name(set_code: str = "sos") -> str:
+    """Generate a run name from set code + ISO timestamp.
+
+    Format: ``<set_code>_<YYYY-MM-DDThh-mm>``
+    """
     ts = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H-%M")
-    return f"{short}_{ts}"
+    return f"{set_code}-{ts}"
 
 
 # ---------------------------------------------------------------------------
@@ -281,9 +306,9 @@ def run(
         ]
     # Resolve defaults relative to repo root
     if results_dir is None:
-        results_dir = _REPO_ROOT / "results"
+        results_dir = _image_results_dir(image)
 
-    run_name = _make_run_name(image)
+    run_name = _make_run_name()
     click.echo(f"Starting run: {run_name}")
     click.echo(f"Image: {image}")
     click.echo(f"Timeout: {timeout}s")
