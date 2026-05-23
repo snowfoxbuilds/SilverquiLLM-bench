@@ -12,5 +12,6 @@ Namespace package for benchmark data sets. Each subdirectory (`sos/`, etc.) cont
 
 ## Convention
 
-- Each set directory follows the pattern: `data/` (raw card data + rules), `cards/` (per-card specs), `results/` (benchmark outputs).
+- Each set directory follows the pattern: `data/` (raw card data + rules), `cards/` (per-card specs).
+- Benchmark results are now stored under `docker/<image_dir>/results/` rather than inside each set directory.
 - The `__init__.py` files make this a proper Python namespace package.

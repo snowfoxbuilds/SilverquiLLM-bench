@@ -42,3 +42,9 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `docs/adrs/ADR-005: In-Place Workspace Engine With Snapshot Fallback.md` — Updated materialized path to `docker/<image_dir>/results/<run_name>/workspace_final/`
 - `docs/HELP.md` — Updated git add example to use `docker/local-pi-blind/results/` path
 - `docs/specs/KNOWN-ISSUES.md` — Added legacy-path parenthetical notes to historical `benchmarks/sos/results/` references
+
+## Item 8: Update benchmarks/ directory summaries
+
+### Implementation
+- `benchmarks/DIRECTORY_SUMMARY.md` — Removed `results/` from convention pattern, added note pointing to `docker/<image_dir>/results/`
+- `benchmarks/sos/DIRECTORY_SUMMARY.md` — Marked `results/` row as deprecated with note pointing to new location
