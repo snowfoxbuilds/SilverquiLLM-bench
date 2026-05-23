@@ -24,9 +24,9 @@ Both modes produce `card_impl.py` per card. Tested mode also produces `tests.py`
 
 **Evaluation Phase** (after all agents finish):
 
-1. **SOS Card Correctness** — Audited SOS tests against each agent's `card_impl.py` + agent's `workspace_final/engine/`
-2. **FDN Card Regression** — Audited FDN tests against pre-filled FDN impls + agent's `workspace_final/engine/`
-3. **Engine Regression** — Core engine tests against agent's `workspace_final/engine/`
+1. **SOS Card Correctness** — Audited SOS tests against each agent's `card_impl.py` + agent's `engine_work/`
+2. **FDN Card Regression** — Audited FDN tests against pre-filled FDN impls + agent's `engine_work/`
+3. **Engine Regression** — Core engine tests against agent's `engine_work/`
 Self-eval and cross-eval deferred to v2 (requires test harvester). Agent-written `tests.py` files are harvested as artifacts but not used for v1 scoring.
 
 ### Test Harvester (v2)
@@ -99,7 +99,7 @@ def declare_blockers(game, blocks) -> None: ...
 Artifacts are scoped per run (one run = one agent/model). Layout matches [BENCHMARK-RUNNER.md](http://benchmark-runner.md/):
 
 ```javascript
-docker/<image_dir>/results/<run_name>/cards/{card_id}/
+results/{run_name}/cards/{card_id}/
 ├── card_impl.py              # Agent's implementation
 ├── tests.py                  # Agent's tests (tested mode only)
 └── result.json               # Per-card evaluation results

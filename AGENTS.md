@@ -56,6 +56,7 @@ Architectural decisions are documented under the ADRs page:
 | `ADR-003` | Replay Validation over differential testing — 17lands GRE JSON, observer mode, full state-diff comparison |
 | `ADR-004` | Docker Agent Containers replace Python adapters — image is full agent config; runner stages, launches, harvests, evaluates |
 | `ADR-005` | In-place Workspace engine with Git snapshot fallback — agent edits `/workspace/engine/`; runner evaluates `workspace_final/` |
+| `ADR-006` | Engine tests staged into workspace — local regression loop for agents; grading still uses host copies; SOS/FDN tests stay hidden |
 
 ## Harness Structure
 

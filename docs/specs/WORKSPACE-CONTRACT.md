@@ -23,6 +23,8 @@ The benchmark now treats agents as black-box containers working in a real codeba
   base_classes.py
   test_utils.md
   engine/
+  tests/
+    engine/            # staged from host repo; reference-only (see ADR-006)
   cards/
     fdn/
       fdn_{collector_number}/
@@ -95,11 +97,16 @@ The baseline engine remains on the host side, outside the container. After the r
 
 ### Agent prompt rule
 
-The prompt should state only the hard location rule:
+The prompt states two hard rules — card location and staged-test integrity:
 
 ```plain text
 Each card's implementation class must remain in its assigned
 cards/sos/{card_id}/card_impl.py file. Do not move or rename card directories.
+
+Do not modify any files under workspace/tests/engine/. These tests are for
+your local verification only; the runner uses its own authoritative copies
+for grading. Modifying the workspace tests will not change your score — it
+will only mislead you about whether your engine changes are correct.
 ```
 
 The prompt does not need to mention shared helper files.
@@ -130,3 +137,4 @@ Then delete the legacy layout.
 - **FDN and SOS share structure**: FDN examples and SOS targets use the same card directory shape.
 - **Card restructuring is card-level by default**: Individual misplaced card files fail those cards; broad Workspace destruction can become run-level failure.
 - **Legacy Foundations not staged**: After FDN migration, do not include monolithic `cards/foundations/` in the agent Workspace.
+- **Engine tests are staged into the workspace**: Per ADR-006, the workspace includes `workspace/tests/engine/` so agents have a local regression-check loop for engine modifications. Grading uses host-repo copies; agents are prompt-instructed not to modify staged tests. SOS card tests and FDN card tests remain hidden.

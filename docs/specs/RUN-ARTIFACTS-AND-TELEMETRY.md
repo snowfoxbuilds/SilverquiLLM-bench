@@ -112,7 +112,7 @@ Field meanings:
 - `changed_card_tests`: card IDs whose `tests.py` changed since the previous snapshot.
 - `completed_like_card_impls`: card IDs whose `card_impl.py` differs from the original template.
 - Engine path lists are capped, for example to 50 paths, with a truncation flag and full count.
-Card telemetry uses IDs only, not card names.
+In `snapshot_telemetry.jsonl`, card telemetry uses IDs only, not card names — this file is high-cadence and stays lean. Slow-cadence per-card artifacts (`progress.jsonl`, `status.json`, `result.json`) include `card_name` alongside `card_id` for human-readable triage. The live `[snapshot]` terminal channel resolves card names from `card_spec.json` at print time, so terminal output stays readable while the JSONL file stays lean.
 
 ### Output Directory
 
@@ -146,15 +146,20 @@ docker/<image-dir>/results/<run_name>/docker_stderr.log
 
 Stream them live to the terminal while saving.
 
-Live terminal output should be labeled and colorized by type:
+Live terminal output is labeled, colorized by type, and mirrored to a per-channel append-only file under the run directory. The tabbed viewer (`silverquillm logs --run`) reads from these files in both live (tail) and archived (static) modes.
 
-```plain text
-[runner]    runner/system messages
-[snapshot]  snapshot telemetry
-[stdout]    Docker stdout
-[stderr]    Docker stderr
-[error]     runner errors
-```
+| Channel | Backing file | Source |
+| --- | --- | --- |
+| `[runner]` | `runner.log` | Runner-internal messages (stage, launch, harvest, evaluate) |
+| `[snapshot]` | `snapshot_telemetry.jsonl` | 60-second Git snapshot telemetry (existing) |
+| `[stdout]` | `docker_stdout.log` | Container stdout (existing) |
+| `[stderr]` | `docker_stderr.log` | Container stderr (existing) |
+| `[error]` | `runner_errors.log` | Runner-side errors and warnings |
+| `[progress]` | `progress.jsonl` | Mirrored from `/output/progress.jsonl` to the host |
+| `[edit]` | `fast_telemetry.jsonl` | 1 Hz fast-tier edit detection (`card_impl.py` / engine mtimes) |
+| `[system]` | `system.log` | Mirrored from `/output/system.log` to the host |
+
+Per-channel files are append-only; no rotation or truncation during a run. The viewer is read-only — running it or not has zero effect on saved artifacts.
 
 Color behavior:
 
@@ -163,7 +168,7 @@ Color behavior:
 - `--color never`
 Saved log files remain plain split-stream logs.
 
-A separate post-run `logs --run` viewer is deferred for v1.
+v1 ships a `silverquillm logs --run` tabbed log viewer over the per-channel files above. Live labeled streaming remains the default; the viewer is opt-in for both live (tail) and archived (static) inspection.
 
 ### Run summary
 
@@ -217,3 +222,5 @@ Rules:
 - **Docker logs are captured by runner**: Stream live and save split stdout/stderr logs.
 - **Filtered runs are not leaderboard-valid**: `--cards` is development/pipeline validation only.
 - **Smoke runs are not benchmark runs**: Use synthetic Workspace and exclude from scoring.
+- **Each terminal channel has a backing file**: Every channel the runner prints is mirrored to an append-only file in the run directory (see Terminal channels above). This file-backed substrate makes the tabbed log viewer (`silverquillm logs --run`) a thin read-only consumer in both live and archived modes.
+- **v1 includes a tabbed post-run log viewer**: Originally deferred to a later version; lifted now that the runner is stable and the 2026-05-23 run surfaced concrete triage pain. Live labeled streaming remains the default for users who don't want to launch the viewer.

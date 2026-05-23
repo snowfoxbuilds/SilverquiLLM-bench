@@ -190,7 +190,7 @@ Task-specific instruction written by the runner to `/workspace/prompt.md` at sta
 - The runner does NOT orchestrate test iteration — the agent self-manages. The runner stages, launches, harvests, evaluates.
 - On container timeout, the runner harvests partial results. Completed cards are evaluated normally; unfinished cards scored as zero.
 - Two benchmark modes: **Blind** (prompt omits test instructions) and **Tested** (prompt includes test instructions). Both produce `card_impl.py`. Distinction is prompt-only for v1. Compare modes via separate runs.
-- Audited tests are evaluation-only artifacts — never in the agent's workspace, never in results directories. Contamination control.
+- SOS and FDN audited tests are evaluation-only artifacts — never staged in the agent's workspace, never in results directories. Engine tests are staged at `workspace/tests/engine/` per ADR-006 so agents can locally verify engine extensions; grading still uses host-repo copies for all three dimensions.
 - The runner is the hard timeout authority. Agent Containers may read the Run Manifest for pacing, but correctness does not depend on honoring it.
 - `progress.jsonl` is optional best-effort observability. It may refine status, but it cannot make an unchanged template count as completed.
 - Output Snapshots are runner-owned, Workspace-only, and independent of Agent Container cooperation. The runner may use prior snapshot commits as fallback if final engine state is corrupted.

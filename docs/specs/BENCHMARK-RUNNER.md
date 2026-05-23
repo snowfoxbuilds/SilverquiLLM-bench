@@ -55,9 +55,10 @@ Staging steps:
 2. Copy rulebook to `workspace/rulebook.md`
 3. Copy reference docs (`engine_api.md`, `base_classes.py`, `test_utils.md`)
 4. Copy FDN cards (with filled implementations) to `workspace/cards/fdn/`
-5. Copy SOS cards (with empty templates) to `workspace/cards/sos/`
-6. Write `workspace/prompt.md`
-7. Immediately before container launch, write `workspace/run_manifest.json` with `timeout_seconds` and `deadline_utc`
+5. Copy engine tests to `workspace/tests/engine/` (per ADR-006; reference-only for agent verification)
+6. Copy SOS cards (with empty templates) to `workspace/cards/sos/`
+7. Write `workspace/prompt.md`
+8. Immediately before container launch, write `workspace/run_manifest.json` with `timeout_seconds` and `deadline_utc`
 FDN and SOS card directories share the same structure (`card_spec.json` + `card_impl.py`), keeping the workspace consistent. FDN implementations are filled in as examples; SOS implementations are empty templates. No test files are included for either set — agents devise their own testing approach.
 
 ## Container Launch
@@ -214,7 +215,7 @@ Cross-agent aggregates (multi-model leaderboard, combined cross-eval) are a futu
 
 ## Contamination Controls
 
-1. **Container isolation** — Agent runs in a Docker container with only curated files mounted. Audited test suites, harness source, and benchmark results do not exist in the container.
+1. **Container isolation** — Agent runs in a Docker container with only curated files mounted. SOS card tests and FDN card tests do not exist in the container. Engine tests are staged at `workspace/tests/engine/` per ADR-006 (reference-only; grading uses host copies). Harness source and benchmark results do not exist in the container.
 2. **New set cards** — SOS released 2026-04-24; too new for LLM training data.
 3. **No cross-agent leakage** — Each run gets a fresh container with a clean workspace. Agents never see other agents' work.
 4. **FDN as examples, not contamination** — FDN implementations are intentionally provided as reference examples. SOS implementations (the benchmark target) are empty templates.
@@ -246,7 +247,7 @@ The runner tracks per-run metrics (not per-card, since the agent manages its own
 - **Partial results on timeout**: On timeout, the runner harvests whatever cards the agent completed. Unfinished cards scored as zero, but completed cards are evaluated normally. [SETTLED]
 - **Filesystem checks as source of truth**: Whether the agent produced `card_impl.py` is determined by comparing against the original template — not by exit codes or stdout parsing. [SETTLED]
 - **Unified ****`card_impl.py`**** naming**: Both blind and tested modes produce `card_impl.py`. Separate runs compare modes. [SETTLED]
-- **Audited tests are evaluation-only**: Never in the agent's workspace. Referenced by the evaluator from `tests/audited/{set_code}/`. [SETTLED]
+- **SOS and FDN audited tests are evaluation-only**: Not staged in the agent's workspace. Referenced by the evaluator from `tests/audited/{set_code}/`. Engine tests are staged in the workspace per ADR-006 for local agent verification; grading still uses host-repo copies. [SETTLED]
 - **Agent self-manages iteration**: The agent decides when to run tests, when to iterate, and when to move on. The runner does not orchestrate test rounds. [SETTLED]
 - **Automatic run summary**: `run_summary.json` generated after evaluation by reading per-card `result.json` files. Idempotent and deterministic. [SETTLED]
 - **Two benchmark modes**: Blind (impl only) and tested (impl + tests). Baked into separate Docker images. Compare modes across separate runs. [UPDATED]
@@ -262,7 +263,7 @@ The runner tracks per-run metrics (not per-card, since the agent manages its own
 - **Snapshot telemetry distinguishes activity from coverage**: `changed_card_impls` means changed since the previous snapshot. `completed_like_card_impls` means the implementation differs from the original template. Track both so telemetry can show minute-by-minute activity and rough implementation coverage. [SETTLED]
 - **Snapshot telemetry does not parse code**: Telemetry is filesystem-based only. `completed_like_card_impls` counts non-template implementations even if they contain syntax, import, or logic errors. Correctness belongs to evaluation, not telemetry. [SETTLED]
 - **Engine telemetry includes capped paths and counts**: Snapshot telemetry records changed engine file paths plus counts. Path lists are capped (for example, first 50 paths) with a truncation flag so telemetry remains lightweight even if an agent rewrites many files. [SETTLED]
-- **Card telemetry uses IDs only**: Snapshot telemetry records card directory IDs, not card names. Keep telemetry lightweight; card names can be resolved later from `card_spec.json` if needed. [SETTLED]
+- **`snapshot_telemetry.jsonl`**** uses card IDs only**: The high-cadence snapshot telemetry file records card directory IDs, not card names, to keep events lean. Slow-cadence per-card artifacts (`progress.jsonl`, `status.json`, `result.json`) include `card_name` alongside `card_id` for human-readable triage. The live `[snapshot]` terminal channel resolves names from `card_spec.json` at print time. [SETTLED]
 - **Test telemetry is tracked separately**: Snapshot telemetry records changed card test files separately from changed card implementations, using card IDs only. This shows whether Tested Mode agents are actually writing tests while staying lightweight. [SETTLED]
 - **Snapshot fallback triggers on failed or hung engine tests**: Final engine viability fallback runs when `tests/engine/` fails, errors on import, times out, hangs, or cannot start due to corrupted files. Snapshot selection walks backward until `tests/engine/` completes and passes within the normal engine-test timeout. [SETTLED]
 - **No viable snapshot means no viable output**: If final engine state is unusable and no prior snapshot passes Engine Regression, mark the run `no_viable_output_produced`. This means the agent broke the engine before producing a viable snapshot, so SOS and FDN correctness are not evaluated. [SETTLED]
@@ -278,7 +279,7 @@ The runner tracks per-run metrics (not per-card, since the agent manages its own
 - **Docker logs stream live and save**: The runner streams Docker stdout/stderr live to the terminal while also saving them as `docker_stdout.log` and `docker_stderr.log` in run results. This supports long-run monitoring and post-run debugging without container cooperation. [SETTLED]
 - **Live logs are labeled and colorized**: The runner prefixes live Docker stdout/stderr lines with stream labels and colors different output types for readability. Saved log files remain split by stream and do not require ANSI color codes. [SETTLED]
 - **Color defaults to auto**: Live log colorization uses `--color auto` by default: enabled for interactive TTY output, disabled for pipes/CI. Support `--color always` and `--color never` overrides. [SETTLED]
-- **No post-run log viewer for v1**: Live labeled/colorized streaming plus saved split logs and `snapshot_telemetry.jsonl` are sufficient for v1. A separate `logs --run` viewer is deferred until the runner is stable. [SETTLED]
+- **v1 includes a tabbed post-run log viewer**: v1 ships `silverquillm logs --run` with tabs over per-channel files (see [RUN-ARTIFACTS-AND-TELEMETRY.md](http://run-artifacts-and-telemetry.md/) → Terminal channels). Live labeled streaming remains the default for users who don't want to launch the viewer. The originally deferred viewer is lifted now that the runner is stable and the 2026-05-23 run surfaced concrete triage pain. [UPDATED]
 - **Runner uses pipe-readers + poll-loop architecture**: Two dedicated threads drain Docker stdout/stderr pipes to host files. The main thread polls all files (Docker log dumps, `/output/` files) on a ~1s interval for colorized terminal output, checks timeouts, and runs snapshots. This avoids pipe buffer deadlock while keeping the main loop single-threaded and simple. [SETTLED]
 - **Timeout is clock-based, not proc.wait-based**: The main thread checks `time.monotonic()` against the deadline each poll iteration, rather than using `proc.wait(timeout)`. This decouples timeout from the Popen API and enables future pause/resume via `docker pause`/`docker unpause`. [SETTLED]
 - **Two timeout types: Hard Timeout + Hang Timeout**: Hard Timeout (`--timeout`) is the overall run time limit. Hang Timeout (`--hang-timeout`, default 900s) triggers when no monitored file has been modified for the configured period. Either timeout causes `docker stop -t 10`. `run_summary.json` records `timeout_reason`. [SETTLED]
