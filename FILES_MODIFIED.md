@@ -54,3 +54,13 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `tests/test_smoke_lifecycle.py` — Refactored to use smoke_image fixture with PID-tagged name and cleanup in teardown
 - `docs/specs/TESTING-CONVENTIONS.md` — Added Rule 8 (no persistent artifacts) and Docker cleanup checklist item
+
+## Item 10: Remove stale results/ and benchmarks/*/results/ directories
+
+### Tests
+- `tests/test_benchmark_scaffold.py` — Updated test_results_subdir_exists → test_results_subdir_removed (asserts directory absent)
+
+### Implementation
+- `silverquillm/cli.py` — Updated docstring from `results/{run_name}/` to `docker/<image_dir>/results/<run_name>/`
+- `tests/test_benchmark_scaffold.py` — Flipped assertion to verify benchmarks/sos/results/ does NOT exist
+- Filesystem cleanup: removed `results/` and `benchmarks/*/results/` directories

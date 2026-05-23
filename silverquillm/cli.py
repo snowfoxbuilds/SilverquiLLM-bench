@@ -129,7 +129,7 @@ def _harvest_results(
     timed_out: bool = False,
     timeout_reason: str | None = None,
 ) -> Path:
-    """Copy artifacts from workspace/output into results/{run_name}/.
+    """Copy artifacts from workspace/output into docker/<image_dir>/results/<run_name>/.
 
     Returns the run results directory path.
     """
