@@ -113,7 +113,7 @@ Canonical implementation constraints for this TODO:
 
   Testability: Visual review — no `results/` subdirectory should be listed as active convention.
 
-- [ ] **Add test artifact cleanup and update **[**TESTING-CONVENTIONS.md**](http://testing-conventions.md/)
+- [x] **Add test artifact cleanup and update **[**TESTING-CONVENTIONS.md**](http://testing-conventions.md/)
   Detail: Two changes to ensure tests leave no persistent artifacts:
 
   1. **`tests/test_smoke_lifecycle.py`**: The `test_smoke_container_lifecycle` test builds `silverquillm-smoke-test:lifecycle` but does not clean it up. Refactor to use a PID-tagged image name (`f"silverquillm-smoke-test:{os.getpid()}"`) to avoid parallel collisions, and wrap in a `try/finally` that runs `subprocess.run(["docker", "rmi", "-f", image_tag], capture_output=True, timeout=30)` in the `finally` block. Alternatively, create a pytest fixture:

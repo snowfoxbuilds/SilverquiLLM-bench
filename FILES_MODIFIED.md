@@ -48,3 +48,9 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `benchmarks/DIRECTORY_SUMMARY.md` — Removed `results/` from convention pattern, added note pointing to `docker/<image_dir>/results/`
 - `benchmarks/sos/DIRECTORY_SUMMARY.md` — Marked `results/` row as deprecated with note pointing to new location
+
+## Item 9: Add test artifact cleanup and update TESTING-CONVENTIONS.md
+
+### Implementation
+- `tests/test_smoke_lifecycle.py` — Refactored to use smoke_image fixture with PID-tagged name and cleanup in teardown
+- `docs/specs/TESTING-CONVENTIONS.md` — Added Rule 8 (no persistent artifacts) and Docker cleanup checklist item

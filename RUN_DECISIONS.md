@@ -15,3 +15,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Actual codebase state**: All 4 spec files already used `docker/<image_dir>/results/<run_name>/` convention — no changes needed.
 - **What was implemented instead**: Verified with grep (zero matches), recorded in FILES_MODIFIED.md as no-op.
 - **Impact**: None — files were already correct.
+
+## Disagreement: Item 9 — Scaffold test quality
+- **Reviewer comment (strict)**: Scaffold tests are only substring checks and don't verify actual cleanup behavior.
+- **Implementer justification**: Structural/source-checking tests are the standard pattern in test_scaffold.py throughout this project for verifying conventions are followed in source.
+- **Coordinator decision**: accept implementer — substring/pattern checks are the established convention for scaffold tests in this project.
+- **Reasoning**: The actual cleanup behavior is tested by the integration test itself (which requires Docker). Scaffold tests verify structural conventions in source code, which is their role.
+- **Impact**: tests/test_scaffold.py — no changes needed for this comment.
