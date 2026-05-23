@@ -22,3 +22,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `PROJECT_MAP.md` — Replaced `results/{run_name}/` with `docker/<image_dir>/results/<run_name>/` in overview paragraph and architecture diagram
+
+## Item 5: Update runner specs — BENCHMARK-RUNNER.md, RUN-ARTIFACTS-AND-TELEMETRY.md, WORKSPACE-CONTRACT.md, AGENT-CONTAINERS.md
+
+### Implementation
+- `docs/specs/BENCHMARK-RUNNER.md` — Already contains new docker/<image-dir>/results/<run_name>/ paths (no changes needed)
+- `docs/specs/RUN-ARTIFACTS-AND-TELEMETRY.md` — Already contains new docker/<image-dir>/results/<run_name>/ paths (no changes needed)
+- `docs/specs/WORKSPACE-CONTRACT.md` — Already contains new docker/<image-dir>/results/<run_name>/ paths (no changes needed)
+- `docs/specs/AGENT-CONTAINERS.md` — Already contains new docker/<image-dir>/results/<run_name>/ paths (no changes needed)

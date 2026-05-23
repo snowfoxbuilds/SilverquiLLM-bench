@@ -58,7 +58,7 @@ Canonical implementation constraints for this TODO:
 
   Testability: `grep -n 'results/{run_name}' PROJECT_MAP.md` should return zero matches.
 
-- [ ] **Update runner specs: **[**BENCHMARK-RUNNER.md**](http://benchmark-runner.md/)**, **[**RUN-ARTIFACTS-AND-TELEMETRY.md**](http://run-artifacts-and-telemetry.md/)**, **[**WORKSPACE-CONTRACT.md**](http://workspace-contract.md/)**, **[**AGENT-CONTAINERS.md**](http://agent-containers.md/)
+- [x] **Update runner specs: **[**BENCHMARK-RUNNER.md**](http://benchmark-runner.md/)**, **[**RUN-ARTIFACTS-AND-TELEMETRY.md**](http://run-artifacts-and-telemetry.md/)**, **[**WORKSPACE-CONTRACT.md**](http://workspace-contract.md/)**, **[**AGENT-CONTAINERS.md**](http://agent-containers.md/)
   Detail: Four spec files with the same find-and-replace pattern. All `results/{run_name}/` → `docker/<image_dir>/results/<run_name>/`. Specific locations per file:
 
   **`docs/specs/BENCHMARK-RUNNER.md`** (6+ locations):
