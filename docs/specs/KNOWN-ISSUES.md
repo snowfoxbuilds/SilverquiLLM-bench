@@ -41,11 +41,11 @@ Known issues encountered during benchmark runner development, with fixes applied
 
 `Status:` ✅ Fixed
 
-`Root cause:` `_get_postmortem_path()` used `config.output_dir` (e.g., `benchmarks/sos/results/`) instead of the run-specific directory (e.g., `benchmarks/sos/results/gemma4_2026-05-12/`). Different runs' postmortems would overwrite each other.
+`Root cause:` `_get_postmortem_path()` used `config.output_dir` (e.g., `benchmarks/sos/results/`) instead of the run-specific directory (e.g., `benchmarks/sos/results/gemma4_2026-05-12/`). Different runs' postmortems would overwrite each other. (Legacy path; results now stored under `docker/<image_dir>/results/`)
 
 `Symptoms:`
 
-- Postmortem files appeared at `benchmarks/sos/results/Plains/postmortem.jsonl` instead of under the run directory
+- Postmortem files appeared at `benchmarks/sos/results/Plains/postmortem.jsonl` instead of under the run directory (Legacy path; results now stored under `docker/<image_dir>/results/`)
 - Cross-run contamination of log files
 - Messy results folder
 `Fix:` Added `run_dir` field to `AgentSession`. Updated `_get_postmortem_path()`, `_generate_agent_thoughts()`, and `append_raw_log()` to use `run_dir` instead of `config.output_dir`. Updated `cli.py` to pass `run_dir` when constructing sessions.
@@ -64,8 +64,8 @@ Known issues encountered during benchmark runner development, with fixes applied
 
 `Symptoms:`
 
-- `Contamination violation: .../benchmarks/sos/results/raw_agent_log.jsonl was created`
-- `Contamination violation: .../benchmarks/sos/results/Plains/postmortem.jsonl was created`
+- `Contamination violation: .../benchmarks/sos/results/raw_agent_log.jsonl was created` (Legacy path; results now stored under `docker/<image_dir>/results/`)
+- `Contamination violation: .../benchmarks/sos/results/Plains/postmortem.jsonl was created` (Legacy path; results now stored under `docker/<image_dir>/results/`)
 `Fix:` Updated `_check_violations()` to accept an `output_dir` parameter and skip files under it. Updated all call sites to pass the output directory.
 
 `Files changed:`

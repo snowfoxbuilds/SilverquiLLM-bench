@@ -35,3 +35,10 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `docs/specs/TEST-SUITE.md` — Updated results path to docker/<image_dir>/results/<run_name>/cards/{card_id}/ and replaced engine_work/ with workspace_final/engine/
+
+## Item 7: Update ADR-005, HELP.md, and KNOWN-ISSUES.md
+
+### Implementation
+- `docs/adrs/ADR-005: In-Place Workspace Engine With Snapshot Fallback.md` — Updated materialized path to `docker/<image_dir>/results/<run_name>/workspace_final/`
+- `docs/HELP.md` — Updated git add example to use `docker/local-pi-blind/results/` path
+- `docs/specs/KNOWN-ISSUES.md` — Added legacy-path parenthetical notes to historical `benchmarks/sos/results/` references
