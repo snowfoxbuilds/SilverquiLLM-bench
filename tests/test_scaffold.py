@@ -162,3 +162,24 @@ class TestRuffConfig:
         assert self.data.get("target-version") == "py312", (
             f"target-version should be 'py312', got {self.data.get('target-version')}"
         )
+
+
+# --- Tests for TODO item 2: .gitignore results path convention ---
+
+
+class TestGitignoreResultsPath:
+    """Verify .gitignore uses the new docker/*/results/ pattern."""
+
+    def setup_method(self) -> None:
+        repo_root = Path(__file__).resolve().parent.parent
+        self.gitignore_path = repo_root / ".gitignore"
+        self.content = self.gitignore_path.read_text()
+        self.lines = [line.strip() for line in self.content.splitlines()]
+
+    def test_contains_new_docker_results_pattern(self) -> None:
+        """`.gitignore` must contain the `docker/*/results/` pattern."""
+        assert "docker/*/results/" in self.lines
+
+    def test_does_not_contain_bare_results_line(self) -> None:
+        """`.gitignore` must NOT contain a bare `results/` line (old pattern)."""
+        assert "results/" not in self.lines
