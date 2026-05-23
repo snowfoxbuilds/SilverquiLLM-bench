@@ -183,3 +183,25 @@ class TestGitignoreResultsPath:
     def test_does_not_contain_bare_results_line(self) -> None:
         """`.gitignore` must NOT contain a bare `results/` line (old pattern)."""
         assert "results/" not in self.lines
+
+
+class TestReadmeResultsPaths:
+    """Verify README.md has migrated all results path references (TODO item 3)."""
+
+    @pytest.fixture(autouse=True)
+    def _load_readme(self) -> None:
+        readme_path = REPO_ROOT / "README.md"
+        assert readme_path.exists(), "README.md must exist at repo root"
+        self.content = readme_path.read_text(encoding="utf-8")
+
+    def test_no_legacy_results_run_name_references(self) -> None:
+        """README.md must not contain any literal 'results/{run_name}' references."""
+        assert "results/{run_name}" not in self.content, (
+            "Found legacy 'results/{run_name}' reference in README.md"
+        )
+
+    def test_contains_docker_path_reference(self) -> None:
+        """README.md must contain at least one 'docker/' path (confirms migration)."""
+        assert "docker/" in self.content, (
+            "README.md should reference 'docker/' paths after migration"
+        )

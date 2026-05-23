@@ -63,8 +63,10 @@ Stage Workspace → Run Agent Container → Snapshot Progress → Harvest worksp
     - The official evaluation state is materialized as:
 
 ```
-results/{run_name}/workspace_final/
+docker/<image_dir>/results/<run_name>/workspace_final/
 ```
+
+> **`<image_dir>` derivation**: Derived from the `--image` flag by stripping the `silverquillm-` prefix and `:tag` suffix. For example, `silverquillm-local-pi-blind:latest` → `local-pi-blind`.
 
 1. **Evaluate**
     - Evaluation is post-run and reads only from `workspace_final/`.
@@ -199,7 +201,7 @@ docs/                           Specs, generated docs, references
 Each run writes a self-contained results directory.
 
 ```
-results/{run_name}/
+docker/<image_dir>/results/<run_name>/
   workspace_final/              Official evaluation Workspace
   snapshots/                    Host-side Git Workspace snapshots
   snapshot_telemetry.jsonl      Filesystem-based progress telemetry
@@ -364,8 +366,8 @@ The runner must tolerate `/output/` being empty.
 The runner independently captures Docker stdout/stderr:
 
 ```
-results/{run_name}/docker_stdout.log
-results/{run_name}/docker_stderr.log
+docker/<image_dir>/results/<run_name>/docker_stdout.log
+docker/<image_dir>/results/<run_name>/docker_stderr.log
 ```
 
 Live terminal logs are labeled and colorized by type when running in an interactive terminal. Use:

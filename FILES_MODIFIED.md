@@ -12,3 +12,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `.gitignore` — Replaced `results/` with `docker/*/results/` to ignore result artifacts under new path convention
+
+## Item 3: Update README.md — all legacy results path references
+
+### Implementation
+- `README.md` — Replaced all `results/{run_name}/...` references with `docker/<image_dir>/results/<run_name>/...` and added `<image_dir>` derivation note
