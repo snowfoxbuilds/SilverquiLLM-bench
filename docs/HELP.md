@@ -4,6 +4,10 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -e ".[dev]"
 
+# sync specs
+
+python3 sync_notion_specs.py
+
 # Testing repo
 
 pytest --ignore=tests/audited/sos/
@@ -21,6 +25,8 @@ docker run --rm -it --network=host   -v /tmp/test-workspace:/workspace   -v /tmp
 node /app/entrypoint.mjs 2>&1
 
 # Validation
+silverquillm run --image silverquillm-local-pi-blind:latest --cards 1,7,13,44,97 --timeout 36000
+
 silverquillm run \
   --image silverquillm-local-pi-blind:latest \
   --timeout 600 

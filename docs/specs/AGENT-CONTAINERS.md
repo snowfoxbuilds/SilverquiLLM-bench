@@ -325,7 +325,7 @@ Snapshots are used for:
 - **Progress telemetry** — After each snapshot, the runner can emit a short summary of which SOS card implementations or tests changed since the prior snapshot.
 Recovery uses the entire selected Workspace snapshot. The runner does not roll back only `/workspace/engine/` while keeping final card implementations, because that would create a combination the agent never produced.
 
-After final harvest or snapshot fallback selection, the runner materializes the official evaluation Workspace as `results/{run_name}/workspace_final/`. This gives humans and the evaluator a stable directory path without requiring Git commands. If no fallback was used, `workspace_final/` is the final harvested Workspace. If fallback was used, `workspace_final/` is the selected snapshot Workspace.
+After final harvest or snapshot fallback selection, the runner materializes the official evaluation Workspace as `docker/<image-dir>/results/<run_name>/workspace_final/`. This gives humans and the evaluator a stable directory path without requiring Git commands. If no fallback was used, `workspace_final/` is the final harvested Workspace. If fallback was used, `workspace_final/` is the selected snapshot Workspace.
 
 `workspace_final/` contains the entire Workspace tree, not a reduced evaluation subset. Keeping prompt, Run Manifest, reference docs, FDN examples, SOS outputs, and engine state together preserves the coherent agent-produced state for evaluation and audit.
 
@@ -345,7 +345,7 @@ The agent prompt should state the hard location rule only: each card's implement
 
 Card directory restructuring is normally a card-level failure. If one expected `card_impl.py` is missing or moved, that card is marked no output or fails evaluation. If many cards are moved, those cards fail individually. Only broad Workspace destruction, such as a missing `cards/sos/` tree, is a run-level structural failure. Missing or unusable `engine/` follows the engine viability and snapshot fallback flow.
 
-Evaluation reads from `results/{run_name}/workspace_final/` as the official source. Any legacy per-card artifacts under `results/{run_name}/cards/{card_id}/` are optional derived convenience outputs and are not a recovery mechanism for broken Workspace structure.
+Evaluation reads from `docker/<image-dir>/results/<run_name>/workspace_final/` as the official source. Any legacy per-card artifacts under the run's `cards/{card_id}/` directory are optional derived convenience outputs and are not a recovery mechanism for broken Workspace structure.
 
 Snapshot fallback selection uses Engine Regression only (`tests/engine/`) as the viability gate. FDN Card Regression and SOS Card Correctness are evaluated after selection, not used to choose the snapshot.
 

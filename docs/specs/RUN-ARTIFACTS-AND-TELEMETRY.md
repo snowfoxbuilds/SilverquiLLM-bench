@@ -17,7 +17,7 @@ Agent Containers run for long periods and may modify many files. The runner need
 Every run materializes:
 
 ```plain text
-results/{run_name}/workspace_final/
+docker/<image-dir>/results/<run_name>/workspace_final/
 ```
 
 This is the official source for evaluation.
@@ -32,7 +32,7 @@ During container execution, the runner captures a Workspace snapshot every 60 se
 Snapshots are host-side Git commits:
 
 ```plain text
-results/{run_name}/snapshots/
+docker/<image-dir>/results/<run_name>/snapshots/
   .git/
   workspace/
     prompt.md
@@ -79,7 +79,7 @@ This is a run-level status only. SOS Card Correctness and FDN Card Regression ar
 After every 60-second snapshot interval, the runner writes telemetry to:
 
 ```plain text
-results/{run_name}/snapshot_telemetry.jsonl
+docker/<image-dir>/results/<run_name>/snapshot_telemetry.jsonl
 ```
 
 It also prints a human-readable console summary.
@@ -140,8 +140,8 @@ Independently of optional `/output/` files, the runner captures Docker process s
 Save:
 
 ```plain text
-results/{run_name}/docker_stdout.log
-results/{run_name}/docker_stderr.log
+docker/<image-dir>/results/<run_name>/docker_stdout.log
+docker/<image-dir>/results/<run_name>/docker_stderr.log
 ```
 
 Stream them live to the terminal while saving.
@@ -207,7 +207,7 @@ Rules:
 - Validate image boot, volume mounts, basic file writing, and auth/model reachability.
 ## Decisions
 
-- **`workspace_final/`**** is canonical**: Evaluation reads from the full official evaluation Workspace.
+- **`workspace_final/`**** is canonical**: Evaluation reads from `docker/<image-dir>/results/<run_name>/workspace_final/`.
 - **Snapshots are full Workspace Git commits**: Snapshot every 60 seconds, host-side, outside the container.
 - **Snapshot fallback is whole-Workspace**: Do not mix final card implementations with earlier engine snapshots.
 - **Fallback viability uses Engine Regression only**: `tests/engine/` is the snapshot selection gate.

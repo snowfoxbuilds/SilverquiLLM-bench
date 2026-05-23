@@ -1,3 +1,17 @@
+## Completed 2026-05-22
+
+Phase 11: Runner Polish, Output Channels (8 items)
+
+Branch: `execute-todo-with-subagents/runner-polish` → `main`
+
+- [x] **Remove ****`--cards-dir`**** and ****`--engine-dir`**** CLI flags; hardcode repo-relative paths**
+- [x] **Add ****`--cards`**** filter to ****`silverquillm run`**
+- [x] **Write ****`run_manifest.json`**** during workspace staging**
+- [x] **Update Docker entrypoints: remove ****`engine_work`**** copy, add file-based channel separation**
+- [x] **Create ****`silverquillm/runner.py`**** with pipe-readers + poll-loop architecture**
+- [x] **Integrate ****`ContainerLifecycle`**** into CLI ****`run`**** and ****`smoke`**** commands; update harvest and add ****`--hang-timeout`**
+- [x] **Fix results directory structure: store under image directory, update run name format**
+- [x] **Add pytest ****`integration`**** marker, ****`pytest-timeout`****, and alpine smoke pipeline test**
 ## Completed 2026-05-15
 
 Phase 10: FDN Card Implementations (174 cards)

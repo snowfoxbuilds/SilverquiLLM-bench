@@ -4,7 +4,7 @@ Last updated: 2026-05-13
 
 # Workspace Contract
 
-The Workspace is the only evaluatable state an Agent Container can produce. The runner stages the Workspace, mounts it at `/workspace/`, snapshots it during execution, and materializes the official evaluation Workspace as `results/{run_name}/workspace_final/`.
+The Workspace is the only evaluatable state an Agent Container can produce. The runner stages the Workspace, mounts it at `/workspace/`, snapshots it during execution, and materializes the official evaluation Workspace as `docker/<image-dir>/results/<run_name>/workspace_final/`.
 
 ## Context
 
@@ -123,7 +123,7 @@ Then delete the legacy layout.
 
 ## Decisions
 
-- **Workspace is evaluatable state**: Evaluation reads from `results/{run_name}/workspace_final/`, not from `/output/`.
+- **Workspace is evaluatable state**: Evaluation reads from `docker/<image-dir>/results/<run_name>/workspace_final/`, not from `/output/`.
 - **Run Manifest is advisory**: `/workspace/run_manifest.json` contains only `timeout_seconds` and `deadline_utc`; the runner remains the hard timeout authority.
 - **No ****`engine_work/`**: Agents modify `/workspace/engine/` in place. The host baseline is used for diffs.
 - **Card class location is hard contract**: Each card's canonical implementation class must be importable from `cards/{set}/{card_id}/card_impl.py`.

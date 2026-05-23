@@ -74,7 +74,7 @@ On timeout, the runner still harvests partial results and the latest usable Outp
 
 ## Result Harvesting
 
-After the container exits, the runner selects the official evaluation Workspace and materializes it at `results/{run_name}/workspace_final/`.
+After the container exits, the runner selects the official evaluation Workspace and materializes it at `docker/<image-dir>/results/<run_name>/workspace_final/`.
 
 The official evaluation Workspace is either:
 
@@ -176,7 +176,7 @@ Status values:
 ## Output Artifacts
 
 ```javascript
-results/{run_name}/
+docker/<image-dir>/results/<set_code>-<timestamp>/
 ├── workspace_final/            # Canonical full Workspace used for evaluation
 ├── snapshots/                  # Host-side Git snapshot repo for Workspace commits
 ├── snapshot_telemetry.jsonl    # Snapshot progress telemetry
@@ -193,19 +193,24 @@ results/{run_name}/
         └── result.json
 ```
 
-Run name defaults to `{image_name}_{ISO-timestamp}` (e.g. `pi-blind_2026-05-13T01-30`). Each run is self-contained. Cross-run aggregates (multi-model leaderboard, combined cross-eval) live at the results root:
+Run results are stored under the Docker image directory that produced them, at `docker/<image-dir>/results/<run_name>/`. The run name format is `<set_code>-<timestamp>` (e.g., `sos-2026-05-16T19-49`). The image directory is derived from the `--image` flag by stripping the `silverquillm-` prefix and the `:tag` suffix (e.g., `silverquillm-local-pi-blind:latest` → `docker/local-pi-blind/`).
+
+Each run is self-contained. Example:
 
 ```javascript
-results/
-├── leaderboard.md
-├── pi-blind_2026-05-13T01-30/
+docker/local-pi-blind/results/
+├── sos-2026-05-16T19-49/
 │   └── ...
-├── pi-tested_2026-05-13T03-45/
+├── sos-2026-05-17T10-00/
 │   └── ...
-├── opencode-tested_2026-05-14T09-15/
+
+docker/homelab-pi-blind/results/
+├── sos-2026-05-16T20-30/
 │   └── ...
 └── ...
 ```
+
+Cross-agent aggregates (multi-model leaderboard, combined cross-eval) are a future concern and do not live under any image directory.
 
 ## Contamination Controls
 
@@ -263,10 +268,10 @@ The runner tracks per-run metrics (not per-card, since the agent manages its own
 - **No viable snapshot means no viable output**: If final engine state is unusable and no prior snapshot passes Engine Regression, mark the run `no_viable_output_produced`. This means the agent broke the engine before producing a viable snapshot, so SOS and FDN correctness are not evaluated. [SETTLED]
 - **No viable output is run-level**: `no_viable_output_produced` is a run-level status only. Do not assign per-card statuses in this case; SOS Card Correctness and FDN Card Regression are skipped because there is no coherent evaluatable Workspace. [SETTLED]
 - **Preserve broken final Workspace**: When a run is marked `no_viable_output_produced`, the runner still preserves the broken final Workspace for debugging, even though the run is not evaluatable. [SETTLED]
-- **Preserve official evaluation Workspace**: Every run materializes the official evaluation Workspace as `results/{run_name}/workspace_final/`. If no fallback was used, this is the final harvested Workspace. If snapshot fallback was used, this is the selected whole-Workspace snapshot. [SETTLED]
+- **Preserve official evaluation Workspace**: Every run materializes the official evaluation Workspace as `docker/<image-dir>/results/<run_name>/workspace_final/`. If no fallback was used, this is the final harvested Workspace. If snapshot fallback was used, this is the selected whole-Workspace snapshot. [SETTLED]
 - **`workspace_final/`**** is the full Workspace**: The official evaluation Workspace includes the entire Workspace tree, not only evaluation-relevant files. This preserves prompt, Run Manifest, docs, FDN examples, SOS outputs, and engine state together for auditability. [SETTLED]
 - **Workspace card structure is invariant**: The runner assumes agents preserve the staged card directory contract: `cards/{set}/{card_id}/card_spec.json`, `card_impl.py`, and optional `tests.py`. If an agent moves, renames, or restructures card directories, evaluation is allowed to fail or mark affected cards as no output; legacy per-card artifacts do not attempt to rescue a broken card structure. [SETTLED]
-- **Evaluation reads from ****`workspace_final/`**: The official evaluation input is `results/{run_name}/workspace_final/`, assuming the Workspace card structure is preserved. Legacy `results/{run_name}/cards/{card_id}/` artifacts are optional derived convenience outputs only, not a recovery path for restructured Workspaces. [SETTLED]
+- **Evaluation reads from ****`workspace_final/`**: The official evaluation input is `docker/<image-dir>/results/<run_name>/workspace_final/`, assuming the Workspace card structure is preserved. Legacy per-run `cards/{card_id}/` artifacts are optional derived convenience outputs only, not a recovery path for restructured Workspaces. [SETTLED]
 - **`/output/`**** is observability only**: The Output Directory pipes agent and process output out of the container for extra telemetry and debugging. No evaluatable state should depend on `/output/`; official evaluation reads from `workspace_final/`. [SETTLED]
 - **`/output/`**** has no required files**: Because the Output Directory is telemetry-only, the runner must tolerate it being empty. Files like `progress.jsonl`, `system.log`, `agent_stdout.log`, `agent_stderr.log`, and `exit_code` are optional conventions, not evaluation requirements. [SETTLED]
 - **Runner captures Docker stdout/stderr**: Independently of optional `/output/` files, the runner captures Docker process stdout and stderr at the host level and saves them as debugging logs such as `docker_stdout.log` and `docker_stderr.log`. These logs are telemetry-only and not evaluatable state. [SETTLED]
@@ -287,4 +292,5 @@ The runner tracks per-run metrics (not per-card, since the agent manages its own
 - **Card restructuring is usually card-level failure**: If a single card's expected `card_impl.py` is missing or moved, that card is marked no output or fails evaluation. Multiple moved cards fail individually. Only broad Workspace destruction, such as a missing `cards/sos/` tree, becomes run-level structural failure. Missing or unusable `engine/` follows engine viability and snapshot fallback flow. [SETTLED]
 - **Legacy Foundations layout is not staged after FDN migration**: After FDN cards are migrated into `cards/fdn/{card_id}/`, the agent Workspace should not include old monolithic `cards/foundations/` files. Duplicate FDN implementations create ambiguity and undermine the FDN/SOS shared structure. [SETTLED]
 - **Repository may keep legacy Foundations during migration**: The repo may temporarily keep `cards/foundations/` while implementations are copied into `cards/fdn/{card_id}/card_impl.py`, registry/tests are updated, and imports are verified. The agent Workspace should still stop staging `cards/foundations/` once per-card FDN examples are ready. Delete the legacy layout after tests pass and no imports remain. [SETTLED]
+- **Results stored under image directory**: Run results live at `docker/<image-dir>/results/<run_name>/`. The image directory is derived from `--image` by stripping the `silverquillm-` prefix and `:tag` suffix. The run name format is `<set_code>-<timestamp>` (e.g., `sos-2026-05-16T19-49`). This keeps results organized by the agent image that produced them. [SETTLED]
 - **Filtered runs are not leaderboard-valid**: The `--cards` filter is for development, debugging, and Pipeline Validation Runs only. It filters SOS targets; FDN examples remain staged in full. Evaluation runs only on staged SOS targets, and `run_summary.json` records the filter. Leaderboards exclude filtered runs by default; leaderboard-valid runs require `card_filter = null` and the full SOS Draft Set staged. [SETTLED]

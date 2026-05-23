@@ -1,436 +1,149 @@
 # TODO
 
-## Phase 11: Runner Polish, Output Channels
+## Phase 12: Result Path Migration & Run Name Format
 
-Scope: (1) Add card subset filter to CLI. (2) Runner container lifecycle — pipe-readers + poll-loop architecture, multi-channel output, dual timeouts (hard + hang). (3) Smoke test automation.
+Scope: Migrate all result directory paths from legacy conventions (`results/{run_name}/` and `benchmarks/<set>/results/`) to the new convention (`docker/<image_dir>/results/<run_name>/`). Change run name format from `{image_short}_{timestamp}` to `<set_code>-<timestamp>`. Add test artifact cleanup.
 
-Reference: [AGENT-CONTAINERS.md](http://agent-containers.md/) for container architecture, [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) for runner spec, [CONTEXT.md](http://context.md/) for vocabulary.
-
-Prerequisite: Phase 9 PR #12 must be merged first (or these items applied on top of that branch).
+Reference: [Prompt: Migrate Result Paths & Run Name Format](prompt-page) for the full file audit. [CONTEXT.md](http://context.md/) for vocabulary.
 
 Canonical implementation constraints for this TODO:
 
-- Current specs and ADRs override stale code patterns in the repository. Do not copy old `engine_work/`, adapter, per-card harness, or `config.yaml` behavior forward.
-- Agents edit `/workspace/engine/` in place. There is no `/workspace/engine_work/`.
-- The runner writes `/workspace/run_manifest.json` immediately before `docker run` with only `timeout_seconds` and `deadline_utc`.
-- The official evaluated output is `results/{run_name}/workspace_final/`, containing the full selected Workspace.
-- `/output/` is telemetry-only. It may contain optional `progress.jsonl`, `system.log`, `agent_stdout.log`, `agent_stderr.log`, and `exit_code`, but evaluation must not depend on any `/output/` file.
-- The runner captures Docker stdout/stderr at the host level, streams them live, and saves them as `docker_stdout.log` and `docker_stderr.log`.
+- `<image_dir>` is derived from `--image` by stripping the `silverquillm-` prefix and `:tag` suffix. E.g. `silverquillm-local-pi-blind:latest` → `local-pi-blind`.
+- `<run_name>` format: `<set_code>-<timestamp>`. For v1, set code is always `sos`. E.g. `sos-2026-05-16T19-49`.
+- Respect KEY_[DECISIONS.md](http://decisions.md/) `_REPO_ROOT convention`: both `cli.py` and `workspace.py` use `_REPO_ROOT = Path(__file__).resolve().parent.parent`.
+- Respect KEY_[DECISIONS.md](http://decisions.md/) `Docker log file naming`: [runner.py](http://runner.py/) copies `.tmp` → `.log` after pipe threads join.
+- Respect KEY_[DECISIONS.md](http://decisions.md/) `Integration test CLI invocation pattern`: use `[sys.executable, "-m", "silverquillm.cli", ...]` in subprocess calls.
+- Use [CONTEXT.md](http://context.md/) vocabulary throughout: Agent Container, Workspace, Hard Timeout, Hang Timeout, Output Snapshot, Run Manifest, User Prompt.
 ---
 
-- [x] **Remove ****`--cards-dir`**** and ****`--engine-dir`**** CLI flags; hardcode repo-relative paths**
-  Detail: These flags are unnecessary — cards and engine directories are static repo-relative paths. The settled decision ([BENCHMARK-RUNNER.md](http://benchmark-runner.md/)) states: "Cards and engine source directories are repo-relative constants (`./cards`, `./engine`); they are not configurable via CLI flags."
+- [ ] **Update ****`_make_run_name()`****, add ****`_image_dir()`**** and ****`_image_results_dir()`****, wire into ****`run()`**** default**
+  Detail: Three related changes in `silverquillm/cli.py` that form one logical unit:
 
-  Current state:
-
-  - `cli.py` `run` command has `--cards-dir` (default `./cards`) and `--engine-dir` (default `./engine`) Click options. Both are passed to `stage_workspace(cards_dir, engine_dir, ...)`.
-  - `workspace.py` `stage_workspace()` takes `cards_dir: Path` and `engine_dir: Path` as parameters.
-  Changes:
-
-  1. In `silverquillm/cli.py`:
-    - Remove `--cards-dir` and `--engine-dir` Click options from the `run` command.
-    - Remove the `cards_dir` and `engine_dir` parameters from `run()`.
-    - Pass `_REPO_ROOT / "cards"` and `_REPO_ROOT / "engine"` directly to `stage_workspace()`.
-    - Update `_harvest_results()` to use `_REPO_ROOT / "cards"` instead of the `cards_dir` parameter. Remove the `cards_dir` parameter from `_harvest_results()` and `_write_card_statuses()`.
-  2. In `silverquillm/workspace.py`:
-    - Add a module-level `_REPO_ROOT` constant (same pattern as `cli.py`: `Path(__file__).resolve().parent.parent`).
-    - Replace `cards_dir` and `engine_dir` parameters with hardcoded `_REPO_ROOT / "cards"` and `_REPO_ROOT / "engine"`.
-    - Update `stage_workspace()` signature to `stage_workspace(output_dir: Path, *, card_filter: list[str] | None = None)` — the `card_filter` parameter is a no-op stub in this item (implemented in the next item).
-    - Update internal helpers (`_copy_engine`, `_copy_reference_docs`, `_stage_cards`) to use the hardcoded paths.
-  Files: `silverquillm/cli.py`, `silverquillm/workspace.py`.
-
-  Testability: Existing `tests/test_workspace.py` tests should be updated to match the new `stage_workspace()` signature. Verify staging still produces the correct workspace structure with hardcoded paths.
-
-- [x] **Add ****`--cards`**** filter to ****`silverquillm run`**
-  Detail: Optional flag to stage only a subset of SOS cards for development and debugging. FDN cards are always staged in full (they're reference examples, not benchmark targets). The settled decision ([BENCHMARK-RUNNER.md](http://benchmark-runner.md/)) states: "Filtered runs are not leaderboard-valid."
-
-  CLI signature:
-
-  ```bash
-silverquillm run --image <img> --cards 001,042,105 --timeout 3600
-  ```
-
-  Changes:
-
-  1. In `silverquillm/cli.py`:
-    - Add `--cards` Click option: `@click.option("--cards", default=None, help="Comma-separated SOS collector numbers to stage (default: all)")`. Parse into `list[str] | None` by splitting on commas and stripping whitespace.
-    - Pass `card_filter` to `stage_workspace()`.
-  2. In `silverquillm/workspace.py`:
-    - Implement the `card_filter` parameter in `stage_workspace()` (stubbed in previous item).
-    - In `_stage_cards()`, when staging the `sos` tier: if `card_filter` is not `None`, skip card directories whose collector number is not in the filter list. FDN staging is unaffected.
-    - Adjust `_PROMPT_TEXT` when `card_filter` is set: replace "Implement all SOS cards" with "Implement the following SOS cards: {comma-separated list}". When `card_filter` is `None`, use the existing full-set prompt.
-  3. Metadata recording: `card_filter` will be recorded in `run_summary.json` in a later phase. For now, print the filter to stdout during staging: `click.echo(f"Card filter: {card_filter or 'all'}")`.
-  Files: `silverquillm/cli.py`, `silverquillm/workspace.py`.
-
-  Testability: Unit test `stage_workspace()` with `card_filter=["001", "042"]` → verify only those two SOS dirs exist in `workspace/cards/sos/`. Full set when `card_filter=None` → all SOS dirs present. FDN dirs always present regardless of filter. Verify prompt text changes when filter is set.
-
-- [x] **Write ****`run_manifest.json`**** during workspace staging**
-  Detail: The runner writes `/workspace/run_manifest.json` immediately before `docker run` with advisory timeout facts. Per [BENCHMARK-RUNNER.md](http://benchmark-runner.md/): "The Run Manifest is advisory. It is not agent configuration."
-
-  The manifest contains exactly two fields:
-
-  ```json
-{
-  "timeout_seconds": 7200,
-  "deadline_utc": "2026-05-13T22:22:00Z"
-}
-  ```
-
-  Changes:
-
-  1. In `silverquillm/cli.py` in the `run()` function, after `stage_workspace()` returns and immediately before the `docker run` call:
-    - Compute `deadline_utc` as `datetime.now(tz=timezone.utc) + timedelta(seconds=timeout)`.
-    - Write `run_manifest.json` to the workspace directory:
-    ```python
-import json
-from datetime import timedelta
-
-manifest = {
-    "timeout_seconds": timeout,
-    "deadline_utc": (datetime.now(tz=timezone.utc) + timedelta(seconds=timeout)).isoformat(timespec="seconds").replace("+00:00", "Z"),
-}
-(workspace / "run_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    ```
-
-  2. In `_harvest_results()`, copy `run_manifest.json` from the workspace to the run results directory (alongside other artifacts).
+  1. **`_image_dir(image: str) -> str`** — New helper. Strips `silverquillm-` prefix and `:tag` suffix from a Docker image name. Implementation: `short = image.rsplit("/", 1)[-1].split(":")[0]`, then `if short.startswith("silverquillm-"): short = short[len("silverquillm-"):]`. E.g. `silverquillm-local-pi-blind:latest` → `local-pi-blind`, `ghcr.io/user/silverquillm-pi-blind:latest` → `pi-blind`, `my-custom-image:v2` → `my-custom-image`.
+  2. **`_image_results_dir(image: str) -> Path`** — New helper. Returns `_REPO_ROOT / "docker" / _image_dir(image) / "results"`. This replaces the old default `_REPO_ROOT / "results"`.
+  3. **`_make_run_name(set_code: str = "sos") -> str`** — Change signature from `_make_run_name(image: str)` to `_make_run_name(set_code: str = "sos")`. Change return format from `f"{short}_{ts}"` to `f"{set_code}-{ts}"`. Remove the image-name parsing logic (moved to `_image_dir`).
+  4. **Wire into ****`run()`** — Change `results_dir` default from `_REPO_ROOT / "results"` to `_image_results_dir(image)`. Change `_make_run_name(image)` call to `_make_run_name()` (uses default `"sos"`). The `container_name = f"sqm-{run_name}"` line stays as-is — it will naturally produce `sqm-sos-2026-05-16T19-49`.
   Files: `silverquillm/cli.py`.
 
-  Testability: After `stage_workspace()` + manifest write, verify `workspace/run_manifest.json` exists and contains valid JSON with `timeout_seconds` (int) and `deadline_utc` (ISO-8601 string). Verify the file is copied to the results directory during harvest.
+  Testability: Update `TestRunName` in `tests/test_cli_docker.py` — replace old tests with: `test_default_set_code()` calling `_make_run_name()` and asserting `sos-` prefix + timestamp pattern; `test_custom_set_code()` calling `_make_run_name("fdn")` and asserting `fdn-` prefix. Add new `TestImageResultsDir` class testing `_image_results_dir()` with inputs: `"silverquillm-local-pi-blind:latest"` → ends with `docker/local-pi-blind/results`, `"my-custom-image:v2"` → `docker/my-custom-image/results`, `"ghcr.io/user/silverquillm-pi-blind:latest"` → `docker/pi-blind/results`. Verify `TestRunDefaults.test_default_timeout_3600` still passes (it doesn't check results_dir).
 
-- [x] **Update Docker entrypoints: remove ****`engine_work`**** copy, add file-based channel separation**
-  Detail: Current entrypoints (`docker/homelab-pi-blind/entrypoint.mjs` and `docker/local-pi-blind/entrypoint.mjs`) copy engine to `/workspace/engine_work` — this is a stale pattern. Per the spec, agents edit `/workspace/engine/` in place. There is no `engine_work`.
+- [ ] **Update ****`.gitignore`**** for new results path convention**
+  Detail: In `.gitignore`, find the `results/` line at the bottom and replace it with `docker/*/results/`. This ignores result artifacts under the new `docker/<image_dir>/results/` tree. Keep `benchmarks/*` as-is (it serves other purposes). No other `.gitignore` entries reference `results/`.
 
-  Additionally, entrypoints should separate output into named log files in `/output/` for the runner's multi-channel monitoring. Current entrypoints write only `progress.jsonl` and `exit_code` to `/output/`.
+  Files: `.gitignore`.
 
-  **Important**: Current Pi entrypoints are JavaScript (`entrypoint.mjs`), not bash. Both JavaScript and bash entrypoints are valid — future agent images may use either language. The channel separation pattern must work in both.
+  Testability: Create a dummy file at `docker/test-img/results/dummy.txt`, run `git status`, confirm it doesn't appear. Remove the dummy file.
 
-  Changes to both `docker/homelab-pi-blind/entrypoint.mjs` and `docker/local-pi-blind/entrypoint.mjs`:
+- [ ] **Update ****`README.md`**** — all legacy results path references**
+  Detail: `README.md` has 5+ locations referencing `results/{run_name}/...` or the old run name format. Every instance must be updated:
 
-  1. **Remove ****`engine_work`**** copy**: Delete the `cpSync("/workspace/engine", "/workspace/engine_work", { recursive: true })` line. Update `createAgentSession()` to use `cwd: "/workspace"` (already correct — the agent will edit `/workspace/engine/` in place).
-  2. **Add system log**: System/orchestration messages ("Starting entrypoint", "Model found", "Session created", etc.) should be written to `/output/system.log` instead of `console.log()`. Create a helper:
-    ```javascript
-import { appendFileSync, mkdirSync } from "fs";
-mkdirSync("/output", { recursive: true });
-function log(msg) {
-  const ts = new Date().toISOString().substring(11, 19);
-  appendFileSync("/output/system.log", `[${ts}] ${msg}\n`);
-}
+  1. **"Harvest Final Workspace" section** (~line 76): `results/{run_name}/workspace_final/` → `docker/<image_dir>/results/<run_name>/workspace_final/`.
+  2. **"Runner Artifacts" section** — single-run tree: replace `results/{run_name}/` root with `docker/<image_dir>/results/<run_name>/`.
+  3. **"Runner Artifacts" section** — cross-run tree: replace `results/` + `pi-blind_2026-05-13T01-30/` with per-image layout showing `docker/local-pi-blind/results/sos-2026-05-13T01-30/` etc.
+  4. **"Logs and Telemetry" section**: `results/{run_name}/docker_stdout.log` → `docker/<image_dir>/results/<run_name>/docker_stdout.log` (and stderr).
+  5. **"Snapshot fallback" section**: `results/{run_name}/workspace_final/` → update.
+  Also add a brief note explaining `<image_dir>` derivation at first occurrence.
+
+  Files: `README.md`.
+
+  Testability: `grep -n 'results/{run_name}' README.md` should return zero matches after the change. Visual review of tree diagrams.
+
+- [ ] **Update ****`PROJECT_MAP.md`**** — results path references**
+  Detail: Three locations in `PROJECT_MAP.md`:
+
+  1. **Overview paragraph**: `materializes the official evaluation state as \`results/{run_name}/workspace_final/`` → `docker/<image_dir>/results/<run_name>/workspace_final/`.
+  2. **Architecture diagram**: the box showing `results/{run_name}/` with children → replace with `docker/<image_dir>/results/<run_name>/`.
+  3. **Key Runtime Patterns** section: any references to the old path → update.
+  Files: `PROJECT_MAP.md`.
+
+  Testability: `grep -n 'results/{run_name}' PROJECT_MAP.md` should return zero matches.
+
+- [ ] **Update runner specs: **[**BENCHMARK-RUNNER.md**](http://benchmark-runner.md/)**, **[**RUN-ARTIFACTS-AND-TELEMETRY.md**](http://run-artifacts-and-telemetry.md/)**, **[**WORKSPACE-CONTRACT.md**](http://workspace-contract.md/)**, **[**AGENT-CONTAINERS.md**](http://agent-containers.md/)
+  Detail: Four spec files with the same find-and-replace pattern. All `results/{run_name}/` → `docker/<image_dir>/results/<run_name>/`. Specific locations per file:
+
+  **`docs/specs/BENCHMARK-RUNNER.md`** (6+ locations):
+
+  - Result Harvesting section prose.
+  - Output Artifacts section: full tree diagram, run name description (change `{image_name}_{ISO-timestamp}` to `<set_code>-<timestamp>` with example `sos-2026-05-13T01-30`), cross-run tree (update to per-image layout).
+  - Decisions section: "Preserve official evaluation Workspace" bullet, "Evaluation reads from workspace_final/" bullet (2 refs).
+  **`docs/specs/RUN-ARTIFACTS-AND-TELEMETRY.md`** (4+ locations):
+
+  - Official evaluation Workspace: `workspace_final/` path.
+  - Snapshot repo: `snapshots/` path.
+  - Snapshot telemetry: `snapshot_telemetry.jsonl` path.
+  - Docker logs: `docker_stdout.log` and `docker_stderr.log` paths.
+  **`docs/specs/WORKSPACE-CONTRACT.md`** (2 locations):
+
+  - Opening paragraph.
+  - Decisions section: "Workspace is evaluatable state" bullet.
+  **`docs/specs/AGENT-CONTAINERS.md`** (3+ locations):
+
+  - Runner-Owned Snapshots section (2 refs).
+  - Legacy per-card artifacts ref: `results/{run_name}/cards/{card_id}/` → update.
+  - Container Lifecycle implementation sketch: update path comment.
+  Files: `docs/specs/BENCHMARK-RUNNER.md`, `docs/specs/RUN-ARTIFACTS-AND-TELEMETRY.md`, `docs/specs/WORKSPACE-CONTRACT.md`, `docs/specs/AGENT-CONTAINERS.md`.
+
+  Testability: `grep -rn 'results/{run_name}' docs/specs/BENCHMARK-RUNNER.md docs/specs/RUN-ARTIFACTS-AND-TELEMETRY.md docs/specs/WORKSPACE-CONTRACT.md docs/specs/AGENT-CONTAINERS.md` should return zero matches.
+
+- [ ] **Update ****`docs/specs/TEST-SUITE.md`**** — results path and stale ****`engine_work/`**** reference**
+  Detail: Two fixes:
+
+  1. **Artifacts Per Card section**: `results/{run_name}/cards/{card_id}/` → `docker/<image_dir>/results/<run_name>/cards/{card_id}/`.
+  2. **Evaluation Phase section**: the line referencing `agent's \`engine_work/`` is stale — agents edit `/workspace/engine/` in place (no `engine_work/`). Replace with `workspace_final/engine/` or similar per the current spec.
+  Files: `docs/specs/TEST-SUITE.md`.
+
+  Testability: `grep -n 'results/{run_name}\|engine_work' docs/specs/TEST-SUITE.md` should return zero matches.
+
+- [ ] **Update ****`docs/adrs/ADR-005*.md`****, ****`docs/HELP.md`****, and ****`docs/specs/KNOWN-ISSUES.md`**
+  Detail: Three small doc files:
+
+  1. **`docs/adrs/ADR-005*.md`** — Decision section: `materialized as \`results/{run_name}/workspace_final/`` → `docker/<image_dir>/results/<run_name>/workspace_final/`.
+  2. **`docs/HELP.md`** — Upload results example: `git add -f benchmarks/sos/results/gemma4_2026-05-12T01-59/` → `git add -f docker/local-pi-blind/results/sos-2026-05-12T01-59/`.
+  3. **`docs/specs/KNOWN-ISSUES.md`** — Issue #3 references `benchmarks/sos/results/` and `benchmarks/sos/results/gemma4_2026-05-12/`. These are historical. Add a parenthetical note: "(Legacy path; results now stored under `docker/<image_dir>/results/`)".
+  Files: The ADR-005 file (check exact filename via `ls docs/adrs/`), `docs/HELP.md`, `docs/specs/KNOWN-ISSUES.md`.
+
+  Testability: Verify no unqualified `results/{run_name}` or `benchmarks/sos/results/` references remain in these files.
+
+- [ ] **Update ****`benchmarks/`**** directory summaries**
+  Detail: Two files:
+
+  1. **`benchmarks/DIRECTORY_SUMMARY.md`**: The convention paragraph lists `results/ (benchmark outputs)`. Remove `results/` from the convention and add a note that results are now stored under `docker/<image_dir>/results/`.
+  2. **`benchmarks/sos/DIRECTORY_SUMMARY.md`**: The subdirectories table has a `results/` row. Remove this row or mark it as deprecated with a note pointing to the new location.
+  Files: `benchmarks/DIRECTORY_SUMMARY.md`, `benchmarks/sos/DIRECTORY_SUMMARY.md`.
+
+  Testability: Visual review — no `results/` subdirectory should be listed as active convention.
+
+- [ ] **Add test artifact cleanup and update **[**TESTING-CONVENTIONS.md**](http://testing-conventions.md/)
+  Detail: Two changes to ensure tests leave no persistent artifacts:
+
+  1. **`tests/test_smoke_lifecycle.py`**: The `test_smoke_container_lifecycle` test builds `silverquillm-smoke-test:lifecycle` but does not clean it up. Refactor to use a PID-tagged image name (`f"silverquillm-smoke-test:{os.getpid()}"`) to avoid parallel collisions, and wrap in a `try/finally` that runs `subprocess.run(["docker", "rmi", "-f", image_tag], capture_output=True, timeout=30)` in the `finally` block. Alternatively, create a pytest fixture:
+    ```python
+@pytest.fixture()
+def smoke_image(tmp_path):
+    image_tag = f"silverquillm-smoke-test:{os.getpid()}"
+    # ... build logic ...
+    yield image_tag
+    subprocess.run(["docker", "rmi", "-f", image_tag], capture_output=True, timeout=30)
     ```
 
-  3. **Capture agent stdout/stderr to files**: Pi's `session.subscribe()` already captures text deltas to `process.stdout`. Additionally tee agent output to `/output/agent_stdout.log`. For stderr (thinking/reasoning), subscribe to thinking events if available, or note that Pi in `-p` mode sends thinking to stderr naturally — the runner's pipe readers will capture Docker-level stderr regardless. At minimum, write agent text output to `/output/agent_stdout.log`:
-    ```javascript
-import { createWriteStream } from "fs";
-const agentStdout = createWriteStream("/output/agent_stdout.log", { flags: "a" });
-session.subscribe((event) => {
-  if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
-    const delta = event.assistantMessageEvent.delta;
-    process.stdout.write(delta);
-    agentStdout.write(delta);
-  }
-  // ... progress.jsonl logging unchanged
-});
-    ```
+  2. **`docs/specs/TESTING-CONVENTIONS.md`**: Add a new rule (Rule 8 or append to existing rules): "Tests must not leave persistent artifacts (result directories, Docker images, temp files outside `tmp_path`). Integration tests that build Docker images must clean up those images in a `finally` block or fixture teardown." Also add to the Checklist: `- [ ] No Docker images left after test (integration tests clean up via fixture/finally)`.
+  3. **Verify existing harvest tests**: Confirm `TestHarvest` and `TestCardStatus` in `tests/test_cli_docker.py` still use `tmp_path` for results dirs after the path changes — they must never use the real `_image_results_dir()` default. Inspect and fix if needed.
+  Files: `tests/test_smoke_lifecycle.py`, `docs/specs/TESTING-CONVENTIONS.md`, `tests/test_cli_docker.py` (verification only).
 
-  4. **SIGTERM trap**: Add a signal handler so `docker stop -t 10` triggers graceful shutdown:
-    ```javascript
-process.on("SIGTERM", () => {
-  log("Received SIGTERM, shutting down");
-  appendFileSync("/output/progress.jsonl",
-    JSON.stringify({ ts: new Date().toISOString(), status: "timed_out" }) + "\n"
-  );
-  process.exit(0);
-});
-    ```
+  Testability: Run `docker images | grep silverquillm-smoke-test` before and after `pytest -m integration tests/test_smoke_lifecycle.py` — image should not persist after test.
 
-  Reference pattern for future bash entrypoints (e.g., OpenCode, Claude Code):
+- [ ] **Remove stale ****`results/`**** and ****`benchmarks/*/results/`**** directories**
+  Detail: Final cleanup step. If the repo-root `results/` directory exists (even if gitignored), remove it. If any `benchmarks/<set_code>/results/` directories exist, remove them. Then verify no stale references remain:
 
   ```bash
-#!/bin/bash
-set -euo pipefail
-mkdir -p /output
-log() { echo "[$(date -u +%H:%M:%S)] $*" >> /output/system.log; }
-trap 'log "SIGTERM received"; echo "{\"ts\":\"$(date -u +%FT%TZ)\",\"status\":\"timed_out\"}" >> /output/progress.jsonl; exit 0' TERM
-log "Building prompt"
-PROMPT="$(cat /workspace/prompt.md)"
-log "Launching agent"
-agent_command -p "${PROMPT}" \
-  > >(tee /output/agent_stdout.log) \
-  2> >(tee /output/agent_stderr.log >&2) &
-wait $!
-echo $? > /output/exit_code
+# Check for stale path references in code and docs
+grep -rn 'results/{run_name}' --include='*.py' --include='*.md' .
+grep -rn 'benchmarks/.*/results/' --include='*.py' --include='*.md' .
+# Both should return zero matches (except KNOWN-ISSUES.md historical note)
   ```
 
-  Files: `docker/homelab-pi-blind/entrypoint.mjs`, `docker/local-pi-blind/entrypoint.mjs`.
+  If either grep finds unexpected matches, fix them before committing.
 
-  Testability: Build the updated image, run smoke test, verify: (a) `/workspace/engine_work/` does NOT exist, (b) `/output/system.log` contains timestamped messages, (c) `/output/agent_stdout.log` contains agent output, (d) `progress.jsonl` still written. Manual verification — this runs against the real model server.
+  Files: Filesystem cleanup + verification grep.
 
-- [x] **Create ****`silverquillm/runner.py`**** with pipe-readers + poll-loop architecture**
-  Detail: New module implementing the `ContainerLifecycle` class — the core container launch, live streaming, dual timeout enforcement, and graceful shutdown logic. This is the settled architecture from [BENCHMARK-RUNNER.md](http://benchmark-runner.md/): "Two dedicated threads drain Docker stdout/stderr pipes to host files. The main thread polls all files on a ~1s interval."
-
-  Create `silverquillm/runner.py` with the following:
-
-  **`ContainerLifecycle`**** class:**
-
-  ```python
-import subprocess
-import threading
-import time
-from pathlib import Path
-from dataclasses import dataclass
-
-@dataclass
-class LifecycleResult:
-    exit_code: int | None
-    timed_out: bool
-    timeout_reason: str | None  # "hard_timeout" | "hang_timeout" | None
-    container_name: str
-
-class ContainerLifecycle:
-    def __init__(
-        self,
-        image: str,
-        container_name: str,
-        workspace: Path,
-        output: Path,
-        hard_timeout: int,
-        hang_timeout: int = 900,
-        env_args: list[str] | None = None,
-        snapshot_callback: callable | None = None,
-    ):
-        ...
-
-    def run(self) -> LifecycleResult:
-        """Launch container, stream output, enforce timeouts, return result."""
-        ...
-  ```
-
-  **Pipe readers** — two dedicated threads, trivial, just drain to disk:
-
-  ```python
-def _drain_pipe(self, pipe, path: Path) -> None:
-    """Drain a subprocess pipe to a file. Runs in a dedicated thread."""
-    with open(path, "wb") as f:
-        while True:
-            chunk = pipe.read(4096)
-            if not chunk:
-                break
-            f.write(chunk)
-            f.flush()
-  ```
-
-  The pipe readers write to temporary host files: `docker_stdout.tmp` and `docker_stderr.tmp` in the output directory. These are renamed to `docker_stdout.log` and `docker_stderr.log` during harvest.
-
-  **Main loop** — single-threaded poll loop (~1s iterations):
-
-  ```python
-def _poll_loop(self, proc: subprocess.Popen) -> LifecycleResult:
-    start = time.monotonic()
-    last_activity = start
-    last_snapshot = start
-    file_positions: dict[Path, int] = {}  # track read position per file
-
-    monitored_files = [
-        (self._docker_stdout_tmp, "stdout"),   # white
-        (self._docker_stderr_tmp, "stderr"),    # gray
-        (self.output / "system.log", "system"),  # blue
-        (self.output / "progress.jsonl", "progress"),  # green
-    ]
-
-    try:
-        while proc.poll() is None:
-            had_data = self._read_and_print_new_bytes(monitored_files, file_positions)
-            if had_data:
-                last_activity = time.monotonic()
-
-            now = time.monotonic()
-            # Hard Timeout check
-            if now - start > self.hard_timeout:
-                self._docker_stop()
-                return LifecycleResult(..., timeout_reason="hard_timeout")
-
-            # Hang Timeout check
-            if now - last_activity > self.hang_timeout:
-                self._docker_stop()
-                return LifecycleResult(..., timeout_reason="hang_timeout")
-
-            # Snapshot (if callback provided)
-            if self.snapshot_callback and now - last_snapshot >= 60:
-                self.snapshot_callback()
-                last_snapshot = now
-
-            time.sleep(1)
-    except KeyboardInterrupt:
-        self._docker_stop()
-        return LifecycleResult(..., timeout_reason=None)
-    finally:
-        self._stdout_thread.join(timeout=10)
-        self._stderr_thread.join(timeout=10)
-
-    return LifecycleResult(
-        exit_code=proc.returncode,
-        timed_out=False,
-        timeout_reason=None,
-        container_name=self.container_name,
-    )
-  ```
-
-  **`_read_and_print_new_bytes()`** — reads new bytes from each file since last position, prints with color labels:
-
-  - `docker_stdout.tmp` → print in default color (agent output)
-  - `docker_stderr.tmp` → print in gray (agent thinking/reasoning)
-  - `/output/system.log` → print in blue (entrypoint orchestration)
-  - `/output/progress.jsonl` → print in green (structured events)
-  Use ANSI escape codes for color. Return `True` if any file had new data.
-
-  **`_docker_stop()`** — calls `subprocess.run(["docker", "stop", "-t", "10", self.container_name], timeout=30, check=False)`. Sends SIGTERM, waits 10s, then SIGKILL if needed.
-
-  **Timeout model** — clock-based via `time.monotonic()`, NOT `proc.wait(timeout)`. Per settled decision: "This decouples timeout from the Popen API and enables future pause/resume."
-
-  **Hang Timeout activity tracking** — resets `last_activity` when ANY monitored file has new bytes. Per settled decision: "The hang clock resets on any file modification across all monitored sources." This includes Docker stdout/stderr pipe dumps AND `/output/` files.
-
-  **Container launch** — `subprocess.Popen` with `stdout=subprocess.PIPE, stderr=subprocess.PIPE`. Container is named `sqm-{run_name}` and run with `--rm`. Example:
-
-  ```python
-proc = subprocess.Popen(
-    ["docker", "run", "--rm", "--name", self.container_name,
-     "--runtime", "runc", "--network=host",
-     "-v", f"{self.workspace}:/workspace",
-     "-v", f"{self.output}:/output",
-     *self.env_args,
-     self.image],
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE,
-)
-  ```
-
-  Do NOT use `--stop-timeout` (the runner owns the timeout, not Docker). Do NOT use `subprocess.run()` (cannot stream or enforce hang timeout).
-
-  Files: `silverquillm/runner.py` (new file).
-
-  Testability: Unit tests with mock `Popen`:
-
-  - Normal exit: mock process exits with code 0 after writing some data → verify `LifecycleResult.exit_code == 0`, `timed_out == False`.
-  - Hard timeout: mock process never exits → verify `docker stop` called, `timeout_reason == "hard_timeout"`.
-  - Hang timeout: mock process writes data, then goes silent → verify `docker stop` called, `timeout_reason == "hang_timeout"`.
-  - KeyboardInterrupt: raise during poll loop → verify `docker stop` called, threads joined.
-  - Verify pipe reader threads are started and joined.
-- [x] **Integrate ****`ContainerLifecycle`**** into CLI ****`run`**** and ****`smoke`**** commands; update harvest and add ****`--hang-timeout`**
-  Detail: Replace the current `subprocess.run()` + `--stop-timeout` pattern in both `run` and `smoke` commands with the new `ContainerLifecycle` from `runner.py`. Also fix stale harvest logic.
-
-  **`run`**** command changes in ****`silverquillm/cli.py`****:**
-
-  1. Add `--hang-timeout` Click option: `@click.option("--hang-timeout", default=900, type=int, help="Hang timeout in seconds (default: 900)")`. Pass to `ContainerLifecycle`.
-  2. Replace the `subprocess.run()` call + `TimeoutExpired` handling with:
-    ```python
-from silverquillm.runner import ContainerLifecycle
-
-container_name = f"sqm-{run_name}"
-lifecycle = ContainerLifecycle(
-    image=image,
-    container_name=container_name,
-    workspace=workspace,
-    output=output,
-    hard_timeout=timeout,
-    hang_timeout=hang_timeout,
-    env_args=_api_key_env_args(),
-)
-result = lifecycle.run()
-
-if result.timeout_reason:
-    click.echo(f"Container stopped: {result.timeout_reason}", err=True)
-elif result.exit_code != 0:
-    click.echo(f"Container exited with code {result.exit_code}", err=True)
-    ```
-
-  3. Remove the `--stop-timeout` Docker flag usage.
-  4. Remove the backup `timeout=timeout + 60` pattern.
-  **Harvest changes in ****`_harvest_results()`****:**
-
-  1. **Remove ****`engine_work`**** reference**: The current code diffs `engine_orig` vs `engine_work`. Replace with diffing `_REPO_ROOT / "engine"` (host baseline) vs `workspace / "engine"` (container-modified). The agent edits `/workspace/engine/` in place.
-  2. **Update log file names**: Replace copying `stdout.log`/`stderr.log` with copying `docker_stdout.log`/`docker_stderr.log` (from the pipe reader output files in the output directory). Also copy any `/output/*.log` and `/output/*.jsonl` files.
-  3. **Materialize ****`workspace_final/`**: After harvest, copy the entire workspace to `results/{run_name}/workspace_final/`. This is the official evaluation Workspace per spec. Use `shutil.copytree()` with `ignore=shutil.ignore_patterns("__pycache__", "*.pyc")`.
-  4. **Copy ****`run_manifest.json`**: Copy from `workspace_final/run_manifest.json` to `results/{run_name}/run_manifest.json`.
-  5. **Record ****`timeout_reason`**: Accept `timeout_reason: str | None` parameter. Will be included in `run_summary.json` in a future phase. For now, print it.
-  6. **Remove ****`cards_dir`**** parameter** (already done in item 1, but verify consistency).
-  **`smoke`**** command changes:**
-
-  1. Replace `subprocess.run()` with `ContainerLifecycle` using a short hard timeout (120s) and hang timeout (60s).
-  2. Remove `--stop-timeout` Docker flag.
-  3. Use consistent container naming: `sqm-smoke-{pid}`.
-  Files: `silverquillm/cli.py`.
-
-  Testability: Existing `tests/test_cli_docker.py` tests should be updated to reflect the new `ContainerLifecycle` integration. Mock `ContainerLifecycle.run()` to return various `LifecycleResult` values and verify CLI behavior (exit codes, error messages). Test harvest produces `workspace_final/`, `docker_stdout.log`, `docker_stderr.log`, and `run_manifest.json` in the results directory.
-
-- [x] **Add pytest ****`integration`**** marker, ****`pytest-timeout`****, and alpine smoke pipeline test**
-  Detail: Set up test infrastructure for Docker-dependent integration tests, then add a `test_smoke_container_lifecycle` that validates the smoke pipeline end-to-end using a minimal alpine image.
-
-  **Infrastructure changes:**
-
-  1. In `pyproject.toml`:
-    - Add `pytest-timeout` to `[project.optional-dependencies] dev`: `"pytest-timeout"`.
-    - Add markers to `[tool.pytest.ini_options]`: `markers = ["integration: requires Docker daemon"]`.
-    - Add default timeout: `timeout = 300` (5 minutes, prevents hung tests).
-  2. Default `pytest` runs skip integration tests. Run integration tests explicitly: `pytest -m integration`.
-  **Alpine smoke pipeline test:**
-
-  Create `tests/test_smoke_lifecycle.py`:
-
-  ```python
-import pytest
-import subprocess
-from pathlib import Path
-
-@pytest.mark.integration
-@pytest.mark.timeout(120)
-def test_smoke_container_lifecycle(tmp_path: Path) -> None:
-    """Smoke test pipeline with minimal alpine container (no real agent).
-
-    This is a smoke-test-for-the-smoke-test: it validates that the
-    silverquillm smoke pipeline (staging → launch → harvest → exit)
-    works end-to-end using a trivial Docker image. It does NOT test
-    real agent images — those are validated manually via
-    `silverquillm smoke --image <img>`.
-    """
-    # Build a trivial image that writes expected /output/ files and exits
-    dockerfile = tmp_path / "Dockerfile"
-    entrypoint = tmp_path / "entrypoint.sh"
-    dockerfile.write_text(
-        "FROM alpine:latest\n"
-        "COPY entrypoint.sh /entrypoint.sh\n"
-        "RUN chmod +x /entrypoint.sh\n"
-        'ENTRYPOINT ["/entrypoint.sh"]\n'
-    )
-    entrypoint.write_text(
-        '#!/bin/sh\n'
-        'echo "[00:00:01] Starting" >> /output/system.log\n'
-        'echo "hello from agent" > /workspace/hello.py\n'
-        'echo 0 > /output/exit_code\n'
-    )
-    image = "silverquillm-smoke-test:lifecycle"
-    build = subprocess.run(
-        ["docker", "build", "-t", image, str(tmp_path)],
-        capture_output=True, timeout=60,
-    )
-    assert build.returncode == 0, build.stderr.decode()
-
-    # Run smoke via CLI
-    result = subprocess.run(
-        ["silverquillm", "smoke", "--image", image],
-        capture_output=True, timeout=60,
-    )
-    assert result.returncode == 0, result.stderr.decode()
-    assert "PASS" in result.stdout.decode()
-  ```
-
-  This test:
-
-  - Builds a disposable alpine image with a trivial entrypoint
-  - Runs the actual `silverquillm smoke` CLI command against it
-  - Verifies the pipeline completes successfully
-  - Runs anywhere with Docker installed — no model server needed
-  - Skipped in normal `pytest` runs (needs `-m integration`)
-  Real agent image smoke testing (e.g., Pi against the local model server at `192.168.86.22:8080`) remains a manual `silverquillm smoke --image <img>` workflow and is NOT part of the test suite.
-
-  Files: `tests/test_smoke_lifecycle.py` (new), `pyproject.toml`.
-
-  Testability: `pytest -m integration tests/test_smoke_lifecycle.py` passes on any machine with Docker installed.
+  Testability: Verify `results/` and `benchmarks/sos/results/` do not exist. Run the full test suite to confirm nothing depends on the old paths.

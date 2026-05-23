@@ -11,7 +11,7 @@ LLM benchmark that evaluates coding ability by tasking models with implementing 
 - Agents: Docker-based black-box containers (one image per agent+mode+strategy variant)
 - License: MIT (matching XMage)
 - Card implementations: one class per card, subclassing `CardImpl`
-- Tests: pytest with `test_utils` helpers, max 30 per card
+- Tests: pytest with `test_utils` helpers, max 30 per card. Run with `--ignore=tests/audited/` unless working on card implementations specifically. 
 - Three evaluation dimensions: SOS card correctness, FDN card regression, engine regression
 - Development phases: Phase 1 (engine port) → Phase 2 (container harness + audited tests) → Phase 3 (FDN completion + replay validation) → Phase 4 (SOS benchmark runs + leaderboard)
 ## Domain Language
