@@ -32,6 +32,6 @@ silverquillm run \
   --timeout 600 
 
 ## Upload results
-git add -f benchmarks/sos/results/gemma4_2026-05-12T01-59/
+git add -f docker/local-pi-blind/results/sos-2026-05-12T01-59/
 
 

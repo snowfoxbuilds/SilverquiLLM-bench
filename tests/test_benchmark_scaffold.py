@@ -2,7 +2,7 @@
 
 These tests confirm:
 - benchmark/ package exists and is importable
-- benchmarks/sos/ directory structure (data/, cards/, results/ subdirs)
+- benchmarks/sos/ directory structure (data/, cards/ subdirs; results/ removed per migration)
 - benchmarks/sos/data/sos.json exists, is valid JSON, and every card has required fields
 - pyyaml and click are importable (added as dependencies)
 - SOS data integrity: card count, field types, and reasonable values
@@ -55,9 +55,9 @@ class TestBenchmarksSosDirectoryStructure:
         """benchmarks/sos/cards/ directory must exist."""
         assert (REPO_ROOT / "benchmarks" / "sos" / "cards").is_dir()
 
-    def test_results_subdir_exists(self) -> None:
-        """benchmarks/sos/results/ directory must exist."""
-        assert (REPO_ROOT / "benchmarks" / "sos" / "results").is_dir()
+    def test_results_subdir_removed(self) -> None:
+        """benchmarks/sos/results/ directory must NOT exist (migrated to docker/<image_dir>/results/)."""
+        assert not (REPO_ROOT / "benchmarks" / "sos" / "results").exists()
 
 
 class TestSosDataFile:

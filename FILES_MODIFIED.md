@@ -2,60 +2,65 @@
 
 Appended by each Implementer invocation after it writes its diff. One section per TODO item.
 
-## Item 1: Remove --cards-dir and --engine-dir CLI flags
+## Item 1: Update _make_run_name(), add _image_dir() and _image_results_dir()
+
+### Implementation
+- `silverquillm/cli.py` — Added `_image_dir()` and `_image_results_dir()` helpers, updated `_make_run_name()` signature to `set_code="sos"`, wired `_image_results_dir(image)` as default in `run()`
+
+
+## Item 2: Update .gitignore for new results path convention
+
+### Implementation
+- `.gitignore` — Replaced `results/` with `docker/*/results/` to ignore result artifacts under new path convention
+
+## Item 3: Update README.md — all legacy results path references
+
+### Implementation
+- `README.md` — Replaced all `results/{run_name}/...` references with `docker/<image_dir>/results/<run_name>/...` and added `<image_dir>` derivation note
+
+## Item 4: Update PROJECT_MAP.md — results path references
+
+### Implementation
+- `PROJECT_MAP.md` — Replaced `results/{run_name}/` with `docker/<image_dir>/results/<run_name>/` in overview paragraph and architecture diagram
+
+## Item 5: Update runner specs — BENCHMARK-RUNNER.md, RUN-ARTIFACTS-AND-TELEMETRY.md, WORKSPACE-CONTRACT.md, AGENT-CONTAINERS.md
+
+### Implementation
+- `docs/specs/BENCHMARK-RUNNER.md` — Already contains new docker/<image-dir>/results/<run_name>/ paths (no changes needed)
+- `docs/specs/RUN-ARTIFACTS-AND-TELEMETRY.md` — Already contains new docker/<image-dir>/results/<run_name>/ paths (no changes needed)
+- `docs/specs/WORKSPACE-CONTRACT.md` — Already contains new docker/<image-dir>/results/<run_name>/ paths (no changes needed)
+- `docs/specs/AGENT-CONTAINERS.md` — Already contains new docker/<image-dir>/results/<run_name>/ paths (no changes needed)
+
+## Item 6: Update docs/specs/TEST-SUITE.md — results path and stale engine_work/ reference
+
+### Implementation
+- `docs/specs/TEST-SUITE.md` — Updated results path to docker/<image_dir>/results/<run_name>/cards/{card_id}/ and replaced engine_work/ with workspace_final/engine/
+
+## Item 7: Update ADR-005, HELP.md, and KNOWN-ISSUES.md
+
+### Implementation
+- `docs/adrs/ADR-005: In-Place Workspace Engine With Snapshot Fallback.md` — Updated materialized path to `docker/<image_dir>/results/<run_name>/workspace_final/`
+- `docs/HELP.md` — Updated git add example to use `docker/local-pi-blind/results/` path
+- `docs/specs/KNOWN-ISSUES.md` — Added legacy-path parenthetical notes to historical `benchmarks/sos/results/` references
+
+## Item 8: Update benchmarks/ directory summaries
+
+### Implementation
+- `benchmarks/DIRECTORY_SUMMARY.md` — Removed `results/` from convention pattern, added note pointing to `docker/<image_dir>/results/`
+- `benchmarks/sos/DIRECTORY_SUMMARY.md` — Marked `results/` row as deprecated with note pointing to new location
+
+## Item 9: Add test artifact cleanup and update TESTING-CONVENTIONS.md
+
+### Implementation
+- `tests/test_smoke_lifecycle.py` — Refactored to use smoke_image fixture with PID-tagged name and cleanup in teardown
+- `docs/specs/TESTING-CONVENTIONS.md` — Added Rule 8 (no persistent artifacts) and Docker cleanup checklist item
+
+## Item 10: Remove stale results/ and benchmarks/*/results/ directories
 
 ### Tests
-- `tests/test_workspace.py` — Verifies stage_workspace signature has no cards_dir/engine_dir params
-- `tests/test_cli_docker.py` — Verifies _harvest_results signature has no cards_dir param; CLI flags removed
+- `tests/test_benchmark_scaffold.py` — Updated test_results_subdir_exists → test_results_subdir_removed (asserts directory absent)
 
 ### Implementation
-- `silverquillm/cli.py` — Removed cards_dir param from _harvest_results and _write_card_statuses; use _REPO_ROOT internally
-- `silverquillm/workspace.py` — Removed cards_dir/engine_dir params from stage_workspace; signature is now (output_dir, *, card_filter)
-
-## Item 2: Add --cards filter to silverquillm run
-
-### Tests
-- `tests/test_workspace.py` — Verifies stage_workspace signature and workspace structure
-- `tests/test_cli_docker.py` — Verifies CLI flags, docker args, harvest, and smoke tests
-
-### Implementation
-- `silverquillm/cli.py` — Added --cards Click option, parsed into card_filter list with zero-pad normalization, passed to stage_workspace
-- `silverquillm/workspace.py` — Implemented card_filter in _stage_cards (SOS filtering by collector_number with numeric normalization), dynamic prompt text, click.echo of filter
-
-## Item 3: Write run_manifest.json during workspace staging
-
-### Implementation
-- `silverquillm/cli.py` — Write run_manifest.json (timeout_seconds + deadline_utc) after staging, copy it in _harvest_results; moved json import to module level
-
-## Item 4: Update Docker entrypoints
-
-### Implementation
-- `docker/homelab-pi-blind/entrypoint.mjs` — Removed engine_work copy, added system.log logging, agent_stdout.log capture, SIGTERM handler
-- `docker/local-pi-blind/entrypoint.mjs` — Removed engine_work copy, added system.log logging, agent_stdout.log capture, SIGTERM handler
-
-## Item 5: Create silverquillm/runner.py
-
-### Tests
-- `tests/test_runner.py` — Verifies poll-loop ordering, final read pass, timeout enforcement, snapshot callbacks
-
-### Implementation
-- `silverquillm/runner.py` — New module with ContainerLifecycle class; revision fixed poll-loop ordering (read before hang-timeout check) and added final _read_and_print_new_bytes() after thread join
-
-## Item 6: Integrate ContainerLifecycle into CLI
-
-### Tests
-- `tests/test_cli_docker.py` — Updated mocks from subprocess.run to ContainerLifecycle; updated harvest log names
-
-### Implementation
-- `silverquillm/cli.py` — Replaced subprocess.run with ContainerLifecycle in run/smoke commands; updated _harvest_results with timeout_reason, engine diff, workspace_final, glob output files
-- `silverquillm/runner.py` — After pipe-reader threads join, copy docker_stdout.tmp → docker_stdout.log and docker_stderr.tmp → docker_stderr.log so _harvest_results picks them up
-
-## Item 7: Add pytest integration marker and smoke pipeline test
-
-### Tests
-- `tests/test_smoke_lifecycle.py` — Integration smoke test for container lifecycle using alpine image (skipped by default)
-
-### Implementation
-- `pyproject.toml` — Added pytest-timeout dep, integration marker, default timeout=300, addopts skip integration by default
-- `tests/test_smoke_lifecycle.py` — New file: smoke test that builds alpine image and runs silverquillm smoke CLI
-
+- `silverquillm/cli.py` — Updated docstring from `results/{run_name}/` to `docker/<image_dir>/results/<run_name>/`
+- `tests/test_benchmark_scaffold.py` — Flipped assertion to verify benchmarks/sos/results/ does NOT exist
+- Filesystem cleanup: removed `results/` and `benchmarks/*/results/` directories

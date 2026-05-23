@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from silverquillm.cli import main, _make_run_name, _api_key_env_args, _harvest_results
+from silverquillm.cli import main, _make_run_name, _image_dir, _image_results_dir, _api_key_env_args, _harvest_results
 from silverquillm.runner import LifecycleResult
 
 
@@ -91,22 +91,84 @@ class TestRemovedCLIFlags:
 
 
 class TestRunName:
-    """Run names should match {image_short_name}_{ISO-timestamp} pattern."""
+    """Run names should match {set_code}-{ISO-timestamp} pattern."""
 
-    def test_simple_image_name(self):
-        name = _make_run_name("opencode-tested")
-        assert name.startswith("opencode-tested_")
+    def test_default_set_code(self):
+        """Calling _make_run_name() with no args should use 'sos-' prefix."""
+        name = _make_run_name()
+        assert name.startswith("sos-"), f"Expected 'sos-' prefix, got: {name}"
         # Check ISO timestamp portion: YYYY-MM-DDTHH-MM
-        ts_part = name.split("_", 1)[1]
+        ts_part = name[len("sos-"):]
         assert re.match(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}", ts_part)
 
-    def test_image_with_registry_and_tag(self):
-        name = _make_run_name("ghcr.io/user/my-image:latest")
-        assert name.startswith("my-image_")
+    def test_custom_set_code(self):
+        """Calling _make_run_name('fdn') should use 'fdn-' prefix."""
+        name = _make_run_name("fdn")
+        assert name.startswith("fdn-"), f"Expected 'fdn-' prefix, got: {name}"
+        ts_part = name[len("fdn-"):]
+        assert re.match(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}", ts_part)
 
-    def test_image_with_tag_only(self):
-        name = _make_run_name("opencode-blind:v2")
-        assert name.startswith("opencode-blind_")
+    def test_timestamp_format(self):
+        """Timestamp should be ISO format with hyphens replacing colons."""
+        name = _make_run_name()
+        # Full pattern: {code}-YYYY-MM-DDTHH-MM
+        assert re.match(r"^sos-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}$", name)
+
+    def test_default_parameter_is_sos(self):
+        """The default parameter value should be 'sos'."""
+        import inspect
+        sig = inspect.signature(_make_run_name)
+        default = sig.parameters["set_code"].default
+        assert default == "sos"
+
+
+# ---------------------------------------------------------------------------
+# Test: _image_dir helper
+# ---------------------------------------------------------------------------
+
+
+class TestImageDir:
+    """_image_dir strips silverquillm- prefix and :tag suffix."""
+
+    def test_silverquillm_prefix_with_tag(self):
+        assert _image_dir("silverquillm-local-pi-blind:latest") == "local-pi-blind"
+
+    def test_registry_with_silverquillm_prefix(self):
+        assert _image_dir("ghcr.io/user/silverquillm-pi-blind:latest") == "pi-blind"
+
+    def test_custom_image_no_prefix(self):
+        assert _image_dir("my-custom-image:v2") == "my-custom-image"
+
+    def test_plain_image_no_tag(self):
+        assert _image_dir("silverquillm-foo") == "foo"
+
+    def test_no_prefix_no_tag(self):
+        assert _image_dir("some-image") == "some-image"
+
+
+# ---------------------------------------------------------------------------
+# Test: _image_results_dir helper
+# ---------------------------------------------------------------------------
+
+
+class TestImageResultsDir:
+    """_image_results_dir returns repo_root/docker/{image_dir}/results."""
+
+    def test_silverquillm_local_pi_blind(self):
+        result = _image_results_dir("silverquillm-local-pi-blind:latest")
+        assert result.parts[-3:] == ("docker", "local-pi-blind", "results")
+
+    def test_custom_image(self):
+        result = _image_results_dir("my-custom-image:v2")
+        assert result.parts[-3:] == ("docker", "my-custom-image", "results")
+
+    def test_registry_image(self):
+        result = _image_results_dir("ghcr.io/user/silverquillm-pi-blind:latest")
+        assert result.parts[-3:] == ("docker", "pi-blind", "results")
+
+    def test_returns_path_object(self):
+        result = _image_results_dir("silverquillm-foo:v1")
+        assert isinstance(result, Path)
 
 
 # ---------------------------------------------------------------------------

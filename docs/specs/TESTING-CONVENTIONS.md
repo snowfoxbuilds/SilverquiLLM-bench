@@ -150,11 +150,24 @@ Use `test_utils` helpers: `create_game()`, `set_board_state()`, `cast_spell()`, 
 
 Tests that need to verify subprocess behavior should mock `subprocess.Popen` or use `unittest.mock.patch`. Real subprocess spawning creates orphan processes, port conflicts, and environment-dependent failures.
 
-**Exception:** Integration tests that verify the runner pipeline may use mock adapters, but must not spawn real LLM-calling processes or Docker containers.
+**Exception:** Integration tests that verify the runner pipeline may use mock adapters, but must not spawn real LLM-calling processes or Docker containers. The sole exception is smoke/lifecycle tests explicitly marked with `@pytest.mark.integration`, which may build and run Docker containers provided they clean up all images and containers in fixture teardown (see Rule 8).
 
 ### 7. Clean up all resources in test teardown
 
 Use `tmp_path` (pytest fixture) for temporary files. Use context managers or `try/finally` for threads, events, and timers. Never leave background threads running after a test completes.
+
+### 8. Tests must not leave persistent artifacts
+
+Tests must not leave persistent artifacts (result directories, Docker images, temp files outside `tmp_path`). Integration tests that build Docker images must clean up those images in a `finally` block or fixture teardown. Use PID-tagged image names to avoid collisions in parallel test runs:
+
+```python
+@pytest.fixture()
+def smoke_image(tmp_path):
+    image_tag = f"silverquillm-smoke-test:{os.getpid()}"
+    # ... build logic ...
+    yield image_tag
+    subprocess.run(["docker", "rmi", "-f", image_tag], capture_output=True, timeout=30)
+```
 
 ---
 
@@ -171,6 +184,7 @@ Before committing any test file, verify:
 - [ ] Test completes in under 10 seconds even if code under test is broken
 - [ ] `tmp_path` used for all filesystem operations
 - [ ] No background threads or timers left running after test
+- [ ] No Docker images left after test (integration tests clean up via fixture/finally)
 ---
 
 ## Enforcing These Conventions

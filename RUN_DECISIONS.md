@@ -3,22 +3,22 @@
 Decisions made during this run only. Before the PR, migrate anything worth preserving long-term into `KEY_DECISIONS.md`.
 
 
-## Test failure: Item 1 — Remove --cards-dir and --engine-dir CLI flags
-- **Failing tests**: test_signature_does_not_accept_cards_dir, test_signature_does_not_accept_engine_dir, test_harvest_signature_no_cards_dir
-- **Tester's intent**: Verify parameters are fully removed from function signatures per TODO spec
-- **Implementer's approach**: Kept cards_dir/engine_dir as optional params with None defaults for backward compatibility
-- **Coordinator decision**: fix implementation
-- **Reasoning**: The TODO spec explicitly says "Replace cards_dir and engine_dir parameters with hardcoded paths" and "Update stage_workspace() signature to stage_workspace(output_dir: Path, *, card_filter: list[str] | None = None)". The parameters must be fully removed, not made optional. Tests in the repo can be updated to use the new signature.
+## Test failure: Item 1 — _make_run_name() separator
+- **Failing tests**: TestRunName assertions expect underscore separator
+- **Tester's intent**: Test the new _make_run_name() function contract
+- **Implementer's approach**: Used underscore to match tests, but TODO spec says hyphen
+- **Coordinator decision**: fix tests — the TODO spec explicitly requires hyphen separator (`<set_code>-<timestamp>`)
+- **Reasoning**: The TODO spec is unambiguous: format is `f"{set_code}-{ts}"` with example `sos-2026-05-16T19-49`. Tests were written with wrong assumption.
 
-## Disagreement: Item 4 — Update Docker entrypoints
-- **Reviewer comment (strict)**: New log files (`system.log`, `agent_stdout.log`) are not harvested by `_harvest_results()`, so channel separation is not usable outside the container.
-- **Implementer justification**: N/A (Implementer did not respond — this is a coordinator override).
-- **Coordinator decision**: accept implementer (defer harvest update to item 6)
-- **Reasoning**: The TODO explicitly splits this work: Item 4 updates entrypoints, Item 6 updates harvest to "Also copy any `/output/*.log` and `/output/*.jsonl` files." The harvest changes are intentionally scoped to item 6 where the full `ContainerLifecycle` integration happens.
-- **Impact**: Harvest will be updated in item 6. Until then, new log files exist in containers but aren't collected.
+## Spec deviation: Item 5 — Runner spec files already migrated
+- **TODO spec expected**: Find-and-replace `results/{run_name}/` in 4 spec files.
+- **Actual codebase state**: All 4 spec files already used `docker/<image_dir>/results/<run_name>/` convention — no changes needed.
+- **What was implemented instead**: Verified with grep (zero matches), recorded in FILES_MODIFIED.md as no-op.
+- **Impact**: None — files were already correct.
 
-## Spec deviation: Item 6 — Integrate ContainerLifecycle into CLI
-- **TODO spec expected**: Full replacement of subprocess.run() with ContainerLifecycle in both run and smoke commands, plus harvest updates.
-- **Actual codebase state**: Implementer only added --hang-timeout flag, deferring the core replacement because existing tests mock subprocess.run.
-- **What was implemented instead**: Sending back to Implementer with directives to complete the full replacement. Existing tests will be updated by the Tester afterward.
-- **Impact**: silverquillm/cli.py
+## Disagreement: Item 9 — Scaffold test quality
+- **Reviewer comment (strict)**: Scaffold tests are only substring checks and don't verify actual cleanup behavior.
+- **Implementer justification**: Structural/source-checking tests are the standard pattern in test_scaffold.py throughout this project for verifying conventions are followed in source.
+- **Coordinator decision**: accept implementer — substring/pattern checks are the established convention for scaffold tests in this project.
+- **Reasoning**: The actual cleanup behavior is tested by the integration test itself (which requires Docker). Scaffold tests verify structural conventions in source code, which is their role.
+- **Impact**: tests/test_scaffold.py — no changes needed for this comment.

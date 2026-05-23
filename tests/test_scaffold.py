@@ -162,3 +162,138 @@ class TestRuffConfig:
         assert self.data.get("target-version") == "py312", (
             f"target-version should be 'py312', got {self.data.get('target-version')}"
         )
+
+
+# --- Tests for TODO item 2: .gitignore results path convention ---
+
+
+class TestGitignoreResultsPath:
+    """Verify .gitignore uses the new docker/*/results/ pattern."""
+
+    def setup_method(self) -> None:
+        repo_root = Path(__file__).resolve().parent.parent
+        self.gitignore_path = repo_root / ".gitignore"
+        self.content = self.gitignore_path.read_text()
+        self.lines = [line.strip() for line in self.content.splitlines()]
+
+    def test_contains_new_docker_results_pattern(self) -> None:
+        """`.gitignore` must contain the `docker/*/results/` pattern."""
+        assert "docker/*/results/" in self.lines
+
+    def test_does_not_contain_bare_results_line(self) -> None:
+        """`.gitignore` must NOT contain a bare `results/` line (old pattern)."""
+        assert "results/" not in self.lines
+
+
+class TestReadmeResultsPaths:
+    """Verify README.md has migrated all results path references (TODO item 3)."""
+
+    @pytest.fixture(autouse=True)
+    def _load_readme(self) -> None:
+        readme_path = REPO_ROOT / "README.md"
+        assert readme_path.exists(), "README.md must exist at repo root"
+        self.content = readme_path.read_text(encoding="utf-8")
+
+    def test_no_legacy_results_run_name_references(self) -> None:
+        """README.md must not contain any literal 'results/{run_name}' references."""
+        assert "results/{run_name}" not in self.content, (
+            "Found legacy 'results/{run_name}' reference in README.md"
+        )
+
+    def test_contains_docker_path_reference(self) -> None:
+        """README.md must contain at least one 'docker/' path (confirms migration)."""
+        assert "docker/" in self.content, (
+            "README.md should reference 'docker/' paths after migration"
+        )
+
+
+class TestProjectMapResultsPaths:
+    """Verify PROJECT_MAP.md has migrated results path references."""
+
+    @pytest.fixture(autouse=True)
+    def _load_project_map(self) -> None:
+        """Read PROJECT_MAP.md content."""
+        project_map_path = REPO_ROOT / "PROJECT_MAP.md"
+        assert project_map_path.exists(), "PROJECT_MAP.md must exist at repo root"
+        self.content = project_map_path.read_text(encoding="utf-8")
+
+    def test_no_old_results_run_name_pattern(self) -> None:
+        """PROJECT_MAP.md must not contain literal 'results/{run_name}' (old path format)."""
+        # The old pattern "results/{run_name}/" without the docker prefix must be gone.
+        # We search for occurrences that are NOT preceded by docker/<image_dir>/
+        lines_with_old_pattern = [
+            (i + 1, line)
+            for i, line in enumerate(self.content.splitlines())
+            if "results/{run_name}" in line and "docker/" not in line
+        ]
+        assert lines_with_old_pattern == [], (
+            f"PROJECT_MAP.md still contains old 'results/{{run_name}}' references "
+            f"(not under docker/) at lines: {[ln for ln, _ in lines_with_old_pattern]}"
+        )
+
+    def test_contains_docker_results_path(self) -> None:
+        """PROJECT_MAP.md should reference the new docker/<image_dir>/results/<run_name>/ path."""
+        assert "docker/" in self.content and "results/" in self.content, (
+            "PROJECT_MAP.md should contain docker/*/results/ path references"
+        )
+
+
+# --- Tests for TODO item 9: Test artifact cleanup conventions ---
+
+
+class TestSmokeLifecyclePIDTagging:
+    """Verify test_smoke_lifecycle.py uses PID-tagged image names for isolation."""
+
+    @pytest.fixture(autouse=True)
+    def _load_source(self) -> None:
+        self.source_path = REPO_ROOT / "tests" / "test_smoke_lifecycle.py"
+        assert self.source_path.exists(), "tests/test_smoke_lifecycle.py must exist"
+        self.content = self.source_path.read_text(encoding="utf-8")
+
+    def test_uses_pid_tagged_image_name(self) -> None:
+        """Smoke lifecycle test must use os.getpid() for dynamic image tagging."""
+        assert "os.getpid()" in self.content, (
+            "test_smoke_lifecycle.py must use os.getpid() for PID-tagged image names"
+        )
+
+    def test_has_docker_rmi_cleanup(self) -> None:
+        """Smoke lifecycle test must clean up Docker images via 'docker rmi'."""
+        assert "docker" in self.content and "rmi" in self.content, (
+            "test_smoke_lifecycle.py must contain 'docker rmi' cleanup logic"
+        )
+
+    def test_cleanup_in_fixture_or_finally(self) -> None:
+        """Cleanup must be in a fixture (yield) or finally block, not just inline."""
+        has_yield = "yield" in self.content
+        has_finally = "finally" in self.content
+        assert has_yield or has_finally, (
+            "test_smoke_lifecycle.py cleanup must use yield fixture or finally block"
+        )
+
+
+class TestTestingConventionsArtifactCleanup:
+    """Verify TESTING-CONVENTIONS.md documents artifact cleanup rule."""
+
+    @pytest.fixture(autouse=True)
+    def _load_conventions(self) -> None:
+        self.conventions_path = REPO_ROOT / "docs" / "specs" / "TESTING-CONVENTIONS.md"
+        assert self.conventions_path.exists(), "TESTING-CONVENTIONS.md must exist"
+        self.content = self.conventions_path.read_text(encoding="utf-8")
+
+    def test_mentions_artifact_cleanup(self) -> None:
+        """TESTING-CONVENTIONS.md must mention artifact cleanup."""
+        assert "artifact" in self.content.lower(), (
+            "TESTING-CONVENTIONS.md must mention test artifact cleanup"
+        )
+
+    def test_mentions_pid_tagged_images(self) -> None:
+        """TESTING-CONVENTIONS.md must mention PID-tagged image names."""
+        assert "pid" in self.content.lower() or "getpid" in self.content.lower(), (
+            "TESTING-CONVENTIONS.md must mention PID-tagged image names"
+        )
+
+    def test_has_rule_8(self) -> None:
+        """TESTING-CONVENTIONS.md must contain Rule 8 about persistent artifacts."""
+        assert "8." in self.content or "Rule 8" in self.content, (
+            "TESTING-CONVENTIONS.md must contain Rule 8"
+        )

@@ -58,7 +58,7 @@ Canonical implementation constraints for this TODO:
 
   Testability: `grep -n 'results/{run_name}' PROJECT_MAP.md` should return zero matches.
 
-- [ ] **Update runner specs: **[**BENCHMARK-RUNNER.md**](http://benchmark-runner.md/)**, **[**RUN-ARTIFACTS-AND-TELEMETRY.md**](http://run-artifacts-and-telemetry.md/)**, **[**WORKSPACE-CONTRACT.md**](http://workspace-contract.md/)**, **[**AGENT-CONTAINERS.md**](http://agent-containers.md/)
+- [x] **Update runner specs: **[**BENCHMARK-RUNNER.md**](http://benchmark-runner.md/)**, **[**RUN-ARTIFACTS-AND-TELEMETRY.md**](http://run-artifacts-and-telemetry.md/)**, **[**WORKSPACE-CONTRACT.md**](http://workspace-contract.md/)**, **[**AGENT-CONTAINERS.md**](http://agent-containers.md/)
   Detail: Four spec files with the same find-and-replace pattern. All `results/{run_name}/` → `docker/<image_dir>/results/<run_name>/`. Specific locations per file:
 
   **`docs/specs/BENCHMARK-RUNNER.md`** (6+ locations):
@@ -113,7 +113,7 @@ Canonical implementation constraints for this TODO:
 
   Testability: Visual review — no `results/` subdirectory should be listed as active convention.
 
-- [ ] **Add test artifact cleanup and update **[**TESTING-CONVENTIONS.md**](http://testing-conventions.md/)
+- [x] **Add test artifact cleanup and update **[**TESTING-CONVENTIONS.md**](http://testing-conventions.md/)
   Detail: Two changes to ensure tests leave no persistent artifacts:
 
   1. **`tests/test_smoke_lifecycle.py`**: The `test_smoke_container_lifecycle` test builds `silverquillm-smoke-test:lifecycle` but does not clean it up. Refactor to use a PID-tagged image name (`f"silverquillm-smoke-test:{os.getpid()}"`) to avoid parallel collisions, and wrap in a `try/finally` that runs `subprocess.run(["docker", "rmi", "-f", image_tag], capture_output=True, timeout=30)` in the `finally` block. Alternatively, create a pytest fixture:
@@ -132,7 +132,7 @@ def smoke_image(tmp_path):
 
   Testability: Run `docker images | grep silverquillm-smoke-test` before and after `pytest -m integration tests/test_smoke_lifecycle.py` — image should not persist after test.
 
-- [ ] **Remove stale ****`results/`**** and ****`benchmarks/*/results/`**** directories**
+- [x] **Remove stale ****`results/`**** and ****`benchmarks/*/results/`**** directories**
   Detail: Final cleanup step. If the repo-root `results/` directory exists (even if gitignored), remove it. If any `benchmarks/<set_code>/results/` directories exist, remove them. Then verify no stale references remain:
 
   ```bash
