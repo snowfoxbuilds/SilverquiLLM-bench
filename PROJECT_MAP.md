@@ -1,6 +1,3 @@
-Here’s an updated `PROJECT_MAP.md`:
-
-```markdown
 # Project Map — SilverquiLLM-bench
 
 ## Overview
@@ -277,4 +274,3 @@ Required changes from older runner state:
 - Add `snapshot_telemetry.jsonl`.
 - Evaluate from `workspace_final/`.
 - Treat `/output/` as optional telemetry only.
-```

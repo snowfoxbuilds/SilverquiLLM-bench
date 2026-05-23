@@ -110,7 +110,7 @@ def _image_results_dir(image: str) -> Path:
 def _make_run_name(set_code: str = "sos") -> str:
     """Generate a run name from set code + ISO timestamp.
 
-    Format: ``<set_code>_<YYYY-MM-DDThh-mm>``
+    Format: ``<set_code>-<YYYY-MM-DDThh-mm>``
     """
     ts = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H-%M")
     return f"{set_code}-{ts}"
@@ -275,7 +275,7 @@ def main() -> None:
     "--results-dir",
     default=None,
     type=click.Path(file_okay=False, path_type=Path),
-    help="Results output directory (default: results/ relative to repo root)",
+    help="Results output directory (default: docker/<image_dir>/results/)",
 )
 @click.option(
     "--cards",
