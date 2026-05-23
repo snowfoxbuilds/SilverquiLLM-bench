@@ -24,6 +24,10 @@ Core Python package for the SilverquiLLM benchmark runner. Provides CLI entry po
 ## Architecture & Patterns
 
 - **`_REPO_ROOT` convention**: Both `cli.py` and `workspace.py` define `_REPO_ROOT = Path(__file__).resolve().parent.parent` for repo-relative path resolution. Cards and engine directories are constants, not configurable.
+- **Per-image results path**: Results are stored under `docker/<image_dir>/results/<run_name>/`. Three helpers in `cli.py` manage this:
+  - `_image_dir(image)` — strips `silverquillm-` prefix and `:tag` suffix from Docker image names.
+  - `_image_results_dir(image)` — returns `_REPO_ROOT / "docker" / _image_dir(image) / "results"`.
+  - `_make_run_name(set_code="sos")` — generates `<set_code>_<YYYY-MM-DDThh-mm>` run names.
 - **Container lifecycle**: `ContainerLifecycle` (in `runner.py`) replaces raw `subprocess.run` calls. Two pipe-reader threads drain stdout/stderr to `.tmp` files, then copy to `.log` files after threads join. The main thread polls for timeouts (hard + hang) and snapshot callbacks.
 - **Card filtering**: `--cards` CLI option accepts comma-separated collector numbers with zero-pad normalization (`str(int(x))`). Filtering happens at workspace staging time.
 - **Run manifest**: `cli.py` writes `run_manifest.json` (timeout_seconds + deadline_utc) after staging.
