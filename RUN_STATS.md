@@ -2,38 +2,41 @@
 
 **Skill**: execute-todo-with-subagents
 **Reviewer model**: GPT-5.4 (via `Reviewer` custom agent)
-**Started**: 2026-05-16T01:07:12Z
-**Finished**: 2026-05-16T02:32:38Z
-**Total duration**: 85m 26s
-**Total duration (seconds)**: 5126
+**Started**: 2026-05-23T05:36:19Z
+**Finished**: 2026-05-23T06:17:05Z
+**Total duration**: 40m 46s
+**Total duration (seconds)**: 2446
 
 ## Summary
-- TODO items completed: 7
-- Items requiring test dispute: 1 (Item 1)
-- Items requiring review revision: 4 (Items 1, 2, 5, 6, 7)
-- Items with coordinator arbitration: 2 (Items 4, 6)
-- Commits: 10
-- RUN_DECISIONS entries: 2
-- KEY_DECISIONS entries added: 5
-- Test quality audit: 4 added, 1 fixed, 0 deleted
-- Test suite result: passing (2075 passed)
+- TODO items completed: 10
+- Items requiring test dispute: 1
+- Items requiring review revision: 2
+- Items with coordinator arbitration: 2
+- Commits: 12
+- RUN_DECISIONS entries: 3
+- KEY_DECISIONS entries added: 0
+- Test quality audit: 0 added, 0 fixed, 0 deleted
+- Test suite result: passing
 
 ## Tokens (subagents)
-- Total Tester tokens: unknown (token reporting not available)
-- Total Implementer tokens: unknown
-- Total Reviewer tokens: unknown
-- Total across all subagents: unknown
+- Total Tester tokens: N/A
+- Total Implementer tokens: N/A
+- Total Reviewer tokens: N/A
+- Total across all subagents: N/A
 - Coordinator tokens: null
 
 ## Per-item breakdown
 | TODO item | Implementer | Tester | Reviewer | Test disputes | Review revisions | Duration (s) |
 |-----------|-------------|--------|----------|---------------|------------------|--------------|
-| Item 1: Remove CLI flags | 267s | 262s | 108s | 1 | 1 | 637 |
-| Item 2: Add --cards filter | 226s | 104s | 130s | 0 | 1 | 460 |
-| Item 3: Write run_manifest.json | 96s | 121s | 62s | 0 | 0 | 279 |
-| Item 4: Update Docker entrypoints | 108s | 96s | 143s | 0 | 0 | 347 |
-| Item 5: Create runner.py | 186s | 164s | 103s | 0 | 1 | 453 |
-| Item 6: Integrate ContainerLifecycle | 672s | 209s | 153s | 0 | 1 | 1034 |
-| Item 7: Add pytest integration marker | 203s | 92s | 136s | 0 | 1 | 431 |
-| Dir summaries | 139s | — | — | — | — | 139 |
-| Test audit | — | 228s | — | — | — | 228 |
+| Item 1: _make_run_name + helpers | 200+69+26 | 103+48 | 55 | 1 | 1 | 501 |
+| Item 2: .gitignore | 35 | 33 | 29 | 0 | 0 | 97 |
+| Item 3: README.md | 49 | 44 | 70 | 0 | 0 | 163 |
+| Item 4: PROJECT_MAP.md | 46 | 60 | 38 | 0 | 0 | 144 |
+| Item 5: Runner specs (77) | no-op | — | 0 | 0 | 77 | | 
+| Item 6: TEST-SUITE.md | 37 | — | — | 0 | 0 | 37 |
+| Item 7: ADR-005, HELP, KNOWN-ISSUES | 83 | — | — | 0 | 0 | 83 |
+| Item 8: benchmarks/ summaries | 29 | — | — | 0 | 0 | 29 |
+| Item 9: test artifact cleanup | 73+80 | 53 | 72 | 0 | 1 | 278 |
+| Item 10: remove stale dirs | 160 | — | — | 0 | 0 | 160 |
+| Dir summaries | 48 | — | — | — | — | 48 |
+| Audit | — | 107 | — | — | — | 107 |
