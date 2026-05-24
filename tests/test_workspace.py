@@ -102,14 +102,6 @@ class TestWorkspaceStructure:
         workspace, _ = staged
         assert (workspace / "rulebook.md").is_file()
 
-    def test_engine_api_md_exists(self, staged):
-        workspace, _ = staged
-        assert (workspace / "engine_api.md").is_file()
-
-    def test_base_classes_py_exists(self, staged):
-        workspace, _ = staged
-        assert (workspace / "base_classes.py").is_file()
-
     def test_test_utils_md_exists(self, staged):
         workspace, _ = staged
         assert (workspace / "test_utils.md").is_file()
@@ -268,22 +260,10 @@ class TestSosCards:
 class TestReferenceDocs:
     """Reference docs should have meaningful content."""
 
-    def test_engine_api_has_content(self, staged):
-        workspace, _ = staged
-        text = (workspace / "engine_api.md").read_text()
-        assert len(text) > 50
-
     def test_test_utils_has_content(self, staged):
         workspace, _ = staged
         text = (workspace / "test_utils.md").read_text()
         assert len(text) > 50
-
-    def test_base_classes_is_card_py(self, staged, engine_dir):
-        """base_classes.py should be a copy of engine/card.py."""
-        workspace, _ = staged
-        original = (engine_dir / "card.py").read_text()
-        staged_copy = (workspace / "base_classes.py").read_text()
-        assert staged_copy == original
 
 
 # ------------------------------------------------------------------

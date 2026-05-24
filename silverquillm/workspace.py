@@ -33,7 +33,11 @@ _PROMPT_TEXT = """\
 Implement all SOS cards in `/workspace/cards/sos/`. Each card directory contains \
 a `card_spec.json` with the card's details and a `card_impl.py` template to fill in.
 Use the completed FDN cards in `/workspace/cards/fdn/` as implementation examples. \
-Refer to `rulebook.md` for detailed game rules and `engine_api.md` for the engine API.
+Refer to `rules_overview.md` for a compact rules skim (always read first) and \
+`rulebook.md` for the full deep-reference rules text.
+For engine API discovery, read the source modules directly — they have rich docstrings: \
+`engine/card.py`, `engine/events.py`, `engine/triggers.py`, \
+`engine/replacement_effects.py`, `engine/zones.py`.
 """
 
 # ---------------------------------------------------------------------------
@@ -41,13 +45,11 @@ Refer to `rulebook.md` for detailed game rules and `engine_api.md` for the engin
 # ---------------------------------------------------------------------------
 
 _REFERENCE_DOCS = {
-    "engine_api.md": "docs/engine_api.md",
     "test_utils.md": "docs/test_utils.md",
-    "base_classes.py": "engine/card.py",
 }
 
-# rulebook.md has a separate path because it may not exist yet
-_RULEBOOK_SRC = "docs/rulebook.md"
+_RULEBOOK_SRC = "benchmarks/sos/data/comprehensive_rules.txt"
+_RULES_OVERVIEW_SRC = "benchmarks/sos/data/rules_overview.md"
 
 
 def stage_workspace(
@@ -124,24 +126,27 @@ def _copy_reference_docs(workspace: Path) -> None:
     """Copy reference docs into the workspace root."""
     for dest_name, rel_src in _REFERENCE_DOCS.items():
         src = _REPO_ROOT / rel_src
-        if src.exists():
-            shutil.copy2(src, workspace / dest_name)
-        else:
-            # Create a stub so the agent still has the file
-            (workspace / dest_name).write_text(
-                f"# {dest_name}\n\nStub — source not found at {rel_src}.\n",
-                encoding="utf-8",
+        if not src.exists():
+            raise FileNotFoundError(
+                f"Reference doc source not found: {src}"
             )
+        shutil.copy2(src, workspace / dest_name)
 
-    # rulebook.md
+    # rulebook.md — hard error if missing
     rulebook_src = _REPO_ROOT / _RULEBOOK_SRC
-    if rulebook_src.exists():
-        shutil.copy2(rulebook_src, workspace / "rulebook.md")
-    else:
-        (workspace / "rulebook.md").write_text(
-            "# Rulebook\n\nStub — rulebook not yet generated.\n",
-            encoding="utf-8",
+    if not rulebook_src.exists():
+        raise FileNotFoundError(
+            f"Rulebook source not found: {rulebook_src}"
         )
+    shutil.copy2(rulebook_src, workspace / "rulebook.md")
+
+    # rules_overview.md — hard error if missing
+    overview_src = _REPO_ROOT / _RULES_OVERVIEW_SRC
+    if not overview_src.exists():
+        raise FileNotFoundError(
+            f"Rules overview source not found: {overview_src}"
+        )
+    shutil.copy2(overview_src, workspace / "rules_overview.md")
 
 
 def _prompt_text(card_filter: list[str] | None) -> str:

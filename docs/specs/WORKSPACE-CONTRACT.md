@@ -19,8 +19,7 @@ The benchmark now treats agents as black-box containers working in a real codeba
   prompt.md
   run_manifest.json
   rulebook.md
-  engine_api.md
-  base_classes.py
+  rules_overview.md
   test_utils.md
   engine/
   tests/

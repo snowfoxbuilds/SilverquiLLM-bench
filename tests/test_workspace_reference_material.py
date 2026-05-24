@@ -1,0 +1,202 @@
+"""Tests for workspace reference material wiring (TODO item 1).
+
+Verifies:
+- Rulebook staged from benchmarks/sos/data/comprehensive_rules.txt
+- rules_overview.md staged from benchmarks/sos/data/rules_overview.md
+- Hard error when source files are missing (no stub fallback)
+- Prompt text references rules_overview.md and engine source modules
+- Prompt text does NOT reference engine_api.md
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+from silverquillm.workspace import stage_workspace
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+@pytest.fixture()
+def staged(tmp_path: Path):
+    """Run stage_workspace and return (workspace, output) paths."""
+    return stage_workspace(tmp_path)
+
+
+# ------------------------------------------------------------------
+# Rulebook sourced from comprehensive_rules.txt
+# ------------------------------------------------------------------
+
+
+class TestRulebookSource:
+    """Rulebook must be staged from benchmarks/sos/data/comprehensive_rules.txt."""
+
+    def test_rulebook_md_exists(self, staged):
+        workspace, _ = staged
+        assert (workspace / "rulebook.md").is_file()
+
+    def test_rulebook_content_matches_comprehensive_rules(self, staged):
+        """rulebook.md content must equal comprehensive_rules.txt."""
+        workspace, _ = staged
+        expected = (_REPO_ROOT / "benchmarks" / "sos" / "data" / "comprehensive_rules.txt").read_text()
+        actual = (workspace / "rulebook.md").read_text()
+        assert actual == expected
+
+    def test_rulebook_is_not_a_stub(self, staged):
+        """rulebook.md must not be a stub placeholder."""
+        workspace, _ = staged
+        text = (workspace / "rulebook.md").read_text()
+        assert "Stub" not in text
+        assert "source not found" not in text
+
+
+# ------------------------------------------------------------------
+# rules_overview.md staged
+# ------------------------------------------------------------------
+
+
+class TestRulesOverview:
+    """rules_overview.md must be staged from benchmarks/sos/data/rules_overview.md."""
+
+    def test_rules_overview_exists(self, staged):
+        workspace, _ = staged
+        assert (workspace / "rules_overview.md").is_file()
+
+    def test_rules_overview_content_matches_source(self, staged):
+        """rules_overview.md content must equal the source file."""
+        workspace, _ = staged
+        expected = (_REPO_ROOT / "benchmarks" / "sos" / "data" / "rules_overview.md").read_text()
+        actual = (workspace / "rules_overview.md").read_text()
+        assert actual == expected
+
+    def test_rules_overview_is_not_a_stub(self, staged):
+        workspace, _ = staged
+        text = (workspace / "rules_overview.md").read_text()
+        assert "Stub" not in text
+        assert "source not found" not in text
+
+
+# ------------------------------------------------------------------
+# Hard error when source files missing (no stub fallback)
+# ------------------------------------------------------------------
+
+
+class TestHardErrorOnMissingSources:
+    """Missing rulebook or rules_overview must raise FileNotFoundError."""
+
+    def test_missing_rulebook_raises_error(self, tmp_path):
+        """If comprehensive_rules.txt doesn't exist, staging must fail."""
+        fake_src = tmp_path / "fake_rules.txt"
+        with patch("silverquillm.workspace._RULEBOOK_SRC", "nonexistent/path/rules.txt"):
+            with pytest.raises(FileNotFoundError):
+                stage_workspace(tmp_path / "out")
+
+    def test_missing_rules_overview_raises_error(self, tmp_path):
+        """If rules_overview.md doesn't exist, staging must fail."""
+        with patch("silverquillm.workspace._RULES_OVERVIEW_SRC", "nonexistent/path/overview.md"):
+            with pytest.raises(FileNotFoundError):
+                stage_workspace(tmp_path / "out")
+
+
+# ------------------------------------------------------------------
+# Prompt text content
+# ------------------------------------------------------------------
+
+
+class TestPromptText:
+    """Prompt text must reference rules_overview.md and engine modules, not engine_api.md."""
+
+    def test_prompt_mentions_rules_overview(self, staged):
+        workspace, _ = staged
+        text = (workspace / "prompt.md").read_text()
+        assert "rules_overview.md" in text
+
+    def test_prompt_does_not_mention_engine_api_md(self, staged):
+        """engine_api.md should not be referenced in prompt — agent reads source directly."""
+        workspace, _ = staged
+        text = (workspace / "prompt.md").read_text()
+        assert "engine_api.md" not in text
+
+    def test_prompt_mentions_engine_card_py(self, staged):
+        """Prompt should point agent to engine/card.py source."""
+        workspace, _ = staged
+        text = (workspace / "prompt.md").read_text()
+        assert "engine/card.py" in text
+
+    def test_prompt_mentions_engine_events_py(self, staged):
+        workspace, _ = staged
+        text = (workspace / "prompt.md").read_text()
+        assert "engine/events.py" in text
+
+    def test_prompt_mentions_rulebook(self, staged):
+        """Prompt should reference rulebook.md for deep rules."""
+        workspace, _ = staged
+        text = (workspace / "prompt.md").read_text()
+        assert "rulebook.md" in text
+
+
+# ------------------------------------------------------------------
+# Module-level constants validation
+# ------------------------------------------------------------------
+
+
+class TestModuleConstants:
+    """Verify module-level constants point to correct sources."""
+
+    def test_rulebook_src_is_comprehensive_rules(self):
+        from silverquillm.workspace import _RULEBOOK_SRC
+        assert _RULEBOOK_SRC == "benchmarks/sos/data/comprehensive_rules.txt"
+
+    def test_rules_overview_src_exists(self):
+        from silverquillm.workspace import _RULES_OVERVIEW_SRC
+        assert _RULES_OVERVIEW_SRC == "benchmarks/sos/data/rules_overview.md"
+
+    def test_reference_docs_contains_test_utils(self):
+        from silverquillm.workspace import _REFERENCE_DOCS
+        assert "test_utils.md" in _REFERENCE_DOCS
+
+    def test_reference_docs_does_not_contain_engine_api(self):
+        from silverquillm.workspace import _REFERENCE_DOCS
+        assert "engine_api.md" not in _REFERENCE_DOCS
+
+    def test_reference_docs_does_not_contain_base_classes(self):
+        from silverquillm.workspace import _REFERENCE_DOCS
+        assert "base_classes.py" not in _REFERENCE_DOCS
+
+
+# ------------------------------------------------------------------
+# Removed files must NOT be staged
+# ------------------------------------------------------------------
+
+
+class TestRemovedFilesNotStaged:
+    """engine_api.md and base_classes.py must not appear in staged workspace."""
+
+    def test_engine_api_md_not_staged(self, staged):
+        workspace, _ = staged
+        assert not (workspace / "engine_api.md").exists()
+
+    def test_base_classes_py_not_staged(self, staged):
+        workspace, _ = staged
+        assert not (workspace / "base_classes.py").exists()
+
+
+# ------------------------------------------------------------------
+# Hard error for test_utils.md missing source
+# ------------------------------------------------------------------
+
+
+class TestHardErrorOnMissingTestUtils:
+    """Missing test_utils.md source must raise FileNotFoundError (no stub)."""
+
+    def test_missing_test_utils_raises_error(self, tmp_path):
+        """If docs/test_utils.md source doesn't exist, staging must fail hard."""
+        with patch.dict(
+            "silverquillm.workspace._REFERENCE_DOCS",
+            {"test_utils.md": "nonexistent/docs/test_utils.md"},
+        ):
+            with pytest.raises(FileNotFoundError):
+                stage_workspace(tmp_path / "out")

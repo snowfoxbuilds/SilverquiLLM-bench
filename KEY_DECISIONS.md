@@ -32,3 +32,9 @@ Persistent architectural and convention decisions across runs.
 - **Decision**: Use `[sys.executable, "-m", "silverquillm.cli", ...]` instead of `["silverquillm", ...]` in subprocess calls.
 - **Reasoning**: Ensures the test exercises the code from the current worktree, not a potentially stale installed entry point.
 - **Impact**: `tests/test_smoke_lifecycle.py`. Future integration tests should follow this pattern.
+
+## Hard-error pattern for workspace reference material
+- **Context**: Workspace staging previously used stub fallbacks for missing source files, masking setup errors.
+- **Decision**: All workspace reference material (rulebook, rules_overview, test_utils.md) raises `FileNotFoundError` if source is missing. No stub fallbacks.
+- **Reasoning**: Silent stubs waste agent budget on useless content and mask misconfigurations.
+- **Impact**: `silverquillm/workspace.py` — `_copy_reference_docs()` and rulebook/overview staging.

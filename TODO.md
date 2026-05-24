@@ -16,7 +16,7 @@ Reference: agent thinking trace in `docker/local-pi-blind/results/sos-2026-05-23
 
 ---
 
-- [ ] **Wire up workspace reference material correctly**
+- [x] **Wire up workspace reference material correctly**
   Detail: Today `silverquillm/workspace.py` stages four reference files at `/workspace/` (`rulebook.md`, `engine_api.md`, `base_classes.py`, `test_utils.md`) via `_RULEBOOK_SRC` (one-off, with stub fallback) and `_REFERENCE_DOCS` (dict). The 05-23 run exposed three problems:
 
   1. **`_RULEBOOK_SRC = "docs/rulebook.md"`**** is wrong.** That path is a hallucination from an earlier draft — `docs/` is for repo-level docs, not workspace-staging sources, and the file does not exist on `main`. The agent saw the stub fallback ("Stub — rulebook not yet generated"). The canonical rulebook is `benchmarks/sos/data/comprehensive_rules.txt`, which has now been populated with the full WotC Comprehensive Rules.
