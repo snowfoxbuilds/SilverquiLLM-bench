@@ -113,3 +113,13 @@ benchmarks/sos/workspace/tests/engine/test_game_state.py — reworded docstring 
 - `tests/audited/` → `benchmarks/sos/data/tests/audited/` — moved all audited test files (fdn/, sos/, __init__.py) via git mv
 - `silverquillm/evaluator.py` — updated audited_sos and audited_fdn paths to new benchmarks/sos/data/tests/audited/ location
 - `benchmarks/sos/data/tests/__init__.py` — added package init for new tests directory
+
+## Item 8: Rewrite stage_workspace() to the four-step form
+
+### Tests
+- `tests/integration/test_stage_workspace.py` — integration tests verifying copytree integrity, per-run overlays, and pre-flight checks
+
+### Implementation
+- `silverquillm/workspace.py` — rewrote to ~15-line copytree-based form; removed _REFERENCE_DOCS, _RULEBOOK_SRC, _RULES_OVERVIEW_SRC, _copy_reference_docs(), _copy_engine(), _stage_engine_tests(), _stage_cards()
+- `tests/integration/__init__.py` — package init for integration test directory
+- `tests/integration/test_stage_workspace.py` — new integration tests for staged tree equality

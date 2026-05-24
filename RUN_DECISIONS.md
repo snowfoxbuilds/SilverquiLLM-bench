@@ -21,3 +21,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Implementer's approach**: Moved cards/ and updated imports, but left `cards/stubs` behind, missed 3 files with stale imports, and SOS stubs (soa_*) lack `from benchmarks.sos.workspace.engine.card import CardImpl` import
 - **Coordinator decision**: fix implementation
 - **Reasoning**: The test requirements match the TODO spec exactly; the implementation has gaps
+
+## Test failure: Item 8 — Rewrite stage_workspace()
+- **Failing tests**: test_run_manifest_exists, test_run_manifest_is_valid_json, test_run_manifest_has_expected_keys, test_staged_dir_is_git_repo, test_exactly_one_commit, test_working_tree_is_clean
+- **Tester's intent**: Verify run_manifest.json is written and git repo is initialized (both explicitly required by TODO spec)
+- **Implementer's approach**: Removed old helpers and added copytree, but apparently didn't implement the run_manifest write or git init steps
+- **Coordinator decision**: fix implementation
+- **Reasoning**: The TODO spec explicitly shows code that writes run_manifest.json and does git init; these are non-optional
