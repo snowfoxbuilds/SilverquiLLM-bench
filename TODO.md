@@ -187,7 +187,7 @@ Reference: [WORKSPACE-CONTRACT.md](http://workspace-contract.md/), [RUN-ARTIFACT
 
   Testability: Run any benchmark with `--cards 1,7`. Confirm `status.json` entries contain `"card_name": "Dawning Archaic"`. Confirm `progress.jsonl` lines include the name. Confirm `snapshot_telemetry.jsonl` events have only `card_id`, no `card_name`. Confirm live `[snapshot]` lines print "sos_1 Dawning Archaic" while the underlying JSONL line has only `"sos_1"`.
 
-- [ ] **Agent-authored ****`decisions.md`**** artifact**
+- [x] **Agent-authored ****`decisions.md`**** artifact**
   Detail: Add `decisions.md` to the workspace contract as a first-class artifact the agent is expected to maintain. Purpose: structured human-readable record of *why* the agent made each non-obvious implementation choice and *what it knows it punted on*. Massively reduces triage time vs. reading stderr stream-of-consciousness.
 
   Expected structure (enforce via prompt, not schema):

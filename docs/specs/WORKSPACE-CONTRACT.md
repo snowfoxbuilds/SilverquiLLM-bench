@@ -17,6 +17,7 @@ The benchmark now treats agents as black-box containers working in a real codeba
 ```plain text
 /workspace/
   prompt.md
+  decisions.md
   run_manifest.json
   rulebook.md
   rules_overview.md
@@ -137,3 +138,4 @@ Then delete the legacy layout.
 - **Card restructuring is card-level by default**: Individual misplaced card files fail those cards; broad Workspace destruction can become run-level failure.
 - **Legacy Foundations not staged**: After FDN migration, do not include monolithic `cards/foundations/` in the agent Workspace.
 - **Engine tests are staged into the workspace**: Per ADR-006, the workspace includes `workspace/tests/engine/` so agents have a local regression-check loop for engine modifications. Grading uses host-repo copies; agents are prompt-instructed not to modify staged tests. SOS card tests and FDN card tests remain hidden.
+- **decisions.md is agent-maintained**: The runner stages an empty `decisions.md` (header only). The agent is prompt-instructed to maintain it with one section per attempted card, documenting non-obvious choices and known gaps. After a run, `decisions.md` exists in `workspace_final/` and contains an entry per attempted card.

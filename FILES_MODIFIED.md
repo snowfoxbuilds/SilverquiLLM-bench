@@ -50,3 +50,9 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `silverquillm/cli.py` — Added card_name to status.json entries, result.json, and progress.jsonl enrichment during harvest
 - `silverquillm/runner.py` — Added card_name_map param to ContainerLifecycle; resolves names at terminal print time
 - `tests/test_cli_cards_filter.py` — Updated status.json assertions to match new dict format with card_name field
+
+## Item 9: Agent-authored decisions.md artifact
+
+### Implementation
+- `silverquillm/workspace.py` — Added decisions.md instruction to _PROMPT_TEXT and staging of empty decisions.md in stage_workspace()
+- `docs/specs/WORKSPACE-CONTRACT.md` — Listed decisions.md in workspace layout and added decisions bullet to contract

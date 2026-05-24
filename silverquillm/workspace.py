@@ -40,6 +40,20 @@ For engine API discovery, read the source modules directly — they have rich do
 `engine/replacement_effects.py`, `engine/zones.py`.
 You are expected to make changes to the engine to implement new mechanics. The existing \
 code base may not be perfect, you are free to make changes that don't break current behavior.
+
+Maintain `/workspace/decisions.md` as you work. For each card you attempt, add a section \
+documenting non-obvious implementation choices and anything you punted on. Use this format:
+
+```
+# Decisions
+## {card_id} {Card Name}
+- Needed: <what the card requires mechanically>.
+- <what you did and why — especially reuse of existing APIs or workarounds>.
+- BLOCKED: <anything you know is wrong or incomplete but had no better option>.
+```
+
+Every card you attempt must have an entry. This is your structured record of *why* you \
+made each choice and *what you know you punted on*.
 """
 
 # ---------------------------------------------------------------------------
@@ -101,6 +115,11 @@ def stage_workspace(
 
     # --- reference docs ---
     _copy_reference_docs(workspace)
+
+    # --- decisions.md (empty template for agent to fill) ---
+    (workspace / "decisions.md").write_text(
+        "# Decisions\n", encoding="utf-8"
+    )
 
     # --- cards/ ---
     _stage_cards(cards_dir, workspace / "cards", card_filter=card_filter)
