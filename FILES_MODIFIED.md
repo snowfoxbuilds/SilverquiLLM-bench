@@ -56,3 +56,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `silverquillm/workspace.py` — Added decisions.md instruction to _PROMPT_TEXT and staging of empty decisions.md in stage_workspace()
 - `docs/specs/WORKSPACE-CONTRACT.md` — Listed decisions.md in workspace layout and added decisions bullet to contract
+
+## Item 10: Stage engine tests into the workspace (per ADR-006)
+
+### Implementation
+- `silverquillm/workspace.py` — Added _stage_engine_tests() helper and no-modify prompt rule for staged tests

@@ -54,6 +54,11 @@ documenting non-obvious implementation choices and anything you punted on. Use t
 
 Every card you attempt must have an entry. This is your structured record of *why* you \
 made each choice and *what you know you punted on*.
+
+Do not modify any files under workspace/tests/engine/. These tests are staged for your \
+local verification only; the runner uses its own authoritative copies for grading. \
+Modifying the workspace tests will not change your score — it will only mislead you \
+about whether your engine changes are correct.
 """
 
 # ---------------------------------------------------------------------------
@@ -121,6 +126,9 @@ def stage_workspace(
         "# Decisions\n", encoding="utf-8"
     )
 
+    # --- tests/engine/ (staged per ADR-006) ---
+    _stage_engine_tests(workspace)
+
     # --- cards/ ---
     _stage_cards(cards_dir, workspace / "cards", card_filter=card_filter)
 
@@ -138,6 +146,22 @@ def _copy_engine(engine_dir: Path, dest: Path) -> None:
         shutil.rmtree(dest)
     shutil.copytree(
         engine_dir,
+        dest,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
+
+
+def _stage_engine_tests(workspace: Path) -> None:
+    """Stage engine regression tests into workspace/tests/engine/ (ADR-006)."""
+    src = _REPO_ROOT / "tests" / "engine"
+    if not src.exists():
+        return
+    dest = workspace / "tests" / "engine"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists():
+        shutil.rmtree(dest)
+    shutil.copytree(
+        src,
         dest,
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )

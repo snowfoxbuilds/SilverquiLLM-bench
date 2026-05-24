@@ -209,7 +209,7 @@ Reference: [WORKSPACE-CONTRACT.md](http://workspace-contract.md/), [RUN-ARTIFACT
 
   Testability: After a run, `decisions.md` exists in `workspace_final/` and contains an entry per attempted card.
 
-- [ ] **Stage engine tests into the workspace (per ADR-006)**
+- [x] **Stage engine tests into the workspace (per ADR-006)**
   Detail: Agents extending the engine had no local way to validate engine changes (the silent-regression failure mode that surfaced in the 05-23 run). Stage the Cat3 Engine Regression test suite into the workspace so the agent can run it locally. FDN and SOS card tests remain hidden.
 
   Staging:
