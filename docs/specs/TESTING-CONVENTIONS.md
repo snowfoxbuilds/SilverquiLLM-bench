@@ -1,4 +1,10 @@
-Testing conventions for the SilverquiLLM-bench repository. These rules apply to all tests — whether written by humans or agents — and exist to prevent tests from hanging, killing processes, or otherwise disrupting the development environment.
+Testing conventions for **bench-authored reference tests** in the SilverquiLLM-bench repository.
+
+Scope: tests we write — host-side suites under `tests/`, FDN reference tests staged into the workspace at `benchmarks/sos/workspace/cards/fdn/{collector_number}/tests.py`, and audited SOS grader tests at `benchmarks/sos/data/tests/audited/sos/{collector_number}/tests.py`.
+
+Out of scope: agent-written tests inside the workspace (e.g., `tests/engine/test_*.py` authored during a run). The grader is the source of truth for scoring, not agent test hygiene, so we deliberately do not bind the agent to these rules and we do not stage this document into the workspace. The workspace `pytest.ini` carries the `timeout = 30` safety net regardless (see [WORKSPACE-CONTRACT.md](http://workspace-contract.md/)).
+
+These rules exist to prevent tests from hanging, killing processes, or otherwise disrupting the development environment.
 
 ## Motivation
 
@@ -156,11 +162,28 @@ Tests that need to verify subprocess behavior should mock `subprocess.Popen` or 
 
 Use `tmp_path` (pytest fixture) for temporary files. Use context managers or `try/finally` for threads, events, and timers. Never leave background threads running after a test completes.
 
+### 8. Invoke the CLI as a module in integration tests
+
+Integration tests that spawn the CLI as a subprocess must use `[sys.executable, "-m", "silverquillm.cli", ...]`, never `["silverquillm", ...]`. This guarantees the test exercises the current worktree, not a potentially stale installed entry point.
+
+**Bad:**
+
+```python
+subprocess.run(["silverquillm", "run", "--image", ...])
+```
+
+**Good:**
+
+```python
+import sys
+subprocess.run([sys.executable, "-m", "silverquillm.cli", "run", "--image", ...])
+```
+
 ---
 
-## Checklist for Test Authors (Human or Agent)
+## Checklist for Reference Test Authors
 
-Before committing any test file, verify:
+Before committing any bench-authored test file (host-side or staged reference), verify:
 
 - [ ] No `while True` loops without a guaranteed exit condition
 - [ ] No `time.sleep()` calls longer than 5 seconds
@@ -171,10 +194,11 @@ Before committing any test file, verify:
 - [ ] Test completes in under 10 seconds even if code under test is broken
 - [ ] `tmp_path` used for all filesystem operations
 - [ ] No background threads or timers left running after test
+- [ ] Integration tests invoke CLI as `[sys.executable, "-m", "silverquillm.cli", ...]`
 ---
 
 ## Enforcing These Conventions
 
 1. **`pytest-timeout = 30s`** — global hard limit in `pyproject.toml`
 2. **CI gate** — `pytest` runs on every PR; any timeout or hang fails the build
-3. **Agent instructions** — Agent-facing documentation references this document and instructs agents to follow these conventions when writing tests
+3. **Author scope** — These rules govern bench-authored tests only. Agent-written tests inside the workspace are not bound by this doc and are not graded; only the audited host-side grader tests determine the score. The workspace `pytest.ini` `timeout = 30` setting is the only safety net that follows tests into the container.

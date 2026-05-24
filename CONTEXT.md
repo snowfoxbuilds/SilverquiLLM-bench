@@ -84,12 +84,6 @@ A benchmark run whose purpose is to validate that the orchestration pipeline wor
 
 *Avoid*: "test run" (ambiguous), "dry run" (has a different meaning — `--dry-run` flag)
 
-**Progress Log**
-
-JSONL file (`progress.jsonl`) written by the agent or entrypoint to `/output/progress.jsonl` inside the container. Records per-card status updates (started, tests_passing, completed). Mounted volume allows the runner to tail it in real time. Replaces the former Postmortem Log.
-
-*Avoid*: "postmortem log" (deprecated — was per-round per-card structured JSONL)
-
 **Replay Validation**
 
 Engine correctness check that replays 17lands GRE (Game Rules Engine) state streams through the Python engine and verifies full game state at every GRE message boundary. Data source: 17lands pre-parsed GRE JSON — clean JSON files containing `GameStateType_Full` and `GameStateType_Diff` messages with object-level fidelity (zones, gameObjects by `grpId`/`instanceId`, life totals, annotations). Execution model: **observer mode** with state-diff comparison — seat 1 (17lands user) fully validated, seat 2 (opponent) actions oracle-injected from public game objects. Single parser, single format. See [17lands Replay Data Schema](https://www.notion.so/35b6a7adc8ed80978dccdf724213b6f8) and [ADR-003](https://www.notion.so/37a8b903f91b4309a15b91d149a90f7c).
@@ -120,11 +114,17 @@ The engine source at `/workspace/engine/` inside the container. The agent modifi
 
 *Avoid*: "persistent engine" (deprecated — implied per-card sequential accumulation), "shared engine"
 
+**FDN Reference Tests**
+
+Illustrative pytest files colocated with FDN reference implementations at `cards/fdn/{collector_number}/tests.py`. Agent-visible inside the Workspace. Demonstrate the testing pattern (DeterministicPlayer scripts, expected-state asserts) so agents can model `cards/sos/{card_id}/tests.py` after them in Tested Mode. Distinct from FDN Card Regression — these are learning material, not grading input. Modifying them does not affect score.
+
+*Avoid*: "FDN tests" alone (ambiguous — specify Reference vs Card Regression), "FDN illustrative tests" (use "FDN Reference Tests")
+
 **FDN Card Regression**
 
-Post-run evaluation dimension: FDN audited tests (`tests/audited/fdn/`) run against pre-filled FDN `card_impl.py` files using the agent's final Writable Engine. Detects whether engine extensions broke existing card behavior.
+Post-run evaluation dimension: FDN audited tests (`tests/audited/fdn/`) run against pre-filled FDN `card_impl.py` files using the agent's final Writable Engine. Detects whether engine extensions broke existing card behavior. Host-side only; not staged into the Workspace. Distinct from FDN Reference Tests.
 
-*Avoid*: "regression check" (deprecated — was per-card sequential re-run)
+*Avoid*: "regression check" (deprecated — was per-card sequential re-run), "FDN tests" alone (ambiguous — specify Reference vs Card Regression)
 
 **Engine Regression**
 
@@ -140,9 +140,15 @@ Modification or addition to `engine/` files by the agent during a benchmark run.
 
 **Workspace**
 
-The staged directory mounted into the agent container at `/workspace/`. Contains all cards (FDN examples + SOS targets), the engine, rulebook, reference docs, and a single prompt. Created once per run by the runner's `stage_workspace()`. The agent has read-write access to the entire workspace.
+The directory at `benchmarks/sos/workspace/` in the bench repo, copied wholesale to a per-run tmp path and mounted into the agent container at `/workspace/`. Contains the engine (canonical single copy, shared with bench tooling), all cards (FDN reference implementations + SOS Card Stubs), tests (`tests/conftest.py`, `tests/test_utils.py`, `tests/engine/`), agent-facing documentation (`AGENTS.md`, `PROJECT_MAP.md`, `rulebook.md`), and supporting files (`pytest.ini`, `.gitignore`). Per-run files (`prompt.md`, `run_manifest.json`) are written into the copy at stage time, followed by an initial `git init && git commit` so the agent has clean version-control state. The agent has read-write access to the entire workspace.
 
-*Avoid*: "working directory", "sandbox", "per-card workspace" (deprecated — workspace is per-run)
+*Avoid*: "working directory", "sandbox", "per-card workspace" (deprecated — workspace is per-run), "staged from scratch" (deprecated — workspace is a pre-built directory copied wholesale)
+
+**SOS Card Stub**
+
+The starting-state `card_impl.py` for an SOS card: a `class CardName(CardImpl): pass` declaration with a TODO docstring. Pins class name, inheritance, and import path so audited tests can reliably import. Provides no behavior — `CardImpl` is no-op-by-default (all hooks return safe defaults), so stubs are runnable from day one and tests fail on missing behavior, not import/structure. The agent's task is to fill in the class body.
+
+*Avoid*: "empty template" (technically inaccurate — stubs are non-empty), "skeleton card"
 
 **Hard Timeout**
 
@@ -172,7 +178,7 @@ Task-specific instruction written by the runner to `/workspace/prompt.md` at sta
 
 - A Benchmark Run evaluates one Agent Container (one agent + one model) against one Draft Set.
 - A Benchmark Run launches one container session. The agent receives the full workload (all SOS cards) in a single Workspace.
-- FDN cards are in-context examples (filled implementations, no tests). SOS cards are benchmark targets (empty templates).
+- FDN cards are in-context examples (filled `card_impl.py` + colocated `tests.py` demonstrating the testing pattern). SOS cards are benchmark targets (SOS Card Stubs to fill in).
 - Each agent produces `card_impl.py` per SOS card. In Tested Mode, also `tests.py` per card.
 - The agent has a Writable Engine (`/workspace/engine/`) and may extend it freely throughout the run.
 - All evaluation is post-run. After the container exits, the evaluator runs tests against harvested implementations and the final engine state.
@@ -190,9 +196,8 @@ Task-specific instruction written by the runner to `/workspace/prompt.md` at sta
 - The runner does NOT orchestrate test iteration — the agent self-manages. The runner stages, launches, harvests, evaluates.
 - On container timeout, the runner harvests partial results. Completed cards are evaluated normally; unfinished cards scored as zero.
 - Two benchmark modes: **Blind** (prompt omits test instructions) and **Tested** (prompt includes test instructions). Both produce `card_impl.py`. Distinction is prompt-only for v1. Compare modes via separate runs.
-- SOS and FDN audited tests are evaluation-only artifacts — never staged in the agent's workspace, never in results directories. Engine tests are staged at `workspace/tests/engine/` per ADR-006 so agents can locally verify engine extensions; grading still uses host-repo copies for all three dimensions.
+- SOS and FDN audited tests are evaluation-only artifacts — never staged in the agent's workspace, never in results directories. Engine tests are staged at `workspace/tests/engine/` per ADR-006 so agents can locally verify engine extensions; grading still uses host-repo copies for all three dimensions. FDN Reference Tests are colocated with the FDN card implementations at `workspace/cards/fdn/{collector_number}/tests.py` as additional reference for agents. Audited SOS grader tests live host-side only — there is no `workspace/tests/cards/` directory.
 - The runner is the hard timeout authority. Agent Containers may read the Run Manifest for pacing, but correctness does not depend on honoring it.
-- `progress.jsonl` is optional best-effort observability. It may refine status, but it cannot make an unchanged template count as completed.
 - Output Snapshots are runner-owned, Workspace-only, and independent of Agent Container cooperation. The runner may use prior snapshot commits as fallback if final engine state is corrupted.
 - The runner writes the User Prompt to `/workspace/prompt.md`; Agent Containers bake System Prompts into their entrypoints.
 - Hard Timeout and Hang Timeout are independent — either can trigger `docker stop -t 10` to end a benchmark run.

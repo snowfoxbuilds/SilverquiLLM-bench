@@ -1,3 +1,17 @@
+## Completed 2026-05-24
+
+Phase 13–15: Post-05-23-run findings, telemetry improvements, and workspace contract / triage (10 items). These framed the implementation cycle that fed the `sos-copilot-gpt-5.4-2026-05-24T08-05` benchmark run. Status at archive time is mixed (most landed; a few were partial); superseded by Phase 16/17 in TODO.
+
+- [x] **Wire up workspace reference material correctly**
+- [x] **`--cards`****-aware status / summary / postmortem plumbing**
+- [x] **Fix broken/misleading fdn/ implementations**
+- [x] **Complete the event-type strings→classes migration**
+- [x] **Add engine-extension permission line to the agent prompt**
+- [x] **Add fast-tier (1 Hz) command-line telemetry**
+- [x] **Tabbed log viewer (live + archived modes)**
+- [x] **Propagate card names into slow-cadence artifacts; terminal resolves at print time**
+- [x] **Agent-authored ****`decisions.md`**** artifact**
+- [x] **Stage engine tests into the workspace (per ADR-006)**
 ## Completed 2026-05-22
 
 Phase 11: Runner Polish, Output Channels (8 items)

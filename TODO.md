@@ -1,232 +1,218 @@
 # TODO
 
-## Conventions
+Reference: post-05-24 run analysis on `docker/copilot-gpt-5.4/results/sos-copilot-gpt-5.4-2026-05-24T08-05`. Goal: a stable benchmark substrate for models and harnesses — staging correctness and live-mode observability come first; agent/harness prompt iteration is on-roadmap but deferred.
 
-These items must respect existing repo conventions captured in `KEY_DECISIONS.md`. Reference the relevant decision in each item's Detail where it applies:
+## Phase 16: Workspace as Pre-Built Directory (post 05-24 run)
 
-- **`_REPO_ROOT`**** convention** — `cli.py` and `workspace.py` derive `_REPO_ROOT = Path(__file__).resolve().parent.parent`. New repo-relative paths must use this constant.
-- **Collector number normalization** — `str(int(x))` at both CLI parsing and workspace staging. Phase 13 #2 must apply this when filtering `status.json`, `result.json`, etc.
-- **Docker log file naming (****`.tmp`**** + ****`.log`**** copy)** — pipe-reader threads write `.tmp` files, then `runner.py` copies to `.log` after threads join. Phase 14 #1's new per-channel files should decide explicitly whether to follow this pattern or be append-only from the start.
-- **Integration test CLI invocation pattern** — `[sys.executable, "-m", "silverquillm.cli", ...]` for any new integration tests.
-## Phase 13: Post 05-23 Run Findings
+Scope: Restructure the workspace from per-file staging assembled by `silverquillm/workspace.py` into a real pre-built directory at `benchmarks/sos/workspace/` in the bench repo, copied wholesale at stage time. Driven by ADR-007. The 05-24 run exposed assembly fragility (missing `AGENTS.md`/`PROJECT_MAP.md`, no pytest config, no `.git/`, no FDN test exemplars); rather than patching per-file staging item-by-item, we move the workspace into a real inspectable, dev-testable directory.
 
-Scope: Address the deficiencies surfaced by the `sos-2026-05-23T07-13` run on `--cards 1,7,13,44,97`. Policy: fix broken/misleading exemplars and document existing engine behavior, but do **not** pre-build engine APIs for new mechanics — the agent is expected to extend the engine itself when implementing new mechanics.
-
-Reference: agent thinking trace in `docker/local-pi-blind/results/sos-2026-05-23T07-13/agent_stderr.log`. [Foundations Card Audit](https://www.notion.so/3606a7adc8ed8074a157db471ec4e60a) for related fdn quality work.
+Reference: `silverquillm/workspace.py`, ADR-007, [WORKSPACE-CONTRACT.md](http://workspace-contract.md/), [BENCHMARK-RUNNER.md](http://benchmark-runner.md/), [CONTEXT.md](http://context.md/) (Workspace, SOS Card Stub, FDN Reference Tests terms).
 
 ---
 
-- [x] **Wire up workspace reference material correctly**
-  Detail: Today `silverquillm/workspace.py` stages four reference files at `/workspace/` (`rulebook.md`, `engine_api.md`, `base_classes.py`, `test_utils.md`) via `_RULEBOOK_SRC` (one-off, with stub fallback) and `_REFERENCE_DOCS` (dict). The 05-23 run exposed three problems:
+Sequencing note: Items 1.1–1.7 below replace what was previously a single mega-item. The split exists because structural moves of `engine/` and `cards/` touch many import sites and must be completed atomically within their commit — a half-finished move leaves the codebase un-importable. Items are ordered so all purely additive work lands first, then the two dangerous moves, then dependent items.
 
-  1. **`_RULEBOOK_SRC = "docs/rulebook.md"`**** is wrong.** That path is a hallucination from an earlier draft — `docs/` is for repo-level docs, not workspace-staging sources, and the file does not exist on `main`. The agent saw the stub fallback ("Stub — rulebook not yet generated"). The canonical rulebook is `benchmarks/sos/data/comprehensive_rules.txt`, which has now been populated with the full WotC Comprehensive Rules.
-  2. **`engine_api.md`**** is misleading.** The auto-generated `docs/engine_api.md` reports `event_type: str` when the source clearly says `type[ReplacementEvent]` (see Phase 13 #4). It caused the 05-23 agent to invent a fake `game.register_replacement(...)` API. The agent should read engine source directly — modules have rich docstrings and won't go stale.
-  3. **`base_classes.py`**** is a redundant rename.** It's a copy of `engine/card.py`, which is already staged via the full `engine/` tree. Two copies means the rename goes stale the moment the agent edits the engine, and it invites the wrong import path (`from base_classes import Creature` instead of `from engine.card import Creature`).
-  Target state in `silverquillm/workspace.py`:
+- [ ] **1.1 Create workspace skeleton and author static files**
+  Detail: Purely additive commit. Create the empty directory structure and author the static workspace files. Nothing is moved yet; existing tests still pass.
 
-  - `_RULEBOOK_SRC = "benchmarks/sos/data/comprehensive_rules.txt"`.
-  - New `_RULES_OVERVIEW_SRC = "benchmarks/sos/data/rules_overview.md"` (compact ~573-token rules skim, staged as `/workspace/rules_overview.md`).
-  - `_REFERENCE_DOCS = {"test_utils.md": "docs/test_utils.md"}` — drop the `engine_api.md` and `base_classes.py` entries.
-  - `_copy_reference_docs(workspace)`: remove the "write stub if source missing" fallback for the rulebook. Both rules files are now expected to exist; a missing source should be a hard error, not a silent stub.
-  - `_PROMPT_TEXT`: drop the `engine_api.md` reference, add `rules_overview.md` (point the agent at it as the always-in-context rules skim) and clarify `rulebook.md` is the deep-reference. Point the agent at `engine/` source modules for API discovery — name the key ones: `engine/card.py`, `engine/events.py`, `engine/triggers.py`, `engine/replacement_effects.py`, `engine/zones.py`.
-  Also update `docs/specs/WORKSPACE-CONTRACT.md` workspace-layout block to match the new staged files (drop `engine_api.md` and `base_classes.py`, add `rules_overview.md`).
+  - Create directories: `benchmarks/sos/workspace/{engine,cards/fdn,cards/sos,tests/engine}/`. Add `.gitkeep` or initial `__init__.py` files where needed for Python package discovery.
+  - Author `benchmarks/sos/workspace/AGENTS.md` — orientation doc only: task framing ("implement SOS cards in `cards/sos/{card_id}/card_impl.py`"), hard rules (card location, staged-test integrity, additive-only engine modifications — cross-reference [WORKSPACE-CONTRACT.md](http://workspace-contract.md/) Decisions), canonical test commands (`pytest` from workspace root discovers FDN reference tests + `tests/engine/` via the workspace `pytest.ini` `python_files` config), engine extension scope (may add files/methods and modify existing function bodies; may NOT rename, move, or delete anything existing in `engine/` — no refactoring), git availability, and a pointer to `PROJECT_MAP.md` for the directory layout. Does NOT duplicate the directory map.
+  - Author `benchmarks/sos/workspace/PROJECT_MAP.md` — directory summary only: one line per top-level file/directory. No helper API reference, no task framing, no commands — strictly a navigation lookup.
+  - Author `benchmarks/sos/workspace/pytest.ini` setting `timeout = 30` and `python_files = test_*.py tests.py` so colocated FDN reference tests (`cards/fdn/{cn}/tests.py`) are discovered alongside `tests/engine/test_*.py`.
+  - Author `benchmarks/sos/workspace/.gitignore` covering `__pycache__/`, `*.pyc`, `.pytest_cache/`, `*.log`, `*.jsonl`, `.coverage`, `htmlcov/`, `decisions.md.tmp`.
+  Files: `benchmarks/sos/workspace/{AGENTS.md,PROJECT_MAP.md,pytest.ini,.gitignore}` (new), `benchmarks/sos/workspace/{engine,cards/fdn,cards/sos,tests/engine}/` (new empty dirs).
 
-  Files: `silverquillm/workspace.py` (`_RULEBOOK_SRC`, new `_RULES_OVERVIEW_SRC`, `_REFERENCE_DOCS`, `_copy_reference_docs`, `_PROMPT_TEXT` — coordinate with Phase 13 #5 and Phase 15 #2/#3 which also edit `_PROMPT_TEXT`), `docs/specs/WORKSPACE-CONTRACT.md`.
+  Testability: `ls benchmarks/sos/workspace/{AGENTS.md,PROJECT_MAP.md,pytest.ini,.gitignore}` succeeds. Existing `pytest` from repo root still passes (nothing moved yet).
 
-  Testability: after `silverquillm run --cards 1`, the staged workspace root contains exactly `prompt.md`, `run_manifest.json`, `rulebook.md` (full WotC text, `wc -c` > 400 KB), `rules_overview.md`, `test_utils.md`, plus the `engine/`, `tests/engine/`, and `cards/` trees. No `engine_api.md` and no `base_classes.py`. `grep -i 'engine_api\|base_classes' workspace/prompt.md` returns nothing.
+- [ ] **1.2 Move ****`rulebook.md`**** into the workspace**
+  Detail: Move the rulebook from its current location (root `rulebook.md` or `docs/rulebook.md` — locate via `find . -name 'rulebook.md' -not -path './.git/*'`) to `benchmarks/sos/workspace/rulebook.md` via `git mv` so history is preserved. Update any documentation references in other markdown files to the new path (`grep -rln 'rulebook.md' --include='*.md' .`).
 
-- [x] **`--cards`**-aware status / summary / postmortem plumbing**
-  Detail: When a run is invoked with `--cards 1,7,13,44,97`, the run artifacts should reflect *that selection*, not the entire set. Concrete gaps observed in `sos-2026-05-23T07-13/`:
+  Files: current `rulebook.md` location (moved), any markdown files referencing it.
 
-  1. **`status.json`**: lists all 339 set cards, with 334 marked `no_output`. Should list only the 5 requested cards.
-  2. **`run_summary.json`**: not written at all for partial runs. Should be written regardless of selection size, and must include the `card_filter` field (already SETTLED in [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) → Filtered runs). The manifest scope stays unchanged — only `timeout_seconds` and `deadline_utc`.
-  3. **Per-card ****`result.json`**** and ****`postmortem.jsonl`**: not produced for the 5 completed cards. The post-eval / scoring step did not run. Should run on every completed card in the `--cards` set.
-  Files: `silverquillm/cli.py` — specifically `_harvest_results()` (does not currently receive `card_filter`; must accept and thread it through from `run()`), `_write_card_statuses()` (currently iterates ALL specs from `load_all_card_specs(cards_dir, "sos")`; must be scoped to the filter), and the two existing stubs `_evaluate_results()` and `_generate_run_summary()` which currently just print `"TODO: ..."`. Also any scoring/post-eval module these stubs eventually delegate to. Reuse `str(int(cn))` collector-number normalization per `KEY_DECISIONS.md` → "Collector number normalization" when comparing filter values to spec collector numbers.
+  Testability: `ls benchmarks/sos/workspace/rulebook.md` succeeds; the old path no longer exists; `git log --follow benchmarks/sos/workspace/rulebook.md` shows continuous history.
 
-  Testability: Run `silverquillm run --cards 1,7 --image silverquillm-local-pi-blind:latest`. Confirm `status.json` has exactly 2 entries, `run_summary.json` exists, both card dirs have `result.json` and `postmortem.jsonl`.
+- [ ] **1.3 Move workspace test infrastructure into the workspace**
+  Detail: `git mv` the workspace-local test files from top-level `tests/` into `benchmarks/sos/workspace/tests/`, and move `docs/test_utils.md` alongside its `.py` counterpart. Bodies stay identical — only locations change:
 
-- [ ] **Fix broken/misleading ****`fdn/`**** implementations**
-  Detail: The Foundations exemplars set bad precedent that blind-mode agents copy. Known offenders from the 05-23 trace:
+  - `tests/test_utils.py` → `benchmarks/sos/workspace/tests/test_utils.py`
+  - `tests/__init__.py` → `benchmarks/sos/workspace/tests/__init__.py`
+  - `tests/conftest.py` → `benchmarks/sos/workspace/tests/conftest.py`
+  - `tests/engine/` → `benchmarks/sos/workspace/tests/engine/` (replaces the empty dir from Item 1.1)
+  - `docs/test_utils.md` → `benchmarks/sos/workspace/tests/test_utils.md`
+  - Top-level `pytest.ini` → delete (the workspace-local `pytest.ini` from Item 1.1 becomes canonical). If host-side `silverquillm/` tests need separate pytest config, move it into a `[tool.pytest.ini_options]` block in repo-root `pyproject.toml` in the same commit.
+  Sweep imports of the moved test helpers (`grep -rln '^from tests\.\|^import tests\.\|from tests import' --include='*.py' .`) and update each to the new path. Note: `tests/engine/` test files themselves don't need import updates yet because `engine/` hasn't moved — those updates happen as part of Item 1.4.
 
-  1. **`fdn_194 EtaliPrimalStorm`**: bypasses the stack and `cast_spell` pipeline by manually calling `on_resolve`. The engine *does* support proper free-casts via the existing replacement/cast infrastructure — Etali is just wrong. Rewrite to respect the stack.
-  2. **Audit sibling fdn cards** for similar shortcuts (manual `on_resolve`, direct zone mutation bypassing events, ad-hoc `_omniscience_active`-style flags used for one-shot effects). Cross-reference with [Foundations Card Audit](https://www.notion.so/3606a7adc8ed8074a157db471ec4e60a) and rewrite anything that takes shortcuts around existing engine capabilities.
-  3. **Do NOT add new exemplars for mechanics fdn doesn't naturally have** (e.g. don't fabricate a split-card example if Foundations has no split cards). The agent owns new-mechanic implementation.
-  Files: `cards/fdn/fdn_194/card_impl.py` and any other audit-flagged cards (note: cards live under `cards/fdn/` at the repo root, not under `benchmarks/`).
+  Files: paths listed above (moved), top-level `pytest.ini` (deleted), `pyproject.toml` (optional host-side pytest config), any callers of `tests.test_utils` (import updates).
 
-  Testability: For each rewritten card, an interaction test where a Counterspell-style effect can target the free-cast spell on the stack should now succeed where it previously failed (the spell goes through the stack).
+  Testability: `pytest benchmarks/sos/workspace/tests/engine/` runs (tests may still pass against the old top-level `engine/` since `engine/` hasn't moved yet — that is Item 1.4). After Phase 16 fully lands, `cd benchmarks/sos/workspace && pytest tests/engine/` passes.
 
-- [x] **Complete the event-type strings→classes migration**
-  Detail: The engine has already migrated from raw-string event types to typed event classes. The source on `main` declares `event_type: type[ReplacementEvent]` in `engine/replacement_effects.py` and `event_type: type[TriggeredEvent]` in `engine/triggers.py`; `engine/events.py` defines the full hierarchy (`MoveToGraveyardReplacementEvent` ← `CreatureDiesReplacementEvent` / `SacrificeReplacementEvent` / `PermanentDestroyedReplacementEvent`, plus `CreateTokenReplacementEvent`, `AddCounterReplacementEvent`, and the parallel `*TriggeredEvent` family). The one-shot migration script `migrate_events.py` holds the canonical string→class mapping (`STRING_TO_REPLACEMENT_CLASS`). Two stragglers still teach the old style:
+- [ ] **1.4 Move ****`engine/`**** to ****`benchmarks/sos/workspace/engine/`**** and update all imports (LARGE STRUCTURAL MOVE)**
+  Detail: Single commit that relocates the engine package and rewrites every import site. **This commit will produce intermediate broken-test states during execution. Do not abort partway through. Do not commit a partial move.** The done-state criteria below are non-negotiable; if you cannot reach them, abandon the working tree and start the item fresh.
 
-  1. **`cards/fdn/fdn_244/card_impl.py`** still registers with raw strings: `for event_type in ("move_to_graveyard", "creature_dies", "sacrifice"):`. Rewrite to use the typed classes. Note that `CreatureDiesReplacementEvent` and `SacrificeReplacementEvent` both subclass `MoveToGraveyardReplacementEvent`, so a single registration against the parent covers all three via subclass-dispatch — pick whichever matches the card's intended semantics. Other fdn cards already use the new pattern correctly (e.g. `fdn_216` registers `CreateTokenReplacementEvent` / `AddCounterReplacementEvent` directly); use those as the reference exemplar.
-  2. **`docs/specs/CARD-INTERFACE.md`** "Replacement Effects" example shows `event="creature_dies"` and a `game.register_replacement(...)` API that does not exist in the engine. The real API is `game.replacement_manager.register(ReplacementEffect(event_type=CreatureDiesReplacementEvent, source=..., condition=..., replacement=..., controller=...))`. Rewrite the example to match the migrated, actually-existing API. This spec is no longer staged into the workspace (per Phase 13 #1, only the two rules files and `test_utils.md` ship), but it's the first thing new contributors read and any future doc-generation tooling will pull from it — leaving the wrong example in encodes the wrong mental model.
-  Note: `docs/engine_api.md` is also stale (reports `event_type: str`), but Phase 13 #1 drops it from the workspace, so fixing the auto-generator is out of scope for this item. If `engine_api.md` is ever restored to the workspace, regenerating it correctly becomes prerequisite work.
+  - Step A: `git mv engine benchmarks/sos/workspace/engine` (preserve history). If the directory-level `git mv` fails for any reason, fall back to per-file `git mv` of each file under `engine/`.
+  - Step B: Enumerate all import sites: `grep -rln '^from engine\b\|^import engine\b' --include='*.py' . | sort -u`. Expected locations: every file in `silverquillm/` that touches game logic, every file in `tests/audited/`, possibly some `cards/` files that import engine internals.
+  - Step C: Update each matched file: `from engine.X` → `from benchmarks.sos.workspace.engine.X`, `import engine` → `import benchmarks.sos.workspace.engine as engine` (preserve the local `engine` alias where existing code relies on it). Use a scripted sed pass for the common cases and hand-edit any complex ones.
+  - Step D: Iterate on remaining `ImportError`s until done-state holds.
+  Done-state verification (all three must hold before committing):
 
-  Why this matters: typed event classes enable subclass-based registration (a handler on `MoveToGraveyardReplacementEvent` fires for `CreatureDiesReplacementEvent` too, per the documented inheritance semantics in `engine/events.py`). Raw strings can't express that — leaving stragglers around encodes the wrong mental model.
+  1. `grep -rln '^from engine\b\|^import engine\b' --include='*.py' .` returns zero matches outside `benchmarks/sos/workspace/engine/` itself.
+  2. `pytest` from repo root exits 0 (full host-side suite, including audited tests).
+  3. `python -c "from benchmarks.sos.workspace.engine.card import CardImpl; from benchmarks.sos.workspace.engine.casting import cast_spell, cast_spell_free, resolve_top; print('ok')"` succeeds.
+  Files: `engine/**` (moved), `silverquillm/**` (import updates), `tests/audited/**` (import updates), any `cards/**` files that import engine internals (import updates).
 
-  Files: `cards/fdn/fdn_244/card_impl.py`, `docs/specs/CARD-INTERFACE.md`. Reference: `migrate_events.py::STRING_TO_REPLACEMENT_CLASS` for the canonical mapping, `engine/events.py` for the full class hierarchy, `cards/fdn/fdn_216/card_impl.py` for a correctly-migrated example.
+  Testability: Per the three done-state checks. Add a focused unit test `tests/test_engine_import_surface.py` (host-side) asserting each of `CardImpl`, `cast_spell`, `cast_spell_free`, `resolve_top` is importable from `benchmarks.sos.workspace.engine.*`.
 
-  Testability: After the fix, `grep -rn "event_type *= *['\"]" cards/fdn/ docs/specs/` should return zero matches (the migration script `migrate_events.py` can be re-run as a verification pass). Engine regression tests on `fdn_244` should pass unchanged after the rewrite.
+- [ ] **1.5 Move ****`cards/`**** to ****`benchmarks/sos/workspace/cards/`**** and normalize SOS stubs (LARGE STRUCTURAL MOVE)**
+  Detail: Single commit that relocates the cards directory, rewrites all `cards.*` import sites, and brings SOS stub files to the canonical class form. **Same atomicity rule as Item 1.4: do not commit a partial move. Do not abort partway through.**
 
-- [x] **Add engine-extension permission line to the agent prompt**
-  Detail: Add to the user prompt (the one shipped to the agent container):
+  - Step A: `git mv cards benchmarks/sos/workspace/cards` (preserve history).
+  - Step B: Enumerate import sites: `grep -rln '^from cards\b\|^import cards\b' --include='*.py' . | sort -u`. Update each from `from cards.X` → `from benchmarks.sos.workspace.cards.X` and `import cards` → `import benchmarks.sos.workspace.cards as cards`.
+  - Step C: Normalize SOS card stubs to the canonical form `class CardName(CardImpl):\n    """TODO: ..."""\n    pass`. Files currently docstring-only that need a class declaration added (post-move paths): `benchmarks/sos/workspace/cards/sos/spg_158/card_impl.py`, `.../sos_195/card_impl.py`, `.../sos_217/card_impl.py`, `.../sos_218/card_impl.py`. The `CardName` class name follows the same PascalCase-from-card-name convention used in already-normalized stubs (`sos_5`, `sos_55`).
+  - Step D: Iterate on remaining errors until done-state holds.
+  Done-state verification (all three must hold before committing):
 
-  > "You are expected to make changes to the engine to implement new mechanics. The existing code base may not be perfect, you are free to make changes that don't break current behavior."
+  1. `grep -rln '^from cards\b\|^import cards\b' --include='*.py' .` returns zero matches outside `benchmarks/sos/workspace/cards/`.
+  2. `pytest` from repo root exits 0.
+  3. Every SOS card module is a valid class definition: `python -c "import ast, glob; [ast.parse(open(f).read()) for f in glob.glob('benchmarks/sos/workspace/cards/sos/*/card_impl.py')]; print('ok')"` succeeds, and a parametrized check confirms each module contains at least one class inheriting from `CardImpl`.
+  Files: `cards/**` (moved), `silverquillm/**` (imports), `tests/audited/**` (imports), the four normalized SOS stub files.
 
-  This makes explicit what the benchmark already grades for (Cat4 Engine Extension Quality) and reduces the chance the agent treats the engine as immutable and resorts to fdn-style hacks. Pair with the broken-fdn cleanup above so the precedent the agent sees is actually good.
+  Testability: Per done-state checks. Add a parametrized unit test that imports every `benchmarks.sos.workspace.cards.sos.*.card_impl` module dynamically and asserts each defines a class inheriting from `CardImpl`.
 
-  Files: `silverquillm/workspace.py` — the user prompt lives in the module-level `_PROMPT_TEXT` constant (not a separate template file). Append the new sentence to that string. The `_prompt_text()` helper already handles `--cards`-filter substitution; the new sentence should be in the base template so both filtered and unfiltered runs include it. Optional follow-up (not required for this item): extract `_PROMPT_TEXT` to a real template file under `silverquillm/templates/` for easier editing.
+- [ ] **1.6 Author FDN Reference Tests at ****`benchmarks/sos/workspace/cards/fdn/{cn}/tests.py`**
+  Detail: Author 3–5 illustrative FDN test files covering representative mechanics: Converge mana-color tracking, modal spell, targeted ETB, multi-blocker combat, replacement effect. Choose the specific FDN collector numbers based on which already-implemented FDN cards cleanly exercise each mechanic (inspect `benchmarks/sos/workspace/cards/fdn/{cn}/card_impl.py` to confirm). Use `benchmarks/sos/workspace/tests/test_utils.py` helpers and follow the patterns established in `benchmarks/sos/workspace/tests/engine/`. These tests are illustrative learning material the agent will see; they may overlap freely with audited FDN tests at `benchmarks/sos/data/tests/audited/fdn/` (no contamination concern — the agent is not graded on either FDN suite).
 
-  Testability: Grep the staged `workspace/prompt.md` of a new run for the new sentence. Run a card that requires a new mechanic (e.g. sos_1 cast-from-graveyard) and confirm the agent's thinking trace shows it considering engine changes rather than only fdn pattern-matching.
+  Files: `benchmarks/sos/workspace/cards/fdn/{cn}/tests.py` for 3–5 chosen FDN cards (new).
 
-## Phase 14: Telemetry Improvements
+  Testability: `cd benchmarks/sos/workspace && pytest cards/fdn/` discovers and passes the new tests. Each test imports from `benchmarks.sos.workspace.engine` and `benchmarks.sos.workspace.cards.fdn.{cn}.card_impl` (paths now correct after Items 1.4 and 1.5).
 
-Scope: Improve live and post-run command-line observability without touching the 60-second Git snapshot cadence. The Git snapshot loop (audit/recovery) stays at 60s as specified in [RUN-ARTIFACTS-AND-TELEMETRY.md](http://run-artifacts-and-telemetry.md/). All work below is purely command-line / terminal-output telemetry.
+- [ ] **1.7 Move audited tests to ****`benchmarks/sos/data/tests/audited/`**** and update evaluator paths**
+  Detail: Move host-side audited tests from top-level `tests/audited/` to `benchmarks/sos/data/tests/audited/{fdn,sos}/`. This consolidates the bench-side input layout under `benchmarks/sos/data/` ("everything the bench owns but the agent never sees"). Also update `silverquillm/evaluator.py` so audited-test paths and `test_utils.py` resolution both point at the new locations:
 
-Reference: [RUN-ARTIFACTS-AND-TELEMETRY.md](http://run-artifacts-and-telemetry.md/) → Terminal channels (per-channel file mapping) and Decisions ("v1 includes a tabbed post-run log viewer"). Item 1 below implements the per-channel files; item 2 implements the tabbed viewer over those files. (Historical context, now superseded: *"A separate post-run **`logs --run`** viewer is deferred for v1"* — item 2 below lifts that deferral.)
+  - Audited tests path: `_REPO_ROOT / "benchmarks/sos/data/tests/audited"` (or `_BENCHMARK_SET_ROOT / "data/tests/audited"` if Item 2 has already landed — either form is fine).
+  - `test_utils.py` source for eval tempdir copies: `_REPO_ROOT / "benchmarks/sos/workspace/tests/test_utils.py"` (now alongside the workspace).
+  - Update any import statements in the moved audited test files from old `engine`/`cards` paths to `benchmarks.sos.workspace.engine`/`benchmarks.sos.workspace.cards` (consequence of Items 1.4 and 1.5; these may already be updated as part of those items' import sweeps).
+  Files: `tests/audited/**` → `benchmarks/sos/data/tests/audited/**` (moved), `silverquillm/evaluator.py` (path updates).
+
+  Testability: `ls tests/audited/` fails (path no longer exists); `ls benchmarks/sos/data/tests/audited/{fdn,sos}/` succeeds. A small end-to-end evaluation run (`silverquillm run --cards 1` then `silverquillm evaluate <run>`) produces a `run_summary.json` matching a pre-restructure baseline.
+
+- [ ] **Rewrite ****`stage_workspace()`**** to the four-step form**
+  Detail: Replace per-file assembly in `silverquillm/workspace.py` with `cp -r` + per-run writes + `git init`:
+
+  ```python
+_BENCHMARK_SET_NAME = "sos"  # module-level; promote to CLI flag when adding a second target set
+_BENCHMARK_SET_ROOT = _REPO_ROOT / "benchmarks" / _BENCHMARK_SET_NAME
+
+def stage_workspace(tmp_run_dir: Path, prompt_text: str, run_manifest: dict) -> Path:
+    src = _BENCHMARK_SET_ROOT / "workspace"
+    dst = tmp_run_dir / "workspace"
+    shutil.copytree(src, dst)
+    (dst / "prompt.md").write_text(prompt_text, encoding="utf-8")
+    (dst / "run_manifest.json").write_text(json.dumps(run_manifest, indent=2), encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=dst, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=dst, check=True)
+    subprocess.run(["git", "-c", "user.name=runner", "-c", "user.email=runner@silverquillm", "commit", "-q", "-m", "initial workspace"], cwd=dst, check=True)
+    return dst
+  ```
+
+  Drop `_REFERENCE_DOCS`, `_RULEBOOK_SRC`, `_RULES_OVERVIEW_SRC`, and every per-file copy helper. Assert `_BENCHMARK_SET_ROOT / "workspace"` exists and is non-empty before `copytree` (cheap pre-flight; raises `FileNotFoundError` with a clear message if the canonical directory is missing). The new function is roughly 15 lines plus imports.
+
+  Files: `silverquillm/workspace.py`.
+
+  Testability: `silverquillm run --cards 1` produces a staged directory matching `benchmarks/sos/workspace/` byte-for-byte plus `prompt.md` and `run_manifest.json`. `git -C <staged_dir> log --oneline` shows exactly one commit. Add `tests/integration/test_stage_workspace.py` asserting the staged tree equals the source tree plus the two per-run files.
+
+- [ ] **Delete deprecated per-file staging code**
+  Detail: After Item 2 (the `stage_workspace()` rewrite) lands, remove the now-unused per-file staging helpers and constants from `silverquillm/workspace.py`. These were used by the old per-file workspace assembly and are dead code once `stage_workspace()` is the four-step `cp -r` form. Specifically delete:
+
+  - `_REFERENCE_DOCS` constant
+  - `_RULEBOOK_SRC`, `_RULES_OVERVIEW_SRC` constants
+  - Any helpers that built per-file copies (`_stage_reference_docs`, `_copy_with_replacement`, etc.)
+  Audited-test relocation and `evaluator.py` path updates are handled in Item 1.7, not here.
+
+  Files: `silverquillm/workspace.py`.
+
+  Testability: `grep -rn '_REFERENCE_DOCS\|_RULEBOOK_SRC\|_RULES_OVERVIEW_SRC\|_stage_reference_docs' silverquillm/` returns zero matches. `silverquillm run --cards 1` still produces a valid staged workspace (the deleted code was unreachable after Item 2).
+
+- [ ] **Add CI-time workspace structure test**
+  Detail: Author `tests/test_workspace_structure.py` (host-side, not staged into the workspace). Asserts `benchmarks/sos/workspace/` contains the expected top-level entries: `engine/`, `cards/fdn/`, `cards/sos/`, `tests/`, `AGENTS.md`, `PROJECT_MAP.md`, `rulebook.md`, `pytest.ini`, `.gitignore`. Replaces the old per-file hard-error enumeration that used to live in `stage_workspace()` — drift is now caught at PR-review time rather than at run time.
+
+  Files: `tests/test_workspace_structure.py` (new).
+
+  Testability: Run the test against current `benchmarks/sos/workspace/` — passes. Temporarily rename or delete a top-level entry locally; the test fails with a message naming the missing entry. CI catches it before merge.
+
+## Phase 17: TUI Telemetry Fixes (live-mode observability)
+
+Scope: Make `silverquillm logs --live` actually populate every tab during a run. Currently only `[system]` populates live; the others are unwritten, written-only-on-exit, or written by an unwired callback. Sequencing matters: items 1–3 produce the missing files, then item 4 hides any channels that remain structurally empty.
+
+Reference: `silverquillm/telemetry.py`, `silverquillm/runner.py`, `silverquillm/cli.py`, `silverquillm/logs_viewer.py`, `docs/specs/RUN-ARTIFACTS-AND-TELEMETRY.md`.
 
 ---
 
-- [x] **Add fast-tier (1 Hz) command-line telemetry**
-  Detail: Introduce a second telemetry tier that runs at 1 Hz (or on FS events via `watchdog`/`inotify` for zero-poll). Reads only cheap signals — no Git operations, no full-workspace stat sweeps. Sources:
+- [ ] **Write ****`docker_stdout.log`**** and ****`docker_stderr.log`**** directly to ****`run_dir`**** during the run**
+  Detail: `silverquillm/runner.py:_drain_pipe` currently writes to `output/docker_stdout.tmp` and `output/docker_stderr.tmp` during the run; `ContainerLifecycle.run()` copies them to `output/docker_stdout.log` / `docker_stderr.log` only after the container exits; `cli.py:_harvest_results` then copies those into `run_dir`. As a result, the `[stdout]` and `[stderr]` tabs are empty until the run finishes.
 
-  1. **Tail ****`/output/progress.jsonl`** — append-only file the agent writes when it completes a card. Emit each new line as a `[progress]` event.
-  2. **Tail ****`/output/system.log`** — agent's free-form status. Emit new lines as `[system]` events.
-  3. **`stat`**** mtimes on ****`workspace/cards/*/card_impl.py`**** and ****`workspace/engine/*.py`** — detect in-flight edits between snapshot intervals. Emit a `[edit]` event when an mtime advances, with the path. Cheap because we only stat a known small set of paths.
-  4. **Do NOT trigger Git snapshots from this tier.** The 60s snapshot loop is independent and unchanged.
-  5. **One append-only file per channel on the host.** Each telemetry stream writes to its own file under the run directory — the substrate the tabbed log viewer reads. Channel → file mapping:
-    - `[runner]` → `runner.log` (runner-internal messages)
-    - `[snapshot]` → `snapshot_telemetry.jsonl` (already exists)
-    - `[stdout]` → `docker_stdout.log` (already exists)
-    - `[stderr]` → `docker_stderr.log` (already exists)
-    - `[error]` → `runner_errors.log`
-    - `[progress]` → `progress.jsonl` (mirrored from `/output/progress.jsonl` to host)
-    - `[edit]` → `fast_telemetry.jsonl`
-    - `[system]` → `system.log` (mirrored from `/output/system.log` to host)
-  Files: `silverquillm/runner.py` (new fast-tier loop alongside the existing snapshot loop), `silverquillm/telemetry.py` (or wherever the channel-labeled streaming lives).
+  Change `_drain_pipe` to open `run_dir / "docker_stdout.log"` (and stderr) directly in append mode (line-buffered) and write each line as it arrives. Drop the `.tmp` intermediate. Update `ContainerLifecycle.run()` to no longer perform the post-exit `shutil.copy2` step. Update `_harvest_results` in `cli.py` to skip these two files (they're already in `run_dir`). This intentionally breaks the `.tmp` + `.log` copy convention for these channels; document the carve-out in `KEY_DECISIONS.md`.
 
-  Testability: Run a real benchmark. Touch `workspace/cards/sos_1/card_impl.py` inside the container; confirm a `[edit]` line appears in the runner terminal within ~1s. Append a line to `/output/progress.jsonl`; confirm a `[progress]` line appears within ~1s. Confirm `snapshot_telemetry.jsonl` is still written every 60s with unchanged content.
+  Thread-safety: append-mode writes from a single `_drain_pipe` thread per stream are safe. Use `open(..., "a", buffering=1, encoding="utf-8", errors="replace")` so lines flush immediately.
 
-- [x] **Tabbed log viewer (live + archived modes)**
-  Detail: A single CLI binary that opens a one-panel, tab-per-channel terminal viewer over the run's per-channel log files. Works during a live run (tails files) and for finished runs (static history with the same UX). Supersedes the earlier separate `logs --run` viewer, channel-toggles, and multi-pane dashboard items — the file-backed substrate from the item above makes one design serve both modes.
+  Files: `silverquillm/runner.py` (`_drain_pipe`, `ContainerLifecycle.run`, `ContainerLifecycle.__init__` — receive `run_dir` if not already), `silverquillm/cli.py` (`_harvest_results`), `KEY_DECISIONS.md`.
 
-  Invocation:
+  Testability: Start a run; while it's executing, `tail -f docker/<image>/results/<run>/docker_stdout.log` shows lines arriving in real time. `silverquillm logs --run <run> --live` shows the `[stdout]` tab populating live. After the run, the file is well-formed and complete (no missing lines vs. previous behavior).
 
-  ```javascript
-silverquillm logs --run sos-2026-05-23T07-13              # auto-detect: live if active, archived if done
-silverquillm logs --run sos-2026-05-23T07-13 --live       # explicit live (errors if run not active)
-silverquillm logs --run sos-2026-05-23T07-13 --archived   # explicit static mode
+- [ ] **Wire ****`snapshot_callback`**** in ****`cli.py`**** so ****`snapshot_telemetry.jsonl`**** populates**
+  Detail: `ContainerLifecycle.__init__` accepts a `snapshot_callback` parameter (called every 60s by the existing snapshot loop — `_SNAPSHOT_INTERVAL = 60`), but `silverquillm/cli.py:run()` instantiates `ContainerLifecycle(...)` without passing one. As a result, `snapshot_telemetry.jsonl` is never written and the `[snapshot]` tab is permanently empty.
+
+  In `cli.py`, define a callback that:
+
+  1. Walks the staged workspace (`cards/`, `engine/`, `tests/`).
+  2. Computes the delta payload per `docs/specs/RUN-ARTIFACTS-AND-TELEMETRY.md` (changed `card_impl.py` count, changed engine files, completed-like card impls per the existing heuristic, etc.).
+  3. Appends one JSON line to `run_dir / "snapshot_telemetry.jsonl"`.
+  Pass it as `snapshot_callback=` to `ContainerLifecycle`. If the snapshot logic already exists in a helper, reuse it; otherwise extract a `silverquillm/snapshot.py:snapshot_once(workspace, run_dir, card_name_map)` helper. Snapshot payload stays IDs-only per the SETTLED scope carve-out (no `card_name` in this high-cadence file).
+
+  Files: `silverquillm/cli.py` (`run()` — add callback wiring), optional `silverquillm/snapshot.py` (new helper).
+
+  Testability: Start a 5-minute run; after 60s, `snapshot_telemetry.jsonl` exists with at least one line; after 3 minutes, at least 3 lines. Each line parses as JSON and contains the keys documented in `RUN-ARTIFACTS-AND-TELEMETRY.md`. Live TUI `[snapshot]` tab updates every 60s.
+
+- [ ] **Tee runner ****`click.echo`**** calls into ****`runner.log`**** and ****`runner_errors.log`**
+  Detail: The `[runner]` and `[error]` tabs in `logs_viewer.py` map to `run_dir / "runner.log"` and `run_dir / "runner_errors.log"`, but nothing in the codebase writes to these files. Add a small helper in `cli.py`:
+
+  ```python
+def _runner_log(run_dir: Path, msg: str, *, err: bool = False) -> None:
+    click.echo(msg, err=err)
+    target = run_dir / ("runner_errors.log" if err else "runner.log")
+    with target.open("a", encoding="utf-8") as f:
+        f.write(msg.rstrip("\n") + "\n")
   ```
 
-  Layout: single panel + tab bar + status footer.
+  Route every existing `click.echo(...)` call in `run()`, `_harvest_results()`, `_evaluate_results()`, `_generate_run_summary()`, and any caught-exception print path through this helper. Pass `run_dir` explicitly (or wrap in a tiny `RunnerContext` so callers don't repeat themselves). Best-effort: if `run_dir` doesn't exist yet (very early in `run()`), skip the file write but still call `click.echo`.
 
-  ```javascript
-┌──────────────────────────────────────────────────────────┐
-│ [1] runner  [2] snapshot  [3] stdout  ▶[4] stderr◀  [5] error  ...  │  tab bar
-├──────────────────────────────────────────────────────────┤
-│  (last N lines of the active tab's file)                          │
-│  ...live appends arrive as the file grows (live mode)...          │  panel
-├──────────────────────────────────────────────────────────┤
-│ TAIL  sos-2026-05-23T07-13  q quit  ↑↓ scroll  End live          │  status footer
-└──────────────────────────────────────────────────────────┘
-  ```
+  Files: `silverquillm/cli.py`.
 
-  Hotkeys:
+  Testability: After a run, `runner.log` exists in `run_dir` and contains the same lines that were printed to the terminal. Trigger an error path (e.g. invalid `--cards` value); confirm the message appears in `runner_errors.log`. Live TUI `[runner]` tab populates as the run progresses.
 
-  - `1`–`8`: switch active tab (re-render history from the channel's file).
-  - `↑` / `↓` / `PgUp` / `PgDn` / `Home`: enter SCROLLBACK mode (freeze viewport; new appends do not move the view but bump an unread badge on the active tab).
-  - `End` / `G`: return to TAIL mode (auto-scroll to bottom on new lines).
-  - `q`: quit the viewer. In live mode the run continues; only the viewer exits.
-  Implementation mechanics:
+- [ ] **Hide structurally-empty channels in live mode with rediscovery polling**
+  Detail: `LogsViewer.__init__` currently registers all channels in `CHANNEL_ORDER` when `live=True`, regardless of whether the backing file exists. After Phase 17 items 1–3 the file-existence check becomes meaningful, so any not-yet-written channel files no longer create permanently-empty tabs.
 
-  1. **Take over the terminal with the alternate screen buffer on entry, restore on exit.** Restoration must run on SIGINT, SIGTERM, normal quit, and uncaught exceptions — a broken teardown leaves the user's terminal unusable. This is the single highest-priority correctness detail.
-  2. **Raw mode** (termios cbreak) for single-keystroke capture. Restore on exit alongside the alternate screen.
-  3. **On tab switch**: stop the previous tail thread, open the new channel's file, seek to `end - viewport_lines` (or to 0 if the file is shorter), render the window, then start a new tail thread (inotify on Linux with polling fallback).
-  4. **TAIL mode**: new appends append at the bottom; scroll up by one line when the panel is full.
-  5. **SCROLLBACK mode**: viewport is a line offset into the file; new appends do not move the viewport but increment an unread counter for the active tab's tab-bar badge. `End` / `G` clears the badge and returns to TAIL.
-  6. **Unread badges on inactive tabs**: each non-active tab shows a count badge (e.g. `[4] stderr (12)`) when new lines have arrived since the user last viewed it. Cleared on switching to that tab.
-  7. **Resize**: handle `SIGWINCH`; re-clamp viewport to terminal size; re-render.
-  8. **Non-TTY fallback**: if stdout is not a TTY (CI, piped), `logs` falls back to interleaved plain streaming over all per-channel files with channel labels. Live mode still works; just no interactive UX.
-  Decoupling from log writing:
+  Change `LogsViewer.__init__` to register only channels whose file currently exists. Add a `_discover_new_channels()` method called every 1s (mirroring the existing `_reload_all` cadence) that scans `run_dir` for new channel files and registers them dynamically. New tabs appear in `CHANNEL_ORDER` position with a transient "new" badge (~3s) so the user notices them.
 
-  - The viewer is **read-only over files**. The runner writes per-channel files exactly as the previous item specifies, whether or not anyone is viewing them. Running the viewer or not has zero impact on saved artifacts.
-  Library choice:
+  Files: `silverquillm/logs_viewer.py`.
 
-  - Use `rich` for rendering primitives (table for tab bar, panel for content, footer). Avoid `textual` — the single-panel design does not need its app framework, and `rich` alone keeps the dependency surface smaller.
-  - Fall back to raw ANSI if `rich` proves cumbersome for the alternate-screen + raw-mode pattern.
-  Files: `silverquillm/cli.py` (new `logs` subcommand), `silverquillm/logs_viewer.py` (new module: terminal control, tab bar, viewport, file tailing).
+  Testability: Start a run; immediately open `silverquillm logs --live`. Initially only `[system]` (and any other already-existing files) appear. As `runner.log`, `docker_stdout.log`, `snapshot_telemetry.jsonl` populate, new tabs appear within ~1s. At no point is an empty tab shown.
 
-  Testability:
+- [ ] **Emit a bootstrap line on first ****`FastTelemetry._poll_mtimes`**** pass**
+  Detail: `FastTelemetry._poll_mtimes` records baseline mtimes on its first poll but emits zero events (the diff logic requires `prev is not None`). On cycle 1 of a run, this leaves `fast_telemetry.jsonl` empty until the agent first edits a card or engine file — making the `[edit]` tab look broken for several minutes during the cycle-1 thrash.
 
-  - Unit tests on viewport math (seek-to-end-N, scroll up/down, resize clamping).
-  - Integration: launch the viewer in a pty against a fixture run directory; programmatically send keystrokes (`1`, `2`, `↑`, `End`, `q`); assert rendered output matches expectation per step.
-  - Manual: open a live run; tab between channels; confirm history loads instantly on each switch; confirm new appends arrive within ~1s on TAIL; confirm SCROLLBACK freezes correctly; confirm `q` restores the terminal cleanly; confirm SIGINT (Ctrl-C) also restores the terminal cleanly.
-  Estimated effort: 1–1.5 days. Single largest risk is reliable terminal-state teardown across SIGINT / crash / exit paths.
+  On the first poll only, emit a synthetic line `{"ts": ..., "event": "polling_started", "watched_paths": <count>, "sample_paths": [<first 3>]}` so the tab shows immediate signal. Subsequent polls behave as today.
 
-## Phase 15: Workspace Contract & Triage Improvements
+  Files: `silverquillm/telemetry.py` (`FastTelemetry._poll_mtimes`).
 
-Scope: Reduce time-to-diagnosis on completed runs and tighten the agent's feedback loop without leaking SOS card tests. The SOS Card Correctness tests remain hidden — only engine and FDN regression tests are staged into the workspace.
+  Testability: Start a run; within 2 seconds, `fast_telemetry.jsonl` contains the `polling_started` line. Live TUI `[edit]` tab shows it. Edit a workspace card file; the next poll emits the standard mtime-change line.
 
-Reference: [WORKSPACE-CONTRACT.md](http://workspace-contract.md/), [RUN-ARTIFACTS-AND-TELEMETRY.md](http://run-artifacts-and-telemetry.md/).
+- [ ] **Drop ****`progress.jsonl`**** channel and entrypoint emission**
+  Detail: Per 2026-05-24 grilling, `progress.jsonl` is removed from the design entirely — not enough use to justify the harness/agent protocol surface.
 
----
+  - Remove `progress` from `CHANNEL_ORDER` in `silverquillm/logs_viewer.py`.
+  - Remove the SIGTERM-time `progress.jsonl` write in the Docker entrypoint (`docker/<image>/entrypoint.mjs`).
+  - Remove any `progress.jsonl` references in `silverquillm/cli.py` and `silverquillm/runner.py`.
+  Files: `silverquillm/logs_viewer.py`, Docker entrypoint script, `silverquillm/cli.py`, `silverquillm/runner.py`.
 
-- [x] **Propagate card names into slow-cadence artifacts; terminal resolves at print time**
-  Detail: Most artifacts reference cards by ID only (`sos_1`, `sos_7`). Human triage is faster with names inline. Add `card_name` alongside `card_id` in slow-cadence artifacts and resolve names at print time for live terminal output. `snapshot_telemetry.jsonl` stays IDs-only per the SETTLED scope carve-out in [RUN-ARTIFACTS-AND-TELEMETRY.md](http://run-artifacts-and-telemetry.md/) (high-cadence file; lean payloads).
-
-  Changes:
-
-  1. **`progress.jsonl`** entries: add `card_name` field alongside `card_id`.
-  2. **`status.json`**: each card entry gains a `card_name` field.
-  3. **`result.json`** (created by Phase 13 #2): include `card_name`. [BENCHMARK-RUNNER.md](http://benchmark-runner.md/)'s example already shows this.
-  4. **Live ****`[snapshot]`****, ****`[progress]`****, ****`[runner]`**** terminal channels**: resolve card names from `card_spec.json` at print time for any line that mentions a card ID. Terminal stays readable, JSONL stays lean.
-  5. **`snapshot_telemetry.jsonl`**: unchanged — stays IDs-only.
-  Source of truth: the card metadata table the runner already consults to stage `cards/sos/`. Plumb it through to the slow-cadence artifact writers and the terminal-print layer.
-
-  Files: `silverquillm/runner.py`, scoring/post-eval pipeline, `silverquillm/telemetry.py`.
-
-  Testability: Run any benchmark with `--cards 1,7`. Confirm `status.json` entries contain `"card_name": "Dawning Archaic"`. Confirm `progress.jsonl` lines include the name. Confirm `snapshot_telemetry.jsonl` events have only `card_id`, no `card_name`. Confirm live `[snapshot]` lines print "sos_1 Dawning Archaic" while the underlying JSONL line has only `"sos_1"`.
-
-- [x] **Agent-authored ****`decisions.md`**** artifact**
-  Detail: Add `decisions.md` to the workspace contract as a first-class artifact the agent is expected to maintain. Purpose: structured human-readable record of *why* the agent made each non-obvious implementation choice and *what it knows it punted on*. Massively reduces triage time vs. reading stderr stream-of-consciousness.
-
-  Expected structure (enforce via prompt, not schema):
-
-  ```javascript
-# Decisions
-## sos_1 Dawning Archaic
-- Needed: cast spell from graveyard without paying.
-- No documented API found; reused `_omniscience_active` flag from fdn_161 (semantically wrong for one-shot but no alternative).
-- BLOCKED: proper `cast_for_free(card, from_zone=...)` API would clean this up.
-## sos_13 Emeritus of Truce // Sands of Time
-- No split-card precedent in fdn/. Modeled after MTG split-card pattern manually.
-- ...
-  ```
-
-  Update the prompt to require the agent to maintain `decisions.md` as it works. Update [WORKSPACE-CONTRACT.md](http://workspace-contract.md/) to list it as part of the workspace layout. The agent already documents this in stderr — making it a structured artifact just surfaces what's already happening.
-
-  Files: `silverquillm/workspace.py` (extend the `_PROMPT_TEXT` module-level constant with the maintain-`decisions.md` instruction — same constant Phase 13 #5 touches), `docs/specs/WORKSPACE-CONTRACT.md` (list `decisions.md` in the workspace layout), [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) (staging step creates an empty `decisions.md` for the agent to fill).
-
-  Testability: After a run, `decisions.md` exists in `workspace_final/` and contains an entry per attempted card.
-
-- [x] **Stage engine tests into the workspace (per ADR-006)**
-  Detail: Agents extending the engine had no local way to validate engine changes (the silent-regression failure mode that surfaced in the 05-23 run). Stage the Cat3 Engine Regression test suite into the workspace so the agent can run it locally. FDN and SOS card tests remain hidden.
-
-  Staging:
-
-  1. **`workspace/tests/engine/`** — mirror of `tests/engine/` from the host repo.
-  2. **FDN card tests are NOT staged.** Agents should not be modifying FDN reference implementations; re-running FDN tests during the run would waste budget on non-target cards.
-  3. **SOS card tests are NOT staged.** Cat1 is the benchmark target; must remain memorization-resistant.
-  Grading authority (from ADR-006):
-
-  1. The runner uses its host-repo copy of `tests/engine/` for grading, not the staged workspace copy.
-  2. The agent must NOT modify the staged tests. Modifying a workspace test to make it pass produces a false-positive local signal without affecting the score — strictly worse than no signal.
-  3. Enforce via prompt, not file permissions. The no-modify rule is now in [WORKSPACE-CONTRACT.md](http://workspace-contract.md/)'s Agent prompt rule section.
-  Why engine tests are safe to stage (and SOS/FDN are not):
-
-  - Engine tests exercise generic engine APIs (mana, stack, combat, state-based actions). Any correct engine must implement these — "memorizing the test" largely reduces to "implementing the engine correctly."
-  - SOS tests grade benchmark targets directly; staging them would defeat the benchmark.
-  - FDN tests grade reference implementations the agent should not be touching anyway.
-  Files: `silverquillm/workspace.py` — both the staging logic (add a new step copying `tests/engine/` into `workspace/tests/engine/`) and the `_PROMPT_TEXT` module-level constant (append the no-modify rule for staged tests, propagating [WORKSPACE-CONTRACT.md](http://workspace-contract.md/)'s rule). Coordinate with Phase 13 #5 and Phase 15 #2, which also edit `_PROMPT_TEXT`.
-
-  Testability: After staging, `ls workspace/tests/engine/` succeeds. Confirm `ls workspace/cards/fdn/fdn_001/tests.py` and `ls workspace/cards/sos/sos_1/tests.py` do NOT exist. Editing `workspace/tests/engine/test_*.py` and re-running grading produces unchanged scores (runner uses host copy). Grep the staged `workspace/prompt.md` for the no-modify rule.
+  Testability: `grep -rn 'progress\.jsonl' silverquillm/ docker/` returns zero matches. `silverquillm logs --run <run>` no longer lists a `[progress]` tab. End-to-end run + `--live` mode shows 7 channels not 8.

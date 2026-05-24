@@ -85,8 +85,7 @@ This manifest is advisory runtime context only. It is not agent configuration; m
         card_spec.json
         card_impl.py
       ...
-/output/                             # Progress and logs (mounted volume)
-  progress.jsonl                     # Per-card status updates (agent writes)
+/output/                             # Logs (mounted volume)
   stdout.log                         # Captured stdout
   stderr.log                         # Captured stderr
 ```
@@ -147,14 +146,13 @@ Agent CLI, mode, strategy, model selection, and System Prompts are all baked int
 | `/workspace/cards/sos/*/card_impl.py` | Agent's card implementations (overwrites templates) |
 | `/workspace/cards/sos/*/tests.py` | Agent's test suites (if `tested` mode) |
 | `/workspace/engine/` | Agent's modified engine, diffed against the host baseline engine for `engine_diff.patch` |
-| `/output/progress.jsonl` | Per-card status updates (for live monitoring) |
 | `/output/stdout.log` | Captured stdout |
 | `/output/stderr.log` | Captured stderr (thinking, tool calls) |
 | `/output/exit_code` | Numeric exit code |
 
 The Output Directory is observability-only. It pipes agent and process output out of the container for live monitoring and post-run debugging. It must not contain card implementations, tests, engine changes, or any artifact required for scoring.
 
-No files in `/output/` are required. The runner must tolerate an empty Output Directory. `progress.jsonl`, `system.log`, `agent_stdout.log`, `agent_stderr.log`, and `exit_code` are optional conventions for telemetry and debugging only.
+No files in `/output/` are required. The runner must tolerate an empty Output Directory. `system.log`, `agent_stdout.log`, `agent_stderr.log`, and `exit_code` are optional conventions for telemetry and debugging only.
 
 The runner still captures Docker process stdout and stderr at the host level and saves them in the run results, for example as `docker_stdout.log` and `docker_stderr.log`. This provides debugging logs even when the entrypoint writes nothing to `/output/`. These logs are telemetry-only and not evaluatable state.
 
@@ -166,20 +164,9 @@ Colorization defaults to `--color auto`: enabled for interactive TTY output and 
 
 For v1, live labeled/colorized streaming plus saved split logs and `snapshot_telemetry.jsonl` are sufficient. A separate post-run `logs --run` viewer is deferred until the runner is stable.
 
-## Progress Monitoring
+## Live Output Tailing
 
-The entrypoint or agent may write incremental progress to `/output/progress.jsonl`. This is recommended for live monitoring, but not required for correctness. Since `/output` is a mounted volume, the runner can tail it in real time when present:
-
-```json
-{"card_id": "042", "card_name": "Ajani's Response", "status": "started", "ts": "2026-05-13T01:15:00Z"}
-{"card_id": "042", "card_name": "Ajani's Response", "status": "tests_passing", "ts": "2026-05-13T01:28:00Z"}
-{"card_id": "042", "card_name": "Ajani's Response", "status": "completed", "ts": "2026-05-13T01:29:00Z"}
-{"card_id": "011", "card_name": "Eager Glyphmage", "status": "started", "ts": "2026-05-13T01:29:30Z"}
-```
-
-Stdout and stderr are also on the mounted volume and can be tailed for live agent thinking and tool call output.
-
-The runner must tolerate missing or malformed `progress.jsonl`. Filesystem artifacts remain the source of truth for whether an implementation exists; progress events only refine status such as `completed` vs `partial`.
+Stdout and stderr are on the mounted `/output/` volume and can be tailed for live agent thinking and tool call output during long runs. Filesystem artifacts (`cards/sos/*/card_impl.py`) remain the source of truth for whether an implementation exists.
 
 ## Container Lifecycle
 

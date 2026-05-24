@@ -1,6 +1,6 @@
 Status: SETTLED
 
-Last updated: 2026-04-28
+Last updated: 2026-05-24
 
 # Card Interface
 
@@ -112,22 +112,13 @@ def get_modes(self) -> list[Mode]:
 Replacement effects modify events before they happen (no stack). Separate from triggers via `register_replacement_effects()`:
 
 ```python
-from engine.events import CreatureDiesReplacementEvent
-from engine.replacement_effects import ReplacementEffect
-
-def register_replacement_effects(self, game: 'GameState') -> None:
-    def _exile_instead(game, event):
-        """Redirect to exile instead of graveyard."""
-        event.destination = "exile"
-        return event
-
-    game.replacement_manager.register(ReplacementEffect(
-        event_type=CreatureDiesReplacementEvent,
-        source=self,
-        condition=lambda game, event: event.card is self,
-        replacement=_exile_instead,
-        controller=getattr(self, 'controller', None),
-    ))
+def register_replacement_effects(self, game, permanent):
+    game.register_replacement(
+        event="creature_dies",
+        source=permanent,
+        condition=lambda e: True,
+        replacement=lambda e: game.exile(e.card),
+    )
 ```
 
 Key differences from triggers: no stack, in-place event modification, "instead" semantics, one replacement per event (affected player chooses if multiple apply).
@@ -176,3 +167,4 @@ class MultanisAcolyte(Creature):
 - **Modal spells via get_modes()**: All modes available; DeterministicPlayer selects mode in tests. [SETTLED]
 - **Replacement effects separate from triggers**: `register_replacement_effects()` mechanism, no stack, "instead" semantics. [SETTLED]
 - **No mechanics declaration file**: Cut `mechanics_declaration.json`. Postmortem logs already capture file diffs per round, which is more reliable than agent self-reporting. Mechanic tagging can be derived from diffs + card spec keywords if needed later. [UPDATED]
+- **`json_collector_number`**** preserves source JSON**: `card_spec.json` stores `collector_number` as the directory-name override (drives the in-memory `collector_number` field used by the engine). `load_all_card_specs()` also preserves the raw JSON `collector_number` as `json_collector_number`. CLI `--cards` dual-matches against both fields so users can pass numeric collector numbers regardless of directory naming. [NEW]

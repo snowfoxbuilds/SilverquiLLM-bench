@@ -1,6 +1,6 @@
 Status: SETTLED
 
-Last updated: 2026-05-13
+Last updated: 2026-05-24
 
 # Run Artifacts and Telemetry
 
@@ -112,7 +112,7 @@ Field meanings:
 - `changed_card_tests`: card IDs whose `tests.py` changed since the previous snapshot.
 - `completed_like_card_impls`: card IDs whose `card_impl.py` differs from the original template.
 - Engine path lists are capped, for example to 50 paths, with a truncation flag and full count.
-In `snapshot_telemetry.jsonl`, card telemetry uses IDs only, not card names — this file is high-cadence and stays lean. Slow-cadence per-card artifacts (`progress.jsonl`, `status.json`, `result.json`) include `card_name` alongside `card_id` for human-readable triage. The live `[snapshot]` terminal channel resolves card names from `card_spec.json` at print time, so terminal output stays readable while the JSONL file stays lean.
+In `snapshot_telemetry.jsonl`, card telemetry uses IDs only, not card names — this file is high-cadence and stays lean. Slow-cadence per-card artifacts (`status.json`, `result.json`) include `card_name` alongside `card_id` for human-readable triage. The live `[snapshot]` terminal channel resolves card names from `card_spec.json` at print time, so terminal output stays readable while the JSONL file stays lean.
 
 ### Output Directory
 
@@ -124,7 +124,6 @@ Optional conventions:
 
 ```plain text
 /output/
-  progress.jsonl
   system.log
   agent_stdout.log
   agent_stderr.log
@@ -155,7 +154,6 @@ Live terminal output is labeled, colorized by type, and mirrored to a per-channe
 | `[stdout]` | `docker_stdout.log` | Container stdout (existing) |
 | `[stderr]` | `docker_stderr.log` | Container stderr (existing) |
 | `[error]` | `runner_errors.log` | Runner-side errors and warnings |
-| `[progress]` | `progress.jsonl` | Mirrored from `/output/progress.jsonl` to the host |
 | `[edit]` | `fast_telemetry.jsonl` | 1 Hz fast-tier edit detection (`card_impl.py` / engine mtimes) |
 | `[system]` | `system.log` | Mirrored from `/output/system.log` to the host |
 
@@ -224,3 +222,5 @@ Rules:
 - **Smoke runs are not benchmark runs**: Use synthetic Workspace and exclude from scoring.
 - **Each terminal channel has a backing file**: Every channel the runner prints is mirrored to an append-only file in the run directory (see Terminal channels above). This file-backed substrate makes the tabbed log viewer (`silverquillm logs --run`) a thin read-only consumer in both live and archived modes.
 - **v1 includes a tabbed post-run log viewer**: Originally deferred to a later version; lifted now that the runner is stable and the 2026-05-23 run surfaced concrete triage pain. Live labeled streaming remains the default for users who don't want to launch the viewer.
+- **JS entrypoint output channel pattern**: JavaScript entrypoints use a `log()` helper that writes to `/output/system.log`, tee agent output to `/output/agent_stdout.log`, and pass agent output through `process.stdout.write()` so Docker logs still capture it. Future bash entrypoints follow the same file-based channel separation.
+- **Docker logs are direct-written to ****`run_dir`**: Pipe-reader threads write `docker_stdout.log` and `docker_stderr.log` directly into `run_dir` in append mode. No `.tmp` intermediate, no post-run copy step. Harvest reads the files in place.

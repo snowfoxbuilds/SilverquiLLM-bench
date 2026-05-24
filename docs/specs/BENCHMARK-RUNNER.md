@@ -1,6 +1,6 @@
 Status: DRAFT (rewritten for container architecture)
 
-Last updated: 2026-05-13
+Last updated: 2026-05-24
 
 # Benchmark Runner
 
@@ -43,7 +43,7 @@ python -m silverquillm run \
 | `--hang-timeout` | Hang Timeout: seconds of no file activity before stopping (default: 900) |
 | `--cards` | Comma-separated SOS collector numbers to stage (default: all). Filtered runs are not leaderboard-valid |
 
-Cards and engine source directories are repo-relative constants (`./cards`, `./engine`); they are not configurable via CLI flags.
+The workspace source directory is a repo-relative constant (`./benchmarks/sos/workspace/`); it is not configurable via CLI flags.
 
 ## Workspace Staging
 
@@ -51,15 +51,11 @@ The runner builds a workspace directory that the container sees as `/workspace/`
 
 Staging steps:
 
-1. Copy engine source to `workspace/engine/`
-2. Copy rulebook to `workspace/rulebook.md`
-3. Copy reference docs (`engine_api.md`, `base_classes.py`, `test_utils.md`)
-4. Copy FDN cards (with filled implementations) to `workspace/cards/fdn/`
-5. Copy engine tests to `workspace/tests/engine/` (per ADR-006; reference-only for agent verification)
-6. Copy SOS cards (with empty templates) to `workspace/cards/sos/`
-7. Write `workspace/prompt.md`
-8. Immediately before container launch, write `workspace/run_manifest.json` with `timeout_seconds` and `deadline_utc`
-FDN and SOS card directories share the same structure (`card_spec.json` + `card_impl.py`), keeping the workspace consistent. FDN implementations are filled in as examples; SOS implementations are empty templates. No test files are included for either set — agents devise their own testing approach.
+1. Recursively copy `benchmarks/sos/workspace/` from the bench repo into a per-run tmp directory.
+2. Write `workspace/prompt.md` (User Prompt) and `workspace/run_manifest.json` (`timeout_seconds` + `deadline_utc`) into the copy. The manifest write happens immediately before container launch.
+3. Run `git init && git add -A && git commit -m "initial workspace"` inside the copy so the agent has clean version-control state and Output Snapshots have a base commit.
+4. Mount the copy at `/workspace/` when launching the agent container.
+The source-of-truth layout lives in the bench repo at `benchmarks/sos/workspace/`. To change what agents see, edit that directory — there is no per-file staging logic. FDN and SOS card directories share the same structure (`card_spec.json` + `card_impl.py`). FDN implementations are filled reference code; SOS implementations are SOS Card Stubs (`class CardName(CardImpl): pass`) for the agent to extend. Illustrative FDN card tests are staged at `tests/cards/fdn/` for agent reference; `tests/cards/sos/` is intentionally empty (audited SOS grader tests live host-side only). See [WORKSPACE-CONTRACT.md](https://www.notion.so/ad4d407fda954387adf7eb4ba8674371) for the full layout.
 
 ## Container Launch
 
@@ -295,3 +291,6 @@ The runner tracks per-run metrics (not per-card, since the agent manages its own
 - **Repository may keep legacy Foundations during migration**: The repo may temporarily keep `cards/foundations/` while implementations are copied into `cards/fdn/{card_id}/card_impl.py`, registry/tests are updated, and imports are verified. The agent Workspace should still stop staging `cards/foundations/` once per-card FDN examples are ready. Delete the legacy layout after tests pass and no imports remain. [SETTLED]
 - **Results stored under image directory**: Run results live at `docker/<image-dir>/results/<run_name>/`. The image directory is derived from `--image` by stripping the `silverquillm-` prefix and `:tag` suffix. The run name format is `<set_code>-<timestamp>` (e.g., `sos-2026-05-16T19-49`). This keeps results organized by the agent image that produced them. [SETTLED]
 - **Filtered runs are not leaderboard-valid**: The `--cards` filter is for development, debugging, and Pipeline Validation Runs only. It filters SOS targets; FDN examples remain staged in full. Evaluation runs only on staged SOS targets, and `run_summary.json` records the filter. Leaderboards exclude filtered runs by default; leaderboard-valid runs require `card_filter = null` and the full SOS Draft Set staged. [SETTLED]
+- **`_REPO_ROOT`**** constant for repo-relative paths**: Host-side modules that need to resolve repo-relative paths (`cli.py`, `workspace.py`) define `_REPO_ROOT = Path(__file__).resolve().parent.parent` as a module-level constant; all repo-relative path resolution flows through it. No `--cards-dir` / `--engine-dir` style flags. [NEW]
+- **`_BENCHMARK_SET_ROOT`**** derives from a module-level set name**: `silverquillm/workspace.py` defines `_BENCHMARK_SET_NAME = "sos"` and `_BENCHMARK_SET_ROOT = _REPO_ROOT / "benchmarks" / _BENCHMARK_SET_NAME` as module-level constants. All bench-side, set-scoped paths flow through `_BENCHMARK_SET_ROOT` (workspace source = `_BENCHMARK_SET_ROOT / "workspace"`, audited tests = `_BENCHMARK_SET_ROOT / "data" / "tests" / "audited"`). When a second target set ships (Foundations 2 etc.), promote `_BENCHMARK_SET_NAME` to a CLI flag (`--set`) with `sos` as default; no other path call sites need to change. The runner stays benchmark-agnostic by funneling all set-scoped paths through one constant. [NEW]
+- **Collector number normalization**: `--cards` accepts zero-padded collector numbers (e.g., `001`, `042`). CLI parsing normalizes via `str(int(x))` and preserves non-numeric values as-is. Card directory names use the normalized form.
