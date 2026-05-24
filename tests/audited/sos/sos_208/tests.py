@@ -68,7 +68,7 @@ class TestParadoxSurveyorAbilities:
 
     def test_on_resolve_changes_state(self) -> None:
         """Resolution must produce observable state change."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -101,7 +101,7 @@ class TestParadoxSurveyorEdgeCases:
 
     def test_may_choice_optional(self) -> None:
         """May effect is optional — decline should not crash."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = ParadoxSurveyor(name="Paradox Surveyor", owner=player)
@@ -120,7 +120,7 @@ class TestParadoxSurveyorInteractions:
 
     def test_resolution_with_board_state(self) -> None:
         """Card should resolve correctly with established board."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -143,7 +143,7 @@ class TestParadoxSurveyorInteractions:
 
     def test_coexists_with_other_creatures(self) -> None:
         """Card should coexist with other creatures on battlefield."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

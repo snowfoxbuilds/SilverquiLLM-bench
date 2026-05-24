@@ -56,7 +56,7 @@ class TestTriumphOfTheHordesAbilities:
         Oracle: Until end of turn, creatures you control get +1/+1 and gain trample and infect. (Creatures with infe
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature as CreatureBase
 
         game = create_game()
@@ -78,7 +78,7 @@ class TestTriumphOfTheHordesAbilities:
         Oracle: Until end of turn, creatures you control get +1/+1 and gain trample and infect.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature as CreatureBase
         from engine.types import Keyword
 

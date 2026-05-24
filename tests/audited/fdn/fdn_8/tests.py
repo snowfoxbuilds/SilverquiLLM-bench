@@ -4,7 +4,7 @@ from card_impl import DauntlessVeteran
 from engine.card import Creature
 from engine.continuous_effects import Layer
 from engine.types import CardType, Keyword, ManaCost
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 from engine.events import AttacksTriggeredEvent
 
 class TestDauntlessVeteranBasics:

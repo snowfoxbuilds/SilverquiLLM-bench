@@ -51,7 +51,7 @@ class TestBulkUpAbilities:
 
     def test_flashback_cost_attribute(self) -> None:
         """Card must expose a flashback cost distinct from normal mana cost."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = BulkUp(name="Bulk Up", owner=player)
@@ -61,7 +61,7 @@ class TestBulkUpAbilities:
 
     def test_flashback_exiles_after_resolution(self) -> None:
         """Card must be exiled after flashback resolution."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         game = create_game()
         player = game.players[0]
@@ -76,7 +76,7 @@ class TestBulkUpAbilities:
 
     def test_flashback_removes_from_graveyard(self) -> None:
         """Flashback resolution must remove card from graveyard."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         game = create_game()
         player = game.players[0]
@@ -97,7 +97,7 @@ class TestBulkUpEdgeCases:
 
     def test_may_choice_optional(self) -> None:
         """May effect is optional — decline should not crash."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = BulkUp(name="Bulk Up", owner=player)
@@ -116,7 +116,7 @@ class TestBulkUpInteractions:
 
     def test_get_targets_finds_creatures(self) -> None:
         """get_targets should return valid creature targets."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -130,7 +130,7 @@ class TestBulkUpInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

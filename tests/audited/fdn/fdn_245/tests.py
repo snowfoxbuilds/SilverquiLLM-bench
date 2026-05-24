@@ -3,7 +3,7 @@ from __future__ import annotations
 from card_impl import RubyDaringTracker
 from engine.card import Creature, ManaAbility
 from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 from engine.events import AttacksTriggeredEvent
 
 def _resolve_stack(game):

@@ -52,7 +52,7 @@ class TestCauldronOfEssenceAbilities:
 
     def test_gains_life(self) -> None:
         """Resolution should gain life."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = CauldronOfEssence(name="Cauldron of Essence", owner=player)
@@ -65,7 +65,7 @@ class TestCauldronOfEssenceAbilities:
 
     def test_causes_life_loss(self) -> None:
         """Resolution should cause life loss."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -79,7 +79,7 @@ class TestCauldronOfEssenceAbilities:
 
     def test_has_activated_ability(self) -> None:
         """Card must expose at least one activated ability."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = CauldronOfEssence(name="Cauldron of Essence", owner=player)
@@ -90,7 +90,7 @@ class TestCauldronOfEssenceAbilities:
 
     def test_returns_from_graveyard(self) -> None:
         """Resolution should return card from graveyard."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -116,7 +116,7 @@ class TestCauldronOfEssenceEdgeCases:
 
     def test_targets_only_own_permanents(self) -> None:
         """Should only target permanents you control."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -139,7 +139,7 @@ class TestCauldronOfEssenceInteractions:
 
     def test_get_targets_finds_own_creatures(self) -> None:
         """get_targets should return valid own creatures."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -152,7 +152,7 @@ class TestCauldronOfEssenceInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

@@ -51,7 +51,7 @@ class TestStandUpForYourselfAbilities:
 
     def test_destroys_target(self) -> None:
         """Resolution should destroy the target."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -77,7 +77,7 @@ class TestStandUpForYourselfEdgeCases:
 
     def test_power_targeting_restriction(self) -> None:
         """Only targets creatures with power 3 or greater."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -98,7 +98,7 @@ class TestStandUpForYourselfInteractions:
 
     def test_get_targets_finds_creatures(self) -> None:
         """get_targets should return valid creature targets."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -112,7 +112,7 @@ class TestStandUpForYourselfInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

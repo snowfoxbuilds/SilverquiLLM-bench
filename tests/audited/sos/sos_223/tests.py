@@ -69,7 +69,7 @@ class TestSanarUnfinishedGeniusWildIdeaAbilities:
 
     def test_etb_creates_tokens(self) -> None:
         """ETB must create tokens per oracle text."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         game = create_game()
         player = game.players[0]
@@ -110,7 +110,7 @@ class TestSanarUnfinishedGeniusWildIdeaEdgeCases:
 
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         game = create_game()
         player = game.players[0]
@@ -129,7 +129,7 @@ class TestSanarUnfinishedGeniusWildIdeaInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -147,7 +147,7 @@ class TestSanarUnfinishedGeniusWildIdeaInteractions:
 
     def test_tokens_appear_on_battlefield(self) -> None:
         """Tokens created must appear on the battlefield."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         game = create_game()
         player = game.players[0]

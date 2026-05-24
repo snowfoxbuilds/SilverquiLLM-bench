@@ -56,7 +56,7 @@ class TestSmallpoxAbilities:
         Oracle: Each player loses 1 life, discards a card, sacrifices a creature of their choice, then sacrifices a 
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         from engine.card import CardImpl
 
@@ -81,7 +81,7 @@ class TestSmallpoxAbilities:
         Oracle: Each player loses 1 life, discards a card, sacrifices a creature of their choice, then sacrifices a 
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
 
         game = create_game()
@@ -100,7 +100,7 @@ class TestSmallpoxAbilities:
         Oracle: Each player loses 1 life, discards a card, sacrifices a creature of their choice, then sacrifices a land of their choice.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         from engine.card import Creature as CreatureBase, Land
 

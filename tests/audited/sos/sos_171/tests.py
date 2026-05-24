@@ -60,7 +60,7 @@ class TestAbstractPaintmageAbilities:
         Oracle: At the beginning of your first main phase, add {U}{R}. Spend this mana only to cast instant and sorc
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = AbstractPaintmage(name='Abstract Paintmage', owner=player)

@@ -74,7 +74,7 @@ class TestTranscendentArchaicAbilities:
 
     def test_etb_draws_cards(self) -> None:
         """ETB must draw cards per oracle text."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -93,7 +93,7 @@ class TestTranscendentArchaicAbilities:
 
     def test_converge_scaling(self) -> None:
         """Converge effect must scale with colors of mana spent."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = TranscendentArchaic(name="Transcendent Archaic", owner=player, base_power=6, base_toughness=6)
@@ -111,7 +111,7 @@ class TestTranscendentArchaicEdgeCases:
 
     def test_converge_zero_colors_no_bonus(self) -> None:
         """With 0 colors, converge should produce no bonus."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = TranscendentArchaic(name="Transcendent Archaic", owner=player, base_power=6, base_toughness=6)
@@ -127,7 +127,7 @@ class TestTranscendentArchaicEdgeCases:
 
     def test_converge_five_colors_maximum(self) -> None:
         """With 5 colors, converge should produce maximum bonus."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = TranscendentArchaic(name="Transcendent Archaic", owner=player, base_power=6, base_toughness=6)
@@ -162,7 +162,7 @@ class TestTranscendentArchaicInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -180,7 +180,7 @@ class TestTranscendentArchaicInteractions:
 
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()

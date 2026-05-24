@@ -52,7 +52,7 @@ class TestHomesicknessAbilities:
 
     def test_resolution_draws_cards(self) -> None:
         """Spell resolution must draw cards per oracle text."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -83,7 +83,7 @@ class TestHomesicknessEdgeCases:
 
     def test_fizzle_spell_goes_to_graveyard(self) -> None:
         """Fizzled spell must end up in graveyard."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
         from engine.zones import move_to_zone
         game = create_game()
@@ -118,7 +118,7 @@ class TestHomesicknessInteractions:
 
     def test_targets_valid_objects(self) -> None:
         """Spell targeting must find valid targets."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -134,7 +134,7 @@ class TestHomesicknessInteractions:
 
     def test_spell_to_graveyard_after_resolution(self) -> None:
         """Resolved spell must go to graveyard."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
         from engine.zones import move_to_zone
         game = create_game()

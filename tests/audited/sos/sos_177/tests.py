@@ -61,7 +61,7 @@ class TestBogwaterLumaretAbilities:
         Oracle: Whenever this creature or another creature you control enters, you gain 1 life.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         game = create_game()
         player = game.players[0]

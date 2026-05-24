@@ -51,7 +51,7 @@ class TestRabidAttackAbilities:
 
     def test_draws_cards(self) -> None:
         """Resolution should draw card(s)."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.card import Sorcery
         from engine.types import Zone
         game = create_game()
@@ -70,7 +70,7 @@ class TestRabidAttackAbilities:
 
     def test_pump_effect(self) -> None:
         """Resolution should grant +1/+0."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -94,7 +94,7 @@ class TestRabidAttackEdgeCases:
 
     def test_targets_only_own_permanents(self) -> None:
         """Should only target permanents you control."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -117,7 +117,7 @@ class TestRabidAttackInteractions:
 
     def test_get_targets_finds_own_creatures(self) -> None:
         """get_targets should return valid own creatures."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -130,7 +130,7 @@ class TestRabidAttackInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

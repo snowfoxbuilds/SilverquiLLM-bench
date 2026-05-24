@@ -68,7 +68,7 @@ class TestDelugeVirtuosoAbilities:
 
     def test_etb_taps_target(self) -> None:
         """ETB must tap a target creature per oracle text."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -98,7 +98,7 @@ class TestDelugeVirtuosoEdgeCases:
 
     def test_fizzle_no_targets_creature_stays(self) -> None:
         """If ETB ability fizzles, the creature remains on battlefield."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         game = create_game()
         player = game.players[0]
@@ -116,7 +116,7 @@ class TestDelugeVirtuosoEdgeCases:
 
     def test_opus_no_trigger_without_spell(self) -> None:
         """Opus should not boost without casting instant/sorcery."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = DelugeVirtuoso(name="Deluge Virtuoso", owner=player, base_power=2, base_toughness=2)
@@ -147,7 +147,7 @@ class TestDelugeVirtuosoInteractions:
 
     def test_counters_survive_end_of_turn(self) -> None:
         """Permanent counters must persist through end of turn."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = DelugeVirtuoso(name="Deluge Virtuoso", owner=player, base_power=2, base_toughness=2)
@@ -163,7 +163,7 @@ class TestDelugeVirtuosoInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()

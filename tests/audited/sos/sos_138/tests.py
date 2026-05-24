@@ -67,7 +67,7 @@ class TestAberrantManawurmAbilities:
 
     def test_on_resolve_changes_state(self) -> None:
         """Resolution must produce observable state change."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -100,7 +100,7 @@ class TestAberrantManawurmEdgeCases:
 
     def test_zone_transition_graveyard(self) -> None:
         """Creature should properly move to graveyard on death."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         game = create_game()
         player = game.players[0]
@@ -119,7 +119,7 @@ class TestAberrantManawurmInteractions:
 
     def test_resolution_with_board_state(self) -> None:
         """Card should resolve correctly with established board."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -142,7 +142,7 @@ class TestAberrantManawurmInteractions:
 
     def test_coexists_with_other_creatures(self) -> None:
         """Card should coexist with other creatures on battlefield."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

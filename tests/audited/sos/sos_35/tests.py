@@ -72,7 +72,7 @@ class TestStirringHopesingerAbilities:
 
     def test_repartee_registers_trigger(self) -> None:
         """Repartee must register a triggered ability."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = StirringHopesinger(name="Stirring Hopesinger", owner=player)
@@ -86,7 +86,7 @@ class TestStirringHopesingerAbilities:
 
     def test_repartee_requires_creature_target(self) -> None:
         """Repartee only triggers for spells targeting a creature."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -104,7 +104,7 @@ class TestStirringHopesingerAbilities:
 
     def test_repartee_adds_counter(self) -> None:
         """Repartee trigger should add +1/+1 counter."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -129,7 +129,7 @@ class TestStirringHopesingerEdgeCases:
 
     def test_targets_only_own_permanents(self) -> None:
         """Should only target permanents you control."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -152,7 +152,7 @@ class TestStirringHopesingerInteractions:
 
     def test_get_targets_finds_own_creatures(self) -> None:
         """get_targets should return valid own creatures."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -165,7 +165,7 @@ class TestStirringHopesingerInteractions:
 
     def test_coexists_with_other_creatures(self) -> None:
         """Card should coexist with other creatures on battlefield."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

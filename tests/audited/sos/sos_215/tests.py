@@ -69,7 +69,7 @@ class TestPterafractylAbilities:
 
     def test_etb_adds_counters(self) -> None:
         """ETB must add +1/+1 counters per oracle text."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = Pterafractyl(name="Pterafractyl", owner=player, base_power=1, base_toughness=0)
@@ -101,7 +101,7 @@ class TestPterafractylEdgeCases:
 
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         game = create_game()
         player = game.players[0]
@@ -120,7 +120,7 @@ class TestPterafractylInteractions:
 
     def test_counters_survive_end_of_turn(self) -> None:
         """Permanent counters must persist through end of turn."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = Pterafractyl(name="Pterafractyl", owner=player, base_power=1, base_toughness=0)
@@ -136,7 +136,7 @@ class TestPterafractylInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()

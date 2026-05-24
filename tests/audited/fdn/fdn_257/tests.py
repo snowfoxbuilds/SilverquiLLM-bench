@@ -3,7 +3,7 @@ from __future__ import annotations
 from card_impl import SolemnSimulacrum
 from engine.card import ArtifactCreature, CardImpl
 from engine.types import CardType, ManaCost, Supertype, Zone
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 from engine.events import CreatureDiesTriggeredEvent, EntersBattlefieldTriggeredEvent
 
 class TestSolemnSimulacrumBasics:

@@ -3,7 +3,7 @@ from __future__ import annotations
 from card_impl import GoldveinPick
 from engine.card import Artifact, Creature
 from engine.types import CardType, ManaCost, ManaType
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 from engine.events import DealsDamageTriggeredEvent
 
 class TestGoldveinPickBasics:

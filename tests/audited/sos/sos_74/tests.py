@@ -67,7 +67,7 @@ class TestArnynDeathbloomBotanistAbilities:
 
     def test_gains_life(self) -> None:
         """Resolution should gain life."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = ArnynDeathbloomBotanist(name="Arnyn, Deathbloom Botanist", owner=player)
@@ -80,7 +80,7 @@ class TestArnynDeathbloomBotanistAbilities:
 
     def test_causes_life_loss(self) -> None:
         """Resolution should cause life loss."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -99,7 +99,7 @@ class TestArnynDeathbloomBotanistEdgeCases:
 
     def test_targets_only_own_permanents(self) -> None:
         """Should only target permanents you control."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -122,7 +122,7 @@ class TestArnynDeathbloomBotanistInteractions:
 
     def test_get_targets_finds_own_creatures(self) -> None:
         """get_targets should return valid own creatures."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -135,7 +135,7 @@ class TestArnynDeathbloomBotanistInteractions:
 
     def test_coexists_with_other_creatures(self) -> None:
         """Card should coexist with other creatures on battlefield."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

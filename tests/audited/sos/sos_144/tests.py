@@ -51,7 +51,7 @@ class TestEfflorescenceAbilities:
 
     def test_adds_plus_counter(self) -> None:
         """Resolution should add +1/+1 counter to target."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -71,7 +71,7 @@ class TestEfflorescenceAbilities:
 
     def test_grants_trample(self) -> None:
         """Resolution should grant trample."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Keyword
         game = create_game()
@@ -90,7 +90,7 @@ class TestEfflorescenceAbilities:
 
     def test_gains_life(self) -> None:
         """Resolution should gain life."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = Efflorescence(name="Efflorescence", owner=player)
@@ -108,7 +108,7 @@ class TestEfflorescenceEdgeCases:
 
     def test_spell_resolution_on_empty_board(self) -> None:
         """Spell should handle resolution when no valid targets exist."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = Efflorescence(name="Efflorescence", owner=player)
@@ -127,7 +127,7 @@ class TestEfflorescenceInteractions:
 
     def test_get_targets_finds_creatures(self) -> None:
         """get_targets should return valid creature targets."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -141,7 +141,7 @@ class TestEfflorescenceInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

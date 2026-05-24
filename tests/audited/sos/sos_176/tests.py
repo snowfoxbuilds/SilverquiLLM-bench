@@ -66,7 +66,7 @@ class TestBlechLoafingPestAbilities:
         Oracle: Whenever you gain life, put a +1/+1 counter on each Pest, Bat, Insect, Snake, and Spider you control
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
 
         game = create_game()
         player = game.players[0]

@@ -14,7 +14,7 @@ _spec.loader.exec_module(_mod)
 AnOfferYouCantRefuse = _mod.AnOfferYouCantRefuse
 from engine.card import CardImpl, Creature, Instant
 from engine.types import CardType, ManaCost, Zone
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 
 
 class TestAnOfferYouCantRefuseBasics:

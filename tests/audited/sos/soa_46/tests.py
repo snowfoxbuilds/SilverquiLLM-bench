@@ -56,7 +56,7 @@ class TestPyreticRitualAbilities:
         Oracle: Add {R}{R}{R}.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
 
         game = create_game()

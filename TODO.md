@@ -31,7 +31,7 @@ Sequencing note: Items 1.1–1.7 below replace what was previously a single mega
 
   Testability: `ls benchmarks/sos/workspace/rulebook.md` succeeds; the old path no longer exists; `git log --follow benchmarks/sos/workspace/rulebook.md` shows continuous history.
 
-- [ ] **1.3 Move workspace test infrastructure into the workspace**
+- [x] **1.3 Move workspace test infrastructure into the workspace**
   Detail: `git mv` the workspace-local test files from top-level `tests/` into `benchmarks/sos/workspace/tests/`, and move `docs/test_utils.md` alongside its `.py` counterpart. Bodies stay identical — only locations change:
 
   - `tests/test_utils.py` → `benchmarks/sos/workspace/tests/test_utils.py`

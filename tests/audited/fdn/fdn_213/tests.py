@@ -8,7 +8,7 @@ from card_impl import BlanchwoodArmor
 from engine.card import Aura, Creature, Land
 from engine.continuous_effects import Layer, SubLayer
 from engine.types import CardType, Keyword, ManaCost
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 
 
 class TestBlanchwoodArmorBasics:

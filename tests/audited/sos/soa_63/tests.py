@@ -56,7 +56,7 @@ class TestDeflectingPalmAbilities:
         Oracle: The next time a source of your choice would deal damage to you this turn, prevent that damage. If da
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
 
         game = create_game()
         player = game.players[0]

@@ -51,7 +51,7 @@ class TestWildHypothesisAbilities:
 
     def test_creates_token(self) -> None:
         """Resolution should create token(s) on battlefield."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = WildHypothesis(name="Wild Hypothesis", owner=player)
@@ -65,7 +65,7 @@ class TestWildHypothesisAbilities:
 
     def test_adds_plus_counter(self) -> None:
         """Resolution should add +1/+1 counter to target."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -85,7 +85,7 @@ class TestWildHypothesisAbilities:
 
     def test_surveil_effect(self) -> None:
         """Resolution should surveil 2."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.card import Sorcery
         from engine.types import Zone
         game = create_game()
@@ -108,7 +108,7 @@ class TestWildHypothesisEdgeCases:
 
     def test_spell_resolution_on_empty_board(self) -> None:
         """Spell should handle resolution when no valid targets exist."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = WildHypothesis(name="Wild Hypothesis", owner=player)
@@ -127,7 +127,7 @@ class TestWildHypothesisInteractions:
 
     def test_resolution_with_board_state(self) -> None:
         """Card should resolve correctly with established board."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -150,7 +150,7 @@ class TestWildHypothesisInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

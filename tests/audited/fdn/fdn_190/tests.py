@@ -8,7 +8,7 @@ from pathlib import Path
 
 from engine.card import CardImpl, Sorcery
 from engine.types import CardType, ManaCost
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 
 # The conftest name derivation produces "BrassSBounty" but the impl uses
 # "BrasssBounty".  Import the real class directly.

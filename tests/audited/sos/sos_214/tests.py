@@ -53,7 +53,7 @@ class TestProfessorDellianFelAbilities:
 
     def test_resolution_removes_creatures(self) -> None:
         """Spell resolution must remove/destroy creatures per oracle text."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -85,7 +85,7 @@ class TestProfessorDellianFelEdgeCases:
 
     def test_fizzle_spell_goes_to_graveyard(self) -> None:
         """Fizzled spell must end up in graveyard."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
         from engine.zones import move_to_zone
         game = create_game()
@@ -120,7 +120,7 @@ class TestProfessorDellianFelInteractions:
 
     def test_targets_valid_objects(self) -> None:
         """Spell targeting must find valid targets."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -136,7 +136,7 @@ class TestProfessorDellianFelInteractions:
 
     def test_spell_to_graveyard_after_resolution(self) -> None:
         """Resolved spell must go to graveyard."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
         from engine.zones import move_to_zone
         game = create_game()

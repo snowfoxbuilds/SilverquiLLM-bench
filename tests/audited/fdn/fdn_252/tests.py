@@ -3,7 +3,7 @@ from __future__ import annotations
 from card_impl import GleamingBarrier
 from engine.card import ArtifactCreature
 from engine.types import CardType, Keyword, ManaCost, Zone
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 from engine.events import CreatureDiesTriggeredEvent
 
 class TestGleamingBarrierBasics:

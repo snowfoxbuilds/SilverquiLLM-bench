@@ -52,7 +52,7 @@ class TestEchocastingSymposiumAbilities:
 
     def test_resolution_exiles_target(self) -> None:
         """Spell resolution must exile target per oracle text."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -83,7 +83,7 @@ class TestEchocastingSymposiumEdgeCases:
 
     def test_fizzle_spell_goes_to_graveyard(self) -> None:
         """Fizzled spell must end up in graveyard."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
         from engine.zones import move_to_zone
         game = create_game()
@@ -118,7 +118,7 @@ class TestEchocastingSymposiumInteractions:
 
     def test_targets_valid_objects(self) -> None:
         """Spell targeting must find valid targets."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -134,7 +134,7 @@ class TestEchocastingSymposiumInteractions:
 
     def test_spell_to_graveyard_after_resolution(self) -> None:
         """Resolved spell must go to graveyard."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
         from engine.zones import move_to_zone
         game = create_game()
@@ -147,7 +147,7 @@ class TestEchocastingSymposiumInteractions:
 
     def test_tokens_appear_on_battlefield(self) -> None:
         """Tokens created must appear on the battlefield."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         game = create_game()
         player = game.players[0]

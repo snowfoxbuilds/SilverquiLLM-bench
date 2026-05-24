@@ -8,7 +8,7 @@ from engine.card import Creature, Enchantment, Instant, Sorcery
 from engine.stack import StackObject
 from engine.types import CardType, ManaCost
 from engine.events import SpellCastTriggeredEvent
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 
 
 def _push_spell(game, spell, player) -> StackObject:

@@ -51,7 +51,7 @@ class TestDazeAbilities:
 
     def test_counters_spell(self) -> None:
         """Resolution should counter target spell."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.card import Instant
         game = create_game()
         player = game.players[0]
@@ -73,7 +73,7 @@ class TestDazeAbilities:
 
     def test_bounces_target(self) -> None:
         """Resolution should return target to hand."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -100,7 +100,7 @@ class TestDazeEdgeCases:
 
     def test_targets_only_own_permanents(self) -> None:
         """Should only target permanents you control."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -123,7 +123,7 @@ class TestDazeInteractions:
 
     def test_get_targets_finds_stack_spells(self) -> None:
         """get_targets should find spells on stack."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.card import Instant
         game = create_game()
         player = game.players[0]
@@ -138,7 +138,7 @@ class TestDazeInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

@@ -7,7 +7,7 @@ from engine.card import Creature, Enchantment
 from engine.events import AddCounterReplacementEvent, CreateTokenReplacementEvent
 from engine.replacement_effects import ReplacementEffect
 from engine.types import ManaCost
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 
 
 class TestDoublingSeasonBasics:

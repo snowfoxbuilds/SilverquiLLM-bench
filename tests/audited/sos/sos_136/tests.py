@@ -51,7 +51,7 @@ class TestUnsubtleMockeryAbilities:
 
     def test_deals_damage(self) -> None:
         """Resolution should deal 4 damage."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -69,7 +69,7 @@ class TestUnsubtleMockeryAbilities:
 
     def test_surveil_effect(self) -> None:
         """Resolution should surveil 1."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.card import Sorcery
         from engine.types import Zone
         game = create_game()
@@ -92,7 +92,7 @@ class TestUnsubtleMockeryEdgeCases:
 
     def test_may_choice_optional(self) -> None:
         """May effect is optional — decline should not crash."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = UnsubtleMockery(name="Unsubtle Mockery", owner=player)
@@ -111,7 +111,7 @@ class TestUnsubtleMockeryInteractions:
 
     def test_get_targets_finds_creatures(self) -> None:
         """get_targets should return valid creature targets."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -125,7 +125,7 @@ class TestUnsubtleMockeryInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

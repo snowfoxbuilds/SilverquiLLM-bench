@@ -6,7 +6,7 @@ from card_impl import Progenitus
 from engine.card import Creature
 from engine.events import CreatureDiesReplacementEvent
 from engine.types import ManaCost, Supertype, Zone
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 
 
 class TestProgenitusBasics:

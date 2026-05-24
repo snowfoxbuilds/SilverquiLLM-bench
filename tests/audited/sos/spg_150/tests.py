@@ -60,7 +60,7 @@ class TestArchmageEmeritusAbilities:
         Oracle: Magecraft — Whenever you cast or copy an instant or sorcery spell, draw a card.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = ArchmageEmeritus(name='Archmage Emeritus', owner=player)

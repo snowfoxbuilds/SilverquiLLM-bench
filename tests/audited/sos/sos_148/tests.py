@@ -71,7 +71,7 @@ class TestFollowTheLumaretsEdgeCases:
 
     def test_infusion_base_effect_without_condition(self) -> None:
         """Without infusion condition, only base effect applies."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -87,7 +87,7 @@ class TestFollowTheLumaretsEdgeCases:
 
     def test_infusion_enhanced_effect_with_condition(self) -> None:
         """With infusion condition met, enhanced effect applies."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -121,7 +121,7 @@ class TestFollowTheLumaretsInteractions:
 
     def test_spell_to_graveyard_after_resolution(self) -> None:
         """Resolved spell must go to graveyard."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
         from engine.zones import move_to_zone
         game = create_game()
@@ -134,7 +134,7 @@ class TestFollowTheLumaretsInteractions:
 
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()

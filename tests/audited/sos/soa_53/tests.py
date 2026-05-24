@@ -50,7 +50,7 @@ class TestGlimpseOfNatureAbilities:
         Oracle: Whenever you cast a creature spell this turn, draw a card.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         from engine.card import CardImpl
         game = create_game()
@@ -71,7 +71,7 @@ class TestGlimpseOfNatureAbilities:
         Oracle: Whenever you cast a creature spell this turn, draw a card.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = GlimpseOfNature(name='Glimpse of Nature', owner=player)

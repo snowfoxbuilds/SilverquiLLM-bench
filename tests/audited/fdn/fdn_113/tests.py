@@ -4,7 +4,7 @@ from card_impl import SylvanScavenging
 from engine.card import Creature, Enchantment
 from engine.player import DeterministicPlayer
 from engine.types import CardType, ManaCost
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 from engine.events import EndStepTriggeredEvent
 
 def _resolve_stack(game):

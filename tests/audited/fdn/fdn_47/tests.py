@@ -4,7 +4,7 @@ from card_impl import MischievousMystic
 from engine.card import Creature
 from engine.events import DrawsCardTriggeredEvent
 from engine.types import Keyword, ManaCost, Zone
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 
 def _fire_and_resolve(game, event):
     game.trigger_manager.fire_event(game, event)

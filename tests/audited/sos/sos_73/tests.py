@@ -58,7 +58,7 @@ class TestArcaneOmensAbilities:
 
     def test_converge_scaling(self) -> None:
         """Converge effect must scale with colors of mana spent."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = ArcaneOmens(name="Arcane Omens", owner=player)
@@ -76,7 +76,7 @@ class TestArcaneOmensEdgeCases:
 
     def test_fizzle_spell_goes_to_graveyard(self) -> None:
         """Fizzled spell must end up in graveyard."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
         from engine.zones import move_to_zone
         game = create_game()
@@ -93,7 +93,7 @@ class TestArcaneOmensEdgeCases:
 
     def test_converge_zero_colors_no_bonus(self) -> None:
         """With 0 colors, converge should produce no bonus."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = ArcaneOmens(name="Arcane Omens", owner=player)
@@ -109,7 +109,7 @@ class TestArcaneOmensEdgeCases:
 
     def test_converge_five_colors_maximum(self) -> None:
         """With 5 colors, converge should produce maximum bonus."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = ArcaneOmens(name="Arcane Omens", owner=player)
@@ -144,7 +144,7 @@ class TestArcaneOmensInteractions:
 
     def test_targets_valid_objects(self) -> None:
         """Spell targeting must find valid targets."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -160,7 +160,7 @@ class TestArcaneOmensInteractions:
 
     def test_spell_to_graveyard_after_resolution(self) -> None:
         """Resolved spell must go to graveyard."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
         from engine.zones import move_to_zone
         game = create_game()

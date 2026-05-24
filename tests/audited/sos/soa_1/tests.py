@@ -79,7 +79,7 @@ class TestAkromasWillEdgeCases:
 
     def test_resolution_with_empty_board(self) -> None:
         """Spell must handle resolution with no valid targets/creatures."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = AkromasWill(name="Akroma's Will", owner=player)
@@ -99,7 +99,7 @@ class TestAkromasWillInteractions:
 
     def test_spell_to_graveyard_after_resolution(self) -> None:
         """Resolved spell must go to graveyard."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
         from engine.zones import move_to_zone
         game = create_game()
@@ -112,7 +112,7 @@ class TestAkromasWillInteractions:
 
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()

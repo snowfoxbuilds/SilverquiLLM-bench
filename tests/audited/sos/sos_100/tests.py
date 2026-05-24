@@ -56,7 +56,7 @@ class TestSendInThePestAbilities:
         Oracle: Each opponent discards a card. You create a 1/1 black and green Pest creature token with "Whenever t
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
 
         game = create_game()
@@ -77,7 +77,7 @@ class TestSendInThePestAbilities:
         Oracle: Each opponent discards a card. You create a 1/1 black and green Pest creature token with "Whenever t
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         from engine.card import CardImpl
 

@@ -86,7 +86,7 @@ class TestEmeritusOfIdeationAncestralRecallAbilities:
 
     def test_attack_trigger_uses_graveyard(self) -> None:
         """Attack trigger must interact with graveyard per oracle text."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Instant
         from engine.types import Zone
         game = create_game()
@@ -130,7 +130,7 @@ class TestEmeritusOfIdeationAncestralRecallEdgeCases:
 
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         game = create_game()
         player = game.players[0]
@@ -149,7 +149,7 @@ class TestEmeritusOfIdeationAncestralRecallInteractions:
 
     def test_exile_from_graveyard_interaction(self) -> None:
         """Cards exiled from graveyard must move to exile zone."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Instant
         from engine.types import Zone
         game = create_game()
@@ -170,7 +170,7 @@ class TestEmeritusOfIdeationAncestralRecallInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()

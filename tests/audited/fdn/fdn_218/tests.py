@@ -7,7 +7,7 @@ from pathlib import Path
 
 from engine.card import CardImpl, Creature
 from engine.types import CardType, ManaCost
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 
 # Direct import since conftest name mapping doesn't match (apostrophe)
 _spec = importlib.util.spec_from_file_location(

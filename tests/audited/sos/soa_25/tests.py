@@ -56,7 +56,7 @@ class TestAdNauseamAbilities:
         Oracle: Reveal the top card of your library and put that card into your hand. You lose life equal to its mana value. You may repeat this process any number of times.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone, ManaCost
         from engine.card import CardImpl
 
@@ -83,7 +83,7 @@ class TestAdNauseamAbilities:
         Oracle: Reveal the top card of your library and put that card into your hand.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone, ManaCost
         from engine.card import CardImpl
 

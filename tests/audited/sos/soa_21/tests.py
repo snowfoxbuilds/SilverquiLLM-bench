@@ -56,7 +56,7 @@ class TestPreordainAbilities:
         Oracle: Scry 2, then draw a card. (To scry 2, look at the top two cards of your library, then put any number
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         from engine.card import CardImpl
 
@@ -83,7 +83,7 @@ class TestPreordainAbilities:
         Oracle: Scry 2, then draw a card. (To scry 2, look at the top two cards of your library, then put any number
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
         from engine.card import CardImpl
 

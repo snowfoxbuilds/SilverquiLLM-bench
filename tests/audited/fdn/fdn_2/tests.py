@@ -3,7 +3,7 @@ from __future__ import annotations
 from card_impl import ArahboTheFirstFang
 from engine.card import Creature
 from engine.types import CardType, Keyword, ManaCost, Supertype
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 from engine.events import EntersBattlefieldTriggeredEvent
 
 class TestArahboBasics:

@@ -62,7 +62,7 @@ class TestInklingMascotAbilities:
 
     def test_repartee_registers_trigger(self) -> None:
         """Repartee must register a triggered ability."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = InklingMascot(name="Inkling Mascot", owner=player)
@@ -76,7 +76,7 @@ class TestInklingMascotAbilities:
 
     def test_repartee_requires_creature_target(self) -> None:
         """Repartee only triggers for spells targeting a creature."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -94,7 +94,7 @@ class TestInklingMascotAbilities:
 
     def test_repartee_produces_effect(self) -> None:
         """Repartee trigger should produce an observable effect."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -117,7 +117,7 @@ class TestInklingMascotAbilities:
 
     def test_grants_flying(self) -> None:
         """Resolution should grant flying."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Keyword
         game = create_game()
@@ -136,7 +136,7 @@ class TestInklingMascotAbilities:
 
     def test_surveil_effect(self) -> None:
         """Resolution should surveil 1."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.card import Sorcery
         from engine.types import Zone
         game = create_game()
@@ -159,7 +159,7 @@ class TestInklingMascotEdgeCases:
 
     def test_may_choice_optional(self) -> None:
         """May effect is optional — decline should not crash."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = InklingMascot(name="Inkling Mascot", owner=player)
@@ -178,7 +178,7 @@ class TestInklingMascotInteractions:
 
     def test_get_targets_finds_creatures(self) -> None:
         """get_targets should return valid creature targets."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -192,7 +192,7 @@ class TestInklingMascotInteractions:
 
     def test_coexists_with_other_creatures(self) -> None:
         """Card should coexist with other creatures on battlefield."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

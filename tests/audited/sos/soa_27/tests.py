@@ -51,7 +51,7 @@ class TestCullingTheWeakAbilities:
 
     def test_additional_cost_declared(self) -> None:
         """Card must declare additional cost mechanism."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = CullingTheWeak(name="Culling the Weak", owner=player)
@@ -70,7 +70,7 @@ class TestCullingTheWeakEdgeCases:
 
     def test_spell_resolution_on_empty_board(self) -> None:
         """Spell should handle resolution when no valid targets exist."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = CullingTheWeak(name="Culling the Weak", owner=player)
@@ -89,7 +89,7 @@ class TestCullingTheWeakInteractions:
 
     def test_resolution_with_board_state(self) -> None:
         """Card should resolve correctly with established board."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -112,7 +112,7 @@ class TestCullingTheWeakInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

@@ -58,7 +58,7 @@ class TestSnarlSongAbilities:
 
     def test_converge_adds_counters(self) -> None:
         """Converge must add +1/+1 counters per color of mana spent."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = SnarlSong(name="Snarl Song", owner=player)
@@ -79,7 +79,7 @@ class TestSnarlSongEdgeCases:
 
     def test_converge_zero_colors_no_bonus(self) -> None:
         """With 0 colors, converge should produce no bonus."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = SnarlSong(name="Snarl Song", owner=player)
@@ -95,7 +95,7 @@ class TestSnarlSongEdgeCases:
 
     def test_converge_five_colors_maximum(self) -> None:
         """With 5 colors, converge should produce maximum bonus."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = SnarlSong(name="Snarl Song", owner=player)
@@ -131,7 +131,7 @@ class TestSnarlSongInteractions:
 
     def test_spell_to_graveyard_after_resolution(self) -> None:
         """Resolved spell must go to graveyard."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
         from engine.zones import move_to_zone
         game = create_game()
@@ -144,7 +144,7 @@ class TestSnarlSongInteractions:
 
     def test_tokens_appear_on_battlefield(self) -> None:
         """Tokens created must appear on the battlefield."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         game = create_game()
         player = game.players[0]

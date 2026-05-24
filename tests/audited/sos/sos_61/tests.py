@@ -51,7 +51,7 @@ class TestMusesEncouragementAbilities:
 
     def test_creates_token(self) -> None:
         """Resolution should create token(s) on battlefield."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = MusesEncouragement(name="Muse's Encouragement", owner=player)
@@ -65,7 +65,7 @@ class TestMusesEncouragementAbilities:
 
     def test_surveil_effect(self) -> None:
         """Resolution should surveil 2."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.card import Sorcery
         from engine.types import Zone
         game = create_game()
@@ -88,7 +88,7 @@ class TestMusesEncouragementEdgeCases:
 
     def test_spell_resolution_on_empty_board(self) -> None:
         """Spell should handle resolution when no valid targets exist."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = MusesEncouragement(name="Muse's Encouragement", owner=player)
@@ -107,7 +107,7 @@ class TestMusesEncouragementInteractions:
 
     def test_resolution_with_board_state(self) -> None:
         """Card should resolve correctly with established board."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -130,7 +130,7 @@ class TestMusesEncouragementInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

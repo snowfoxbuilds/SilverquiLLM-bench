@@ -52,7 +52,7 @@ class TestArkOfHungerAbilities:
 
     def test_deals_damage(self) -> None:
         """Resolution should deal 1 damage."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -70,7 +70,7 @@ class TestArkOfHungerAbilities:
 
     def test_gains_life(self) -> None:
         """Resolution should gain life."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = ArkOfHunger(name="Ark of Hunger", owner=player)
@@ -83,7 +83,7 @@ class TestArkOfHungerAbilities:
 
     def test_mill_effect(self) -> None:
         """Resolution should mill 2 cards."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.card import Sorcery
         from engine.types import Zone
         game = create_game()
@@ -102,7 +102,7 @@ class TestArkOfHungerAbilities:
 
     def test_has_activated_ability(self) -> None:
         """Card must expose at least one activated ability."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = ArkOfHunger(name="Ark of Hunger", owner=player)
@@ -118,7 +118,7 @@ class TestArkOfHungerEdgeCases:
 
     def test_may_choice_optional(self) -> None:
         """May effect is optional — decline should not crash."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = ArkOfHunger(name="Ark of Hunger", owner=player)
@@ -137,7 +137,7 @@ class TestArkOfHungerInteractions:
 
     def test_resolution_with_board_state(self) -> None:
         """Card should resolve correctly with established board."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -160,7 +160,7 @@ class TestArkOfHungerInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

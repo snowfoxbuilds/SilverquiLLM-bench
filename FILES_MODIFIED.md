@@ -21,3 +21,20 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `benchmarks/sos/workspace/rulebook.md` — Comprehensive MTG rules reference created in workspace (no prior file existed to move)
 
+
+## Item 3: Move workspace test infrastructure into the workspace
+
+### Tests
+- (no dedicated test file — verified via existing workspace engine tests and host-side tests)
+
+### Implementation
+- `benchmarks/sos/workspace/tests/__init__.py` — moved from tests/__init__.py via git mv
+- `benchmarks/sos/workspace/tests/test_utils.py` — moved from tests/test_utils.py via git mv
+- `benchmarks/sos/workspace/tests/conftest.py` — moved from tests/conftest.py via git mv
+- `benchmarks/sos/workspace/tests/engine/` — moved entire directory from tests/engine/ via git mv
+- `benchmarks/sos/workspace/tests/test_utils.md` — moved from docs/test_utils.md via git mv
+- `tests/audited/**/*.py` — updated ~550 files: import path changed to benchmarks.sos.workspace.tests.test_utils
+- `tests/test_integration.py` — updated import path to benchmarks.sos.workspace.tests.test_utils
+- `silverquillm/evaluator.py` — updated test_utils.py copy path to benchmarks/sos/workspace/tests/test_utils.py
+- `silverquillm/workspace.py` — updated test_utils.md staging path to benchmarks/sos/workspace/tests/test_utils.md
+- `tests/test_test_utils_doc.py` — updated DOC_PATH to benchmarks/sos/workspace/tests/test_utils.md

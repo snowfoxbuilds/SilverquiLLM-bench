@@ -61,7 +61,7 @@ class TestEnvironmentalScientistAbilities:
         Oracle: When this creature enters, you may search your library for a basic land card, reveal it, put it into
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         from engine.card import CardImpl, Land
         game = create_game()

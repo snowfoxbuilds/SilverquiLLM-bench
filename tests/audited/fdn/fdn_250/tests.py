@@ -5,7 +5,7 @@ from __future__ import annotations
 from card_impl import BurnishedHart
 from engine.card import ArtifactCreature, CardImpl
 from engine.types import CardType, ManaCost, ManaType, Supertype, Zone
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 
 
 class TestBurnishedHartBasics:

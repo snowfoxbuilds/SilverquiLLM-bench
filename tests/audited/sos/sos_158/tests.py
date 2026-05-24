@@ -56,7 +56,7 @@ class TestPlanarEngineeringAbilities:
         Oracle: Sacrifice two lands. Search your library for four basic land cards, put them onto the battlefield tapped, then shuffle.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         from engine.card import Land
 
@@ -88,7 +88,7 @@ class TestPlanarEngineeringAbilities:
         Oracle: Sacrifice two lands. Search your library for four basic land cards, put them onto the battlefield tapped, then shuffle.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         from engine.card import Land
 

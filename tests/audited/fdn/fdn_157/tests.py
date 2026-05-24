@@ -5,7 +5,7 @@ from __future__ import annotations
 from card_impl import LightshellDuo
 from engine.card import CardImpl, Creature
 from engine.types import Keyword, ManaCost, Zone
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 
 
 class TestLightshellDuoBasics:

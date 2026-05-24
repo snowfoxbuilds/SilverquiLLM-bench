@@ -68,7 +68,7 @@ class TestSunderingArchaicAbilities:
 
     def test_etb_exiles_target(self) -> None:
         """ETB must exile target permanent per oracle text."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -87,7 +87,7 @@ class TestSunderingArchaicAbilities:
 
     def test_converge_scaling(self) -> None:
         """Converge effect must scale with colors of mana spent."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = SunderingArchaic(name="Sundering Archaic", owner=player, base_power=3, base_toughness=3)
@@ -105,7 +105,7 @@ class TestSunderingArchaicEdgeCases:
 
     def test_fizzle_no_targets_creature_stays(self) -> None:
         """If ETB ability fizzles, the creature remains on battlefield."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         game = create_game()
         player = game.players[0]
@@ -123,7 +123,7 @@ class TestSunderingArchaicEdgeCases:
 
     def test_converge_zero_colors_no_bonus(self) -> None:
         """With 0 colors, converge should produce no bonus."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = SunderingArchaic(name="Sundering Archaic", owner=player, base_power=3, base_toughness=3)
@@ -139,7 +139,7 @@ class TestSunderingArchaicEdgeCases:
 
     def test_converge_five_colors_maximum(self) -> None:
         """With 5 colors, converge should produce maximum bonus."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = SunderingArchaic(name="Sundering Archaic", owner=player, base_power=3, base_toughness=3)
@@ -174,7 +174,7 @@ class TestSunderingArchaicInteractions:
 
     def test_exile_from_graveyard_interaction(self) -> None:
         """Cards exiled from graveyard must move to exile zone."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Instant
         from engine.types import Zone
         game = create_game()
@@ -195,7 +195,7 @@ class TestSunderingArchaicInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()

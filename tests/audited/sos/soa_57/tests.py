@@ -51,7 +51,7 @@ class TestShamanicRevelationAbilities:
 
     def test_draws_cards(self) -> None:
         """Resolution should draw card(s)."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.card import Sorcery
         from engine.types import Zone
         game = create_game()
@@ -70,7 +70,7 @@ class TestShamanicRevelationAbilities:
 
     def test_gains_life(self) -> None:
         """Resolution should gain life."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = ShamanicRevelation(name="Shamanic Revelation", owner=player)
@@ -88,7 +88,7 @@ class TestShamanicRevelationEdgeCases:
 
     def test_power_targeting_restriction(self) -> None:
         """Only targets creatures with power 4 or greater."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -109,7 +109,7 @@ class TestShamanicRevelationInteractions:
 
     def test_resolution_with_board_state(self) -> None:
         """Card should resolve correctly with established board."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -132,7 +132,7 @@ class TestShamanicRevelationInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

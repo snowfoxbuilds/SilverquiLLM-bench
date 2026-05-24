@@ -93,7 +93,7 @@ class TestTragedyFeasterEdgeCases:
 
     def test_infusion_base_effect_without_condition(self) -> None:
         """Without infusion condition, only base effect applies."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -109,7 +109,7 @@ class TestTragedyFeasterEdgeCases:
 
     def test_infusion_enhanced_effect_with_condition(self) -> None:
         """With infusion condition met, enhanced effect applies."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -143,7 +143,7 @@ class TestTragedyFeasterInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -161,7 +161,7 @@ class TestTragedyFeasterInteractions:
 
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()

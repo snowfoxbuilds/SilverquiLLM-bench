@@ -8,7 +8,7 @@ from card_impl import WitnessProtection
 from engine.card import Aura, Creature
 from engine.continuous_effects import Layer, SubLayer
 from engine.types import CardType, Color, Keyword, ManaCost
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 
 
 class TestWitnessProtectionBasics:

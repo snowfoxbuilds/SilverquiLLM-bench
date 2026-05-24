@@ -56,7 +56,7 @@ class TestFractalAnomalyAbilities:
         Oracle: Create a 0/0 green and blue Fractal creature token and put X +1/+1 counters on it, where X is the number of cards you've drawn this turn.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
         from engine.card import CardImpl
 
@@ -83,7 +83,7 @@ class TestFractalAnomalyAbilities:
         Oracle: Create a 0/0 green and blue Fractal creature token and put X +1/+1 counters on it, where X is the nu
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
 
         game = create_game()

@@ -3,7 +3,7 @@ from __future__ import annotations
 from card_impl import FirespitterWhelp
 from engine.card import CardImpl, Creature
 from engine.types import CardType, Keyword, ManaCost
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 from engine.events import SpellCastTriggeredEvent
 
 def _resolve_stack(game):

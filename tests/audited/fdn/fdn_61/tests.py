@@ -5,7 +5,7 @@ from card_impl import HighSocietyHunter
 from engine.card import Creature
 from engine.events import AttacksTriggeredEvent, CreatureDiesTriggeredEvent
 from engine.types import CardType, Keyword, ManaCost
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 
 class TestHighSocietyHunterBasics:
     """Basic card properties."""

@@ -3,7 +3,7 @@ from __future__ import annotations
 from card_impl import BrinebornCutthroat
 from engine.card import Creature
 from engine.types import Keyword, ManaCost
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 from engine.events import SpellCastTriggeredEvent
 
 def _resolve_stack(game):

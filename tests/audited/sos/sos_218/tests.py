@@ -75,7 +75,7 @@ class TestQuandrixTheProofAbilities:
 
     def test_cost_reduction_implemented(self) -> None:
         """Cost reduction must be implemented per oracle text."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = QuandrixTheProof(name="Quandrix, the Proof", owner=player, base_power=6, base_toughness=6)
@@ -91,7 +91,7 @@ class TestQuandrixTheProofEdgeCases:
 
     def test_cost_reduction_floor_at_zero(self) -> None:
         """Cost reduction must not reduce cost below zero."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = QuandrixTheProof(name="Quandrix, the Proof", owner=player, base_power=6, base_toughness=6)
@@ -123,7 +123,7 @@ class TestQuandrixTheProofInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -141,7 +141,7 @@ class TestQuandrixTheProofInteractions:
 
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()

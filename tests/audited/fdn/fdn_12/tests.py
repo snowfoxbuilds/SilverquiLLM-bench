@@ -5,7 +5,7 @@ from __future__ import annotations
 from card_impl import FelidarSavior
 from engine.card import Creature
 from engine.types import CardType, Keyword, ManaCost
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 
 
 class TestFelidarSaviorBasics:

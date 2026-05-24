@@ -51,7 +51,7 @@ class TestForceOfWillAbilities:
 
     def test_counters_spell(self) -> None:
         """Resolution should counter target spell."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.card import Instant
         game = create_game()
         player = game.players[0]
@@ -78,7 +78,7 @@ class TestForceOfWillEdgeCases:
 
     def test_may_choice_optional(self) -> None:
         """May effect is optional — decline should not crash."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = ForceOfWill(name="Force of Will", owner=player)
@@ -97,7 +97,7 @@ class TestForceOfWillInteractions:
 
     def test_get_targets_finds_stack_spells(self) -> None:
         """get_targets should find spells on stack."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.card import Instant
         game = create_game()
         player = game.players[0]
@@ -112,7 +112,7 @@ class TestForceOfWillInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

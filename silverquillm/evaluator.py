@@ -233,12 +233,12 @@ def run_tests(
                 shutil.copy2(impl_path, tmp / alias)
 
         # Copy test_utils.py so flat imports (from test_utils import ...) work
-        test_utils_src = _REPO_ROOT / "tests" / "test_utils.py"
+        test_utils_src = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "tests" / "test_utils.py"
         if test_utils_src.exists():
             shutil.copy2(test_utils_src, tmp / "test_utils.py")
 
         # Copy tests as test_card.py to avoid shadowing the tests/ package.
-        # The agent may write `from tests.test_utils import ...` which fails
+        # The agent may write `from benchmarks.sos.workspace.tests.test_utils import ...` which fails
         # if a local file named tests.py exists (Python resolves it as the
         # local module instead of the repo's tests/ package).
         shutil.copy2(tests_path, tmp / "test_card.py")

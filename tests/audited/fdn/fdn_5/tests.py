@@ -8,7 +8,7 @@ from card_impl import CelestialArmor
 from engine.card import Artifact, Creature
 from engine.continuous_effects import Layer
 from engine.types import CardType, Keyword, ManaCost, ManaType
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 
 
 class TestCelestialArmorBasics:

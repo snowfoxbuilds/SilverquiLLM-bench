@@ -4,7 +4,7 @@ import pytest
 from card_impl import ChandraFlameshaper
 from engine.card import Creature, Planeswalker
 from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
-from tests.test_utils import create_game, set_board_state
+from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
 from engine.events import EndStepTriggeredEvent
 
 class TestChandraBasics:

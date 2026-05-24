@@ -56,7 +56,7 @@ class TestSubterraneanTremorsAbilities:
         Oracle: Subterranean Tremors deals X damage to each creature without flying. If X is 4 or more, destroy all artifacts. If X is 8 or more, create an 8/8 red Lizard creature token.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
 
         game = create_game()
@@ -78,7 +78,7 @@ class TestSubterraneanTremorsAbilities:
         Oracle: If X is 4 or more, destroy all artifacts.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Artifact
 
         game = create_game()
@@ -101,7 +101,7 @@ class TestSubterraneanTremorsAbilities:
         Oracle: Subterranean Tremors deals X damage to each creature without flying. If X is 4 or more, destroy all 
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature as CreatureBase
 
         game = create_game()

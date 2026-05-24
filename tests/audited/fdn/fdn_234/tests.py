@@ -8,7 +8,7 @@ from card_impl import VivienReid
 from engine.card import Creature, Planeswalker
 from engine.continuous_effects import ContinuousEffect, Layer
 from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
-from tests.test_utils import create_game, set_board_state
+from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
 
 
 class TestVivienBasics:

@@ -61,7 +61,7 @@ class TestEagerGlyphmageAbilities:
         Oracle: When this creature enters, create a 1/1 white and black Inkling creature token with flying.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         game = create_game()
         player = game.players[0]

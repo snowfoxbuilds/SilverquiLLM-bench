@@ -60,7 +60,7 @@ class TestMurmuringMysticAbilities:
         Oracle: Whenever you cast an instant or sorcery spell, create a 1/1 blue Bird Illusion creature token with f
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = MurmuringMystic(name='Murmuring Mystic', owner=player)

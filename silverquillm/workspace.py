@@ -66,7 +66,7 @@ about whether your engine changes are correct.
 # ---------------------------------------------------------------------------
 
 _REFERENCE_DOCS = {
-    "test_utils.md": "docs/test_utils.md",
+    "test_utils.md": "benchmarks/sos/workspace/tests/test_utils.md",
 }
 
 _RULEBOOK_SRC = "benchmarks/sos/data/comprehensive_rules.txt"

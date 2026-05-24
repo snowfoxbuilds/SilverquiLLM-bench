@@ -3,7 +3,7 @@ from __future__ import annotations
 from card_impl import NineLivesFamiliar
 from engine.card import Creature
 from engine.types import ManaCost, Zone
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 from engine.events import CreatureDiesTriggeredEvent, EntersBattlefieldTriggeredEvent
 
 class TestNineLivesFamiliarBasics:

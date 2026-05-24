@@ -63,7 +63,7 @@ class TestMageTowerRefereeAbilities:
         Oracle: Whenever you cast a multicolored spell, put a +1/+1 counter on this creature.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
 
         game = create_game()
         player = game.players[0]

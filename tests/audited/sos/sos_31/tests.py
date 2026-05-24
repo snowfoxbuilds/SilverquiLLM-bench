@@ -67,7 +67,7 @@ class TestShatteredAcolyteAbilities:
 
     def test_destroys_target(self) -> None:
         """Resolution should destroy the target."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -88,7 +88,7 @@ class TestShatteredAcolyteAbilities:
 
     def test_has_activated_ability(self) -> None:
         """Card must expose at least one activated ability."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = ShatteredAcolyte(name="Shattered Acolyte", owner=player)
@@ -104,7 +104,7 @@ class TestShatteredAcolyteEdgeCases:
 
     def test_zone_transition_graveyard(self) -> None:
         """Creature should properly move to graveyard on death."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         game = create_game()
         player = game.players[0]
@@ -123,7 +123,7 @@ class TestShatteredAcolyteInteractions:
 
     def test_get_targets_finds_creatures(self) -> None:
         """get_targets should return valid creature targets."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -137,7 +137,7 @@ class TestShatteredAcolyteInteractions:
 
     def test_coexists_with_other_creatures(self) -> None:
         """Card should coexist with other creatures on battlefield."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

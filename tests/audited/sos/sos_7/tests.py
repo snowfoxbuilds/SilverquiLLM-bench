@@ -52,7 +52,7 @@ class TestAntiquitiesOnTheLooseAbilities:
 
     def test_resolution_exiles_target(self) -> None:
         """Spell resolution must exile target per oracle text."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -96,7 +96,7 @@ class TestAntiquitiesOnTheLooseEdgeCases:
 
     def test_resolution_with_empty_board(self) -> None:
         """Spell must handle resolution with no valid targets/creatures."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = AntiquitiesOnTheLoose(name="Antiquities on the Loose", owner=player)
@@ -116,7 +116,7 @@ class TestAntiquitiesOnTheLooseInteractions:
 
     def test_spell_to_graveyard_after_resolution(self) -> None:
         """Resolved spell must go to graveyard."""
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
         from engine.zones import move_to_zone
         game = create_game()
@@ -129,7 +129,7 @@ class TestAntiquitiesOnTheLooseInteractions:
 
     def test_tokens_appear_on_battlefield(self) -> None:
         """Tokens created must appear on the battlefield."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         game = create_game()
         player = game.players[0]

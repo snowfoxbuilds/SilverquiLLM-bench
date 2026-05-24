@@ -39,7 +39,7 @@ from engine.state_based_actions import resolve_state_based_actions
 from engine.triggers import TriggerRegistration
 from engine.turn import _do_cleanup_step
 from engine.types import CardType, Keyword, ManaType, Phase, Step, Zone
-from tests.test_utils import cast_spell, create_game, set_board_state
+from benchmarks.sos.workspace.tests.test_utils import cast_spell, create_game, set_board_state
 from engine.events import DealsDamageTriggeredEvent
 
 def _tap_land_for_mana(game, player, land):

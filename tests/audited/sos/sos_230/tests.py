@@ -66,7 +66,7 @@ class TestSpiritMascotAbilities:
         Oracle: Whenever one or more cards leave your graveyard, put a +1/+1 counter on this creature.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
 
         game = create_game()
         player = game.players[0]

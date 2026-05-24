@@ -7,7 +7,7 @@ from pathlib import Path
 
 from engine.card import Instant
 from engine.types import ManaCost
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 
 # The conftest name derivation produces "HidetsuguSSecondRite" but the impl
 # uses "HidetsugusSecondRite".  Import the real class directly.

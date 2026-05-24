@@ -56,7 +56,7 @@ class TestSleightOfHandAbilities:
         Oracle: Look at the top two cards of your library. Put one of them into your hand and the other on the botto
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
         from engine.card import CardImpl
 

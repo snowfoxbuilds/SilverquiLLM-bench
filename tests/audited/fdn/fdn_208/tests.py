@@ -3,7 +3,7 @@ from __future__ import annotations
 from card_impl import SpitfireLagac
 from engine.card import CardImpl, Creature
 from engine.types import CardType, ManaCost
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 from engine.events import EntersBattlefieldTriggeredEvent
 
 def _resolve_stack(game):

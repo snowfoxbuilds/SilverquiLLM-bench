@@ -51,7 +51,7 @@ class TestAjanisResponseAbilities:
 
     def test_destroys_target(self) -> None:
         """Resolution should destroy the target."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -72,7 +72,7 @@ class TestAjanisResponseAbilities:
 
     def test_cost_reduction_applies(self) -> None:
         """cost_reduction should return > 0 when condition met."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -94,7 +94,7 @@ class TestAjanisResponseEdgeCases:
 
     def test_no_reduction_when_condition_unmet(self) -> None:
         """No cost reduction when condition is not met."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -114,7 +114,7 @@ class TestAjanisResponseInteractions:
 
     def test_get_targets_finds_creatures(self) -> None:
         """get_targets should return valid creature targets."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]
@@ -128,7 +128,7 @@ class TestAjanisResponseInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         game = create_game()
         player = game.players[0]

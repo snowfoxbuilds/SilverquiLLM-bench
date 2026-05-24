@@ -93,7 +93,7 @@ class TestElementalMascotEdgeCases:
 
     def test_opus_no_trigger_without_spell(self) -> None:
         """Opus should not boost without casting instant/sorcery."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = ElementalMascot(name="Elemental Mascot", owner=player, base_power=1, base_toughness=4)
@@ -124,7 +124,7 @@ class TestElementalMascotInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()
@@ -142,7 +142,7 @@ class TestElementalMascotInteractions:
 
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature
         from engine.types import Zone
         game = create_game()

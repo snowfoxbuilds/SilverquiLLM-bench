@@ -56,7 +56,7 @@ class TestDinasGuidanceAbilities:
         Oracle: Search your library for a creature card, reveal it, put it into your hand or graveyard, then shuffle.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
         from engine.card import Creature as CreatureBase
 

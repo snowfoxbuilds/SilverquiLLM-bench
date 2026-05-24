@@ -56,7 +56,7 @@ class TestCullingRitualAbilities:
         Oracle: Destroy each nonland permanent with mana value 2 or less. Add {B} or {G} for each permanent destroyed this way.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature as CreatureBase
         from engine.types import ManaCost
 
@@ -96,7 +96,7 @@ class TestCullingRitualAbilities:
         Oracle: Destroy each nonland permanent with mana value 2 or less. Add {B} or {G} for each permanent destroye
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.card import Creature as CreatureBase
         from engine.types import ManaCost
 

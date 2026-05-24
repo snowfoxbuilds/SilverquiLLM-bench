@@ -66,7 +66,7 @@ class TestStoneDocentAbilities:
         Oracle: {W}, Exile this card from your graveyard: You gain 2 life. Surveil 1. Activate only as a sorcery. (L
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
 
         game = create_game()

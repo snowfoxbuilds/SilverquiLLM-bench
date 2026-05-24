@@ -60,7 +60,7 @@ class TestGeometersArthropodAbilities:
         Oracle: Whenever you cast a spell with {X} in its mana cost, look at the top X cards of your library. Put on
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = GeometersArthropod(name="Geometer's Arthropod", owner=player)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from card_impl import LootExuberantExplorer
 from engine.card import ActivatedAbility, Creature, Land
 from engine.types import CardType, ManaCost, ManaType, Zone
-from tests.test_utils import create_game
+from benchmarks.sos.workspace.tests.test_utils import create_game
 
 
 class TestLootBasics:

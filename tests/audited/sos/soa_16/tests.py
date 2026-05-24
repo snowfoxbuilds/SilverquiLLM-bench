@@ -56,7 +56,7 @@ class TestDeduceAbilities:
         Oracle: Draw a card. Investigate. (Create a Clue token. It's an artifact with "{2}, Sacrifice this token: Dr
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game, set_board_state
+        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
         from engine.types import Zone
         from engine.card import CardImpl
 
@@ -83,7 +83,7 @@ class TestDeduceAbilities:
         Oracle: Draw a card. Investigate. (Create a Clue token. It's an artifact with "{2}, Sacrifice this token: Dr
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
 
         game = create_game()
@@ -104,7 +104,7 @@ class TestDeduceAbilities:
         Oracle: Draw a card. Investigate. (Create a Clue token. It's an artifact with "{2}, Sacrifice this token: Dr
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
 
         game = create_game()

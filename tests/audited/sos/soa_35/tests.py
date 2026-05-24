@@ -56,7 +56,7 @@ class TestVampiricTutorAbilities:
         Oracle: Search your library for a card, then shuffle and put that card on top. You lose 2 life.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
         from engine.card import CardImpl
 
@@ -87,7 +87,7 @@ class TestVampiricTutorAbilities:
         Oracle: Search your library for a card, then shuffle and put that card on top. You lose 2 life.
         This test will fail against stubs (expected).
         """
-        from tests.test_utils import create_game
+        from benchmarks.sos.workspace.tests.test_utils import create_game
         from engine.types import Zone
 
         game = create_game()
