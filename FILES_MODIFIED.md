@@ -20,3 +20,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `silverquillm/cli.py` — Added card_filter param to _harvest_results/_write_card_statuses/_evaluate_results/_generate_run_summary, filter compares against spec collector_number with str(int(x)) normalization for numeric values
 - `silverquillm/evaluator.py` — Added CardResult, EngineResult, FullEvalResult dataclasses and evaluate() function
 
+
+## Item 4: Complete event-type strings→classes migration
+
+### Implementation
+- `docs/specs/CARD-INTERFACE.md` — Rewrote Replacement Effects example to use typed event classes and game.replacement_manager.register() API
