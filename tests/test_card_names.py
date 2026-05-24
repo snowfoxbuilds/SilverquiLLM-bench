@@ -242,31 +242,24 @@ class TestCopyProgressWithNames:
 class TestSnapshotTelemetryStaysIDsOnly:
     """Verify snapshot_telemetry.jsonl is never enriched with card_name."""
 
-    def test_snapshot_telemetry_not_enriched(self, tmp_path: Path):
-        """snapshot_telemetry.jsonl should remain IDs-only (no card_name field).
-
-        The _copy_progress_with_names function only processes progress.jsonl;
-        snapshot_telemetry.jsonl is a separate file that should not be passed
-        through the enrichment pipeline.
+    def test_snapshot_telemetry_would_get_names_if_passed_to_enrichment(self, tmp_path: Path):
+        """If snapshot_telemetry.jsonl were passed to _copy_progress_with_names,
+        it would add card_name — proving the caller-level guard matters.
         """
         from silverquillm.cli import _copy_progress_with_names
 
-        # Simulate: if someone mistakenly ran enrichment on telemetry data,
-        # entries without card_id fields would pass through unchanged
         src = tmp_path / "snapshot_telemetry.jsonl"
         dst = tmp_path / "out.jsonl"
-        # Telemetry entries use card_id but the contract says no card_name
         entry = {"card_id": "sos_1", "cpu": 45.2, "mem_mb": 128}
         src.write_text(json.dumps(entry) + "\n")
         name_map = {"sos_1": "Alpha"}
 
-        # The design ensures snapshot_telemetry is NOT passed to this function.
-        # This test documents the contract: if you DO pass it, it would add names.
-        # The real protection is at the caller level — only progress.jsonl is enriched.
-        # We verify the caller doesn't touch snapshot_telemetry by checking the
-        # harvest logic doesn't call _copy_progress_with_names on it.
-        # (This is a documentation/contract test)
-        assert True  # The real test is structural — see integration test below
+        # Proves that the enrichment function WOULD add card_name if called,
+        # so the caller must not call it on snapshot_telemetry.
+        _copy_progress_with_names(src, dst, name_map)
+        import json as _json
+        result = _json.loads(dst.read_text().strip())
+        assert result.get("card_name") == "Alpha"
 
     def test_snapshot_telemetry_file_not_modified_by_harvest(self, tmp_path: Path):
         """The harvest step should copy snapshot_telemetry.jsonl without enrichment.

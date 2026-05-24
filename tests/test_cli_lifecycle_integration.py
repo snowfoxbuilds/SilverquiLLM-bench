@@ -24,6 +24,15 @@ def runner():
     return CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def _patch_run_deps():
+    """Auto-mock dependencies added after these tests were written."""
+    with patch("silverquillm.cli.build_card_name_map", return_value={}), \
+         patch("silverquillm.cli._evaluate_results"), \
+         patch("silverquillm.cli._generate_run_summary"):
+        yield
+
+
 def _make_lifecycle_mock(exit_code=0, timed_out=False, timeout_reason=None):
     """Helper to create a mock ContainerLifecycle instance."""
     mock_instance = MagicMock()
