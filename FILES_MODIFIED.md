@@ -136,3 +136,13 @@ benchmarks/sos/workspace/tests/engine/test_game_state.py — reworded docstring 
 
 ### Implementation
 - `tests/test_workspace_structure.py` — CI-time structure assertion for benchmarks/sos/workspace/
+
+## Item 11: Write docker_stdout.log and docker_stderr.log directly to run_dir during the run
+
+### Tests
+- `tests/test_docker_direct_stream.py` — tests for _drain_pipe direct streaming and _harvest_results skip logic
+
+### Implementation
+- `silverquillm/runner.py` — `_drain_pipe` uses TextIOWrapper for line-by-line streaming to run_dir with proper UTF-8 handling; removed post-exit shutil.copy2 for .tmp→.log
+- `silverquillm/cli.py` — `_harvest_results` skips docker_stdout.log/docker_stderr.log if already present in run_dir
+- `KEY_DECISIONS.md` — documented the direct-write carve-out for docker stdout/stderr

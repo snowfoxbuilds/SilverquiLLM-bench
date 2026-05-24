@@ -227,14 +227,20 @@ def _harvest_results(
             pass  # diff not available
 
     # Output files — copy docker_stdout.log, docker_stderr.log, and any *.log / *.jsonl
+    # NOTE: docker_stdout.log and docker_stderr.log may already be streamed directly
+    # to run_dir by _drain_pipe (see KEY_DECISIONS.md). Skip them if already present.
     # For progress.jsonl, enrich with card_name fields
+    _DIRECT_STREAM_FILES = {"docker_stdout.log", "docker_stderr.log"}
     name_map = build_card_name_map(cards_dir, "sos")
     for src in output.iterdir():
         if src.is_file() and (src.suffix in (".log", ".jsonl")):
+            if src.name in _DIRECT_STREAM_FILES and (run_dir / src.name).exists():
+                continue
+            dest = run_dir / src.name
             if src.name == "progress.jsonl":
-                _copy_progress_with_names(src, run_dir / src.name, name_map)
+                _copy_progress_with_names(src, dest, name_map)
             else:
-                shutil.copy2(src, run_dir / src.name)
+                shutil.copy2(src, dest)
 
     # Per-card status
     _write_card_statuses(workspace, run_dir, timed_out, card_filter=filter_set)

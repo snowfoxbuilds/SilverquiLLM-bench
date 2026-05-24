@@ -577,15 +577,22 @@ class TestSnapshotCallback:
 
 
 # ---------------------------------------------------------------------------
-# .tmp → .log copy after thread join
+# Direct streaming to run_dir (no .tmp → .log copy)
 # ---------------------------------------------------------------------------
 
 
-class TestTmpToLogCopy:
-    """After pipe reader threads join, .tmp files should be copied to .log."""
+@pytest.fixture()
+def run_dir(tmp_path: Path) -> Path:
+    rd = tmp_path / "run_dir"
+    rd.mkdir()
+    return rd
 
-    def test_stdout_tmp_copied_to_log(self, workspace, output):
-        """docker_stdout.tmp should be copied to docker_stdout.log."""
+
+class TestDirectStreamToRunDir:
+    """When run_dir is provided, logs stream directly there — no post-exit copy."""
+
+    def test_stdout_written_to_run_dir_directly(self, workspace, output, run_dir):
+        """docker_stdout.log appears in run_dir via direct streaming, not copy."""
         mock_proc = _make_mock_popen(stdout_data=b"stdout data\n", exit_code=0, exit_delay=0.1)
 
         with patch("silverquillm.runner.subprocess.Popen", return_value=mock_proc), \
@@ -596,15 +603,16 @@ class TestTmpToLogCopy:
                 workspace=workspace,
                 output=output,
                 hard_timeout=300,
+                run_dir=run_dir,
             )
             lc.run()
 
-        log_file = output / "docker_stdout.log"
-        assert log_file.exists(), "docker_stdout.log should be created from .tmp"
-        assert b"stdout data" in log_file.read_bytes()
+        run_dir_log = run_dir / "docker_stdout.log"
+        assert run_dir_log.exists(), "docker_stdout.log should be streamed to run_dir"
+        assert "stdout data" in run_dir_log.read_text(encoding="utf-8")
 
-    def test_stderr_tmp_copied_to_log(self, workspace, output):
-        """docker_stderr.tmp should be copied to docker_stderr.log."""
+    def test_stderr_written_to_run_dir_directly(self, workspace, output, run_dir):
+        """docker_stderr.log appears in run_dir via direct streaming."""
         mock_proc = _make_mock_popen(
             stdout_data=b"out\n", stderr_data=b"err data\n",
             exit_code=0, exit_delay=0.1,
@@ -618,15 +626,16 @@ class TestTmpToLogCopy:
                 workspace=workspace,
                 output=output,
                 hard_timeout=300,
+                run_dir=run_dir,
             )
             lc.run()
 
-        log_file = output / "docker_stderr.log"
-        assert log_file.exists(), "docker_stderr.log should be created from .tmp"
-        assert b"err data" in log_file.read_bytes()
+        run_dir_log = run_dir / "docker_stderr.log"
+        assert run_dir_log.exists(), "docker_stderr.log should be streamed to run_dir"
+        assert "err data" in run_dir_log.read_text(encoding="utf-8")
 
-    def test_tmp_files_preserved_alongside_log(self, workspace, output):
-        """Original .tmp files should still exist (copy, not rename)."""
+    def test_no_post_exit_copy_to_output_log(self, workspace, output, run_dir):
+        """When run_dir is provided, output/docker_stdout.log is NOT created via copy."""
         mock_proc = _make_mock_popen(stdout_data=b"data\n", exit_code=0, exit_delay=0.1)
 
         with patch("silverquillm.runner.subprocess.Popen", return_value=mock_proc), \
@@ -637,8 +646,55 @@ class TestTmpToLogCopy:
                 workspace=workspace,
                 output=output,
                 hard_timeout=300,
+                run_dir=run_dir,
             )
             lc.run()
 
-        assert (output / "docker_stdout.tmp").exists(), ".tmp should be preserved"
-        assert (output / "docker_stdout.log").exists(), ".log should be created"
+        # The .log file should NOT be created in output/ via shutil.copy2
+        assert not (output / "docker_stdout.log").exists(), \
+            "output/docker_stdout.log should not be created when run_dir is set"
+        assert not (output / "docker_stderr.log").exists(), \
+            "output/docker_stderr.log should not be created when run_dir is set"
+
+    def test_no_tmp_files_when_run_dir_provided(self, workspace, output, run_dir):
+        """When run_dir is provided, .tmp intermediates are not created."""
+        mock_proc = _make_mock_popen(stdout_data=b"data\n", exit_code=0, exit_delay=0.1)
+
+        with patch("silverquillm.runner.subprocess.Popen", return_value=mock_proc), \
+             patch("silverquillm.runner.subprocess.run"):
+            lc = ContainerLifecycle(
+                image="img",
+                container_name="ctr",
+                workspace=workspace,
+                output=output,
+                hard_timeout=300,
+                run_dir=run_dir,
+            )
+            lc.run()
+
+        assert not (output / "docker_stdout.tmp").exists(), \
+            ".tmp intermediates should not exist when run_dir streams directly"
+        assert not (output / "docker_stderr.tmp").exists(), \
+            ".tmp intermediates should not exist when run_dir streams directly"
+
+    def test_run_dir_log_content_matches_container_output(self, workspace, output, run_dir):
+        """All container output lines appear in the run_dir log file."""
+        data = b"line1\nline2\nline3\n"
+        mock_proc = _make_mock_popen(stdout_data=data, exit_code=0, exit_delay=0.1)
+
+        with patch("silverquillm.runner.subprocess.Popen", return_value=mock_proc), \
+             patch("silverquillm.runner.subprocess.run"):
+            lc = ContainerLifecycle(
+                image="img",
+                container_name="ctr",
+                workspace=workspace,
+                output=output,
+                hard_timeout=300,
+                run_dir=run_dir,
+            )
+            lc.run()
+
+        content = (run_dir / "docker_stdout.log").read_text(encoding="utf-8")
+        assert "line1\n" in content
+        assert "line2\n" in content
+        assert "line3\n" in content

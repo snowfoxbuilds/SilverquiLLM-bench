@@ -28,3 +28,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Implementer's approach**: Removed old helpers and added copytree, but apparently didn't implement the run_manifest write or git init steps
 - **Coordinator decision**: fix implementation
 - **Reasoning**: The TODO spec explicitly shows code that writes run_manifest.json and does git init; these are non-optional
+
+## Test deletion: Item 11 — test_harvest_does_not_copy_stdout_log_from_output
+- **Deleted test**: `tests/test_docker_direct_stream.py::TestHarvestResultsSkipDirectStream::test_harvest_does_not_copy_stdout_log_from_output`
+- **Tester's intent**: Assert that `_harvest_results` NEVER copies `docker_stdout.log`/`docker_stderr.log` from `output/` to `run_dir`.
+- **Conflict**: This contradicts the legacy test `test_cli_docker.py::TestHarvest::test_harvests_output_logs` which verifies that harvest DOES copy these files when they aren't pre-streamed to `run_dir`.
+- **Coordinator decision**: Delete the overly-strict test. The correct behavior is: skip copy if file already exists in `run_dir` (was streamed directly during the run); copy if not (legacy path where run_dir streaming wasn't active).
+- **Reasoning**: The TODO says "skip these two files (they're already in run_dir)" — the keyword being "they're already in run_dir". The conditional check `(run_dir / name).exists()` correctly implements this intent while preserving backward compatibility.
