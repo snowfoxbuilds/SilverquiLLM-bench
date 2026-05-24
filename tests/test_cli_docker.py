@@ -267,7 +267,7 @@ class TestHarvest:
         # Create workspace cards with modified content
         # Use real repo SOS card collector numbers
         repo_root = Path(__file__).resolve().parent.parent
-        cards_dir = repo_root / "cards"
+        cards_dir = repo_root / "benchmarks" / "sos" / "workspace" / "cards"
         sos_dir = cards_dir / "sos"
         assert sos_dir.exists(), f"SOS cards directory not found at {sos_dir}"
         # Pick the first SOS card

@@ -66,3 +66,33 @@ cards/fdn/fdn_97/card_impl.py — updated bare engine import to full benchmarks 
 silverquillm/cli.py — updated two _REPO_ROOT / "engine" path references to new location
 silverquillm/replay/executor.py — reworded comments to avoid false-positive "from engine" grep matches
 benchmarks/sos/workspace/tests/engine/test_game_state.py — reworded docstring to avoid false-positive grep match
+
+## Item 5: Move cards/ to benchmarks/sos/workspace/cards/ and normalize SOS stubs
+
+### Implementation
+- `benchmarks/sos/workspace/cards/` — entire cards directory moved here from repo root via git mv
+- `benchmarks/sos/workspace/cards/fdn/__init__.py` — recreated for package discovery (placeholder was removed before move)
+- `benchmarks/sos/workspace/cards/**/*.py` — ~115 internal files updated from cards.* to benchmarks.sos.workspace.cards.*
+- `benchmarks/sos/workspace/engine/basic_lands.py` — updated cards.registry import to new path
+- `benchmarks/sos/workspace/tests/engine/test_lazy_targets.py` — updated cards.fdn imports to new path
+- `benchmarks/sos/workspace/tests/engine/test_cast_spell_free.py` — updated cards.fdn imports to new path
+- `silverquillm/workspace.py` — updated cards_dir from _REPO_ROOT/"cards" to new workspace path
+- `silverquillm/cli.py` — updated cards_dir references to new workspace path
+- `silverquillm/card_spec.py` — updated cards.registry import to new path
+- `benchmarks/sos/fetch_data.py` — updated cards.scryfall import to new path
+- `scripts/generate_audited_stubs.py` — updated cards.registry string references to new path
+- `tests/audited/fdn/conftest.py` — updated _FDN_CARDS_DIR path and cards.registry import
+- `tests/audited/sos/conftest.py` — updated importlib.import_module call and cards.registry import
+- `tests/test_audited_infrastructure.py` — updated sys.modules string keys and cards.registry imports
+- `tests/test_card_filter.py` — updated source cards/sos path reference
+- `tests/test_card_spec.py` — updated cards.registry import
+- `tests/test_cli_cards_filter.py` — updated cards/sos path references
+- `tests/test_cli_docker.py` — updated cards path reference
+- `tests/test_event_type_migration.py` — updated cards/fdn path reference
+- `tests/test_integration.py` — updated cards.fdn imports
+- `tests/test_scaffold.py` — updated cards package path and import references
+- `tests/test_soa_mystical_archives.py` — updated cards.registry and patch target paths
+- `tests/test_sos_regenerated_artifacts.py` — updated cards/sos path reference
+- `tests/test_sos_restructure.py` — updated CARDS_SOS path to new location
+- `tests/test_sos_stubs.py` — updated all cards module references to new path
+- `tests/test_tier_naming.py` — updated cards.registry import

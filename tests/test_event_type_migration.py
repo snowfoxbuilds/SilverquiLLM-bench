@@ -23,7 +23,7 @@ class TestNoRawStringEventTypes:
     def test_no_raw_string_event_types_in_cards_fdn(self) -> None:
         """grep -rn 'event_type *= *['\\'\"']' cards/fdn/ should return zero matches."""
         result = subprocess.run(
-            ["grep", "-rn", r"event_type *= *['\"]", str(_REPO_ROOT / "cards" / "fdn")],
+            ["grep", "-rn", r"event_type *= *['\"]", str(_REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards" / "fdn")],
             capture_output=True,
             text=True,
         )
@@ -48,7 +48,7 @@ class TestFdn244UsesTypedEventClasses:
 
     @pytest.fixture()
     def card_impl_source(self) -> str:
-        path = _REPO_ROOT / "cards" / "fdn" / "fdn_244" / "card_impl.py"
+        path = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards" / "fdn" / "fdn_244" / "card_impl.py"
         assert path.exists(), f"Expected {path} to exist"
         return path.read_text(encoding="utf-8")
 

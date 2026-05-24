@@ -174,7 +174,7 @@ def _harvest_results(
     cards_out = run_dir / "cards"
     cards_out.mkdir(parents=True, exist_ok=True)
 
-    cards_dir = _REPO_ROOT / "cards"
+    cards_dir = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards"
     specs = load_all_card_specs(cards_dir, "sos")
 
     # Normalize filter for comparison
@@ -300,7 +300,7 @@ def _write_card_statuses(
         When set, only include cards whose normalized collector numbers are in
         this set. When ``None``, include all cards from the set.
     """
-    cards_dir = _REPO_ROOT / "cards"
+    cards_dir = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards"
     specs = load_all_card_specs(cards_dir, "sos")
     name_map = build_card_name_map(cards_dir, "sos")
     statuses: dict[str, dict] = {}
@@ -361,7 +361,7 @@ def _evaluate_results(run_dir: Path, card_filter: list[str] | None = None) -> No
     from silverquillm.evaluator import evaluate, CardResult
     from dataclasses import asdict
 
-    cards_dir = _REPO_ROOT / "cards"
+    cards_dir = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards"
     engine_dir = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "engine"
     name_map = build_card_name_map(cards_dir, "sos")
 
@@ -560,7 +560,7 @@ def run(
         (workspace / "run_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
         # Build card name map for terminal display
-        card_name_map = build_card_name_map(_REPO_ROOT / "cards", "sos")
+        card_name_map = build_card_name_map(_REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards", "sos")
 
         # Run container via ContainerLifecycle
         container_name = f"sqm-{run_name}"

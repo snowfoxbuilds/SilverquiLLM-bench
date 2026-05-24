@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CARDS_SOS = REPO_ROOT / "cards" / "sos"
+CARDS_SOS = REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards" / "sos"
 OLD_CARDS = REPO_ROOT / "benchmarks" / "sos" / "cards"
 
 

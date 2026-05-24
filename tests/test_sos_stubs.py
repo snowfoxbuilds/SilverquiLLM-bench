@@ -54,8 +54,8 @@ def sos_cards():
 @pytest.fixture
 def fresh_registry():
     """Create a fresh CardRegistry with SOS stubs registered."""
-    from cards.registry import CardRegistry
-    from cards.stubs.sos_stubs import register_sos_stubs
+    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from benchmarks.sos.workspace.cards.stubs.sos_stubs import register_sos_stubs
 
     registry = CardRegistry()
     register_sos_stubs(registry)
@@ -91,8 +91,8 @@ class TestRegisterSosStubs:
 
     def test_register_is_idempotent(self):
         """Calling register_sos_stubs twice doesn't break the registry."""
-        from cards.registry import CardRegistry
-        from cards.stubs.sos_stubs import register_sos_stubs
+        from benchmarks.sos.workspace.cards.registry import CardRegistry
+        from benchmarks.sos.workspace.cards.stubs.sos_stubs import register_sos_stubs
 
         registry = CardRegistry()
         register_sos_stubs(registry)
@@ -291,14 +291,14 @@ class TestNoAutoLoad:
 
     def test_import_does_not_populate_default_registry(self):
         """Importing cards.stubs.sos_stubs must not auto-register in default_registry."""
-        from cards.registry import default_registry
+        from benchmarks.sos.workspace.cards.registry import default_registry
 
         # Record current state
         before_count = len(default_registry)
 
         # Re-import the stubs module (force reload to be thorough)
-        import cards.stubs.sos_stubs
-        importlib.reload(cards.stubs.sos_stubs)
+        import benchmarks.sos.workspace.cards.stubs.sos_stubs
+        importlib.reload(benchmarks.sos.workspace.cards.stubs.sos_stubs)
 
         after_count = len(default_registry)
         assert after_count == before_count, (
@@ -308,7 +308,7 @@ class TestNoAutoLoad:
 
     def test_default_registry_does_not_contain_sos_cards(self):
         """default_registry should not have SOS stub cards by default."""
-        from cards.registry import default_registry
+        from benchmarks.sos.workspace.cards.registry import default_registry
 
         # The Dawning Archaic is an SOS card that shouldn't be in default
         assert "The Dawning Archaic" not in default_registry
@@ -324,17 +324,17 @@ class TestGeneratorScript:
 
     def test_generated_output_exists(self):
         """cards/stubs/sos_stubs.py must exist."""
-        output_path = PROJECT_ROOT / "cards" / "stubs" / "sos_stubs.py"
+        output_path = PROJECT_ROOT / "benchmarks" / "sos" / "workspace" / "cards" / "stubs" / "sos_stubs.py"
         assert output_path.exists()
 
     def test_stubs_module_importable(self):
         """cards.stubs.sos_stubs must be importable."""
-        mod = importlib.import_module("cards.stubs.sos_stubs")
+        mod = importlib.import_module("benchmarks.sos.workspace.cards.stubs.sos_stubs")
         assert hasattr(mod, "register_sos_stubs")
 
     def test_register_function_callable(self):
         """register_sos_stubs must be callable."""
-        from cards.stubs.sos_stubs import register_sos_stubs
+        from benchmarks.sos.workspace.cards.stubs.sos_stubs import register_sos_stubs
         assert callable(register_sos_stubs)
 
     def test_generator_deterministic(self):
@@ -342,7 +342,7 @@ class TestGeneratorScript:
         import subprocess
 
         script_path = PROJECT_ROOT / "scripts" / "generate_audited_stubs.py"
-        output_path = PROJECT_ROOT / "cards" / "stubs" / "sos_stubs.py"
+        output_path = PROJECT_ROOT / "benchmarks" / "sos" / "workspace" / "cards" / "stubs" / "sos_stubs.py"
 
         # Read current output
         original_content = output_path.read_text()
@@ -367,8 +367,8 @@ class TestSosConftestIntegration:
     def test_conftest_loads_stubs_successfully(self):
         """SOS conftest can load and register stubs without error."""
         # Simulate what the conftest does
-        from cards.stubs.sos_stubs import register_sos_stubs
-        from cards.registry import CardRegistry
+        from benchmarks.sos.workspace.cards.stubs.sos_stubs import register_sos_stubs
+        from benchmarks.sos.workspace.cards.registry import CardRegistry
 
         registry = CardRegistry()
         register_sos_stubs(registry)
@@ -386,8 +386,8 @@ class TestSosConftestIntegration:
         Example: SOS cn 1 = The Dawning Archaic, SOA cn 1 = Akroma's Will.
         The conftest registry lookup for plain '1' must always return the SOS card.
         """
-        from cards.stubs.sos_stubs import register_sos_stubs
-        from cards.registry import CardRegistry
+        from benchmarks.sos.workspace.cards.stubs.sos_stubs import register_sos_stubs
+        from benchmarks.sos.workspace.cards.registry import CardRegistry
 
         registry = CardRegistry()
         register_sos_stubs(registry)
@@ -411,8 +411,8 @@ class TestSosConftestIntegration:
         SPG cn 149-158 don't collide with SOS cn 1-271 in practice, but
         the mechanism must still ensure SPG uses only prefixed keys.
         """
-        from cards.stubs.sos_stubs import register_sos_stubs
-        from cards.registry import CardRegistry
+        from benchmarks.sos.workspace.cards.stubs.sos_stubs import register_sos_stubs
+        from benchmarks.sos.workspace.cards.registry import CardRegistry
 
         registry = CardRegistry()
         register_sos_stubs(registry)
@@ -450,12 +450,12 @@ class TestSosConftestIntegration:
         from tests.audited.sos.conftest import _load_sos_stubs_and_build_registry
 
         def fail_import_module(name):
-            if name == "cards.stubs.sos_stubs":
+            if name == "benchmarks.sos.workspace.cards.stubs.sos_stubs":
                 raise ImportError("Simulated: stubs not available")
             return importlib.import_module(name)
 
         # Remove cached module and patch importlib.import_module
-        monkeypatch.delitem(sys.modules, "cards.stubs.sos_stubs", raising=False)
+        monkeypatch.delitem(sys.modules, "benchmarks.sos.workspace.cards.stubs.sos_stubs", raising=False)
         monkeypatch.setattr(
             "tests.audited.sos.conftest.importlib.import_module",
             fail_import_module,

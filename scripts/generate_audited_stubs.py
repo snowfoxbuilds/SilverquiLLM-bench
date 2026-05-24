@@ -2,7 +2,7 @@
 """Generate minimal stub card classes for all SOS Draft Set cards.
 
 Reads ``benchmarks/sos/data/sos.json`` and generates
-``cards/stubs/sos_stubs.py`` containing one stub class per card plus a
+``benchmarks/sos/workspace/cards/stubs/sos_stubs.py`` containing one stub class per card plus a
 ``register_sos_stubs(registry)`` function.
 
 Usage:
@@ -193,7 +193,7 @@ def generate_stubs(sos_data: list[dict]) -> str:
     lines.append("from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Supertype")
     lines.append("")
     lines.append("if TYPE_CHECKING:")
-    lines.append("    from cards.registry import CardRegistry")
+    lines.append("    from benchmarks.sos.workspace.cards.registry import CardRegistry")
     lines.append("")
     lines.append("")
 
@@ -320,7 +320,7 @@ def generate_stubs(sos_data: list[dict]) -> str:
     lines.append("")
     lines.append("def register_sos_stubs(registry: CardRegistry) -> None:")
     lines.append('    """Register all SOS Draft Set stub cards with *registry*."""')
-    lines.append("    from cards.registry import CardMetadata")
+    lines.append("    from benchmarks.sos.workspace.cards.registry import CardMetadata")
     lines.append("")
     lines.append("    for (name, impl_class, mana_cost_str, type_line, power,")
     lines.append("         toughness, colors, keywords, rarity, set_code, collector_number) in _STUB_CARDS:")
@@ -371,7 +371,7 @@ def main() -> None:
 
     source = generate_stubs(sos_data)
 
-    output_path = PROJECT_ROOT / "cards" / "stubs" / "sos_stubs.py"
+    output_path = PROJECT_ROOT / "benchmarks" / "sos" / "workspace" / "cards" / "stubs" / "sos_stubs.py"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(source)
     print(f"Generated {output_path} ({len(sos_data)} stub classes)")

@@ -28,11 +28,11 @@ import types
 from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-_FDN_CARDS_DIR = _PROJECT_ROOT / "cards" / "fdn"
+_FDN_CARDS_DIR = _PROJECT_ROOT / "benchmarks" / "sos" / "workspace" / "cards" / "fdn"
 
 # Maps collector-directory names to card names for cards whose registry
 # metadata has an empty collector_number (basic lands).  The directory
-# names mirror the corresponding cards/fdn/ subdirectories.
+# names mirror the corresponding benchmarks/sos/workspace/cards/fdn/ subdirectories.
 _COLLECTOR_DIR_OVERRIDES: dict[str, str] = {
     "fdn_272": "Plains",
     "fdn_274": "Island",
@@ -70,10 +70,10 @@ def _build_registry():
 
     Registers all five basic lands first (with empty collector_number so
     the override mechanism is needed for 001–005).  Then scans
-    ``cards/fdn/`` to register all FDN cards using minimal stubs for
+    ``benchmarks/sos/workspace/cards/fdn/`` to register all FDN cards using minimal stubs for
     cards whose card_impl.py cannot be imported.
     """
-    from cards.registry import CardMetadata, CardRegistry
+    from benchmarks.sos.workspace.cards.registry import CardMetadata, CardRegistry
     from benchmarks.sos.workspace.engine.basic_lands import register_basic_lands
     from benchmarks.sos.workspace.engine.card import CardImpl
 

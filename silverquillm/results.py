@@ -163,7 +163,7 @@ def generate_run_summary(
     status_map = _load_status_map(run_dir)
     eval_result = _load_eval_result(run_dir)
 
-    # ---- Build per-card entries from cards/ directory ----
+    # ---- Build per-card entries from benchmarks/sos/workspace/cards/ directory ----
     per_card: list[dict] = []
     cards_dir = run_dir / "cards"
 

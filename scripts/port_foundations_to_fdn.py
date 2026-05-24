@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Port implemented card classes from cards/foundations/ to cards/fdn/.
+"""Port implemented card classes from benchmarks/sos/workspace/cards/foundations/ to benchmarks/sos/workspace/cards/fdn/.
 
 Scans all cards/foundations/*.py files, extracts card class definitions,
 matches them against cards/fdn/*/card_spec.json by card name, and

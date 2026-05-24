@@ -40,7 +40,7 @@ def _get_real_sos_collector_numbers() -> list[str]:
 
     load_all_card_specs uses directory name as collector_number, so we mirror that.
     """
-    sos_dir = _REPO_ROOT / "cards" / "sos"
+    sos_dir = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards" / "sos"
     result = []
     for d in sorted(sos_dir.iterdir()):
         spec = d / "card_spec.json"
@@ -51,7 +51,7 @@ def _get_real_sos_collector_numbers() -> list[str]:
 
 def _get_json_collector_number(dir_name: str) -> str:
     """Read the collector_number field from the card_spec.json for a given dir."""
-    spec_path = _REPO_ROOT / "cards" / "sos" / dir_name / "card_spec.json"
+    spec_path = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards" / "sos" / dir_name / "card_spec.json"
     with open(spec_path) as f:
         return json.load(f)["collector_number"]
 

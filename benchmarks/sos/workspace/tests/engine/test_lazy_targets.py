@@ -111,7 +111,7 @@ class TestLazyTargetFilter:
     def test_keyword_based_filter_sees_updated_keywords(self) -> None:
         """If a creature gains/loses flying after filter creation, the
         filter should see the updated keywords."""
-        from cards.fdn.fdn_214.card_impl import BrokenWings
+        from benchmarks.sos.workspace.cards.fdn.fdn_214.card_impl import BrokenWings
 
         game = _make_game()
         p1, p2 = game.players
@@ -135,7 +135,7 @@ class TestLazyTargetFilter:
     def test_power_based_filter_sees_updated_power(self) -> None:
         """If a creature's power changes after filter creation, the
         filter should see the updated power."""
-        from cards.fdn.fdn_143.card_impl import MakeYourMove
+        from benchmarks.sos.workspace.cards.fdn.fdn_143.card_impl import MakeYourMove
 
         game = _make_game()
         p1, p2 = game.players
@@ -158,7 +158,7 @@ class TestLazyTargetFilter:
         """BanishingLight targets 'nonland permanent an opponent controls'.
         If control of a permanent changes after filter creation, the filter
         should reflect the new controller."""
-        from cards.fdn.fdn_138.card_impl import BanishingLight
+        from benchmarks.sos.workspace.cards.fdn.fdn_138.card_impl import BanishingLight
 
         game = _make_game()
         p1, p2 = game.players

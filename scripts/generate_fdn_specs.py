@@ -6,8 +6,8 @@ Fetches authoritative card data from Scryfall for the FDN Draft Set:
   - FDN Special Guests (SPG): collector numbers 74–83
 
 For each card, creates:
-  cards/fdn/{dir_key}/card_spec.json   — oracle data + complexity tier
-  cards/fdn/{dir_key}/card_impl.py     — empty class skeleton (template)
+  benchmarks/sos/workspace/cards/fdn/{dir_key}/card_spec.json   — oracle data + complexity tier
+  benchmarks/sos/workspace/cards/fdn/{dir_key}/card_impl.py     — empty class skeleton (template)
 
 Directory key rules (per KEY_DECISIONS.md):
   - FDN cards:  {collector_number}
@@ -32,7 +32,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from silverquillm.card_spec import card_name_to_class_name
 
-OUTPUT_DIR = PROJECT_ROOT / "cards" / "fdn"
+OUTPUT_DIR = PROJECT_ROOT / "benchmarks" / "sos" / "workspace" / "cards" / "fdn"
 CACHE_DIR = PROJECT_ROOT / "data" / "sets"
 
 # FDN Draft Set collector-number ranges

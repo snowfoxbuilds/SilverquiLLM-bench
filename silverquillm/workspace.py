@@ -94,7 +94,7 @@ def stage_workspace(
     tuple[Path, Path]
         ``(workspace_path, output_path)`` — both guaranteed to exist.
     """
-    cards_dir = _REPO_ROOT / "cards"
+    cards_dir = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards"
     engine_dir = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "engine"
     workspace = output_dir / "workspace"
     output = output_dir / "output"
