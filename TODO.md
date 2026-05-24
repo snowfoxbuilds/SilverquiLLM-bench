@@ -16,14 +16,12 @@ Reference: agent thinking trace in `docker/local-pi-blind/results/sos-2026-05-23
 
 ---
 
-- [ ] **Fill in the rulebook**
-  Detail: `benchmarks/sos/data/comprehensive_rules.txt` is the rulebook source of truth. It currently starts with "Magic: The Gathering Comprehensive Rules (Stub)" and is ~5 KB of sparse, hand-written placeholder text with skipping section numbers (605 → 608, 702.13 → 702.15 → 702.19, etc.). Replace it with the actual WotC Comprehensive Rules text (~500 KB plaintext, freely published). At minimum, every keyword and ability word used by SOS cards must be defined: Surveil, Flashback, Paradigm, Prepared (currently a one-sentence stub), plus anything else the SOS spec uses.
+- [ ] **Wire up the rulebook**
+  Detail: `benchmarks/sos/data/comprehensive_rules.txt` is the rulebook source of truth. 
 
   Wiring fix required: `silverquillm/workspace.py` currently has `_RULEBOOK_SRC = "docs/rulebook.md"`. That path is wrong — `docs/` is for repo-level docs, not workspace-staging sources, and the file does not exist on main, which is why the agent sees the staged stub. Change the constant to `_RULEBOOK_SRC = "benchmarks/sos/data/comprehensive_rules.txt"`. After this change, the staging code's existing "copy if exists, else stub" logic picks up the real rulebook automatically. Do NOT create or reference `docs/rulebook.md` — it is not part of the design.
 
-  Files: `benchmarks/sos/data/comprehensive_rules.txt` (replace stub with real WotC text), `silverquillm/workspace.py` (update `_RULEBOOK_SRC` constant).
-
-  Testability: `wc -c benchmarks/sos/data/comprehensive_rules.txt` should be >400 KB. `grep -i 'surveil\|flashback\|paradigm' benchmarks/sos/data/comprehensive_rules.txt` should return real rules definitions, not one-line stubs. After running `silverquillm run --cards 1`, `workspace/rulebook.md` in the staged output should contain the WotC text, not the "Stub — rulebook not yet generated" placeholder.
+  Files: `benchmarks/sos/data/comprehensive_rules.txt`, `silverquillm/workspace.py` (update `_RULEBOOK_SRC` constant).
 
 - [ ] **`--cards`****-aware status / summary / postmortem plumbing**
   Detail: When a run is invoked with `--cards 1,7,13,44,97`, the run artifacts should reflect *that selection*, not the entire set. Concrete gaps observed in `sos-2026-05-23T07-13/`:
