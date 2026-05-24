@@ -519,6 +519,8 @@ def run(
 
         # Run container via ContainerLifecycle
         container_name = f"sqm-{run_name}"
+        run_dir = results_dir / run_name
+        run_dir.mkdir(parents=True, exist_ok=True)
         lifecycle = ContainerLifecycle(
             image=image,
             container_name=container_name,
@@ -527,6 +529,7 @@ def run(
             hard_timeout=timeout,
             hang_timeout=hang_timeout,
             env_args=_api_key_env_args(),
+            run_dir=run_dir,
         )
 
         click.echo(f"Running container: {container_name}")

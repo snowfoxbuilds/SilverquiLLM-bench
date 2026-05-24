@@ -14,6 +14,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from silverquillm.telemetry import FastTelemetry
+
 # ANSI color helpers
 _GRAY = "\033[90m"
 _BLUE = "\033[34m"
@@ -44,6 +46,7 @@ class ContainerLifecycle:
         hang_timeout: int = 900,
         env_args: list[str] | None = None,
         snapshot_callback: callable | None = None,
+        run_dir: Path | None = None,
     ):
         self.image = image
         self.container_name = container_name
@@ -53,6 +56,7 @@ class ContainerLifecycle:
         self.hang_timeout = hang_timeout
         self.env_args = env_args or []
         self.snapshot_callback = snapshot_callback
+        self.run_dir = Path(run_dir) if run_dir else None
 
         # Pipe drain target files
         self._stdout_path = self.output / "docker_stdout.tmp"
@@ -98,6 +102,16 @@ class ContainerLifecycle:
         stdout_thread.start()
         stderr_thread.start()
 
+        # Start fast-tier (1 Hz) telemetry if run_dir is available
+        fast_telemetry: FastTelemetry | None = None
+        if self.run_dir:
+            fast_telemetry = FastTelemetry(
+                output_dir=self.output,
+                run_dir=self.run_dir,
+                workspace_dir=self.workspace,
+            )
+            fast_telemetry.start()
+
         # Initialize tracking state
         start = time.monotonic()
         last_activity = start
@@ -142,6 +156,10 @@ class ContainerLifecycle:
         except KeyboardInterrupt:
             self._docker_stop()
             timeout_reason = None
+
+        # Stop fast-tier telemetry
+        if fast_telemetry:
+            fast_telemetry.stop()
 
         # Wait for pipe readers to finish
         stdout_thread.join(timeout=10)

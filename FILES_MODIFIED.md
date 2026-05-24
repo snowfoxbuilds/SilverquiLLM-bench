@@ -30,3 +30,9 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `silverquillm/workspace.py` — Appended engine-extension permission sentence to `_PROMPT_TEXT` constant
+
+## Item 6: Add fast-tier (1 Hz) command-line telemetry
+
+### Implementation
+- `silverquillm/telemetry.py` — New module with FastTelemetry class: 1 Hz poll loop tailing progress.jsonl/system.log and stat-checking card/engine mtimes, writing to per-channel files
+- `silverquillm/runner.py` — Integrated FastTelemetry into ContainerLifecycle via optional run_dir parameter; starts on container launch, stops on exit

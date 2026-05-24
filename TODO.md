@@ -87,7 +87,7 @@ Reference: [RUN-ARTIFACTS-AND-TELEMETRY.md](http://run-artifacts-and-telemetry.m
 
 ---
 
-- [ ] **Add fast-tier (1 Hz) command-line telemetry**
+- [x] **Add fast-tier (1 Hz) command-line telemetry**
   Detail: Introduce a second telemetry tier that runs at 1 Hz (or on FS events via `watchdog`/`inotify` for zero-poll). Reads only cheap signals — no Git operations, no full-workspace stat sweeps. Sources:
 
   1. **Tail ****`/output/progress.jsonl`** — append-only file the agent writes when it completes a card. Emit each new line as a `[progress]` event.
