@@ -16,3 +16,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `benchmarks/sos/workspace/tests/__init__.py` — Empty init for tests package discovery
 - `benchmarks/sos/workspace/tests/engine/__init__.py` — Empty init for tests/engine package discovery
 
+## Item 2: Move rulebook.md into the workspace
+
+### Implementation
+- `benchmarks/sos/workspace/rulebook.md` — Comprehensive MTG rules reference created in workspace (no prior file existed to move)
+
