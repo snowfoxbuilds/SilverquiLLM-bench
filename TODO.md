@@ -35,7 +35,7 @@ Reference: agent thinking trace in `docker/local-pi-blind/results/sos-2026-05-23
 
   Testability: after `silverquillm run --cards 1`, the staged workspace root contains exactly `prompt.md`, `run_manifest.json`, `rulebook.md` (full WotC text, `wc -c` > 400 KB), `rules_overview.md`, `test_utils.md`, plus the `engine/`, `tests/engine/`, and `cards/` trees. No `engine_api.md` and no `base_classes.py`. `grep -i 'engine_api\|base_classes' workspace/prompt.md` returns nothing.
 
-- [ ] **`--cards`****-aware status / summary / postmortem plumbing**
+- [x] **`--cards`**-aware status / summary / postmortem plumbing**
   Detail: When a run is invoked with `--cards 1,7,13,44,97`, the run artifacts should reflect *that selection*, not the entire set. Concrete gaps observed in `sos-2026-05-23T07-13/`:
 
   1. **`status.json`**: lists all 339 set cards, with 334 marked `no_output`. Should list only the 5 requested cards.

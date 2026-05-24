@@ -38,3 +38,9 @@ Persistent architectural and convention decisions across runs.
 - **Decision**: All workspace reference material (rulebook, rules_overview, test_utils.md) raises `FileNotFoundError` if source is missing. No stub fallbacks.
 - **Reasoning**: Silent stubs waste agent budget on useless content and mask misconfigurations.
 - **Impact**: `silverquillm/workspace.py` — `_copy_reference_docs()` and rulebook/overview staging.
+
+## json_collector_number field in card specs
+- **Context**: `load_all_card_specs()` overrides `collector_number` with directory name. CLI `--cards` filter uses numeric collector numbers from the user.
+- **Decision**: Added `json_collector_number` field preserving the original JSON value before directory-name override. Filter logic checks both fields for dual-match.
+- **Reasoning**: Preserves backward compat (existing code uses `collector_number` as dir name) while enabling numeric filtering from CLI.
+- **Impact**: `silverquillm/card_loader.py`, `silverquillm/cli.py`.

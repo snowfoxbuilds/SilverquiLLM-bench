@@ -150,8 +150,15 @@ def _harvest_results(
     run_name: str,
     timed_out: bool = False,
     timeout_reason: str | None = None,
+    card_filter: list[str] | None = None,
 ) -> Path:
     """Copy artifacts from workspace/output into docker/<image_dir>/results/<run_name>/.
+
+    Parameters
+    ----------
+    card_filter:
+        When set, only harvest cards whose collector numbers (normalized via
+        ``str(int(x))``) are in this list. When ``None``, harvest all cards.
 
     Returns the run results directory path.
     """
@@ -169,8 +176,20 @@ def _harvest_results(
     cards_dir = _REPO_ROOT / "cards"
     specs = load_all_card_specs(cards_dir, "sos")
 
+    # Normalize filter for comparison
+    filter_set: set[str] | None = None
+    if card_filter is not None:
+        filter_set = {str(int(c)) if c.isdigit() else c for c in card_filter}
+
     for spec in specs:
-        cn = spec["collector_number"]
+        cn = spec["collector_number"]  # directory name
+        json_cn = spec.get("json_collector_number", cn)
+        normalized_cn = str(int(json_cn)) if json_cn.isdigit() else json_cn
+
+        # Skip cards not in the filter (match on json collector_number or dir_name)
+        if filter_set is not None and normalized_cn not in filter_set and cn not in filter_set:
+            continue
+
         card_workspace_dir = sos_dir / cn
 
         if not card_workspace_dir.exists():
@@ -212,7 +231,7 @@ def _harvest_results(
             shutil.copy2(src, run_dir / src.name)
 
     # Per-card status
-    _write_card_statuses(workspace, run_dir, timed_out)
+    _write_card_statuses(workspace, run_dir, timed_out, card_filter=filter_set)
 
     # Materialize workspace_final/ snapshot
     workspace_final = run_dir / "workspace_final"
@@ -236,14 +255,38 @@ def _write_card_statuses(
     workspace: Path,
     run_dir: Path,
     timed_out: bool,
+    card_filter: set[str] | None = None,
 ) -> None:
-    """Determine per-card status and write status.json."""
+    """Determine per-card status and write status.json.
+
+    Parameters
+    ----------
+    card_filter:
+        When set, only include cards whose normalized collector numbers are in
+        this set. When ``None``, include all cards from the set.
+    """
     cards_dir = _REPO_ROOT / "cards"
     specs = load_all_card_specs(cards_dir, "sos")
     statuses: dict[str, str] = {}
 
     for spec in specs:
-        cn = spec["collector_number"]
+        cn = spec["collector_number"]  # directory name
+        json_cn = spec.get("json_collector_number", cn)
+        normalized_cn = str(int(json_cn)) if json_cn.isdigit() else json_cn
+
+        # Skip cards not in the filter (match on json collector_number or dir_name)
+        if card_filter is not None:
+            matched_by_dir = cn in card_filter
+            matched_by_cn = normalized_cn in card_filter
+            if not matched_by_dir and not matched_by_cn:
+                continue
+            # When matched only by numeric collector_number (not dir name),
+            # skip if workspace dir doesn't exist (avoids duplicates)
+            if not matched_by_dir and matched_by_cn:
+                workspace_card_dir = workspace / "cards" / "sos" / cn
+                if not workspace_card_dir.exists():
+                    continue
+
         # Compare workspace card_impl.py against the original template
         original = cards_dir / "sos" / cn / "card_impl.py"
         workspace_impl = workspace / "cards" / "sos" / cn / "card_impl.py"
@@ -265,14 +308,140 @@ def _write_card_statuses(
 # ---------------------------------------------------------------------------
 
 
-def _evaluate_results(run_dir: Path) -> None:
-    """Stub for silverquillm.evaluator.evaluate() — TODO Item 8."""
-    click.echo("TODO: evaluate results (Item 8)")
+def _evaluate_results(run_dir: Path, card_filter: list[str] | None = None) -> None:
+    """Run post-eval scoring on completed cards and write per-card result.json and postmortem.jsonl.
+
+    Parameters
+    ----------
+    run_dir:
+        Path to the run results directory.
+    card_filter:
+        When set, only evaluate cards in this list. When ``None``, evaluate all
+        completed cards.
+    """
+    from silverquillm.evaluator import evaluate, CardResult
+    from dataclasses import asdict
+
+    cards_dir = _REPO_ROOT / "cards"
+    engine_dir = _REPO_ROOT / "engine"
+
+    try:
+        full_result = evaluate(run_dir, cards_dir, engine_dir)
+    except Exception as exc:
+        click.echo(f"Evaluation failed: {exc}", err=True)
+        return
+
+    # Normalize filter for comparison
+    filter_set: set[str] | None = None
+    if card_filter is not None:
+        filter_set = {str(int(c)) if c.isdigit() else c for c in card_filter}
+
+    # Write per-card result.json and postmortem.jsonl
+    cards_out = run_dir / "cards"
+    for cn, card_result in full_result.sos_results.items():
+        normalized_cn = str(int(cn)) if cn.isdigit() else cn
+        if filter_set is not None and normalized_cn not in filter_set:
+            continue
+
+        card_dir = cards_out / cn
+        card_dir.mkdir(parents=True, exist_ok=True)
+
+        # Write result.json
+        result_data = {
+            "tests_passed": card_result.tests_passed,
+            "tests_failed": card_result.tests_failed,
+            "tests_total": card_result.tests_total,
+            "pass_rate": card_result.pass_rate,
+        }
+        (card_dir / "result.json").write_text(
+            json.dumps(result_data, indent=2) + "\n", encoding="utf-8"
+        )
+
+        # Write postmortem.jsonl
+        postmortem_entries = []
+        if card_result.errors:
+            for error in card_result.errors:
+                postmortem_entries.append(json.dumps({
+                    "collector_number": cn,
+                    "type": "error",
+                    "message": error,
+                }))
+        else:
+            postmortem_entries.append(json.dumps({
+                "collector_number": cn,
+                "type": "summary",
+                "tests_passed": card_result.tests_passed,
+                "tests_failed": card_result.tests_failed,
+                "tests_total": card_result.tests_total,
+            }))
+        (card_dir / "postmortem.jsonl").write_text(
+            "\n".join(postmortem_entries) + "\n", encoding="utf-8"
+        )
+
+    # Write eval_result.json at run level
+    eval_result_data = {
+        "sos_results": {
+            cn: {
+                "tests_passed": r.tests_passed,
+                "tests_failed": r.tests_failed,
+                "tests_total": r.tests_total,
+            }
+            for cn, r in full_result.sos_results.items()
+        },
+        "fdn_results": {
+            cn: {
+                "tests_passed": r.tests_passed,
+                "tests_failed": r.tests_failed,
+                "tests_total": r.tests_total,
+            }
+            for cn, r in full_result.fdn_results.items()
+        },
+        "engine_result": {
+            "tests_passed": full_result.engine_result.tests_passed,
+            "tests_failed": full_result.engine_result.tests_failed,
+            "tests_total": full_result.engine_result.tests_total,
+        },
+    }
+    (run_dir / "eval_result.json").write_text(
+        json.dumps(eval_result_data, indent=2) + "\n", encoding="utf-8"
+    )
+
+    click.echo(f"Evaluation complete: {len(full_result.sos_results)} SOS cards scored")
 
 
-def _generate_run_summary(run_dir: Path) -> None:
-    """Stub for silverquillm.results.generate_run_summary() — TODO Item 9."""
-    click.echo("TODO: generate run summary (Item 9)")
+def _generate_run_summary(
+    run_dir: Path,
+    image_name: str,
+    card_filter: list[str] | None = None,
+) -> None:
+    """Generate run_summary.json for the completed run.
+
+    Parameters
+    ----------
+    run_dir:
+        Path to the run results directory.
+    image_name:
+        Docker image name used for the run.
+    card_filter:
+        When set, included in run_summary.json as the ``card_filter`` field.
+    """
+    from silverquillm.results import generate_run_summary
+
+    summary = generate_run_summary(run_dir, image_name)
+
+    # Inject card_filter field into the summary
+    if card_filter is not None:
+        summary["card_filter"] = card_filter
+    else:
+        summary["card_filter"] = None
+
+    # Re-write the summary with card_filter included
+    summary_path = run_dir / "run_summary.json"
+    summary_path.write_text(
+        json.dumps(summary, indent=2) + "\n", encoding="utf-8"
+    )
+
+    click.echo(f"Run summary written to: {summary_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -376,12 +545,13 @@ def run(
             workspace, output, results_dir, run_name,
             timed_out=result.timed_out,
             timeout_reason=result.timeout_reason,
+            card_filter=card_filter,
         )
         click.echo(f"Results saved to: {run_dir}")
 
-        # Evaluate and summarize (stubs)
-        _evaluate_results(run_dir)
-        _generate_run_summary(run_dir)
+        # Evaluate and summarize
+        _evaluate_results(run_dir, card_filter=card_filter)
+        _generate_run_summary(run_dir, image_name=image, card_filter=card_filter)
 
         click.echo(f"Run complete: {run_name}")
 

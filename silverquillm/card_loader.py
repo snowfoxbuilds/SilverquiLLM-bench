@@ -264,6 +264,8 @@ def load_all_card_specs(cards_dir: Path, set_code: str) -> list[dict]:
         if spec_file.exists():
             with open(spec_file, "r", encoding="utf-8") as f:
                 spec = json.load(f)
+            # Store original JSON collector_number for filter matching
+            spec["json_collector_number"] = spec.get("collector_number", child.name)
             # Always use directory name as collector_number (canonical in unified layout)
             spec["collector_number"] = child.name
             if not spec.get("set_code"):

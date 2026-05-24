@@ -11,3 +11,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `silverquillm/workspace.py` — Changed _RULEBOOK_SRC to comprehensive_rules.txt, added _RULES_OVERVIEW_SRC, reduced _REFERENCE_DOCS to only test_utils.md, removed stub fallback (hard error for all sources), updated _PROMPT_TEXT
 - `docs/specs/WORKSPACE-CONTRACT.md` — Added rules_overview.md, removed engine_api.md and base_classes.py from workspace layout
 
+## Item 2: --cards-aware status / summary / postmortem plumbing
+
+### Tests
+- `tests/test_cli_cards_filter.py` — Validates card_filter in _write_card_statuses, _harvest_results, _evaluate_results, _generate_run_summary with collector_number normalization
+
+### Implementation
+- `silverquillm/cli.py` — Added card_filter param to _harvest_results/_write_card_statuses/_evaluate_results/_generate_run_summary, filter compares against spec collector_number with str(int(x)) normalization for numeric values
+- `silverquillm/evaluator.py` — Added CardResult, EngineResult, FullEvalResult dataclasses and evaluate() function
+
