@@ -340,6 +340,57 @@ class TestChannelFileMapping:
 
 
 # ---------------------------------------------------------------------------
+# Bug regressions
+# ---------------------------------------------------------------------------
+
+
+class TestBugRegressions:
+    """Regression tests for specific bugs fixed in the tabbed log viewer."""
+
+    # Bug 1: only the `system` tab appears in live mode ----------------------
+
+    def test_live_mode_includes_all_channels_when_only_system_exists(self, tmp_path: Path) -> None:
+        """live=True must include every CHANNEL_ORDER entry even if only system.log exists."""
+        (tmp_path / "system.log").write_text("hello\n")
+        viewer = LogsViewer(tmp_path, live=True)
+        assert viewer.channels == CHANNEL_ORDER
+
+    def test_archived_mode_shows_only_existing_channels(self, tmp_path: Path) -> None:
+        """live=False must only include channels whose files are present."""
+        (tmp_path / "system.log").write_text("hello\n")
+        viewer = LogsViewer(tmp_path, live=False)
+        assert viewer.channels == ["system"]
+
+    # Bug 2: ↑ flips footer but doesn't scroll --------------------------------
+
+    def test_scroll_up_stays_in_tail_when_content_fits(self, tmp_path: Path) -> None:
+        """_scroll_up must not enter SCROLLBACK when all lines fit in the viewport."""
+        (tmp_path / "system.log").write_text("")
+        viewer = LogsViewer(tmp_path, live=False)
+        viewer.rows = 13   # panel_height = 10
+        viewer.cols = 80
+        viewer.lines["system"] = ["line"] * 2
+        viewer._render = lambda: None
+        viewer._scroll_up()
+        assert viewer.scroll_offset == -1
+
+    def test_scroll_up_works_for_long_content(self, tmp_path: Path) -> None:
+        """_scroll_up enters SCROLLBACK and scrolls correctly when content overflows."""
+        (tmp_path / "system.log").write_text("")
+        viewer = LogsViewer(tmp_path, live=False)
+        viewer.rows = 13   # panel_height = 10
+        viewer.cols = 80
+        viewer.lines["system"] = ["line"] * 100
+        viewer._render = lambda: None
+
+        viewer._scroll_up()
+        assert viewer.scroll_offset == 89  # 100 - 10 - 1
+
+        viewer._scroll_up(amount=1000)
+        assert viewer.scroll_offset == 0  # clamped to top
+
+
+# ---------------------------------------------------------------------------
 # Auto-detect live vs archived
 # ---------------------------------------------------------------------------
 

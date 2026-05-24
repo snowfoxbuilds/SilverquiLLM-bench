@@ -81,25 +81,16 @@ class LogsViewer:
         self.out: TextIO = sys.stdout
         self.running = False
 
-        # Discover available channels (only those with existing files)
         self.channels: list[str] = []
         self.channel_files: dict[str, Path] = {}
         for ch in CHANNEL_ORDER:
             fname = CHANNEL_FILES.get(ch)
-            if fname:
-                fpath = run_dir / fname
-                if fpath.exists():
-                    self.channels.append(ch)
-                    self.channel_files[ch] = fpath
-
-        if not self.channels:
-            # Fall back to all channels even if files don't exist yet (live mode)
-            if live:
-                for ch in CHANNEL_ORDER:
-                    fname = CHANNEL_FILES.get(ch)
-                    if fname:
-                        self.channels.append(ch)
-                        self.channel_files[ch] = run_dir / fname
+            if not fname:
+                continue
+            fpath = run_dir / fname
+            if live or fpath.exists():
+                self.channels.append(ch)
+                self.channel_files[ch] = fpath
 
         # State
         self.active_tab: int = 0
@@ -223,10 +214,14 @@ class LogsViewer:
         """Enter scrollback or scroll up."""
         lines = self.lines.get(self.active_channel, [])
         ph = self.panel_height
+        if len(lines) <= ph:
+            return  # nothing to scroll into; stay in TAIL
         if self.scroll_offset == -1:
-            # Enter scrollback from end
             self.scroll_offset = max(0, len(lines) - ph)
-        self.scroll_offset = max(0, self.scroll_offset - amount)
+        new_offset = max(0, self.scroll_offset - amount)
+        if new_offset == self.scroll_offset:
+            return  # already at top of history
+        self.scroll_offset = new_offset
         self._render()
 
     def _scroll_down(self, amount: int = 1) -> None:

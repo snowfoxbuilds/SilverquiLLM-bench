@@ -16,20 +16,32 @@ pytest tests/audited/fdn tests/engine
 
 # Docker
 docker build -t silverquillm-local-pi-blind:latest docker/local-pi-blind/
+docker build -t silverquillm-copilot-gpt-4.1:latest docker/copilot-gpt-4.1/
+docker build -t silverquillm-copilot-gpt-5.4-mini:latest docker/copilot-gpt-5.4-mini/
+docker build -t silverquillm-copilot-gpt-5.4:latest docker/copilot-gpt-5.4/
 
 # Smoke
 silverquillm smoke --image silverquillm-local-pi-blind:latest
+silverquillm smoke --image silverquillm-copilot-gpt-4.1:latest
+
+# Validation
+silverquillm run --image silverquillm-local-pi-blind:latest --cards 1,7,13,44,97 --timeout 36000
+silverquillm run --image silverquillm-copilot-gpt-4.1:latest --cards 1,7,13,44,97 --timeout 36000
+silverquillm run --image silverquillm-copilot-gpt-5.4-mini:latest --timeout 360000
+silverquillm run --image silverquillm-copilot-gpt-5.4:latest --timeout 360000
+
+silverquillm run \
+  --image silverquillm-local-pi-blind:latest \
+  --timeout 600 
+
+# TUI
+
+silverquillm logs --run sos-copilot-gpt-4.1-2026-05-24T06-51 
 
 # Test inside docker
 docker run --rm -it --network=host   -v /tmp/test-workspace:/workspace   -v /tmp/test-output:/output   --entrypoint /bin/bash   silverquillm-local-pi-blind:latest
 node /app/entrypoint.mjs 2>&1
 
-# Validation
-silverquillm run --image silverquillm-local-pi-blind:latest --cards 1,7,13,44,97 --timeout 36000
-
-silverquillm run \
-  --image silverquillm-local-pi-blind:latest \
-  --timeout 600 
 
 ## Upload results
 git add -f docker/local-pi-blind/results/sos-2026-05-12T01-59/

@@ -517,16 +517,16 @@ def main() -> None:
 )
 @click.option(
     "--hang-timeout",
-    default=900,
+    default=1800,
     type=int,
-    help="Hang timeout in seconds (default: 900)",
+    help="Hang timeout in seconds (default: 1800)",
 )
 def run(
     image: str,
     timeout: int,
     results_dir: Path | None,
     cards: str | None,
-    hang_timeout: int = 900,
+    hang_timeout: int = 1800,
 ) -> None:
     """Run the full benchmark workload in a Docker container."""
     # Parse --cards into a list of collector numbers
