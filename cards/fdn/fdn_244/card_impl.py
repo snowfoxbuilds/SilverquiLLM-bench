@@ -43,9 +43,9 @@ class Progenitus(Creature):
     def register_replacement_effects(self, game: 'GameState') -> None:
         """Register graveyard-shuffle replacement effect.
 
-        Registered for both ``"move_to_graveyard"`` (direct callers) and
-        ``"creature_dies"`` / ``"sacrifice"`` so the engine's zone-move
-        pipeline can also consult this replacement.
+        Registers a single :class:`~engine.events.MoveToGraveyardReplacementEvent`
+        handler; the engine's zone-move pipeline dispatches subclass events
+        (creature_dies, sacrifice, etc.) to this parent-type handler automatically.
         """
         source = self
 

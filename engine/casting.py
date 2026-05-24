@@ -347,7 +347,7 @@ def cast_spell_free(
                 raise CastingError(
                     f"Cannot cast {card.name!r} — target has protection from this spell"
                 )
-    except (CastingError, Exception) as exc:
+    except Exception as exc:
         # Rollback: move card from stack zone back to source zone
         stack_zone.remove(card)
         source_zone_container.add(card)

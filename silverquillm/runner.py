@@ -159,10 +159,10 @@ class ContainerLifecycle:
         except KeyboardInterrupt:
             self._docker_stop()
             timeout_reason = None
-
-        # Stop fast-tier telemetry
-        if fast_telemetry:
-            fast_telemetry.stop()
+        finally:
+            # Stop fast-tier telemetry
+            if fast_telemetry:
+                fast_telemetry.stop()
 
         # Wait for pipe readers to finish
         stdout_thread.join(timeout=10)
