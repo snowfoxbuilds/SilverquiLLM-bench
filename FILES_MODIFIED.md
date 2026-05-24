@@ -36,3 +36,9 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `silverquillm/telemetry.py` — New module with FastTelemetry class: 1 Hz poll loop tailing progress.jsonl/system.log and stat-checking card/engine mtimes, writing to per-channel files
 - `silverquillm/runner.py` — Integrated FastTelemetry into ContainerLifecycle via optional run_dir parameter; starts on container launch, stops on exit
+
+## Item 7: Tabbed log viewer (live + archived modes)
+
+### Implementation
+- `silverquillm/logs_viewer.py` — New module: LogsViewer class with alt-screen, raw-mode, tab-per-channel TUI; stream_plain non-TTY fallback
+- `silverquillm/cli.py` — Added `logs` subcommand with --run, --live, --archived options and run directory discovery

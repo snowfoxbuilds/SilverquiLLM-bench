@@ -619,3 +619,62 @@ def smoke(image: str) -> None:
 
     finally:
         shutil.rmtree(staging_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# logs command
+# ---------------------------------------------------------------------------
+
+
+def _find_run_dir(run_name: str) -> Path | None:
+    """Find a run directory by name under docker/*/results/."""
+    docker_dir = _REPO_ROOT / "docker"
+    if not docker_dir.exists():
+        return None
+    for image_dir in docker_dir.iterdir():
+        if not image_dir.is_dir():
+            continue
+        results_dir = image_dir / "results"
+        if results_dir.exists():
+            candidate = results_dir / run_name
+            if candidate.is_dir():
+                return candidate
+    return None
+
+
+def _is_run_active(run_dir: Path) -> bool:
+    """Heuristic: a run is active if no run_summary.json exists yet."""
+    return not (run_dir / "run_summary.json").exists()
+
+
+@main.command()
+@click.option("--run", "run_name", required=True, help="Run name (e.g. sos-2026-05-23T07-13)")
+@click.option("--live", "force_live", is_flag=True, default=False, help="Force live tailing mode")
+@click.option("--archived", "force_archived", is_flag=True, default=False, help="Force archived (static) mode")
+def logs(run_name: str, force_live: bool, force_archived: bool) -> None:
+    """Open tabbed log viewer for a run's per-channel log files."""
+    from silverquillm.logs_viewer import run_viewer
+
+    run_dir = _find_run_dir(run_name)
+    if run_dir is None:
+        # Try as a direct path
+        candidate = Path(run_name)
+        if candidate.is_dir():
+            run_dir = candidate
+        else:
+            click.echo(f"Run not found: {run_name}", err=True)
+            raise SystemExit(1)
+
+    if force_live and force_archived:
+        click.echo("Cannot specify both --live and --archived", err=True)
+        raise SystemExit(1)
+
+    if force_live:
+        live = True
+    elif force_archived:
+        live = False
+    else:
+        # Auto-detect
+        live = _is_run_active(run_dir)
+
+    run_viewer(run_dir, live=live)

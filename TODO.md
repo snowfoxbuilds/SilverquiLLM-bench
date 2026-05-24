@@ -107,7 +107,7 @@ Reference: [RUN-ARTIFACTS-AND-TELEMETRY.md](http://run-artifacts-and-telemetry.m
 
   Testability: Run a real benchmark. Touch `workspace/cards/sos_1/card_impl.py` inside the container; confirm a `[edit]` line appears in the runner terminal within ~1s. Append a line to `/output/progress.jsonl`; confirm a `[progress]` line appears within ~1s. Confirm `snapshot_telemetry.jsonl` is still written every 60s with unchanged content.
 
-- [ ] **Tabbed log viewer (live + archived modes)**
+- [x] **Tabbed log viewer (live + archived modes)**
   Detail: A single CLI binary that opens a one-panel, tab-per-channel terminal viewer over the run's per-channel log files. Works during a live run (tails files) and for finished runs (static history with the same UX). Supersedes the earlier separate `logs --run` viewer, channel-toggles, and multi-pane dashboard items — the file-backed substrate from the item above makes one design serve both modes.
 
   Invocation:
