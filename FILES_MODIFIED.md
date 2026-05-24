@@ -25,3 +25,8 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `docs/specs/CARD-INTERFACE.md` — Rewrote Replacement Effects example to use typed event classes and game.replacement_manager.register() API
+
+## Item 5: Add engine-extension permission line to the agent prompt
+
+### Implementation
+- `silverquillm/workspace.py` — Appended engine-extension permission sentence to `_PROMPT_TEXT` constant

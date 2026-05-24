@@ -68,7 +68,7 @@ Reference: agent thinking trace in `docker/local-pi-blind/results/sos-2026-05-23
 
   Testability: After the fix, `grep -rn "event_type *= *['\"]" cards/fdn/ docs/specs/` should return zero matches (the migration script `migrate_events.py` can be re-run as a verification pass). Engine regression tests on `fdn_244` should pass unchanged after the rewrite.
 
-- [ ] **Add engine-extension permission line to the agent prompt**
+- [x] **Add engine-extension permission line to the agent prompt**
   Detail: Add to the user prompt (the one shipped to the agent container):
 
   > "You are expected to make changes to the engine to implement new mechanics. The existing code base may not be perfect, you are free to make changes that don't break current behavior."

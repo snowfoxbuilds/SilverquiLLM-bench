@@ -14,3 +14,9 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Decision**: Added `json_collector_number` field to preserve original JSON value; dual-match logic supports both `--cards 1` (numeric) and `--cards soa_1` (dir-name).
 - **Reasoning**: `card_loader.py` already overrides `collector_number` with directory name for filesystem operations. Adding a separate field is non-breaking.
 - **Impact**: `silverquillm/card_loader.py`, `silverquillm/cli.py`.
+
+## Item 5: Add engine-extension permission line to the agent prompt
+- **Context**: Reviewer flagged that tests don't cover the new sentence. Actually, `tests/test_prompt_content.py` (5 tests) already covers it — reviewer couldn't see the untracked file in `git diff HEAD`.
+- **Decision**: Accepted as-is. Coverage exists in `tests/test_prompt_content.py`.
+- **Reasoning**: False positive due to combined diff not including untracked new files.
+- **Impact**: None — no changes needed.

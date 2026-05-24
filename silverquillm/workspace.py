@@ -38,6 +38,8 @@ Refer to `rules_overview.md` for a compact rules skim (always read first) and \
 For engine API discovery, read the source modules directly — they have rich docstrings: \
 `engine/card.py`, `engine/events.py`, `engine/triggers.py`, \
 `engine/replacement_effects.py`, `engine/zones.py`.
+You are expected to make changes to the engine to implement new mechanics. The existing \
+code base may not be perfect, you are free to make changes that don't break current behavior.
 """
 
 # ---------------------------------------------------------------------------
