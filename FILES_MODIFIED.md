@@ -153,3 +153,10 @@ tests/test_snapshot_callback.py — snapshot_telemetry.jsonl writing and wiring 
 tests/test_cli_lifecycle_integration.py — ContainerLifecycle integration (hang-timeout, harvest, lifecycle usage)
 Implementation
 silverquillm/cli.py — defined _snapshot_callback closure with _display.emit_snapshot() support, fixed hang_timeout default to 900
+
+Item 13: Tee runner click.echo into runner.log and runner_errors.log
+Tests
+tests/test_logs_viewer.py — Log viewer tests (pre-existing, verify no regressions)
+tests/test_runner.py — Runner tests (pre-existing, verify no regressions)
+Implementation
+silverquillm/cli.py — Added _runner_log() helper with ISO-8601 timestamped file logging; replaced ~15 bare click.echo calls in run/smoke commands

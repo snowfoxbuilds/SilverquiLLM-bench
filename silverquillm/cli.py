@@ -67,6 +67,41 @@ def _redact_cmd(cmd: list[str]) -> str:
     return " ".join(parts)
 
 # ---------------------------------------------------------------------------
+# Runner log helper
+# ---------------------------------------------------------------------------
+
+# Module-level path set by `run`/`smoke` commands so _runner_log can append.
+_runner_log_dir: Path | None = None
+
+
+def _runner_log(msg: str, *, err: bool = False) -> None:
+    """Echo *msg* to terminal and append (with ISO-8601 prefix) to runner log files.
+
+    Parameters
+    ----------
+    msg:
+        Message to echo.
+    err:
+        If True, also write to stderr and to ``runner_errors.log``.
+    """
+    click.echo(msg, err=err)
+
+    log_dir = _runner_log_dir
+    if log_dir is None or not log_dir.exists():
+        return
+
+    ts = datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+    line = f"{ts} {msg}\n"
+
+    with open(log_dir / "runner.log", "a", encoding="utf-8") as f:
+        f.write(line)
+
+    if err:
+        with open(log_dir / "runner_errors.log", "a", encoding="utf-8") as f:
+            f.write(line)
+
+
+# ---------------------------------------------------------------------------
 # Repo root detection
 # ---------------------------------------------------------------------------
 
@@ -171,7 +206,7 @@ def _harvest_results(
     run_dir.mkdir(parents=True, exist_ok=True)
 
     if timeout_reason:
-        click.echo(f"Timeout reason: {timeout_reason}")
+        _runner_log(f"Timeout reason: {timeout_reason}")
 
     # Per-card artifacts
     sos_dir = workspace / "cards" / "sos"
@@ -378,7 +413,7 @@ def _evaluate_results(run_dir: Path, card_filter: list[str] | None = None) -> No
     try:
         full_result = evaluate(run_dir, cards_dir, engine_dir)
     except Exception as exc:
-        click.echo(f"Evaluation failed: {exc}", err=True)
+        _runner_log(f"Evaluation failed: {exc}", err=True)
         return
 
     # Normalize filter for comparison
@@ -458,7 +493,7 @@ def _evaluate_results(run_dir: Path, card_filter: list[str] | None = None) -> No
         json.dumps(eval_result_data, indent=2) + "\n", encoding="utf-8"
     )
 
-    click.echo(f"Evaluation complete: {len(full_result.sos_results)} SOS cards scored")
+    _runner_log(f"Evaluation complete: {len(full_result.sos_results)} SOS cards scored")
 
 
 def _generate_run_summary(
@@ -493,7 +528,7 @@ def _generate_run_summary(
         json.dumps(summary, indent=2) + "\n", encoding="utf-8"
     )
 
-    click.echo(f"Run summary written to: {summary_path}")
+    _runner_log(f"Run summary written to: {summary_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -552,15 +587,21 @@ def run(
         results_dir = _image_results_dir(image)
 
     run_name = _make_run_name(set_code="sos", image=image, results_dir=results_dir)
-    click.echo(f"Starting run: {run_name}")
-    click.echo(f"Image: {image}")
-    click.echo(f"Timeout: {timeout}s")
+
+    # Set up runner log directory early so all messages are captured
+    global _runner_log_dir
+    _runner_log_dir = results_dir / run_name
+    _runner_log_dir.mkdir(parents=True, exist_ok=True)
+
+    _runner_log(f"Starting run: {run_name}")
+    _runner_log(f"Image: {image}")
+    _runner_log(f"Timeout: {timeout}s")
 
     # Stage workspace with all cards
     staging_dir = Path(tempfile.mkdtemp(prefix="silverquillm_run_"))
     try:
         workspace, output = stage_workspace(output_dir=staging_dir, card_filter=card_filter)
-        click.echo(f"Workspace staged at: {workspace}")
+        _runner_log(f"Workspace staged at: {workspace}")
 
         # Write run manifest (advisory timeout facts)
         manifest = {
@@ -618,42 +659,45 @@ def run(
             snapshot_callback=_snapshot_callback,
         )
 
-        click.echo(f"Running container: {container_name}")
+        _runner_log(f"Running container: {container_name}")
         result = lifecycle.run()
 
         if result.timeout_reason:
-            click.echo(f"Container timed out ({result.timeout_reason})", err=True)
+            _runner_log(f"Container timed out ({result.timeout_reason})", err=True)
         elif result.exit_code != 0:
-            click.echo(
+            _runner_log(
                 f"Container exited with code {result.exit_code}", err=True
             )
 
         # Harvest results
-        click.echo("Harvesting results...")
+        _runner_log("Harvesting results...")
         run_dir = _harvest_results(
             workspace, output, results_dir, run_name,
             timed_out=result.timed_out,
             timeout_reason=result.timeout_reason,
             card_filter=card_filter,
         )
-        click.echo(f"Results saved to: {run_dir}")
+        _runner_log(f"Results saved to: {run_dir}")
 
         # Evaluate and summarize
         _evaluate_results(run_dir, card_filter=card_filter)
         _generate_run_summary(run_dir, image_name=image, card_filter=card_filter)
 
-        click.echo(f"Run complete: {run_name}")
+        _runner_log(f"Run complete: {run_name}")
 
     finally:
         # Clean up staging directory
         shutil.rmtree(staging_dir, ignore_errors=True)
+        _runner_log_dir = None  # noqa: F841
 
 
 @main.command()
 @click.option("--image", required=True, help="Docker image name")
 def smoke(image: str) -> None:
     """Quick smoke test to verify a Docker image works."""
+    global _runner_log_dir
     staging_dir = Path(tempfile.mkdtemp(prefix="silverquillm_smoke_"))
+    _runner_log_dir = staging_dir
     try:
         workspace = staging_dir / "workspace"
         output = staging_dir / "output"
@@ -680,11 +724,11 @@ def smoke(image: str) -> None:
             env_args=_api_key_env_args(),
         )
 
-        click.echo(f"Smoke test: {image}")
+        _runner_log(f"Smoke test: {image}")
         result = lifecycle.run()
 
         if result.timeout_reason:
-            click.echo("FAIL: Container timed out")
+            _runner_log("FAIL: Container timed out", err=True)
             raise SystemExit(1)
 
         exit_zero = result.exit_code == 0
@@ -693,17 +737,18 @@ def smoke(image: str) -> None:
         hello_exists = (workspace / "hello.py").exists()
 
         if exit_zero and hello_exists:
-            click.echo("PASS")
+            _runner_log("PASS")
         else:
             reasons = []
             if not exit_zero:
                 reasons.append(f"exit code {result.exit_code}")
             if not hello_exists:
                 reasons.append("hello.py not found")
-            click.echo(f"FAIL: {', '.join(reasons)}")
+            _runner_log(f"FAIL: {', '.join(reasons)}", err=True)
             raise SystemExit(1)
 
     finally:
+        _runner_log_dir = None
         shutil.rmtree(staging_dir, ignore_errors=True)
 
 
