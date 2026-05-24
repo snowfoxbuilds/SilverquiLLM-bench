@@ -85,7 +85,7 @@ Sequencing note: Items 1.1–1.7 below replace what was previously a single mega
 
   Testability: `cd benchmarks/sos/workspace && pytest cards/fdn/` discovers and passes the new tests. Each test imports from `benchmarks.sos.workspace.engine` and `benchmarks.sos.workspace.cards.fdn.{cn}.card_impl` (paths now correct after Items 1.4 and 1.5).
 
-- [ ] **1.7 Move audited tests to ****`benchmarks/sos/data/tests/audited/`**** and update evaluator paths**
+- [x] **1.7 Move audited tests to ****`benchmarks/sos/data/tests/audited/`**** and update evaluator paths**
   Detail: Move host-side audited tests from top-level `tests/audited/` to `benchmarks/sos/data/tests/audited/{fdn,sos}/`. This consolidates the bench-side input layout under `benchmarks/sos/data/` ("everything the bench owns but the agent never sees"). Also update `silverquillm/evaluator.py` so audited-test paths and `test_utils.py` resolution both point at the new locations:
 
   - Audited tests path: `_REPO_ROOT / "benchmarks/sos/data/tests/audited"` (or `_BENCHMARK_SET_ROOT / "data/tests/audited"` if Item 2 has already landed — either form is fine).

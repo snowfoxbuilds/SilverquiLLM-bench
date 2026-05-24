@@ -208,7 +208,7 @@ def _setup_run_dir(tmp_path: Path, completed_cards: list[str]) -> Path:
 
 def _setup_audited_sos(tmp_path: Path, card_numbers: list[str]) -> Path:
     """Create fake audited SOS test files."""
-    sos_dir = tmp_path / "tests" / "audited" / "sos"
+    sos_dir = tmp_path / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos"
     for cn in card_numbers:
         d = sos_dir / cn
         d.mkdir(parents=True)
@@ -218,7 +218,7 @@ def _setup_audited_sos(tmp_path: Path, card_numbers: list[str]) -> Path:
 
 def _setup_audited_fdn(tmp_path: Path, card_numbers: list[str]) -> Path:
     """Create fake audited FDN test files."""
-    fdn_dir = tmp_path / "tests" / "audited" / "fdn"
+    fdn_dir = tmp_path / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn"
     for cn in card_numbers:
         d = fdn_dir / cn
         d.mkdir(parents=True)
@@ -303,7 +303,7 @@ class TestEvaluateSOS:
         """Card with no audited tests should be skipped."""
         run_dir = _setup_run_dir(tmp_path, ["99"])
         # No audited tests created for card 99
-        (tmp_path / "tests" / "audited" / "sos").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos").mkdir(parents=True, exist_ok=True)
         cards_dir = _setup_cards_dir(tmp_path, [])
         engine_dir = tmp_path / "engine"
         engine_dir.mkdir()

@@ -34,7 +34,7 @@ def _load_fdn_conftest_module() -> types.ModuleType:
     conftest skips injection.  Returns the loaded module with all
     helper functions available.
     """
-    conftest_path = _PROJECT_ROOT / "tests" / "audited" / "fdn" / "conftest.py"
+    conftest_path = _PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "conftest.py"
     spec = importlib.util.spec_from_file_location(
         "fdn_conftest_test", conftest_path,
         submodule_search_locations=[],
@@ -60,7 +60,7 @@ def _load_sos_conftest_module() -> types.ModuleType:
 
     Same trick: fake explicit card_impl to skip module-level guard.
     """
-    conftest_path = _PROJECT_ROOT / "tests" / "audited" / "sos" / "conftest.py"
+    conftest_path = _PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos" / "conftest.py"
     spec = importlib.util.spec_from_file_location(
         "sos_conftest_test", conftest_path,
         submodule_search_locations=[],
@@ -84,37 +84,37 @@ class TestDirectoryStructure:
     """Verify required audited test directories and files exist."""
 
     def test_audited_root_exists(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited").is_dir()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited").is_dir()
 
     def test_audited_root_has_init(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "__init__.py").is_file()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "__init__.py").is_file()
 
     def test_fdn_directory_exists(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "fdn").is_dir()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn").is_dir()
 
     def test_fdn_has_init(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "__init__.py").is_file()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "__init__.py").is_file()
 
     def test_fdn_has_conftest(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "conftest.py").is_file()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "conftest.py").is_file()
 
     def test_sos_directory_exists(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "sos").is_dir()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos").is_dir()
 
     def test_sos_has_init(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "sos" / "__init__.py").is_file()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos" / "__init__.py").is_file()
 
     def test_sos_has_conftest(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "sos" / "conftest.py").is_file()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos" / "conftest.py").is_file()
 
     def test_fdn_272_directory_exists(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "fdn_272").is_dir()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "fdn_272").is_dir()
 
     def test_fdn_272_has_tests_py(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").is_file()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").is_file()
 
     def test_fdn_272_has_init(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "fdn_272" / "__init__.py").is_file()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "fdn_272" / "__init__.py").is_file()
 
 
 class TestPyprojectConfig:
@@ -232,13 +232,13 @@ class TestCollectorDirectoryDetection:
 
     def test_fdn_getattr_calls_detect_collector_dir(self) -> None:
         """FDN synthetic module __getattr__ must call _detect_collector_dir()."""
-        source = (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "conftest.py").read_text()
+        source = (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "conftest.py").read_text()
         # _make_card_impl_module's inner _getattr must reference _detect_collector_dir
         assert "_detect_collector_dir()" in source
 
     def test_sos_getattr_calls_detect_collector_dir(self) -> None:
         """SOS synthetic module __getattr__ must call _detect_collector_dir()."""
-        source = (_PROJECT_ROOT / "tests" / "audited" / "sos" / "conftest.py").read_text()
+        source = (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos" / "conftest.py").read_text()
         assert "_detect_collector_dir()" in source
 
 
@@ -296,7 +296,7 @@ class TestExplicitCardImplOverrideProtection:
         sentinel._sentinel = True  # type: ignore[attr-defined]
         try:
             sys.modules["card_impl"] = sentinel
-            conftest_path = _PROJECT_ROOT / "tests" / "audited" / "fdn" / "conftest.py"
+            conftest_path = _PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "conftest.py"
             spec = importlib.util.spec_from_file_location(
                 "fdn_conftest_test_noinject", conftest_path,
                 submodule_search_locations=[],
@@ -342,7 +342,7 @@ class TestSOSConftestBehavior:
             fdn_synth.__file__ = "<synthetic:fdn_conftest>"
             sys.modules["card_impl"] = fdn_synth
 
-            conftest_path = _PROJECT_ROOT / "tests" / "audited" / "sos" / "conftest.py"
+            conftest_path = _PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos" / "conftest.py"
             spec = importlib.util.spec_from_file_location(
                 "sos_conftest_test_replace", conftest_path,
                 submodule_search_locations=[],
@@ -367,7 +367,7 @@ class TestSOSConftestBehavior:
 
     def test_sos_conftest_references_register_sos_stubs(self) -> None:
         """SOS conftest must call register_sos_stubs() from benchmarks.sos.workspace.cards.stubs.sos_stubs."""
-        content = (_PROJECT_ROOT / "tests" / "audited" / "sos" / "conftest.py").read_text()
+        content = (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos" / "conftest.py").read_text()
         assert "register_sos_stubs" in content
         assert "benchmarks.sos.workspace.cards.stubs.sos_stubs" in content
 
@@ -379,7 +379,7 @@ class TestSOSConftestBehavior:
         sentinel._sentinel = True  # type: ignore[attr-defined]
         try:
             sys.modules["card_impl"] = sentinel
-            conftest_path = _PROJECT_ROOT / "tests" / "audited" / "sos" / "conftest.py"
+            conftest_path = _PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos" / "conftest.py"
             spec = importlib.util.spec_from_file_location(
                 "sos_conftest_test_nooverride", conftest_path,
                 submodule_search_locations=[],
@@ -398,16 +398,16 @@ class TestSamplePlainsTest:
     """Verify the sample Plains test under tests/audited/fdn/fdn_272/tests.py."""
 
     def test_plains_tests_file_imports_from_card_impl(self) -> None:
-        tests_content = (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").read_text()
+        tests_content = (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").read_text()
         assert "from card_impl import Plains" in tests_content
 
     def test_plains_tests_file_has_test_class(self) -> None:
-        tests_content = (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").read_text()
+        tests_content = (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").read_text()
         assert "class Test" in tests_content
 
     def test_plains_tests_file_has_category_markers(self) -> None:
         """Sample audited test should use pytest.mark category markers."""
-        tests_content = (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").read_text()
+        tests_content = (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").read_text()
         assert "pytest.mark" in tests_content, (
             "Sample audited test should use pytest.mark category markers "
             "(@pytest.mark.basic, etc.) as per audited-test conventions"

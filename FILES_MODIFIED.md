@@ -106,3 +106,10 @@ benchmarks/sos/workspace/tests/engine/test_game_state.py — reworded docstring 
 - `benchmarks/sos/workspace/cards/fdn/fdn_242/tests.py` — Lathril tests: menace keyword and combat damage trigger creating tokens
 - `benchmarks/sos/workspace/pytest.ini` — added --import-mode=importlib for tests.py module name collision avoidance
 - `tests/test_tier_naming.py` — updated cards.registry import
+
+## Item 7: Move audited tests to benchmarks/sos/data/tests/audited/
+
+### Implementation
+- `tests/audited/` → `benchmarks/sos/data/tests/audited/` — moved all audited test files (fdn/, sos/, __init__.py) via git mv
+- `silverquillm/evaluator.py` — updated audited_sos and audited_fdn paths to new benchmarks/sos/data/tests/audited/ location
+- `benchmarks/sos/data/tests/__init__.py` — added package init for new tests directory

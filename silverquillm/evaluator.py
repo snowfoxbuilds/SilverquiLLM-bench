@@ -920,8 +920,8 @@ def evaluate(
     engine_work, staging_dir = _prepare_engine_work(run_dir, engine_dir)
 
     # Audited test directories
-    audited_sos = _REPO_ROOT / "tests" / "audited" / "sos"
-    audited_fdn = _REPO_ROOT / "tests" / "audited" / "fdn"
+    audited_sos = _REPO_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos"
+    audited_fdn = _REPO_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn"
     engine_tests = _REPO_ROOT / "tests" / "engine"
 
     result = FullEvalResult()

@@ -27,7 +27,7 @@ import sys
 import types
 from pathlib import Path
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent.parent.parent
 _FDN_CARDS_DIR = _PROJECT_ROOT / "benchmarks" / "sos" / "workspace" / "cards" / "fdn"
 
 # Maps collector-directory names to card names for cards whose registry
