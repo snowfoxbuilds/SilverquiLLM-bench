@@ -12,7 +12,7 @@ Reference: `silverquillm/workspace.py`, ADR-007, [WORKSPACE-CONTRACT.md](http://
 
 Sequencing note: Items 1.1–1.7 below replace what was previously a single mega-item. The split exists because structural moves of `engine/` and `cards/` touch many import sites and must be completed atomically within their commit — a half-finished move leaves the codebase un-importable. Items are ordered so all purely additive work lands first, then the two dangerous moves, then dependent items.
 
-- [ ] **1.1 Create workspace skeleton and author static files**
+- [x] **1.1 Create workspace skeleton and author static files**
   Detail: Purely additive commit. Create the empty directory structure and author the static workspace files. Nothing is moved yet; existing tests still pass.
 
   - Create directories: `benchmarks/sos/workspace/{engine,cards/fdn,cards/sos,tests/engine}/`. Add `.gitkeep` or initial `__init__.py` files where needed for Python package discovery.
