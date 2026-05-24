@@ -123,3 +123,11 @@ benchmarks/sos/workspace/tests/engine/test_game_state.py — reworded docstring 
 - `silverquillm/workspace.py` — rewrote to ~15-line copytree-based form; removed _REFERENCE_DOCS, _RULEBOOK_SRC, _RULES_OVERVIEW_SRC, _copy_reference_docs(), _copy_engine(), _stage_engine_tests(), _stage_cards()
 - `tests/integration/__init__.py` — package init for integration test directory
 - `tests/integration/test_stage_workspace.py` — new integration tests for staged tree equality
+
+## Item 9: Delete deprecated per-file staging code
+
+### Tests
+- `tests/integration/test_stage_workspace.py` — verifies stage_workspace still works (all 21 pass)
+
+### Implementation
+- No-op: all deprecated constants and helpers were already removed in Item 8

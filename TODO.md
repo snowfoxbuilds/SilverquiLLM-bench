@@ -120,7 +120,7 @@ def stage_workspace(tmp_run_dir: Path, prompt_text: str, run_manifest: dict) -> 
 
   Testability: `silverquillm run --cards 1` produces a staged directory matching `benchmarks/sos/workspace/` byte-for-byte plus `prompt.md` and `run_manifest.json`. `git -C <staged_dir> log --oneline` shows exactly one commit. Add `tests/integration/test_stage_workspace.py` asserting the staged tree equals the source tree plus the two per-run files.
 
-- [ ] **Delete deprecated per-file staging code**
+- [x] **Delete deprecated per-file staging code**
   Detail: After Item 2 (the `stage_workspace()` rewrite) lands, remove the now-unused per-file staging helpers and constants from `silverquillm/workspace.py`. These were used by the old per-file workspace assembly and are dead code once `stage_workspace()` is the four-step `cp -r` form. Specifically delete:
 
   - `_REFERENCE_DOCS` constant
