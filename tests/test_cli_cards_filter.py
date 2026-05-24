@@ -272,7 +272,7 @@ class TestWriteCardStatusesFiltered:
         _write_card_statuses(workspace, run_dir, timed_out=False, card_filter=filter_set)
 
         statuses = json.loads((run_dir / "status.json").read_text())
-        assert statuses[all_cns[0]] == "no_output"
+        assert statuses[all_cns[0]]["status"] == "no_output"
 
     def test_filtered_cards_with_modified_impl_get_completed(self, tmp_path):
         """Filtered cards with modified card_impl.py get 'completed' status."""
@@ -290,7 +290,7 @@ class TestWriteCardStatusesFiltered:
         _write_card_statuses(workspace, run_dir, timed_out=False, card_filter=filter_set)
 
         statuses = json.loads((run_dir / "status.json").read_text())
-        assert statuses[target_cn] == "completed"
+        assert statuses[target_cn]["status"] == "completed"
 
     def test_filtered_cards_with_timeout_get_timeout_status(self, tmp_path):
         """When timed_out=True, unmodified filtered cards get 'timeout' status."""
@@ -305,7 +305,7 @@ class TestWriteCardStatusesFiltered:
         _write_card_statuses(workspace, run_dir, timed_out=True, card_filter=filter_set)
 
         statuses = json.loads((run_dir / "status.json").read_text())
-        assert statuses[all_cns[0]] == "timeout"
+        assert statuses[all_cns[0]]["status"] == "timeout"
 
 
 # ---------------------------------------------------------------------------

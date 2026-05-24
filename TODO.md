@@ -171,7 +171,7 @@ Reference: [WORKSPACE-CONTRACT.md](http://workspace-contract.md/), [RUN-ARTIFACT
 
 ---
 
-- [ ] **Propagate card names into slow-cadence artifacts; terminal resolves at print time**
+- [x] **Propagate card names into slow-cadence artifacts; terminal resolves at print time**
   Detail: Most artifacts reference cards by ID only (`sos_1`, `sos_7`). Human triage is faster with names inline. Add `card_name` alongside `card_id` in slow-cadence artifacts and resolve names at print time for live terminal output. `snapshot_telemetry.jsonl` stays IDs-only per the SETTLED scope carve-out in [RUN-ARTIFACTS-AND-TELEMETRY.md](http://run-artifacts-and-telemetry.md/) (high-cadence file; lean payloads).
 
   Changes:

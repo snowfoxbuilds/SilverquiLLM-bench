@@ -42,3 +42,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Implementation
 - `silverquillm/logs_viewer.py` — New module: LogsViewer class with alt-screen, raw-mode, tab-per-channel TUI; stream_plain non-TTY fallback
 - `silverquillm/cli.py` — Added `logs` subcommand with --run, --live, --archived options and run directory discovery
+
+## Item 8: Propagate card names into slow-cadence artifacts
+
+### Implementation
+- `silverquillm/card_names.py` — New module: build_card_name_map and resolve_card_names_in_line for card ID→name resolution
+- `silverquillm/cli.py` — Added card_name to status.json entries, result.json, and progress.jsonl enrichment during harvest
+- `silverquillm/runner.py` — Added card_name_map param to ContainerLifecycle; resolves names at terminal print time
+- `tests/test_cli_cards_filter.py` — Updated status.json assertions to match new dict format with card_name field

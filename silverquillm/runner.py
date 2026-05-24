@@ -14,6 +14,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from silverquillm.card_names import resolve_card_names_in_line
 from silverquillm.telemetry import FastTelemetry
 
 # ANSI color helpers
@@ -47,6 +48,7 @@ class ContainerLifecycle:
         env_args: list[str] | None = None,
         snapshot_callback: callable | None = None,
         run_dir: Path | None = None,
+        card_name_map: dict[str, str] | None = None,
     ):
         self.image = image
         self.container_name = container_name
@@ -57,6 +59,7 @@ class ContainerLifecycle:
         self.env_args = env_args or []
         self.snapshot_callback = snapshot_callback
         self.run_dir = Path(run_dir) if run_dir else None
+        self.card_name_map = card_name_map or {}
 
         # Pipe drain target files
         self._stdout_path = self.output / "docker_stdout.tmp"
@@ -216,6 +219,9 @@ class ContainerLifecycle:
             (self._progress_path, "progress", _GREEN),
         ]
 
+        # Channels where card names should be resolved at print time
+        _RESOLVE_NAME_LABELS = {"progress", "system"}
+
         for path, label, color in files_and_labels:
             if not path.exists():
                 continue
@@ -239,6 +245,9 @@ class ContainerLifecycle:
                         text = data.decode("utf-8", errors="replace")
                         if label and color:
                             for line in text.splitlines(keepends=True):
+                                # Resolve card names for terminal display
+                                if label in _RESOLVE_NAME_LABELS and self.card_name_map:
+                                    line = resolve_card_names_in_line(line, self.card_name_map)
                                 print(f"{color}[{label}]{_RESET} {line}", end="")
                         else:
                             print(text, end="")

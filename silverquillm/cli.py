@@ -30,6 +30,7 @@ if _ENV_FILE.exists():
 import click
 
 from silverquillm.card_loader import is_template, load_all_card_specs
+from silverquillm.card_names import build_card_name_map
 from silverquillm.runner import ContainerLifecycle
 from silverquillm.workspace import stage_workspace
 
@@ -226,9 +227,14 @@ def _harvest_results(
             pass  # diff not available
 
     # Output files — copy docker_stdout.log, docker_stderr.log, and any *.log / *.jsonl
+    # For progress.jsonl, enrich with card_name fields
+    name_map = build_card_name_map(cards_dir, "sos")
     for src in output.iterdir():
         if src.is_file() and (src.suffix in (".log", ".jsonl")):
-            shutil.copy2(src, run_dir / src.name)
+            if src.name == "progress.jsonl":
+                _copy_progress_with_names(src, run_dir / src.name, name_map)
+            else:
+                shutil.copy2(src, run_dir / src.name)
 
     # Per-card status
     _write_card_statuses(workspace, run_dir, timed_out, card_filter=filter_set)
@@ -251,6 +257,35 @@ def _harvest_results(
     return run_dir
 
 
+def _copy_progress_with_names(
+    src: Path, dst: Path, name_map: dict[str, str]
+) -> None:
+    """Copy progress.jsonl, enriching each line that has card_id with card_name.
+
+    Lines that already contain card_name or aren't valid JSON are copied as-is.
+    snapshot_telemetry.jsonl is NOT processed here (stays IDs-only).
+    """
+    with open(src, "r", encoding="utf-8", errors="replace") as fin, \
+         open(dst, "w", encoding="utf-8") as fout:
+        for line in fin:
+            stripped = line.strip()
+            if not stripped:
+                fout.write(line)
+                continue
+            try:
+                entry = json.loads(stripped)
+                if isinstance(entry, dict) and "card_id" in entry and "card_name" not in entry:
+                    card_id = entry["card_id"]
+                    card_name = name_map.get(card_id, "")
+                    if card_name:
+                        entry["card_name"] = card_name
+                    fout.write(json.dumps(entry) + "\n")
+                else:
+                    fout.write(line)
+            except (json.JSONDecodeError, TypeError):
+                fout.write(line)
+
+
 def _write_card_statuses(
     workspace: Path,
     run_dir: Path,
@@ -267,7 +302,8 @@ def _write_card_statuses(
     """
     cards_dir = _REPO_ROOT / "cards"
     specs = load_all_card_specs(cards_dir, "sos")
-    statuses: dict[str, str] = {}
+    name_map = build_card_name_map(cards_dir, "sos")
+    statuses: dict[str, dict] = {}
 
     for spec in specs:
         cn = spec["collector_number"]  # directory name
@@ -292,11 +328,14 @@ def _write_card_statuses(
         workspace_impl = workspace / "cards" / "sos" / cn / "card_impl.py"
 
         if not workspace_impl.exists():
-            statuses[cn] = "timeout" if timed_out else "no_output"
+            status = "timeout" if timed_out else "no_output"
         elif original.exists() and workspace_impl.read_text() == original.read_text():
-            statuses[cn] = "timeout" if timed_out else "no_output"
+            status = "timeout" if timed_out else "no_output"
         else:
-            statuses[cn] = "completed"
+            status = "completed"
+
+        card_name = name_map.get(cn, spec.get("name", ""))
+        statuses[cn] = {"status": status, "card_name": card_name}
 
     (run_dir / "status.json").write_text(
         json.dumps(statuses, indent=2) + "\n", encoding="utf-8"
@@ -324,6 +363,7 @@ def _evaluate_results(run_dir: Path, card_filter: list[str] | None = None) -> No
 
     cards_dir = _REPO_ROOT / "cards"
     engine_dir = _REPO_ROOT / "engine"
+    name_map = build_card_name_map(cards_dir, "sos")
 
     try:
         full_result = evaluate(run_dir, cards_dir, engine_dir)
@@ -348,6 +388,8 @@ def _evaluate_results(run_dir: Path, card_filter: list[str] | None = None) -> No
 
         # Write result.json
         result_data = {
+            "card_id": cn,
+            "card_name": name_map.get(cn, ""),
             "tests_passed": card_result.tests_passed,
             "tests_failed": card_result.tests_failed,
             "tests_total": card_result.tests_total,
@@ -517,6 +559,9 @@ def run(
         }
         (workspace / "run_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
+        # Build card name map for terminal display
+        card_name_map = build_card_name_map(_REPO_ROOT / "cards", "sos")
+
         # Run container via ContainerLifecycle
         container_name = f"sqm-{run_name}"
         run_dir = results_dir / run_name
@@ -530,6 +575,7 @@ def run(
             hang_timeout=hang_timeout,
             env_args=_api_key_env_args(),
             run_dir=run_dir,
+            card_name_map=card_name_map,
         )
 
         click.echo(f"Running container: {container_name}")
