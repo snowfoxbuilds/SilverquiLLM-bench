@@ -15,6 +15,7 @@ import secrets
 import shutil
 import subprocess
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -35,6 +36,9 @@ from silverquillm.runner import ContainerLifecycle
 from silverquillm.workspace import stage_workspace
 
 __all__ = ["main"]
+
+# TUI display singleton (None until a display layer is wired; patchable for tests)
+_display = None
 
 
 # ---------------------------------------------------------------------------
@@ -523,16 +527,16 @@ def main() -> None:
 )
 @click.option(
     "--hang-timeout",
-    default=1800,
+    default=900,
     type=int,
-    help="Hang timeout in seconds (default: 1800)",
+    help="Hang timeout in seconds (default: 900)",
 )
 def run(
     image: str,
     timeout: int,
     results_dir: Path | None,
     cards: str | None,
-    hang_timeout: int = 1800,
+    hang_timeout: int = 900,
 ) -> None:
     """Run the full benchmark workload in a Docker container."""
     # Parse --cards into a list of collector numbers
@@ -572,6 +576,35 @@ def run(
         container_name = f"sqm-{run_name}"
         run_dir = results_dir / run_name
         run_dir.mkdir(parents=True, exist_ok=True)
+
+        # TUI display object — reads module-level _display (None until wired)
+        pass  # _display is read from module-level silverquillm.cli._display
+
+        # Build snapshot callback closure
+        _snapshot_state: dict = {"index": 0, "start": time.monotonic()}
+        _snapshot_telemetry_path = run_dir / "snapshot_telemetry.jsonl"
+
+        def _snapshot_callback() -> None:
+            _snapshot_state["index"] += 1
+            idx = _snapshot_state["index"]
+            elapsed = time.monotonic() - _snapshot_state["start"]
+            # Count files in output directory as proxy for files_changed
+            try:
+                files_changed = sum(1 for _ in output.rglob("*") if _.is_file())
+            except OSError:
+                files_changed = 0
+            record = {
+                "ts": datetime.now(tz=timezone.utc).isoformat(timespec="milliseconds"),
+                "snapshot_index": idx,
+                "files_changed": files_changed,
+                "elapsed_s": round(elapsed, 3),
+            }
+            with open(_snapshot_telemetry_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record) + "\n")
+            # Notify TUI display if available
+            if _display is not None:
+                _display.emit_snapshot(idx)
+
         lifecycle = ContainerLifecycle(
             image=image,
             container_name=container_name,
@@ -582,6 +615,7 @@ def run(
             env_args=_api_key_env_args(),
             run_dir=run_dir,
             card_name_map=card_name_map,
+            snapshot_callback=_snapshot_callback,
         )
 
         click.echo(f"Running container: {container_name}")

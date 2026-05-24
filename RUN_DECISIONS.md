@@ -35,3 +35,10 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Conflict**: This contradicts the legacy test `test_cli_docker.py::TestHarvest::test_harvests_output_logs` which verifies that harvest DOES copy these files when they aren't pre-streamed to `run_dir`.
 - **Coordinator decision**: Delete the overly-strict test. The correct behavior is: skip copy if file already exists in `run_dir` (was streamed directly during the run); copy if not (legacy path where run_dir streaming wasn't active).
 - **Reasoning**: The TODO says "skip these two files (they're already in run_dir)" — the keyword being "they're already in run_dir". The conditional check `(run_dir / name).exists()` correctly implements this intent while preserving backward compatibility.
+
+## Disagreement: Item 12 — files_changed semantics in snapshot_callback
+- **Reviewer comment (strict)**: `files_changed` should count workspace files changed, not output directory artifacts.
+- **Implementer justification**: Tests validate the output-file-counting behavior; changing it would require workspace diffing which is complex and unspecified by the TODO.
+- **Coordinator decision**: accept implementer
+- **Reasoning**: The TODO specifies the field name but not its exact semantics. Counting output files is a reasonable proxy for agent progress and matches the validated test contract. Workspace diffing can be added later if needed.
+- **Impact**: `silverquillm/cli.py` — `_snapshot_callback` closure

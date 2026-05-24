@@ -146,3 +146,10 @@ benchmarks/sos/workspace/tests/engine/test_game_state.py — reworded docstring 
 - `silverquillm/runner.py` — `_drain_pipe` uses TextIOWrapper for line-by-line streaming to run_dir with proper UTF-8 handling; removed post-exit shutil.copy2 for .tmp→.log
 - `silverquillm/cli.py` — `_harvest_results` skips docker_stdout.log/docker_stderr.log if already present in run_dir
 - `KEY_DECISIONS.md` — documented the direct-write carve-out for docker stdout/stderr
+
+Item 12: Wire snapshot_callback in cli.py so snapshot_telemetry.jsonl populates
+Tests
+tests/test_snapshot_callback.py — snapshot_telemetry.jsonl writing and wiring verification
+tests/test_cli_lifecycle_integration.py — ContainerLifecycle integration (hang-timeout, harvest, lifecycle usage)
+Implementation
+silverquillm/cli.py — defined _snapshot_callback closure with _display.emit_snapshot() support, fixed hang_timeout default to 900
