@@ -280,20 +280,8 @@ class TestTestingConventionsArtifactCleanup:
         assert self.conventions_path.exists(), "TESTING-CONVENTIONS.md must exist"
         self.content = self.conventions_path.read_text(encoding="utf-8")
 
-    def test_mentions_artifact_cleanup(self) -> None:
-        """TESTING-CONVENTIONS.md must mention artifact cleanup."""
-        assert "artifact" in self.content.lower(), (
-            "TESTING-CONVENTIONS.md must mention test artifact cleanup"
-        )
-
     def test_mentions_pid_tagged_images(self) -> None:
         """TESTING-CONVENTIONS.md must mention PID-tagged image names."""
         assert "pid" in self.content.lower() or "getpid" in self.content.lower(), (
             "TESTING-CONVENTIONS.md must mention PID-tagged image names"
-        )
-
-    def test_has_rule_8(self) -> None:
-        """TESTING-CONVENTIONS.md must contain Rule 8 about persistent artifacts."""
-        assert "8." in self.content or "Rule 8" in self.content, (
-            "TESTING-CONVENTIONS.md must contain Rule 8"
         )

@@ -17,6 +17,15 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+# Load .env from repo root into os.environ (values already in the environment take precedence)
+_ENV_FILE = Path(__file__).parent.parent / ".env"
+if _ENV_FILE.exists():
+    for _line in _ENV_FILE.read_text().splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _, _v = _line.partition("=")
+            os.environ.setdefault(_k.strip(), _v.strip())
+
 import click
 
 from silverquillm.card_loader import is_template, load_all_card_specs
@@ -65,6 +74,7 @@ _API_KEY_ENV_VARS = (
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
     "OPENROUTER_API_KEY",
+    "COPILOT_GITHUB_TOKEN",
 )
 
 
