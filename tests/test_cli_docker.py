@@ -91,35 +91,37 @@ class TestRemovedCLIFlags:
 
 
 class TestRunName:
-    """Run names should match {set_code}-{ISO-timestamp} pattern."""
+    """Run names should match {set_code}-{image_dir}-{ISO-timestamp} pattern."""
 
     def test_default_set_code(self):
-        """Calling _make_run_name() with no args should use 'sos-' prefix."""
-        name = _make_run_name()
+        """Calling _make_run_name('sos') should use 'sos-' prefix."""
+        name = _make_run_name("sos")
         assert name.startswith("sos-"), f"Expected 'sos-' prefix, got: {name}"
         # Check ISO timestamp portion: YYYY-MM-DDTHH-MM
-        ts_part = name[len("sos-"):]
-        assert re.match(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}", ts_part)
+        assert re.search(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}", name)
 
     def test_custom_set_code(self):
         """Calling _make_run_name('fdn') should use 'fdn-' prefix."""
         name = _make_run_name("fdn")
         assert name.startswith("fdn-"), f"Expected 'fdn-' prefix, got: {name}"
-        ts_part = name[len("fdn-"):]
-        assert re.match(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}", ts_part)
+        assert re.search(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}", name)
 
     def test_timestamp_format(self):
         """Timestamp should be ISO format with hyphens replacing colons."""
-        name = _make_run_name()
-        # Full pattern: {code}-YYYY-MM-DDTHH-MM
-        assert re.match(r"^sos-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}$", name)
+        name = _make_run_name("sos")
+        # Full pattern: {set_code}-{image_dir}-YYYY-MM-DDTHH-MM (optional nonce)
+        assert re.match(r"^sos-[^-]+-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}(-[0-9a-f]+)?$", name)
 
-    def test_default_parameter_is_sos(self):
-        """The default parameter value should be 'sos'."""
-        import inspect
+    def test_image_default_parameter(self):
+        """The default image parameter value should be 'default'."""
         sig = inspect.signature(_make_run_name)
-        default = sig.parameters["set_code"].default
-        assert default == "sos"
+        default = sig.parameters["image"].default
+        assert default == "default"
+
+    def test_image_dir_in_run_name(self):
+        """Image dir should appear between set_code and timestamp."""
+        name = _make_run_name("sos", image="silverquillm-pi-blind:latest")
+        assert name.startswith("sos-pi-blind-"), f"Expected 'sos-pi-blind-' prefix, got: {name}"
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +194,7 @@ class TestAPIKeyPassthrough:
         assert not any("OPENROUTER" in a for a in args)
 
     def test_no_keys_returns_empty(self, monkeypatch):
-        for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY"):
+        for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "COPILOT_GITHUB_TOKEN"):
             monkeypatch.delenv(key, raising=False)
         assert _api_key_env_args() == []
 
@@ -220,7 +222,7 @@ class TestRunDefaults:
         )
         mock_lifecycle_cls.return_value = mock_instance
 
-        result = runner.invoke(main, ["run", "--image", "test-img"])
+        result = runner.invoke(main, ["run", "--image", "test-img", "--results-dir", str(tmp_path / "results")])
         # ContainerLifecycle should have been called with hard_timeout=3600
         call_kwargs = mock_lifecycle_cls.call_args
         assert call_kwargs.kwargs.get("hard_timeout", call_kwargs[1].get("hard_timeout")) == 3600
@@ -481,7 +483,7 @@ class TestRunDockerArgs:
         )
         mock_lifecycle_cls.return_value = mock_instance
 
-        result = runner.invoke(main, ["run", "--image", "my-img:v1"])
+        result = runner.invoke(main, ["run", "--image", "my-img:v1", "--results-dir", str(tmp_path / "results")])
         call_kwargs = mock_lifecycle_cls.call_args
         assert call_kwargs.kwargs.get("image") == "my-img:v1"
 
@@ -499,7 +501,7 @@ class TestRunDockerArgs:
         )
         mock_lifecycle_cls.return_value = mock_instance
 
-        result = runner.invoke(main, ["run", "--image", "my-img"])
+        result = runner.invoke(main, ["run", "--image", "my-img", "--results-dir", str(tmp_path / "results")])
         call_kwargs = mock_lifecycle_cls.call_args
         assert call_kwargs.kwargs.get("workspace") == workspace
         assert call_kwargs.kwargs.get("output") == output
@@ -520,7 +522,7 @@ class TestRunDockerArgs:
         )
         mock_lifecycle_cls.return_value = mock_instance
 
-        result = runner.invoke(main, ["run", "--image", "my-img"])
+        result = runner.invoke(main, ["run", "--image", "my-img", "--results-dir", str(tmp_path / "results")])
         call_kwargs = mock_lifecycle_cls.call_args
         env_args = call_kwargs.kwargs.get("env_args", [])
         assert "OPENAI_API_KEY=sk-test" in env_args
@@ -549,7 +551,7 @@ class TestRunManifest:
         )
         mock_lifecycle_cls.return_value = mock_instance
 
-        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "300"])
+        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "300", "--results-dir", str(tmp_path / "results")])
 
         manifest_path = workspace / "run_manifest.json"
         assert manifest_path.exists(), "run_manifest.json should be written to workspace"
@@ -569,7 +571,7 @@ class TestRunManifest:
         )
         mock_lifecycle_cls.return_value = mock_instance
 
-        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "600"])
+        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "600", "--results-dir", str(tmp_path / "results")])
 
         manifest = json.loads((workspace / "run_manifest.json").read_text())
         assert isinstance(manifest, dict)
@@ -589,7 +591,7 @@ class TestRunManifest:
         )
         mock_lifecycle_cls.return_value = mock_instance
 
-        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "420"])
+        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "420", "--results-dir", str(tmp_path / "results")])
 
         manifest = json.loads((workspace / "run_manifest.json").read_text())
         assert "timeout_seconds" in manifest
@@ -611,7 +613,7 @@ class TestRunManifest:
         )
         mock_lifecycle_cls.return_value = mock_instance
 
-        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "300"])
+        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "300", "--results-dir", str(tmp_path / "results")])
 
         manifest = json.loads((workspace / "run_manifest.json").read_text())
         assert "deadline_utc" in manifest
@@ -638,7 +640,7 @@ class TestRunManifest:
         )
         mock_lifecycle_cls.return_value = mock_instance
 
-        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "300"])
+        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "300", "--results-dir", str(tmp_path / "results")])
 
         manifest = json.loads((workspace / "run_manifest.json").read_text())
         assert set(manifest.keys()) == {"timeout_seconds", "deadline_utc"}

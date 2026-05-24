@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import shutil
 import subprocess
 import tempfile
@@ -117,13 +118,24 @@ def _image_results_dir(image: str) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def _make_run_name(set_code: str = "sos") -> str:
-    """Generate a run name from set code + ISO timestamp.
+def _make_run_name(
+    set_code: str,
+    image: str = "default",
+    results_dir: Path = _REPO_ROOT / "docker" / "default" / "results",
+) -> str:
+    """Generate a run name from set + image + ISO timestamp.
 
-    Format: ``<set_code>-<YYYY-MM-DDThh-mm>``
+    Format: ``<set_code>-<image_dir>-<YYYY-MM-DDThh-mm>``.
+    If that directory already exists under *results_dir*, a short hex
+    nonce is appended to disambiguate (``-<4 hex chars>``).
     """
     ts = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H-%M")
-    return f"{set_code}-{ts}"
+    base = f"{set_code}-{_image_dir(image)}-{ts}"
+
+    candidate = base
+    while (results_dir / candidate).exists():
+        candidate = f"{base}-{secrets.token_hex(2)}"
+    return candidate
 
 
 # ---------------------------------------------------------------------------
@@ -318,7 +330,7 @@ def run(
     if results_dir is None:
         results_dir = _image_results_dir(image)
 
-    run_name = _make_run_name()
+    run_name = _make_run_name(set_code="sos", image=image, results_dir=results_dir)
     click.echo(f"Starting run: {run_name}")
     click.echo(f"Image: {image}")
     click.echo(f"Timeout: {timeout}s")
