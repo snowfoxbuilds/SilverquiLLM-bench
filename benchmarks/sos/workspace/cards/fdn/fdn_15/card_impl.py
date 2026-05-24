@@ -1,66 +1,71 @@
-"""Card implementation for Hare Apparent."""
+"""Card implementation for Bigfin Bouncer (FDN #15 slot).
+
+Demonstrates a targeted ETB trigger: when this creature enters the
+battlefield, return target creature an opponent controls to its owner's hand.
+"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
 from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Zone
 
 if TYPE_CHECKING:
     from benchmarks.sos.workspace.engine.game_state import GameState
 
 
-class HareApparent(Creature):
-    """Hare Apparent — {1}{W} — 2/2 — Rabbit Noble.
+class BigfinBouncer(Creature):
+    """Bigfin Bouncer — {3}{U} — 3/2 — Merfolk Rogue.
 
-    When this creature enters, create a number of 1/1 white Rabbit creature
-    tokens equal to the number of other creatures you control named
-    Hare Apparent.
-    A deck can have any number of cards named Hare Apparent.
+    When this creature enters, return target creature an opponent
+    controls to its owner's hand.
 
-    FDN collector number 15.
+    FDN collector number 15 (reference slot for targeted ETB).
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        kwargs.setdefault("name", "Hare Apparent")
-        kwargs.setdefault("mana_cost", ManaCost.parse("{1}{W}"))
-        kwargs.setdefault("subtypes", {"Rabbit", "Noble"})
+        kwargs.setdefault("name", "Bigfin Bouncer")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{3}{U}"))
+        kwargs.setdefault("subtypes", {"Merfolk", "Rogue"})
         kwargs.setdefault("keywords", Keyword(0))
-        kwargs.setdefault("base_power", 2)
+        kwargs.setdefault("base_power", 3)
         kwargs.setdefault("base_toughness", 2)
         kwargs.setdefault(
             "rules_text",
-            "When this creature enters, create a number of 1/1 white Rabbit "
-            "creature tokens equal to the number of other creatures you "
-            "control named Hare Apparent.\n"
-            "A deck can have any number of cards named Hare Apparent.",
+            "When this creature enters, return target creature an opponent "
+            "controls to its owner's hand.",
         )
         super().__init__(**kwargs)
+        # Target is selected during ETB trigger resolution.
+        self.chosen_targets: list[Any] = []
 
     def on_resolve(self, game: "GameState") -> None:
-        """ETB: create Rabbit tokens equal to other Hare Apparents you control."""
-        from benchmarks.sos.workspace.engine.game import create_token
+        """ETB: return target opponent's creature to its owner's hand.
+
+        Target validation: the target must be on an opponent's battlefield.
+        If the target is no longer valid (left the battlefield), the
+        ability fizzles (does nothing).
+        """
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
 
         controller = self.controller
         if controller is None:
             return
 
-        # Count other creatures named "Hare Apparent" on our battlefield
-        battlefield = game.get_battlefield(controller)
-        count = 0
-        for obj in battlefield.get_all():
-            if obj is self:
-                continue
-            if getattr(obj, "name", "") == "Hare Apparent":
-                count += 1
+        if not self.chosen_targets:
+            return
 
-        # Create that many 1/1 Rabbit tokens
-        for _ in range(count):
-            token = Creature(
-                name="Rabbit",
-                subtypes={"Rabbit"},
-                base_power=1,
-                base_toughness=1,
-            )
-            create_token(game, controller, token)
+        target = self.chosen_targets[0]
+
+        # Validate target: must be on an opponent's battlefield
+        for player in game.players:
+            if player is controller:
+                continue
+            bf = game.get_battlefield(player)
+            if target in bf.get_all():
+                # Valid target — bounce it to owner's hand
+                move_to_zone(game, target, Zone.BATTLEFIELD, Zone.HAND)
+                return
+
+        # Target not found on any opponent's battlefield — fizzles

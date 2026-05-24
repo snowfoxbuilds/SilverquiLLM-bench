@@ -1,44 +1,63 @@
-"""Card implementation for Seismic Rupture."""
+"""Card implementation for Wardens of the Cycle (FDN #205 slot).
+
+Demonstrates converge / mana-color tracking.  Wardens of the Cycle is a
+multicolor creature whose enter-the-battlefield ability creates a number
+of 1/1 Saproling tokens equal to the number of distinct colors of mana
+spent to cast it (converge mechanic).
+"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import Sorcery
+from benchmarks.sos.workspace.engine.card import Creature
 from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
 
 if TYPE_CHECKING:
     from benchmarks.sos.workspace.engine.game_state import GameState
 
 
-class SeismicRupture(Sorcery):
-    """Seismic Rupture — {2}{R} — Sorcery.
+class WardensOfTheCycle(Creature):
+    """Wardens of the Cycle — {3}{B}{G} — 4/4 — Treefolk.
 
-    Seismic Rupture deals 2 damage to each creature without flying.
+    Converge — When this creature enters, create a 1/1 green Saproling
+    creature token for each color of mana spent to cast it.
 
-    FDN collector number 205.
+    FDN collector number 205 (reference slot for converge/mana-color tracking).
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        kwargs.setdefault("name", "Seismic Rupture")
-        kwargs.setdefault("mana_cost", ManaCost.parse("{2}{R}"))
+        kwargs.setdefault("name", "Wardens of the Cycle")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{3}{B}{G}"))
+        kwargs.setdefault("subtypes", {"Treefolk"})
+        kwargs.setdefault("keywords", Keyword(0))
+        kwargs.setdefault("base_power", 4)
+        kwargs.setdefault("base_toughness", 4)
         kwargs.setdefault(
             "rules_text",
-            "Seismic Rupture deals 2 damage to each creature without flying.",
+            "Converge — When this creature enters, create a 1/1 green "
+            "Saproling creature token for each color of mana spent to cast it.",
         )
         super().__init__(**kwargs)
+        # Tracks colors spent when cast (set externally by cast logic or tests).
+        self.colors_spent: int = 0
 
     def on_resolve(self, game: "GameState") -> None:
-        """Deal 2 damage to each creature without flying."""
-        from benchmarks.sos.workspace.engine.game import deal_damage
+        """ETB: create Saproling tokens equal to distinct colors of mana spent."""
+        from benchmarks.sos.workspace.engine.game import create_token
 
-        creatures: list = []
-        for player in game.players:
-            for perm in game.get_battlefield(player).get_all():
-                if CardType.CREATURE in getattr(perm, "card_types", set()):
-                    kw = getattr(perm, "keywords", Keyword(0))
-                    if not (kw & Keyword.FLYING):
-                        creatures.append(perm)
+        controller = self.controller
+        if controller is None:
+            return
 
-        for creature in creatures:
-            deal_damage(game, self, creature, 2)
+        # Use colors_spent attribute (set during casting or by test setup).
+        count = self.colors_spent
+
+        for _ in range(count):
+            token = Creature(
+                name="Saproling",
+                subtypes={"Saproling"},
+                base_power=1,
+                base_toughness=1,
+            )
+            create_token(game, controller, token)

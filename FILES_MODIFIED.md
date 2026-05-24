@@ -95,4 +95,14 @@ benchmarks/sos/workspace/tests/engine/test_game_state.py — reworded docstring 
 - `tests/test_sos_regenerated_artifacts.py` — updated cards/sos path reference
 - `tests/test_sos_restructure.py` — updated CARDS_SOS path to new location
 - `tests/test_sos_stubs.py` — updated all cards module references to new path
+
+## Item 6: Author FDN Reference Tests
+
+### Implementation
+- `benchmarks/sos/workspace/cards/fdn/fdn_13/tests.py` — Fleeting Flight tests: replacement effect (combat damage prevention), +1/+1 counter, flying grant
+- `benchmarks/sos/workspace/cards/fdn/fdn_15/tests.py` — Hare Apparent tests: targeted ETB token creation based on board-state counting
+- `benchmarks/sos/workspace/cards/fdn/fdn_200/tests.py` — Goblin Surprise tests: modal spell with pump mode and token mode
+- `benchmarks/sos/workspace/cards/fdn/fdn_205/tests.py` — Seismic Rupture tests: sweeper dealing damage to non-flying creatures
+- `benchmarks/sos/workspace/cards/fdn/fdn_242/tests.py` — Lathril tests: menace keyword and combat damage trigger creating tokens
+- `benchmarks/sos/workspace/pytest.ini` — added --import-mode=importlib for tests.py module name collision avoidance
 - `tests/test_tier_naming.py` — updated cards.registry import

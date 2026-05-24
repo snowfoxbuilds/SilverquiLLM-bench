@@ -78,7 +78,7 @@ Sequencing note: Items 1.1–1.7 below replace what was previously a single mega
 
   Testability: Per done-state checks. Add a parametrized unit test that imports every `benchmarks.sos.workspace.cards.sos.*.card_impl` module dynamically and asserts each defines a class inheriting from `CardImpl`.
 
-- [ ] **1.6 Author FDN Reference Tests at ****`benchmarks/sos/workspace/cards/fdn/{cn}/tests.py`**
+- [x] **1.6 Author FDN Reference Tests at ****`benchmarks/sos/workspace/cards/fdn/{cn}/tests.py`**
   Detail: Author 3–5 illustrative FDN test files covering representative mechanics: Converge mana-color tracking, modal spell, targeted ETB, multi-blocker combat, replacement effect. Choose the specific FDN collector numbers based on which already-implemented FDN cards cleanly exercise each mechanic (inspect `benchmarks/sos/workspace/cards/fdn/{cn}/card_impl.py` to confirm). Use `benchmarks/sos/workspace/tests/test_utils.py` helpers and follow the patterns established in `benchmarks/sos/workspace/tests/engine/`. These tests are illustrative learning material the agent will see; they may overlap freely with audited FDN tests at `benchmarks/sos/data/tests/audited/fdn/` (no contamination concern — the agent is not graded on either FDN suite).
 
   Files: `benchmarks/sos/workspace/cards/fdn/{cn}/tests.py` for 3–5 chosen FDN cards (new).
