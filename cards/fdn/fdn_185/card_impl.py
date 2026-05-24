@@ -1,11 +1,11 @@
 """Card implementation for Stromkirk Bloodthief."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature
-from engine.types import ManaCost
-from engine.events import EndStepTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import ManaCost
+from benchmarks.sos.workspace.engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class StromkirkBloodthief(Creature):
     """Stromkirk Bloodthief — {2}{B} — 2/2 — Vampire Rogue.
@@ -27,8 +27,8 @@ class StromkirkBloodthief(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register end step trigger for Vampire counter."""
-        from engine.game import add_counter
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import add_counter
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 
@@ -48,7 +48,7 @@ class StromkirkBloodthief(Creature):
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return
-            from engine.types import CardType
+            from benchmarks.sos.workspace.engine.types import CardType
             bf = game.get_battlefield(ctrl)
             vampires = []
             for perm in bf.get_all():

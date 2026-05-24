@@ -1,10 +1,10 @@
 """Audited tests for FDN 3 — Armasaur Guide."""
 from __future__ import annotations
 from card_impl import ArmasaurGuide
-from engine.card import Creature
-from engine.types import CardType, Keyword, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
 from benchmarks.sos.workspace.tests.test_utils import create_game
-from engine.events import AttacksTriggeredEvent
+from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent
 
 class TestArmasaurGuideBasics:
     """Basic card properties."""

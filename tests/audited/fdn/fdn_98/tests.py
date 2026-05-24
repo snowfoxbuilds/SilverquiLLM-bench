@@ -1,10 +1,10 @@
 """Audited tests for FDN 98 — Ambush Wolf."""
 from __future__ import annotations
 from card_impl import AmbushWolf
-from engine.card import Creature
-from engine.types import Keyword, ManaCost, Zone
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import Keyword, ManaCost, Zone
 from benchmarks.sos.workspace.tests.test_utils import create_game
-from engine.events import EntersBattlefieldTriggeredEvent
+from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
 
 def _resolve_stack(game):
     """Pop and resolve all objects on the stack."""

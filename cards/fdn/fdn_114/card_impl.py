@@ -3,10 +3,10 @@
 from __future__ import annotations
 import random
 from typing import TYPE_CHECKING, Any
-from engine.card import ActivatedAbility, ArtifactCreature, Creature, ManaAbility
-from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
+from benchmarks.sos.workspace.engine.card import ActivatedAbility, ArtifactCreature, Creature, ManaAbility
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
     from cards.registry import CardRegistry
 
@@ -58,7 +58,7 @@ class TreetopSnarespinner(Creature):
 
         # ENGINE LIMITATION: sorcery-speed timing not enforced
         def _effect(game: Any) -> None:
-            from engine.game import add_counter
+            from benchmarks.sos.workspace.engine.game import add_counter
 
             target = getattr(source, "_current_target", None)
             if target is None:

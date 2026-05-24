@@ -5,11 +5,11 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING, Any
 
-from engine.card import ActivatedAbility, Creature
-from engine.types import CardType, Keyword, ManaCost
+from benchmarks.sos.workspace.engine.card import ActivatedAbility, Creature
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 
 class SquadRallier(Creature):
@@ -60,7 +60,7 @@ class SquadRallier(Creature):
             ctrl = getattr(source, "controller", None)
             if ctrl is None:
                 return
-            from engine.types import Zone
+            from benchmarks.sos.workspace.engine.types import Zone
 
             library = ctrl.zones[Zone.LIBRARY]
             cards_in_lib = list(library.get_all())

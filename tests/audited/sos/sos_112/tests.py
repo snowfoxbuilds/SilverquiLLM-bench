@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import DuelTactics
 
-from engine.card import Sorcery
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Sorcery
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -62,7 +62,7 @@ class TestDuelTacticsAbilities:
     def test_flashback_exiles_after_resolution(self) -> None:
         """Card must be exiled after flashback resolution."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = DuelTactics(name="Duel Tactics", owner=player)
@@ -77,7 +77,7 @@ class TestDuelTacticsAbilities:
     def test_flashback_removes_from_graveyard(self) -> None:
         """Flashback resolution must remove card from graveyard."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = DuelTactics(name="Duel Tactics", owner=player)
@@ -135,7 +135,7 @@ class TestDuelTacticsInteractions:
     def test_get_targets_finds_creatures(self) -> None:
         """get_targets should return valid creature targets."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -149,7 +149,7 @@ class TestDuelTacticsInteractions:
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         own = Creature(name="Own", owner=player, base_power=4, base_toughness=4)

@@ -3,14 +3,14 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
-from engine.events import GainsLifeTriggeredEvent
+from benchmarks.sos.workspace.engine.events import GainsLifeTriggeredEvent
 _impl_path = Path(__file__).resolve().parent.parent.parent.parent.parent / 'cards' / 'fdn' / 'fdn_135' / 'card_impl.py'
 _spec = importlib.util.spec_from_file_location('_fdn135_impl', _impl_path)
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 AjanisPridemate = _mod.AjanisPridemate
-from engine.card import Creature
-from engine.types import Keyword, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
 from benchmarks.sos.workspace.tests.test_utils import create_game
 
 def _resolve_stack(game):

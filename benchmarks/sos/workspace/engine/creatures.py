@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.card import Creature
-from engine.types import Keyword, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
 
 
 def make_vanilla(

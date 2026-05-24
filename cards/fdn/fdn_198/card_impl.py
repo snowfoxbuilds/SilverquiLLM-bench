@@ -1,11 +1,11 @@
 """Card implementation for Flamewake Phoenix."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature
-from engine.types import CardType, Keyword, ManaCost, Zone
-from engine.events import BeginningOfCombatTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Zone
+from benchmarks.sos.workspace.engine.events import BeginningOfCombatTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class FlamewakePhoenix(Creature):
     """Flamewake Phoenix — {1}{R}{R} — 2/2 — Phoenix — Flying, Haste.
@@ -31,8 +31,8 @@ class FlamewakePhoenix(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register beginning-of-combat graveyard recursion trigger."""
-        from engine.triggers import TriggerRegistration
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

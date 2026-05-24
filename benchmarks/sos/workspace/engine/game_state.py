@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.combat import CombatState
-from engine.continuous_effects import EffectManager
-from engine.player import Player
-from engine.replacement_effects import ReplacementManager
-from engine.stack import Stack
-from engine.triggers import TriggerManager
-from engine.types import Phase, Step, Zone
-from engine.zones import ZoneContainer
+from benchmarks.sos.workspace.engine.combat import CombatState
+from benchmarks.sos.workspace.engine.continuous_effects import EffectManager
+from benchmarks.sos.workspace.engine.player import Player
+from benchmarks.sos.workspace.engine.replacement_effects import ReplacementManager
+from benchmarks.sos.workspace.engine.stack import Stack
+from benchmarks.sos.workspace.engine.triggers import TriggerManager
+from benchmarks.sos.workspace.engine.types import Phase, Step, Zone
+from benchmarks.sos.workspace.engine.zones import ZoneContainer
 
 # Ordered list of (Phase, Step | None) representing a full MTG turn.
 _TURN_SEQUENCE: list[tuple[Phase, Step | None]] = [

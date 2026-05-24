@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from card_impl import ElendaSaintOfDusk
-from engine.card import Creature
-from engine.types import Keyword, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
 from benchmarks.sos.workspace.tests.test_utils import create_game
 
 

@@ -1,10 +1,10 @@
 """Audited tests for FDN 253 — Goldvein Pick."""
 from __future__ import annotations
 from card_impl import GoldveinPick
-from engine.card import Artifact, Creature
-from engine.types import CardType, ManaCost, ManaType
+from benchmarks.sos.workspace.engine.card import Artifact, Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost, ManaType
 from benchmarks.sos.workspace.tests.test_utils import create_game
-from engine.events import DealsDamageTriggeredEvent
+from benchmarks.sos.workspace.engine.events import DealsDamageTriggeredEvent
 
 class TestGoldveinPickBasics:
     """Basic card properties."""

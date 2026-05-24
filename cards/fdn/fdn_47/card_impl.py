@@ -1,11 +1,11 @@
 """Card implementation for Mischievous Mystic."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature
-from engine.types import Keyword, ManaCost
-from engine.events import DrawsCardTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
+from benchmarks.sos.workspace.engine.events import DrawsCardTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class MischievousMystic(Creature):
     """Mischievous Mystic — {1}{U} — 2/1 — Human Wizard — Flying.
@@ -28,8 +28,8 @@ class MischievousMystic(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register draw trigger: second card each turn → Faerie token."""
-        from engine.game import create_token
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import create_token
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
         source._mystic_draws_this_turn: int = 0

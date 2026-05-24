@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import CardImpl, Sorcery
-from engine.continuous_effects import (
+from benchmarks.sos.workspace.engine.card import CardImpl, Sorcery
+from benchmarks.sos.workspace.engine.continuous_effects import (
     ContinuousEffect,
     DURATION_END_OF_TURN,
     Layer,
 )
-from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 
 class InvoluntaryEmployment(Sorcery):
@@ -48,7 +48,7 @@ class InvoluntaryEmployment(Sorcery):
 
     def on_resolve(self, game: "GameState") -> None:
         """Gain control, untap, grant haste, create Treasure."""
-        from engine.game import create_token
+        from benchmarks.sos.workspace.engine.game import create_token
 
         chosen = getattr(self, "chosen_targets", None)
         target = chosen[0] if chosen else None

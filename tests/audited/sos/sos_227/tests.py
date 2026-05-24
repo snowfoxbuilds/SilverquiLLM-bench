@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import SnoopingPage
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -77,7 +77,7 @@ class TestSnoopingPageAbilities:
     def test_repartee_requires_creature_target(self) -> None:
         """Repartee only triggers for spells targeting a creature."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         card = SnoopingPage(name="Snooping Page", owner=player)
@@ -95,8 +95,8 @@ class TestSnoopingPageAbilities:
     def test_repartee_produces_effect(self) -> None:
         """Repartee trigger should produce an observable effect."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = SnoopingPage(name="Snooping Page", owner=player)
@@ -118,8 +118,8 @@ class TestSnoopingPageAbilities:
     def test_draws_cards(self) -> None:
         """Resolution should draw card(s)."""
         from benchmarks.sos.workspace.tests.test_utils import create_game
-        from engine.card import Sorcery
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Sorcery
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         filler = Sorcery(name="Filler", owner=player)
@@ -156,7 +156,7 @@ class TestSnoopingPageEdgeCases:
     def test_zone_transition_graveyard(self) -> None:
         """Creature should properly move to graveyard on death."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = SnoopingPage(name="Snooping Page", owner=player)
@@ -175,7 +175,7 @@ class TestSnoopingPageInteractions:
     def test_get_targets_finds_creatures(self) -> None:
         """get_targets should return valid creature targets."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -189,7 +189,7 @@ class TestSnoopingPageInteractions:
     def test_coexists_with_other_creatures(self) -> None:
         """Card should coexist with other creatures on battlefield."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         card = SnoopingPage(name="Snooping Page", owner=player)

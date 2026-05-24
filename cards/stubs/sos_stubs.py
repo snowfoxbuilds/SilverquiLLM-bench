@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from engine.card import (
+from benchmarks.sos.workspace.engine.card import (
     Artifact,
     ArtifactCreature,
     CardImpl,
@@ -21,7 +21,7 @@ from engine.card import (
     Planeswalker,
     Sorcery,
 )
-from engine.types import CardType, ManaCost, Supertype
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Supertype
 
 if TYPE_CHECKING:
     from cards.registry import CardRegistry

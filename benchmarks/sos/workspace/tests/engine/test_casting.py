@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from engine.card import (
+from benchmarks.sos.workspace.engine.card import (
     Artifact,
     ArtifactCreature,
     CardImpl,
@@ -24,7 +24,7 @@ from engine.card import (
     Planeswalker,
     Sorcery,
 )
-from engine.casting import (
+from benchmarks.sos.workspace.engine.casting import (
     CastingError,
     _PERMANENT_TYPES,
     can_cast_at_instant_speed,
@@ -32,10 +32,10 @@ from engine.casting import (
     is_sorcery_speed,
     play_land,
 )
-from engine.game_state import GameState
-from engine.player import DeterministicPlayer
-from engine.stack import StackObject
-from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step
+from benchmarks.sos.workspace.engine.game_state import GameState
+from benchmarks.sos.workspace.engine.player import DeterministicPlayer
+from benchmarks.sos.workspace.engine.stack import StackObject
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step
 
 
 # ---------------------------------------------------------------------------

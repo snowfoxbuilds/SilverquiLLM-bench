@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from card_impl import HeraldicBanner
-from engine.card import Artifact, ManaAbility
-from engine.types import ManaCost, ManaType
+from benchmarks.sos.workspace.engine.card import Artifact, ManaAbility
+from benchmarks.sos.workspace.engine.types import ManaCost, ManaType
 from benchmarks.sos.workspace.tests.test_utils import create_game
 
 

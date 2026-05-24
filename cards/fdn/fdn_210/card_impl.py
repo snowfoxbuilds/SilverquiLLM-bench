@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Instant
-from engine.types import ManaCost
+from benchmarks.sos.workspace.engine.card import Instant
+from benchmarks.sos.workspace.engine.types import ManaCost
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 
 class ThrillOfPossibility(Instant):
@@ -32,7 +32,7 @@ class ThrillOfPossibility(Instant):
 
     def on_resolve(self, game: "GameState") -> None:
         """Draw two cards (discard cost paid during casting)."""
-        from engine.game import draw_card
+        from benchmarks.sos.workspace.engine.game import draw_card
 
         controller = self.controller
         if controller is None:

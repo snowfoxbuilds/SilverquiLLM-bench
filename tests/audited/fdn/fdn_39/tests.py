@@ -1,10 +1,10 @@
 """Audited tests for FDN 39 — Grappling Kraken."""
 from __future__ import annotations
 from card_impl import GrapplingKraken
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 from benchmarks.sos.workspace.tests.test_utils import create_game
-from engine.events import EntersBattlefieldTriggeredEvent
+from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
 
 class TestGrapplingKrakenBasics:
     """Basic card properties."""
@@ -52,7 +52,7 @@ class TestGrapplingKrakenLandfall:
 
     def _make_land(self, owner):
         """Create a minimal land-like object."""
-        from engine.card import CardImpl
+        from benchmarks.sos.workspace.engine.card import CardImpl
         land = CardImpl(name='Island', owner=owner, controller=owner)
         land.card_types = {CardType.LAND}
         return land

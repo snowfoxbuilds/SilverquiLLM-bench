@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from card_impl import InspiringPaladin
-from engine.card import Creature
-from engine.types import CardType, Keyword, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
 from benchmarks.sos.workspace.tests.test_utils import create_game
 
 
@@ -60,7 +60,7 @@ class TestInspiringPaladinFirstStrike:
 
     def test_creature_with_counter_gets_first_strike_on_own_turn(self) -> None:
         game, p1, paladin = self._setup()
-        from engine.game import add_counter
+        from benchmarks.sos.workspace.engine.game import add_counter
         other = Creature(name="Bear", base_power=2, base_toughness=2, owner=p1, controller=p1)
         game.get_battlefield(p1).add(other)
         add_counter(game, other, "+1/+1", 1)

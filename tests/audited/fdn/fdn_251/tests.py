@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from card_impl import CampusGuide
-from engine.card import ArtifactCreature
-from engine.types import ManaCost
+from benchmarks.sos.workspace.engine.card import ArtifactCreature
+from benchmarks.sos.workspace.engine.types import ManaCost
 from benchmarks.sos.workspace.tests.test_utils import create_game
 
 

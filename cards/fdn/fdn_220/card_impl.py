@@ -2,12 +2,12 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
-from engine.card import ActivatedAbility, Creature, Enchantment
-from engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
-from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
-from engine.events import EntersBattlefieldTriggeredEvent
+from benchmarks.sos.workspace.engine.card import ActivatedAbility, Creature, Enchantment
+from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
     from cards.registry import CardRegistry
 
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
@@ -42,7 +42,7 @@ class GarruksUprising(Enchantment):
                 if CardType.CREATURE in getattr(obj, 'card_types', set()):
                     power = getattr(obj, 'power', getattr(obj, 'base_power', 0))
                     if power >= 4:
-                        from engine.game import draw_card
+                        from benchmarks.sos.workspace.engine.game import draw_card
                         draw_card(game, controller)
                         break
         self._register_effect(game)
@@ -63,8 +63,8 @@ class GarruksUprising(Enchantment):
         self._effect_ref = game.effect_manager.add(effect)
 
     def register_triggers(self, game: GameState) -> None:
-        from engine.triggers import TriggerRegistration
-        from engine.game import draw_card
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import draw_card
         source = self
 
         def _condition(game: Any, event: dict) -> bool:

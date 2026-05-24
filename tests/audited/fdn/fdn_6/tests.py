@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from card_impl import ClawsOut
-from engine.card import Creature, Instant
-from engine.types import CardType, Keyword, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature, Instant
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
 from benchmarks.sos.workspace.tests.test_utils import create_game
 
 

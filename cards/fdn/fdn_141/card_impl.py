@@ -1,11 +1,11 @@
 """Card implementation for Giada, Font of Hope."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature, ManaAbility
-from engine.types import CardType, Keyword, ManaCost, Zone
-from engine.events import EntersBattlefieldTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature, ManaAbility
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Zone
+from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class GiadaFontOfHope(Creature):
     """Giada, Font of Hope — {1}{W} — 2/2 — Legendary Angel.
@@ -32,8 +32,8 @@ class GiadaFontOfHope(Creature):
     def register_triggers(self, game: 'GameState') -> None:
         """Register ETB trigger for other Angels entering."""
         from collections import deque
-        from engine.game import add_counter
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import add_counter
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
         _angel_queue: deque = deque()
@@ -70,7 +70,7 @@ class GiadaFontOfHope(Creature):
 
     def get_mana_abilities(self) -> list:
         """Return the tap-for-white mana ability."""
-        from engine.card import ManaAbility
+        from benchmarks.sos.workspace.engine.card import ManaAbility
         source = self
 
         def _cost(game: Any, src: Any) -> bool:
@@ -83,6 +83,6 @@ class GiadaFontOfHope(Creature):
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return
-            from engine.types import ManaType
+            from benchmarks.sos.workspace.engine.types import ManaType
             ctrl.mana_pool.add(ManaType.WHITE, 1)
         return [ManaAbility(cost=_cost, mana_produced=_mana_produced, description='{T}: Add {W}. Spend this mana only to cast an Angel spell.')]

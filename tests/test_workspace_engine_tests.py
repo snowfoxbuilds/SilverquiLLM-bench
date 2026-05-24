@@ -130,13 +130,15 @@ class TestGracefulMissing:
         fake_root = tmp_path / "fake_repo"
         fake_root.mkdir()
         # Create minimal structure needed for stage_workspace to work
-        (fake_root / "engine").mkdir()
-        (fake_root / "engine" / "card.py").write_text("# stub")
+        (fake_root / "benchmarks" / "sos" / "workspace" / "engine").mkdir(parents=True)
+        (fake_root / "benchmarks" / "sos" / "workspace" / "engine" / "card.py").write_text("# stub")
+        (fake_root / "benchmarks" / "sos" / "workspace" / "tests").mkdir(parents=True, exist_ok=True)
+        (fake_root / "benchmarks" / "sos" / "workspace" / "tests" / "test_utils.md").write_text("# stub")
         (fake_root / "cards" / "sos").mkdir(parents=True)
         (fake_root / "cards" / "fdn").mkdir(parents=True)
         (fake_root / "docs").mkdir()
         (fake_root / "docs" / "test_utils.md").write_text("# stub")
-        (fake_root / "benchmarks" / "sos" / "data").mkdir(parents=True)
+        (fake_root / "benchmarks" / "sos" / "data").mkdir(parents=True, exist_ok=True)
         (fake_root / "benchmarks" / "sos" / "data" / "comprehensive_rules.txt").write_text("rules")
         (fake_root / "benchmarks" / "sos" / "data" / "rules_overview.md").write_text("overview")
 

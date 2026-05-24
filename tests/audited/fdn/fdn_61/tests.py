@@ -2,9 +2,9 @@
 from __future__ import annotations
 import pytest
 from card_impl import HighSocietyHunter
-from engine.card import Creature
-from engine.events import AttacksTriggeredEvent, CreatureDiesTriggeredEvent
-from engine.types import CardType, Keyword, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent, CreatureDiesTriggeredEvent
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
 from benchmarks.sos.workspace.tests.test_utils import create_game
 
 class TestHighSocietyHunterBasics:
@@ -154,8 +154,8 @@ class TestHighSocietyHunterDeathTrigger:
 
     def test_death_trigger_draws_card(self) -> None:
         """When death effect fires, controller draws a card."""
-        from engine.card import CardImpl
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import CardImpl
+        from benchmarks.sos.workspace.engine.types import Zone
         game, hunter, p1 = self._setup_death()
         lib_card = CardImpl(name='Mountain', owner=p1)
         p1.zones[Zone.LIBRARY].add(lib_card)

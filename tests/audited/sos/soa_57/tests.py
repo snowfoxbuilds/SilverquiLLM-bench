@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import ShamanicRevelation
 
-from engine.card import Sorcery
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Sorcery
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -52,8 +52,8 @@ class TestShamanicRevelationAbilities:
     def test_draws_cards(self) -> None:
         """Resolution should draw card(s)."""
         from benchmarks.sos.workspace.tests.test_utils import create_game
-        from engine.card import Sorcery
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Sorcery
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         filler = Sorcery(name="Filler", owner=player)
@@ -89,7 +89,7 @@ class TestShamanicRevelationEdgeCases:
     def test_power_targeting_restriction(self) -> None:
         """Only targets creatures with power 4 or greater."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -110,7 +110,7 @@ class TestShamanicRevelationInteractions:
     def test_resolution_with_board_state(self) -> None:
         """Card should resolve correctly with established board."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -133,7 +133,7 @@ class TestShamanicRevelationInteractions:
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         own = Creature(name="Own", owner=player, base_power=4, base_toughness=4)

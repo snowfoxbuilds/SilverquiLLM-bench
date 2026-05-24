@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Sorcery
-from engine.types import CardType, Keyword, ManaCost
+from benchmarks.sos.workspace.engine.card import Sorcery
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 
 class SeismicRupture(Sorcery):
@@ -30,7 +30,7 @@ class SeismicRupture(Sorcery):
 
     def on_resolve(self, game: "GameState") -> None:
         """Deal 2 damage to each creature without flying."""
-        from engine.game import deal_damage
+        from benchmarks.sos.workspace.engine.game import deal_damage
 
         creatures: list = []
         for player in game.players:

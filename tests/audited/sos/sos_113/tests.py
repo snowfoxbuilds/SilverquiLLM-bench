@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import EmeritusOfConflictLightningBolt
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -62,13 +62,13 @@ class TestEmeritusOfConflictLightningBoltAbilities:
 
     def test_has_first_strike(self) -> None:
         """Emeritus of Conflict // Lightning Bolt must have First strike keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = EmeritusOfConflictLightningBolt(name="Emeritus of Conflict // Lightning Bolt", owner=None, base_power=2, base_toughness=2)
         assert Keyword.FIRST_STRIKE in card.keywords, "Emeritus of Conflict // Lightning Bolt should have First strike"
 
     def test_has_prepared(self) -> None:
         """Emeritus of Conflict // Lightning Bolt must have Prepared keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = EmeritusOfConflictLightningBolt(name="Emeritus of Conflict // Lightning Bolt", owner=None, base_power=2, base_toughness=2)
         assert Keyword.PREPARED in card.keywords, "Emeritus of Conflict // Lightning Bolt should have Prepared"
 
@@ -101,7 +101,7 @@ class TestEmeritusOfConflictLightningBoltEdgeCases:
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = EmeritusOfConflictLightningBolt(name="Emeritus of Conflict // Lightning Bolt", owner=player, base_power=2, base_toughness=2)
@@ -120,8 +120,8 @@ class TestEmeritusOfConflictLightningBoltInteractions:
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -138,8 +138,8 @@ class TestEmeritusOfConflictLightningBoltInteractions:
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         other = Creature(name="Companion", owner=player, base_power=2, base_toughness=2)

@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import SunderingArchaic
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -62,15 +62,15 @@ class TestSunderingArchaicAbilities:
 
     def test_has_converge(self) -> None:
         """Sundering Archaic must have Converge keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = SunderingArchaic(name="Sundering Archaic", owner=None, base_power=3, base_toughness=3)
         assert Keyword.CONVERGE in card.keywords, "Sundering Archaic should have Converge"
 
     def test_etb_exiles_target(self) -> None:
         """ETB must exile target permanent per oracle text."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -106,7 +106,7 @@ class TestSunderingArchaicEdgeCases:
     def test_fizzle_no_targets_creature_stays(self) -> None:
         """If ETB ability fizzles, the creature remains on battlefield."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = SunderingArchaic(name="Sundering Archaic", owner=player, base_power=3, base_toughness=3)
@@ -175,8 +175,8 @@ class TestSunderingArchaicInteractions:
     def test_exile_from_graveyard_interaction(self) -> None:
         """Cards exiled from graveyard must move to exile zone."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Instant
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Instant
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         fodder = Instant(name="Fodder", owner=player)
@@ -196,8 +196,8 @@ class TestSunderingArchaicInteractions:
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Creature
-from engine.types import ManaCost, Zone
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import ManaCost, Zone
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 
 class BigfinBouncer(Creature):
@@ -44,7 +44,7 @@ class BigfinBouncer(Creature):
                 continue
             bf = game.get_battlefield(player)
             for obj in bf.get_all():
-                from engine.types import CardType
+                from benchmarks.sos.workspace.engine.types import CardType
                 card_types = getattr(obj, "card_types", set())
                 if CardType.CREATURE in card_types:
                     targets.append(obj)
@@ -56,7 +56,7 @@ class BigfinBouncer(Creature):
 
     def on_resolve(self, game: "GameState") -> None:
         """ETB: bounce target creature an opponent controls."""
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
 
         controller = self.controller
         if controller is None:

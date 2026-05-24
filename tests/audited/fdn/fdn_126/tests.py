@@ -1,10 +1,10 @@
 """Audited tests for FDN 126 — Zimone, Paradox Sculptor."""
 from __future__ import annotations
 from card_impl import ZimoneParadoxSculptor
-from engine.card import Creature
-from engine.types import ManaCost, ManaType, Zone
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import ManaCost, ManaType, Zone
 from benchmarks.sos.workspace.tests.test_utils import create_game
-from engine.events import BeginningOfCombatTriggeredEvent
+from benchmarks.sos.workspace.engine.events import BeginningOfCombatTriggeredEvent
 
 def _resolve_stack(game):
     """Pop and resolve all objects on the stack."""

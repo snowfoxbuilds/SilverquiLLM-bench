@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Sorcery
-from engine.types import CardType, ManaCost, Zone
+from benchmarks.sos.workspace.engine.card import Sorcery
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Zone
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 
 class RiseOfTheDarkRealms(Sorcery):
@@ -32,7 +32,7 @@ class RiseOfTheDarkRealms(Sorcery):
 
     def on_resolve(self, game: "GameState") -> None:
         """Put all creature cards from all graveyards onto the battlefield."""
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
 
         controller = self.controller
         if controller is None:

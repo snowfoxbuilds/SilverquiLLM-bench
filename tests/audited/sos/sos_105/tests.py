@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import WitheringCurse
 
-from engine.card import Sorcery
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Sorcery
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -52,7 +52,7 @@ class TestWitheringCurseAbilities:
 
     def test_has_infusion(self) -> None:
         """Withering Curse must have Infusion keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = WitheringCurse(name="Withering Curse", owner=None)
         assert Keyword.INFUSION in card.keywords, "Withering Curse should have Infusion"
 
@@ -67,8 +67,8 @@ class TestWitheringCurseAbilities:
     def test_resolution_removes_creatures(self) -> None:
         """Spell resolution must remove/destroy creatures per oracle text."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -90,8 +90,8 @@ class TestWitheringCurseEdgeCases:
     def test_infusion_base_effect_without_condition(self) -> None:
         """Without infusion condition, only base effect applies."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -110,8 +110,8 @@ class TestWitheringCurseEdgeCases:
     def test_infusion_enhanced_effect_with_condition(self) -> None:
         """With infusion condition met, enhanced effect applies."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -149,8 +149,8 @@ class TestWitheringCurseInteractions:
     def test_affects_both_players_creatures(self) -> None:
         """Board-wide effect must affect both players creatures."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -174,8 +174,8 @@ class TestWitheringCurseInteractions:
     def test_spell_to_graveyard_after_resolution(self) -> None:
         """Resolved spell must go to graveyard."""
         from benchmarks.sos.workspace.tests.test_utils import create_game
-        from engine.types import Zone
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.types import Zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         player = game.players[0]
         card = WitheringCurse(name="Withering Curse", owner=player)

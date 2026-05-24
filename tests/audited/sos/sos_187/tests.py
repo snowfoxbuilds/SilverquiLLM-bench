@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import EssenceknitScholar
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -77,8 +77,8 @@ class TestEssenceknitScholarAbilities:
     def test_draws_cards(self) -> None:
         """Resolution should draw card(s)."""
         from benchmarks.sos.workspace.tests.test_utils import create_game
-        from engine.card import Sorcery
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Sorcery
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         filler = Sorcery(name="Filler", owner=player)
@@ -114,7 +114,7 @@ class TestEssenceknitScholarEdgeCases:
     def test_zone_transition_graveyard(self) -> None:
         """Creature should properly move to graveyard on death."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = EssenceknitScholar(name="Essenceknit Scholar", owner=player)
@@ -133,7 +133,7 @@ class TestEssenceknitScholarInteractions:
     def test_resolution_with_board_state(self) -> None:
         """Card should resolve correctly with established board."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -156,7 +156,7 @@ class TestEssenceknitScholarInteractions:
     def test_coexists_with_other_creatures(self) -> None:
         """Card should coexist with other creatures on battlefield."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         card = EssenceknitScholar(name="Essenceknit Scholar", owner=player)

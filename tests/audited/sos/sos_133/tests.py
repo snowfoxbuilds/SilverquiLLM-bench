@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import TackleArtist
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -62,13 +62,13 @@ class TestTackleArtistAbilities:
 
     def test_has_trample(self) -> None:
         """Tackle Artist must have Trample keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = TackleArtist(name="Tackle Artist", owner=None, base_power=4, base_toughness=3)
         assert Keyword.TRAMPLE in card.keywords, "Tackle Artist should have Trample"
 
     def test_has_opus(self) -> None:
         """Tackle Artist must have Opus keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = TackleArtist(name="Tackle Artist", owner=None, base_power=4, base_toughness=3)
         assert Keyword.OPUS in card.keywords, "Tackle Artist should have Opus"
 
@@ -132,8 +132,8 @@ class TestTackleArtistInteractions:
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]

@@ -1,12 +1,12 @@
 """Card implementation for Goblin Bushwhacker."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import ActivatedAbility, Artifact, Creature, Enchantment, Instant, ManaAbility, Sorcery
-from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, DURATION_PERMANENT, Layer, SubLayer
-from engine.types import CardType, Color, HybridManaSymbol, Keyword, ManaCost, ManaType, Supertype, Zone
-from engine.events import EntersBattlefieldTriggeredEvent
+from benchmarks.sos.workspace.engine.card import ActivatedAbility, Artifact, Creature, Enchantment, Instant, ManaAbility, Sorcery
+from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, DURATION_PERMANENT, Layer, SubLayer
+from benchmarks.sos.workspace.engine.types import CardType, Color, HybridManaSymbol, Keyword, ManaCost, ManaType, Supertype, Zone
+from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
     from cards.registry import CardRegistry
 
 def _self_etb_condition(source: Any):
@@ -46,7 +46,7 @@ class GoblinBushwhacker(Creature):
         self.has_kicker: bool = True
 
     def register_triggers(self, game: GameState) -> None:
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
 
         def _etb_effect(g: GameState) -> None:

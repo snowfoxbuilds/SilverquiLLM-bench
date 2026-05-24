@@ -1,10 +1,10 @@
 """Audited tests for FDN 197 — Firespitter Whelp."""
 from __future__ import annotations
 from card_impl import FirespitterWhelp
-from engine.card import CardImpl, Creature
-from engine.types import CardType, Keyword, ManaCost
+from benchmarks.sos.workspace.engine.card import CardImpl, Creature
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
 from benchmarks.sos.workspace.tests.test_utils import create_game
-from engine.events import SpellCastTriggeredEvent
+from benchmarks.sos.workspace.engine.events import SpellCastTriggeredEvent
 
 def _resolve_stack(game):
     while not game.stack.is_empty():

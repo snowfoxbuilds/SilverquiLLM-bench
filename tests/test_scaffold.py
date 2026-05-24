@@ -83,10 +83,10 @@ class TestDirectoryStructure:
     @pytest.mark.parametrize(
         "package_dir",
         [
-            "engine",
+            "benchmarks/sos/workspace/engine",
             "cards",
             "tests",
-            "tests/engine",
+            "benchmarks/sos/workspace/tests/engine",
         ],
         ids=[
             "engine",
@@ -108,7 +108,7 @@ class TestPackageImportability:
 
     def test_import_engine(self) -> None:
         """The 'engine' package must be importable."""
-        mod = importlib.import_module("engine")
+        mod = importlib.import_module("benchmarks.sos.workspace.engine")
         assert mod is not None
 
     def test_import_cards(self) -> None:
@@ -128,7 +128,7 @@ class TestPyTypedMarker:
 
     @pytest.mark.parametrize(
         "package_dir",
-        ["engine", "cards"],
+        ["benchmarks/sos/workspace/engine", "cards"],
         ids=["engine", "cards"],
     )
     def test_py_typed_exists(self, package_dir: str) -> None:

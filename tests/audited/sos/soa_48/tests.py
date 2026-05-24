@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import SubterraneanTremors
 
-from engine.card import Sorcery
-from engine.types import CardType
+from benchmarks.sos.workspace.engine.card import Sorcery
+from benchmarks.sos.workspace.engine.types import CardType
 
 
 @pytest.mark.basic
@@ -57,7 +57,7 @@ class TestSubterraneanTremorsAbilities:
         This test will fail against stubs (expected).
         """
         from benchmarks.sos.workspace.tests.test_utils import create_game
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
 
         game = create_game()
         player = game.players[0]
@@ -79,7 +79,7 @@ class TestSubterraneanTremorsAbilities:
         This test will fail against stubs (expected).
         """
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Artifact
+        from benchmarks.sos.workspace.engine.card import Artifact
 
         game = create_game()
         player = game.players[0]
@@ -102,7 +102,7 @@ class TestSubterraneanTremorsAbilities:
         This test will fail against stubs (expected).
         """
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature as CreatureBase
+        from benchmarks.sos.workspace.engine.card import Creature as CreatureBase
 
         game = create_game()
         player = game.players[0]

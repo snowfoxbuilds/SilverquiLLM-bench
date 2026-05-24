@@ -23,14 +23,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import CardImpl
-from engine.stack import StackObject
-from engine.types import CardType, Keyword, ManaCost, Phase, Zone
-from engine.zones import move_zone
+from benchmarks.sos.workspace.engine.card import CardImpl
+from benchmarks.sos.workspace.engine.stack import StackObject
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Phase, Zone
+from benchmarks.sos.workspace.engine.zones import move_zone
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
-    from engine.player import Player
+    from benchmarks.sos.workspace.engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.player import Player
 
 
 # Card types that represent permanents — these go to the battlefield on resolve.
@@ -191,7 +191,7 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
 
     # 5b. Protection check — reject targets that have protection from this
     #     spell (the T in DEBT).
-    from engine.protection import has_protection_from
+    from benchmarks.sos.workspace.engine.protection import has_protection_from
 
     for target in chosen_targets:
         if has_protection_from(target, card):
@@ -290,7 +290,7 @@ def cast_spell_free(
         CastingError: If the card cannot be found in *from_zone* or
             legality checks fail.
     """
-    from engine.zones import move_to_zone
+    from benchmarks.sos.workspace.engine.zones import move_to_zone
 
     # Ensure controller is set
     card.controller = player
@@ -340,7 +340,7 @@ def cast_spell_free(
                 chosen_targets.append(target)
 
         # Protection check — reject targets that have protection from this spell
-        from engine.protection import has_protection_from
+        from benchmarks.sos.workspace.engine.protection import has_protection_from
 
         for target in chosen_targets:
             if has_protection_from(target, card):
@@ -390,7 +390,7 @@ def _resolve_spell(
        registration and the ETB event).
     4. Otherwise (instant / sorcery), move it to the owner's graveyard.
     """
-    from engine.zones import move_to_zone
+    from benchmarks.sos.workspace.engine.zones import move_to_zone
 
     # Read targets from the StackObject — the single source of truth.
     # Set chosen_targets on the card just before resolution so that
@@ -465,8 +465,23 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
 
     # Move from hand to battlefield via move_to_zone, which fires
     # ENTERS_BATTLEFIELD and registers triggers/replacement effects.
-    from engine.zones import move_to_zone
+    from benchmarks.sos.workspace.engine.zones import move_to_zone
     move_to_zone(game, land_card, Zone.HAND, Zone.BATTLEFIELD)
 
     # Decrement land plays
     player.land_plays_remaining -= 1
+
+
+def resolve_top(game: GameState) -> None:
+    """Resolve the top spell/ability on the stack.
+
+    Pops the top item from the stack, calls its on_resolve callback,
+    then runs state-based actions.  If the stack is empty this is a no-op.
+    """
+    if game.stack.is_empty():
+        return
+    from benchmarks.sos.workspace.engine.state_based_actions import resolve_state_based_actions
+
+    obj = game.stack.pop()
+    obj.on_resolve(game)
+    resolve_state_based_actions(game)

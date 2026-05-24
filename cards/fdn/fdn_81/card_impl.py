@@ -1,12 +1,12 @@
 """Card implementation for Chandra, Flameshaper."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature, LoyaltyAbility, Planeswalker
-from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
-from engine.events import EndStepTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature, LoyaltyAbility, Planeswalker
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
+from benchmarks.sos.workspace.engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
-    from engine.player import Player
+    from benchmarks.sos.workspace.engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.player import Player
     from cards.registry import CardRegistry
 
 class ChandraFlameshaper(Planeswalker):
@@ -60,8 +60,8 @@ class ChandraFlameshaper(Planeswalker):
 
         def _plus1(game: Any) -> None:
             """Create a token copy of target creature (with haste, sacrifice at end step)."""
-            from engine.game import create_token
-            from engine.triggers import TriggerRegistration
+            from benchmarks.sos.workspace.engine.game import create_token
+            from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
             target = getattr(pw, '_resolve_target', None)
             controller = pw.controller
             if target is None or controller is None:
@@ -76,7 +76,7 @@ class ChandraFlameshaper(Planeswalker):
 
             def _eot_effect(game: Any) -> None:
                 """Sacrifice the token at end of turn."""
-                from engine.game import sacrifice
+                from benchmarks.sos.workspace.engine.game import sacrifice
                 bf = game.get_battlefield(controller)
                 if bf.contains(token):
                     sacrifice(game, controller, token)
@@ -84,7 +84,7 @@ class ChandraFlameshaper(Planeswalker):
 
         def _minus4(game: Any) -> None:
             """Deal 8 damage divided among targets."""
-            from engine.game import deal_damage
+            from benchmarks.sos.workspace.engine.game import deal_damage
             damage_assignments = getattr(pw, '_damage_assignments', None)
             if damage_assignments:
                 for target, amount in damage_assignments:

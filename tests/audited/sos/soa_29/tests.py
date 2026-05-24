@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import FeedTheSwarm
 
-from engine.card import Sorcery
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Sorcery
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -52,7 +52,7 @@ class TestFeedTheSwarmAbilities:
     def test_destroys_target(self) -> None:
         """Resolution should destroy the target."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -111,7 +111,7 @@ class TestFeedTheSwarmInteractions:
     def test_get_targets_finds_creatures(self) -> None:
         """get_targets should return valid creature targets."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -125,7 +125,7 @@ class TestFeedTheSwarmInteractions:
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         own = Creature(name="Own", owner=player, base_power=4, base_toughness=4)

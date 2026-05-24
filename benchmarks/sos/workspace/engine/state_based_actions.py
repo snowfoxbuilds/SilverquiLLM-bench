@@ -13,13 +13,13 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
-from engine.events import CreatureDiesReplacementEvent
-from engine.types import CardType, Supertype, Zone
-from engine.zones import ZoneContainer
+from benchmarks.sos.workspace.engine.events import CreatureDiesReplacementEvent
+from benchmarks.sos.workspace.engine.types import CardType, Supertype, Zone
+from benchmarks.sos.workspace.engine.zones import ZoneContainer
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
-    from engine.player import Player
+    from benchmarks.sos.workspace.engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.player import Player
 
 
 # ---------------------------------------------------------------------------
@@ -44,7 +44,7 @@ def _move_to_graveyard(game: GameState, player: Player, obj: Any) -> None:
     replacement effects, event firing (``LEAVES_BATTLEFIELD``,
     ``CREATURE_DIES``), and trigger/effect unregistration.
     """
-    from engine.zones import move_to_zone
+    from benchmarks.sos.workspace.engine.zones import move_to_zone
 
     bf = _battlefield(game, player)
     if bf.contains(obj):
@@ -123,7 +123,7 @@ def _sba_creature_lethal_damage(game: GameState) -> bool:
 
             # Skip indestructible creatures
             if hasattr(obj, "keywords"):
-                from engine.types import Keyword
+                from benchmarks.sos.workspace.engine.types import Keyword
 
                 if Keyword.INDESTRUCTIBLE in obj.keywords:
                     continue
@@ -219,7 +219,7 @@ def _attachment_illegal_due_to_protection(obj: Any) -> bool:
     attached = getattr(obj, "attached_to", None)
     if attached is None:
         return False
-    from engine.protection import has_protection_from
+    from benchmarks.sos.workspace.engine.protection import has_protection_from
     return has_protection_from(attached, obj)
 
 

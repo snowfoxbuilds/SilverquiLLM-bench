@@ -1,10 +1,10 @@
 """Audited tests for FDN 112 — Spinner of Souls."""
 from __future__ import annotations
 from card_impl import SpinnerOfSouls
-from engine.card import Creature, Instant
-from engine.types import CardType, Keyword, ManaCost, Zone
+from benchmarks.sos.workspace.engine.card import Creature, Instant
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Zone
 from benchmarks.sos.workspace.tests.test_utils import create_game
-from engine.events import CreatureDiesTriggeredEvent
+from benchmarks.sos.workspace.engine.events import CreatureDiesTriggeredEvent
 
 def _resolve_stack(game):
     while not game.stack.is_empty():

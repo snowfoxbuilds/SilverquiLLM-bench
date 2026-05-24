@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import StrixhavenSkycoach
 
-from engine.card import Artifact
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Artifact
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -52,7 +52,7 @@ class TestStrixhavenSkycoachAbilities:
 
     def test_has_flying(self) -> None:
         """Strixhaven Skycoach must have Flying keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = StrixhavenSkycoach(name="Strixhaven Skycoach", owner=None)
         assert Keyword.FLYING in card.keywords, "Strixhaven Skycoach should have Flying"
 
@@ -106,8 +106,8 @@ class TestStrixhavenSkycoachInteractions:
     def test_spell_to_graveyard_after_resolution(self) -> None:
         """Resolved spell must go to graveyard."""
         from benchmarks.sos.workspace.tests.test_utils import create_game
-        from engine.types import Zone
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.types import Zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         player = game.players[0]
         card = StrixhavenSkycoach(name="Strixhaven Skycoach", owner=player)
@@ -119,8 +119,8 @@ class TestStrixhavenSkycoachInteractions:
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         other = Creature(name="Companion", owner=player, base_power=2, base_toughness=2)

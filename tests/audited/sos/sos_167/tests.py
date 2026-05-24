@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import WildHypothesis
 
-from engine.card import Sorcery
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Sorcery
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -66,7 +66,7 @@ class TestWildHypothesisAbilities:
     def test_adds_plus_counter(self) -> None:
         """Resolution should add +1/+1 counter to target."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         target = Creature(name="Target", owner=player, base_power=2, base_toughness=2)
@@ -86,8 +86,8 @@ class TestWildHypothesisAbilities:
     def test_surveil_effect(self) -> None:
         """Resolution should surveil 2."""
         from benchmarks.sos.workspace.tests.test_utils import create_game
-        from engine.card import Sorcery
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Sorcery
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         for i in range(4):
@@ -128,7 +128,7 @@ class TestWildHypothesisInteractions:
     def test_resolution_with_board_state(self) -> None:
         """Card should resolve correctly with established board."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -151,7 +151,7 @@ class TestWildHypothesisInteractions:
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         own = Creature(name="Own", owner=player, base_power=4, base_toughness=4)

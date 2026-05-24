@@ -17,12 +17,12 @@ from __future__ import annotations
 
 import pytest
 
-from engine.game_state import GameState
-from engine.mana import ManaPool
-from engine.player import DeterministicPlayer
-from engine.turn import run_turn
-from engine.types import ManaType, Phase, Step, Zone
-from engine.zones import ZoneContainer
+from benchmarks.sos.workspace.engine.game_state import GameState
+from benchmarks.sos.workspace.engine.mana import ManaPool
+from benchmarks.sos.workspace.engine.player import DeterministicPlayer
+from benchmarks.sos.workspace.engine.turn import run_turn
+from benchmarks.sos.workspace.engine.types import ManaType, Phase, Step, Zone
+from benchmarks.sos.workspace.engine.zones import ZoneContainer
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +125,7 @@ class TestGameStateInitialState:
     def test_initial_stack_is_stack_instance(self) -> None:
         """stack should be an empty Stack instance."""
         game = _make_game()
-        from engine.stack import Stack
+        from benchmarks.sos.workspace.engine.stack import Stack
 
         assert isinstance(game.stack, Stack)
         assert game.stack.is_empty()
@@ -443,7 +443,7 @@ class TestEmptyManaPools:
 # run_turn — full turn execution
 # ---------------------------------------------------------------------------
 class TestRunTurn:
-    """Tests for run_turn() from engine/turn.py."""
+    """Tests for run_turn() in engine/turn.py."""
 
     def test_run_turn_increments_turn_number(self) -> None:
         """run_turn should advance through the full turn and increment turn_number."""

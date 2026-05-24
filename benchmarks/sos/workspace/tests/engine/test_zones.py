@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import pytest
 
-from engine.types import Zone
-from engine.zones import IllegalMoveError, ZoneContainer, Zones, move_zone
+from benchmarks.sos.workspace.engine.types import Zone
+from benchmarks.sos.workspace.engine.zones import IllegalMoveError, ZoneContainer, Zones, move_zone
 
 
 # ---------------------------------------------------------------------------

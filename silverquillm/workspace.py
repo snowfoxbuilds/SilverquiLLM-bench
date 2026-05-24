@@ -95,7 +95,7 @@ def stage_workspace(
         ``(workspace_path, output_path)`` — both guaranteed to exist.
     """
     cards_dir = _REPO_ROOT / "cards"
-    engine_dir = _REPO_ROOT / "engine"
+    engine_dir = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "engine"
     workspace = output_dir / "workspace"
     output = output_dir / "output"
 
@@ -153,7 +153,7 @@ def _copy_engine(engine_dir: Path, dest: Path) -> None:
 
 def _stage_engine_tests(workspace: Path) -> None:
     """Stage engine regression tests into workspace/tests/engine/ (ADR-006)."""
-    src = _REPO_ROOT / "tests" / "engine"
+    src = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "tests" / "engine"
     if not src.exists():
         return
     dest = workspace / "tests" / "engine"

@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import BiblioplexTomekeeper
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -62,7 +62,7 @@ class TestBiblioplexTomekeeperAbilities:
 
     def test_has_prepared(self) -> None:
         """Biblioplex Tomekeeper must have Prepared keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = BiblioplexTomekeeper(name="Biblioplex Tomekeeper", owner=None, base_power=3, base_toughness=4)
         assert Keyword.PREPARED in card.keywords, "Biblioplex Tomekeeper should have Prepared"
 
@@ -88,7 +88,7 @@ class TestBiblioplexTomekeeperEdgeCases:
     def test_fizzle_no_targets_creature_stays(self) -> None:
         """If ETB ability fizzles, the creature remains on battlefield."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = BiblioplexTomekeeper(name="Biblioplex Tomekeeper", owner=player, base_power=3, base_toughness=4)
@@ -124,8 +124,8 @@ class TestBiblioplexTomekeeperInteractions:
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -142,8 +142,8 @@ class TestBiblioplexTomekeeperInteractions:
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         other = Creature(name="Companion", owner=player, base_power=2, base_toughness=2)

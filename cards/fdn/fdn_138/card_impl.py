@@ -2,12 +2,12 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
-from engine.card import ActivatedAbility, Creature, Enchantment
-from engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
-from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
-from engine.events import LeavesBattlefieldTriggeredEvent
+from benchmarks.sos.workspace.engine.card import ActivatedAbility, Creature, Enchantment
+from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+from benchmarks.sos.workspace.engine.events import LeavesBattlefieldTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
     from cards.registry import CardRegistry
 
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
@@ -60,13 +60,13 @@ class BanishingLight(Enchantment):
             return
         if not _is_on_battlefield(game, target):
             return
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         self._exiled_card = target
         self._exiled_owner = getattr(target, 'owner', None) or getattr(target, 'controller', None)
         move_to_zone(game, target, Zone.BATTLEFIELD, Zone.EXILE)
 
     def register_triggers(self, game: GameState) -> None:
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
 
         def _condition(game: Any, event: dict) -> bool:
@@ -78,7 +78,7 @@ class BanishingLight(Enchantment):
             owner = source._exiled_owner
             if card is None or owner is None:
                 return
-            from engine.zones import move_to_zone
+            from benchmarks.sos.workspace.engine.zones import move_to_zone
             card.controller = owner
             move_to_zone(game, card, Zone.EXILE, Zone.BATTLEFIELD)
             source._exiled_card = None

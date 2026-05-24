@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import FractalMascot
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -63,15 +63,15 @@ class TestFractalMascotAbilities:
 
     def test_has_trample(self) -> None:
         """Fractal Mascot must have Trample keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = FractalMascot(name="Fractal Mascot", owner=None, base_power=6, base_toughness=6)
         assert Keyword.TRAMPLE in card.keywords, "Fractal Mascot should have Trample"
 
     def test_etb_taps_target(self) -> None:
         """ETB must tap a target creature per oracle text."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -93,7 +93,7 @@ class TestFractalMascotEdgeCases:
     def test_fizzle_no_targets_creature_stays(self) -> None:
         """If ETB ability fizzles, the creature remains on battlefield."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = FractalMascot(name="Fractal Mascot", owner=player, base_power=6, base_toughness=6)
@@ -129,8 +129,8 @@ class TestFractalMascotInteractions:
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -147,8 +147,8 @@ class TestFractalMascotInteractions:
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         other = Creature(name="Companion", owner=player, base_power=2, base_toughness=2)

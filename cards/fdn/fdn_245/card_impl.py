@@ -1,12 +1,12 @@
 """Card implementation for Ruby, Daring Tracker."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature, ManaAbility
-from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
-from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype
-from engine.events import AttacksTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature, ManaAbility
+from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Supertype
+from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 def _tap_cost(game: Any, source: Any) -> bool:
     """Generic tap-cost: check untapped, then tap."""
@@ -39,7 +39,7 @@ class RubyDaringTracker(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register attack trigger for +2/+2 buff."""
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

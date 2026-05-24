@@ -1,11 +1,11 @@
 """Card implementation for Grappling Kraken."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature
-from engine.types import CardType, ManaCost
-from engine.events import EntersBattlefieldTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class GrapplingKraken(Creature):
     """Grappling Kraken — {4}{U}{U} — 5/6 — Kraken.
@@ -27,8 +27,8 @@ class GrapplingKraken(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register landfall trigger: tap + stun counter on opponent creature."""
-        from engine.game import add_counter
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import add_counter
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

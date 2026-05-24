@@ -1,12 +1,12 @@
 """Card implementation for Apothecary Stomper."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature, Instant, Mode, Sorcery
-from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
-from engine.types import CardType, Keyword, ManaCost, Zone
-from engine.events import EntersBattlefieldTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature, Instant, Mode, Sorcery
+from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Zone
+from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
     from cards.registry import CardRegistry
 
 def _get_controller(card: Any) -> Any:
@@ -52,7 +52,7 @@ class ApothecaryStomper(Creature):
         return [Mode(name='Counters', description='Put two +1/+1 counters on target creature you control.'), Mode(name='Life', description='You gain 4 life.')]
 
     def register_triggers(self, game: GameState) -> None:
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
 
         def _etb_effect(g: GameState) -> None:
             controller = _get_controller(self)

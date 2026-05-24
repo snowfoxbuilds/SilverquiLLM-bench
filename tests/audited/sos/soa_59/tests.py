@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import TriumphOfTheHordes
 
-from engine.card import Sorcery
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Sorcery
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -57,7 +57,7 @@ class TestTriumphOfTheHordesAbilities:
         This test will fail against stubs (expected).
         """
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature as CreatureBase
+        from benchmarks.sos.workspace.engine.card import Creature as CreatureBase
 
         game = create_game()
         player = game.players[0]
@@ -79,8 +79,8 @@ class TestTriumphOfTheHordesAbilities:
         This test will fail against stubs (expected).
         """
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature as CreatureBase
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.card import Creature as CreatureBase
+        from benchmarks.sos.workspace.engine.types import Keyword
 
         game = create_game()
         player = game.players[0]

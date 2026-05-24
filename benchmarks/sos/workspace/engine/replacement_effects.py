@@ -26,11 +26,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable
 
-from engine.events import ReplacementEvent
+from benchmarks.sos.workspace.engine.events import ReplacementEvent
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
-    from engine.player import Player
+    from benchmarks.sos.workspace.engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.player import Player
 
 
 @dataclass

@@ -1,10 +1,10 @@
 """Audited tests for FDN 83 — Crackling Cyclops."""
 from __future__ import annotations
 from card_impl import CracklingCyclops
-from engine.card import Creature, Instant, Sorcery
-from engine.types import CardType, ManaCost, Zone
+from benchmarks.sos.workspace.engine.card import Creature, Instant, Sorcery
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Zone
 from benchmarks.sos.workspace.tests.test_utils import create_game
-from engine.events import SpellCastTriggeredEvent
+from benchmarks.sos.workspace.engine.events import SpellCastTriggeredEvent
 
 class TestCracklingCyclopsBasics:
     """Basic card properties."""

@@ -1,11 +1,11 @@
 """Card implementation for Wildwood Scourge."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature
-from engine.types import CardType, ManaCost
-from engine.events import CounterAddedTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.events import CounterAddedTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class WildwoodScourge(Creature):
     """Wildwood Scourge — {X}{G} — 0/0 — Hydra.
@@ -29,7 +29,7 @@ class WildwoodScourge(Creature):
 
     def on_resolve(self, game: 'GameState') -> None:
         """Enter with X +1/+1 counters."""
-        from engine.game import add_counter
+        from benchmarks.sos.workspace.engine.game import add_counter
         if self.x_value > 0:
             add_counter(game, self, '+1/+1', self.x_value)
             if hasattr(self, '_base_plus_one_counters'):
@@ -46,8 +46,8 @@ class WildwoodScourge(Creature):
         available event and also set a marker attribute so future engine
         work can wire this up.
         """
-        from engine.game import add_counter
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import add_counter
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
         source._counter_synergy = True

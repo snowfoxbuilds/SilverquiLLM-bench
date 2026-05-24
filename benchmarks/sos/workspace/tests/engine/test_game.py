@@ -27,8 +27,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from engine.card import CardImpl, Creature
-from engine.game import (
+from benchmarks.sos.workspace.engine.card import CardImpl, Creature
+from benchmarks.sos.workspace.engine.game import (
     MAX_TURNS,
     add_counter,
     create_game,
@@ -44,9 +44,9 @@ from engine.game import (
     tap,
     untap,
 )
-from engine.game_state import GameState
-from engine.player import DeterministicPlayer
-from engine.types import CardType, Keyword, Phase, Step, Zone
+from benchmarks.sos.workspace.engine.game_state import GameState
+from benchmarks.sos.workspace.engine.player import DeterministicPlayer
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, Phase, Step, Zone
 
 
 # ---------------------------------------------------------------------------
@@ -554,7 +554,7 @@ class TestCounters:
 
     def test_add_loyalty_counter(self) -> None:
         """Adding loyalty counters should increase loyalty attribute."""
-        from engine.card import Planeswalker
+        from benchmarks.sos.workspace.engine.card import Planeswalker
         game, _, _ = _make_bare_game()
         pw = Planeswalker(name="TestPW", starting_loyalty=3)
         add_counter(game, pw, "loyalty", 2)
@@ -562,7 +562,7 @@ class TestCounters:
 
     def test_remove_loyalty_counter(self) -> None:
         """Removing loyalty counters should decrease loyalty attribute."""
-        from engine.card import Planeswalker
+        from benchmarks.sos.workspace.engine.card import Planeswalker
         game, _, _ = _make_bare_game()
         pw = Planeswalker(name="TestPW", starting_loyalty=4)
         remove_counter(game, pw, "loyalty", 2)
@@ -698,7 +698,7 @@ class TestIntegration:
 
     def test_create_game_and_run_one_turn(self) -> None:
         """Create a game and run one full turn; verify turn advances."""
-        from engine.turn import run_turn
+        from benchmarks.sos.workspace.engine.turn import run_turn
 
         game, p1, p2 = _make_game(deck_size=40)
         assert game.turn_number == 1
@@ -720,7 +720,7 @@ class TestIntegration:
 
     def test_create_game_and_run_two_turns(self) -> None:
         """Create a game and run two full turns; verify alternating active player."""
-        from engine.turn import run_turn
+        from benchmarks.sos.workspace.engine.turn import run_turn
 
         game, p1, p2 = _make_game(deck_size=40)
 
@@ -738,7 +738,7 @@ class TestIntegration:
 
     def test_phase_starts_at_beginning_after_turn(self) -> None:
         """After a full turn, phase should reset to BEGINNING/UNTAP."""
-        from engine.turn import run_turn
+        from benchmarks.sos.workspace.engine.turn import run_turn
 
         game, p1, p2 = _make_game(deck_size=40)
         run_turn(game)
@@ -748,7 +748,7 @@ class TestIntegration:
 
     def test_untap_step_untaps_creatures(self) -> None:
         """Creatures on the active player's battlefield should be untapped during untap step."""
-        from engine.turn import run_turn
+        from benchmarks.sos.workspace.engine.turn import run_turn
 
         # The combat step will ask Alice to choose attackers when she has
         # eligible creatures. Provide [] (no attackers) so the turn completes.

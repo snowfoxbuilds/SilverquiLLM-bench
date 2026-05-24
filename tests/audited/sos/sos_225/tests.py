@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import SilverquillCharm
 
-from engine.card import Instant
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Instant
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -54,8 +54,8 @@ class TestSilverquillCharmAbilities:
     def test_resolution_exiles_target(self) -> None:
         """Spell resolution must exile target per oracle text."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -85,8 +85,8 @@ class TestSilverquillCharmEdgeCases:
     def test_fizzle_spell_goes_to_graveyard(self) -> None:
         """Fizzled spell must end up in graveyard."""
         from benchmarks.sos.workspace.tests.test_utils import create_game
-        from engine.types import Zone
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.types import Zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         player = game.players[0]
         card = SilverquillCharm(name="Silverquill Charm", owner=player)
@@ -120,7 +120,7 @@ class TestSilverquillCharmInteractions:
     def test_targets_valid_objects(self) -> None:
         """Spell targeting must find valid targets."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -136,8 +136,8 @@ class TestSilverquillCharmInteractions:
     def test_spell_to_graveyard_after_resolution(self) -> None:
         """Resolved spell must go to graveyard."""
         from benchmarks.sos.workspace.tests.test_utils import create_game
-        from engine.types import Zone
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.types import Zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         player = game.players[0]
         card = SilverquillCharm(name="Silverquill Charm", owner=player)

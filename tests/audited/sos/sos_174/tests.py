@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import AzizaMageTowerCaptain
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -63,8 +63,8 @@ class TestAzizaMageTowerCaptainAbilities:
     def test_on_resolve_changes_state(self) -> None:
         """Resolution must produce observable state change."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -96,7 +96,7 @@ class TestAzizaMageTowerCaptainEdgeCases:
     def test_targets_only_own_permanents(self) -> None:
         """Should only target permanents you control."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -119,7 +119,7 @@ class TestAzizaMageTowerCaptainInteractions:
     def test_get_targets_finds_own_creatures(self) -> None:
         """get_targets should return valid own creatures."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         creature = Creature(name="Mine", owner=player, base_power=2, base_toughness=2)
@@ -132,7 +132,7 @@ class TestAzizaMageTowerCaptainInteractions:
     def test_coexists_with_other_creatures(self) -> None:
         """Card should coexist with other creatures on battlefield."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         card = AzizaMageTowerCaptain(name="Aziza, Mage Tower Captain", owner=player)

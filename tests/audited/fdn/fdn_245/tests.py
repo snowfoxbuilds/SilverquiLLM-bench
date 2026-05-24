@@ -1,10 +1,10 @@
 """Audited tests for FDN 245 — Ruby, Daring Tracker."""
 from __future__ import annotations
 from card_impl import RubyDaringTracker
-from engine.card import Creature, ManaAbility
-from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype
+from benchmarks.sos.workspace.engine.card import Creature, ManaAbility
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Supertype
 from benchmarks.sos.workspace.tests.test_utils import create_game
-from engine.events import AttacksTriggeredEvent
+from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent
 
 def _resolve_stack(game):
     while not game.stack.is_empty():

@@ -74,8 +74,8 @@ def _build_registry():
     cards whose card_impl.py cannot be imported.
     """
     from cards.registry import CardMetadata, CardRegistry
-    from engine.basic_lands import register_basic_lands
-    from engine.card import CardImpl
+    from benchmarks.sos.workspace.engine.basic_lands import register_basic_lands
+    from benchmarks.sos.workspace.engine.card import CardImpl
 
     registry = CardRegistry()
     register_basic_lands(registry)

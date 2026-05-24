@@ -20,12 +20,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 import pytest
-from engine.card import CardImpl, Creature
-from engine.game_state import GameState
-from engine.player import DeterministicPlayer
-from engine.replacement_effects import ReplacementEffect, ReplacementManager
-from engine.types import CardType, Zone
-from engine.events import AddCounterReplacementEvent, CreateTokenReplacementEvent, CreatureDiesReplacementEvent, MoveToGraveyardReplacementEvent, ReplacementEvent
+from benchmarks.sos.workspace.engine.card import CardImpl, Creature
+from benchmarks.sos.workspace.engine.game_state import GameState
+from benchmarks.sos.workspace.engine.player import DeterministicPlayer
+from benchmarks.sos.workspace.engine.replacement_effects import ReplacementEffect, ReplacementManager
+from benchmarks.sos.workspace.engine.types import CardType, Zone
+from benchmarks.sos.workspace.engine.events import AddCounterReplacementEvent, CreateTokenReplacementEvent, CreatureDiesReplacementEvent, MoveToGraveyardReplacementEvent, ReplacementEvent
 
 
 @dataclass
@@ -554,7 +554,7 @@ class TestSBAUnregistersReplacements:
 
     def test_move_to_graveyard_unregisters_replacement_effects(self, game: GameState) -> None:
         """SBA _move_to_graveyard should call replacement_manager.unregister."""
-        from engine.state_based_actions import _move_to_graveyard
+        from benchmarks.sos.workspace.engine.state_based_actions import _move_to_graveyard
         alice = game.players[0]
         bear = _make_creature('Bear', owner=alice, controller=alice)
         bf = game.get_battlefield(alice)
@@ -576,7 +576,7 @@ class TestSBADeathReplacementEndToEnd:
         """Baseline: a creature with 0 toughness goes to its owner's graveyard via SBAs
         when no replacement effect is registered.
         """
-        from engine.state_based_actions import resolve_state_based_actions
+        from benchmarks.sos.workspace.engine.state_based_actions import resolve_state_based_actions
         alice = game.players[0]
         bear = _make_creature('Fragile Bear', power=2, toughness=0, owner=alice, controller=alice)
         bf = game.get_battlefield(alice)
@@ -592,7 +592,7 @@ class TestSBADeathReplacementEndToEnd:
         """Baseline: a creature with lethal damage marked goes to graveyard via SBAs
         when no replacement effect is registered.
         """
-        from engine.state_based_actions import resolve_state_based_actions
+        from benchmarks.sos.workspace.engine.state_based_actions import resolve_state_based_actions
         alice = game.players[0]
         bear = _make_creature('Wounded Bear', power=2, toughness=2, owner=alice, controller=alice)
         bear.damage_marked = 3
@@ -609,7 +609,7 @@ class TestSBADeathReplacementEndToEnd:
         """End-to-end: register 'if creature would die, exile instead', set toughness
         to 0, run resolve_state_based_actions → creature should land in exile, NOT graveyard.
         """
-        from engine.state_based_actions import resolve_state_based_actions
+        from benchmarks.sos.workspace.engine.state_based_actions import resolve_state_based_actions
         alice = game.players[0]
         bear = _make_creature('Exile Bear', power=2, toughness=0, owner=alice, controller=alice)
         bf = game.get_battlefield(alice)
@@ -630,7 +630,7 @@ class TestSBADeathReplacementEndToEnd:
         """End-to-end: register 'if creature would die, exile instead', mark lethal
         damage, run resolve_state_based_actions → creature should land in exile.
         """
-        from engine.state_based_actions import resolve_state_based_actions
+        from benchmarks.sos.workspace.engine.state_based_actions import resolve_state_based_actions
         alice = game.players[0]
         bear = _make_creature('Damaged Bear', power=2, toughness=2, owner=alice, controller=alice)
         bear.damage_marked = 5
@@ -652,7 +652,7 @@ class TestSBADeathReplacementEndToEnd:
         """End-to-end: a conditional replacement only exiles the specific creature it
         targets; another creature with zero toughness goes to graveyard normally.
         """
-        from engine.state_based_actions import resolve_state_based_actions
+        from benchmarks.sos.workspace.engine.state_based_actions import resolve_state_based_actions
         alice = game.players[0]
         protected = _make_creature('Protected Bear', power=2, toughness=0, owner=alice, controller=alice)
         unprotected = _make_creature('Normal Bear', power=2, toughness=0, owner=alice, controller=alice)
@@ -681,7 +681,7 @@ class TestSBADeathReplacementEndToEnd:
         """After a creature is exiled via replacement effect through SBA, its
         replacement effects should be cleaned up from the manager.
         """
-        from engine.state_based_actions import resolve_state_based_actions
+        from benchmarks.sos.workspace.engine.state_based_actions import resolve_state_based_actions
         alice = game.players[0]
         bear = _make_creature('Cleanup Bear', power=2, toughness=0, owner=alice, controller=alice)
         bf = game.get_battlefield(alice)

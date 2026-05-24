@@ -12,8 +12,8 @@ _spec = importlib.util.spec_from_file_location("_fdn160_impl", _impl_path)
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 AnOfferYouCantRefuse = _mod.AnOfferYouCantRefuse
-from engine.card import CardImpl, Creature, Instant
-from engine.types import CardType, ManaCost, Zone
+from benchmarks.sos.workspace.engine.card import CardImpl, Creature, Instant
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Zone
 from benchmarks.sos.workspace.tests.test_utils import create_game
 
 
@@ -44,7 +44,7 @@ class TestAnOfferYouCantRefuseResolve:
         game = create_game()
         p1 = game.players[0]
         p2 = game.players[1]
-        from engine.stack import StackObject
+        from benchmarks.sos.workspace.engine.stack import StackObject
         target_card = Instant(name="Lightning Bolt", mana_cost=ManaCost.parse("{R}"), owner=p2)
         stack_obj = StackObject(source=target_card, controller=p2)
         game.stack.push(stack_obj)
@@ -59,7 +59,7 @@ class TestAnOfferYouCantRefuseResolve:
         game = create_game()
         p1 = game.players[0]
         p2 = game.players[1]
-        from engine.stack import StackObject
+        from benchmarks.sos.workspace.engine.stack import StackObject
         target_card = Instant(name="Lightning Bolt", mana_cost=ManaCost.parse("{R}"), owner=p2)
         stack_obj = StackObject(source=target_card, controller=p2)
         game.stack.push(stack_obj)
@@ -74,7 +74,7 @@ class TestAnOfferYouCantRefuseResolve:
         game = create_game()
         p1 = game.players[0]
         p2 = game.players[1]
-        from engine.stack import StackObject
+        from benchmarks.sos.workspace.engine.stack import StackObject
         target_card = Instant(name="Lightning Bolt", mana_cost=ManaCost.parse("{R}"), owner=p2)
         stack_obj = StackObject(source=target_card, controller=p2)
         game.stack.push(stack_obj)

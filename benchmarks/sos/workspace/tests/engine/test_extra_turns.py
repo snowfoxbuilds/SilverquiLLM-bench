@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import pytest
 
-from engine.game_state import GameState
-from engine.player import DeterministicPlayer
-from engine.types import Phase, Step
+from benchmarks.sos.workspace.engine.game_state import GameState
+from benchmarks.sos.workspace.engine.player import DeterministicPlayer
+from benchmarks.sos.workspace.engine.types import Phase, Step
 
 
 # ---------------------------------------------------------------------------

@@ -1,11 +1,11 @@
 """Card implementation for Vampire Gourmand."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature
-from engine.types import CardType, ManaCost, Zone
-from engine.events import AttacksTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Zone
+from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class VampireGourmand(Creature):
     """Vampire Gourmand — {1}{B} — 2/2 — Vampire.
@@ -27,8 +27,8 @@ class VampireGourmand(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register attack trigger for sacrifice/draw/unblockable."""
-        from engine.triggers import TriggerRegistration
-        from engine.game import draw_card, sacrifice
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import draw_card, sacrifice
         source = self
 
         def _condition(game: Any, event: dict) -> bool:

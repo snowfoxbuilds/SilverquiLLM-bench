@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import TerramorphicExpanse
 
-from engine.card import Land
-from engine.types import CardType
+from benchmarks.sos.workspace.engine.card import Land
+from benchmarks.sos.workspace.engine.types import CardType
 
 
 @pytest.mark.basic

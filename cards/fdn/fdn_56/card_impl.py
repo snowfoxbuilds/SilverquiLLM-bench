@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Creature
-from engine.continuous_effects import ContinuousEffect, Layer, SubLayer
-from engine.types import CardType, Keyword, ManaCost, Zone
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, Layer, SubLayer
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Zone
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 
 class BillowingShriekmass(Creature):
@@ -39,7 +39,7 @@ class BillowingShriekmass(Creature):
 
     def on_resolve(self, game: "GameState") -> None:
         """ETB: mill three cards."""
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
 
         controller = self.controller
         if controller is None:
@@ -75,7 +75,7 @@ class BillowingShriekmass(Creature):
             source.modified_power = source.modified_power + 2
             source.modified_toughness = source.modified_toughness + 1
 
-        from engine.continuous_effects import DURATION_PERMANENT
+        from benchmarks.sos.workspace.engine.continuous_effects import DURATION_PERMANENT
 
         effect = ContinuousEffect(
             source=self,

@@ -1,11 +1,11 @@
 """Card implementation for Exemplar of Light."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature
-from engine.types import CardType, Keyword, ManaCost
-from engine.events import GainsLifeTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
+from benchmarks.sos.workspace.engine.events import GainsLifeTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class ExemplarOfLight(Creature):
     """Exemplar of Light — {2}{W}{W} — 3/3 — Angel — Flying.
@@ -29,8 +29,8 @@ class ExemplarOfLight(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register life-gain → +1/+1 counter trigger and counter → draw trigger."""
-        from engine.game import add_counter, draw_card
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import add_counter, draw_card
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
         source._exemplar_drew_on_turn: int = -1

@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import MaelstromArtisanRocketVolley
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -62,13 +62,13 @@ class TestMaelstromArtisanRocketVolleyAbilities:
 
     def test_has_haste(self) -> None:
         """Maelstrom Artisan // Rocket Volley must have Haste keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = MaelstromArtisanRocketVolley(name="Maelstrom Artisan // Rocket Volley", owner=None, base_power=3, base_toughness=2)
         assert Keyword.HASTE in card.keywords, "Maelstrom Artisan // Rocket Volley should have Haste"
 
     def test_has_prepared(self) -> None:
         """Maelstrom Artisan // Rocket Volley must have Prepared keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = MaelstromArtisanRocketVolley(name="Maelstrom Artisan // Rocket Volley", owner=None, base_power=3, base_toughness=2)
         assert Keyword.PREPARED in card.keywords, "Maelstrom Artisan // Rocket Volley should have Prepared"
 
@@ -107,7 +107,7 @@ class TestMaelstromArtisanRocketVolleyEdgeCases:
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = MaelstromArtisanRocketVolley(name="Maelstrom Artisan // Rocket Volley", owner=player, base_power=3, base_toughness=2)
@@ -126,8 +126,8 @@ class TestMaelstromArtisanRocketVolleyInteractions:
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -144,8 +144,8 @@ class TestMaelstromArtisanRocketVolleyInteractions:
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         other = Creature(name="Companion", owner=player, base_power=2, base_toughness=2)

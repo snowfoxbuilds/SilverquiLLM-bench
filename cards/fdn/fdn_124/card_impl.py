@@ -1,11 +1,11 @@
 """Card implementation for Perforating Artist."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature
-from engine.types import Keyword, ManaCost
-from engine.events import EndStepTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
+from benchmarks.sos.workspace.engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class PerforatingArtist(Creature):
     """Perforating Artist — {1}{B}{R} — 3/2 — Devil.
@@ -30,9 +30,9 @@ class PerforatingArtist(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register Raid end-step trigger."""
-        from engine.game import sacrifice
-        from engine.triggers import TriggerRegistration
-        from engine.types import CardType, Zone
+        from benchmarks.sos.workspace.engine.game import sacrifice
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.types import CardType, Zone
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 
@@ -77,7 +77,7 @@ class PerforatingArtist(Creature):
                         pass
                 if not chose_alternative and hand:
                     try:
-                        from engine.game import discard as _discard
+                        from benchmarks.sos.workspace.engine.game import discard as _discard
                         chosen = player.choose_card(hand, 'discard a card or lose 3 life')
                         if chosen is not None:
                             _discard(game, player, chosen)

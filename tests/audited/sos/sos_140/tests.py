@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import AmbitiousAugmenter
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -97,7 +97,7 @@ class TestAmbitiousAugmenterEdgeCases:
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = AmbitiousAugmenter(name="Ambitious Augmenter", owner=player, base_power=1, base_toughness=1)
@@ -132,8 +132,8 @@ class TestAmbitiousAugmenterInteractions:
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -150,7 +150,7 @@ class TestAmbitiousAugmenterInteractions:
     def test_tokens_appear_on_battlefield(self) -> None:
         """Tokens created must appear on the battlefield."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = AmbitiousAugmenter(name="Ambitious Augmenter", owner=player, base_power=1, base_toughness=1)

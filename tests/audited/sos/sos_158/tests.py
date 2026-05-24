@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import PlanarEngineering
 
-from engine.card import Sorcery
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Sorcery
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -57,8 +57,8 @@ class TestPlanarEngineeringAbilities:
         This test will fail against stubs (expected).
         """
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
-        from engine.card import Land
+        from benchmarks.sos.workspace.engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Land
 
         game = create_game()
         player = game.players[0]
@@ -89,8 +89,8 @@ class TestPlanarEngineeringAbilities:
         This test will fail against stubs (expected).
         """
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
-        from engine.card import Land
+        from benchmarks.sos.workspace.engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Land
 
         game = create_game()
         player = game.players[0]

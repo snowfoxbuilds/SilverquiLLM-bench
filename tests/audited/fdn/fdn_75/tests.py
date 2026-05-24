@@ -1,10 +1,10 @@
 """Audited tests for FDN 75 — Vampire Soulcaller."""
 from __future__ import annotations
 from card_impl import VampireSoulcaller
-from engine.card import Creature
-from engine.types import Keyword, ManaCost, Zone
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import Keyword, ManaCost, Zone
 from benchmarks.sos.workspace.tests.test_utils import create_game
-from engine.events import EntersBattlefieldTriggeredEvent
+from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
 
 class TestVampireSoulcallerBasics:
     """Basic card properties."""

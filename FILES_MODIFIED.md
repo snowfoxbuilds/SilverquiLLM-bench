@@ -38,3 +38,31 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `silverquillm/evaluator.py` — updated test_utils.py copy path to benchmarks/sos/workspace/tests/test_utils.py
 - `silverquillm/workspace.py` — updated test_utils.md staging path to benchmarks/sos/workspace/tests/test_utils.md
 - `tests/test_test_utils_doc.py` — updated DOC_PATH to benchmarks/sos/workspace/tests/test_utils.md
+
+## Item 4: Move engine/ to benchmarks/sos/workspace/engine/ and update imports
+
+### Tests
+- `tests/test_engine_import_surface.py` — asserts CardImpl, cast_spell, cast_spell_free, resolve_top importable from new path
+
+### Implementation
+- `benchmarks/sos/workspace/engine/` — engine package moved here from repo root via git mv
+- `benchmarks/sos/workspace/engine/casting.py` — added resolve_top() function
+- `silverquillm/workspace.py` — updated engine_dir and _stage_engine_tests paths to new location
+- `tests/test_engine_import_surface.py` — new test file for import surface verification
+- `tests/__init__.py` — recreated (needed for pytest discovery)
+- `tests/test_scaffold.py` — updated paths to reflect engine's new location
+- `tests/test_workspace.py` — updated engine_dir fixture to new path
+- `tests/test_workspace_engine_tests.py` — updated fake repo structure for graceful-missing test
+- `tests/test_event_type_migration.py` — updated regex patterns to match new import paths
+- `cards/**/*.py` — ~270 files updated from engine.* to benchmarks.sos.workspace.engine.*
+- `tests/audited/**/*.py` — ~530 files updated from engine.* to benchmarks.sos.workspace.engine.*
+- `benchmarks/sos/workspace/tests/**/*.py` — ~26 files updated from engine.* to benchmarks.sos.workspace.engine.*
+
+Item 1.4 (revision): Fix remaining stale engine references
+Tests
+tests/test_engine_import_surface.py — verifies engine import surface and no stale references
+Implementation
+cards/fdn/fdn_97/card_impl.py — updated bare engine import to full benchmarks path
+silverquillm/cli.py — updated two _REPO_ROOT / "engine" path references to new location
+silverquillm/replay/executor.py — reworded comments to avoid false-positive "from engine" grep matches
+benchmarks/sos/workspace/tests/engine/test_game_state.py — reworded docstring to avoid false-positive grep match

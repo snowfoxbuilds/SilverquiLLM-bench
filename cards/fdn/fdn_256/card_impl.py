@@ -1,12 +1,12 @@
 """Card implementation for Meteor Golem."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import ArtifactCreature, Creature
-from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
-from engine.types import CardType, Keyword, ManaCost, Zone
-from engine.events import EntersBattlefieldTriggeredEvent
+from benchmarks.sos.workspace.engine.card import ArtifactCreature, Creature
+from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Zone
+from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
     from cards.registry import CardRegistry
 
 def _self_etb_condition(source: Any):
@@ -47,8 +47,8 @@ class MeteorGolem(ArtifactCreature):
         super().__init__(**kwargs)
 
     def register_triggers(self, game: GameState) -> None:
-        from engine.triggers import TriggerRegistration
-        from engine.game import destroy
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import destroy
         source = self
 
         def _effect(game: GameState) -> None:

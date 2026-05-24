@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Creature
-from engine.types import ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import ManaCost
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 
 class GoblinBoarders(Creature):
@@ -35,7 +35,7 @@ class GoblinBoarders(Creature):
 
     def on_resolve(self, game: "GameState") -> None:
         """ETB: Raid — enters with a +1/+1 counter if attacked this turn."""
-        from engine.game import add_counter
+        from benchmarks.sos.workspace.engine.game import add_counter
 
         controller = self.controller
         if controller is None:

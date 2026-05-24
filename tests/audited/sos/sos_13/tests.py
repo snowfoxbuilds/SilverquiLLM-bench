@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import EmeritusOfTruceSwordsToPlowshares
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -62,14 +62,14 @@ class TestEmeritusOfTruceSwordsToPlowsharesAbilities:
 
     def test_has_prepared(self) -> None:
         """Emeritus of Truce // Swords to Plowshares must have Prepared keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = EmeritusOfTruceSwordsToPlowshares(name="Emeritus of Truce // Swords to Plowshares", owner=None, base_power=3, base_toughness=3)
         assert Keyword.PREPARED in card.keywords, "Emeritus of Truce // Swords to Plowshares should have Prepared"
 
     def test_etb_creates_tokens(self) -> None:
         """ETB must create tokens per oracle text."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = EmeritusOfTruceSwordsToPlowshares(name="Emeritus of Truce // Swords to Plowshares", owner=player, base_power=3, base_toughness=3)
@@ -97,7 +97,7 @@ class TestEmeritusOfTruceSwordsToPlowsharesEdgeCases:
     def test_fizzle_no_targets_creature_stays(self) -> None:
         """If ETB ability fizzles, the creature remains on battlefield."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = EmeritusOfTruceSwordsToPlowshares(name="Emeritus of Truce // Swords to Plowshares", owner=player, base_power=3, base_toughness=3)
@@ -133,8 +133,8 @@ class TestEmeritusOfTruceSwordsToPlowsharesInteractions:
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -151,7 +151,7 @@ class TestEmeritusOfTruceSwordsToPlowsharesInteractions:
     def test_tokens_appear_on_battlefield(self) -> None:
         """Tokens created must appear on the battlefield."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = EmeritusOfTruceSwordsToPlowshares(name="Emeritus of Truce // Swords to Plowshares", owner=player, base_power=3, base_toughness=3)

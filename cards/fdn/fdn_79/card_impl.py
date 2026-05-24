@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Sorcery
-from engine.types import ManaCost
+from benchmarks.sos.workspace.engine.card import Sorcery
+from benchmarks.sos.workspace.engine.types import ManaCost
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 
 class Boltwave(Sorcery):
@@ -30,7 +30,7 @@ class Boltwave(Sorcery):
 
     def on_resolve(self, game: "GameState") -> None:
         """Deal 3 damage to each opponent."""
-        from engine.game import deal_damage
+        from benchmarks.sos.workspace.engine.game import deal_damage
 
         controller = self.controller
         if controller is None:

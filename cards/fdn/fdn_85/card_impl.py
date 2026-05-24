@@ -1,11 +1,11 @@
 """Card implementation for Electroduplicate."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature, Sorcery
-from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
-from engine.events import EndStepTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature, Sorcery
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+from benchmarks.sos.workspace.engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class Electroduplicate(Sorcery):
     """Electroduplicate — {2}{R} — Sorcery.
@@ -31,8 +31,8 @@ class Electroduplicate(Sorcery):
 
     def on_resolve(self, game: 'GameState') -> None:
         """Create token copy with haste and end-step sacrifice."""
-        from engine.game import create_token, sacrifice
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import create_token, sacrifice
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         chosen = getattr(self, 'chosen_targets', None)
         target = chosen[0] if chosen else None
         if target is None:

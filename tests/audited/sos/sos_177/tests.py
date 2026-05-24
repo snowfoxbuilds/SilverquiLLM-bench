@@ -7,9 +7,9 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 from __future__ import annotations
 import pytest
 from card_impl import BogwaterLumaret
-from engine.card import Creature
-from engine.types import CardType, ManaCost
-from engine.events import EntersBattlefieldTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
 
 @pytest.mark.basic
 class TestBogwaterLumaretBasicProperties:
@@ -62,7 +62,7 @@ class TestBogwaterLumaretAbilities:
         This test will fail against stubs (expected).
         """
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = BogwaterLumaret(name='Bogwater Lumaret', owner=player)

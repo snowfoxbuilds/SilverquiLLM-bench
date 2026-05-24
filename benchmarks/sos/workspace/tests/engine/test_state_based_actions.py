@@ -25,12 +25,12 @@ Verifies:
 from __future__ import annotations
 from types import SimpleNamespace
 import pytest
-from engine.game_state import GameState
-from engine.player import DeterministicPlayer
-from engine.state_based_actions import check_state_based_actions, resolve_state_based_actions
-from engine.triggers import TriggerRegistration
-from engine.types import CardType, Supertype, Zone
-from engine.events import CreatureDiesTriggeredEvent, LeavesBattlefieldTriggeredEvent
+from benchmarks.sos.workspace.engine.game_state import GameState
+from benchmarks.sos.workspace.engine.player import DeterministicPlayer
+from benchmarks.sos.workspace.engine.state_based_actions import check_state_based_actions, resolve_state_based_actions
+from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+from benchmarks.sos.workspace.engine.types import CardType, Supertype, Zone
+from benchmarks.sos.workspace.engine.events import CreatureDiesTriggeredEvent, LeavesBattlefieldTriggeredEvent
 
 def _make_game(p1_script: list | None=None, p2_script: list | None=None, p1_life: int=20, p2_life: int=20) -> GameState:
     """Create a 2-player GameState with optional scripts and life totals."""
@@ -209,7 +209,7 @@ class TestCreatureLethalDamage:
 
     def test_indestructible_creature_survives_lethal_damage(self) -> None:
         """Creature with indestructible keyword should NOT be destroyed by lethal damage."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         game = _make_game()
         creature = _make_creature(toughness=3, damage_marked=5, keywords=Keyword.INDESTRUCTIBLE)
         _battlefield(game, 0).add(creature)

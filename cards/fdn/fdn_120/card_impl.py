@@ -1,11 +1,11 @@
 """Card implementation for Fiendish Panda."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import ArtifactCreature, Creature
-from engine.types import CardType, Keyword, ManaCost, Supertype, Zone
-from engine.events import CreatureDiesTriggeredEvent, GainsLifeTriggeredEvent
+from benchmarks.sos.workspace.engine.card import ArtifactCreature, Creature
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Supertype, Zone
+from benchmarks.sos.workspace.engine.events import CreatureDiesTriggeredEvent, GainsLifeTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
     from cards.registry import CardRegistry
 
 def _self_dies_condition(source: Any):
@@ -43,9 +43,9 @@ class FiendishPanda(Creature):
         super().__init__(**kwargs)
 
     def register_triggers(self, game: GameState) -> None:
-        from engine.triggers import TriggerRegistration
-        from engine.game import add_counter
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import add_counter
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         source = self
 
         def _lifegain_condition(game: Any, event: dict) -> bool:

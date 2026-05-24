@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import ArcaneOmens
 
-from engine.card import Sorcery
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Sorcery
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -52,7 +52,7 @@ class TestArcaneOmensAbilities:
 
     def test_has_converge(self) -> None:
         """Arcane Omens must have Converge keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = ArcaneOmens(name="Arcane Omens", owner=None)
         assert Keyword.CONVERGE in card.keywords, "Arcane Omens should have Converge"
 
@@ -77,8 +77,8 @@ class TestArcaneOmensEdgeCases:
     def test_fizzle_spell_goes_to_graveyard(self) -> None:
         """Fizzled spell must end up in graveyard."""
         from benchmarks.sos.workspace.tests.test_utils import create_game
-        from engine.types import Zone
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.types import Zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         player = game.players[0]
         card = ArcaneOmens(name="Arcane Omens", owner=player)
@@ -145,7 +145,7 @@ class TestArcaneOmensInteractions:
     def test_targets_valid_objects(self) -> None:
         """Spell targeting must find valid targets."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -161,8 +161,8 @@ class TestArcaneOmensInteractions:
     def test_spell_to_graveyard_after_resolution(self) -> None:
         """Resolved spell must go to graveyard."""
         from benchmarks.sos.workspace.tests.test_utils import create_game
-        from engine.types import Zone
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.types import Zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         player = game.players[0]
         card = ArcaneOmens(name="Arcane Omens", owner=player)

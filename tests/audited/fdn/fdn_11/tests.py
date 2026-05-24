@@ -1,10 +1,10 @@
 """Audited tests for FDN 11 — Exemplar of Light."""
 from __future__ import annotations
 from card_impl import ExemplarOfLight
-from engine.card import Creature
-from engine.types import CardType, Keyword, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
 from benchmarks.sos.workspace.tests.test_utils import create_game
-from engine.events import GainsLifeTriggeredEvent
+from benchmarks.sos.workspace.engine.events import GainsLifeTriggeredEvent
 
 class TestExemplarOfLightBasics:
     """Basic card properties."""
@@ -83,7 +83,7 @@ class TestExemplarDrawTrigger:
         exemplar = ExemplarOfLight(owner=p1, controller=p1)
         bf = game.get_battlefield(p1)
         bf.add(exemplar)
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         for i in range(5):
             c = Creature(name=f'LibCard{i}', base_power=1, base_toughness=1, owner=p1)
             p1.zones[Zone.LIBRARY].add(c)

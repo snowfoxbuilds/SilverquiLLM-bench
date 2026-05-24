@@ -3,10 +3,10 @@
 from __future__ import annotations
 import random
 from typing import TYPE_CHECKING, Any
-from engine.card import ActivatedAbility, ArtifactCreature, Creature, ManaAbility
-from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
+from benchmarks.sos.workspace.engine.card import ActivatedAbility, ArtifactCreature, Creature, ManaAbility
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
     from cards.registry import CardRegistry
 
@@ -56,12 +56,12 @@ class HungryGhoul(Creature):
             if getattr(sac_target, "controller", None) is not controller:
                 return False
             controller.mana_pool.pay(ManaCost(generic=1))
-            from engine.game import sacrifice
+            from benchmarks.sos.workspace.engine.game import sacrifice
             sacrifice(game, controller, sac_target)
             return True
 
         def _effect(game: Any) -> None:
-            from engine.game import add_counter
+            from benchmarks.sos.workspace.engine.game import add_counter
             if _is_on_battlefield(game, source):
                 add_counter(game, source, "+1/+1", 1)
 

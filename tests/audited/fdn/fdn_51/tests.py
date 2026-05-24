@@ -1,9 +1,9 @@
 """Audited tests for FDN 51 — Sphinx of Forgotten Lore."""
 from __future__ import annotations
 from card_impl import SphinxOfForgottenLore
-from engine.card import Creature, Instant, Sorcery
-from engine.events import AttacksTriggeredEvent
-from engine.types import Keyword, ManaCost, Zone
+from benchmarks.sos.workspace.engine.card import Creature, Instant, Sorcery
+from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent
+from benchmarks.sos.workspace.engine.types import Keyword, ManaCost, Zone
 from benchmarks.sos.workspace.tests.test_utils import create_game
 
 class TestSphinxOfForgottenLoreBasics:

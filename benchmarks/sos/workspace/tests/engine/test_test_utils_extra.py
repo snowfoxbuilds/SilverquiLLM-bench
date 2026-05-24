@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import pytest
 
-from engine.card import CardImpl, Creature, Instant, Sorcery
-from engine.player import DeterministicPlayer
-from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Zone
+from benchmarks.sos.workspace.engine.card import CardImpl, Creature, Instant, Sorcery
+from benchmarks.sos.workspace.engine.player import DeterministicPlayer
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Zone
 
 from tests.test_utils import (
     TestSetupError,

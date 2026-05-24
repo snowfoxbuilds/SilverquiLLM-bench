@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Instant
-from engine.types import CardType, ManaCost, TargetRequirement, Zone
+from benchmarks.sos.workspace.engine.card import Instant
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 
 def _get_chosen_target(card: Any, game: Any) -> Any:
@@ -21,7 +21,7 @@ def _get_chosen_target(card: Any, game: Any) -> Any:
 
 def _counter_spell(game: "GameState", stack_obj: Any) -> None:
     """Counter a spell — remove from stack and move card to graveyard."""
-    from engine.stack import StackObject
+    from benchmarks.sos.workspace.engine.stack import StackObject
 
     if not isinstance(stack_obj, StackObject):
         return
@@ -72,7 +72,7 @@ class AnOfferYouCantRefuse(Instant):
 
     def can_cast(self, game: "GameState") -> bool:
         """Cannot cast unless there's a noncreature spell on the stack."""
-        from engine.types import CardType
+        from benchmarks.sos.workspace.engine.types import CardType
 
         for stack_obj in game.stack.objects():
             source = stack_obj.source
@@ -87,7 +87,7 @@ class AnOfferYouCantRefuse(Instant):
 
     def get_targets(self, game: "GameState") -> list:
         """Target noncreature spell on the stack."""
-        from engine.types import CardType
+        from benchmarks.sos.workspace.engine.types import CardType
 
         def _filter(obj: Any) -> bool:
             if obj is self:
@@ -108,8 +108,8 @@ class AnOfferYouCantRefuse(Instant):
 
     def on_resolve(self, game: "GameState") -> None:
         """Counter target noncreature spell, give its controller two Treasure tokens."""
-        from engine.game import create_token
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.game import create_token
+        from benchmarks.sos.workspace.engine.card import Creature
 
         target = _get_chosen_target(self, game)
         if target is None:
@@ -123,7 +123,7 @@ class AnOfferYouCantRefuse(Instant):
         # Create two Treasure tokens for the spell's controller
         if spell_controller is not None:
             for _ in range(2):
-                from engine.card import CardImpl
+                from benchmarks.sos.workspace.engine.card import CardImpl
                 treasure = CardImpl(
                     name="Treasure",
                     mana_cost=ManaCost(generic=0),

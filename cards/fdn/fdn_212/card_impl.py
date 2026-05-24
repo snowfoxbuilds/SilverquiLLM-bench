@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Instant, Sorcery
-from engine.continuous_effects import (
+from benchmarks.sos.workspace.engine.card import Instant, Sorcery
+from benchmarks.sos.workspace.engine.continuous_effects import (
     ContinuousEffect,
     DURATION_END_OF_TURN,
     Layer,
     SubLayer,
 )
-from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
     from cards.registry import CardRegistry
 
@@ -95,7 +95,7 @@ class BiteDown(Instant):
 
     def on_resolve(self, game: GameState) -> None:
         """Your creature deals damage equal to its power to the second target."""
-        from engine.game import deal_damage
+        from benchmarks.sos.workspace.engine.game import deal_damage
 
         source_creature = _get_chosen_target_idx(self, game, 0)
         fight_target = _get_chosen_target_idx(self, game, 1)

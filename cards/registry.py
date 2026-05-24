@@ -11,10 +11,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from engine.card import CardImpl
+from benchmarks.sos.workspace.engine.card import CardImpl
 
 if TYPE_CHECKING:
-    from engine.player import Player
+    from benchmarks.sos.workspace.engine.player import Player
 
 
 @dataclass

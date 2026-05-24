@@ -20,7 +20,7 @@ def repo_root() -> Path:
 
 @pytest.fixture()
 def engine_dir(repo_root: Path) -> Path:
-    return repo_root / "engine"
+    return repo_root / "benchmarks" / "sos" / "workspace" / "engine"
 
 
 @pytest.fixture()

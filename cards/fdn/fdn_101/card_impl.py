@@ -1,11 +1,11 @@
 """Card implementation for Cackling Prowler."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature
-from engine.types import Keyword, ManaCost
-from engine.events import EndStepTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
+from benchmarks.sos.workspace.engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class CacklingProwler(Creature):
     """Cackling Prowler — {3}{G} — 4/3 — Hyena Rogue — Ward {2}.
@@ -27,8 +27,8 @@ class CacklingProwler(Creature):
         super().__init__(**kwargs)
 
     def register_triggers(self, game: 'GameState') -> None:
-        from engine.game import add_counter
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import add_counter
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

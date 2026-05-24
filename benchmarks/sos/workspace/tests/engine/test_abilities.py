@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import pytest
 
-from engine.abilities import (
+from benchmarks.sos.workspace.engine.abilities import (
     AbilityError,
     ActivatedAbilityInstance,
     LoyaltyAbilityInstance,
@@ -31,12 +31,12 @@ from engine.abilities import (
     clear_loyalty_tracking,
     tap_cost,
 )
-from engine.card import Land, Planeswalker
-from engine.game_state import GameState
-from engine.mana import ManaPool
-from engine.player import DeterministicPlayer
-from engine.stack import StackObject
-from engine.types import ManaType, Phase, Step
+from benchmarks.sos.workspace.engine.card import Land, Planeswalker
+from benchmarks.sos.workspace.engine.game_state import GameState
+from benchmarks.sos.workspace.engine.mana import ManaPool
+from benchmarks.sos.workspace.engine.player import DeterministicPlayer
+from benchmarks.sos.workspace.engine.stack import StackObject
+from benchmarks.sos.workspace.engine.types import ManaType, Phase, Step
 
 
 # ---------------------------------------------------------------------------

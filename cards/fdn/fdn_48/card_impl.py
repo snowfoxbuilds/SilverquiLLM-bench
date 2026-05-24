@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Instant
-from engine.types import ManaCost, TargetRequirement, Zone
+from benchmarks.sos.workspace.engine.card import Instant
+from benchmarks.sos.workspace.engine.types import ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 
 def _get_chosen_target(card: Any, game: Any) -> Any:
@@ -21,7 +21,7 @@ def _get_chosen_target(card: Any, game: Any) -> Any:
 
 def _counter_spell(game: "GameState", stack_obj: Any) -> None:
     """Counter a spell — remove from stack and move card to graveyard."""
-    from engine.stack import StackObject
+    from benchmarks.sos.workspace.engine.stack import StackObject
 
     if not isinstance(stack_obj, StackObject):
         return
@@ -70,7 +70,7 @@ class Refute(Instant):
 
     def can_cast(self, game: "GameState") -> bool:
         """Cannot cast unless there's a spell on the stack to counter."""
-        from engine.stack import StackObject
+        from benchmarks.sos.workspace.engine.stack import StackObject
 
         for stack_obj in game.stack.objects():
             source = stack_obj.source
@@ -83,7 +83,7 @@ class Refute(Instant):
 
     def get_targets(self, game: "GameState") -> list:
         """Target spell on the stack."""
-        from engine.stack import StackObject
+        from benchmarks.sos.workspace.engine.stack import StackObject
 
         targets = []
         for stack_obj in game.stack.objects():
@@ -104,7 +104,7 @@ class Refute(Instant):
 
     def on_resolve(self, game: "GameState") -> None:
         """Counter target spell, then draw a card, then discard a card."""
-        from engine.game import discard, draw_card
+        from benchmarks.sos.workspace.engine.game import discard, draw_card
 
         target = _get_chosen_target(self, game)
         # Single-target spell fizzles if target is illegal

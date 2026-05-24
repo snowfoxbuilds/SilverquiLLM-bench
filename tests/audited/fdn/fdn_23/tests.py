@@ -1,10 +1,10 @@
 """Audited tests for FDN 23 — Skyknight Squire."""
 from __future__ import annotations
 from card_impl import SkyknightSquire
-from engine.card import Creature
-from engine.types import CardType, Keyword, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
 from benchmarks.sos.workspace.tests.test_utils import create_game
-from engine.events import EntersBattlefieldTriggeredEvent
+from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
 
 class TestSkyknightSquireBasics:
     """Basic card properties."""
@@ -86,7 +86,7 @@ class TestSkyknightSquireThreshold:
         game = create_game()
         p1 = game.players[0]
         squire = SkyknightSquire(owner=p1, controller=p1)
-        from engine.game import add_counter
+        from benchmarks.sos.workspace.engine.game import add_counter
         game.get_battlefield(p1).add(squire)
         squire.register_triggers(game)
         add_counter(game, squire, '+1/+1', count)

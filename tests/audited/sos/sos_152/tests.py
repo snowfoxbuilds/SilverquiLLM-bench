@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import InfirmaryHealerStreamOfLife
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -62,7 +62,7 @@ class TestInfirmaryHealerStreamOfLifeAbilities:
 
     def test_has_prepared(self) -> None:
         """Infirmary Healer // Stream of Life must have Prepared keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = InfirmaryHealerStreamOfLife(name="Infirmary Healer // Stream of Life", owner=None, base_power=2, base_toughness=3)
         assert Keyword.PREPARED in card.keywords, "Infirmary Healer // Stream of Life should have Prepared"
 
@@ -101,7 +101,7 @@ class TestInfirmaryHealerStreamOfLifeEdgeCases:
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = InfirmaryHealerStreamOfLife(name="Infirmary Healer // Stream of Life", owner=player, base_power=2, base_toughness=3)
@@ -120,8 +120,8 @@ class TestInfirmaryHealerStreamOfLifeInteractions:
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -138,8 +138,8 @@ class TestInfirmaryHealerStreamOfLifeInteractions:
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         other = Creature(name="Companion", owner=player, base_power=2, base_toughness=2)

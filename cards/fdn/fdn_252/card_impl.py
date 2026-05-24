@@ -1,11 +1,11 @@
 """Card implementation for Gleaming Barrier."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import ArtifactCreature, Creature
-from engine.types import CardType, Keyword, ManaCost, Supertype, Zone
-from engine.events import CreatureDiesTriggeredEvent
+from benchmarks.sos.workspace.engine.card import ArtifactCreature, Creature
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Supertype, Zone
+from benchmarks.sos.workspace.engine.events import CreatureDiesTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
     from cards.registry import CardRegistry
 
 def _self_dies_condition(source: Any):
@@ -34,15 +34,15 @@ class GleamingBarrier(ArtifactCreature):
         super().__init__(**kwargs)
 
     def register_triggers(self, game: GameState) -> None:
-        from engine.triggers import TriggerRegistration
-        from engine.game import create_token
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import create_token
         source = self
 
         def _effect(game: GameState) -> None:
             controller = getattr(source, 'controller', None) or getattr(source, 'owner', None)
             if controller is None:
                 return
-            from engine.card import Artifact
+            from benchmarks.sos.workspace.engine.card import Artifact
             token = Artifact(name='Treasure', subtypes={'Treasure'})
             create_token(game, controller, token)
         controller = getattr(self, 'controller', None) or game.active_player

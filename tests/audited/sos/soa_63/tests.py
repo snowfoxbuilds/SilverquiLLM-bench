@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import DeflectingPalm
 
-from engine.card import Instant
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Instant
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic

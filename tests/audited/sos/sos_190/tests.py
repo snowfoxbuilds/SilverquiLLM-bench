@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import FractalTender
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -63,7 +63,7 @@ class TestFractalTenderAbilities:
 
     def test_has_ward(self) -> None:
         """Fractal Tender must have Ward keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = FractalTender(name="Fractal Tender", owner=None, base_power=3, base_toughness=3)
         assert Keyword.WARD in card.keywords, "Fractal Tender should have Ward"
 
@@ -97,7 +97,7 @@ class TestFractalTenderEdgeCases:
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = FractalTender(name="Fractal Tender", owner=player, base_power=3, base_toughness=3)
@@ -132,8 +132,8 @@ class TestFractalTenderInteractions:
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -150,7 +150,7 @@ class TestFractalTenderInteractions:
     def test_tokens_appear_on_battlefield(self) -> None:
         """Tokens created must appear on the battlefield."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = FractalTender(name="Fractal Tender", owner=player, base_power=3, base_toughness=3)

@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import ColorstormStallion
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -63,19 +63,19 @@ class TestColorstormStallionAbilities:
 
     def test_has_haste(self) -> None:
         """Colorstorm Stallion must have Haste keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = ColorstormStallion(name="Colorstorm Stallion", owner=None, base_power=3, base_toughness=3)
         assert Keyword.HASTE in card.keywords, "Colorstorm Stallion should have Haste"
 
     def test_has_ward(self) -> None:
         """Colorstorm Stallion must have Ward keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = ColorstormStallion(name="Colorstorm Stallion", owner=None, base_power=3, base_toughness=3)
         assert Keyword.WARD in card.keywords, "Colorstorm Stallion should have Ward"
 
     def test_has_opus(self) -> None:
         """Colorstorm Stallion must have Opus keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = ColorstormStallion(name="Colorstorm Stallion", owner=None, base_power=3, base_toughness=3)
         assert Keyword.OPUS in card.keywords, "Colorstorm Stallion should have Opus"
 
@@ -141,8 +141,8 @@ class TestColorstormStallionInteractions:
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -159,7 +159,7 @@ class TestColorstormStallionInteractions:
     def test_tokens_appear_on_battlefield(self) -> None:
         """Tokens created must appear on the battlefield."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = ColorstormStallion(name="Colorstorm Stallion", owner=player, base_power=3, base_toughness=3)

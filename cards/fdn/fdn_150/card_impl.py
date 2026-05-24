@@ -3,7 +3,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
-from engine.creatures import make_vanilla
+from benchmarks.sos.workspace.engine.creatures import make_vanilla
 
 if TYPE_CHECKING:
     from cards.registry import CardRegistry

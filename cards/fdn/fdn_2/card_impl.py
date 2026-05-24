@@ -1,12 +1,12 @@
 """Card implementation for Arahbo, the First Fang."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature
-from engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
-from engine.types import CardType, Keyword, ManaCost, Supertype
-from engine.events import EntersBattlefieldTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Supertype
+from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Return True if *obj* is on any player's battlefield."""
@@ -44,7 +44,7 @@ class ArahboTheFirstFang(Creature):
         so the self-entry event has already happened by the time the trigger is
         registered. Self-ETB must therefore be handled here in on_resolve().
         """
-        from engine.game import create_token
+        from benchmarks.sos.workspace.engine.game import create_token
         controller = self.controller
         if controller is None:
             return
@@ -53,8 +53,8 @@ class ArahboTheFirstFang(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register the lord effect and Cat-ETB token trigger."""
-        from engine.game import create_token
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import create_token
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
         if self._lord_effect_ref is None:

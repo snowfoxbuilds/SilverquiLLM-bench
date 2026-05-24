@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import SnarlSong
 
-from engine.card import Sorcery
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Sorcery
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -52,7 +52,7 @@ class TestSnarlSongAbilities:
 
     def test_has_converge(self) -> None:
         """Snarl Song must have Converge keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = SnarlSong(name="Snarl Song", owner=None)
         assert Keyword.CONVERGE in card.keywords, "Snarl Song should have Converge"
 
@@ -132,8 +132,8 @@ class TestSnarlSongInteractions:
     def test_spell_to_graveyard_after_resolution(self) -> None:
         """Resolved spell must go to graveyard."""
         from benchmarks.sos.workspace.tests.test_utils import create_game
-        from engine.types import Zone
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.types import Zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         player = game.players[0]
         card = SnarlSong(name="Snarl Song", owner=player)
@@ -145,7 +145,7 @@ class TestSnarlSongInteractions:
     def test_tokens_appear_on_battlefield(self) -> None:
         """Tokens created must appear on the battlefield."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = SnarlSong(name="Snarl Song", owner=player)

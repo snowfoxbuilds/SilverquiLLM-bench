@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import PrismariTheInspiration
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -63,13 +63,13 @@ class TestPrismariTheInspirationAbilities:
 
     def test_has_flying(self) -> None:
         """Prismari, the Inspiration must have Flying keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = PrismariTheInspiration(name="Prismari, the Inspiration", owner=None, base_power=7, base_toughness=7)
         assert Keyword.FLYING in card.keywords, "Prismari, the Inspiration should have Flying"
 
     def test_has_ward(self) -> None:
         """Prismari, the Inspiration must have Ward keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = PrismariTheInspiration(name="Prismari, the Inspiration", owner=None, base_power=7, base_toughness=7)
         assert Keyword.WARD in card.keywords, "Prismari, the Inspiration should have Ward"
 
@@ -81,7 +81,7 @@ class TestPrismariTheInspirationEdgeCases:
     def test_fizzle_no_targets_creature_stays(self) -> None:
         """If ETB ability fizzles, the creature remains on battlefield."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = PrismariTheInspiration(name="Prismari, the Inspiration", owner=player, base_power=7, base_toughness=7)
@@ -117,8 +117,8 @@ class TestPrismariTheInspirationInteractions:
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -135,8 +135,8 @@ class TestPrismariTheInspirationInteractions:
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         other = Creature(name="Companion", owner=player, base_power=2, base_toughness=2)

@@ -1,11 +1,11 @@
 """Card implementation for Niv-Mizzet, Visionary."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature
-from engine.types import Keyword, ManaCost
-from engine.events import DealsDamageTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
+from benchmarks.sos.workspace.engine.events import DealsDamageTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class NivMizzetVisionary(Creature):
     """Niv-Mizzet, Visionary — {4}{U}{R} — 5/5 — Legendary Dragon Wizard.
@@ -32,8 +32,8 @@ class NivMizzetVisionary(Creature):
     def register_triggers(self, game: 'GameState') -> None:
         """Register noncombat damage trigger and no-max-hand-size."""
         from collections import deque
-        from engine.game import draw_card
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import draw_card
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
         controller.no_maximum_hand_size = True

@@ -1,11 +1,11 @@
 """Card implementation for Bloodthirsty Conqueror."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature
-from engine.types import Keyword, ManaCost
-from engine.events import LosesLifeTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
+from benchmarks.sos.workspace.engine.events import LosesLifeTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class BloodthirstyConqueror(Creature):
     """Bloodthirsty Conqueror — {3}{B}{B} — 5/5 — Vampire Knight.
@@ -28,7 +28,7 @@ class BloodthirstyConqueror(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register life-loss trigger."""
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
 
         def _condition(game: Any, event: dict) -> bool:

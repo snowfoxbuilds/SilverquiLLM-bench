@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import AwakenTheWoods
 
-from engine.card import Sorcery
-from engine.types import CardType
+from benchmarks.sos.workspace.engine.card import Sorcery
+from benchmarks.sos.workspace.engine.types import CardType
 
 
 @pytest.mark.basic
@@ -57,7 +57,7 @@ class TestAwakenTheWoodsAbilities:
         This test will fail against stubs (expected).
         """
         from benchmarks.sos.workspace.tests.test_utils import create_game
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
 
         game = create_game()
         player = game.players[0]

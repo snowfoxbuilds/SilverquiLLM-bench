@@ -12,10 +12,10 @@ from typing import Any
 
 import pytest
 
-from engine.card import Creature, Instant
-from engine.game_state import GameState
-from engine.player import DeterministicPlayer
-from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+from benchmarks.sos.workspace.engine.card import Creature, Instant
+from benchmarks.sos.workspace.engine.game_state import GameState
+from benchmarks.sos.workspace.engine.player import DeterministicPlayer
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
 
 
 # ---------------------------------------------------------------------------
@@ -104,7 +104,7 @@ class TestLazyTargetFilter:
         target_reqs = spell.get_targets(game)
         filter_fn = target_reqs[0].filter_fn
 
-        from engine.card import Artifact
+        from benchmarks.sos.workspace.engine.card import Artifact
         artifact = Artifact(name="Artifact", owner=p1, controller=p1)
         assert filter_fn(artifact) is False
 
@@ -235,7 +235,7 @@ class TestLazyTargetFilter:
         game = _make_game()
         p1 = game.players[0]
 
-        from engine.card import Instant
+        from benchmarks.sos.workspace.engine.card import Instant
         vanilla_spell = Instant(name="Opt", mana_cost=ManaCost.parse("{U}"), owner=p1, controller=p1)
         assert vanilla_spell.get_targets(game) == []
 

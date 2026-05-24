@@ -1,12 +1,12 @@
 """Card implementation for Kaito, Cunning Infiltrator."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature, LoyaltyAbility, Planeswalker
-from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
-from engine.events import DealsDamageTriggeredEvent, SpellCastTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature, LoyaltyAbility, Planeswalker
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
+from benchmarks.sos.workspace.engine.events import DealsDamageTriggeredEvent, SpellCastTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
-    from engine.player import Player
+    from benchmarks.sos.workspace.engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.player import Player
     from cards.registry import CardRegistry
 
 class KaitoCunningInfiltrator(Planeswalker):
@@ -34,8 +34,8 @@ class KaitoCunningInfiltrator(Planeswalker):
 
     def register_triggers(self, game: Any) -> None:
         """Register passive: combat damage to a player → loyalty counter."""
-        from engine.game import add_counter
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import add_counter
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         pw = self
         controller = getattr(self, 'controller', None) or game.active_player
 
@@ -66,7 +66,7 @@ class KaitoCunningInfiltrator(Planeswalker):
 
         def _plus1(game: Any) -> None:
             """Up to one target creature can't be blocked. Draw then discard."""
-            from engine.game import discard, draw_card
+            from benchmarks.sos.workspace.engine.game import discard, draw_card
             target = getattr(pw, '_resolve_target', None)
             if target is not None:
                 target._cant_be_blocked = True
@@ -81,7 +81,7 @@ class KaitoCunningInfiltrator(Planeswalker):
 
         def _minus2(game: Any) -> None:
             """Create a 2/1 blue Ninja creature token."""
-            from engine.game import create_token
+            from benchmarks.sos.workspace.engine.game import create_token
             controller = pw.controller
             if controller is not None:
                 token = Creature(name='Ninja', base_power=2, base_toughness=1, subtypes={'Ninja'})
@@ -89,8 +89,8 @@ class KaitoCunningInfiltrator(Planeswalker):
 
         def _minus9(game: Any) -> None:
             """Emblem — whenever a player casts a spell, create a 2/1 Ninja token."""
-            from engine.triggers import TriggerRegistration
-            from engine.game import create_token
+            from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+            from benchmarks.sos.workspace.engine.game import create_token
             controller = pw.controller
             if controller is None:
                 return

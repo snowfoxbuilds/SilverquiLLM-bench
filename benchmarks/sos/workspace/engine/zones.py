@@ -5,10 +5,10 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING, Any
 
-from engine.types import CardType, Zone
+from benchmarks.sos.workspace.engine.types import CardType, Zone
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 
 class IllegalMoveError(Exception):
@@ -219,7 +219,7 @@ def move_to_zone(
             no replacement effects are consulted (useful for simple
             moves like casting resolution or exile-from-graveyard).
     """
-    from engine.events import (
+    from benchmarks.sos.workspace.engine.events import (
         CreatureDiesTriggeredEvent,
         EntersBattlefieldTriggeredEvent,
         LeavesBattlefieldTriggeredEvent,

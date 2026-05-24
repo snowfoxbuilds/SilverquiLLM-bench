@@ -1,11 +1,11 @@
 """Card implementation for Drake Hatcher."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import ActivatedAbility, Creature
-from engine.types import Keyword, ManaCost
-from engine.events import DealsDamageTriggeredEvent
+from benchmarks.sos.workspace.engine.card import ActivatedAbility, Creature
+from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
+from benchmarks.sos.workspace.engine.events import DealsDamageTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class DrakeHatcher(Creature):
     """Drake Hatcher — {1}{U} — 1/3 — Human Wizard.
@@ -32,7 +32,7 @@ class DrakeHatcher(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register combat damage trigger: add incubation counters."""
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
         _captured: dict[str, int] = {}
@@ -43,7 +43,7 @@ class DrakeHatcher(Creature):
             if not event.is_combat:
                 return False
             target = event.target
-            from engine.player import Player
+            from benchmarks.sos.workspace.engine.player import Player
             if not isinstance(target, Player):
                 return False
             _captured['amount'] = event.amount
@@ -66,7 +66,7 @@ class DrakeHatcher(Creature):
             return True
 
         def _effect(game: Any) -> None:
-            from engine.game import create_token
+            from benchmarks.sos.workspace.engine.game import create_token
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return

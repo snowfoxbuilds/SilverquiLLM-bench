@@ -1,11 +1,11 @@
 """Card implementation for Firebrand Archer."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature
-from engine.types import CardType, ManaCost
-from engine.events import SpellCastTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.events import SpellCastTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class FirebrandArcher(Creature):
     """Firebrand Archer — {1}{R} — 2/1 — Human Archer.
@@ -27,8 +27,8 @@ class FirebrandArcher(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register noncreature spell cast trigger."""
-        from engine.game import deal_damage
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import deal_damage
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

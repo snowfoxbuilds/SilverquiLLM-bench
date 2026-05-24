@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import (
+from benchmarks.sos.workspace.engine.card import (
     Artifact,
     ArtifactCreature,
     ActivatedAbility,
     ManaAbility,
 )
-from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Supertype
 if TYPE_CHECKING:
-    from engine.game_state import GameState
-    from engine.player import Player
+    from benchmarks.sos.workspace.engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.player import Player
 
     from cards.registry import CardRegistry
 
@@ -39,7 +39,7 @@ class RavenousAmulet(Artifact):
                 return False
             src.is_tapped = True
             # Sacrifice a creature as part of the cost
-            from engine.game import sacrifice
+            from benchmarks.sos.workspace.engine.game import sacrifice
             controller = source.controller
             if controller is not None:
                 bf = game.get_battlefield(controller)
@@ -52,7 +52,7 @@ class RavenousAmulet(Artifact):
             return True
 
         def _sac_creature_effect(game: Any) -> None:
-            from engine.game import draw_card
+            from benchmarks.sos.workspace.engine.game import draw_card
             controller = source.controller
             if controller is not None:
                 draw_card(game, controller)
@@ -65,7 +65,7 @@ class RavenousAmulet(Artifact):
             return True
 
         def _drain_effect(game: Any) -> None:
-            from engine.game import sacrifice
+            from benchmarks.sos.workspace.engine.game import sacrifice
             controller = source.controller
             if controller is not None:
                 # Sacrifice this artifact

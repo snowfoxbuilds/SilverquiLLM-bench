@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import Any
 import types
 import pytest
-from engine.card import CardImpl, Creature, Enchantment
-from engine.events import CreatureDiesReplacementEvent, CreatureDiesTriggeredEvent, EntersBattlefieldTriggeredEvent, LeavesBattlefieldTriggeredEvent, BeginningOfUpkeepTriggeredEvent, TriggeredEvent
-from engine.replacement_effects import ReplacementEffect
-from engine.triggers import TriggerRegistration
-from engine.types import CardType, Zone
+from benchmarks.sos.workspace.engine.card import CardImpl, Creature, Enchantment
+from benchmarks.sos.workspace.engine.events import CreatureDiesReplacementEvent, CreatureDiesTriggeredEvent, EntersBattlefieldTriggeredEvent, LeavesBattlefieldTriggeredEvent, BeginningOfUpkeepTriggeredEvent, TriggeredEvent
+from benchmarks.sos.workspace.engine.replacement_effects import ReplacementEffect
+from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+from benchmarks.sos.workspace.engine.types import CardType, Zone
 from tests.test_utils import create_game, set_board_state
 
 def _make_creature(name: str='TestCreature', power: int=2, toughness: int=2) -> Creature:
@@ -36,7 +36,7 @@ class TestMoveToZoneBounce:
     """Bounce a creature from battlefield to hand."""
 
     def test_bounce_removes_from_battlefield_adds_to_hand(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         creature = _make_creature('Bouncee')
         player = game.players[0]
@@ -46,7 +46,7 @@ class TestMoveToZoneBounce:
         assert player.zones[Zone.HAND].contains(creature)
 
     def test_bounce_fires_leaves_battlefield(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         creature = _make_creature('Bouncee')
         set_board_state(game, 0, battlefield=[creature])
@@ -55,7 +55,7 @@ class TestMoveToZoneBounce:
         assert any((isinstance(e, LeavesBattlefieldTriggeredEvent) for e in recorded))
 
     def test_bounce_does_not_fire_creature_dies(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         creature = _make_creature('Bouncee')
         set_board_state(game, 0, battlefield=[creature])
@@ -64,7 +64,7 @@ class TestMoveToZoneBounce:
         assert not any((isinstance(e, CreatureDiesTriggeredEvent) for e in recorded))
 
     def test_bounce_unregisters_triggers(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         creature = _make_creature('Bouncee')
         player = game.players[0]
@@ -76,7 +76,7 @@ class TestMoveToZoneBounce:
         assert len(game.trigger_manager.get_triggers_for_source(creature)) == 0
 
     def test_bounce_unregisters_replacement_effects(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         creature = _make_creature('Bouncee')
         player = game.players[0]
@@ -91,7 +91,7 @@ class TestMoveToZoneETB:
     """Enter the battlefield: hand to battlefield."""
 
     def test_etb_fires_enters_battlefield(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         creature = _make_creature('ETBCreature')
         set_board_state(game, 0, hand=[creature])
@@ -100,7 +100,7 @@ class TestMoveToZoneETB:
         assert any((isinstance(e, EntersBattlefieldTriggeredEvent) for e in recorded))
 
     def test_etb_calls_register_triggers(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         registered = []
 
@@ -114,7 +114,7 @@ class TestMoveToZoneETB:
         assert len(registered) == 1
 
     def test_etb_calls_register_replacement_effects(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         registered = []
 
@@ -128,7 +128,7 @@ class TestMoveToZoneETB:
         assert len(registered) == 1
 
     def test_etb_adds_to_battlefield(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         creature = _make_creature('ETBCreature')
         player = game.players[0]
@@ -141,7 +141,7 @@ class TestMoveToZoneDeath:
     """Creature dying: battlefield to graveyard."""
 
     def test_death_fires_leaves_battlefield(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         creature = _make_creature('DyingCreature')
         set_board_state(game, 0, battlefield=[creature])
@@ -150,7 +150,7 @@ class TestMoveToZoneDeath:
         assert any((isinstance(e, LeavesBattlefieldTriggeredEvent) for e in recorded))
 
     def test_death_fires_creature_dies(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         creature = _make_creature('DyingCreature')
         set_board_state(game, 0, battlefield=[creature])
@@ -159,7 +159,7 @@ class TestMoveToZoneDeath:
         assert any((isinstance(e, CreatureDiesTriggeredEvent) for e in recorded))
 
     def test_death_fires_events_before_unregister(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         creature = _make_creature('DyingCreature')
         player = game.players[0]
@@ -178,7 +178,7 @@ class TestMoveToZoneDeath:
         assert len(game.trigger_manager.get_triggers_for_source(creature)) == 0
 
     def test_death_card_ends_in_graveyard(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         creature = _make_creature('DyingCreature')
         player = game.players[0]
@@ -191,7 +191,7 @@ class TestMoveToZoneExile:
     """Exile a creature: battlefield to exile."""
 
     def test_exile_fires_leaves_battlefield(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         creature = _make_creature('ExiledCreature')
         set_board_state(game, 0, battlefield=[creature])
@@ -200,7 +200,7 @@ class TestMoveToZoneExile:
         assert any((isinstance(e, LeavesBattlefieldTriggeredEvent) for e in recorded))
 
     def test_exile_does_not_fire_creature_dies(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         creature = _make_creature('ExiledCreature')
         set_board_state(game, 0, battlefield=[creature])
@@ -209,7 +209,7 @@ class TestMoveToZoneExile:
         assert not any((isinstance(e, CreatureDiesTriggeredEvent) for e in recorded))
 
     def test_exile_moves_to_exile_zone(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         creature = _make_creature('ExiledCreature')
         player = game.players[0]
@@ -226,7 +226,7 @@ class TestMoveToZoneReplacementRedirection:
         return CreatureDiesReplacementEvent(creature=creature, destination='graveyard', controller=player, owner=player)
 
     def test_replacement_redirects_to_exile(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         creature = _make_creature('RedirectedCreature')
         player = game.players[0]
@@ -242,7 +242,7 @@ class TestMoveToZoneReplacementRedirection:
         assert not player.zones[Zone.GRAVEYARD].contains(creature)
 
     def test_replacement_redirect_suppresses_creature_dies(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         creature = _make_creature('RedirectedCreature')
         player = game.players[0]
@@ -258,7 +258,7 @@ class TestMoveToZoneReplacementRedirection:
         assert not any((isinstance(e, CreatureDiesTriggeredEvent) for e in recorded))
 
     def test_replacement_redirect_still_fires_leaves_battlefield(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         creature = _make_creature('RedirectedCreature')
         player = game.players[0]
@@ -277,7 +277,7 @@ class TestMoveToZoneNonCreature:
     """Non-creature permanent leaving battlefield."""
 
     def test_enchantment_leaving_fires_leaves_battlefield(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         enchantment = _make_enchantment('TestEnchantment')
         set_board_state(game, 0, battlefield=[enchantment])
@@ -286,7 +286,7 @@ class TestMoveToZoneNonCreature:
         assert any((isinstance(e, LeavesBattlefieldTriggeredEvent) for e in recorded))
 
     def test_enchantment_leaving_does_not_fire_creature_dies(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         enchantment = _make_enchantment('TestEnchantment')
         set_board_state(game, 0, battlefield=[enchantment])
@@ -298,7 +298,7 @@ class TestMoveToZoneToken:
     """Token creature going to graveyard."""
 
     def test_token_to_graveyard_fires_leaves_battlefield(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         token = _make_token_creature('SoldierToken')
         set_board_state(game, 0, battlefield=[token])
@@ -307,7 +307,7 @@ class TestMoveToZoneToken:
         assert any((isinstance(e, LeavesBattlefieldTriggeredEvent) for e in recorded))
 
     def test_token_to_graveyard_fires_creature_dies(self) -> None:
-        from engine.zones import move_to_zone
+        from benchmarks.sos.workspace.engine.zones import move_to_zone
         game = create_game()
         token = _make_token_creature('SoldierToken')
         set_board_state(game, 0, battlefield=[token])

@@ -1,12 +1,12 @@
 """Card implementation for Fiend Artisan."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import ActivatedAbility, Artifact, Creature, Enchantment, Instant, ManaAbility, Sorcery
-from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, DURATION_PERMANENT, Layer, SubLayer
-from engine.types import CardType, Color, HybridManaSymbol, Keyword, ManaCost, ManaType, Supertype, Zone
-from engine.events import EntersBattlefieldTriggeredEvent
+from benchmarks.sos.workspace.engine.card import ActivatedAbility, Artifact, Creature, Enchantment, Instant, ManaAbility, Sorcery
+from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, DURATION_PERMANENT, Layer, SubLayer
+from benchmarks.sos.workspace.engine.types import CardType, Color, HybridManaSymbol, Keyword, ManaCost, ManaType, Supertype, Zone
+from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
     from cards.registry import CardRegistry
 
 def _is_on_battlefield(game: Any, card: Any) -> bool:
@@ -94,7 +94,7 @@ class FiendArtisan(Creature):
             The X value is read from ``src._x_value`` (set by the game
             engine or test harness before calling the ability).
             """
-            from engine.casting import is_sorcery_speed
+            from benchmarks.sos.workspace.engine.casting import is_sorcery_speed
             controller = getattr(src, 'controller', None)
             if controller is None:
                 return False
@@ -116,7 +116,7 @@ class FiendArtisan(Creature):
             if sac_target is None:
                 sac_target = other_creatures[0]
             if bf.contains(sac_target):
-                from engine.zones import move_to_zone
+                from benchmarks.sos.workspace.engine.zones import move_to_zone
                 move_to_zone(game, sac_target, Zone.BATTLEFIELD, Zone.GRAVEYARD)
             return True
 
@@ -137,7 +137,7 @@ class FiendArtisan(Creature):
                 library.remove(chosen)
                 chosen.owner = chosen.owner or controller
                 chosen.controller = controller
-                from engine.zones import move_to_zone
+                from benchmarks.sos.workspace.engine.zones import move_to_zone
                 game.get_battlefield(controller).add(chosen)
                 if hasattr(chosen, 'register_triggers'):
                     chosen.register_triggers(game)

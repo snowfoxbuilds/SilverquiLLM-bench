@@ -4,17 +4,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Sorcery
-from engine.continuous_effects import (
+from benchmarks.sos.workspace.engine.card import Sorcery
+from benchmarks.sos.workspace.engine.continuous_effects import (
     ContinuousEffect,
     DURATION_END_OF_TURN,
     Layer,
     SubLayer,
 )
-from engine.types import CardType, Keyword, ManaCost
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 
 class Overrun(Sorcery):

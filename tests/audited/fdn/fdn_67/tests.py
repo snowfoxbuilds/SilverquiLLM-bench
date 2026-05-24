@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from card_impl import RevengeOfTheRats
-from engine.card import Creature, Sorcery
-from engine.types import CardType, ManaCost, Zone
+from benchmarks.sos.workspace.engine.card import Creature, Sorcery
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Zone
 from benchmarks.sos.workspace.tests.test_utils import create_game
 
 
@@ -80,7 +80,7 @@ class TestRevengeOfTheRatsResolve:
         c = Creature(name="Dead", base_power=1, base_toughness=1, owner=p1)
         p1.zones[Zone.GRAVEYARD].add(c)
         # Add a non-creature (instant)
-        from engine.card import Instant
+        from benchmarks.sos.workspace.engine.card import Instant
         inst = Instant(name="Spell", owner=p1)
         p1.zones[Zone.GRAVEYARD].add(inst)
         card.on_resolve(game)

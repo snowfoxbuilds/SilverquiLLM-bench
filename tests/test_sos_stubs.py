@@ -125,7 +125,7 @@ class TestStubAttributes:
 
     def test_card_types_set_correctly(self, fresh_registry):
         """Card types must be derived from the type line."""
-        from engine.types import CardType
+        from benchmarks.sos.workspace.engine.types import CardType
 
         instance = fresh_registry.create_instance("The Dawning Archaic")
         assert CardType.CREATURE in instance.card_types
@@ -264,7 +264,7 @@ class TestStubAttributes:
 
     def test_planeswalker_is_planeswalker_type(self, fresh_registry):
         """Planeswalker stubs must have PLANESWALKER in card_types."""
-        from engine.types import CardType
+        from benchmarks.sos.workspace.engine.types import CardType
 
         instance = fresh_registry.create_instance("Ral Zarek, Guest Lecturer")
         assert CardType.PLANESWALKER in instance.card_types
@@ -279,7 +279,7 @@ class TestStubAttributes:
 
     def test_vehicle_is_artifact_not_creature(self, fresh_registry):
         """Strixhaven Skycoach should be an Artifact, not inherently a Creature."""
-        from engine.types import CardType
+        from benchmarks.sos.workspace.engine.types import CardType
 
         instance = fresh_registry.create_instance("Strixhaven Skycoach")
         assert CardType.ARTIFACT in instance.card_types
@@ -468,22 +468,22 @@ class TestStubClassHierarchy:
     """Tests that stubs use correct engine base classes."""
 
     def test_creature_is_creature_subclass(self, fresh_registry):
-        """Creature stubs must inherit from engine.card.Creature."""
-        from engine.card import Creature
+        """Creature stubs must inherit from benchmarks.sos.workspace.engine.card.Creature."""
+        from benchmarks.sos.workspace.engine.card import Creature
 
         instance = fresh_registry.create_instance("The Dawning Archaic")
         assert isinstance(instance, Creature)
 
     def test_instant_is_instant_subclass(self, fresh_registry):
-        """Instant stubs must inherit from engine.card.Instant."""
-        from engine.card import Instant
+        """Instant stubs must inherit from benchmarks.sos.workspace.engine.card.Instant."""
+        from benchmarks.sos.workspace.engine.card import Instant
 
         instance = fresh_registry.create_instance("Ajani's Response")
         assert isinstance(instance, Instant)
 
     def test_land_is_land_subclass(self, fresh_registry, sos_cards):
-        """Land stubs must inherit from engine.card.Land."""
-        from engine.card import Land
+        """Land stubs must inherit from benchmarks.sos.workspace.engine.card.Land."""
+        from benchmarks.sos.workspace.engine.card import Land
 
         land_card = next(c for c in sos_cards if "Land" in c.get("type_line", "") and "Creature" not in c.get("type_line", ""))
         instance = fresh_registry.create_instance(land_card["name"])

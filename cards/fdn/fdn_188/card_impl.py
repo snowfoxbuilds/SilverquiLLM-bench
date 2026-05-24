@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature, Instant, Mode, Sorcery
-from engine.continuous_effects import (
+from benchmarks.sos.workspace.engine.card import Creature, Instant, Mode, Sorcery
+from benchmarks.sos.workspace.engine.continuous_effects import (
     ContinuousEffect,
     DURATION_END_OF_TURN,
     Layer,
     SubLayer,
 )
-from engine.types import CardType, Keyword, ManaCost, Zone
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Zone
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
     from cards.registry import CardRegistry
 
@@ -59,12 +59,12 @@ class Abrade(Instant):
         if mode is None:
             return
         if mode == 0:
-            from engine.game import deal_damage
+            from benchmarks.sos.workspace.engine.game import deal_damage
             target = _get_target(self)
             if target is not None:
                 deal_damage(game, self, target, 3)
         elif mode == 1:
-            from engine.game import destroy
+            from benchmarks.sos.workspace.engine.game import destroy
             target = _get_target(self)
             if target is not None and _is_on_battlefield(game, target):
                 destroy(game, target)

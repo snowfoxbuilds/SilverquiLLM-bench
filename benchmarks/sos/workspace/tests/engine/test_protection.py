@@ -18,11 +18,11 @@ from __future__ import annotations
 
 import pytest
 
-from engine.card import Aura, Creature, Instant, Sorcery
-from engine.game import deal_damage
-from engine.game_state import GameState
-from engine.player import DeterministicPlayer as Player
-from engine.protection import (
+from benchmarks.sos.workspace.engine.card import Aura, Creature, Instant, Sorcery
+from benchmarks.sos.workspace.engine.game import deal_damage
+from benchmarks.sos.workspace.engine.game_state import GameState
+from benchmarks.sos.workspace.engine.player import DeterministicPlayer as Player
+from benchmarks.sos.workspace.engine.protection import (
     ProtectionAbility,
     get_colors,
     get_protections,
@@ -32,9 +32,9 @@ from engine.protection import (
     _is_illegal_target_due_to_protection,
     _should_prevent_damage,
 )
-from engine.combat import _can_block
-from engine.state_based_actions import check_state_based_actions
-from engine.types import Color, ManaCost, ManaType, Zone
+from benchmarks.sos.workspace.engine.combat import _can_block
+from benchmarks.sos.workspace.engine.state_based_actions import check_state_based_actions
+from benchmarks.sos.workspace.engine.types import Color, ManaCost, ManaType, Zone
 
 
 # ---------------------------------------------------------------------------

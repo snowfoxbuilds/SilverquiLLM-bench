@@ -13,16 +13,16 @@ from __future__ import annotations
 
 import pytest
 
-from engine.card import (
+from benchmarks.sos.workspace.engine.card import (
     Creature,
     Instant,
     Sorcery,
 )
-from engine.casting import cast_spell_free
-from engine.game_state import GameState
-from engine.player import DeterministicPlayer
-from engine.stack import StackObject
-from engine.types import CardType, ManaCost, ManaType, Phase, Zone
+from benchmarks.sos.workspace.engine.casting import cast_spell_free
+from benchmarks.sos.workspace.engine.game_state import GameState
+from benchmarks.sos.workspace.engine.player import DeterministicPlayer
+from benchmarks.sos.workspace.engine.stack import StackObject
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost, ManaType, Phase, Zone
 
 
 # ---------------------------------------------------------------------------

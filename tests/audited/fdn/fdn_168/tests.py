@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 
 from card_impl import WitnessProtection
-from engine.card import Aura, Creature
-from engine.continuous_effects import Layer, SubLayer
-from engine.types import CardType, Color, Keyword, ManaCost
+from benchmarks.sos.workspace.engine.card import Aura, Creature
+from benchmarks.sos.workspace.engine.continuous_effects import Layer, SubLayer
+from benchmarks.sos.workspace.engine.types import CardType, Color, Keyword, ManaCost
 from benchmarks.sos.workspace.tests.test_utils import create_game
 
 

@@ -2,12 +2,12 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
-from engine.card import ActivatedAbility, Creature, Enchantment
-from engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
-from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
-from engine.events import SpellCastTriggeredEvent
+from benchmarks.sos.workspace.engine.card import ActivatedAbility, Creature, Enchantment
+from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+from benchmarks.sos.workspace.engine.events import SpellCastTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
     from cards.registry import CardRegistry
 
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
@@ -36,8 +36,8 @@ class RiteOfTheDragoncaller(Enchantment):
         pass
 
     def register_triggers(self, game: GameState) -> None:
-        from engine.triggers import TriggerRegistration
-        from engine.game import create_token
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import create_token
         source = self
 
         def _condition(game: Any, event: dict) -> bool:

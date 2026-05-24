@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Creature
-from engine.types import CardType, Keyword, ManaCost, Zone
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Zone
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 
 class AbyssalHarvester(Creature):
@@ -39,12 +39,12 @@ class AbyssalHarvester(Creature):
 
     def get_activated_abilities(self, game: "GameState") -> list:
         """Return the tap ability."""
-        from engine.card import ActivatedAbility
+        from benchmarks.sos.workspace.engine.card import ActivatedAbility
 
         source = self
 
         def _tap_ability_effect(game: "GameState") -> None:
-            from engine.game import create_token, exile
+            from benchmarks.sos.workspace.engine.game import create_token, exile
 
             controller = getattr(source, "controller", None)
             if controller is None:

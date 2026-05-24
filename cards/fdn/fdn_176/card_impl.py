@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import LoyaltyAbility, Planeswalker
-from engine.types import CardType, ManaCost, ManaType, Supertype
+from benchmarks.sos.workspace.engine.card import LoyaltyAbility, Planeswalker
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost, ManaType, Supertype
 if TYPE_CHECKING:
-    from engine.game_state import GameState
-    from engine.player import Player
+    from benchmarks.sos.workspace.engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.player import Player
 
     from cards.registry import CardRegistry
 
@@ -44,10 +44,10 @@ class LilianaDreadhordeGeneral(Planeswalker):
 
         def _plus1(game: Any) -> None:
             # Each opponent sacrifices a creature.
-            from engine.game import sacrifice
+            from benchmarks.sos.workspace.engine.game import sacrifice
             for p in game.players:
                 if p is not pw.controller:
-                    from engine.types import CardType as CT
+                    from benchmarks.sos.workspace.engine.types import CardType as CT
                     bf = game.get_battlefield(p)
                     for obj in bf.get_all():
                         if CT.CREATURE in getattr(obj, "card_types", set()):
@@ -56,8 +56,8 @@ class LilianaDreadhordeGeneral(Planeswalker):
 
         def _minus4(game: Any) -> None:
             # Each player draws cards equal to creatures they control.
-            from engine.game import draw_card
-            from engine.types import CardType as CT
+            from benchmarks.sos.workspace.engine.game import draw_card
+            from benchmarks.sos.workspace.engine.types import CardType as CT
             for p in game.players:
                 bf = game.get_battlefield(p)
                 count = sum(1 for obj in bf.get_all() if CT.CREATURE in getattr(obj, "card_types", set()))

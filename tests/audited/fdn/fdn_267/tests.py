@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from card_impl import SecludedCourtyard
-from engine.card import Land, ManaAbility
-from engine.types import ManaCost, ManaType
+from benchmarks.sos.workspace.engine.card import Land, ManaAbility
+from benchmarks.sos.workspace.engine.types import ManaCost, ManaType
 from benchmarks.sos.workspace.tests.test_utils import create_game
 
 

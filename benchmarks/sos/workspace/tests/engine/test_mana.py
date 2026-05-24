@@ -27,8 +27,8 @@ from __future__ import annotations
 
 import pytest
 
-from engine.mana import ManaPool
-from engine.types import ManaCost, ManaType
+from benchmarks.sos.workspace.engine.mana import ManaPool
+from benchmarks.sos.workspace.engine.types import ManaCost, ManaType
 
 
 # ---------------------------------------------------------------------------
@@ -449,21 +449,21 @@ class TestPlayerManaPoolIntegration:
 
     def test_player_mana_pool_is_mana_pool_instance(self) -> None:
         """Player.mana_pool should be a ManaPool (not None)."""
-        from engine.player import DeterministicPlayer
+        from benchmarks.sos.workspace.engine.player import DeterministicPlayer
 
         p = DeterministicPlayer("Alice", [])
         assert isinstance(p.mana_pool, ManaPool)
 
     def test_player_mana_pool_starts_empty(self) -> None:
         """Player's mana pool should start with 0 total mana."""
-        from engine.player import DeterministicPlayer
+        from benchmarks.sos.workspace.engine.player import DeterministicPlayer
 
         p = DeterministicPlayer("Alice", [])
         assert p.mana_pool.total() == 0
 
     def test_each_player_gets_distinct_mana_pool(self) -> None:
         """Two players should not share the same ManaPool instance."""
-        from engine.player import DeterministicPlayer
+        from benchmarks.sos.workspace.engine.player import DeterministicPlayer
 
         p1 = DeterministicPlayer("P1", [])
         p2 = DeterministicPlayer("P2", [])
@@ -471,7 +471,7 @@ class TestPlayerManaPoolIntegration:
 
     def test_player_mana_pool_is_functional(self) -> None:
         """Player's mana pool should support add/pay operations."""
-        from engine.player import DeterministicPlayer
+        from benchmarks.sos.workspace.engine.player import DeterministicPlayer
 
         p = DeterministicPlayer("Alice", [])
         p.mana_pool.add(ManaType.RED, 2)

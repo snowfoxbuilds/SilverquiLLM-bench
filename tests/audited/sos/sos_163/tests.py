@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import TenuredConcocter
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -62,13 +62,13 @@ class TestTenuredConcocterAbilities:
 
     def test_has_infusion(self) -> None:
         """Tenured Concocter must have Infusion keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = TenuredConcocter(name="Tenured Concocter", owner=None, base_power=4, base_toughness=5)
         assert Keyword.INFUSION in card.keywords, "Tenured Concocter should have Infusion"
 
     def test_has_vigilance(self) -> None:
         """Tenured Concocter must have Vigilance keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = TenuredConcocter(name="Tenured Concocter", owner=None, base_power=4, base_toughness=5)
         assert Keyword.VIGILANCE in card.keywords, "Tenured Concocter should have Vigilance"
 
@@ -88,7 +88,7 @@ class TestTenuredConcocterEdgeCases:
     def test_fizzle_no_targets_creature_stays(self) -> None:
         """If ETB ability fizzles, the creature remains on battlefield."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = TenuredConcocter(name="Tenured Concocter", owner=player, base_power=4, base_toughness=5)
@@ -106,8 +106,8 @@ class TestTenuredConcocterEdgeCases:
     def test_infusion_base_effect_without_condition(self) -> None:
         """Without infusion condition, only base effect applies."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -122,8 +122,8 @@ class TestTenuredConcocterEdgeCases:
     def test_infusion_enhanced_effect_with_condition(self) -> None:
         """With infusion condition met, enhanced effect applies."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -156,8 +156,8 @@ class TestTenuredConcocterInteractions:
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -174,8 +174,8 @@ class TestTenuredConcocterInteractions:
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         other = Creature(name="Companion", owner=player, base_power=2, base_toughness=2)

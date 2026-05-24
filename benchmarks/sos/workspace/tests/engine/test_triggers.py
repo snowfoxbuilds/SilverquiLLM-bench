@@ -20,13 +20,13 @@ Verifies:
 """
 from __future__ import annotations
 import pytest
-from engine.card import CardImpl, Creature
-from engine.game_state import GameState
-from engine.player import DeterministicPlayer
-from engine.stack import StackObject
-from engine.triggers import TriggerManager, TriggerRegistration
-from engine.types import Zone
-from engine.events import AttacksTriggeredEvent, BeginningOfUpkeepTriggeredEvent, CreatureDiesTriggeredEvent, DealsDamageTriggeredEvent, EndOfTurnTriggeredEvent, EntersBattlefieldTriggeredEvent, GainsLifeTriggeredEvent, SpellCastTriggeredEvent
+from benchmarks.sos.workspace.engine.card import CardImpl, Creature
+from benchmarks.sos.workspace.engine.game_state import GameState
+from benchmarks.sos.workspace.engine.player import DeterministicPlayer
+from benchmarks.sos.workspace.engine.stack import StackObject
+from benchmarks.sos.workspace.engine.triggers import TriggerManager, TriggerRegistration
+from benchmarks.sos.workspace.engine.types import Zone
+from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent, BeginningOfUpkeepTriggeredEvent, CreatureDiesTriggeredEvent, DealsDamageTriggeredEvent, EndOfTurnTriggeredEvent, EntersBattlefieldTriggeredEvent, GainsLifeTriggeredEvent, SpellCastTriggeredEvent
 
 @pytest.fixture()
 def players() -> list[DeterministicPlayer]:
@@ -461,8 +461,8 @@ class TestAutoTriggerRegistrationViaResolve:
         """Cast a creature with an ETB trigger, resolve it, fire event,
         verify the trigger fires and pushes a StackObject automatically.
         """
-        from engine.casting import cast_spell
-        from engine.types import ManaCost, ManaType, Phase
+        from benchmarks.sos.workspace.engine.casting import cast_spell
+        from benchmarks.sos.workspace.engine.types import ManaCost, ManaType, Phase
         etb_fired: list[str] = []
 
         class ETBBeast(Creature):
@@ -496,9 +496,9 @@ class TestAutoTriggerRegistrationViaResolve:
         """Play a land with triggers via play_land, verify triggers are
         auto-registered without manual register_triggers call.
         """
-        from engine.card import Land
-        from engine.casting import play_land
-        from engine.types import Phase
+        from benchmarks.sos.workspace.engine.card import Land
+        from benchmarks.sos.workspace.engine.casting import play_land
+        from benchmarks.sos.workspace.engine.types import Phase
         etb_fired: list[str] = []
 
         class TriggerLand(Land):
@@ -529,9 +529,9 @@ class TestAutoTriggerUnregistrationViaLeave:
         """A creature with triggers takes lethal damage → SBA moves it to
         graveyard → triggers should be automatically unregistered.
         """
-        from engine.casting import cast_spell
-        from engine.state_based_actions import check_state_based_actions
-        from engine.types import ManaCost, ManaType, Phase
+        from benchmarks.sos.workspace.engine.casting import cast_spell
+        from benchmarks.sos.workspace.engine.state_based_actions import check_state_based_actions
+        from benchmarks.sos.workspace.engine.types import ManaCost, ManaType, Phase
 
         class ETBCreature(Creature):
 
@@ -559,7 +559,7 @@ class TestAutoTriggerUnregistrationViaLeave:
 
     def test_sba_zero_toughness_auto_unregisters_triggers(self, game: GameState, players: list[DeterministicPlayer]) -> None:
         """A creature with 0 toughness is removed by SBA → triggers auto-unregistered."""
-        from engine.state_based_actions import check_state_based_actions
+        from benchmarks.sos.workspace.engine.state_based_actions import check_state_based_actions
 
         class ETBCreature(Creature):
 

@@ -1,11 +1,11 @@
 """Card implementation for Eager Trufflesnout."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Artifact, Creature
-from engine.types import CardType, Keyword, ManaCost
-from engine.events import DealsDamageTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Artifact, Creature
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
+from benchmarks.sos.workspace.engine.events import DealsDamageTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 def _make_food_token() -> Artifact:
     """Create a Food artifact token.
@@ -15,7 +15,7 @@ def _make_food_token() -> Artifact:
     the engine does not support sacrifice-as-cost or life-gain activated
     abilities on tokens. The token is created with correct type/subtype.
     """
-    from engine.card import Artifact
+    from benchmarks.sos.workspace.engine.card import Artifact
     token = Artifact(name='Food', subtypes={'Food'}, rules_text='{2}, {T}, Sacrifice this artifact: You gain 3 life.')
     return token
 
@@ -39,9 +39,9 @@ class EagerTrufflesnout(Creature):
         super().__init__(**kwargs)
 
     def register_triggers(self, game: 'GameState') -> None:
-        from engine.game import create_token
-        from engine.player import Player
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import create_token
+        from benchmarks.sos.workspace.engine.player import Player
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

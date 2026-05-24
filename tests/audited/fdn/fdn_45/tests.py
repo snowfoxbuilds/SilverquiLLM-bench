@@ -1,9 +1,9 @@
 """Audited tests for FDN 45 — Kiora, the Rising Tide."""
 from __future__ import annotations
 from card_impl import KioraTheRisingTide
-from engine.card import Creature
-from engine.events import AttacksTriggeredEvent
-from engine.types import ManaCost, Supertype, Zone
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent
+from benchmarks.sos.workspace.engine.types import ManaCost, Supertype, Zone
 from benchmarks.sos.workspace.tests.test_utils import create_game
 
 class TestKioraBasics:

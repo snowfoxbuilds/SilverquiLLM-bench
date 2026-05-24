@@ -7,9 +7,9 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 from __future__ import annotations
 import pytest
 from card_impl import EnvironmentalScientist
-from engine.card import Creature
-from engine.types import CardType, ManaCost
-from engine.events import EntersBattlefieldTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
 
 @pytest.mark.basic
 class TestEnvironmentalScientistBasicProperties:
@@ -62,8 +62,8 @@ class TestEnvironmentalScientistAbilities:
         This test will fail against stubs (expected).
         """
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
-        from engine.card import CardImpl, Land
+        from benchmarks.sos.workspace.engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import CardImpl, Land
         game = create_game()
         player = game.players[0]
         for i in range(5):

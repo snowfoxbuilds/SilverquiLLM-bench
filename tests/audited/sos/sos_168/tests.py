@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import WildgrowthArchaic
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -62,19 +62,19 @@ class TestWildgrowthArchaicAbilities:
 
     def test_has_reach(self) -> None:
         """Wildgrowth Archaic must have Reach keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = WildgrowthArchaic(name="Wildgrowth Archaic", owner=None, base_power=0, base_toughness=0)
         assert Keyword.REACH in card.keywords, "Wildgrowth Archaic should have Reach"
 
     def test_has_converge(self) -> None:
         """Wildgrowth Archaic must have Converge keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = WildgrowthArchaic(name="Wildgrowth Archaic", owner=None, base_power=0, base_toughness=0)
         assert Keyword.CONVERGE in card.keywords, "Wildgrowth Archaic should have Converge"
 
     def test_has_trample(self) -> None:
         """Wildgrowth Archaic must have Trample keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = WildgrowthArchaic(name="Wildgrowth Archaic", owner=None, base_power=0, base_toughness=0)
         assert Keyword.TRAMPLE in card.keywords, "Wildgrowth Archaic should have Trample"
 
@@ -184,8 +184,8 @@ class TestWildgrowthArchaicInteractions:
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]

@@ -1,12 +1,12 @@
 """Card implementation for Ashroot Animist."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature
-from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
-from engine.types import CardType, Keyword, ManaCost, Zone
-from engine.events import AttacksTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Zone
+from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class AshrootAnimist(Creature):
     """Ashroot Animist — {2}{R}{G} — 4/4 — Lizard Druid.
@@ -31,7 +31,7 @@ class AshrootAnimist(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register attack trigger for trample + power buff."""
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

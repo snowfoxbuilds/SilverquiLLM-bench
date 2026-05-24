@@ -1,11 +1,11 @@
 """Card implementation for Cat Collector."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Artifact, Creature
-from engine.types import CardType, Keyword, ManaCost
-from engine.events import GainsLifeTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Artifact, Creature
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
+from benchmarks.sos.workspace.engine.events import GainsLifeTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 def _make_food_token() -> Artifact:
     """Create a Food artifact token.
@@ -15,7 +15,7 @@ def _make_food_token() -> Artifact:
     the engine does not support sacrifice-as-cost or life-gain activated
     abilities on tokens. The token is created with correct type/subtype.
     """
-    from engine.card import Artifact
+    from benchmarks.sos.workspace.engine.card import Artifact
     token = Artifact(name='Food', subtypes={'Food'}, rules_text='{2}, {T}, Sacrifice this artifact: You gain 3 life.')
     return token
 
@@ -41,7 +41,7 @@ class CatCollector(Creature):
 
     def on_resolve(self, game: 'GameState') -> None:
         """ETB: create a Food token."""
-        from engine.game import create_token
+        from benchmarks.sos.workspace.engine.game import create_token
         controller = self.controller
         if controller is None:
             return
@@ -51,8 +51,8 @@ class CatCollector(Creature):
     def register_triggers(self, game: 'GameState') -> None:
         """Register life-gain trigger: first life gain each of your turns
         creates a 1/1 Cat token."""
-        from engine.game import create_token
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import create_token
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
         source._cat_collector_last_triggered_turn: int = -1

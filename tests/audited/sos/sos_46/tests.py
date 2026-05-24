@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import EncouragingAviatorJump
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -62,13 +62,13 @@ class TestEncouragingAviatorJumpAbilities:
 
     def test_has_flying(self) -> None:
         """Encouraging Aviator // Jump must have Flying keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = EncouragingAviatorJump(name="Encouraging Aviator // Jump", owner=None, base_power=2, base_toughness=3)
         assert Keyword.FLYING in card.keywords, "Encouraging Aviator // Jump should have Flying"
 
     def test_has_prepared(self) -> None:
         """Encouraging Aviator // Jump must have Prepared keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = EncouragingAviatorJump(name="Encouraging Aviator // Jump", owner=None, base_power=2, base_toughness=3)
         assert Keyword.PREPARED in card.keywords, "Encouraging Aviator // Jump should have Prepared"
 
@@ -107,7 +107,7 @@ class TestEncouragingAviatorJumpEdgeCases:
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = EncouragingAviatorJump(name="Encouraging Aviator // Jump", owner=player, base_power=2, base_toughness=3)
@@ -126,8 +126,8 @@ class TestEncouragingAviatorJumpInteractions:
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -144,8 +144,8 @@ class TestEncouragingAviatorJumpInteractions:
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         other = Creature(name="Companion", owner=player, base_power=2, base_toughness=2)

@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import BlechLoafingPest
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost, Supertype
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Supertype
 
 
 @pytest.mark.basic

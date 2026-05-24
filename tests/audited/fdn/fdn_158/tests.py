@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from card_impl import Micromancer
-from engine.card import CardImpl, Creature, Instant, Sorcery
-from engine.types import CardType, ManaCost, Zone
+from benchmarks.sos.workspace.engine.card import CardImpl, Creature, Instant, Sorcery
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Zone
 from benchmarks.sos.workspace.tests.test_utils import create_game
 
 
@@ -44,7 +44,7 @@ class TestMicromancerETB:
         micro.controller = p1
         target_spell = Instant(name="Shock", mana_cost=ManaCost.parse("{R}"), owner=p1)
         p1.zones[Zone.LIBRARY].add(target_spell)
-        from engine.player import DeterministicPlayer
+        from benchmarks.sos.workspace.engine.player import DeterministicPlayer
         if isinstance(p1, DeterministicPlayer):
             p1._script.append(True)  # yes, search
             p1._script.append(target_spell)  # choose this card
@@ -59,7 +59,7 @@ class TestMicromancerETB:
         micro.controller = p1
         big_spell = Instant(name="Big Spell", mana_cost=ManaCost.parse("{1}{U}"), owner=p1)
         p1.zones[Zone.LIBRARY].add(big_spell)
-        from engine.player import DeterministicPlayer
+        from benchmarks.sos.workspace.engine.player import DeterministicPlayer
         if isinstance(p1, DeterministicPlayer):
             p1._script.append(True)  # yes, search
         micro.on_resolve(game)
@@ -73,7 +73,7 @@ class TestMicromancerETB:
         micro.controller = p1
         target_spell = Instant(name="Shock", mana_cost=ManaCost.parse("{R}"), owner=p1)
         p1.zones[Zone.LIBRARY].add(target_spell)
-        from engine.player import DeterministicPlayer
+        from benchmarks.sos.workspace.engine.player import DeterministicPlayer
         if isinstance(p1, DeterministicPlayer):
             p1._script.append(False)  # decline to search
         micro.on_resolve(game)

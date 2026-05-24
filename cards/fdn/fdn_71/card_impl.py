@@ -4,17 +4,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Instant
-from engine.continuous_effects import (
+from benchmarks.sos.workspace.engine.card import Instant
+from benchmarks.sos.workspace.engine.continuous_effects import (
     ContinuousEffect,
     DURATION_END_OF_TURN,
     Layer,
     SubLayer,
 )
-from engine.types import CardType, ManaCost, TargetRequirement
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost, TargetRequirement
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 
 class Stab(Instant):
@@ -36,7 +36,7 @@ class Stab(Instant):
 
     def get_targets(self, game: "GameState") -> list:
         """Requires one target creature."""
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         return [TargetRequirement(
             filter_fn=lambda obj, g=game: CardType.CREATURE in getattr(obj, "card_types", set()),
             description="target creature",
@@ -51,7 +51,7 @@ class Stab(Instant):
         target = chosen[0]
 
         # Verify still valid: must be on battlefield AND still a creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         found = False
         for player in game.players:
             bf = game.get_battlefield(player)

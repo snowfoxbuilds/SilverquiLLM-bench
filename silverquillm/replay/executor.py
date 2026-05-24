@@ -160,7 +160,7 @@ class ReplayExecutor:
                 raise ValueError("No snapshots in replay")
             snapshot = self.replay.snapshots[0]
 
-        from engine.player import DeterministicPlayer
+        from benchmarks.sos.workspace.engine.player import DeterministicPlayer
 
         # Create engine players
         for seat_id, player_info in snapshot.players.items():
@@ -204,9 +204,9 @@ class ReplayExecutor:
         seat_libraries: dict[int, list[int]],
     ) -> None:
         """Set up player zones from snapshot data."""
-        from engine.card import CardImpl, Creature, Land
-        from engine.game_state import GameState
-        from engine.types import CardType, Zone
+        from benchmarks.sos.workspace.engine.card import CardImpl, Creature, Land
+        from benchmarks.sos.workspace.engine.game_state import GameState
+        from benchmarks.sos.workspace.engine.types import CardType, Zone
 
         for seat_id, player in self.players.items():
             # Create hand cards
@@ -249,8 +249,8 @@ class ReplayExecutor:
 
     def _create_basic_card(self, grp_id: int, card_name: str, owner: Any) -> Any:
         """Create a basic engine card without registry."""
-        from engine.card import Creature, Land, CardImpl
-        from engine.types import CardType, ManaCost
+        from benchmarks.sos.workspace.engine.card import Creature, Land, CardImpl
+        from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
         # Use name to guess card type
         basic_lands = {"Plains", "Island", "Swamp", "Mountain", "Forest"}
@@ -266,7 +266,7 @@ class ReplayExecutor:
 
     def _rebuild_instance_map(self, snapshot: GameSnapshot) -> None:
         """Rebuild the GRE instanceId -> engine card mapping."""
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
 
         self._engine_cards.clear()
 
@@ -439,7 +439,7 @@ class ReplayExecutor:
 
     def _compare_zones(self, snapshot: GameSnapshot) -> list[StateMismatch]:
         """Compare zone contents by grpId."""
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
 
         mismatches = []
 
@@ -470,7 +470,7 @@ class ReplayExecutor:
                 if (obj := snapshot.game_objects.get(iid)) is not None
             )
 
-            # Get grpIds from engine zone
+            # Get grpIds via engine zone
             engine_cards = player.zones[engine_zone_enum].get_all()
             engine_grp_ids = sorted(
                 self._card_to_grp_id(card)
@@ -565,7 +565,7 @@ class ReplayExecutor:
 
     def _execute_land_play(self, action: ReplayAction, result: StepResult) -> None:
         """Execute a land play through the engine API (play_land)."""
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
 
         player = self.players.get(action.player_seat_id)
         if player is None or self.game is None:
@@ -585,7 +585,7 @@ class ReplayExecutor:
 
         # Try engine API first
         try:
-            from engine.casting import play_land
+            from benchmarks.sos.workspace.engine.casting import play_land
             play_land(self.game, player, card)
         except Exception as exc:
             # ENGINE LIMITATION: oracle-injected — engine timing/phase checks
@@ -612,7 +612,7 @@ class ReplayExecutor:
         # integrated; we model the correct final destination but skip the
         # hand → stack → resolve pipeline.
         """
-        from engine.types import CardType, Zone
+        from benchmarks.sos.workspace.engine.types import CardType, Zone
 
         player = self.players.get(action.player_seat_id)
         if player is None or self.game is None:
@@ -652,7 +652,7 @@ class ReplayExecutor:
 
     def _execute_draw(self, action: ReplayAction, result: StepResult) -> None:
         """Execute a card draw through the engine."""
-        from engine.game import draw_card
+        from benchmarks.sos.workspace.engine.game import draw_card
 
         player = self.players.get(action.player_seat_id)
         if player is None or self.game is None:
@@ -670,7 +670,7 @@ class ReplayExecutor:
 
     def _execute_creature_death(self, action: ReplayAction, result: StepResult) -> None:
         """Handle creature death for seat 1 using engine move_to_zone."""
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
 
         player = self.players.get(action.player_seat_id)
         if player is None or self.game is None:
@@ -689,7 +689,7 @@ class ReplayExecutor:
 
         # Use engine move_to_zone for proper trigger/replacement handling
         try:
-            from engine.zones import move_to_zone
+            from benchmarks.sos.workspace.engine.zones import move_to_zone
             move_to_zone(
                 self.game, card, Zone.BATTLEFIELD, Zone.GRAVEYARD,
                 replacement_event_type="creature_dies",
@@ -719,7 +719,7 @@ class ReplayExecutor:
         result: StepResult,
     ) -> None:
         """Inject a Seat 2 action directly into engine state without legality checks."""
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
 
         player = self.players.get(action.player_seat_id)
         if player is None:
@@ -748,7 +748,7 @@ class ReplayExecutor:
                 hand.remove(hand_card)
                 card = hand_card
             # Determine final destination based on card type
-            from engine.types import CardType
+            from benchmarks.sos.workspace.engine.types import CardType
             card_types = getattr(card, "card_types", set())
             is_instant_or_sorcery = bool(
                 card_types & {CardType.INSTANT, CardType.SORCERY}
@@ -799,7 +799,7 @@ class ReplayExecutor:
 
     def _find_ability_source(self, action: ReplayAction) -> Any | None:
         """Return the engine card that is the source of an ability action."""
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
 
         parent_id = action.details.get("parent_id")
         if parent_id:
@@ -949,7 +949,7 @@ class ReplayExecutor:
         Compares grpId multisets per zone. Injects missing cards into the
         engine and removes excess cards. Library and Stack are skipped.
         """
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
 
         # Library: hidden and order-dependent, inferred via draw actions.
         # Stack: transient; engine models entries differently than GRE.
@@ -981,14 +981,14 @@ class ReplayExecutor:
                 if obj is not None and obj.grp_id != 0:
                     snap_grp_ids[obj.grp_id] += 1
 
-            # grpId multiset from engine (skip grpId=0)
+            # grpId multiset via engine (skip grpId=0)
             engine_cards_list = player.zones[engine_zone_enum].get_all()
             engine_grp_ids: Counter[int] = Counter(
                 gid for card in engine_cards_list
                 if (gid := self._card_to_grp_id(card)) != 0
             )
 
-            # Inject cards present in snapshot but missing from engine
+            # Inject cards present in snapshot but missing in engine
             for grp_id, snap_count in snap_grp_ids.items():
                 deficit = snap_count - engine_grp_ids.get(grp_id, 0)
                 for _ in range(deficit):

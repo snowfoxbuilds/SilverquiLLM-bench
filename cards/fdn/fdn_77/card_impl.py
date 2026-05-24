@@ -1,11 +1,11 @@
 """Card implementation for Zul Ashur, Lich Lord."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import ActivatedAbility, Creature
-from engine.types import CardType, Keyword, ManaCost, Zone
-from engine.events import EndStepTriggeredEvent
+from benchmarks.sos.workspace.engine.card import ActivatedAbility, Creature
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Zone
+from benchmarks.sos.workspace.engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class ZulAshurLichLord(Creature):
     """Zul Ashur, Lich Lord — {1}{B} — 2/2 — Legendary Zombie Warlock.
@@ -31,7 +31,7 @@ class ZulAshurLichLord(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register end-of-turn cleanup to remove graveyard casting permission."""
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
 
         def _cleanup_condition(game: Any, event: dict) -> bool:

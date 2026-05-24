@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Creature
-from engine.types import ManaCost, TargetRequirement, Zone
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 
 class GorehornRaider(Creature):
@@ -35,7 +35,7 @@ class GorehornRaider(Creature):
 
     def on_resolve(self, game: "GameState") -> None:
         """ETB: Raid — deal 2 damage to any target if attacked this turn."""
-        from engine.game import deal_damage
+        from benchmarks.sos.workspace.engine.game import deal_damage
 
         controller = self.controller
         if controller is None:
@@ -57,7 +57,7 @@ class GorehornRaider(Creature):
             return
 
         # Any target: creatures on battlefield + players
-        from engine.types import CardType
+        from benchmarks.sos.workspace.engine.types import CardType
         targets: list = list(game.players)
         for player in game.players:
             bf = game.get_battlefield(player)

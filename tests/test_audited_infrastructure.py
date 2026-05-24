@@ -538,7 +538,7 @@ class TestSOSSetPrefixedResolution:
         - SPG card cn=149, set_code="spg" → dir "spg_149"
         """
         from cards.registry import CardRegistry, CardMetadata
-        from engine.card import CardImpl
+        from benchmarks.sos.workspace.engine.card import CardImpl
 
         # Create distinct stub classes
         SOSBaseCard = type("SOSBaseCard", (CardImpl,), {"__init__": lambda self, **kw: None})
@@ -683,8 +683,8 @@ class TestPlainsTestExecution:
 
     def test_plains_is_land_subclass(self) -> None:
         from cards.registry import CardRegistry
-        from engine.basic_lands import register_basic_lands
-        from engine.card import Land
+        from benchmarks.sos.workspace.engine.basic_lands import register_basic_lands
+        from benchmarks.sos.workspace.engine.card import Land
 
         registry = CardRegistry()
         register_basic_lands(registry)
@@ -694,7 +694,7 @@ class TestPlainsTestExecution:
 
     def test_plains_has_mana_abilities(self) -> None:
         from cards.registry import CardRegistry
-        from engine.basic_lands import register_basic_lands
+        from benchmarks.sos.workspace.engine.basic_lands import register_basic_lands
 
         registry = CardRegistry()
         register_basic_lands(registry)

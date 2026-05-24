@@ -1,13 +1,13 @@
 """Card implementation for Progenitus."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature
-from engine.protection import ProtectionAbility
-from engine.events import MoveToGraveyardReplacementEvent
-from engine.replacement_effects import ReplacementEffect
-from engine.types import ManaCost, Supertype, Zone
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.protection import ProtectionAbility
+from benchmarks.sos.workspace.engine.events import MoveToGraveyardReplacementEvent
+from benchmarks.sos.workspace.engine.replacement_effects import ReplacementEffect
+from benchmarks.sos.workspace.engine.types import ManaCost, Supertype, Zone
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class Progenitus(Creature):
     """Progenitus — {W}{W}{U}{U}{B}{B}{R}{R}{G}{G} — 10/10 — Legendary Hydra Avatar.

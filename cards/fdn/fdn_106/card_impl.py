@@ -1,11 +1,11 @@
 """Card implementation for Loot, Exuberant Explorer."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import ActivatedAbility, Creature
-from engine.types import CardType, ManaCost, Zone
-from engine.events import EntersBattlefieldTriggeredEvent
+from benchmarks.sos.workspace.engine.card import ActivatedAbility, Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Zone
+from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class LootExuberantExplorer(Creature):
     """Loot, Exuberant Explorer — {2}{G} — 1/4 — Legendary Beast Noble.
@@ -58,8 +58,8 @@ class LootExuberantExplorer(Creature):
 
         def _effect(game: Any) -> None:
             import random
-            from engine.game import create_token, move_to_zone
-            from engine.player import ScriptExhaustedError
+            from benchmarks.sos.workspace.engine.game import create_token, move_to_zone
+            from benchmarks.sos.workspace.engine.player import ScriptExhaustedError
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return

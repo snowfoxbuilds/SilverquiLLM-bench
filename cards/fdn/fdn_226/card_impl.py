@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Instant
-from engine.continuous_effects import (
+from benchmarks.sos.workspace.engine.card import Instant
+from benchmarks.sos.workspace.engine.continuous_effects import (
     ContinuousEffect,
     DURATION_END_OF_TURN,
     Layer,
 )
-from engine.types import CardType, Keyword, ManaCost
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 
 class InspiringCall(Instant):
@@ -37,7 +37,7 @@ class InspiringCall(Instant):
 
     def on_resolve(self, game: "GameState") -> None:
         """Draw cards and grant indestructible to creatures with +1/+1 counters."""
-        from engine.game import draw_card
+        from benchmarks.sos.workspace.engine.game import draw_card
 
         controller = self.controller
         if controller is None:

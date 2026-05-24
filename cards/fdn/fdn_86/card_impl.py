@@ -1,11 +1,11 @@
 """Card implementation for Fiery Annihilation."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Instant
-from engine.types import CardType, ManaCost, TargetRequirement, Zone
-from engine.events import CreatureDiesTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Instant
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost, TargetRequirement, Zone
+from benchmarks.sos.workspace.engine.events import CreatureDiesTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class FieryAnnihilation(Instant):
     """Fiery Annihilation — {2}{R} — Instant.
@@ -29,7 +29,7 @@ class FieryAnnihilation(Instant):
 
     def on_resolve(self, game: 'GameState') -> None:
         """Deal 5 damage, exile attached equipment, set exile replacement."""
-        from engine.game import deal_damage, exile
+        from benchmarks.sos.workspace.engine.game import deal_damage, exile
         chosen = getattr(self, 'chosen_targets', None)
         target = chosen[0] if chosen else None
         if target is None:
@@ -56,7 +56,7 @@ class FieryAnnihilation(Instant):
                 if equip is not None:
                     exile(game, equip)
         target._exile_on_death = True
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         _target_ref = target
 
         def _death_condition(game: Any, event: dict) -> bool:

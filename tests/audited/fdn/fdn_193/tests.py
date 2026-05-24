@@ -1,10 +1,10 @@
 """Audited tests for FDN 193 — Drakuseth, Maw of Flames."""
 from __future__ import annotations
 from card_impl import DrakusethMawOfFlames
-from engine.card import Creature
-from engine.types import Keyword, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
 from benchmarks.sos.workspace.tests.test_utils import create_game
-from engine.events import AttacksTriggeredEvent
+from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent
 
 def _resolve_stack(game):
     while not game.stack.is_empty():
@@ -53,7 +53,7 @@ class TestDrakusethAttackTrigger:
         drake = DrakusethMawOfFlames(owner=p1, controller=p1)
         game.get_battlefield(p1).add(drake)
         drake.register_triggers(game)
-        from engine.player import DeterministicPlayer
+        from benchmarks.sos.workspace.engine.player import DeterministicPlayer
         if isinstance(p1, DeterministicPlayer):
             p1._script.append(p2)
             p1._script.append(p2)

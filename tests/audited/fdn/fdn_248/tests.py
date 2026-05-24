@@ -4,10 +4,10 @@ from __future__ import annotations
 import pytest
 
 from card_impl import ThousandYearStorm
-from engine.card import Creature, Enchantment, Instant, Sorcery
-from engine.stack import StackObject
-from engine.types import CardType, ManaCost
-from engine.events import SpellCastTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature, Enchantment, Instant, Sorcery
+from benchmarks.sos.workspace.engine.stack import StackObject
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.events import SpellCastTriggeredEvent
 from benchmarks.sos.workspace.tests.test_utils import create_game
 
 

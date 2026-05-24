@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import DinasGuidance
 
-from engine.card import Instant
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Instant
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -57,8 +57,8 @@ class TestDinasGuidanceAbilities:
         This test will fail against stubs (expected).
         """
         from benchmarks.sos.workspace.tests.test_utils import create_game
-        from engine.types import Zone
-        from engine.card import Creature as CreatureBase
+        from benchmarks.sos.workspace.engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature as CreatureBase
 
         game = create_game()
         player = game.players[0]

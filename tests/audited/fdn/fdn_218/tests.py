@@ -5,8 +5,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-from engine.card import CardImpl, Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import CardImpl, Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 from benchmarks.sos.workspace.tests.test_utils import create_game
 
 # Direct import since conftest name mapping doesn't match (apostrophe)

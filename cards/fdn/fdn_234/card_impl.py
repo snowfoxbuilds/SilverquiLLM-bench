@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature, LoyaltyAbility, Planeswalker
-from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
+from benchmarks.sos.workspace.engine.card import Creature, LoyaltyAbility, Planeswalker
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
 if TYPE_CHECKING:
-    from engine.game_state import GameState
-    from engine.player import Player
+    from benchmarks.sos.workspace.engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.player import Player
 
     from cards.registry import CardRegistry
 
@@ -101,7 +101,7 @@ class VivienReid(Planeswalker):
 
             Uses lazy target validation at resolution time.
             """
-            from engine.game import destroy
+            from benchmarks.sos.workspace.engine.game import destroy
 
             target = getattr(pw, "_resolve_target", None)
             if target is None:
@@ -120,7 +120,7 @@ class VivienReid(Planeswalker):
 
         def _minus8(game: Any) -> None:
             """Emblem — creatures you control get +2/+2, vigilance, trample, indestructible."""
-            from engine.continuous_effects import (
+            from benchmarks.sos.workspace.engine.continuous_effects import (
                 ContinuousEffect,
                 DURATION_PERMANENT,
                 Layer,

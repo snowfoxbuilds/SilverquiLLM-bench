@@ -1,11 +1,11 @@
 """Card implementation for Drakuseth, Maw of Flames."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature
-from engine.types import Keyword, ManaCost
-from engine.events import AttacksTriggeredEvent
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
+from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class DrakusethMawOfFlames(Creature):
     """Drakuseth, Maw of Flames — {4}{R}{R}{R} — 7/7 — Legendary Dragon.
@@ -30,8 +30,8 @@ class DrakusethMawOfFlames(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register attack trigger for damage dealing."""
-        from engine.game import deal_damage
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import deal_damage
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 
@@ -42,7 +42,7 @@ class DrakusethMawOfFlames(Creature):
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return
-            from engine.types import CardType
+            from benchmarks.sos.workspace.engine.types import CardType
             all_targets: list = []
             for player in game.players:
                 all_targets.append(player)

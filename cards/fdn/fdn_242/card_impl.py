@@ -1,11 +1,11 @@
 """Card implementation for Lathril, Blade of the Elves."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import ActivatedAbility, Creature
-from engine.types import CardType, Keyword, ManaCost, Supertype
-from engine.events import DealsDamageTriggeredEvent
+from benchmarks.sos.workspace.engine.card import ActivatedAbility, Creature
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Supertype
+from benchmarks.sos.workspace.engine.events import DealsDamageTriggeredEvent
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 class LathrilBladeOfTheElves(Creature):
     """Lathril, Blade of the Elves — {2}{B}{G} — 2/3 — Legendary Elf Noble.
@@ -32,8 +32,8 @@ class LathrilBladeOfTheElves(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register combat damage trigger for token creation."""
-        from engine.game import create_token
-        from engine.triggers import TriggerRegistration
+        from benchmarks.sos.workspace.engine.game import create_token
+        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
         _damage_queue: list[int] = []

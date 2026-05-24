@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from card_impl import SelfReflection
-from engine.card import Creature, Sorcery
-from engine.types import CardType, ManaCost, Zone
+from benchmarks.sos.workspace.engine.card import Creature, Sorcery
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Zone
 from benchmarks.sos.workspace.tests.test_utils import create_game
 
 

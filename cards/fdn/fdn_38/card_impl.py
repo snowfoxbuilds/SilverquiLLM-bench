@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Creature, Instant
-from engine.types import Keyword, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature, Instant
+from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
 
 if TYPE_CHECKING:
-    from engine.game_state import GameState
+    from benchmarks.sos.workspace.engine.game_state import GameState
 
 
 class FaebloomTrick(Instant):
@@ -41,7 +41,7 @@ class FaebloomTrick(Instant):
                 continue
             bf = game.get_battlefield(player)
             for obj in bf.get_all():
-                from engine.types import CardType
+                from benchmarks.sos.workspace.engine.types import CardType
                 card_types = getattr(obj, "card_types", set())
                 if CardType.CREATURE in card_types:
                     targets.append(obj)
@@ -52,7 +52,7 @@ class FaebloomTrick(Instant):
 
     def on_resolve(self, game: "GameState") -> None:
         """Create two Faerie tokens, then tap target opponent creature."""
-        from engine.game import create_token
+        from benchmarks.sos.workspace.engine.game import create_token
 
         controller = self.controller
         if controller is None:

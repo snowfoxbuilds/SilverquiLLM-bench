@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from card_impl import DoublingSeason
-from engine.card import Creature, Enchantment
-from engine.events import AddCounterReplacementEvent, CreateTokenReplacementEvent
-from engine.replacement_effects import ReplacementEffect
-from engine.types import ManaCost
+from benchmarks.sos.workspace.engine.card import Creature, Enchantment
+from benchmarks.sos.workspace.engine.events import AddCounterReplacementEvent, CreateTokenReplacementEvent
+from benchmarks.sos.workspace.engine.replacement_effects import ReplacementEffect
+from benchmarks.sos.workspace.engine.types import ManaCost
 from benchmarks.sos.workspace.tests.test_utils import create_game
 
 

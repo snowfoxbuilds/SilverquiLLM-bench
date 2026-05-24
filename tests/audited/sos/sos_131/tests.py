@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import StrifeScholarAwakenTheAges
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -62,13 +62,13 @@ class TestStrifeScholarAwakenTheAgesAbilities:
 
     def test_has_prepared(self) -> None:
         """Strife Scholar // Awaken the Ages must have Prepared keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = StrifeScholarAwakenTheAges(name="Strife Scholar // Awaken the Ages", owner=None, base_power=3, base_toughness=2)
         assert Keyword.PREPARED in card.keywords, "Strife Scholar // Awaken the Ages should have Prepared"
 
     def test_has_ward(self) -> None:
         """Strife Scholar // Awaken the Ages must have Ward keyword."""
-        from engine.types import Keyword
+        from benchmarks.sos.workspace.engine.types import Keyword
         card = StrifeScholarAwakenTheAges(name="Strife Scholar // Awaken the Ages", owner=None, base_power=3, base_toughness=2)
         assert Keyword.WARD in card.keywords, "Strife Scholar // Awaken the Ages should have Ward"
 
@@ -107,7 +107,7 @@ class TestStrifeScholarAwakenTheAgesEdgeCases:
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = StrifeScholarAwakenTheAges(name="Strife Scholar // Awaken the Ages", owner=player, base_power=3, base_toughness=2)
@@ -126,8 +126,8 @@ class TestStrifeScholarAwakenTheAgesInteractions:
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -144,8 +144,8 @@ class TestStrifeScholarAwakenTheAgesInteractions:
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.card import Creature
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         other = Creature(name="Companion", owner=player, base_power=2, base_toughness=2)

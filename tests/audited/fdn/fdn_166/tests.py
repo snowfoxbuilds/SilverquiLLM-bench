@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from card_impl import TimeStop
-from engine.card import CardImpl, Instant
-from engine.types import ManaCost, Zone
+from benchmarks.sos.workspace.engine.card import CardImpl, Instant
+from benchmarks.sos.workspace.engine.types import ManaCost, Zone
 from benchmarks.sos.workspace.tests.test_utils import create_game
 
 
@@ -34,7 +34,7 @@ class TestTimeStopResolve:
     def test_clears_the_stack(self) -> None:
         game = create_game()
         p1 = game.players[0]
-        from engine.stack import StackObject
+        from benchmarks.sos.workspace.engine.stack import StackObject
         dummy_card = CardImpl(name="Dummy", owner=p1)
         stack_obj = StackObject(source=dummy_card, controller=p1)
         game.stack.push(stack_obj)
@@ -45,7 +45,7 @@ class TestTimeStopResolve:
     def test_exiled_spells_go_to_exile(self) -> None:
         game = create_game()
         p1 = game.players[0]
-        from engine.stack import StackObject
+        from benchmarks.sos.workspace.engine.stack import StackObject
         dummy_card = CardImpl(name="Dummy", owner=p1)
         stack_obj = StackObject(source=dummy_card, controller=p1)
         game.stack.push(stack_obj)

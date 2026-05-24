@@ -1,10 +1,10 @@
 """Audited tests for FDN 125 — Wardens of the Cycle."""
 from __future__ import annotations
 from card_impl import WardensOfTheCycle
-from engine.card import Creature
-from engine.types import ManaCost, Zone
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import ManaCost, Zone
 from benchmarks.sos.workspace.tests.test_utils import create_game
-from engine.events import EndStepTriggeredEvent
+from benchmarks.sos.workspace.engine.events import EndStepTriggeredEvent
 
 def _resolve_stack(game):
     """Pop and resolve all objects on the stack."""

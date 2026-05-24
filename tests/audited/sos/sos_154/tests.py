@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import MindfulBiomancer
 
-from engine.card import Creature
-from engine.types import CardType, ManaCost
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -62,7 +62,7 @@ class TestMindfulBiomancerAbilities:
     def test_pump_effect(self) -> None:
         """Resolution should grant +2/+2."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         target = Creature(name="PumpTarget", owner=player, base_power=1, base_toughness=1)
@@ -110,7 +110,7 @@ class TestMindfulBiomancerEdgeCases:
     def test_zone_transition_graveyard(self) -> None:
         """Creature should properly move to graveyard on death."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.types import Zone
+        from benchmarks.sos.workspace.engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = MindfulBiomancer(name="Mindful Biomancer", owner=player)
@@ -129,7 +129,7 @@ class TestMindfulBiomancerInteractions:
     def test_resolution_with_board_state(self) -> None:
         """Card should resolve correctly with established board."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -152,7 +152,7 @@ class TestMindfulBiomancerInteractions:
     def test_coexists_with_other_creatures(self) -> None:
         """Card should coexist with other creatures on battlefield."""
         from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from engine.card import Creature
+        from benchmarks.sos.workspace.engine.card import Creature
         game = create_game()
         player = game.players[0]
         card = MindfulBiomancer(name="Mindful Biomancer", owner=player)

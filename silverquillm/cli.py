@@ -210,7 +210,7 @@ def _harvest_results(
             shutil.copy2(tests_src, card_results / "tests.py")
 
     # Engine diff — compare repo engine against workspace engine
-    engine_repo = _REPO_ROOT / "engine"
+    engine_repo = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "engine"
     engine_ws = workspace / "engine"
     if engine_repo.exists() and engine_ws.exists():
         try:
@@ -362,7 +362,7 @@ def _evaluate_results(run_dir: Path, card_filter: list[str] | None = None) -> No
     from dataclasses import asdict
 
     cards_dir = _REPO_ROOT / "cards"
-    engine_dir = _REPO_ROOT / "engine"
+    engine_dir = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "engine"
     name_map = build_card_name_map(cards_dir, "sos")
 
     try:

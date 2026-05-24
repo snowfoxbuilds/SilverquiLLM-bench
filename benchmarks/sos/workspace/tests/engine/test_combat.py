@@ -25,8 +25,8 @@ from __future__ import annotations
 
 import pytest
 
-from engine.card import Creature, GameObject
-from engine.combat import (
+from benchmarks.sos.workspace.engine.card import Creature, GameObject
+from benchmarks.sos.workspace.engine.combat import (
     CombatState,
     _can_attack,
     _can_block,
@@ -36,9 +36,9 @@ from engine.combat import (
     declare_blockers_step,
     end_combat_step,
 )
-from engine.game_state import GameState
-from engine.player import DeterministicPlayer
-from engine.types import Keyword, Zone
+from benchmarks.sos.workspace.engine.game_state import GameState
+from benchmarks.sos.workspace.engine.player import DeterministicPlayer
+from benchmarks.sos.workspace.engine.types import Keyword, Zone
 
 
 # ---------------------------------------------------------------------------

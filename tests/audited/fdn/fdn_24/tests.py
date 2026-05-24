@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from card_impl import SquadRallier
-from engine.card import Creature
-from engine.types import CardType, Keyword, ManaCost, ManaType, Zone
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Zone
 from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
 
 
@@ -62,7 +62,7 @@ class TestSquadRallierAbility:
         # Give mana
         p1.mana_pool.add(ManaType.COLORLESS, 3)
         # Script the player to choose the small creature
-        from engine.player import DeterministicPlayer
+        from benchmarks.sos.workspace.engine.player import DeterministicPlayer
         if isinstance(p1, DeterministicPlayer):
             p1._script.appendleft(small)
         ability = rallier.get_activated_abilities()[0]

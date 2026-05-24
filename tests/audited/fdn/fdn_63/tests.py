@@ -1,10 +1,10 @@
 """Audited tests for FDN 63 — Infernal Vessel."""
 from __future__ import annotations
 from card_impl import InfernalVessel
-from engine.card import Creature
-from engine.types import ManaCost, Zone
+from benchmarks.sos.workspace.engine.card import Creature
+from benchmarks.sos.workspace.engine.types import ManaCost, Zone
 from benchmarks.sos.workspace.tests.test_utils import create_game
-from engine.events import CreatureDiesTriggeredEvent
+from benchmarks.sos.workspace.engine.events import CreatureDiesTriggeredEvent
 
 class TestInfernalVesselBasics:
     """Basic card properties."""
