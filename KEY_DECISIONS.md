@@ -44,3 +44,10 @@ Persistent architectural and convention decisions across runs.
 - **Decision**: Added `json_collector_number` field preserving the original JSON value before directory-name override. Filter logic checks both fields for dual-match.
 - **Reasoning**: Preserves backward compat (existing code uses `collector_number` as dir name) while enabling numeric filtering from CLI.
 - **Impact**: `silverquillm/card_loader.py`, `silverquillm/cli.py`.
+
+## cast_spell_free() API contract
+- **Context**: Etali used manual `on_resolve()` bypass. Added `cast_spell_free()` to engine for proper stack-based free casting.
+- **Decision**: `cast_spell_free()` skips mana payment and timing checks but retains: `can_cast()` legality, target validation (filter_fn + protection), and rollback on error.
+- **Reasoning**: MTG "without paying mana cost" waives mana/timing only. Cast legality, targeting, and stack interaction must be preserved for correct game state.
+- **Alternatives considered**: Full bypass (rejected — allows illegal casts), full `cast_spell()` with mana=0 (rejected — doesn't skip timing).
+- **Impact**: `engine/casting.py`, `cards/fdn/fdn_194/card_impl.py`. Future free-cast cards should use this function.

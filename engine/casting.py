@@ -247,6 +247,131 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
 
 
 # ------------------------------------------------------------------
+# Cast spell without paying mana cost (free-cast from any zone)
+# ------------------------------------------------------------------
+
+
+def cast_spell_free(
+    game: GameState,
+    player: Player,
+    card: CardImpl,
+    from_zone: Zone,
+) -> None:
+    """Cast *card* without paying its mana cost, using the stack.
+
+    This is used by effects that allow casting from zones other than hand
+    (e.g. exile) without paying mana costs — such as Etali, Primal Storm
+    or cascade.
+
+    Pipeline
+    --------
+    1. **can_cast** — ask the card whether it can legally be cast (same
+       legality as :func:`cast_spell`, minus mana/timing constraints).
+    2. Move *card* from *from_zone* to the stack zone.
+    3. Choose targets (if applicable) with validation and protection check.
+    4. Call ``on_cast`` hook.
+    5. Push a :class:`StackObject` whose ``on_resolve`` callback handles
+       resolution normally (permanents → battlefield, non-permanents →
+       graveyard).
+
+    No timing check or mana payment is performed.  The spell goes on the
+    stack and can be responded to normally (e.g. countered).
+
+    If targeting or other post-move checks fail, the card is rolled back
+    to its source zone.
+
+    Parameters:
+        game: The current game state.
+        player: The player casting the spell.
+        card: The card to cast.
+        from_zone: The zone the card is currently in.
+
+    Raises:
+        CastingError: If the card cannot be found in *from_zone* or
+            legality checks fail.
+    """
+    from engine.zones import move_to_zone
+
+    # Ensure controller is set
+    card.controller = player
+    if card.owner is None:
+        card.owner = player
+
+    # 1. can_cast legality (same as cast_spell but skipping mana/timing)
+    if not card.can_cast(game):
+        raise CastingError(f"Cannot cast {card.name!r} — can_cast returned False")
+
+    # 2. Locate card in source zone
+    source_zone_container = player.zones[from_zone]
+    if not source_zone_container.contains(card):
+        # Try to find the card in any player's zone
+        source_zone_container = None
+        for p in game.players:
+            z = p.zones[from_zone]
+            if z.contains(card):
+                source_zone_container = z
+                break
+
+    if source_zone_container is None or not source_zone_container.contains(card):
+        raise CastingError(
+            f"Cannot cast {card.name!r} — card not found in {from_zone.name}"
+        )
+
+    # Move card from source zone to stack zone
+    stack_zone = player.zones[Zone.STACK]
+    source_zone_container.remove(card)
+    stack_zone.add(card)
+
+    # 3. Choose targets (with rollback on failure)
+    try:
+        target_specs = card.get_targets(game)
+        chosen_targets: list[Any] = []
+        if target_specs:
+            for spec in target_specs:
+                target = player.choose_target(target_specs, spec)
+                # Validate against filter_fn if the spec provides one
+                filter_fn = getattr(spec, "filter_fn", None)
+                if filter_fn is not None and target is not None:
+                    if not filter_fn(target):
+                        raise CastingError(
+                            f"Cannot cast {card.name!r} — chosen target does not "
+                            f"satisfy filter: {getattr(spec, 'description', '')}"
+                        )
+                chosen_targets.append(target)
+
+        # Protection check — reject targets that have protection from this spell
+        from engine.protection import has_protection_from
+
+        for target in chosen_targets:
+            if has_protection_from(target, card):
+                raise CastingError(
+                    f"Cannot cast {card.name!r} — target has protection from this spell"
+                )
+    except (CastingError, Exception) as exc:
+        # Rollback: move card from stack zone back to source zone
+        stack_zone.remove(card)
+        source_zone_container.add(card)
+        raise CastingError(str(exc)) from exc
+
+    # 4. Call on_cast hook
+    card.on_cast(game)
+
+    # 5. Build on_resolve callback and push StackObject
+    stack_obj = StackObject(
+        source=card,
+        controller=player,
+        targets=chosen_targets,
+        on_resolve=lambda g: None,  # replaced below
+    )
+
+    def _on_resolve(g: GameState) -> None:
+        _resolve_spell(g, card, player, stack_obj)
+
+    stack_obj.on_resolve = _on_resolve
+    game.stack.push(stack_obj)
+
+
+# ------------------------------------------------------------------
 # Resolution (called when the stack pops)
 # ------------------------------------------------------------------
 

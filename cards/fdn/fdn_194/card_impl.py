@@ -31,6 +31,7 @@ class EtaliPrimalStorm(Creature):
         """Register attack trigger for exile-and-cast."""
         from engine.triggers import TriggerRegistration
         from engine.zones import move_to_zone
+        from engine.casting import cast_spell_free
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 
@@ -49,19 +50,14 @@ class EtaliPrimalStorm(Creature):
                     top_card = cards[-1]
                     move_to_zone(game, top_card, Zone.LIBRARY, Zone.EXILE)
                     exiled_cards.append(top_card)
+            # Filter out lands — Etali can only cast nonland cards
             castable = [c for c in exiled_cards if CardType.LAND not in getattr(c, 'card_types', set())]
             for card in castable:
                 try:
                     if ctrl.choose_yes_no(f"Cast {getattr(card, 'name', 'card')} without paying its mana cost?"):
-                        _is_permanent = bool(getattr(card, 'card_types', set()) & {CardType.CREATURE, CardType.ARTIFACT, CardType.ENCHANTMENT, CardType.PLANESWALKER})
-                        if _is_permanent:
-                            move_to_zone(game, card, Zone.EXILE, Zone.BATTLEFIELD)
-                            card.controller = ctrl
-                        else:
-                            card.controller = ctrl
-                            if hasattr(card, 'on_resolve'):
-                                card.on_resolve(game)
-                            move_to_zone(game, card, Zone.EXILE, Zone.GRAVEYARD)
+                        # Use the proper cast pipeline — spell goes on the
+                        # stack and can be responded to (e.g. countered).
+                        cast_spell_free(game, ctrl, card, Zone.EXILE)
                 except Exception:
                     pass
         game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
