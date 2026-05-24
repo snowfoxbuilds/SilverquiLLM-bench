@@ -132,7 +132,7 @@ def stage_workspace(tmp_run_dir: Path, prompt_text: str, run_manifest: dict) -> 
 
   Testability: `grep -rn '_REFERENCE_DOCS\|_RULEBOOK_SRC\|_RULES_OVERVIEW_SRC\|_stage_reference_docs' silverquillm/` returns zero matches. `silverquillm run --cards 1` still produces a valid staged workspace (the deleted code was unreachable after Item 2).
 
-- [ ] **Add CI-time workspace structure test**
+- [x] **Add CI-time workspace structure test**
   Detail: Author `tests/test_workspace_structure.py` (host-side, not staged into the workspace). Asserts `benchmarks/sos/workspace/` contains the expected top-level entries: `engine/`, `cards/fdn/`, `cards/sos/`, `tests/`, `AGENTS.md`, `PROJECT_MAP.md`, `rulebook.md`, `pytest.ini`, `.gitignore`. Replaces the old per-file hard-error enumeration that used to live in `stage_workspace()` — drift is now caught at PR-review time rather than at run time.
 
   Files: `tests/test_workspace_structure.py` (new).

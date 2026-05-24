@@ -131,3 +131,8 @@ benchmarks/sos/workspace/tests/engine/test_game_state.py — reworded docstring 
 
 ### Implementation
 - No-op: all deprecated constants and helpers were already removed in Item 8
+
+## Item 10: Add CI-time workspace structure test
+
+### Implementation
+- `tests/test_workspace_structure.py` — CI-time structure assertion for benchmarks/sos/workspace/
