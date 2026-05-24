@@ -2,65 +2,62 @@
 
 Appended by each Implementer invocation after it writes its diff. One section per TODO item.
 
-## Item 1: Update _make_run_name(), add _image_dir() and _image_results_dir()
-
-### Implementation
-- `silverquillm/cli.py` — Added `_image_dir()` and `_image_results_dir()` helpers, updated `_make_run_name()` signature to `set_code="sos"`, wired `_image_results_dir(image)` as default in `run()`
-
-
-## Item 2: Update .gitignore for new results path convention
-
-### Implementation
-- `.gitignore` — Replaced `results/` with `docker/*/results/` to ignore result artifacts under new path convention
-
-## Item 3: Update README.md — all legacy results path references
-
-### Implementation
-- `README.md` — Replaced all `results/{run_name}/...` references with `docker/<image_dir>/results/<run_name>/...` and added `<image_dir>` derivation note
-
-## Item 4: Update PROJECT_MAP.md — results path references
-
-### Implementation
-- `PROJECT_MAP.md` — Replaced `results/{run_name}/` with `docker/<image_dir>/results/<run_name>/` in overview paragraph and architecture diagram
-
-## Item 5: Update runner specs — BENCHMARK-RUNNER.md, RUN-ARTIFACTS-AND-TELEMETRY.md, WORKSPACE-CONTRACT.md, AGENT-CONTAINERS.md
-
-### Implementation
-- `docs/specs/BENCHMARK-RUNNER.md` — Already contains new docker/<image-dir>/results/<run_name>/ paths (no changes needed)
-- `docs/specs/RUN-ARTIFACTS-AND-TELEMETRY.md` — Already contains new docker/<image-dir>/results/<run_name>/ paths (no changes needed)
-- `docs/specs/WORKSPACE-CONTRACT.md` — Already contains new docker/<image-dir>/results/<run_name>/ paths (no changes needed)
-- `docs/specs/AGENT-CONTAINERS.md` — Already contains new docker/<image-dir>/results/<run_name>/ paths (no changes needed)
-
-## Item 6: Update docs/specs/TEST-SUITE.md — results path and stale engine_work/ reference
-
-### Implementation
-- `docs/specs/TEST-SUITE.md` — Updated results path to docker/<image_dir>/results/<run_name>/cards/{card_id}/ and replaced engine_work/ with workspace_final/engine/
-
-## Item 7: Update ADR-005, HELP.md, and KNOWN-ISSUES.md
-
-### Implementation
-- `docs/adrs/ADR-005: In-Place Workspace Engine With Snapshot Fallback.md` — Updated materialized path to `docker/<image_dir>/results/<run_name>/workspace_final/`
-- `docs/HELP.md` — Updated git add example to use `docker/local-pi-blind/results/` path
-- `docs/specs/KNOWN-ISSUES.md` — Added legacy-path parenthetical notes to historical `benchmarks/sos/results/` references
-
-## Item 8: Update benchmarks/ directory summaries
-
-### Implementation
-- `benchmarks/DIRECTORY_SUMMARY.md` — Removed `results/` from convention pattern, added note pointing to `docker/<image_dir>/results/`
-- `benchmarks/sos/DIRECTORY_SUMMARY.md` — Marked `results/` row as deprecated with note pointing to new location
-
-## Item 9: Add test artifact cleanup and update TESTING-CONVENTIONS.md
-
-### Implementation
-- `tests/test_smoke_lifecycle.py` — Refactored to use smoke_image fixture with PID-tagged name and cleanup in teardown
-- `docs/specs/TESTING-CONVENTIONS.md` — Added Rule 8 (no persistent artifacts) and Docker cleanup checklist item
-
-## Item 10: Remove stale results/ and benchmarks/*/results/ directories
+## Item 1: Wire up workspace reference material correctly
 
 ### Tests
-- `tests/test_benchmark_scaffold.py` — Updated test_results_subdir_exists → test_results_subdir_removed (asserts directory absent)
+- `tests/test_workspace_reference_material.py` — Validates rulebook, rules_overview, hard errors on missing sources, prompt text, and module constants
 
 ### Implementation
-- `silverquillm/cli.py` — Updated docstring from `results/{run_name}/` to `docker/<image_dir>/results/<run_name>/`
-- `tests/test_benchmark_scaffold.py` — Flipped assertion to verify benchmarks/sos/results/ does NOT exist
-- Filesystem cleanup: removed `results/` and `benchmarks/*/results/` directories
+- `silverquillm/workspace.py` — Changed _RULEBOOK_SRC to comprehensive_rules.txt, added _RULES_OVERVIEW_SRC, reduced _REFERENCE_DOCS to only test_utils.md, removed stub fallback (hard error for all sources), updated _PROMPT_TEXT
+- `docs/specs/WORKSPACE-CONTRACT.md` — Added rules_overview.md, removed engine_api.md and base_classes.py from workspace layout
+
+## Item 2: --cards-aware status / summary / postmortem plumbing
+
+### Tests
+- `tests/test_cli_cards_filter.py` — Validates card_filter in _write_card_statuses, _harvest_results, _evaluate_results, _generate_run_summary with collector_number normalization
+
+### Implementation
+- `silverquillm/cli.py` — Added card_filter param to _harvest_results/_write_card_statuses/_evaluate_results/_generate_run_summary, filter compares against spec collector_number with str(int(x)) normalization for numeric values
+- `silverquillm/evaluator.py` — Added CardResult, EngineResult, FullEvalResult dataclasses and evaluate() function
+
+
+## Item 4: Complete event-type strings→classes migration
+
+### Implementation
+- `docs/specs/CARD-INTERFACE.md` — Rewrote Replacement Effects example to use typed event classes and game.replacement_manager.register() API
+
+## Item 5: Add engine-extension permission line to the agent prompt
+
+### Implementation
+- `silverquillm/workspace.py` — Appended engine-extension permission sentence to `_PROMPT_TEXT` constant
+
+## Item 6: Add fast-tier (1 Hz) command-line telemetry
+
+### Implementation
+- `silverquillm/telemetry.py` — New module with FastTelemetry class: 1 Hz poll loop tailing progress.jsonl/system.log and stat-checking card/engine mtimes, writing to per-channel files
+- `silverquillm/runner.py` — Integrated FastTelemetry into ContainerLifecycle via optional run_dir parameter; starts on container launch, stops on exit
+
+## Item 7: Tabbed log viewer (live + archived modes)
+
+### Implementation
+- `silverquillm/logs_viewer.py` — New module: LogsViewer class with alt-screen, raw-mode, tab-per-channel TUI; stream_plain non-TTY fallback
+- `silverquillm/cli.py` — Added `logs` subcommand with --run, --live, --archived options and run directory discovery
+
+## Item 8: Propagate card names into slow-cadence artifacts
+
+### Implementation
+- `silverquillm/card_names.py` — New module: build_card_name_map and resolve_card_names_in_line for card ID→name resolution
+- `silverquillm/cli.py` — Added card_name to status.json entries, result.json, and progress.jsonl enrichment during harvest
+- `silverquillm/runner.py` — Added card_name_map param to ContainerLifecycle; resolves names at terminal print time
+- `tests/test_cli_cards_filter.py` — Updated status.json assertions to match new dict format with card_name field
+
+## Item 9: Agent-authored decisions.md artifact
+
+### Implementation
+- `silverquillm/workspace.py` — Added decisions.md instruction to _PROMPT_TEXT and staging of empty decisions.md in stage_workspace()
+- `docs/specs/WORKSPACE-CONTRACT.md` — Listed decisions.md in workspace layout and added decisions bullet to contract
+
+## Item 10: Stage engine tests into the workspace (per ADR-006)
+
+### Implementation
+- `silverquillm/workspace.py` — Added _stage_engine_tests() helper and no-modify prompt rule for staged tests

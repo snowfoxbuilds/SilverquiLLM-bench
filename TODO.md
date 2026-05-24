@@ -16,7 +16,7 @@ Reference: agent thinking trace in `docker/local-pi-blind/results/sos-2026-05-23
 
 ---
 
-- [ ] **Wire up workspace reference material correctly**
+- [x] **Wire up workspace reference material correctly**
   Detail: Today `silverquillm/workspace.py` stages four reference files at `/workspace/` (`rulebook.md`, `engine_api.md`, `base_classes.py`, `test_utils.md`) via `_RULEBOOK_SRC` (one-off, with stub fallback) and `_REFERENCE_DOCS` (dict). The 05-23 run exposed three problems:
 
   1. **`_RULEBOOK_SRC = "docs/rulebook.md"`**** is wrong.** That path is a hallucination from an earlier draft — `docs/` is for repo-level docs, not workspace-staging sources, and the file does not exist on `main`. The agent saw the stub fallback ("Stub — rulebook not yet generated"). The canonical rulebook is `benchmarks/sos/data/comprehensive_rules.txt`, which has now been populated with the full WotC Comprehensive Rules.
@@ -35,7 +35,7 @@ Reference: agent thinking trace in `docker/local-pi-blind/results/sos-2026-05-23
 
   Testability: after `silverquillm run --cards 1`, the staged workspace root contains exactly `prompt.md`, `run_manifest.json`, `rulebook.md` (full WotC text, `wc -c` > 400 KB), `rules_overview.md`, `test_utils.md`, plus the `engine/`, `tests/engine/`, and `cards/` trees. No `engine_api.md` and no `base_classes.py`. `grep -i 'engine_api\|base_classes' workspace/prompt.md` returns nothing.
 
-- [ ] **`--cards`****-aware status / summary / postmortem plumbing**
+- [x] **`--cards`**-aware status / summary / postmortem plumbing**
   Detail: When a run is invoked with `--cards 1,7,13,44,97`, the run artifacts should reflect *that selection*, not the entire set. Concrete gaps observed in `sos-2026-05-23T07-13/`:
 
   1. **`status.json`**: lists all 339 set cards, with 334 marked `no_output`. Should list only the 5 requested cards.
@@ -55,7 +55,7 @@ Reference: agent thinking trace in `docker/local-pi-blind/results/sos-2026-05-23
 
   Testability: For each rewritten card, an interaction test where a Counterspell-style effect can target the free-cast spell on the stack should now succeed where it previously failed (the spell goes through the stack).
 
-- [ ] **Complete the event-type strings→classes migration**
+- [x] **Complete the event-type strings→classes migration**
   Detail: The engine has already migrated from raw-string event types to typed event classes. The source on `main` declares `event_type: type[ReplacementEvent]` in `engine/replacement_effects.py` and `event_type: type[TriggeredEvent]` in `engine/triggers.py`; `engine/events.py` defines the full hierarchy (`MoveToGraveyardReplacementEvent` ← `CreatureDiesReplacementEvent` / `SacrificeReplacementEvent` / `PermanentDestroyedReplacementEvent`, plus `CreateTokenReplacementEvent`, `AddCounterReplacementEvent`, and the parallel `*TriggeredEvent` family). The one-shot migration script `migrate_events.py` holds the canonical string→class mapping (`STRING_TO_REPLACEMENT_CLASS`). Two stragglers still teach the old style:
 
   1. **`cards/fdn/fdn_244/card_impl.py`** still registers with raw strings: `for event_type in ("move_to_graveyard", "creature_dies", "sacrifice"):`. Rewrite to use the typed classes. Note that `CreatureDiesReplacementEvent` and `SacrificeReplacementEvent` both subclass `MoveToGraveyardReplacementEvent`, so a single registration against the parent covers all three via subclass-dispatch — pick whichever matches the card's intended semantics. Other fdn cards already use the new pattern correctly (e.g. `fdn_216` registers `CreateTokenReplacementEvent` / `AddCounterReplacementEvent` directly); use those as the reference exemplar.
@@ -68,7 +68,7 @@ Reference: agent thinking trace in `docker/local-pi-blind/results/sos-2026-05-23
 
   Testability: After the fix, `grep -rn "event_type *= *['\"]" cards/fdn/ docs/specs/` should return zero matches (the migration script `migrate_events.py` can be re-run as a verification pass). Engine regression tests on `fdn_244` should pass unchanged after the rewrite.
 
-- [ ] **Add engine-extension permission line to the agent prompt**
+- [x] **Add engine-extension permission line to the agent prompt**
   Detail: Add to the user prompt (the one shipped to the agent container):
 
   > "You are expected to make changes to the engine to implement new mechanics. The existing code base may not be perfect, you are free to make changes that don't break current behavior."
@@ -87,7 +87,7 @@ Reference: [RUN-ARTIFACTS-AND-TELEMETRY.md](http://run-artifacts-and-telemetry.m
 
 ---
 
-- [ ] **Add fast-tier (1 Hz) command-line telemetry**
+- [x] **Add fast-tier (1 Hz) command-line telemetry**
   Detail: Introduce a second telemetry tier that runs at 1 Hz (or on FS events via `watchdog`/`inotify` for zero-poll). Reads only cheap signals — no Git operations, no full-workspace stat sweeps. Sources:
 
   1. **Tail ****`/output/progress.jsonl`** — append-only file the agent writes when it completes a card. Emit each new line as a `[progress]` event.
@@ -107,7 +107,7 @@ Reference: [RUN-ARTIFACTS-AND-TELEMETRY.md](http://run-artifacts-and-telemetry.m
 
   Testability: Run a real benchmark. Touch `workspace/cards/sos_1/card_impl.py` inside the container; confirm a `[edit]` line appears in the runner terminal within ~1s. Append a line to `/output/progress.jsonl`; confirm a `[progress]` line appears within ~1s. Confirm `snapshot_telemetry.jsonl` is still written every 60s with unchanged content.
 
-- [ ] **Tabbed log viewer (live + archived modes)**
+- [x] **Tabbed log viewer (live + archived modes)**
   Detail: A single CLI binary that opens a one-panel, tab-per-channel terminal viewer over the run's per-channel log files. Works during a live run (tails files) and for finished runs (static history with the same UX). Supersedes the earlier separate `logs --run` viewer, channel-toggles, and multi-pane dashboard items — the file-backed substrate from the item above makes one design serve both modes.
 
   Invocation:
@@ -171,7 +171,7 @@ Reference: [WORKSPACE-CONTRACT.md](http://workspace-contract.md/), [RUN-ARTIFACT
 
 ---
 
-- [ ] **Propagate card names into slow-cadence artifacts; terminal resolves at print time**
+- [x] **Propagate card names into slow-cadence artifacts; terminal resolves at print time**
   Detail: Most artifacts reference cards by ID only (`sos_1`, `sos_7`). Human triage is faster with names inline. Add `card_name` alongside `card_id` in slow-cadence artifacts and resolve names at print time for live terminal output. `snapshot_telemetry.jsonl` stays IDs-only per the SETTLED scope carve-out in [RUN-ARTIFACTS-AND-TELEMETRY.md](http://run-artifacts-and-telemetry.md/) (high-cadence file; lean payloads).
 
   Changes:
@@ -187,7 +187,7 @@ Reference: [WORKSPACE-CONTRACT.md](http://workspace-contract.md/), [RUN-ARTIFACT
 
   Testability: Run any benchmark with `--cards 1,7`. Confirm `status.json` entries contain `"card_name": "Dawning Archaic"`. Confirm `progress.jsonl` lines include the name. Confirm `snapshot_telemetry.jsonl` events have only `card_id`, no `card_name`. Confirm live `[snapshot]` lines print "sos_1 Dawning Archaic" while the underlying JSONL line has only `"sos_1"`.
 
-- [ ] **Agent-authored ****`decisions.md`**** artifact**
+- [x] **Agent-authored ****`decisions.md`**** artifact**
   Detail: Add `decisions.md` to the workspace contract as a first-class artifact the agent is expected to maintain. Purpose: structured human-readable record of *why* the agent made each non-obvious implementation choice and *what it knows it punted on*. Massively reduces triage time vs. reading stderr stream-of-consciousness.
 
   Expected structure (enforce via prompt, not schema):
@@ -209,7 +209,7 @@ Reference: [WORKSPACE-CONTRACT.md](http://workspace-contract.md/), [RUN-ARTIFACT
 
   Testability: After a run, `decisions.md` exists in `workspace_final/` and contains an entry per attempted card.
 
-- [ ] **Stage engine tests into the workspace (per ADR-006)**
+- [x] **Stage engine tests into the workspace (per ADR-006)**
   Detail: Agents extending the engine had no local way to validate engine changes (the silent-regression failure mode that surfaced in the 05-23 run). Stage the Cat3 Engine Regression test suite into the workspace so the agent can run it locally. FDN and SOS card tests remain hidden.
 
   Staging:

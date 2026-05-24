@@ -27,6 +27,19 @@ def runner():
     return CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def _patch_run_dependencies():
+    """Auto-mock build_card_name_map and post-run functions for all tests.
+
+    These were added in Items 6-8 and break older CLI tests that mock only
+    stage_workspace + ContainerLifecycle.
+    """
+    with patch("silverquillm.cli.build_card_name_map", return_value={}), \
+         patch("silverquillm.cli._evaluate_results"), \
+         patch("silverquillm.cli._generate_run_summary"):
+        yield
+
+
 # ---------------------------------------------------------------------------
 # Test: main() is a Click group with run and smoke commands
 # ---------------------------------------------------------------------------
@@ -207,9 +220,10 @@ class TestAPIKeyPassthrough:
 class TestRunDefaults:
     """Verify default option values for the run command."""
 
+    @patch("silverquillm.cli._harvest_results")
     @patch("silverquillm.cli.ContainerLifecycle")
     @patch("silverquillm.cli.stage_workspace")
-    def test_default_timeout_3600(self, mock_stage, mock_lifecycle_cls, runner, tmp_path):
+    def test_default_timeout_3600(self, mock_stage, mock_lifecycle_cls, mock_harvest, runner, tmp_path):
         """Default timeout should be 3600 seconds."""
         workspace = tmp_path / "workspace"
         workspace.mkdir()
@@ -221,6 +235,7 @@ class TestRunDefaults:
             exit_code=0, timed_out=False, timeout_reason=None, container_name="test"
         )
         mock_lifecycle_cls.return_value = mock_instance
+        mock_harvest.return_value = tmp_path / "results" / "run"
 
         result = runner.invoke(main, ["run", "--image", "test-img", "--results-dir", str(tmp_path / "results")])
         # ContainerLifecycle should have been called with hard_timeout=3600
@@ -346,7 +361,8 @@ class TestCardStatus:
         statuses = json.loads((run_dir / "status.json").read_text())
         assert statuses, "status.json should contain at least one card entry"
         # All SOS cards should be no_output since none exist in workspace
-        for status in statuses.values():
+        for entry in statuses.values():
+            status = entry["status"] if isinstance(entry, dict) else entry
             assert status == "no_output"
 
     def test_timeout_unmodified_cards_get_timeout_status(self, tmp_path):
@@ -364,7 +380,8 @@ class TestCardStatus:
         statuses = json.loads((run_dir / "status.json").read_text())
         assert statuses, "status.json should contain at least one card entry"
         # All should be timeout since none are modified
-        for status in statuses.values():
+        for entry in statuses.values():
+            status = entry["status"] if isinstance(entry, dict) else entry
             assert status == "timeout"
 
 
@@ -376,9 +393,10 @@ class TestCardStatus:
 class TestTimeout:
     """When Docker container times out, partial harvest should still happen."""
 
+    @patch("silverquillm.cli._harvest_results")
     @patch("silverquillm.cli.ContainerLifecycle")
     @patch("silverquillm.cli.stage_workspace")
-    def test_timeout_still_harvests(self, mock_stage, mock_lifecycle_cls, runner, tmp_path):
+    def test_timeout_still_harvests(self, mock_stage, mock_lifecycle_cls, mock_harvest, runner, tmp_path):
         """Timeout should trigger harvest with timed_out=True."""
         workspace = tmp_path / "workspace"
         output = tmp_path / "output"
@@ -395,6 +413,7 @@ class TestTimeout:
             exit_code=None, timed_out=True, timeout_reason="hard_timeout", container_name="test"
         )
         mock_lifecycle_cls.return_value = mock_instance
+        mock_harvest.return_value = tmp_path / "results" / "run"
 
         result = runner.invoke(
             main,
@@ -405,7 +424,7 @@ class TestTimeout:
         # Should mention timeout
         assert "timed out" in result.output.lower() or "timeout" in result.output.lower()
         # Should still harvest
-        assert "harvest" in result.output.lower() or "results saved" in result.output.lower()
+        assert mock_harvest.called
 
 
 # ---------------------------------------------------------------------------

@@ -3,22 +3,20 @@
 Decisions made during this run only. Before the PR, migrate anything worth preserving long-term into `KEY_DECISIONS.md`.
 
 
-## Test failure: Item 1 — _make_run_name() separator
-- **Failing tests**: TestRunName assertions expect underscore separator
-- **Tester's intent**: Test the new _make_run_name() function contract
-- **Implementer's approach**: Used underscore to match tests, but TODO spec says hyphen
-- **Coordinator decision**: fix tests — the TODO spec explicitly requires hyphen separator (`<set_code>-<timestamp>`)
-- **Reasoning**: The TODO spec is unambiguous: format is `f"{set_code}-{ts}"` with example `sos-2026-05-16T19-49`. Tests were written with wrong assumption.
+## Item 1: Wire up workspace reference material correctly
+- **Context**: Reviewer flagged that initial implementation kept `engine_api.md` and `base_classes.py` staged to avoid breaking pre-existing tests.
+- **Decision**: Fully removed per TODO spec. Updated pre-existing tests to match new contract.
+- **Reasoning**: The TODO is explicit. Keeping stale files staged (even without prompt reference) allows agents to discover and use them. Clean removal is correct.
+- **Impact**: `silverquillm/workspace.py`, `docs/specs/WORKSPACE-CONTRACT.md`, `tests/test_workspace.py`, `tests/test_workspace_reference_material.py`.
 
-## Spec deviation: Item 5 — Runner spec files already migrated
-- **TODO spec expected**: Find-and-replace `results/{run_name}/` in 4 spec files.
-- **Actual codebase state**: All 4 spec files already used `docker/<image_dir>/results/<run_name>/` convention — no changes needed.
-- **What was implemented instead**: Verified with grep (zero matches), recorded in FILES_MODIFIED.md as no-op.
-- **Impact**: None — files were already correct.
+## Item 2: --cards-aware status / summary / postmortem plumbing
+- **Context**: Reviewer caught that filter comparison used directory names (from `card_loader.py` override) instead of numeric collector numbers from JSON.
+- **Decision**: Added `json_collector_number` field to preserve original JSON value; dual-match logic supports both `--cards 1` (numeric) and `--cards soa_1` (dir-name).
+- **Reasoning**: `card_loader.py` already overrides `collector_number` with directory name for filesystem operations. Adding a separate field is non-breaking.
+- **Impact**: `silverquillm/card_loader.py`, `silverquillm/cli.py`.
 
-## Disagreement: Item 9 — Scaffold test quality
-- **Reviewer comment (strict)**: Scaffold tests are only substring checks and don't verify actual cleanup behavior.
-- **Implementer justification**: Structural/source-checking tests are the standard pattern in test_scaffold.py throughout this project for verifying conventions are followed in source.
-- **Coordinator decision**: accept implementer — substring/pattern checks are the established convention for scaffold tests in this project.
-- **Reasoning**: The actual cleanup behavior is tested by the integration test itself (which requires Docker). Scaffold tests verify structural conventions in source code, which is their role.
-- **Impact**: tests/test_scaffold.py — no changes needed for this comment.
+## Item 5: Add engine-extension permission line to the agent prompt
+- **Context**: Reviewer flagged that tests don't cover the new sentence. Actually, `tests/test_prompt_content.py` (5 tests) already covers it — reviewer couldn't see the untracked file in `git diff HEAD`.
+- **Decision**: Accepted as-is. Coverage exists in `tests/test_prompt_content.py`.
+- **Reasoning**: False positive due to combined diff not including untracked new files.
+- **Impact**: None — no changes needed.

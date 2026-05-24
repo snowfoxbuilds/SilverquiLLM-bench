@@ -62,11 +62,21 @@ def _load_json(path: Path) -> dict | None:
 
 
 def _load_status_map(run_dir: Path) -> dict[str, str]:
-    """Load status.json mapping collector_number → status string."""
+    """Load status.json mapping collector_number → status string.
+
+    Handles both the new dict format ``{"status": str, "card_name": str}``
+    and legacy bare string format for backward compatibility.
+    """
     data = _load_json(run_dir / "status.json")
-    if isinstance(data, dict):
-        return data
-    return {}
+    if not isinstance(data, dict):
+        return {}
+    result: dict[str, str] = {}
+    for key, value in data.items():
+        if isinstance(value, dict):
+            result[key] = value.get("status", "unknown")
+        else:
+            result[key] = value  # legacy bare string format
+    return result
 
 
 def _load_eval_result(run_dir: Path) -> dict | None:

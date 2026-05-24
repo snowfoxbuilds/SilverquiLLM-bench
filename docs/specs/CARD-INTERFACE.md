@@ -112,13 +112,22 @@ def get_modes(self) -> list[Mode]:
 Replacement effects modify events before they happen (no stack). Separate from triggers via `register_replacement_effects()`:
 
 ```python
-def register_replacement_effects(self, game, permanent):
-    game.register_replacement(
-        event="creature_dies",
-        source=permanent,
-        condition=lambda e: True,
-        replacement=lambda e: game.exile(e.card),
-    )
+from engine.events import CreatureDiesReplacementEvent
+from engine.replacement_effects import ReplacementEffect
+
+def register_replacement_effects(self, game: 'GameState') -> None:
+    def _exile_instead(game, event):
+        """Redirect to exile instead of graveyard."""
+        event.destination = "exile"
+        return event
+
+    game.replacement_manager.register(ReplacementEffect(
+        event_type=CreatureDiesReplacementEvent,
+        source=self,
+        condition=lambda game, event: event.card is self,
+        replacement=_exile_instead,
+        controller=getattr(self, 'controller', None),
+    ))
 ```
 
 Key differences from triggers: no stack, in-place event modification, "instead" semantics, one replacement per event (affected player chooses if multiple apply).

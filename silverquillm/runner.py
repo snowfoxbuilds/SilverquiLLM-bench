@@ -14,6 +14,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from silverquillm.card_names import resolve_card_names_in_line
+from silverquillm.telemetry import FastTelemetry
+
 # ANSI color helpers
 _GRAY = "\033[90m"
 _BLUE = "\033[34m"
@@ -44,6 +47,8 @@ class ContainerLifecycle:
         hang_timeout: int = 900,
         env_args: list[str] | None = None,
         snapshot_callback: callable | None = None,
+        run_dir: Path | None = None,
+        card_name_map: dict[str, str] | None = None,
     ):
         self.image = image
         self.container_name = container_name
@@ -53,6 +58,8 @@ class ContainerLifecycle:
         self.hang_timeout = hang_timeout
         self.env_args = env_args or []
         self.snapshot_callback = snapshot_callback
+        self.run_dir = Path(run_dir) if run_dir else None
+        self.card_name_map = card_name_map or {}
 
         # Pipe drain target files
         self._stdout_path = self.output / "docker_stdout.tmp"
@@ -98,6 +105,16 @@ class ContainerLifecycle:
         stdout_thread.start()
         stderr_thread.start()
 
+        # Start fast-tier (1 Hz) telemetry if run_dir is available
+        fast_telemetry: FastTelemetry | None = None
+        if self.run_dir:
+            fast_telemetry = FastTelemetry(
+                output_dir=self.output,
+                run_dir=self.run_dir,
+                workspace_dir=self.workspace,
+            )
+            fast_telemetry.start()
+
         # Initialize tracking state
         start = time.monotonic()
         last_activity = start
@@ -142,6 +159,10 @@ class ContainerLifecycle:
         except KeyboardInterrupt:
             self._docker_stop()
             timeout_reason = None
+        finally:
+            # Stop fast-tier telemetry
+            if fast_telemetry:
+                fast_telemetry.stop()
 
         # Wait for pipe readers to finish
         stdout_thread.join(timeout=10)
@@ -198,6 +219,9 @@ class ContainerLifecycle:
             (self._progress_path, "progress", _GREEN),
         ]
 
+        # Channels where card names should be resolved at print time
+        _RESOLVE_NAME_LABELS = {"progress", "system"}
+
         for path, label, color in files_and_labels:
             if not path.exists():
                 continue
@@ -221,6 +245,9 @@ class ContainerLifecycle:
                         text = data.decode("utf-8", errors="replace")
                         if label and color:
                             for line in text.splitlines(keepends=True):
+                                # Resolve card names for terminal display
+                                if label in _RESOLVE_NAME_LABELS and self.card_name_map:
+                                    line = resolve_card_names_in_line(line, self.card_name_map)
                                 print(f"{color}[{label}]{_RESET} {line}", end="")
                         else:
                             print(text, end="")

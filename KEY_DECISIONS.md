@@ -32,3 +32,22 @@ Persistent architectural and convention decisions across runs.
 - **Decision**: Use `[sys.executable, "-m", "silverquillm.cli", ...]` instead of `["silverquillm", ...]` in subprocess calls.
 - **Reasoning**: Ensures the test exercises the code from the current worktree, not a potentially stale installed entry point.
 - **Impact**: `tests/test_smoke_lifecycle.py`. Future integration tests should follow this pattern.
+
+## Hard-error pattern for workspace reference material
+- **Context**: Workspace staging previously used stub fallbacks for missing source files, masking setup errors.
+- **Decision**: All workspace reference material (rulebook, rules_overview, test_utils.md) raises `FileNotFoundError` if source is missing. No stub fallbacks.
+- **Reasoning**: Silent stubs waste agent budget on useless content and mask misconfigurations.
+- **Impact**: `silverquillm/workspace.py` — `_copy_reference_docs()` and rulebook/overview staging.
+
+## json_collector_number field in card specs
+- **Context**: `load_all_card_specs()` overrides `collector_number` with directory name. CLI `--cards` filter uses numeric collector numbers from the user.
+- **Decision**: Added `json_collector_number` field preserving the original JSON value before directory-name override. Filter logic checks both fields for dual-match.
+- **Reasoning**: Preserves backward compat (existing code uses `collector_number` as dir name) while enabling numeric filtering from CLI.
+- **Impact**: `silverquillm/card_loader.py`, `silverquillm/cli.py`.
+
+## cast_spell_free() API contract
+- **Context**: Etali used manual `on_resolve()` bypass. Added `cast_spell_free()` to engine for proper stack-based free casting.
+- **Decision**: `cast_spell_free()` skips mana payment and timing checks but retains: `can_cast()` legality, target validation (filter_fn + protection), and rollback on error.
+- **Reasoning**: MTG "without paying mana cost" waives mana/timing only. Cast legality, targeting, and stack interaction must be preserved for correct game state.
+- **Alternatives considered**: Full bypass (rejected — allows illegal casts), full `cast_spell()` with mana=0 (rejected — doesn't skip timing).
+- **Impact**: `engine/casting.py`, `cards/fdn/fdn_194/card_impl.py`. Future free-cast cards should use this function.
