@@ -30,6 +30,13 @@ user-invocable: true
 
 This passive-waiting rule supersedes any instinct to "check more often to make sure things are progressing." More polling does not make subagents go faster; it just burns your turn budget. Trust the sleep.
 
+**EVERY SUBAGENT INVOCATION must include these inputs**, in addition to whatever the per-step instructions list:
+- The path `MODEL_AUDIT.jsonl` (workspace root).
+- Your session marker `$session_started_at` (the timestamp you used in your own MODEL_AUDIT entry during Setup). The subagent will copy this into its own audit row so all rows from this run share one key.
+- The instruction: **"Your FIRST action on invocation, before any other work, is to append one MODEL_AUDIT entry per your agent profile."** This is the only way we can verify after the run that subagent routing actually honored your `model:` field.
+
+Do not skip these inputs. If a subagent forgets to self-report, that's still on the coordinator's prompt to enforce.
+
 **ROLE: YOU are the coordinator — a pure orchestrator.** Your only jobs are: invoke subagents in order, read their `.md` output files, arbitrate disputes, and commit results. You do not write, edit, or run any implementation code, test code, or reviews yourself. If you find yourself writing a `class`, `def`, `import`, `assert`, or any source/test code, stop immediately — that work belongs to the Implementer or Tester subagent.
 
 **PREREQUISITE: This agent relies on three preset custom agents — `Tester`, `Implementer`, and `Reviewer` — defined as `.agent.md` files under `~/.copilot/agents/`. Each agent's model, tool allowlist, and system prompt live in its agent profile.**
@@ -82,6 +89,7 @@ Tracking files in the **repo root**:
 - `KEY_DECISIONS.md` — **persistent across runs**, append-only.
 - `RUN_DECISIONS.md` — **this-run only**, cleared at the start of every run.
 - `FILES_MODIFIED.json` — **this-run only**, cleared at the start of every run, upserted (one entry per cycle, matched by `cycle: <N>`) by each Implementer invocation.
+- `MODEL_AUDIT.jsonl` — **persistent across runs**, append-only. Every agent invocation (coordinator + every subagent invocation) appends exactly one JSON line stating who it is, which model it self-reports as, and which effort level it was launched with. We use this to verify after-the-fact that subagent routing actually honored the agent profiles' `model:` field — CLI parity for that field has historically been spotty, so empirical confirmation matters. Never clear this file; it is the run history.
 
 ### 1. Setup
 
@@ -121,6 +129,12 @@ git config user.name  || git config user.name  "Coordinator"
 
 `KEY_DECISIONS.md` is **persistent across runs**. Do not clear it. If it does not exist, create it with a header (see Section 9).
 
+`MODEL_AUDIT.jsonl` is **persistent across runs** (append-only). Do not clear it. If it does not exist, create it as an empty file:
+
+```bash
+touch MODEL_AUDIT.jsonl
+```
+
 `RUN_DECISIONS.md` and `FILES_MODIFIED.json` are **this-run only**. Reset them at the start of every run so Implementer invocations start with a clean working state:
 
 ```bash
@@ -137,6 +151,22 @@ cat > FILES_MODIFIED.json <<'EOF'
 }
 EOF
 ```
+
+**Self-report your model + effort to the audit log NOW, before any further work.** This is your first MODEL_AUDIT entry of the session and the marker that groups everything else in this run:
+
+```bash
+jq -nc \
+  --arg ts "$(date -u +%FT%TZ)" \
+  --arg role "coordinator" \
+  --arg model "<state the model you identify as, e.g. 'Claude Opus 4.6'>" \
+  --arg effort "<state your effort/reasoning level, e.g. 'high'; or 'unknown' if you cannot determine it>" \
+  --arg session "$(date -u +%FT%TZ)" \
+  --arg notes "session start" \
+  '{ts:$ts, role:$role, cycle:null, agent_id:null, model_self_report:$model, effort_self_report:$effort, session_started_at:$session, notes:$notes}' \
+  >> MODEL_AUDIT.jsonl
+```
+
+Use the *same* `$session` value for every subsequent MODEL_AUDIT entry you write yourself in this run, so a reader can group all rows from this session by that field.
 
 Commit the reset state so the starting point is reproducible:
 
@@ -378,7 +408,7 @@ Read only the `disagreement_count` from the revision status summary.
 **Step 9: Commit (you)**
 
 1. Run the full test suite to verify everything passes.
-2. Commit (include test files, implementation files, `FILES_MODIFIED.json` and, if updated, `RUN_DECISIONS.md` / `KEY_DECISIONS.md` in the same commit):
+2. Commit (include test files, implementation files, `FILES_MODIFIED.json`, `MODEL_AUDIT.jsonl`, and, if updated, `RUN_DECISIONS.md` / `KEY_DECISIONS.md` in the same commit):
     ```
     feat: implement cards <names> (cycle <N>)
     ```

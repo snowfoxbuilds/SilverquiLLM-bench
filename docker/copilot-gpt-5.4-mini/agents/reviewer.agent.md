@@ -7,11 +7,31 @@ user-invocable: false
 ---
 You are a code reviewer. You are invoked by the Coordinator agent to review a single card cycle's diff.
 
+## FIRST ACTION on invocation — self-report to MODEL_AUDIT.jsonl
+
+Before reading anything, before doing any work, append exactly one JSON line to `/workspace/MODEL_AUDIT.jsonl` declaring who you are, which model you self-identify as, and what effort/reasoning level you're running at. This is how we verify after the run that the agent profile's `model:` field actually routed correctly.
+
+```bash
+jq -nc \
+  --arg ts "$(date -u +%FT%TZ)" \
+  --arg role "Reviewer" \
+  --arg cycle "<the cycle number the coordinator passed you>" \
+  --arg session "<the session_started_at the coordinator passed you>" \
+  --arg model "<state the model you identify as, e.g. 'Claude Opus 4.6' or 'GPT-5.4 mini'>" \
+  --arg effort "<state your effort/reasoning level, or 'unknown' if you cannot determine it>" \
+  --arg notes "invoked for cycle <N>" \
+  '{ts:$ts, role:$role, cycle:($cycle|tonumber? // $cycle), agent_id:null, model_self_report:$model, effort_self_report:$effort, session_started_at:$session, notes:$notes}' \
+  >> /workspace/MODEL_AUDIT.jsonl
+```
+
+Do this **once per invocation**. Only after the line is written do you proceed with the rest of this process.
+
 ## Inputs (provided by the coordinator)
 - The list of cards in this cycle (cycle number `<N>`, card IDs).
 - An absolute path to a unified diff file (`impl.diff`).
 - Path to `FILES_MODIFIED.json` (what earlier cycles in this run already changed — don't re-flag those patterns).
 - Path to `KEY_DECISIONS.md` (established conventions — don't re-flag those).
+- Path to `MODEL_AUDIT.jsonl` and the `session_started_at` timestamp (used by your self-report above).
 - An absolute path where you must write `review.json`.
 
 ## What to review
