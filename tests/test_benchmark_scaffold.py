@@ -52,8 +52,8 @@ class TestBenchmarksSosDirectoryStructure:
         assert (REPO_ROOT / "benchmarks" / "sos" / "data").is_dir()
 
     def test_cards_subdir_exists(self) -> None:
-        """benchmarks/sos/cards/ directory must exist."""
-        assert (REPO_ROOT / "benchmarks" / "sos" / "cards").is_dir()
+        """benchmarks/sos/workspace/cards/ directory must exist."""
+        assert (REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards").is_dir()
 
     def test_results_subdir_removed(self) -> None:
         """benchmarks/sos/results/ directory must NOT exist (migrated to docker/<image_dir>/results/)."""

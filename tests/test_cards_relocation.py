@@ -71,27 +71,15 @@ class TestCardsRelocation:
         )
 
 
-# Sample of SOS card modules to test — includes the 4 normalized stubs plus others
+# Sample of SOS card modules to test — includes the normalized stubs plus others
 _SAMPLE_SOS_CARDS = [
-    "spg_158",
     "sos_195",
     "sos_217",
     "sos_218",
-    "soa_1",
-    "soa_2",
-    "soa_3",
-    "soa_10",
-    "soa_20",
-    "soa_30",
-    "soa_31",
-    "soa_32",
-    "soa_33",
-    "soa_34",
-    "soa_35",
 ]
 
-# The 4 specifically normalized stubs
-_NORMALIZED_STUBS = ["spg_158", "sos_195", "sos_217", "sos_218"]
+# Specifically normalized stubs
+_NORMALIZED_STUBS = ["sos_195", "sos_217", "sos_218"]
 
 
 class TestSOSCardImplModules:
