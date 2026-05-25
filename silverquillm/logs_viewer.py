@@ -23,7 +23,7 @@ from silverquillm.telemetry import CHANNEL_FILES
 __all__ = ["LogsViewer", "run_viewer", "stream_plain"]
 
 # Ordered channel list for tab display
-CHANNEL_ORDER = ["runner", "snapshot", "stdout", "stderr", "error", "progress", "edit", "system"]
+CHANNEL_ORDER = ["runner", "snapshot", "stdout", "stderr", "error", "edit", "system"]
 
 # ANSI escape helpers
 ESC = "\033"
@@ -92,8 +92,21 @@ class LogsViewer:
                 self.channels.append(ch)
                 self.channel_files[ch] = fpath
 
-        # State
-        self.active_tab: int = 0
+        # Visibility tracking for live mode: hide structurally-empty channels
+        # A channel is visible when its backing file exists AND has >0 bytes.
+        # Once visible, it never hides again (avoids flicker).
+        self._ever_visible: set[str] = set()
+        if live:
+            for ch in self.channels:
+                fpath = self.channel_files.get(ch)
+                if fpath and fpath.exists() and fpath.stat().st_size > 0:
+                    self._ever_visible.add(ch)
+        else:
+            # In archived mode all discovered channels are visible
+            self._ever_visible = set(self.channels)
+
+        # State — active_tab defaults to first visible channel, or None if none visible
+        self.active_tab: int | None = self._first_visible_index()
         self.lines: dict[str, list[str]] = {ch: [] for ch in self.channels}
         self.scroll_offset: int = -1  # -1 means TAIL mode (follow end)
         self.unread: dict[str, int] = {ch: 0 for ch in self.channels}
@@ -101,6 +114,42 @@ class LogsViewer:
         self.cols: int = 80
         self._old_termios: list | None = None
         self._resized = False
+        self._last_discovery: float = 0.0
+
+    @property
+    def visible_channels(self) -> list[str]:
+        """Channels that should be rendered in the tab bar.
+
+        In live mode, a channel is visible only if it has been seen with >0 bytes
+        at least once. In archived mode, all discovered channels are visible.
+        """
+        return [ch for ch in self.channels if ch in self._ever_visible]
+
+    def _poll_channel_visibility(self) -> bool:
+        """Check for newly-appearing files and promote them to visible.
+
+        Returns True if any new channel became visible (requires re-render).
+        """
+        changed = False
+        for ch in self.channels:
+            if ch in self._ever_visible:
+                continue
+            fpath = self.channel_files.get(ch)
+            if fpath and fpath.exists():
+                try:
+                    if fpath.stat().st_size > 0:
+                        self._ever_visible.add(ch)
+                        changed = True
+                except OSError:
+                    pass
+        return changed
+
+    def _first_visible_index(self) -> int | None:
+        """Return the index (in self.channels) of the first visible channel, or None."""
+        for i, ch in enumerate(self.channels):
+            if ch in self._ever_visible:
+                return i
+        return None
 
     @property
     def panel_height(self) -> int:
@@ -109,7 +158,7 @@ class LogsViewer:
 
     @property
     def active_channel(self) -> str:
-        if not self.channels:
+        if self.active_tab is None or not self.channels:
             return ""
         return self.channels[self.active_tab]
 
@@ -148,7 +197,10 @@ class LogsViewer:
         _move_to(self.out, 1, 1)
         _clear_line(self.out)
         parts: list[str] = []
+        visible = self.visible_channels
         for i, ch in enumerate(self.channels):
+            if ch not in self._ever_visible:
+                continue  # Hide structurally-empty channels
             label = f"[{i + 1}] {ch}"
             unread = self.unread.get(ch, 0)
             if unread > 0 and i != self.active_tab:
@@ -164,9 +216,20 @@ class LogsViewer:
 
     def _render_panel(self) -> None:
         """Render the log content panel."""
+        ph = self.panel_height
+
+        # Show placeholder if no active channel (no visible channels yet)
+        if self.active_tab is None:
+            for row_idx in range(ph):
+                _move_to(self.out, row_idx + 2, 1)
+                _clear_line(self.out)
+                if row_idx == ph // 2:
+                    msg = "waiting for output..."
+                    self.out.write(msg[: self.cols])
+            return
+
         ch = self.active_channel
         lines = self.lines.get(ch, [])
-        ph = self.panel_height
 
         if self.scroll_offset == -1:
             # TAIL mode: show last ph lines
@@ -201,8 +264,11 @@ class LogsViewer:
         self.out.flush()
 
     def _switch_tab(self, idx: int) -> None:
-        """Switch to a different tab."""
+        """Switch to a different tab (only if it's a visible channel)."""
         if idx < 0 or idx >= len(self.channels):
+            return
+        # Only allow switching to visible channels
+        if self.channels[idx] not in self._ever_visible:
             return
         self.active_tab = idx
         self.scroll_offset = -1  # Reset to TAIL on tab switch
@@ -320,6 +386,7 @@ class LogsViewer:
 
         self.running = True
         last_reload = time.time()
+        self._last_discovery = time.time()
 
         try:
             self._render()
@@ -343,6 +410,15 @@ class LogsViewer:
                     if self.scroll_offset == -1:
                         self._render()
                     last_reload = time.time()
+
+                # Periodic channel discovery poll (every 2s)
+                if self.live and time.time() - self._last_discovery > 2.0:
+                    if self._poll_channel_visibility():
+                        # If active_tab was placeholder, switch to first visible
+                        if self.active_tab is None:
+                            self.active_tab = self._first_visible_index()
+                        self._render()
+                    self._last_discovery = time.time()
 
                 if key is None:
                     continue

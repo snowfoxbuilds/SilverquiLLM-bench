@@ -12,9 +12,6 @@ let copilotProc = null;
 
 process.on("SIGTERM", () => {
   log("Received SIGTERM, shutting down");
-  appendFileSync("/output/progress.jsonl",
-    JSON.stringify({ ts: new Date().toISOString(), status: "timed_out" }) + "\n"
-  );
   copilotProc?.kill("SIGTERM");
   process.exit(0);
 });

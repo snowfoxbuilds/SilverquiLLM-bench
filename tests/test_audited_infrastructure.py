@@ -34,7 +34,7 @@ def _load_fdn_conftest_module() -> types.ModuleType:
     conftest skips injection.  Returns the loaded module with all
     helper functions available.
     """
-    conftest_path = _PROJECT_ROOT / "tests" / "audited" / "fdn" / "conftest.py"
+    conftest_path = _PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "conftest.py"
     spec = importlib.util.spec_from_file_location(
         "fdn_conftest_test", conftest_path,
         submodule_search_locations=[],
@@ -60,7 +60,7 @@ def _load_sos_conftest_module() -> types.ModuleType:
 
     Same trick: fake explicit card_impl to skip module-level guard.
     """
-    conftest_path = _PROJECT_ROOT / "tests" / "audited" / "sos" / "conftest.py"
+    conftest_path = _PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos" / "conftest.py"
     spec = importlib.util.spec_from_file_location(
         "sos_conftest_test", conftest_path,
         submodule_search_locations=[],
@@ -84,37 +84,37 @@ class TestDirectoryStructure:
     """Verify required audited test directories and files exist."""
 
     def test_audited_root_exists(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited").is_dir()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited").is_dir()
 
     def test_audited_root_has_init(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "__init__.py").is_file()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "__init__.py").is_file()
 
     def test_fdn_directory_exists(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "fdn").is_dir()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn").is_dir()
 
     def test_fdn_has_init(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "__init__.py").is_file()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "__init__.py").is_file()
 
     def test_fdn_has_conftest(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "conftest.py").is_file()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "conftest.py").is_file()
 
     def test_sos_directory_exists(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "sos").is_dir()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos").is_dir()
 
     def test_sos_has_init(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "sos" / "__init__.py").is_file()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos" / "__init__.py").is_file()
 
     def test_sos_has_conftest(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "sos" / "conftest.py").is_file()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos" / "conftest.py").is_file()
 
     def test_fdn_272_directory_exists(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "fdn_272").is_dir()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "fdn_272").is_dir()
 
     def test_fdn_272_has_tests_py(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").is_file()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").is_file()
 
     def test_fdn_272_has_init(self) -> None:
-        assert (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "fdn_272" / "__init__.py").is_file()
+        assert (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "fdn_272" / "__init__.py").is_file()
 
 
 class TestPyprojectConfig:
@@ -232,13 +232,13 @@ class TestCollectorDirectoryDetection:
 
     def test_fdn_getattr_calls_detect_collector_dir(self) -> None:
         """FDN synthetic module __getattr__ must call _detect_collector_dir()."""
-        source = (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "conftest.py").read_text()
+        source = (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "conftest.py").read_text()
         # _make_card_impl_module's inner _getattr must reference _detect_collector_dir
         assert "_detect_collector_dir()" in source
 
     def test_sos_getattr_calls_detect_collector_dir(self) -> None:
         """SOS synthetic module __getattr__ must call _detect_collector_dir()."""
-        source = (_PROJECT_ROOT / "tests" / "audited" / "sos" / "conftest.py").read_text()
+        source = (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos" / "conftest.py").read_text()
         assert "_detect_collector_dir()" in source
 
 
@@ -296,7 +296,7 @@ class TestExplicitCardImplOverrideProtection:
         sentinel._sentinel = True  # type: ignore[attr-defined]
         try:
             sys.modules["card_impl"] = sentinel
-            conftest_path = _PROJECT_ROOT / "tests" / "audited" / "fdn" / "conftest.py"
+            conftest_path = _PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "conftest.py"
             spec = importlib.util.spec_from_file_location(
                 "fdn_conftest_test_noinject", conftest_path,
                 submodule_search_locations=[],
@@ -342,7 +342,7 @@ class TestSOSConftestBehavior:
             fdn_synth.__file__ = "<synthetic:fdn_conftest>"
             sys.modules["card_impl"] = fdn_synth
 
-            conftest_path = _PROJECT_ROOT / "tests" / "audited" / "sos" / "conftest.py"
+            conftest_path = _PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos" / "conftest.py"
             spec = importlib.util.spec_from_file_location(
                 "sos_conftest_test_replace", conftest_path,
                 submodule_search_locations=[],
@@ -366,10 +366,10 @@ class TestSOSConftestBehavior:
                 sys.modules.pop("card_impl", None)
 
     def test_sos_conftest_references_register_sos_stubs(self) -> None:
-        """SOS conftest must call register_sos_stubs() from cards.stubs.sos_stubs."""
-        content = (_PROJECT_ROOT / "tests" / "audited" / "sos" / "conftest.py").read_text()
+        """SOS conftest must call register_sos_stubs() from benchmarks.sos.workspace.cards.stubs.sos_stubs."""
+        content = (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos" / "conftest.py").read_text()
         assert "register_sos_stubs" in content
-        assert "cards.stubs.sos_stubs" in content
+        assert "benchmarks.sos.workspace.cards.stubs.sos_stubs" in content
 
     def test_sos_does_not_replace_real_explicit_card_impl(self) -> None:
         """SOS conftest must not replace an evaluator-provided real card_impl.py."""
@@ -379,7 +379,7 @@ class TestSOSConftestBehavior:
         sentinel._sentinel = True  # type: ignore[attr-defined]
         try:
             sys.modules["card_impl"] = sentinel
-            conftest_path = _PROJECT_ROOT / "tests" / "audited" / "sos" / "conftest.py"
+            conftest_path = _PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos" / "conftest.py"
             spec = importlib.util.spec_from_file_location(
                 "sos_conftest_test_nooverride", conftest_path,
                 submodule_search_locations=[],
@@ -398,16 +398,16 @@ class TestSamplePlainsTest:
     """Verify the sample Plains test under tests/audited/fdn/fdn_272/tests.py."""
 
     def test_plains_tests_file_imports_from_card_impl(self) -> None:
-        tests_content = (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").read_text()
+        tests_content = (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").read_text()
         assert "from card_impl import Plains" in tests_content
 
     def test_plains_tests_file_has_test_class(self) -> None:
-        tests_content = (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").read_text()
+        tests_content = (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").read_text()
         assert "class Test" in tests_content
 
     def test_plains_tests_file_has_category_markers(self) -> None:
         """Sample audited test should use pytest.mark category markers."""
-        tests_content = (_PROJECT_ROOT / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").read_text()
+        tests_content = (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn" / "fdn_272" / "tests.py").read_text()
         assert "pytest.mark" in tests_content, (
             "Sample audited test should use pytest.mark category markers "
             "(@pytest.mark.basic, etc.) as per audited-test conventions"
@@ -537,8 +537,8 @@ class TestSOSSetPrefixedResolution:
         - SOA card cn=1, set_code="soa" → dir "soa_1"
         - SPG card cn=149, set_code="spg" → dir "spg_149"
         """
-        from cards.registry import CardRegistry, CardMetadata
-        from engine.card import CardImpl
+        from benchmarks.sos.workspace.cards.registry import CardRegistry, CardMetadata
+        from benchmarks.sos.workspace.engine.card import CardImpl
 
         # Create distinct stub classes
         SOSBaseCard = type("SOSBaseCard", (CardImpl,), {"__init__": lambda self, **kw: None})
@@ -562,7 +562,7 @@ class TestSOSSetPrefixedResolution:
                 CardMetadata(collector_number="149", set_code="spg"),
             )
 
-        fake_mod = types.ModuleType("cards.stubs.sos_stubs")
+        fake_mod = types.ModuleType("benchmarks.sos.workspace.cards.stubs.sos_stubs")
         fake_mod.register_sos_stubs = register_sos_stubs
         return fake_mod
 
@@ -571,9 +571,9 @@ class TestSOSSetPrefixedResolution:
         sos = _load_sos_conftest_module()
         fake_stubs = self._make_fake_sos_stubs_module()
 
-        original_stubs = sys.modules.get("cards.stubs.sos_stubs")
+        original_stubs = sys.modules.get("benchmarks.sos.workspace.cards.stubs.sos_stubs")
         try:
-            sys.modules["cards.stubs.sos_stubs"] = fake_stubs
+            sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = fake_stubs
             cn_to_entry, _classname_to_class = sos._load_sos_stubs_and_build_registry()
 
             assert "sos_1" in cn_to_entry, "Set-prefixed 'sos_1' must map to SOS base card"
@@ -587,18 +587,18 @@ class TestSOSSetPrefixedResolution:
             )
         finally:
             if original_stubs is not None:
-                sys.modules["cards.stubs.sos_stubs"] = original_stubs
+                sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = original_stubs
             else:
-                sys.modules.pop("cards.stubs.sos_stubs", None)
+                sys.modules.pop("benchmarks.sos.workspace.cards.stubs.sos_stubs", None)
 
     def test_spg_prefix_maps_correctly(self) -> None:
         """'spg_149' must map to the SPG guest card."""
         sos = _load_sos_conftest_module()
         fake_stubs = self._make_fake_sos_stubs_module()
 
-        original_stubs = sys.modules.get("cards.stubs.sos_stubs")
+        original_stubs = sys.modules.get("benchmarks.sos.workspace.cards.stubs.sos_stubs")
         try:
-            sys.modules["cards.stubs.sos_stubs"] = fake_stubs
+            sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = fake_stubs
             cn_to_entry, _classname_to_class = sos._load_sos_stubs_and_build_registry()
 
             assert "spg_149" in cn_to_entry, "Set-prefixed 'spg_149' must exist"
@@ -606,18 +606,18 @@ class TestSOSSetPrefixedResolution:
             assert spg_class.__name__ == "SPGGuestCard"
         finally:
             if original_stubs is not None:
-                sys.modules["cards.stubs.sos_stubs"] = original_stubs
+                sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = original_stubs
             else:
-                sys.modules.pop("cards.stubs.sos_stubs", None)
+                sys.modules.pop("benchmarks.sos.workspace.cards.stubs.sos_stubs", None)
 
     def test_sos_base_card_uses_set_prefix(self) -> None:
         """SOS base set cards (set_code='sos') must use the 'sos_N' prefixed form."""
         sos = _load_sos_conftest_module()
         fake_stubs = self._make_fake_sos_stubs_module()
 
-        original_stubs = sys.modules.get("cards.stubs.sos_stubs")
+        original_stubs = sys.modules.get("benchmarks.sos.workspace.cards.stubs.sos_stubs")
         try:
-            sys.modules["cards.stubs.sos_stubs"] = fake_stubs
+            sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = fake_stubs
             cn_to_entry, _classname_to_class = sos._load_sos_stubs_and_build_registry()
 
             # sos_1 must exist — SOS base cards use set-prefixed dirs to match cards/sos/
@@ -630,18 +630,18 @@ class TestSOSSetPrefixedResolution:
             )
         finally:
             if original_stubs is not None:
-                sys.modules["cards.stubs.sos_stubs"] = original_stubs
+                sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = original_stubs
             else:
-                sys.modules.pop("cards.stubs.sos_stubs", None)
+                sys.modules.pop("benchmarks.sos.workspace.cards.stubs.sos_stubs", None)
 
     def test_sos_synthetic_resolves_soa_card_from_prefixed_dir(self) -> None:
         """Synthetic card_impl with detected dir 'soa_1' must return SOA card class."""
         sos = _load_sos_conftest_module()
         fake_stubs = self._make_fake_sos_stubs_module()
 
-        original_stubs = sys.modules.get("cards.stubs.sos_stubs")
+        original_stubs = sys.modules.get("benchmarks.sos.workspace.cards.stubs.sos_stubs")
         try:
-            sys.modules["cards.stubs.sos_stubs"] = fake_stubs
+            sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = fake_stubs
             cn_to_entry, classname_to_class = sos._load_sos_stubs_and_build_registry()
             synthetic = sos._make_card_impl_module(cn_to_entry, classname_to_class)
 
@@ -652,18 +652,18 @@ class TestSOSSetPrefixedResolution:
                 assert result.__name__ == "SOAArchiveCard"
         finally:
             if original_stubs is not None:
-                sys.modules["cards.stubs.sos_stubs"] = original_stubs
+                sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = original_stubs
             else:
-                sys.modules.pop("cards.stubs.sos_stubs", None)
+                sys.modules.pop("benchmarks.sos.workspace.cards.stubs.sos_stubs", None)
 
     def test_sos_synthetic_rejects_wrong_card_from_prefixed_dir(self) -> None:
         """Importing wrong class from 'soa_1' dir must raise AttributeError."""
         sos = _load_sos_conftest_module()
         fake_stubs = self._make_fake_sos_stubs_module()
 
-        original_stubs = sys.modules.get("cards.stubs.sos_stubs")
+        original_stubs = sys.modules.get("benchmarks.sos.workspace.cards.stubs.sos_stubs")
         try:
-            sys.modules["cards.stubs.sos_stubs"] = fake_stubs
+            sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = fake_stubs
             cn_to_entry, classname_to_class = sos._load_sos_stubs_and_build_registry()
 
             import unittest.mock as mock
@@ -673,18 +673,18 @@ class TestSOSSetPrefixedResolution:
                     synthetic.__getattr__("SPGGuestCard")
         finally:
             if original_stubs is not None:
-                sys.modules["cards.stubs.sos_stubs"] = original_stubs
+                sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = original_stubs
             else:
-                sys.modules.pop("cards.stubs.sos_stubs", None)
+                sys.modules.pop("benchmarks.sos.workspace.cards.stubs.sos_stubs", None)
 
 
 class TestPlainsTestExecution:
     """Actually run Plains resolution to verify end-to-end infrastructure."""
 
     def test_plains_is_land_subclass(self) -> None:
-        from cards.registry import CardRegistry
-        from engine.basic_lands import register_basic_lands
-        from engine.card import Land
+        from benchmarks.sos.workspace.cards.registry import CardRegistry
+        from benchmarks.sos.workspace.engine.basic_lands import register_basic_lands
+        from benchmarks.sos.workspace.engine.card import Land
 
         registry = CardRegistry()
         register_basic_lands(registry)
@@ -693,8 +693,8 @@ class TestPlainsTestExecution:
         assert isinstance(card, Land)
 
     def test_plains_has_mana_abilities(self) -> None:
-        from cards.registry import CardRegistry
-        from engine.basic_lands import register_basic_lands
+        from benchmarks.sos.workspace.cards.registry import CardRegistry
+        from benchmarks.sos.workspace.engine.basic_lands import register_basic_lands
 
         registry = CardRegistry()
         register_basic_lands(registry)

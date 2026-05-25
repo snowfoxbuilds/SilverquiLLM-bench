@@ -83,14 +83,14 @@ class TestDirectoryStructure:
     @pytest.mark.parametrize(
         "package_dir",
         [
-            "engine",
-            "cards",
+            "benchmarks/sos/workspace/engine",
+            "benchmarks/sos/workspace/cards",
             "tests",
-            "tests/engine",
+            "benchmarks/sos/workspace/tests/engine",
         ],
         ids=[
             "engine",
-            "cards",
+            "benchmarks/sos/workspace/cards",
             "tests",
             "tests/engine",
         ],
@@ -108,18 +108,18 @@ class TestPackageImportability:
 
     def test_import_engine(self) -> None:
         """The 'engine' package must be importable."""
-        mod = importlib.import_module("engine")
+        mod = importlib.import_module("benchmarks.sos.workspace.engine")
         assert mod is not None
 
     def test_import_cards(self) -> None:
         """The 'cards' package must be importable."""
-        mod = importlib.import_module("cards")
+        mod = importlib.import_module("benchmarks.sos.workspace.cards")
         assert mod is not None
 
     def test_import_cards_fdn(self) -> None:
         """The 'cards.fdn' subpackage directory must exist."""
         from pathlib import Path
-        fdn_dir = REPO_ROOT / "cards" / "fdn"
+        fdn_dir = REPO_ROOT / "benchmarks/sos/workspace/cards" / "fdn"
         assert fdn_dir.is_dir(), "cards/fdn/ must exist"
 
 
@@ -128,8 +128,8 @@ class TestPyTypedMarker:
 
     @pytest.mark.parametrize(
         "package_dir",
-        ["engine", "cards"],
-        ids=["engine", "cards"],
+        ["benchmarks/sos/workspace/engine", "benchmarks/sos/workspace/cards"],
+        ids=["engine", "benchmarks/sos/workspace/cards"],
     )
     def test_py_typed_exists(self, package_dir: str) -> None:
         """py.typed marker must exist in each package directory for PEP 561 compliance."""

@@ -61,13 +61,18 @@ class ContainerLifecycle:
         self.run_dir = Path(run_dir) if run_dir else None
         self.card_name_map = card_name_map or {}
 
-        # Pipe drain target files
-        self._stdout_path = self.output / "docker_stdout.tmp"
-        self._stderr_path = self.output / "docker_stderr.tmp"
+        # Pipe drain target files — when run_dir is set, write directly there
+        # (no .tmp intermediate); otherwise fall back to legacy .tmp in output/.
+        if self.run_dir:
+            self.run_dir.mkdir(parents=True, exist_ok=True)
+            self._stdout_path = self.run_dir / "docker_stdout.log"
+            self._stderr_path = self.run_dir / "docker_stderr.log"
+        else:
+            self._stdout_path = self.output / "docker_stdout.tmp"
+            self._stderr_path = self.output / "docker_stderr.tmp"
 
         # Monitored files (written by the container inside /output)
         self._system_log_path = self.output / "system.log"
-        self._progress_path = self.output / "progress.jsonl"
 
         # File positions for incremental reads
         self._file_positions: dict[Path, int] = {}
@@ -171,13 +176,10 @@ class ContainerLifecycle:
         # Final read pass to flush any remaining data
         self._read_and_print_new_bytes()
 
-        # Copy .tmp capture files to .log so harvest picks them up
-        for tmp_path, log_name in [
-            (self._stdout_path, "docker_stdout.log"),
-            (self._stderr_path, "docker_stderr.log"),
-        ]:
-            if tmp_path.exists():
-                shutil.copy2(tmp_path, tmp_path.parent / log_name)
+        # NOTE: docker_stdout.log and docker_stderr.log are now streamed
+        # directly to run_dir by _drain_pipe. The .tmp files in output/ are
+        # kept for backward compat with _read_and_print_new_bytes but we no
+        # longer copy them to .log here. See KEY_DECISIONS.md.
 
         # Get exit code (may need to wait briefly after docker stop)
         exit_code = proc.poll()
@@ -196,14 +198,38 @@ class ContainerLifecycle:
         )
 
     def _drain_pipe(self, pipe, path: Path) -> None:
-        """Dedicated thread: drain a subprocess pipe to a file on disk."""
-        with open(path, "wb") as f:
-            while True:
-                chunk = pipe.read(4096)
-                if not chunk:
-                    break
-                f.write(chunk)
-                f.flush()
+        """Dedicated thread: drain a subprocess pipe to a file on disk.
+
+        Writes to *path* which is either the run_dir log (append, line-buffered,
+        UTF-8 text) or the legacy .tmp file (binary) depending on how the runner
+        was configured.
+
+        Uses io.TextIOWrapper over the binary pipe for proper incremental UTF-8
+        decoding — avoids corruption when multibyte characters span read boundaries.
+        """
+        import io as _io
+
+        # Determine mode based on file suffix: .log → run_dir (text append),
+        # .tmp → legacy (binary write).
+        use_text_mode = path.suffix == ".log"
+
+        if use_text_mode:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "a", buffering=1, encoding="utf-8", errors="replace") as f:
+                text_stream = _io.TextIOWrapper(
+                    pipe, encoding="utf-8", errors="replace"
+                )
+                for line in text_stream:
+                    f.write(line)
+        else:
+            with open(path, "wb") as f:
+                text_stream = _io.TextIOWrapper(
+                    pipe, encoding="utf-8", errors="replace"
+                )
+                for line in text_stream:
+                    raw = line.encode("utf-8")
+                    f.write(raw)
+                    f.flush()
 
     def _read_and_print_new_bytes(self) -> bool:
         """Read new bytes from each monitored file since last position.
@@ -216,11 +242,10 @@ class ContainerLifecycle:
             (self._stdout_path, "", None),          # default color
             (self._stderr_path, "stderr", _GRAY),
             (self._system_log_path, "system", _BLUE),
-            (self._progress_path, "progress", _GREEN),
         ]
 
         # Channels where card names should be resolved at print time
-        _RESOLVE_NAME_LABELS = {"progress", "system"}
+        _RESOLVE_NAME_LABELS = {"system"}
 
         for path, label, color in files_and_labels:
             if not path.exists():

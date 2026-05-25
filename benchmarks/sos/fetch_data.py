@@ -25,7 +25,7 @@ from typing import Any
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
-from cards.scryfall import fetch_set, fetch_scryfall_query  # noqa: E402
+from benchmarks.sos.workspace.cards.scryfall import fetch_set, fetch_scryfall_query  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

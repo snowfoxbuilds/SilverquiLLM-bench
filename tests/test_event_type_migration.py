@@ -23,7 +23,7 @@ class TestNoRawStringEventTypes:
     def test_no_raw_string_event_types_in_cards_fdn(self) -> None:
         """grep -rn 'event_type *= *['\\'\"']' cards/fdn/ should return zero matches."""
         result = subprocess.run(
-            ["grep", "-rn", r"event_type *= *['\"]", str(_REPO_ROOT / "cards" / "fdn")],
+            ["grep", "-rn", r"event_type *= *['\"]", str(_REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards" / "fdn")],
             capture_output=True,
             text=True,
         )
@@ -48,19 +48,19 @@ class TestFdn244UsesTypedEventClasses:
 
     @pytest.fixture()
     def card_impl_source(self) -> str:
-        path = _REPO_ROOT / "cards" / "fdn" / "fdn_244" / "card_impl.py"
+        path = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards" / "fdn" / "fdn_244" / "card_impl.py"
         assert path.exists(), f"Expected {path} to exist"
         return path.read_text(encoding="utf-8")
 
     def test_imports_event_class(self, card_impl_source: str) -> None:
-        """Should import a typed event class from engine.events."""
+        """Should import a typed event class from benchmarks.sos.workspace.engine.events."""
         assert re.search(
-            r"from engine\.events import .+Event", card_impl_source
-        ), "fdn_244/card_impl.py should import a typed event class from engine.events"
+            r"from benchmarks\.sos\.workspace\.engine\.events import .+Event", card_impl_source
+        ), "fdn_244/card_impl.py should import a typed event class from benchmarks.sos.workspace.engine.events"
 
     def test_imports_replacement_effect(self, card_impl_source: str) -> None:
-        """Should import ReplacementEffect from engine.replacement_effects."""
-        assert "from engine.replacement_effects import ReplacementEffect" in card_impl_source
+        """Should import ReplacementEffect from benchmarks.sos.workspace.engine.replacement_effects."""
+        assert "from benchmarks.sos.workspace.engine.replacement_effects import ReplacementEffect" in card_impl_source
 
     def test_registers_with_replacement_manager(self, card_impl_source: str) -> None:
         """Should use game.replacement_manager.register(), not game.register_replacement()."""
@@ -96,9 +96,9 @@ class TestCardInterfaceSpecUsesTypedAPI:
         assert "game.register_replacement(" not in spec_source
 
     def test_imports_typed_event_class(self, spec_source: str) -> None:
-        """Should import a typed event class (ending in Event) from engine.events."""
+        """Should import a typed event class (ending in Event) from benchmarks.sos.workspace.engine.events."""
         assert re.search(
-            r"from engine\.events import \w+Event", spec_source
+            r"from benchmarks\.sos\.workspace\.engine\.events import \w+Event", spec_source
         ), "CARD-INTERFACE.md should show importing typed event classes"
 
     def test_event_type_references_class_not_string(self, spec_source: str) -> None:

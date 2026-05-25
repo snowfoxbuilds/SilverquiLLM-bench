@@ -5,7 +5,7 @@ Reads entrypoint.mjs files as text and verifies:
 - system.log logging with timestamps
 - agent_stdout.log output capture
 - SIGTERM handler for graceful shutdown
-- progress.jsonl writing preserved
+- progress.jsonl writing removed
 - /output directory creation
 """
 
@@ -103,15 +103,15 @@ class TestSigtermHandler:
 
 
 # ---------------------------------------------------------------------------
-# progress.jsonl still written
+# progress.jsonl no longer written (removed in phase 17)
 # ---------------------------------------------------------------------------
 
-class TestProgressJsonl:
-    """progress.jsonl writing must be preserved."""
+class TestProgressJsonlRemoved:
+    """progress.jsonl writing must be removed from entrypoints."""
 
-    def test_progress_jsonl_present(self, entrypoint_text: str):
-        assert "progress.jsonl" in entrypoint_text, (
-            "Entrypoint must still write progress.jsonl"
+    def test_no_progress_jsonl_reference(self, entrypoint_text: str):
+        assert "progress.jsonl" not in entrypoint_text, (
+            "Entrypoint must not write progress.jsonl (channel removed)"
         )
 
 

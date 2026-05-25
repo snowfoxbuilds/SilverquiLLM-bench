@@ -306,9 +306,9 @@ class TestRunDirectoryDiscovery:
 class TestChannelFileMapping:
     """Tests for channel ordering and file mapping."""
 
-    def test_channel_order_has_8_entries(self) -> None:
-        """CHANNEL_ORDER has exactly 8 entries (tabs 1-8)."""
-        assert len(CHANNEL_ORDER) == 8
+    def test_channel_order_has_7_entries(self) -> None:
+        """CHANNEL_ORDER has exactly 7 entries (tabs 1-7, progress removed)."""
+        assert len(CHANNEL_ORDER) == 7
 
     def test_all_channels_have_file_mapping(self) -> None:
         """Every channel in CHANNEL_ORDER has a corresponding CHANNEL_FILES entry."""
@@ -329,7 +329,7 @@ class TestChannelFileMapping:
     def test_viewer_live_mode_includes_all_channels_if_none_exist(self, tmp_path: Path) -> None:
         """In live mode with no existing files, all channels are listed."""
         viewer = LogsViewer(tmp_path, live=True)
-        assert len(viewer.channels) == 8
+        assert len(viewer.channels) == 7
 
     def test_channel_file_paths_correct(self, run_dir: Path) -> None:
         """Channel file paths resolve to the correct run_dir files."""

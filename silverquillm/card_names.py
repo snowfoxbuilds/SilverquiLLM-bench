@@ -1,6 +1,6 @@
 """Card name resolution — builds card_id → card_name mapping.
 
-Used by slow-cadence artifact writers (status.json, result.json, progress.jsonl)
+Used by slow-cadence artifact writers (status.json, result.json)
 and the terminal print layer to display human-readable card names alongside IDs.
 
 The source of truth is card_spec.json files under cards/{set_code}/{card_id}/.

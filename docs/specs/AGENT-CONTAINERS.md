@@ -63,7 +63,7 @@ This manifest is advisory runtime context only. It is not agent configuration; m
 /workspace/
   prompt.md                          # Single input prompt
   run_manifest.json                  # Advisory runtime timeout facts
-  rulebook.md                        # Comprehensive MTG rules reference
+  RULEBOOK.txt                       # Comprehensive MTG rules reference
   engine/                            # Game engine source (read-write copy)
   engine_api.md                      # Engine API reference
   base_classes.py                    # CardImpl base class source
@@ -98,7 +98,7 @@ The input prompt is minimal and natural — like handing a developer a codebase:
 
 > 
 
-> Use the completed FDN cards in `/workspace/cards/fdn/` as implementation examples. Refer to `rulebook.md` for detailed game rules and `engine_api.md` for the engine API.
+> Use the completed FDN cards in `/workspace/cards/fdn/` as implementation examples. Refer to `RULEBOOK.txt` for detailed game rules and `engine_api.md` for the engine API.
 
 The prompt does not dictate ordering, strategy, or iteration approach. The agent decides how to tackle the workload. This tests planning and self-management, not just code generation.
 

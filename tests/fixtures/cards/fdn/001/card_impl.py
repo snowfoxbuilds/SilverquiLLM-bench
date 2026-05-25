@@ -1,5 +1,5 @@
 """Real implementation for Plains."""
-from engine.card_impl import CardImpl
+from benchmarks.sos.workspace.engine.card_impl import CardImpl
 
 
 class Plains(CardImpl):

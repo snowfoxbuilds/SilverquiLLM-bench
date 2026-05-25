@@ -10,9 +10,6 @@ function log(msg) {
 
 process.on("SIGTERM", () => {
   log("Received SIGTERM, shutting down");
-  appendFileSync("/output/progress.jsonl",
-    JSON.stringify({ ts: new Date().toISOString(), status: "timed_out" }) + "\n"
-  );
   process.exit(0);
 });
 
@@ -60,11 +57,8 @@ session.subscribe((event) => {
   }
 
   if (event.type === "tool_execution_end") {
-    appendFileSync("/output/progress.jsonl",
-      JSON.stringify({ ts: new Date().toISOString(), tool: event.toolName }) + "\n"
-    );
+    log(`Tool executed: ${event.toolName}`);
   }
-  // ... progress.jsonl unchanged
 });
 
 // Read prompt and go

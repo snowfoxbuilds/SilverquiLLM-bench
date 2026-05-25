@@ -47,7 +47,7 @@ def _fdn_dir_count(workspace: Path) -> int:
 def _all_sos_collector_numbers() -> set[str]:
     """Return collector numbers from the source cards/sos directory."""
     repo_root = Path(__file__).resolve().parent.parent
-    sos_src = repo_root / "cards" / "sos"
+    sos_src = repo_root / "benchmarks" / "sos" / "workspace" / "cards" / "sos"
     result = set()
     for d in sos_src.iterdir():
         spec = d / "card_spec.json"

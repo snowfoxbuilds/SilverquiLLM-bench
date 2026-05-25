@@ -39,7 +39,7 @@ docker/<image-dir>/results/<run_name>/snapshots/
     run_manifest.json
     engine/
     cards/
-    rulebook.md
+    RULEBOOK.txt
     engine_api.md
     base_classes.py
     test_utils.md
@@ -223,4 +223,4 @@ Rules:
 - **Each terminal channel has a backing file**: Every channel the runner prints is mirrored to an append-only file in the run directory (see Terminal channels above). This file-backed substrate makes the tabbed log viewer (`silverquillm logs --run`) a thin read-only consumer in both live and archived modes.
 - **v1 includes a tabbed post-run log viewer**: Originally deferred to a later version; lifted now that the runner is stable and the 2026-05-23 run surfaced concrete triage pain. Live labeled streaming remains the default for users who don't want to launch the viewer.
 - **JS entrypoint output channel pattern**: JavaScript entrypoints use a `log()` helper that writes to `/output/system.log`, tee agent output to `/output/agent_stdout.log`, and pass agent output through `process.stdout.write()` so Docker logs still capture it. Future bash entrypoints follow the same file-based channel separation.
-- **Docker logs are direct-written to ****`run_dir`**: Pipe-reader threads write `docker_stdout.log` and `docker_stderr.log` directly into `run_dir` in append mode. No `.tmp` intermediate, no post-run copy step. Harvest reads the files in place.
+- **Docker logs are direct-written to ****`run_dir`**: Pipe-reader threads write `docker_stdout.log` and `docker_stderr.log` directly into `run_dir` in append mode. No `.tmp` intermediate, no post-run copy step. Harvest reads the files in place. As a backwards-compatibility fallback, `_harvest_results` still copies `docker_stdout.log` / `docker_stderr.log` from `/output/` into `run_dir` *only if* the file isn't already present (i.e. the direct-stream path didn't write it). New runs hit the skip branch; pre-streaming runs hit the copy branch.

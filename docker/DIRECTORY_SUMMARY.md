@@ -16,8 +16,9 @@ Docker image definitions for agent runtime environments. Each subdirectory conta
 Both entrypoints (`entrypoint.mjs`) follow a consistent pattern:
 - **System log**: `log()` helper writes timestamped messages to `/output/system.log`.
 - **Agent output capture**: Agent stdout is tee'd to `/output/agent_stdout.log`.
-- **SIGTERM handler**: Catches SIGTERM, writes `timed_out` status to `/output/progress.jsonl`, then exits cleanly.
+- **SIGTERM handler**: Catches SIGTERM, terminates the agent process, then exits cleanly.
 - **No engine copy**: Engine work directory is not copied into the container (engine is staged in workspace by `silverquillm/workspace.py`).
+- **No progress.jsonl**: Progress channel removed; startup/completion messages go to system.log instead.
 
 ## Files per Subdirectory
 

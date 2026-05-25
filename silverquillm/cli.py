@@ -15,6 +15,7 @@ import secrets
 import shutil
 import subprocess
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -35,6 +36,9 @@ from silverquillm.runner import ContainerLifecycle
 from silverquillm.workspace import stage_workspace
 
 __all__ = ["main"]
+
+# TUI display singleton (None until a display layer is wired; patchable for tests)
+_display = None
 
 
 # ---------------------------------------------------------------------------
@@ -61,6 +65,41 @@ def _redact_cmd(cmd: list[str]) -> str:
         else:
             parts.append(token)
     return " ".join(parts)
+
+# ---------------------------------------------------------------------------
+# Runner log helper
+# ---------------------------------------------------------------------------
+
+# Module-level path set by `run`/`smoke` commands so _runner_log can append.
+_runner_log_dir: Path | None = None
+
+
+def _runner_log(msg: str, *, err: bool = False) -> None:
+    """Echo *msg* to terminal and append (with ISO-8601 prefix) to runner log files.
+
+    Parameters
+    ----------
+    msg:
+        Message to echo.
+    err:
+        If True, also write to stderr and to ``runner_errors.log``.
+    """
+    click.echo(msg, err=err)
+
+    log_dir = _runner_log_dir
+    if log_dir is None or not log_dir.exists():
+        return
+
+    ts = datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+    line = f"{ts} {msg}\n"
+
+    with open(log_dir / "runner.log", "a", encoding="utf-8") as f:
+        f.write(line)
+
+    if err:
+        with open(log_dir / "runner_errors.log", "a", encoding="utf-8") as f:
+            f.write(line)
+
 
 # ---------------------------------------------------------------------------
 # Repo root detection
@@ -167,14 +206,14 @@ def _harvest_results(
     run_dir.mkdir(parents=True, exist_ok=True)
 
     if timeout_reason:
-        click.echo(f"Timeout reason: {timeout_reason}")
+        _runner_log(f"Timeout reason: {timeout_reason}")
 
     # Per-card artifacts
     sos_dir = workspace / "cards" / "sos"
     cards_out = run_dir / "cards"
     cards_out.mkdir(parents=True, exist_ok=True)
 
-    cards_dir = _REPO_ROOT / "cards"
+    cards_dir = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards"
     specs = load_all_card_specs(cards_dir, "sos")
 
     # Normalize filter for comparison
@@ -210,7 +249,7 @@ def _harvest_results(
             shutil.copy2(tests_src, card_results / "tests.py")
 
     # Engine diff — compare repo engine against workspace engine
-    engine_repo = _REPO_ROOT / "engine"
+    engine_repo = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "engine"
     engine_ws = workspace / "engine"
     if engine_repo.exists() and engine_ws.exists():
         try:
@@ -227,14 +266,17 @@ def _harvest_results(
             pass  # diff not available
 
     # Output files — copy docker_stdout.log, docker_stderr.log, and any *.log / *.jsonl
-    # For progress.jsonl, enrich with card_name fields
-    name_map = build_card_name_map(cards_dir, "sos")
+    # NOTE: docker_stdout.log and docker_stderr.log may already be streamed directly
+    # to run_dir by _drain_pipe (see KEY_DECISIONS.md). Skip them if already present.
+    _DIRECT_STREAM_FILES = {"docker_stdout.log", "docker_stderr.log"}
     for src in output.iterdir():
         if src.is_file() and (src.suffix in (".log", ".jsonl")):
+            if src.name in _DIRECT_STREAM_FILES and (run_dir / src.name).exists():
+                continue
             if src.name == "progress.jsonl":
-                _copy_progress_with_names(src, run_dir / src.name, name_map)
-            else:
-                shutil.copy2(src, run_dir / src.name)
+                continue  # progress.jsonl is deprecated; skip it
+            dest = run_dir / src.name
+            shutil.copy2(src, dest)
 
     # Per-card status
     _write_card_statuses(workspace, run_dir, timed_out, card_filter=filter_set)
@@ -257,35 +299,6 @@ def _harvest_results(
     return run_dir
 
 
-def _copy_progress_with_names(
-    src: Path, dst: Path, name_map: dict[str, str]
-) -> None:
-    """Copy progress.jsonl, enriching each line that has card_id with card_name.
-
-    Lines that already contain card_name or aren't valid JSON are copied as-is.
-    snapshot_telemetry.jsonl is NOT processed here (stays IDs-only).
-    """
-    with open(src, "r", encoding="utf-8", errors="replace") as fin, \
-         open(dst, "w", encoding="utf-8") as fout:
-        for line in fin:
-            stripped = line.strip()
-            if not stripped:
-                fout.write(line)
-                continue
-            try:
-                entry = json.loads(stripped)
-                if isinstance(entry, dict) and "card_id" in entry and "card_name" not in entry:
-                    card_id = entry["card_id"]
-                    card_name = name_map.get(card_id, "")
-                    if card_name:
-                        entry["card_name"] = card_name
-                    fout.write(json.dumps(entry) + "\n")
-                else:
-                    fout.write(line)
-            except (json.JSONDecodeError, TypeError):
-                fout.write(line)
-
-
 def _write_card_statuses(
     workspace: Path,
     run_dir: Path,
@@ -300,7 +313,7 @@ def _write_card_statuses(
         When set, only include cards whose normalized collector numbers are in
         this set. When ``None``, include all cards from the set.
     """
-    cards_dir = _REPO_ROOT / "cards"
+    cards_dir = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards"
     specs = load_all_card_specs(cards_dir, "sos")
     name_map = build_card_name_map(cards_dir, "sos")
     statuses: dict[str, dict] = {}
@@ -361,14 +374,14 @@ def _evaluate_results(run_dir: Path, card_filter: list[str] | None = None) -> No
     from silverquillm.evaluator import evaluate, CardResult
     from dataclasses import asdict
 
-    cards_dir = _REPO_ROOT / "cards"
-    engine_dir = _REPO_ROOT / "engine"
+    cards_dir = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards"
+    engine_dir = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "engine"
     name_map = build_card_name_map(cards_dir, "sos")
 
     try:
         full_result = evaluate(run_dir, cards_dir, engine_dir)
     except Exception as exc:
-        click.echo(f"Evaluation failed: {exc}", err=True)
+        _runner_log(f"Evaluation failed: {exc}", err=True)
         return
 
     # Normalize filter for comparison
@@ -448,7 +461,7 @@ def _evaluate_results(run_dir: Path, card_filter: list[str] | None = None) -> No
         json.dumps(eval_result_data, indent=2) + "\n", encoding="utf-8"
     )
 
-    click.echo(f"Evaluation complete: {len(full_result.sos_results)} SOS cards scored")
+    _runner_log(f"Evaluation complete: {len(full_result.sos_results)} SOS cards scored")
 
 
 def _generate_run_summary(
@@ -483,7 +496,7 @@ def _generate_run_summary(
         json.dumps(summary, indent=2) + "\n", encoding="utf-8"
     )
 
-    click.echo(f"Run summary written to: {summary_path}")
+    _runner_log(f"Run summary written to: {summary_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -517,16 +530,16 @@ def main() -> None:
 )
 @click.option(
     "--hang-timeout",
-    default=1800,
+    default=900,
     type=int,
-    help="Hang timeout in seconds (default: 1800)",
+    help="Hang timeout in seconds (default: 900)",
 )
 def run(
     image: str,
     timeout: int,
     results_dir: Path | None,
     cards: str | None,
-    hang_timeout: int = 1800,
+    hang_timeout: int = 900,
 ) -> None:
     """Run the full benchmark workload in a Docker container."""
     # Parse --cards into a list of collector numbers
@@ -542,15 +555,21 @@ def run(
         results_dir = _image_results_dir(image)
 
     run_name = _make_run_name(set_code="sos", image=image, results_dir=results_dir)
-    click.echo(f"Starting run: {run_name}")
-    click.echo(f"Image: {image}")
-    click.echo(f"Timeout: {timeout}s")
+
+    # Set up runner log directory early so all messages are captured
+    global _runner_log_dir
+    _runner_log_dir = results_dir / run_name
+    _runner_log_dir.mkdir(parents=True, exist_ok=True)
+
+    _runner_log(f"Starting run: {run_name}")
+    _runner_log(f"Image: {image}")
+    _runner_log(f"Timeout: {timeout}s")
 
     # Stage workspace with all cards
     staging_dir = Path(tempfile.mkdtemp(prefix="silverquillm_run_"))
     try:
         workspace, output = stage_workspace(output_dir=staging_dir, card_filter=card_filter)
-        click.echo(f"Workspace staged at: {workspace}")
+        _runner_log(f"Workspace staged at: {workspace}")
 
         # Write run manifest (advisory timeout facts)
         manifest = {
@@ -560,12 +579,66 @@ def run(
         (workspace / "run_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
         # Build card name map for terminal display
-        card_name_map = build_card_name_map(_REPO_ROOT / "cards", "sos")
+        card_name_map = build_card_name_map(_REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards", "sos")
 
         # Run container via ContainerLifecycle
         container_name = f"sqm-{run_name}"
         run_dir = results_dir / run_name
         run_dir.mkdir(parents=True, exist_ok=True)
+
+        # TUI display object — reads module-level _display (None until wired)
+        pass  # _display is read from module-level silverquillm.cli._display
+
+        # Build snapshot callback closure
+        _snapshot_state: dict = {"index": 0, "start": time.monotonic()}
+        _snapshot_telemetry_path = run_dir / "snapshot_telemetry.jsonl"
+
+        def _snapshot_callback() -> None:
+            _snapshot_state["index"] += 1
+            idx = _snapshot_state["index"]
+            elapsed = time.monotonic() - _snapshot_state["start"]
+            # files_changed = workspace card_impl.py + engine/ files differing
+            # from the staged baseline. stage_workspace() git-inits + commits
+            # the workspace, so `git status --porcelain` reports anything the
+            # agent touched (modified-tracked + new untracked). We filter to
+            # the two file groups that meaningfully represent agent work.
+            try:
+                # --untracked-files=all expands untracked directories so each
+                # contained file is reported individually (needed to catch a
+                # new card_impl.py in a brand-new card dir).
+                status = subprocess.run(
+                    ["git", "status", "--porcelain", "-z", "--untracked-files=all"],
+                    cwd=workspace,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                paths = (
+                    [p for p in status.stdout.split("\0") if p]
+                    if status.returncode == 0
+                    else []
+                )
+                # Porcelain v1 prefixes each entry with a two-char status + space.
+                files_changed = sum(
+                    1
+                    for entry in paths
+                    for path in [entry[3:] if len(entry) > 3 else entry]
+                    if path.endswith("/card_impl.py") or path.startswith("engine/")
+                )
+            except (OSError, subprocess.SubprocessError):
+                files_changed = 0
+            record = {
+                "ts": datetime.now(tz=timezone.utc).isoformat(timespec="milliseconds"),
+                "snapshot_index": idx,
+                "files_changed": files_changed,
+                "elapsed_s": round(elapsed, 3),
+            }
+            with open(_snapshot_telemetry_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record) + "\n")
+            # Notify TUI display if available
+            if _display is not None:
+                _display.emit_snapshot(idx)
+
         lifecycle = ContainerLifecycle(
             image=image,
             container_name=container_name,
@@ -576,44 +649,48 @@ def run(
             env_args=_api_key_env_args(),
             run_dir=run_dir,
             card_name_map=card_name_map,
+            snapshot_callback=_snapshot_callback,
         )
 
-        click.echo(f"Running container: {container_name}")
+        _runner_log(f"Running container: {container_name}")
         result = lifecycle.run()
 
         if result.timeout_reason:
-            click.echo(f"Container timed out ({result.timeout_reason})", err=True)
+            _runner_log(f"Container timed out ({result.timeout_reason})", err=True)
         elif result.exit_code != 0:
-            click.echo(
+            _runner_log(
                 f"Container exited with code {result.exit_code}", err=True
             )
 
         # Harvest results
-        click.echo("Harvesting results...")
+        _runner_log("Harvesting results...")
         run_dir = _harvest_results(
             workspace, output, results_dir, run_name,
             timed_out=result.timed_out,
             timeout_reason=result.timeout_reason,
             card_filter=card_filter,
         )
-        click.echo(f"Results saved to: {run_dir}")
+        _runner_log(f"Results saved to: {run_dir}")
 
         # Evaluate and summarize
         _evaluate_results(run_dir, card_filter=card_filter)
         _generate_run_summary(run_dir, image_name=image, card_filter=card_filter)
 
-        click.echo(f"Run complete: {run_name}")
+        _runner_log(f"Run complete: {run_name}")
 
     finally:
         # Clean up staging directory
         shutil.rmtree(staging_dir, ignore_errors=True)
+        _runner_log_dir = None  # noqa: F841
 
 
 @main.command()
 @click.option("--image", required=True, help="Docker image name")
 def smoke(image: str) -> None:
     """Quick smoke test to verify a Docker image works."""
+    global _runner_log_dir
     staging_dir = Path(tempfile.mkdtemp(prefix="silverquillm_smoke_"))
+    _runner_log_dir = staging_dir
     try:
         workspace = staging_dir / "workspace"
         output = staging_dir / "output"
@@ -640,11 +717,11 @@ def smoke(image: str) -> None:
             env_args=_api_key_env_args(),
         )
 
-        click.echo(f"Smoke test: {image}")
+        _runner_log(f"Smoke test: {image}")
         result = lifecycle.run()
 
         if result.timeout_reason:
-            click.echo("FAIL: Container timed out")
+            _runner_log("FAIL: Container timed out", err=True)
             raise SystemExit(1)
 
         exit_zero = result.exit_code == 0
@@ -653,17 +730,18 @@ def smoke(image: str) -> None:
         hello_exists = (workspace / "hello.py").exists()
 
         if exit_zero and hello_exists:
-            click.echo("PASS")
+            _runner_log("PASS")
         else:
             reasons = []
             if not exit_zero:
                 reasons.append(f"exit code {result.exit_code}")
             if not hello_exists:
                 reasons.append("hello.py not found")
-            click.echo(f"FAIL: {', '.join(reasons)}")
+            _runner_log(f"FAIL: {', '.join(reasons)}", err=True)
             raise SystemExit(1)
 
     finally:
+        _runner_log_dir = None
         shutil.rmtree(staging_dir, ignore_errors=True)
 
 

@@ -1,7 +1,6 @@
 """Fast-tier (1 Hz) telemetry — lightweight signals between snapshot intervals.
 
 Monitors cheap signals without Git operations or full-workspace stat sweeps:
-- Tails /output/progress.jsonl → emits [progress] events
 - Tails /output/system.log → emits [system] events
 - Stats mtime on known card/engine paths → emits [edit] events
 
@@ -25,7 +24,6 @@ CHANNEL_FILES = {
     "stdout": "docker_stdout.log",
     "stderr": "docker_stderr.log",
     "error": "runner_errors.log",
-    "progress": "progress.jsonl",
     "edit": "fast_telemetry.jsonl",
     "system": "system.log",
 }
@@ -55,18 +53,18 @@ class FastTelemetry:
     # Internal state
     _stop_event: threading.Event = field(default_factory=threading.Event, init=False)
     _thread: threading.Thread | None = field(default=None, init=False)
-    _progress_pos: int = field(default=0, init=False)
     _system_pos: int = field(default=0, init=False)
     _mtimes: dict[str, float] = field(default_factory=dict, init=False)
+    _bootstrap_emitted: bool = field(default=False, init=False)
 
     def start(self) -> None:
         """Start the fast telemetry loop in a background thread."""
         if self._thread is not None:
             return
         self._stop_event.clear()
-        self._progress_pos = 0
         self._system_pos = 0
         self._mtimes = {}
+        self._bootstrap_emitted = False
         self._thread = threading.Thread(
             target=self._loop,
             name="fast-telemetry",
@@ -91,19 +89,11 @@ class FastTelemetry:
         """Main 1 Hz poll loop."""
         while not self._stop_event.is_set():
             try:
-                self._poll_progress()
                 self._poll_system_log()
                 self._poll_mtimes()
             except Exception:
                 pass  # Never crash the telemetry thread
             self._stop_event.wait(timeout=1.0)
-
-    def _poll_progress(self) -> None:
-        """Tail /output/progress.jsonl and emit [progress] events."""
-        progress_path = self.output_dir / "progress.jsonl"
-        new_lines = self._tail_file(progress_path, "_progress_pos")
-        for line in new_lines:
-            self._emit("progress", line)
 
     def _poll_system_log(self) -> None:
         """Tail /output/system.log and emit [system] events."""
@@ -114,6 +104,7 @@ class FastTelemetry:
 
     def _poll_mtimes(self) -> None:
         """Stat known card/engine paths and emit [edit] events on mtime changes."""
+        is_first_pass = not self._bootstrap_emitted
         paths = self._get_watched_paths()
         for p in paths:
             try:
@@ -131,6 +122,17 @@ class FastTelemetry:
                 })
                 self._emit("edit", event_data)
             self._mtimes[key] = mtime
+
+        if is_first_pass:
+            from datetime import datetime, timezone
+            bootstrap_data = json.dumps({
+                "event": "bootstrap",
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "files_seen": len(self._mtimes),
+                "poll_interval_s": 1.0,
+            })
+            self._emit("edit", bootstrap_data)
+            self._bootstrap_emitted = True
 
     def _get_watched_paths(self) -> list[Path]:
         """Return the small set of paths to stat for edit detection."""

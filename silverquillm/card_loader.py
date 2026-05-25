@@ -10,7 +10,7 @@ Public API (legacy dict-based):
 - ``filter_by_prototype`` — filter specs to those listed in a prototype file.
 
 Public API (unified card layout):
-- ``load_card_spec`` — load one card spec JSON from cards/{set}/{collector}/.
+- ``load_card_spec`` — load one card spec JSON from benchmarks/sos/workspace/cards/{set}/{collector}/.
 - ``load_all_card_specs`` — load all card specs for a set, sorted by collector number.
 - ``load_card_impl`` — return path to card_impl.py for a given card.
 - ``is_template`` — check if a card_impl.py is an empty template.

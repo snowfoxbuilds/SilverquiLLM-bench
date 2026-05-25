@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DOC_PATH = REPO_ROOT / "docs" / "test_utils.md"
+DOC_PATH = REPO_ROOT / "benchmarks" / "sos" / "workspace" / "tests" / "test_utils.md"
 
 PUBLIC_FUNCTIONS = [
     "create_game",

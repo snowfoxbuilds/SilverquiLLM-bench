@@ -83,14 +83,12 @@ The runner also collects telemetry and debugging artifacts:
 
 - `docker_stdout.log` — host-captured Docker stdout
 - `docker_stderr.log` — host-captured Docker stderr
-- optional `/output/progress.jsonl`
 - optional `/output/system.log`
 - optional `/output/agent_stdout.log`
 - optional `/output/agent_stderr.log`
 - optional `/output/exit_code`
 `/output/` is an observability channel only. It pipes agent and process output out of the container for extra telemetry and debugging. It is not part of the official evaluation state.
 
-The Progress Log is recommended but not required. Entrypoints and agents may write `progress.jsonl` for live monitoring, but the runner must tolerate missing or malformed progress events.
 
 During container execution, the runner captures periodic Output Snapshots, approximately once per minute. A snapshot records the current Workspace state only. Snapshots provide concrete progress measurement and allow recovery from final Workspace corruption, including scrambled engine code after timeout or interruption.
 
@@ -166,7 +164,7 @@ Per-card result after evaluation:
 
 Status values:
 
-- `completed` — `card_impl.py` differs from template and `progress.jsonl` contains `card_completed` for the card, or the run ended cleanly and the implementation is changed.
+- `completed` — `card_impl.py` differs from template and the run ended cleanly.
 - `partial` — `card_impl.py` differs from template but the run timed out before a completion signal. Partial cards may still be evaluated if importable.
 - `no_output` — template unchanged in a non-timeout run.
 - `timeout_no_output` — template unchanged when the run timed out.
@@ -182,7 +180,6 @@ docker/<image-dir>/results/<set_code>-<timestamp>/
 ├── engine_diff.patch           # Engine diff from workspace_final/engine vs baseline
 ├── run_manifest.json           # Copy of workspace_final/run_manifest.json
 ├── run_summary.json            # Aggregate stats and run metadata
-├── progress.jsonl              # Optional copy from /output/, if present
 └── cards/                      # Optional derived convenience artifacts only
     └── 001/
         ├── card_impl.py
@@ -233,7 +230,7 @@ The runner tracks per-run metrics (not per-card, since the agent manages its own
 
 - **Total tokens**: input, output (if reported by agent via progress log)
 - **Wall-clock time**: total run duration
-- **Per-card estimates**: approximated from `progress.jsonl` timestamps if available
+- **Per-card estimates**: approximated from snapshot telemetry timestamps if available
 ## Decisions
 
 - **Docker image is the full config**: No `config.yaml`, no `MODE`/`STRATEGY` env vars. The image bakes in agent CLI, mode, strategy, model selection, and prompt. Runner only passes workspace, output dir, timeout, and API keys. [UPDATED]
@@ -248,7 +245,7 @@ The runner tracks per-run metrics (not per-card, since the agent manages its own
 - **Automatic run summary**: `run_summary.json` generated after evaluation by reading per-card `result.json` files. Idempotent and deterministic. [SETTLED]
 - **Two benchmark modes**: Blind (impl only) and tested (impl + tests). Baked into separate Docker images. Compare modes across separate runs. [UPDATED]
 - **Run Manifest is advisory**: The runner writes `/workspace/run_manifest.json` immediately before container launch with only `timeout_seconds` and `deadline_utc`. The runner remains the hard timeout authority. Containers may use the manifest for pacing, but it is not agent configuration. [SETTLED]
-- **Progress Log is optional**: `progress.jsonl` is recommended for live monitoring and status refinement, but entrypoints are not required to produce it. Missing or malformed progress logs must not break harvest or evaluation. [SETTLED]
+- **Progress Log removed**: `progress.jsonl` has been removed from the design. Status derivation uses workspace diffing and snapshot telemetry only. [SETTLED]
 - **Runner-owned Output Snapshots**: The runner captures periodic Workspace-only snapshots during execution, approximately once per minute, as host-side Git commits outside the container. Snapshots measure concrete progress, drive telemetry about modified cards, and provide fallback if final engine state is corrupted. [SETTLED]
 - **Snapshot fallback uses entire Workspace**: If final engine state is corrupted, the runner may select an earlier snapshot commit as the official evaluation Workspace. The fallback uses the entire snapshot Workspace, not just `engine/`, to preserve a coherent agent-produced state. [SETTLED]
 - **Snapshot fallback viability uses Engine Regression only**: When walking backward through snapshot commits, the runner selects the latest whole-Workspace snapshot whose engine is runnable and passes `tests/engine/`. FDN Card Regression and SOS Card Correctness are not fallback selection gates. [SETTLED]
@@ -259,7 +256,7 @@ The runner tracks per-run metrics (not per-card, since the agent manages its own
 - **Snapshot telemetry distinguishes activity from coverage**: `changed_card_impls` means changed since the previous snapshot. `completed_like_card_impls` means the implementation differs from the original template. Track both so telemetry can show minute-by-minute activity and rough implementation coverage. [SETTLED]
 - **Snapshot telemetry does not parse code**: Telemetry is filesystem-based only. `completed_like_card_impls` counts non-template implementations even if they contain syntax, import, or logic errors. Correctness belongs to evaluation, not telemetry. [SETTLED]
 - **Engine telemetry includes capped paths and counts**: Snapshot telemetry records changed engine file paths plus counts. Path lists are capped (for example, first 50 paths) with a truncation flag so telemetry remains lightweight even if an agent rewrites many files. [SETTLED]
-- **`snapshot_telemetry.jsonl`**** uses card IDs only**: The high-cadence snapshot telemetry file records card directory IDs, not card names, to keep events lean. Slow-cadence per-card artifacts (`progress.jsonl`, `status.json`, `result.json`) include `card_name` alongside `card_id` for human-readable triage. The live `[snapshot]` terminal channel resolves names from `card_spec.json` at print time. [SETTLED]
+- **`snapshot_telemetry.jsonl`**** uses card IDs only**: The high-cadence snapshot telemetry file records card directory IDs, not card names, to keep events lean. Slow-cadence per-card artifacts (`status.json`, `result.json`) include `card_name` alongside `card_id` for human-readable triage. The live `[snapshot]` terminal channel resolves names from `card_spec.json` at print time. [SETTLED]
 - **Test telemetry is tracked separately**: Snapshot telemetry records changed card test files separately from changed card implementations, using card IDs only. This shows whether Tested Mode agents are actually writing tests while staying lightweight. [SETTLED]
 - **Snapshot fallback triggers on failed or hung engine tests**: Final engine viability fallback runs when `tests/engine/` fails, errors on import, times out, hangs, or cannot start due to corrupted files. Snapshot selection walks backward until `tests/engine/` completes and passes within the normal engine-test timeout. [SETTLED]
 - **No viable snapshot means no viable output**: If final engine state is unusable and no prior snapshot passes Engine Regression, mark the run `no_viable_output_produced`. This means the agent broke the engine before producing a viable snapshot, so SOS and FDN correctness are not evaluated. [SETTLED]
@@ -270,7 +267,7 @@ The runner tracks per-run metrics (not per-card, since the agent manages its own
 - **Workspace card structure is invariant**: The runner assumes agents preserve the staged card directory contract: `cards/{set}/{card_id}/card_spec.json`, `card_impl.py`, and optional `tests.py`. If an agent moves, renames, or restructures card directories, evaluation is allowed to fail or mark affected cards as no output; legacy per-card artifacts do not attempt to rescue a broken card structure. [SETTLED]
 - **Evaluation reads from ****`workspace_final/`**: The official evaluation input is `docker/<image-dir>/results/<run_name>/workspace_final/`, assuming the Workspace card structure is preserved. Legacy per-run `cards/{card_id}/` artifacts are optional derived convenience outputs only, not a recovery path for restructured Workspaces. [SETTLED]
 - **`/output/`**** is observability only**: The Output Directory pipes agent and process output out of the container for extra telemetry and debugging. No evaluatable state should depend on `/output/`; official evaluation reads from `workspace_final/`. [SETTLED]
-- **`/output/`**** has no required files**: Because the Output Directory is telemetry-only, the runner must tolerate it being empty. Files like `progress.jsonl`, `system.log`, `agent_stdout.log`, `agent_stderr.log`, and `exit_code` are optional conventions, not evaluation requirements. [SETTLED]
+- **`/output/`**** has no required files**: Because the Output Directory is telemetry-only, the runner must tolerate it being empty. Files like `system.log`, `agent_stdout.log`, `agent_stderr.log`, and `exit_code` are optional conventions, not evaluation requirements. [SETTLED]
 - **Runner captures Docker stdout/stderr**: Independently of optional `/output/` files, the runner captures Docker process stdout and stderr at the host level and saves them as debugging logs such as `docker_stdout.log` and `docker_stderr.log`. These logs are telemetry-only and not evaluatable state. [SETTLED]
 - **Docker logs stream live and save**: The runner streams Docker stdout/stderr live to the terminal while also saving them as `docker_stdout.log` and `docker_stderr.log` in run results. This supports long-run monitoring and post-run debugging without container cooperation. [SETTLED]
 - **Live logs are labeled and colorized**: The runner prefixes live Docker stdout/stderr lines with stream labels and colors different output types for readability. Saved log files remain split by stream and do not require ANSI color codes. [SETTLED]
@@ -279,7 +276,7 @@ The runner tracks per-run metrics (not per-card, since the agent manages its own
 - **Runner uses pipe-readers + poll-loop architecture**: Two dedicated threads drain Docker stdout/stderr pipes to host files. The main thread polls all files (Docker log dumps, `/output/` files) on a ~1s interval for colorized terminal output, checks timeouts, and runs snapshots. This avoids pipe buffer deadlock while keeping the main loop single-threaded and simple. [SETTLED]
 - **Timeout is clock-based, not proc.wait-based**: The main thread checks `time.monotonic()` against the deadline each poll iteration, rather than using `proc.wait(timeout)`. This decouples timeout from the Popen API and enables future pause/resume via `docker pause`/`docker unpause`. [SETTLED]
 - **Two timeout types: Hard Timeout + Hang Timeout**: Hard Timeout (`--timeout`) is the overall run time limit. Hang Timeout (`--hang-timeout`, default 900s) triggers when no monitored file has been modified for the configured period. Either timeout causes `docker stop -t 10`. `run_summary.json` records `timeout_reason`. [SETTLED]
-- **Hang Timeout resets on any monitored file activity**: The hang clock resets on any file modification across all monitored sources (Docker stdout/stderr dumps, `/output/system.log`, `/output/progress.jsonl`, `/output/agent_stdout.log`, `/output/agent_stderr.log`). This catches true agent death without false-positiving on long thinking pauses. [SETTLED]
+- **Hang Timeout resets on any monitored file activity**: The hang clock resets on any file modification across all monitored sources (Docker stdout/stderr dumps, `/output/system.log`, `/output/agent_stdout.log`, `/output/agent_stderr.log`). This catches true agent death without false-positiving on long thinking pauses. [SETTLED]
 - **Cards and engine paths are repo-relative constants**: Source directories (`./cards`, `./engine`) are hardcoded repo-relative paths. No `--cards-dir` or `--engine-dir` CLI flags. [SETTLED]
 - **User Prompt is runner-written**: The runner writes `/workspace/prompt.md` (the User Prompt) at staging time. System Prompts are baked into the Docker image's entrypoint. The runner adjusts the User Prompt for filtered runs. [SETTLED]
 - **FDN and SOS share the same card directory contract**: FDN examples and SOS targets use the same `cards/{set}/{card_id}/card_spec.json` + `card_impl.py` structure. FDN implementations are filled reference code; SOS implementations start as templates. [SETTLED]

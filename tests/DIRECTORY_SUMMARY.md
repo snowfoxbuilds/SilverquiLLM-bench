@@ -81,8 +81,18 @@ Test root directory for the SilverquiLLM-bench project. Contains top-level test 
 | `test_card_filter.py` | **Card filter tests** — `--cards` CLI option parsing, collector-number normalization, workspace filtering. |
 | `test_cli_docker.py` | **CLI Docker tests** — CLI flags, ContainerLifecycle mocking, docker args, harvest, smoke command, and per-image results path tests (`_image_dir`, `_image_results_dir`). |
 | `test_cli_lifecycle_integration.py` | **CLI lifecycle integration tests** — End-to-end tests for ContainerLifecycle integration into CLI run/smoke commands. |
-| `test_docker_entrypoints.py` | **Docker entrypoint tests** — Validates entrypoint.mjs files have system.log, agent_stdout.log, SIGTERM handler, no engine_work copy. |
+| `test_docker_entrypoints.py` | **Docker entrypoint tests** — Validates entrypoint.mjs files have system.log, agent_stdout.log, SIGTERM handler, no engine_work copy, no progress.jsonl writes. |
 | `test_runner.py` | **Container lifecycle tests** — Poll-loop ordering, final read pass, timeout enforcement, snapshot callbacks for `ContainerLifecycle`. |
+| `test_docker_direct_stream.py` | **Direct stream tests** — Tests for `_drain_pipe` direct streaming to run_dir and `_harvest_results` skip logic for already-present docker logs. |
+| `test_snapshot_callback.py` | **Snapshot callback tests** — `snapshot_telemetry.jsonl` writing and callback wiring verification. |
+| `test_cli_lifecycle_integration.py` | **CLI lifecycle integration tests** — End-to-end tests for ContainerLifecycle integration into CLI run/smoke commands (hang-timeout, harvest, lifecycle usage). |
+| `test_runner_log.py` | **Runner log tests** — `_runner_log()` helper ISO-8601 timestamped file logging. |
+| `test_telemetry.py` | **Telemetry tests** — FastTelemetry channel polling, callback invocation, system channel usage. |
+| `test_telemetry_bootstrap.py` | **Telemetry bootstrap tests** — Bootstrap line emission on first `_poll_mtimes` pass. |
+| `test_channel_visibility.py` | **Channel visibility tests** — 7-channel count, visibility polling for structurally-empty channels. |
+| `test_logs_viewer.py` | **Log viewer tests** — Viewer tab rendering, channel visibility, event loop polling. |
+| `test_progress_removal.py` | **Progress removal tests** — Verifies progress.jsonl is absent from telemetry, runner, and viewer. |
+| `test_workspace_structure.py` | **Workspace structure tests** — CI-time structure assertion for `benchmarks/sos/workspace/`. |
 | `test_smoke_lifecycle.py` | **Integration smoke test** — Container lifecycle smoke test using PID-tagged alpine image with teardown cleanup (skipped by default, requires `--run-integration`). |
 | `test_pytest_infra.py` | **Pytest infrastructure tests** — Integration marker registration, pytest-timeout configuration. |
 | `test_workspace.py` | **Workspace staging tests** — `stage_workspace` signature, workspace structure, card filtering, prompt generation. |
@@ -92,7 +102,8 @@ Test root directory for the SilverquiLLM-bench project. Contains top-level test 
 - **`engine/`** — Unit tests for all engine modules. See `tests/engine/DIRECTORY_SUMMARY.md`.
 - **`cards/`** — Unit tests for card implementations (25 test files). See `tests/cards/DIRECTORY_SUMMARY.md`.
 - **`benchmark/`** — Integration tests and helpers. See `tests/benchmark/DIRECTORY_SUMMARY.md`.
-- **`audited/`** — Per-card audited test directories. Contains `fdn/` (286 FDN card test dirs, 174 with new/upgraded implementations from Items 1–15) and `sos/` (346 SOS Draft Set card test dirs with SOA/SPG subsets). Each card has a numbered directory with `tests.py`. Conftest files inject `card_impl` fixtures via `CardRegistry` class-name mapping.
+- **`integration/`** — Integration tests for workspace staging (`test_stage_workspace.py`).
+- **`audited/`** — **Relocated to `benchmarks/sos/data/tests/audited/`**. Per-card audited test directories (fdn/ and sos/).
 
 ## Testing Approach
 

@@ -215,7 +215,7 @@ def run_tests(
     ----------
     engine_dir:
         Optional path to an engine directory.  When provided it is prepended
-        to ``PYTHONPATH`` so that ``import engine`` resolves to this directory's
+        to ``PYTHONPATH`` so that ``import benchmarks.sos.workspace.engine as engine`` resolves to this directory's
         parent (i.e. the run-level engine state rather than the repo default).
 
     Returns ``(passed, failed, total, error_messages)``.
@@ -233,12 +233,12 @@ def run_tests(
                 shutil.copy2(impl_path, tmp / alias)
 
         # Copy test_utils.py so flat imports (from test_utils import ...) work
-        test_utils_src = _REPO_ROOT / "tests" / "test_utils.py"
+        test_utils_src = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "tests" / "test_utils.py"
         if test_utils_src.exists():
             shutil.copy2(test_utils_src, tmp / "test_utils.py")
 
         # Copy tests as test_card.py to avoid shadowing the tests/ package.
-        # The agent may write `from tests.test_utils import ...` which fails
+        # The agent may write `from benchmarks.sos.workspace.tests.test_utils import ...` which fails
         # if a local file named tests.py exists (Python resolves it as the
         # local module instead of the repo's tests/ package).
         shutil.copy2(tests_path, tmp / "test_card.py")
@@ -251,7 +251,7 @@ def run_tests(
         parts = [str(tmp)]
         if engine_dir is not None:
             # engine_dir is e.g. run_dir/engine; its parent must be on
-            # PYTHONPATH so ``import engine`` resolves to the run-level copy.
+            # PYTHONPATH so ``import benchmarks.sos.workspace.engine as engine`` resolves to the run-level copy.
             parts.append(str(Path(engine_dir).parent))
         parts.append(str(_REPO_ROOT))
         if existing:
@@ -619,7 +619,7 @@ def _prepare_engine_work(
     """Prepare the agent's engine directory for evaluation.
 
     Always returns a path named ``engine/`` inside a staging directory so
-    that putting ``path.parent`` on ``PYTHONPATH`` makes ``import engine``
+    that putting ``path.parent`` on ``PYTHONPATH`` makes ``import benchmarks.sos.workspace.engine as engine``
     resolve correctly.
 
     If ``run_dir/engine_work/`` exists, copy it into a staging temp dir as
@@ -638,7 +638,7 @@ def _prepare_engine_work(
     engine_work = run_dir / "engine_work"
     if engine_work.is_dir():
         # Copy engine_work into a staging dir named "engine/" so that
-        # PYTHONPATH=staging_dir makes ``import engine`` work.
+        # PYTHONPATH=staging_dir makes ``import benchmarks.sos.workspace.engine as engine`` work.
         staging = Path(tempfile.mkdtemp(prefix="eval_engine_"))
         shutil.copytree(engine_work, staging / "engine")
         return staging / "engine", staging
@@ -920,8 +920,8 @@ def evaluate(
     engine_work, staging_dir = _prepare_engine_work(run_dir, engine_dir)
 
     # Audited test directories
-    audited_sos = _REPO_ROOT / "tests" / "audited" / "sos"
-    audited_fdn = _REPO_ROOT / "tests" / "audited" / "fdn"
+    audited_sos = _REPO_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos"
+    audited_fdn = _REPO_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn"
     engine_tests = _REPO_ROOT / "tests" / "engine"
 
     result = FullEvalResult()
