@@ -166,3 +166,9 @@ Tests
 tests/test_logs_viewer.py — existing viewer tests (all 33 pass, no regressions)
 Implementation
 silverquillm/logs_viewer.py — added _ever_visible set, visible_channels property, _poll_channel_visibility() method, 2s discovery poll in event loop, tab bar filters by visibility
+
+Item 15: Emit bootstrap line on first FastTelemetry._poll_mtimes pass
+Tests
+tests/test_telemetry.py — updated test_no_edit_event_without_mtime_change to filter bootstrap events
+Implementation
+silverquillm/telemetry.py — added _bootstrap_emitted flag and bootstrap JSON emission on first _poll_mtimes pass

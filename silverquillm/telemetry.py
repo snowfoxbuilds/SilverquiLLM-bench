@@ -58,6 +58,7 @@ class FastTelemetry:
     _progress_pos: int = field(default=0, init=False)
     _system_pos: int = field(default=0, init=False)
     _mtimes: dict[str, float] = field(default_factory=dict, init=False)
+    _bootstrap_emitted: bool = field(default=False, init=False)
 
     def start(self) -> None:
         """Start the fast telemetry loop in a background thread."""
@@ -67,6 +68,7 @@ class FastTelemetry:
         self._progress_pos = 0
         self._system_pos = 0
         self._mtimes = {}
+        self._bootstrap_emitted = False
         self._thread = threading.Thread(
             target=self._loop,
             name="fast-telemetry",
@@ -114,6 +116,7 @@ class FastTelemetry:
 
     def _poll_mtimes(self) -> None:
         """Stat known card/engine paths and emit [edit] events on mtime changes."""
+        is_first_pass = not self._bootstrap_emitted
         paths = self._get_watched_paths()
         for p in paths:
             try:
@@ -131,6 +134,17 @@ class FastTelemetry:
                 })
                 self._emit("edit", event_data)
             self._mtimes[key] = mtime
+
+        if is_first_pass:
+            from datetime import datetime, timezone
+            bootstrap_data = json.dumps({
+                "event": "bootstrap",
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "files_seen": len(self._mtimes),
+                "poll_interval_s": 1.0,
+            })
+            self._emit("edit", bootstrap_data)
+            self._bootstrap_emitted = True
 
     def _get_watched_paths(self) -> list[Path]:
         """Return the small set of paths to stat for edit detection."""

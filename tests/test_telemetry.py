@@ -247,9 +247,14 @@ class TestMtimeEditDetection:
         ft.stop()
 
         out_file = run_dir / "fast_telemetry.jsonl"
-        # File either doesn't exist or is empty (no edits detected)
+        # File may contain the bootstrap event but no edit events
         if out_file.exists():
-            assert out_file.read_text().strip() == ""
+            lines = [l for l in out_file.read_text().strip().split("\n") if l]
+            edit_events = [
+                json.loads(l) for l in lines
+                if json.loads(l).get("type") == "edit"
+            ]
+            assert len(edit_events) == 0
 
 
 # ---------------------------------------------------------------------------
