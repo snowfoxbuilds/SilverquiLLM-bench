@@ -1,14 +1,11 @@
 """Pytest bootstrap for the repo-level tests/ suite.
 
-Adds the SOS workspace dir to ``sys.path`` so tests can use the same flat
-imports (``from engine.X import …``, ``from cards.X import …``) that the
-agent and the workspace's own pytest see.
+Puts the SOS workspace dir on ``sys.path`` so tests can use the same flat
+imports (``from engine.X import …``, ``from cards.X import …``,
+``from test_utils import …``) that the agent and the workspace's own pytest see.
 """
 from __future__ import annotations
 
-import sys
-from pathlib import Path
+from silverquillm._bootstrap import ensure_workspace_on_path
 
-_WORKSPACE = Path(__file__).resolve().parent.parent / "benchmarks" / "sos" / "workspace"
-if str(_WORKSPACE) not in sys.path:
-    sys.path.insert(0, str(_WORKSPACE))
+ensure_workspace_on_path()

@@ -16,7 +16,11 @@ import re
 from pathlib import Path
 from typing import Any
 
-from cards.registry import CardMetadata
+from silverquillm._bootstrap import ensure_workspace_on_path
+
+ensure_workspace_on_path()
+
+from cards.registry import CardMetadata  # noqa: E402
 
 __all__ = ["generate_card_spec", "generate_all_specs", "card_name_to_class_name"]
 
