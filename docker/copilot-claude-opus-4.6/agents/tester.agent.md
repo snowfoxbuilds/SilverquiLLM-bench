@@ -1,6 +1,7 @@
 ---
 name: Tester
 description: Writes tests for a card cycle before implementation (TDD red phase).
+model: Claude Opus 4.6 (copilot)
 tools: ['edit', 'execute', 'search', 'read']
 user-invocable: false
 ---

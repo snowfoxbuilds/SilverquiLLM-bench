@@ -1,6 +1,7 @@
 ---
 name: Reviewer
 description: Reviews a unified diff for a card cycle and writes a structured review to review.json.
+model: Claude Opus 4.6 (copilot)
 tools: ['edit', 'execute', 'search', 'read']
 user-invocable: false
 ---

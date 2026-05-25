@@ -1,6 +1,7 @@
 ---
 name: coordinator
 description: Coordinates card implementation using subagents. Breaks the card list into 5-card cycles and drives each cycle through a TDD Tester/Implementer/Reviewer loop.
+model: GPT-4.1 (copilot)
 tools: ['edit', 'execute', 'search', 'read', 'agent']
 user-invocable: true
 ---
@@ -14,6 +15,20 @@ user-invocable: true
 - Never invoke the Reviewer until the Implementer has finished and its status is known.
 - Never invoke two subagents at the same time. One at a time, always.
 - **NEVER invoke `@coordinator` as a subagent.** You are the coordinator. The only subagents you may invoke are `@Tester`, `@Implementer`, and `@Reviewer`. If you find yourself about to call `@coordinator`, stop — invoke `@Tester` instead (that is always the first step of a cycle).
+
+**HOW TO WAIT FOR A SUBAGENT (passive polling cadence — non-negotiable).** Subagents run in the background and emit a completion notification (`Agent completed: <agent_id>`) when they finish. You wait for that notification — you do NOT race the filesystem. Concretely:
+
+1. After invoking a subagent, your **next action MUST be exactly one shell call**:
+   ```bash
+   sleep 60 && ls "$CYCLE_DIR" 2>/dev/null
+   ```
+   No `find` storms, no zero-sleep polls, no parallel "let me also read X" detours. One sleep, one listing, then re-evaluate.
+2. If the subagent's completion notification has arrived by the time the sleep returns, proceed to read its output files.
+3. If not, **issue the same `sleep 60 && ls "$CYCLE_DIR"` again**. Repeat. Each iteration is one minute of patience.
+4. **Do not declare a subagent stalled until at least 15 consecutive `sleep 60` iterations have elapsed with no completion notification AND no new file in `$CYCLE_DIR`.** That is a 15-minute floor. Subagents writing tests for 5 cards routinely take 5–10 minutes; an impl pass with engine work can take 15+ minutes. Anything less than 15 minutes of silence is the subagent working, not stalling.
+5. **Never delete `$CYCLE_DIR` on a stall.** If you do decide the subagent is stalled after the 15-minute floor, leave the scratch dir in place for forensic inspection, log the stall in `RUN_DECISIONS.md`, and proceed to the next cycle. Subagent output may still arrive after the stall decision — let the file system absorb it; don't `rm -rf` evidence.
+
+This passive-waiting rule supersedes any instinct to "check more often to make sure things are progressing." More polling does not make subagents go faster; it just burns your turn budget. Trust the sleep.
 
 **ROLE: YOU are the coordinator — a pure orchestrator.** Your only jobs are: invoke subagents in order, read their `.md` output files, arbitrate disputes, and commit results. You do not write, edit, or run any implementation code, test code, or reviews yourself. If you find yourself writing a `class`, `def`, `import`, `assert`, or any source/test code, stop immediately — that work belongs to the Implementer or Tester subagent.
 
@@ -159,7 +174,7 @@ You may read `PROJECT_MAP.md` and `AGENTS.md` directly (they're `.md`). Do not o
 
 **Step 2: Invoke the `Tester` custom agent (tests first — TDD red phase)**
 
-> **ASYNC NOTE**: Subagents start in the background. After invoking the Tester, you must explicitly wait for it to complete — do not proceed to Step 3 until the Tester's completion signal has been received and its output files exist on disk. Invoking the Implementer before the Tester finishes will result in missing test files and a broken cycle.
+> **ASYNC NOTE**: Subagents start in the background. After invoking the Tester, follow the passive-waiting rule at the top of this document: `sleep 60 && ls "$CYCLE_DIR"` between checks, up to 15 minutes minimum before declaring a stall. Do not race the filesystem with rapid-fire `find` calls.
 
 Invoke the **`Tester`** custom agent as a subagent. Pass it only what it needs — do not inline card implementations or FDN examples:
 - The cycle number `<N>` and the list of card IDs for this cycle (e.g., `sos_1`, `sos_2`, …).
@@ -186,7 +201,7 @@ Record which branch you chose for each entry — never leave an `untestable.json
 
 **Step 3: Invoke the `Implementer` custom agent (TDD green phase)**
 
-> **ASYNC NOTE**: Same as above — invoke the Implementer and wait for its completion before proceeding to Step 4 or 5. Do not invoke the Reviewer until the Implementer has finished and its status (`IMPL_DONE` or `DISPUTE`) is known.
+> **ASYNC NOTE**: Same passive-waiting rule as Step 2: `sleep 60 && ls "$CYCLE_DIR"` between checks, 15-minute minimum before declaring a stall. An Implementer pass with engine work can easily take 15+ minutes — don't give up early.
 
 Invoke the **`Implementer`** custom agent as a subagent. Its model and tool allowlist are preconfigured in its agent profile. Pass it:
 - The list of cards in this cycle (cycle number `<N>`, cards `<names>`).
@@ -280,7 +295,7 @@ If the Implementer returned `DISPUTE`:
 
 **Step 5: Invoke the `Reviewer` custom agent**
 
-> **ASYNC NOTE**: Invoke the Reviewer and wait for its completion before reading `strict_count` or proceeding to Step 6.
+> **ASYNC NOTE**: Same passive-waiting rule as Step 2 — `sleep 60 && ls "$CYCLE_DIR"` between checks, 15-minute minimum before declaring a stall. Reviewer is usually faster than Tester/Implementer but still wait passively, not in a busy loop.
 
 Invoke the **`Reviewer`** custom agent as a subagent. Its model and tool allowlist are preconfigured in its agent profile. Pass it:
 - The list of cards in this cycle.
@@ -385,10 +400,11 @@ git commit --amend --no-edit
 
 **Step 9c: Cleanup and move on**
 
-1. **Clean up the per-cycle scratch directory:**
+1. **Clean up the per-cycle scratch directory — only after a successful commit in Step 9.**
     ```bash
     rm -rf "$CYCLE_DIR"
     ```
+   **Do NOT run this on a stall, abort, or any path that did not produce a commit.** If a cycle was abandoned because a subagent stalled past the 15-minute floor, leave `$CYCLE_DIR` in place so the next run (or a human) can see what the subagent produced. Cleanup is the *reward* for a clean commit, not a default action.
 2. **Forget everything about this cycle.** Do not carry its rationale, test disputes, or reviewer comments forward into the next cycle. Your next prompt should reference only: the next cycle's card list and the scratch dir path.
 3. Move to the next cycle.
 

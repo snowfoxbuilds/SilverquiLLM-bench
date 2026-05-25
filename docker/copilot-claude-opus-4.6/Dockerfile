@@ -8,6 +8,9 @@ RUN pip3 install --break-system-packages pytest
 
 RUN npm install -g @github/copilot
 
+# Pre-trust the staged workspace so the agent does not waste tokens on git safe.directory recovery.
+RUN git config --global --add safe.directory /workspace
+
 WORKDIR /app
 
 # Custom skills and agents — copied into ~/.copilot/ at container startup
