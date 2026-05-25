@@ -1,6 +1,6 @@
 ---
 name: coordinator
-description: Coordinates card implementation using subagents. Breaks the card list into 10-card cycles and drives each cycle through a TDD Tester/Implementer/Reviewer loop.
+description: Coordinates card implementation using subagents. Breaks the card list into 5-card cycles and drives each cycle through a TDD Tester/Implementer/Reviewer loop.
 tools: ['edit', 'execute', 'search', 'read', 'agent']
 user-invocable: true
 ---
@@ -75,7 +75,7 @@ mkdir -p "$SCRATCH"
 **Read project context**
 - Read `PROJECT_MAP.md` if present (it's `.md`, so this is allowed).
 - Read the card list from the user prompt. These are the cards to implement.
-- Group the cards into **cycles of 10** (e.g., cycle 1 = cards 1–10, cycle 2 = cards 11–20, etc.). Each cycle is one unit of work for the loop. The final cycle may have fewer than 10 cards.
+- Group the cards into **cycles of 5** (e.g., cycle 1 = cards 1–5, cycle 2 = cards 6–10, etc.). Each cycle is one unit of work for the loop. The final cycle may have fewer than 5 cards. (The 05-24 run used 10-card cycles and the Implementer drifted across cards / into engine territory; 5 keeps each loop bounded.)
 - If the prompt contains no cards, create a `KEY_DECISIONS.md` entry noting this and exit gracefully.
 - **Stop here.** Do not read FDN examples, card stub files, engine source, or any `.py` file. Proceed directly to git init and tracking file setup below.
 
@@ -169,6 +169,18 @@ Invoke the **`Tester`** custom agent as a subagent. Pass it only what it needs �
 - **Instruction: Write pytest tests for each card using the card's spec file. Tests should fail before implementation (TDD red phase). Follow the existing test file conventions exactly. Write output to `$ITEM_DIR/test-rationale.md` and `$ITEM_DIR/test-files.txt`. Return only a short status summary.**
 
 **After invoking the Tester: wait. Do not invoke the Implementer yet.** Confirm the Tester has finished by checking that `$ITEM_DIR/test-files.txt` exists. If the Tester fails or exceeds limits, log it in `RUN_DECISIONS.md` and skip to the next cycle.
+
+**Step 2b: Handle Tester's `untestable` items (if any)**
+
+If the Tester's return summary includes `untestable_count: <N>` with `N > 0`, the Tester wrote partial coverage and recorded the uncovered requirements in `$ITEM_DIR/untestable.md`. **Never silently move on.** Read `untestable.md` (it's `.md`, allowed) and for each entry decide one of three branches:
+
+- **(a) Hand back to the Implementer with the specific gap.** Choose this when "what would unblock it" is something the Implementer can build (a new engine helper, a new fixture, an exposed property). Write `$ITEM_DIR/coordinator-directives.md` naming the specific requirement and what to add. Proceed to Step 3 with the Implementer instructed to build the missing surface as part of its work. Then re-invoke the `Tester` (back to Step 2) once with the same `$ITEM_DIR` so it can extend `test-files.txt` to cover the now-testable requirement, and continue from Step 3 again. Max one re-invocation per cycle — if the gap persists after the Implementer's second pass, fall through to branch (b) or (c).
+
+- **(b) Accept the partial coverage and commit with a `# UNVERIFIED:` marker.** Choose this when the requirement is genuinely outside this run's scope (the spec is wrong, the dependency lives in a different TODO item, building the test apparatus is its own multi-cycle project). Add `# UNVERIFIED: <requirement> — <reason>` as a top-of-file comment in the relevant `card_impl.py` (or equivalent) so the gap is grep-able in the diff. Log the acceptance in `RUN_DECISIONS.md`.
+
+- **(c) Escalate to the harness log with a structured refusal record.** Choose this when neither (a) nor (b) is safe — the requirement is load-bearing for the cycle's correctness but you cannot specify the unblock yourself. Append a `## Untestable escalation: Cycle <N> — <card names>` section to `RUN_DECISIONS.md` with the verbatim `untestable.md` entry, your reasoning for escalating rather than (a)/(b), and what a human reviewer should decide. Then proceed to Step 3 with the cycle's testable subset only.
+
+Record which branch you chose for each entry — never leave an `untestable.md` entry unresolved when entering Step 3.
 
 **Step 3: Invoke the `Implementer` custom agent (TDD green phase)**
 

@@ -52,6 +52,12 @@ discovery of both patterns.
 - **May**: Modify the bodies of existing functions in `engine/`.
 - **Must NOT**: Rename, move, or delete anything existing in `engine/`.
 
+## Rules questions → grep RULEBOOK.txt
+
+`RULEBOOK.txt` (workspace root) is the Magic: The Gathering Comprehensive Rules — the authoritative source for any rules question. **Whenever you're unsure how a mechanic works (keyword behavior, timing, replacement vs trigger ordering, state-based actions, etc.), check the rulebook before guessing in a `card_impl.py` or an `engine/` change.**
+
+The file is large — don't `cat` or `Read` it whole. See the workspace skill at [`skills/grep-rulebook/SKILL.md`](skills/grep-rulebook/SKILL.md) for grep recipes, the file's structure (numbered rules + glossary), and best practices.
+
 ## Tools
 
 Git is available. The workspace is initialized as a git repository at stage time.
