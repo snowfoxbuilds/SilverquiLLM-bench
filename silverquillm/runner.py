@@ -73,7 +73,6 @@ class ContainerLifecycle:
 
         # Monitored files (written by the container inside /output)
         self._system_log_path = self.output / "system.log"
-        self._progress_path = self.output / "progress.jsonl"
 
         # File positions for incremental reads
         self._file_positions: dict[Path, int] = {}
@@ -243,11 +242,10 @@ class ContainerLifecycle:
             (self._stdout_path, "", None),          # default color
             (self._stderr_path, "stderr", _GRAY),
             (self._system_log_path, "system", _BLUE),
-            (self._progress_path, "progress", _GREEN),
         ]
 
         # Channels where card names should be resolved at print time
-        _RESOLVE_NAME_LABELS = {"progress", "system"}
+        _RESOLVE_NAME_LABELS = {"system"}
 
         for path, label, color in files_and_labels:
             if not path.exists():

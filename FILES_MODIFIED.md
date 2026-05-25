@@ -172,3 +172,19 @@ Tests
 tests/test_telemetry.py — updated test_no_edit_event_without_mtime_change to filter bootstrap events
 Implementation
 silverquillm/telemetry.py — added _bootstrap_emitted flag and bootstrap JSON emission on first _poll_mtimes pass
+
+## Item 16: Drop progress.jsonl channel and entrypoint emission
+Tests
+tests/test_telemetry.py — removed progress tailing tests, updated callback test to use system channel
+tests/test_card_names.py — removed TestCopyProgressWithNames, updated snapshot telemetry test
+tests/test_cli_docker.py — updated harvest test to verify progress.jsonl is not copied
+tests/test_docker_entrypoints.py — inverted assertion to verify progress.jsonl removed
+tests/test_channel_visibility.py — updated channel count from 8 to 7
+Implementation
+silverquillm/telemetry.py — removed progress channel from CHANNEL_FILES and _poll_progress method
+silverquillm/logs_viewer.py — removed progress from CHANNEL_ORDER
+silverquillm/runner.py — removed _progress_path and progress entry from files_and_labels
+silverquillm/cli.py — removed _copy_progress_with_names helper and skip progress.jsonl in harvest
+silverquillm/card_names.py — updated docstring to remove progress.jsonl reference
+docker/homelab-pi-blind/entrypoint.mjs — removed progress.jsonl writes, log to system.log instead
+docker/local-pi-blind/entrypoint.mjs — removed progress.jsonl writes, log to system.log instead

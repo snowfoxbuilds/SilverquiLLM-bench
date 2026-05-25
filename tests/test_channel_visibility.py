@@ -51,7 +51,7 @@ class TestChannelHiddenWhenEmpty:
         """In live mode, channels with no backing file are not in visible_channels."""
         viewer = LogsViewer(empty_run_dir, live=True)
         # All channels are in self.channels (live mode enumerates all)
-        assert len(viewer.channels) == 8
+        assert len(viewer.channels) == 7
         # But none should be visible since no files exist
         assert viewer.visible_channels == []
 

@@ -23,7 +23,7 @@ from silverquillm.telemetry import CHANNEL_FILES
 __all__ = ["LogsViewer", "run_viewer", "stream_plain"]
 
 # Ordered channel list for tab display
-CHANNEL_ORDER = ["runner", "snapshot", "stdout", "stderr", "error", "progress", "edit", "system"]
+CHANNEL_ORDER = ["runner", "snapshot", "stdout", "stderr", "error", "edit", "system"]
 
 # ANSI escape helpers
 ESC = "\033"

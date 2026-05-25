@@ -290,7 +290,7 @@ class TestHarvest:
         assert (run_dir / "cards" / cn / "card_impl.py").read_text() == "# MODIFIED implementation\n"
 
     def test_harvests_output_logs(self, tmp_path):
-        """docker_stdout.log, docker_stderr.log, and *.jsonl should be harvested."""
+        """docker_stdout.log, docker_stderr.log, and *.jsonl should be harvested (progress.jsonl excluded)."""
         workspace = tmp_path / "ws" / "workspace"
         output = tmp_path / "ws" / "output"
         results = tmp_path / "results"
@@ -298,6 +298,7 @@ class TestHarvest:
         output.mkdir(parents=True)
 
         (output / "progress.jsonl").write_text('{"card": "1"}\n')
+        (output / "fast_telemetry.jsonl").write_text('{"edit": true}\n')
         (output / "docker_stdout.log").write_text("stdout content\n")
         (output / "docker_stderr.log").write_text("stderr content\n")
 
@@ -305,7 +306,8 @@ class TestHarvest:
             workspace, output, results, "test-run", timed_out=False
         )
 
-        assert (run_dir / "progress.jsonl").read_text() == '{"card": "1"}\n'
+        assert not (run_dir / "progress.jsonl").exists()
+        assert (run_dir / "fast_telemetry.jsonl").read_text() == '{"edit": true}\n'
         assert (run_dir / "docker_stdout.log").read_text() == "stdout content\n"
         assert (run_dir / "docker_stderr.log").read_text() == "stderr content\n"
 

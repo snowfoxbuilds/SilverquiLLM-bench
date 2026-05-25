@@ -268,18 +268,15 @@ def _harvest_results(
     # Output files — copy docker_stdout.log, docker_stderr.log, and any *.log / *.jsonl
     # NOTE: docker_stdout.log and docker_stderr.log may already be streamed directly
     # to run_dir by _drain_pipe (see KEY_DECISIONS.md). Skip them if already present.
-    # For progress.jsonl, enrich with card_name fields
     _DIRECT_STREAM_FILES = {"docker_stdout.log", "docker_stderr.log"}
-    name_map = build_card_name_map(cards_dir, "sos")
     for src in output.iterdir():
         if src.is_file() and (src.suffix in (".log", ".jsonl")):
             if src.name in _DIRECT_STREAM_FILES and (run_dir / src.name).exists():
                 continue
-            dest = run_dir / src.name
             if src.name == "progress.jsonl":
-                _copy_progress_with_names(src, dest, name_map)
-            else:
-                shutil.copy2(src, dest)
+                continue  # progress.jsonl is deprecated; skip it
+            dest = run_dir / src.name
+            shutil.copy2(src, dest)
 
     # Per-card status
     _write_card_statuses(workspace, run_dir, timed_out, card_filter=filter_set)
@@ -300,35 +297,6 @@ def _harvest_results(
         shutil.copy2(manifest_src, run_dir / "run_manifest.json")
 
     return run_dir
-
-
-def _copy_progress_with_names(
-    src: Path, dst: Path, name_map: dict[str, str]
-) -> None:
-    """Copy progress.jsonl, enriching each line that has card_id with card_name.
-
-    Lines that already contain card_name or aren't valid JSON are copied as-is.
-    snapshot_telemetry.jsonl is NOT processed here (stays IDs-only).
-    """
-    with open(src, "r", encoding="utf-8", errors="replace") as fin, \
-         open(dst, "w", encoding="utf-8") as fout:
-        for line in fin:
-            stripped = line.strip()
-            if not stripped:
-                fout.write(line)
-                continue
-            try:
-                entry = json.loads(stripped)
-                if isinstance(entry, dict) and "card_id" in entry and "card_name" not in entry:
-                    card_id = entry["card_id"]
-                    card_name = name_map.get(card_id, "")
-                    if card_name:
-                        entry["card_name"] = card_name
-                    fout.write(json.dumps(entry) + "\n")
-                else:
-                    fout.write(line)
-            except (json.JSONDecodeError, TypeError):
-                fout.write(line)
 
 
 def _write_card_statuses(
