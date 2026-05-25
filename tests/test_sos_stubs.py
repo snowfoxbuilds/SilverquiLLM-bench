@@ -447,7 +447,7 @@ class TestSosConftestIntegration:
 
     def test_stubs_absent_simulation_with_monkeypatch(self, monkeypatch):
         """When stubs module is not importable, conftest produces clear error."""
-        from tests.audited.sos.conftest import _load_sos_stubs_and_build_registry
+        from benchmarks.sos.data.tests.audited.sos.conftest import _load_sos_stubs_and_build_registry
 
         def fail_import_module(name):
             if name == "benchmarks.sos.workspace.cards.stubs.sos_stubs":
@@ -457,7 +457,7 @@ class TestSosConftestIntegration:
         # Remove cached module and patch importlib.import_module
         monkeypatch.delitem(sys.modules, "benchmarks.sos.workspace.cards.stubs.sos_stubs", raising=False)
         monkeypatch.setattr(
-            "tests.audited.sos.conftest.importlib.import_module",
+            "benchmarks.sos.data.tests.audited.sos.conftest.importlib.import_module",
             fail_import_module,
         )
         with pytest.raises(ImportError, match="not available"):

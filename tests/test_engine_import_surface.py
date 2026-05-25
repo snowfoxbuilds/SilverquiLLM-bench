@@ -61,13 +61,25 @@ class TestEngineRelocation:
             capture_output=True,
             text=True,
         )
-        # Filter out matches inside the engine package itself
+        # Filter out matches inside the engine package itself and false positives
+        # from string literals in test assertion messages
         engine_pkg = str(REPO_ROOT / "benchmarks" / "sos" / "workspace" / "engine")
-        stale_files = [
-            f
-            for f in result.stdout.strip().splitlines()
-            if f and not f.startswith(engine_pkg)
-        ]
+        tests_dir = str(REPO_ROOT / "tests")
+        stale_files = []
+        for f in result.stdout.strip().splitlines():
+            if not f or f.startswith(engine_pkg):
+                continue
+            # For files in tests/, verify it's an actual import not a string literal
+            if f.startswith(tests_dir):
+                with open(f) as fh:
+                    has_real_import = any(
+                        (line.lstrip().startswith("from engine")
+                         or line.lstrip().startswith("import engine"))
+                        for line in fh
+                    )
+                if not has_real_import:
+                    continue
+            stale_files.append(f)
         assert stale_files == [], (
             f"Stale engine imports found outside engine package:\n"
             + "\n".join(stale_files)

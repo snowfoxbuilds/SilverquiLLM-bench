@@ -148,7 +148,7 @@ class TestMtimeEditDetection:
         assert out_file.exists()
         lines = out_file.read_text().strip().split("\n")
         events = [json.loads(line) for line in lines if line]
-        assert any(e["type"] == "edit" and "card_impl.py" in e["path"] for e in events)
+        assert any(e.get("type") == "edit" and "card_impl.py" in e.get("path", "") for e in events)
 
     def test_detects_mtime_change_on_fdn_card_impl(self, ft, telemetry_dirs):
         _, run_dir, workspace_dir = telemetry_dirs
@@ -168,7 +168,7 @@ class TestMtimeEditDetection:
         assert out_file.exists()
         lines = out_file.read_text().strip().split("\n")
         events = [json.loads(line) for line in lines if line]
-        assert any(e["type"] == "edit" and "card_impl.py" in e["path"] for e in events)
+        assert any(e.get("type") == "edit" and "card_impl.py" in e.get("path", "") for e in events)
 
     def test_detects_mtime_change_on_engine_file(self, ft, telemetry_dirs):
         _, run_dir, workspace_dir = telemetry_dirs
@@ -186,7 +186,7 @@ class TestMtimeEditDetection:
         assert out_file.exists()
         lines = out_file.read_text().strip().split("\n")
         events = [json.loads(line) for line in lines if line]
-        assert any(e["type"] == "edit" and "core.py" in e["path"] for e in events)
+        assert any(e.get("type") == "edit" and "core.py" in e.get("path", "") for e in events)
 
     def test_no_edit_event_without_mtime_change(self, ft, telemetry_dirs):
         _, run_dir, _ = telemetry_dirs
