@@ -40,25 +40,28 @@ user-invocable: true
 
 ### Scratch layout
 
-All non-repo scratch state lives under a single scratch directory:
+All non-repo scratch state lives under a single scratch directory. One per-cycle subdirectory holds every file produced for that cycle:
 
 ```
 /tmp/coordinator-run/
-  item-<N>/
+  cycle-<N>/
     test-rationale.md
     test-files.txt
+    untestable.json              # only if Tester reported uncovered requirements
     test-dispute.md              # only if Implementer disputes tests
-    tester-response.md           # only if Tester responds to dispute
+    coordinator-directives.md    # only if coordinator overrides
     impl.diff
     impl-rationale.md
     impl-files.txt
     review.json
-    impl-revised.diff
-    impl-revised-rationale.md
-    disagreements.json
-    coordinator-directives.md    # only if coordinator overrides
-    impl-final.diff              # only if a second revision is needed
+    impl-revised.diff            # only if a revision round runs
+    impl-revised-rationale.md    # only if a revision round runs
+    disagreements.json           # only if a revision round runs
+    impl-final.diff              # only if a coordinator-directed final pass runs
+    impl-final-rationale.md      # only if a coordinator-directed final pass runs
 ```
+
+You'll see this scratch path referred to as `$ITEM_DIR` throughout the rest of this document and in the subagent instructions — that's the env-var name the coordinator passes to each subagent. The directory it points at is `cycle-<N>/`.
 
 Tracking files in the **repo root**:
 - `KEY_DECISIONS.md` — **persistent across runs**, append-only.
@@ -76,9 +79,11 @@ mkdir -p "$SCRATCH"
 **Read project context**
 - Read `PROJECT_MAP.md` if present (it's `.md`, so this is allowed). It tells you the path conventions for `cards/sos/sos_{N}/` and `cards/fdn/fdn_{N}/`.
 - Read `AGENTS.md` for the workspace rules (which files are off-limits, additive-only engine modifications, etc.).
-- Read the card list from the user prompt. These are the cards to implement.
+- Derive the card list:
+  - If the user prompt enumerates specific card IDs (e.g., `sos_3, sos_7`), use that list verbatim.
+  - If the user prompt says "all SOS cards" (or otherwise does not enumerate), build the list by listing `cards/sos/`. Every directory there whose name matches `sos_<N>` is a card to implement; ignore `__init__.py`, `__pycache__`, and any other non-card entries. Use `ls cards/sos/ | grep -E '^sos_[0-9]+$' | sort -V` (or equivalent) — do not read the card contents.
 - Group the cards into **cycles of 5** (e.g., cycle 1 = cards 1–5, cycle 2 = cards 6–10, etc.). Each cycle is one unit of work for the loop. The final cycle may have fewer than 5 cards.
-- If the prompt contains no cards, create a `KEY_DECISIONS.md` entry noting this and exit gracefully.
+- If neither the prompt nor the directory yields any cards, create a `KEY_DECISIONS.md` entry noting this and exit gracefully.
 - **Stop here.** Do not read FDN examples, card stub files, engine source, or any `.py` file. Proceed directly to tracking file setup below.
 
 **Initialize tracking files**
@@ -120,14 +125,14 @@ chore: reset RUN_DECISIONS.md and FILES_MODIFIED.json for new run
 
 Process card cycles **one at a time, in order**. For each cycle, run the Tester/Implementer/Reviewer loop described below.
 
-**Do not parallelize across cycles.** Cycles must be sequential because they all commit to the same repo and all append to the same `FILES_MODIFIED.md`.
+**Do not parallelize across cycles.** Cycles must be sequential because they all commit to the same repo and all append to the same `FILES_MODIFIED.json`.
 
-For each cycle, create a per-item scratch directory:
+For each cycle, create a per-cycle scratch directory:
 ```bash
-ITEM_DIR="$SCRATCH/item-<N>"
+ITEM_DIR="$SCRATCH/cycle-<N>"
 mkdir -p "$ITEM_DIR"
 ```
-All subagent output for that cycle goes in `$ITEM_DIR`. Clean up with `rm -rf "$ITEM_DIR"` after the cycle is committed (see Step 9).
+All subagent output for that cycle goes in `$ITEM_DIR`. (The env-var name is historical — the directory itself is `cycle-<N>/`.) Clean up with `rm -rf "$ITEM_DIR"` after the cycle is committed (see Step 9).
 
 For each cycle, follow Section 3 (Tester/Implementer/Reviewer Loop).
 
@@ -246,10 +251,8 @@ If the Implementer returned `DISPUTE`:
     ```
 5. **If siding with the Tester** (tests are correct) → invoke the **`Implementer`** again with:
     - The card list for this cycle.
-    - The path to `$ITEM_DIR/test-dispute.md` (so it can see the coordinator's notes).
     - A `$ITEM_DIR/coordinator-directives.md` file explaining: "The coordinator has reviewed your dispute and sided with the Tester. The tests are correct. You must make them pass. Here's guidance: <specific suggestions if you have any>."
     - Same output contract as Step 3. If it returns `DISPUTE` again, proceed to round 2 below.
-    - If it returns `DISPUTE` again, proceed to round 2 below.
 
 6. **If siding with the Implementer** (tests are wrong) → invoke the **`Tester`** again with:
     - The card list for this cycle.
@@ -362,9 +365,9 @@ Read only the `disagreement_count` from the revision status summary.
 After committing but **before cleaning up `$ITEM_DIR`**, read the latest rationale file for this cycle — in order of preference: `$ITEM_DIR/impl-final-rationale.md` if a coordinator-directed final pass ran, otherwise `$ITEM_DIR/impl-revised-rationale.md` if a revision occurred, otherwise `$ITEM_DIR/impl-rationale.md`. Scan for design decisions and spec deviations worth recording:
 
 - **Design decisions** (data structure selection, migration strategy, API shape, pattern establishment): Add to `KEY_DECISIONS.md` if they establish a convention, or `RUN_DECISIONS.md` if they're one-off.
-- **Spec deviations** (implementation differs from what the TODO spec literally said because the spec's assumptions were wrong): Always log in `RUN_DECISIONS.md`. Promote to `KEY_DECISIONS.md` if it reveals a recurring misconception.
+- **Spec deviations** (implementation differs from what the card spec literally said because the spec's assumptions were wrong): Always log in `RUN_DECISIONS.md`. Promote to `KEY_DECISIONS.md` if it reveals a recurring misconception.
 
-If any test disputes occurred for this item, also review whether the dispute outcome should be a `KEY_DECISIONS.md` entry (e.g., "we test Arrow access column-by-column, not row-by-row").
+If any test disputes occurred for this cycle, also review whether the dispute outcome should be a `KEY_DECISIONS.md` entry (e.g., "we model X-from-graveyard as a replacement, not a triggered ability").
 
 If any entries were added, amend the commit:
 ```bash
@@ -410,6 +413,5 @@ git commit --amend --no-edit
 - **`FILES_MODIFIED.json` is append-only during the run, with one entry per cycle.** Revisions update the existing entry in place.
 - **Severity levels**: `strict` requires a response from the Implementer; `advisory` can be ignored.
 - **Every cycle gets its own commit** (tests + implementation together).
-- **Directory summary and audit updates are separate commits** after all cycles are done.
 - **Keep decision logs updated throughout execution.**
 - **Maximize forward progress.**

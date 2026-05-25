@@ -59,7 +59,9 @@ If you believe a test is genuinely wrong (testing impossible behavior, wrong ass
 }
 ```
 
-Use `jq` or an equivalent tool to mutate the file atomically so the JSON stays valid. Keep each summary to a single line.
+- The `tests` paths come from `$ITEM_DIR/test-files.txt` (the Tester's list). For each test file's `summary`, write a short description of what the file covers — the Tester's `$ITEM_DIR/test-rationale.md` has per-file rationales you can summarize into one line (e.g., `"tests for sos_1 The Dawning Archaic targeting and graveyard cast"`).
+- The `implementation` paths come from your own `impl-files.txt`.
+- Use `jq` or an equivalent tool to mutate the file atomically so the JSON stays valid. Keep each summary to a single line.
 
 ## Return message
 Return ONLY a short status summary.

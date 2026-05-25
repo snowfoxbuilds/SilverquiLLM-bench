@@ -74,7 +74,12 @@ Refusing the whole cycle drops the cards' coverage to zero. Partial coverage + a
 - `untestable.json` — only if any requirements couldn't be covered (see above).
 
 ## Write tests directly in the worktree
-Create test files following the project's conventions. Per-card tests go at `cards/sos/<id>/tests.py`. Engine-level regression tests (only if absolutely required by a card's mechanic) go under `engine_tests/test_*.py` — but prefer extending card-local tests when possible. Never modify existing files under `engine_tests/` or any existing `cards/fdn/*/tests.py`; those are owned by the grader.
+Per-card tests go at `cards/sos/<id>/tests.py` — one `tests.py` per card you cover. **Do not write anywhere else.** In particular:
+- Do not add or modify files under `engine_tests/`. That directory is grader-owned; engine regressions are not what you're testing.
+- Do not modify any existing `cards/fdn/*/tests.py`. Those are grader-owned too — read them as examples but never edit them.
+- Do not create new top-level test directories.
+
+If a card genuinely needs a fixture or helper that doesn't exist yet, either inline it in the card's `tests.py`, or escalate the requirement via `untestable.json` (see "Partial verification") so the Coordinator can decide whether to ask the Implementer to add it.
 
 ## Return message
 Return ONLY a short status summary:
@@ -105,4 +110,4 @@ If the coordinator sides with the Implementer in a test dispute, you may be invo
 - Every test must have a clear, descriptive name.
 - Every assertion must verify meaningful behavior.
 - Follow existing test patterns visible in `engine_tests/` and the few FDN `tests.py` examples.
-- Respect the workspace rules in `AGENTS.md` — do not modify files under `engine_tests/` or any existing `cards/fdn/*/tests.py`.
+- Respect the workspace rules in `AGENTS.md` — do not write under `engine_tests/` at all and do not modify any existing `cards/fdn/*/tests.py`. Your only output location for test code is `cards/sos/<id>/tests.py`.
