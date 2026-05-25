@@ -1,12 +1,12 @@
 """Card implementation for Valkyrie's Call."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature, Enchantment
-from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
-from benchmarks.sos.workspace.engine.events import CreatureDiesTriggeredEvent
+from engine.card import Creature, Enchantment
+from engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer
+from engine.types import CardType, Keyword, ManaCost
+from engine.events import CreatureDiesTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Return True if *obj* is on any player's battlefield."""
@@ -34,9 +34,9 @@ class ValkyrieSCall(Enchantment):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register death trigger: return nontoken non-Angel creature."""
-        from benchmarks.sos.workspace.engine.game import add_counter
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
-        from benchmarks.sos.workspace.engine.zones import move_to_zone
+        from engine.game import add_counter
+        from engine.triggers import TriggerRegistration
+        from engine.zones import move_to_zone
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
         source._valkyrie_dying_queue: list[Any] = []
@@ -65,7 +65,7 @@ class ValkyrieSCall(Enchantment):
             if ctrl is None:
                 return
             owner = getattr(creature, 'owner', ctrl)
-            from benchmarks.sos.workspace.engine.types import Zone
+            from engine.types import Zone
             graveyard = owner.zones[Zone.GRAVEYARD]
             if not graveyard.contains(creature):
                 return

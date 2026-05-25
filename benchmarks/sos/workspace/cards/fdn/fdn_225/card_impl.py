@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Zone
+from engine.card import Sorcery
+from engine.types import CardType, ManaCost, Zone
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 class GrowFromTheAshes(Sorcery):
@@ -38,7 +38,7 @@ class GrowFromTheAshes(Sorcery):
 
     def on_resolve(self, game: "GameState") -> None:
         """Search for 1 (or 2 if kicked) basic land(s) and put onto battlefield."""
-        from benchmarks.sos.workspace.engine.zones import move_to_zone
+        from engine.zones import move_to_zone
 
         controller = self.controller
         if controller is None:
@@ -53,7 +53,7 @@ class GrowFromTheAshes(Sorcery):
             for card in library.get_all():
                 card_types = getattr(card, "card_types", set())
                 if CardType.LAND in card_types:
-                    from benchmarks.sos.workspace.engine.types import Supertype
+                    from engine.types import Supertype
                     supertypes = getattr(card, "supertypes", set())
                     if Supertype.BASIC in supertypes:
                         basics.append(card)

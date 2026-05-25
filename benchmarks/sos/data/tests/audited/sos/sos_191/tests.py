@@ -7,8 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 from __future__ import annotations
 import pytest
 from card_impl import GeometersArthropod
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 @pytest.mark.basic
 class TestGeometersArthropodBasicProperties:
@@ -60,7 +60,7 @@ class TestGeometersArthropodAbilities:
         Oracle: Whenever you cast a spell with {X} in its mana cost, look at the top X cards of your library. Put on
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = GeometersArthropod(name="Geometer's Arthropod", owner=player)

@@ -1,10 +1,10 @@
 """Audited tests for FDN 28 — Vanguard Seraph."""
 from __future__ import annotations
 from card_impl import VanguardSeraph
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
-from benchmarks.sos.workspace.engine.events import GainsLifeTriggeredEvent
+from engine.card import Creature
+from engine.types import CardType, Keyword, ManaCost, Zone
+from test_utils import create_game
+from engine.events import GainsLifeTriggeredEvent
 
 class TestVanguardSeraphBasics:
     """Basic card properties."""
@@ -56,7 +56,7 @@ class TestVanguardSeraphSurveil:
 
     def test_first_life_gain_triggers_surveil(self) -> None:
         game, p1, seraph, top_card = self._setup()
-        from benchmarks.sos.workspace.engine.player import DeterministicPlayer
+        from engine.player import DeterministicPlayer
         if isinstance(p1, DeterministicPlayer):
             p1._script.appendleft(True)
         game.trigger_manager.fire_event(game, GainsLifeTriggeredEvent(player=p1, amount=2))
@@ -65,7 +65,7 @@ class TestVanguardSeraphSurveil:
 
     def test_surveil_keep_on_top(self) -> None:
         game, p1, seraph, top_card = self._setup()
-        from benchmarks.sos.workspace.engine.player import DeterministicPlayer
+        from engine.player import DeterministicPlayer
         if isinstance(p1, DeterministicPlayer):
             p1._script.appendleft(False)
         game.trigger_manager.fire_event(game, GainsLifeTriggeredEvent(player=p1, amount=2))
@@ -75,7 +75,7 @@ class TestVanguardSeraphSurveil:
 
     def test_second_life_gain_same_turn_no_surveil(self) -> None:
         game, p1, seraph, top_card = self._setup()
-        from benchmarks.sos.workspace.engine.player import DeterministicPlayer
+        from engine.player import DeterministicPlayer
         if isinstance(p1, DeterministicPlayer):
             p1._script.appendleft(False)
         game.trigger_manager.fire_event(game, GainsLifeTriggeredEvent(player=p1, amount=2))

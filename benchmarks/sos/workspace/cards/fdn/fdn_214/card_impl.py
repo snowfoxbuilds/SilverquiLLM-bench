@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Instant, Sorcery
-from benchmarks.sos.workspace.engine.continuous_effects import (
+from engine.card import Instant, Sorcery
+from engine.continuous_effects import (
     ContinuousEffect,
     DURATION_END_OF_TURN,
     Layer,
     SubLayer,
 )
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from cards.registry import CardRegistry
 
 def _get_chosen_target(card: Any, game: Any) -> Any:
     """Retrieve the first chosen target for a spell.
@@ -68,7 +68,7 @@ class BrokenWings(Instant):
 
     def on_resolve(self, game: GameState) -> None:
         """Destroy the target."""
-        from benchmarks.sos.workspace.engine.game import destroy
+        from engine.game import destroy
 
         target = _get_chosen_target(self, game)
         if target is None:

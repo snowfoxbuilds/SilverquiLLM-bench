@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import Berserk
 
-from benchmarks.sos.workspace.engine.card import Instant
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Instant
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -51,9 +51,9 @@ class TestBerserkAbilities:
 
     def test_grants_trample(self) -> None:
         """Resolution should grant trample."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Keyword
         game = create_game()
         player = game.players[0]
         target = Creature(name="KWTarget", owner=player, base_power=2, base_toughness=2)
@@ -75,7 +75,7 @@ class TestBerserkEdgeCases:
 
     def test_spell_resolution_on_empty_board(self) -> None:
         """Spell should handle resolution when no valid targets exist."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = Berserk(name="Berserk", owner=player)
@@ -94,8 +94,8 @@ class TestBerserkInteractions:
 
     def test_get_targets_finds_creatures(self) -> None:
         """get_targets should return valid creature targets."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -108,8 +108,8 @@ class TestBerserkInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         own = Creature(name="Own", owner=player, base_power=4, base_toughness=4)

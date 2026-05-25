@@ -1,11 +1,11 @@
 """Card implementation for Sylvan Scavenging."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature, Enchantment
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Zone
-from benchmarks.sos.workspace.engine.events import EndStepTriggeredEvent
+from engine.card import Creature, Enchantment
+from engine.types import CardType, ManaCost, Zone
+from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     for player in game.players:
@@ -31,9 +31,9 @@ class SylvanScavenging(Enchantment):
         super().__init__(**kwargs)
 
     def register_triggers(self, game: 'GameState') -> None:
-        from benchmarks.sos.workspace.engine.game import add_counter, create_token
-        from benchmarks.sos.workspace.engine.player import ScriptExhaustedError
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.game import add_counter, create_token
+        from engine.player import ScriptExhaustedError
+        from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

@@ -4,17 +4,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import CardImpl, Creature, Sorcery
-from benchmarks.sos.workspace.engine.continuous_effects import (
+from engine.card import CardImpl, Creature, Sorcery
+from engine.continuous_effects import (
     ContinuousEffect,
     DURATION_END_OF_TURN,
     Layer,
     SubLayer,
 )
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
+from engine.types import CardType, Keyword, ManaCost
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 class HeroicReinforcements(Sorcery):
@@ -38,7 +38,7 @@ class HeroicReinforcements(Sorcery):
 
     def on_resolve(self, game: "GameState") -> None:
         """Create 2 Soldier tokens, then pump and grant haste."""
-        from benchmarks.sos.workspace.engine.game import create_token
+        from engine.game import create_token
 
         controller = self.controller
         if controller is None:

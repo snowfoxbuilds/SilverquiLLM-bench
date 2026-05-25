@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import pytest
 
-from benchmarks.sos.workspace.engine.player import DeterministicPlayer, Player, ScriptExhaustedError
-from benchmarks.sos.workspace.engine.zones import Zones
+from engine.player import DeterministicPlayer, Player, ScriptExhaustedError
+from engine.zones import Zones
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +78,7 @@ class TestDeterministicPlayerConstruction:
 
     def test_mana_pool_defaults_none(self) -> None:
         """mana_pool should default to a ManaPool instance."""
-        from benchmarks.sos.workspace.engine.mana import ManaPool
+        from engine.mana import ManaPool
 
         p = DeterministicPlayer("Alice", [])
         assert isinstance(p.mana_pool, ManaPool)

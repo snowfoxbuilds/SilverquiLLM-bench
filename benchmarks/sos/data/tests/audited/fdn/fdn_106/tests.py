@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from card_impl import LootExuberantExplorer
-from benchmarks.sos.workspace.engine.card import ActivatedAbility, Creature, Land
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, ManaType, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
+from engine.card import ActivatedAbility, Creature, Land
+from engine.types import CardType, ManaCost, ManaType, Zone
+from test_utils import create_game
 
 
 class TestLootBasics:

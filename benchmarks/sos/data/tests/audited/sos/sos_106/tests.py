@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import AncestralAnger
 
-from benchmarks.sos.workspace.engine.card import Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Sorcery
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -51,9 +51,9 @@ class TestAncestralAngerAbilities:
 
     def test_draws_cards(self) -> None:
         """Resolution should draw card(s)."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
-        from benchmarks.sos.workspace.engine.card import Sorcery
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game
+        from engine.card import Sorcery
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         filler = Sorcery(name="Filler", owner=player)
@@ -70,9 +70,9 @@ class TestAncestralAngerAbilities:
 
     def test_grants_trample(self) -> None:
         """Resolution should grant trample."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Keyword
         game = create_game()
         player = game.players[0]
         target = Creature(name="KWTarget", owner=player, base_power=2, base_toughness=2)
@@ -94,7 +94,7 @@ class TestAncestralAngerEdgeCases:
 
     def test_spell_resolution_on_empty_board(self) -> None:
         """Spell should handle resolution when no valid targets exist."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = AncestralAnger(name="Ancestral Anger", owner=player)
@@ -113,8 +113,8 @@ class TestAncestralAngerInteractions:
 
     def test_get_targets_finds_creatures(self) -> None:
         """get_targets should return valid creature targets."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -127,8 +127,8 @@ class TestAncestralAngerInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         own = Creature(name="Own", owner=player, base_power=4, base_toughness=4)

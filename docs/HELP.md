@@ -40,8 +40,24 @@ silverquillm run \
 
 silverquillm logs --run sos-copilot-gpt-4.1-2026-05-24T06-51 
 
+# Workspace setup
+rm -rf /tmp/test-staging && mkdir /tmp/test-staging 
+
+python -c "
+from pathlib import Path
+from silverquillm.workspace import stage_workspace
+ws, out = stage_workspace(Path('/tmp/test-staging'), card_filter=['1','7','13'])
+print('workspace:', ws)
+print('output:', out)
+"
+
 # Test inside docker
-docker run --rm -it --network=host   -v /tmp/test-workspace:/workspace   -v /tmp/test-output:/output   --entrypoint /bin/bash   silverquillm-local-pi-blind:latest
+docker run --rm -it --network=host \
+  -v /tmp/test-staging/workspace:/workspace \
+  -v /tmp/test-staging/output:/output \
+  --entrypoint /bin/bash \
+  silverquillm-local-pi-blind:latest
+
 node /app/entrypoint.mjs 2>&1
 
 

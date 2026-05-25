@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import RubbleRouser
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -61,9 +61,9 @@ class TestRubbleRouserAbilities:
 
     def test_draws_cards(self) -> None:
         """Resolution should draw card(s)."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
-        from benchmarks.sos.workspace.engine.card import Sorcery
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game
+        from engine.card import Sorcery
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         filler = Sorcery(name="Filler", owner=player)
@@ -80,9 +80,9 @@ class TestRubbleRouserAbilities:
 
     def test_causes_discard(self) -> None:
         """Resolution should cause discard."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Sorcery
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Sorcery
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -99,7 +99,7 @@ class TestRubbleRouserAbilities:
 
     def test_deals_damage(self) -> None:
         """Resolution should deal 1 damage."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -117,7 +117,7 @@ class TestRubbleRouserAbilities:
 
     def test_has_activated_ability(self) -> None:
         """Card must expose at least one activated ability."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = RubbleRouser(name="Rubble Rouser", owner=player)
@@ -133,7 +133,7 @@ class TestRubbleRouserEdgeCases:
 
     def test_may_choice_optional(self) -> None:
         """May effect is optional — decline should not crash."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = RubbleRouser(name="Rubble Rouser", owner=player)
@@ -152,8 +152,8 @@ class TestRubbleRouserInteractions:
 
     def test_resolution_with_board_state(self) -> None:
         """Card should resolve correctly with established board."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -175,8 +175,8 @@ class TestRubbleRouserInteractions:
 
     def test_coexists_with_other_creatures(self) -> None:
         """Card should coexist with other creatures on battlefield."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         card = RubbleRouser(name="Rubble Rouser", owner=player)

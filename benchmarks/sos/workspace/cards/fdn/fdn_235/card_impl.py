@@ -1,12 +1,12 @@
 """Card implementation for Wary Thespian."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import ArtifactCreature, Creature
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Supertype, Zone
-from benchmarks.sos.workspace.engine.events import CreatureDiesTriggeredEvent, EntersBattlefieldTriggeredEvent
+from engine.card import ArtifactCreature, Creature
+from engine.types import CardType, Keyword, ManaCost, Supertype, Zone
+from engine.events import CreatureDiesTriggeredEvent, EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from engine.game_state import GameState
+    from cards.registry import CardRegistry
 
 def _self_dies_condition(source: Any):
     """Return a condition callable that matches only when *source* dies."""
@@ -40,7 +40,7 @@ class WaryThespian(Creature):
         super().__init__(**kwargs)
 
     def register_triggers(self, game: GameState) -> None:
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.triggers import TriggerRegistration
         source = self
 
         def _surveil_effect(game: GameState) -> None:

@@ -1,11 +1,11 @@
 """Card implementation for Kellan, Planar Trailblazer."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import ActivatedAbility, Creature
-from benchmarks.sos.workspace.engine.types import Keyword, ManaCost, Supertype, Zone
-from benchmarks.sos.workspace.engine.events import DealsDamageTriggeredEvent
+from engine.card import ActivatedAbility, Creature
+from engine.types import Keyword, ManaCost, Supertype, Zone
+from engine.events import DealsDamageTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class KellanPlanarTrailblazer(Creature):
     """Kellan, Planar Trailblazer — {R} — 2/1 — Legendary Human Faerie Scout.
@@ -62,7 +62,7 @@ class KellanPlanarTrailblazer(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register combat damage trigger for Detective mode."""
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 
@@ -85,7 +85,7 @@ class KellanPlanarTrailblazer(Creature):
             if not cards:
                 return
             top_card = cards[-1]
-            from benchmarks.sos.workspace.engine.zones import move_to_zone
+            from engine.zones import move_to_zone
             move_to_zone(game, top_card, Zone.LIBRARY, Zone.EXILE)
             top_card._playable_this_turn = True
         game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

@@ -19,7 +19,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from benchmarks.sos.workspace.cards.registry import CardMetadata
+from cards.registry import CardMetadata
 
 
 # ---------------------------------------------------------------------------
@@ -388,14 +388,14 @@ class TestFetchScryfallQueryContract:
     """fetch_scryfall_query must return (raw_list, parsed_list) tuple."""
 
     def test_returns_tuple_of_two_lists(self) -> None:
-        from benchmarks.sos.workspace.cards.scryfall import fetch_scryfall_query
+        from cards.scryfall import fetch_scryfall_query
 
         mock_response = {
             "data": [_make_raw_scryfall_card(set_code="soa", collector_number="1")],
             "has_more": False,
         }
 
-        with patch("benchmarks.sos.workspace.cards.scryfall._fetch_json", return_value=mock_response):
+        with patch("cards.scryfall._fetch_json", return_value=mock_response):
             raw, parsed = fetch_scryfall_query("e%3Asoa+cn%3E%3D1+cn%3C%3D65", set_code="soa")
 
         assert isinstance(raw, list)
@@ -404,20 +404,20 @@ class TestFetchScryfallQueryContract:
         assert len(parsed) == 1
 
     def test_parsed_cards_are_card_metadata(self) -> None:
-        from benchmarks.sos.workspace.cards.scryfall import fetch_scryfall_query
+        from cards.scryfall import fetch_scryfall_query
 
         mock_response = {
             "data": [_make_raw_scryfall_card(set_code="soa", collector_number="3")],
             "has_more": False,
         }
 
-        with patch("benchmarks.sos.workspace.cards.scryfall._fetch_json", return_value=mock_response):
+        with patch("cards.scryfall._fetch_json", return_value=mock_response):
             _, parsed = fetch_scryfall_query("e%3Asoa+cn%3E%3D1+cn%3C%3D65", set_code="soa")
 
         assert isinstance(parsed[0], CardMetadata)
 
     def test_handles_pagination(self) -> None:
-        from benchmarks.sos.workspace.cards.scryfall import fetch_scryfall_query
+        from cards.scryfall import fetch_scryfall_query
 
         page1 = {
             "data": [_make_raw_scryfall_card(name="Card 1", set_code="soa", collector_number="1")],
@@ -429,8 +429,8 @@ class TestFetchScryfallQueryContract:
             "has_more": False,
         }
 
-        with patch("benchmarks.sos.workspace.cards.scryfall._fetch_json", side_effect=[page1, page2]):
-            with patch("benchmarks.sos.workspace.cards.scryfall.time.sleep"):  # skip rate limit delay
+        with patch("cards.scryfall._fetch_json", side_effect=[page1, page2]):
+            with patch("cards.scryfall.time.sleep"):  # skip rate limit delay
                 raw, parsed = fetch_scryfall_query("e%3Asoa", set_code="soa")
 
         assert len(raw) == 2

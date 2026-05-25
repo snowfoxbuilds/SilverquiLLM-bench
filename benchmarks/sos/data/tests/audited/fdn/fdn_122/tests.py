@@ -1,10 +1,10 @@
 """Audited tests for FDN 122 — Kykar, Zephyr Awakener."""
 from __future__ import annotations
 from card_impl import KykarZephyrAwakener
-from benchmarks.sos.workspace.engine.card import CardImpl, Creature
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
-from benchmarks.sos.workspace.engine.events import SpellCastTriggeredEvent
+from engine.card import CardImpl, Creature
+from engine.types import CardType, Keyword, ManaCost, Zone
+from test_utils import create_game
+from engine.events import SpellCastTriggeredEvent
 
 def _resolve_stack(game):
     """Pop and resolve all objects on the stack."""

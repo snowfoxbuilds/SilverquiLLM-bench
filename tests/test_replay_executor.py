@@ -107,14 +107,14 @@ class TestReplayExecutorInit:
         assert executor.game is not None
 
     def test_init_populates_hands(self, executor: ReplayExecutor) -> None:
-        from benchmarks.sos.workspace.engine.types import Zone
+        from engine.types import Zone
         p1_hand = executor.players[1].zones[Zone.HAND]
         p2_hand = executor.players[2].zones[Zone.HAND]
         assert len(p1_hand) == 7
         assert len(p2_hand) == 7
 
     def test_init_populates_libraries(self, executor: ReplayExecutor) -> None:
-        from benchmarks.sos.workspace.engine.types import Zone
+        from engine.types import Zone
         p1_lib = executor.players[1].zones[Zone.LIBRARY]
         p2_lib = executor.players[2].zones[Zone.LIBRARY]
         assert len(p1_lib) > 0
@@ -122,7 +122,7 @@ class TestReplayExecutorInit:
 
     def test_init_hand_card_names(self, executor: ReplayExecutor) -> None:
         """Hand cards should have correct names from grpId mapping."""
-        from benchmarks.sos.workspace.engine.types import Zone
+        from engine.types import Zone
         hand = executor.players[1].zones[Zone.HAND]
         card_names = [c.name for c in hand.get_all()]
         # From sample replay: seat 1 hand has Mountains, Plains, Savannah Lions
@@ -294,7 +294,7 @@ class TestSeatBehavior:
         sample_replay: ReplayGame,
     ) -> None:
         """Seat 1 land play should move card from hand to battlefield in engine."""
-        from benchmarks.sos.workspace.engine.types import Zone
+        from engine.types import Zone
 
         for i in range(1, len(sample_replay.snapshots)):
             prev = sample_replay.snapshots[i - 1]
@@ -313,7 +313,7 @@ class TestSeatBehavior:
         sample_replay: ReplayGame,
     ) -> None:
         """Seat 2 actions should be injected without legality checks."""
-        from benchmarks.sos.workspace.engine.types import Zone
+        from engine.types import Zone
 
         for i in range(1, len(sample_replay.snapshots)):
             prev = sample_replay.snapshots[i - 1]
@@ -331,7 +331,7 @@ class TestSeatBehavior:
         sample_replay: ReplayGame,
     ) -> None:
         """Seat 1 actions should modify engine state (not just inject)."""
-        from benchmarks.sos.workspace.engine.types import Zone
+        from engine.types import Zone
 
         found_seat1_action = False
         for i in range(1, len(sample_replay.snapshots)):
@@ -370,7 +370,7 @@ class TestEdgeCases:
         replay = ReplayGame(seat_id=1, opponent_seat_id=2, snapshots=[snap])
         ex = ReplayExecutor(replay, card_id_map={MOUNTAIN: "Mountain", PLAINS: "Plains"})
         ex.initialize(snap)
-        from benchmarks.sos.workspace.engine.types import Zone
+        from engine.types import Zone
         hand = ex.players[1].zones[Zone.HAND]
         names = [c.name for c in hand.get_all()]
         assert any("Unknown" in n or "999999" in n for n in names)
@@ -512,7 +512,7 @@ class TestAbilityResolution:
 
     def _seed_land_on_bf(self, ex: ReplayExecutor, snap1: GameSnapshot) -> None:
         """Place the gain land into the executor's engine battlefield to mirror snap1."""
-        from benchmarks.sos.workspace.engine.types import Zone
+        from engine.types import Zone
 
         player = ex.players[1]
         card = ex._create_card(_GAIN_LAND_GRP, player)
@@ -608,7 +608,7 @@ class TestAbilityResolution:
         ex.initialize(snap0_adj)
 
         # Place land on p1's BF (opponent for seat-2 replay), ability in stack
-        from benchmarks.sos.workspace.engine.types import Zone
+        from engine.types import Zone
         p2 = ex.players[2]
         card = ex._create_card(_GAIN_LAND_GRP, p2)
         card._grp_id = _GAIN_LAND_GRP
@@ -798,7 +798,7 @@ class TestZoneSync:
         zone_mismatches = [m for m in result.mismatches if m.category == "zone_contents"]
         assert zone_mismatches == [], f"Unexpected zone mismatches: {zone_mismatches}"
 
-        from benchmarks.sos.workspace.engine.types import Zone
+        from engine.types import Zone
         assert len(ex.players[1].zones[Zone.HAND]) == 7
 
     def test_mulligan_sync(self, card_id_map: dict[int, str]) -> None:
@@ -813,13 +813,13 @@ class TestZoneSync:
         zone_mismatches = [m for m in result.mismatches if m.category == "zone_contents"]
         assert zone_mismatches == [], f"Unexpected zone mismatches after mulligan: {zone_mismatches}"
 
-        from benchmarks.sos.workspace.engine.types import Zone
+        from engine.types import Zone
         hand = ex.players[1].zones[Zone.HAND]
         assert len(hand) == 6
 
     def test_untracked_battlefield_appearance(self, card_id_map: dict[int, str]) -> None:
         """Card appears on battlefield without ObjectIdChanged (e.g. token): gets synced."""
-        from benchmarks.sos.workspace.engine.types import Zone
+        from engine.types import Zone
 
         def _base_snap(gsid: int) -> GameSnapshot:
             s = GameSnapshot(game_state_id=gsid)

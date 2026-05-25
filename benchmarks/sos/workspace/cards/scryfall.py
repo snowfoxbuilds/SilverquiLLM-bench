@@ -21,7 +21,7 @@ from typing import Any
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 
-from benchmarks.sos.workspace.cards.registry import CardMetadata
+from cards.registry import CardMetadata
 
 # ---------------------------------------------------------------------------
 # Configuration

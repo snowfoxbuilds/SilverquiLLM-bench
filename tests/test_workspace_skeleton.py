@@ -34,7 +34,7 @@ class TestDirectoryStructure:
         assert (workspace / "cards" / "sos").is_dir()
 
     def test_tests_engine_dir_exists(self, workspace: Path):
-        assert (workspace / "tests" / "engine").is_dir()
+        assert (workspace / "engine_tests").is_dir()
 
 
 # ------------------------------------------------------------------
@@ -52,8 +52,7 @@ class TestPackageDiscovery:
             "cards/__init__.py",
             "cards/fdn/__init__.py",
             "cards/sos/__init__.py",
-            "tests/__init__.py",
-            "tests/engine/__init__.py",
+            "engine_tests/__init__.py",
         ],
     )
     def test_init_file_exists(self, workspace: Path, relpath: str):

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from benchmarks.sos.workspace.engine.types import Color, HybridManaSymbol, ManaCost, ManaType
+from engine.types import Color, HybridManaSymbol, ManaCost, ManaType
 
 # Map colored ManaTypes to their corresponding Color enum values.
 _MANA_TO_COLOR: dict[ManaType, Color] = {

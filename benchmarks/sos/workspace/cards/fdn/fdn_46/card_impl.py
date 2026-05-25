@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Sorcery
+from engine.types import CardType, ManaCost
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 class LunarInsight(Sorcery):
@@ -32,7 +32,7 @@ class LunarInsight(Sorcery):
 
     def on_resolve(self, game: "GameState") -> None:
         """Draw cards equal to distinct mana values among nonland permanents."""
-        from benchmarks.sos.workspace.engine.game import draw_card
+        from engine.game import draw_card
 
         controller = self.controller
         if controller is None:

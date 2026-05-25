@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import PoxPlague
 
-from benchmarks.sos.workspace.engine.card import Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Sorcery
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -56,9 +56,9 @@ class TestPoxPlagueAbilities:
         Oracle: Each player loses half their life, then discards half the cards in their hand, then sacrifices half 
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
+        from engine.card import CardImpl
 
         game = create_game()
         player = game.players[0]
@@ -81,8 +81,8 @@ class TestPoxPlagueAbilities:
         Oracle: Each player loses half their life, then discards half the cards in their hand, then sacrifices half 
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game
+        from engine.types import Zone
 
         game = create_game()
         player = game.players[0]
@@ -100,9 +100,9 @@ class TestPoxPlagueAbilities:
         Oracle: Each player loses half their life, then discards half the cards in their hand, then sacrifices half 
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
+        from engine.card import CardImpl
 
         game = create_game()
         player = game.players[0]

@@ -16,13 +16,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from benchmarks.sos.workspace.engine.card import Creature, Instant
-from benchmarks.sos.workspace.engine.casting import CastingError, cast_spell
-from benchmarks.sos.workspace.engine.game_state import GameState
-from benchmarks.sos.workspace.engine.mana import ManaPool
-from benchmarks.sos.workspace.engine.player import DeterministicPlayer
-from benchmarks.sos.workspace.engine.protection import ProtectionAbility
-from benchmarks.sos.workspace.engine.types import CardType, Color, ManaCost, ManaType, Phase
+from engine.card import Creature, Instant
+from engine.casting import CastingError, cast_spell
+from engine.game_state import GameState
+from engine.mana import ManaPool
+from engine.player import DeterministicPlayer
+from engine.protection import ProtectionAbility
+from engine.types import CardType, Color, ManaCost, ManaType, Phase
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +123,7 @@ class TestCastSpellProtectionTargeting:
 
 def from_engine_types(zone_name: str):
     """Resolve a Zone enum value by name."""
-    from benchmarks.sos.workspace.engine.types import Zone
+    from engine.types import Zone
     return Zone[zone_name]
 
 

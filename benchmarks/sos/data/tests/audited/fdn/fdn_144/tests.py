@@ -1,10 +1,10 @@
 """Audited tests for FDN 144 — Mischievous Pup."""
 from __future__ import annotations
 from card_impl import MischievousPup
-from benchmarks.sos.workspace.engine.card import CardImpl, Creature
-from benchmarks.sos.workspace.engine.types import ManaCost, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
-from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
+from engine.card import CardImpl, Creature
+from engine.types import ManaCost, Zone
+from test_utils import create_game
+from engine.events import EntersBattlefieldTriggeredEvent
 
 def _resolve_stack(game):
     while not game.stack.is_empty():

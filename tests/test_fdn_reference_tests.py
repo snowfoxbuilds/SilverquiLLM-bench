@@ -60,17 +60,17 @@ class TestFdnTestFileCount:
 
 
 class TestFdnImportPaths:
-    """Each test must import from benchmarks.sos.workspace.engine and card_impl."""
+    """Each test must import from engine and card_impl."""
 
     @pytest.fixture()
     def test_files(self) -> list[Path]:
         return _get_fdn_test_files()
 
     def test_each_file_imports_from_engine(self, test_files: list[Path]) -> None:
-        """Every FDN test file must import from benchmarks.sos.workspace.engine.*."""
+        """Every FDN test file must import from engine.*."""
         for tf in test_files:
             source = _read_source(tf)
-            assert "from benchmarks.sos.workspace.engine" in source, (
+            assert "from engine" in source, (
                 f"{tf.relative_to(REPO_ROOT)} does not import from engine"
             )
 
@@ -78,9 +78,9 @@ class TestFdnImportPaths:
         """Every FDN test file must import from its own card_impl module."""
         for tf in test_files:
             source = _read_source(tf)
-            # e.g. from benchmarks.sos.workspace.cards.fdn.fdn_13.card_impl import ...
+            # e.g. from cards.fdn.fdn_13.card_impl import ...
             card_dir = tf.parent.name  # e.g. "fdn_13"
-            expected_import = f"from benchmarks.sos.workspace.cards.fdn.{card_dir}.card_impl"
+            expected_import = f"from cards.fdn.{card_dir}.card_impl"
             assert expected_import in source, (
                 f"{tf.relative_to(REPO_ROOT)} does not import from {expected_import}"
             )
@@ -201,7 +201,7 @@ class TestFdnPytestDiscovery:
              str(FDN_CARDS)],
             capture_output=True,
             text=True,
-            cwd=str(REPO_ROOT),
+            cwd=str(WORKSPACE),
         )
         # Should collect at least some tests (exit code 0 means collected OK)
         assert result.returncode == 0, (
@@ -229,7 +229,7 @@ class TestFdnTestsPass:
              "-q", "--no-header", "--tb=short"],
             capture_output=True,
             text=True,
-            cwd=str(REPO_ROOT),
+            cwd=str(WORKSPACE),
         )
         assert result.returncode == 0, (
             f"FDN tests failed (exit {result.returncode}):\n"

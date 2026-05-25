@@ -9,10 +9,10 @@ engine encodes this in :func:`engine.combat._can_block`.
 
 from __future__ import annotations
 
-from benchmarks.sos.workspace.cards.fdn.fdn_142.card_impl import HealersHawk
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.combat import _can_block
-from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
+from cards.fdn.fdn_142.card_impl import HealersHawk
+from engine.card import Creature
+from engine.combat import _can_block
+from engine.types import Keyword, ManaCost
 
 
 class TestHealersHawkProperties:

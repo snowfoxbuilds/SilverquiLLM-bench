@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import ManaCost, Zone
+from engine.card import Creature
+from engine.types import ManaCost, Zone
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 class StrongboxRaider(Creature):
@@ -37,7 +37,7 @@ class StrongboxRaider(Creature):
 
     def on_resolve(self, game: "GameState") -> None:
         """ETB: Raid — exile top 2, choose one playable until end of next turn."""
-        from benchmarks.sos.workspace.engine.zones import move_to_zone
+        from engine.zones import move_to_zone
 
         controller = self.controller
         if controller is None:

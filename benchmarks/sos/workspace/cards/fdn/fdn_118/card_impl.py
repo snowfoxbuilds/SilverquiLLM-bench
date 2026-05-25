@@ -1,12 +1,12 @@
 """Card implementation for Dreadwing Scavenger."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
-from benchmarks.sos.workspace.engine.types import Keyword, ManaCost, Zone
-from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent
+from engine.card import Creature
+from engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
+from engine.types import Keyword, ManaCost, Zone
+from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Return True if *obj* is on any player's battlefield."""
@@ -40,7 +40,7 @@ class DreadwingScavenger(Creature):
 
     def on_resolve(self, game: 'GameState') -> None:
         """ETB: draw a card, then discard a card."""
-        from benchmarks.sos.workspace.engine.game import draw_card, discard
+        from engine.game import draw_card, discard
         controller = self.controller
         if controller is None:
             return
@@ -56,8 +56,8 @@ class DreadwingScavenger(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register attack trigger (loot) and threshold continuous effect."""
-        from benchmarks.sos.workspace.engine.game import draw_card, discard
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.game import draw_card, discard
+        from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

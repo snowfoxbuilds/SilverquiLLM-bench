@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import SkycoachConductorAllAboard
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -62,25 +62,25 @@ class TestSkycoachConductorAllAboardAbilities:
 
     def test_has_flying(self) -> None:
         """Skycoach Conductor // All Aboard must have Flying keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = SkycoachConductorAllAboard(name="Skycoach Conductor // All Aboard", owner=None, base_power=2, base_toughness=3)
         assert Keyword.FLYING in card.keywords, "Skycoach Conductor // All Aboard should have Flying"
 
     def test_has_vigilance(self) -> None:
         """Skycoach Conductor // All Aboard must have Vigilance keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = SkycoachConductorAllAboard(name="Skycoach Conductor // All Aboard", owner=None, base_power=2, base_toughness=3)
         assert Keyword.VIGILANCE in card.keywords, "Skycoach Conductor // All Aboard should have Vigilance"
 
     def test_has_prepared(self) -> None:
         """Skycoach Conductor // All Aboard must have Prepared keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = SkycoachConductorAllAboard(name="Skycoach Conductor // All Aboard", owner=None, base_power=2, base_toughness=3)
         assert Keyword.PREPARED in card.keywords, "Skycoach Conductor // All Aboard should have Prepared"
 
     def test_has_flash(self) -> None:
         """Skycoach Conductor // All Aboard must have Flash keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = SkycoachConductorAllAboard(name="Skycoach Conductor // All Aboard", owner=None, base_power=2, base_toughness=3)
         assert Keyword.FLASH in card.keywords, "Skycoach Conductor // All Aboard should have Flash"
 
@@ -118,8 +118,8 @@ class TestSkycoachConductorAllAboardEdgeCases:
 
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = SkycoachConductorAllAboard(name="Skycoach Conductor // All Aboard", owner=player, base_power=2, base_toughness=3)
@@ -137,9 +137,9 @@ class TestSkycoachConductorAllAboardInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -155,9 +155,9 @@ class TestSkycoachConductorAllAboardInteractions:
 
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         other = Creature(name="Companion", owner=player, base_power=2, base_toughness=2)

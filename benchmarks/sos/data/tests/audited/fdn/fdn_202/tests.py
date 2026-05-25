@@ -5,9 +5,9 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-from benchmarks.sos.workspace.engine.card import Instant
-from benchmarks.sos.workspace.engine.types import ManaCost
-from benchmarks.sos.workspace.tests.test_utils import create_game
+from engine.card import Instant
+from engine.types import ManaCost
+from test_utils import create_game
 
 # The conftest name derivation produces "HidetsuguSSecondRite" but the impl
 # uses "HidetsugusSecondRite".  Import the real class directly.

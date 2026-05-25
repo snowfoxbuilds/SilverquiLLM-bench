@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import TeachersPest
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -63,15 +63,15 @@ class TestTeachersPestAbilities:
 
     def test_has_menace(self) -> None:
         """Teacher's Pest must have Menace keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = TeachersPest(name="Teacher's Pest", owner=None, base_power=1, base_toughness=1)
         assert Keyword.MENACE in card.keywords, "Teacher's Pest should have Menace"
 
     def test_attack_trigger_uses_graveyard(self) -> None:
         """Attack trigger must interact with graveyard per oracle text."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Instant
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Instant
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         fodder = Instant(name="Bolt", owner=player)
@@ -105,8 +105,8 @@ class TestTeachersPestEdgeCases:
 
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = TeachersPest(name="Teacher's Pest", owner=player, base_power=1, base_toughness=1)
@@ -124,9 +124,9 @@ class TestTeachersPestInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -142,9 +142,9 @@ class TestTeachersPestInteractions:
 
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         other = Creature(name="Companion", owner=player, base_power=2, base_toughness=2)

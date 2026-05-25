@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import AkromasWill
 
-from benchmarks.sos.workspace.engine.card import Instant
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Instant
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -79,7 +79,7 @@ class TestAkromasWillEdgeCases:
 
     def test_resolution_with_empty_board(self) -> None:
         """Spell must handle resolution with no valid targets/creatures."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = AkromasWill(name="Akroma's Will", owner=player)
@@ -99,9 +99,9 @@ class TestAkromasWillInteractions:
 
     def test_spell_to_graveyard_after_resolution(self) -> None:
         """Resolved spell must go to graveyard."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
-        from benchmarks.sos.workspace.engine.types import Zone
-        from benchmarks.sos.workspace.engine.zones import move_to_zone
+        from test_utils import create_game
+        from engine.types import Zone
+        from engine.zones import move_to_zone
         game = create_game()
         player = game.players[0]
         card = AkromasWill(name="Akroma's Will", owner=player)
@@ -112,9 +112,9 @@ class TestAkromasWillInteractions:
 
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         other = Creature(name="Companion", owner=player, base_power=2, base_toughness=2)

@@ -9,7 +9,7 @@ Transforms applied to every .py file under cards/ and tests/:
 2. fire_event(game, EventType.X, {k: v}) -> fire_event(game, XTriggeredEvent(k=v))
 3. ReplacementEffect(event_type="x", ...) -> event_type=XReplacementEvent
 4. Condition/replacement callable bodies: param rename + dict access -> attribute access
-5. Import updates: add engine.events imports, drop EventType from benchmarks.sos.workspace.engine.triggers
+5. Import updates: add engine.events imports, drop EventType from engine.triggers
 """
 
 from __future__ import annotations
@@ -248,7 +248,7 @@ class EventMigrator(ast.NodeTransformer):
         return node
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> ast.stmt | None:
-        # Remove EventType (and _ET alias) from benchmarks.sos.workspace.engine.triggers imports.
+        # Remove EventType (and _ET alias) from engine.triggers imports.
         # If nothing remains, drop the import entirely.
         if node.module == "engine.triggers":
             new_names = [
@@ -266,7 +266,7 @@ class EventMigrator(ast.NodeTransformer):
 # ---------------------------------------------------------------------------
 
 def _inject_events_import(tree: ast.Module, event_classes: set[str]) -> None:
-    """Insert 'from benchmarks.sos.workspace.engine.events import ...' at the top of the module."""
+    """Insert 'from engine.events import ...' at the top of the module."""
     if not event_classes:
         return
 

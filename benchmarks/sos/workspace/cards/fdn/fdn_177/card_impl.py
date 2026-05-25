@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, TargetRequirement, Zone
+from engine.card import Sorcery
+from engine.types import CardType, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 class MacabreWaltz(Sorcery):
@@ -55,8 +55,8 @@ class MacabreWaltz(Sorcery):
 
     def on_resolve(self, game: "GameState") -> None:
         """Return targets to hand, then discard a card."""
-        from benchmarks.sos.workspace.engine.game import discard
-        from benchmarks.sos.workspace.engine.zones import move_to_zone
+        from engine.game import discard
+        from engine.zones import move_to_zone
 
         controller = self.controller
         if controller is None:

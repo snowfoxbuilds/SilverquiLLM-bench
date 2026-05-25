@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import Creature, Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, TargetRequirement, Zone
+from engine.card import Creature, Sorcery
+from engine.types import CardType, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 class GoblinNegotiation(Sorcery):
@@ -44,7 +44,7 @@ class GoblinNegotiation(Sorcery):
 
     def on_resolve(self, game: "GameState") -> None:
         """Deal X damage, create Goblin tokens for excess damage."""
-        from benchmarks.sos.workspace.engine.game import create_token, deal_damage
+        from engine.game import create_token, deal_damage
 
         chosen = getattr(self, "chosen_targets", None)
         target = chosen[0] if chosen else None

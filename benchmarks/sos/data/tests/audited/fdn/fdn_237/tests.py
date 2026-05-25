@@ -1,10 +1,10 @@
 """Audited tests for FDN 237 — Balmor, Battlemage Captain."""
 from __future__ import annotations
 from card_impl import BalmorBattlemageCaptain
-from benchmarks.sos.workspace.engine.card import Creature, Instant
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Supertype
-from benchmarks.sos.workspace.tests.test_utils import create_game
-from benchmarks.sos.workspace.engine.events import SpellCastTriggeredEvent
+from engine.card import Creature, Instant
+from engine.types import CardType, Keyword, ManaCost, Supertype
+from test_utils import create_game
+from engine.events import SpellCastTriggeredEvent
 
 def _resolve_stack(game):
     while not game.stack.is_empty():

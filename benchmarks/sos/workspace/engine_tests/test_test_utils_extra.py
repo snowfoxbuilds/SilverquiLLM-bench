@@ -1,4 +1,4 @@
-"""Additional tests for tests/test_utils.py — covers edge cases and gaps
+"""Additional tests for test_utils.py — covers edge cases and gaps
 not addressed by the implementer's 37 meta-tests.
 
 Focus areas:
@@ -16,11 +16,11 @@ from __future__ import annotations
 
 import pytest
 
-from benchmarks.sos.workspace.engine.card import CardImpl, Creature, Instant, Sorcery
-from benchmarks.sos.workspace.engine.player import DeterministicPlayer
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Zone
+from engine.card import CardImpl, Creature, Instant, Sorcery
+from engine.player import DeterministicPlayer
+from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Zone
 
-from tests.test_utils import (
+from test_utils import (
     TestSetupError,
     advance_to_phase,
     cast_spell,

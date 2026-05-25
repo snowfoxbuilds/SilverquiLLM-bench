@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import ScoldingAdministrator
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -63,7 +63,7 @@ class TestScoldingAdministratorAbilities:
 
     def test_has_menace(self) -> None:
         """Scolding Administrator must have Menace keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = ScoldingAdministrator(name="Scolding Administrator", owner=None, base_power=2, base_toughness=2)
         assert Keyword.MENACE in card.keywords, "Scolding Administrator should have Menace"
 
@@ -81,8 +81,8 @@ class TestScoldingAdministratorEdgeCases:
 
     def test_fizzle_no_targets_creature_stays(self) -> None:
         """If ETB ability fizzles, the creature remains on battlefield."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = ScoldingAdministrator(name="Scolding Administrator", owner=player, base_power=2, base_toughness=2)
@@ -117,7 +117,7 @@ class TestScoldingAdministratorInteractions:
 
     def test_counters_survive_end_of_turn(self) -> None:
         """Permanent counters must persist through end of turn."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = ScoldingAdministrator(name="Scolding Administrator", owner=player, base_power=2, base_toughness=2)
@@ -133,9 +133,9 @@ class TestScoldingAdministratorInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]

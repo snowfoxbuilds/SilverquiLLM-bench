@@ -112,8 +112,8 @@ def get_modes(self) -> list[Mode]:
 Replacement effects modify events before they happen (no stack). Separate from triggers via `register_replacement_effects()`. Registration goes through `game.replacement_manager.register(...)` using a typed `ReplacementEffect` and a typed event class (no string event names):
 
 ```python
-from benchmarks.sos.workspace.engine.events import MoveToGraveyardReplacementEvent
-from benchmarks.sos.workspace.engine.replacement_effects import ReplacementEffect
+from engine.events import MoveToGraveyardReplacementEvent
+from engine.replacement_effects import ReplacementEffect
 
 def register_replacement_effects(self, game):
     source = self

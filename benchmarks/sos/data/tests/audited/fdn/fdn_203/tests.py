@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from card_impl import InvoluntaryEmployment
-from benchmarks.sos.workspace.engine.card import CardImpl, Creature, Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
-from benchmarks.sos.workspace.tests.test_utils import create_game
+from engine.card import CardImpl, Creature, Sorcery
+from engine.types import CardType, Keyword, ManaCost
+from test_utils import create_game
 
 
 class TestInvoluntaryEmploymentBasics:

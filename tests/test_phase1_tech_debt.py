@@ -89,10 +89,10 @@ class TestCleanupDiscardWarning:
 
     def _make_game_for_warning(self) -> Any:
         """Build a minimal game state where cleanup discard triggers the fallback."""
-        from benchmarks.sos.workspace.engine.card import CardImpl
-        from benchmarks.sos.workspace.engine.game_state import GameState
-        from benchmarks.sos.workspace.engine.player import DeterministicPlayer
-        from benchmarks.sos.workspace.engine.types import Zone
+        from engine.card import CardImpl
+        from engine.game_state import GameState
+        from engine.player import DeterministicPlayer
+        from engine.types import Zone
 
         p1 = DeterministicPlayer("Alice", life=20, script=[])
         p2 = DeterministicPlayer("Bob", life=20, script=[])
@@ -110,7 +110,7 @@ class TestCleanupDiscardWarning:
 
     def test_warning_emitted_on_script_exhausted(self) -> None:
         """A UserWarning must be emitted when cleanup falls back to auto-discard."""
-        from benchmarks.sos.workspace.engine.turn import _do_cleanup_step
+        from engine.turn import _do_cleanup_step
 
         game, p1 = self._make_game_for_warning()
 
@@ -125,7 +125,7 @@ class TestCleanupDiscardWarning:
 
     def test_warning_contains_player_name(self) -> None:
         """The warning message must mention the player's name."""
-        from benchmarks.sos.workspace.engine.turn import _do_cleanup_step
+        from engine.turn import _do_cleanup_step
 
         game, p1 = self._make_game_for_warning()
 
@@ -141,7 +141,7 @@ class TestCleanupDiscardWarning:
 
     def test_warning_contains_card_name(self) -> None:
         """The warning message must mention the auto-discarded card's name."""
-        from benchmarks.sos.workspace.engine.turn import _do_cleanup_step
+        from engine.turn import _do_cleanup_step
 
         game, p1 = self._make_game_for_warning()
 
@@ -158,7 +158,7 @@ class TestCleanupDiscardWarning:
 
     def test_warning_mentions_script_exhausted(self) -> None:
         """The warning message must reference ScriptExhaustedError."""
-        from benchmarks.sos.workspace.engine.turn import _do_cleanup_step
+        from engine.turn import _do_cleanup_step
 
         game, p1 = self._make_game_for_warning()
 
@@ -174,11 +174,11 @@ class TestCleanupDiscardWarning:
 
     def test_no_warning_when_script_provides_choices(self) -> None:
         """No warning should be emitted when the script provides all needed choices."""
-        from benchmarks.sos.workspace.engine.card import CardImpl
-        from benchmarks.sos.workspace.engine.game_state import GameState
-        from benchmarks.sos.workspace.engine.player import DeterministicPlayer
-        from benchmarks.sos.workspace.engine.turn import _do_cleanup_step
-        from benchmarks.sos.workspace.engine.types import Zone
+        from engine.card import CardImpl
+        from engine.game_state import GameState
+        from engine.player import DeterministicPlayer
+        from engine.turn import _do_cleanup_step
+        from engine.types import Zone
 
         cards = []
         for i in range(9):

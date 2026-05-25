@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from card_impl import GrowFromTheAshes
-from benchmarks.sos.workspace.engine.card import CardImpl, Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Supertype, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
+from engine.card import CardImpl, Sorcery
+from engine.types import CardType, ManaCost, Supertype, Zone
+from test_utils import create_game
 
 
 class TestGrowFromTheAshesBasics:

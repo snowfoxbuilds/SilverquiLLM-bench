@@ -29,11 +29,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["engine*", "cards*", "silverquillm*", "benchmarks*"]
-
-[tool.setuptools.package-data]
-engine = ["py.typed"]
-cards = ["py.typed"]
+include = ["silverquillm*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -47,4 +43,7 @@ timeout = 300
 [tool.mypy]
 python_version = "3.12"
 strict = true
+# `engine` and `cards` live under benchmarks/sos/workspace/ — put that on
+# the mypy module search path so the unqualified names resolve.
+mypy_path = "benchmarks/sos/workspace"
 packages = ["engine", "cards"]

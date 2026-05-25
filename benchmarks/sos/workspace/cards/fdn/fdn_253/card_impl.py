@@ -1,13 +1,13 @@
 """Card implementation for Goldvein Pick."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import ActivatedAbility, Artifact
-from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
-from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
-from benchmarks.sos.workspace.engine.events import DealsDamageTriggeredEvent
+from engine.card import ActivatedAbility, Artifact
+from engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
+from engine.types import Keyword, ManaCost
+from engine.events import DealsDamageTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from engine.game_state import GameState
+    from cards.registry import CardRegistry
 
 def _make_equip_ability(equipment: Artifact, generic_cost: int) -> ActivatedAbility:
     """Return an :class:`ActivatedAbility` representing *Equip {N}*.
@@ -67,7 +67,7 @@ class GoldveinPick(Artifact):
 
     def register_triggers(self, game: Any) -> None:
         """Register combat damage trigger for Treasure token creation."""
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.triggers import TriggerRegistration
         source = self
 
         def _condition(game: Any, event: dict) -> bool:
@@ -81,9 +81,9 @@ class GoldveinPick(Artifact):
 
         def _effect(game: Any) -> None:
             """Create a Treasure token for the controller."""
-            from benchmarks.sos.workspace.engine.card import Artifact as _Artifact
-            from benchmarks.sos.workspace.engine.game import create_token
-            from benchmarks.sos.workspace.engine.types import ManaType
+            from engine.card import Artifact as _Artifact
+            from engine.game import create_token
+            from engine.types import ManaType
             controller = source.controller
             if controller is None:
                 return

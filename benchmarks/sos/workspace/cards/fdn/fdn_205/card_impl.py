@@ -10,11 +10,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
+from engine.card import Creature
+from engine.types import CardType, Keyword, ManaCost
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 class WardensOfTheCycle(Creature):
@@ -44,7 +44,7 @@ class WardensOfTheCycle(Creature):
 
     def on_resolve(self, game: "GameState") -> None:
         """ETB: create Saproling tokens equal to distinct colors of mana spent."""
-        from benchmarks.sos.workspace.engine.game import create_token
+        from engine.game import create_token
 
         controller = self.controller
         if controller is None:

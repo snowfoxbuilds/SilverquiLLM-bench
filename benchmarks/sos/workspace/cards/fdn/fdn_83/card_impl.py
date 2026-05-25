@@ -1,12 +1,12 @@
 """Card implementation for Crackling Cyclops."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
-from benchmarks.sos.workspace.engine.events import SpellCastTriggeredEvent
+from engine.card import Creature
+from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
+from engine.types import CardType, ManaCost
+from engine.events import SpellCastTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class CracklingCyclops(Creature):
     """Crackling Cyclops — {2}{R} — 0/4 — Cyclops Wizard.
@@ -28,7 +28,7 @@ class CracklingCyclops(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register spell-cast trigger for +3/+0."""
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

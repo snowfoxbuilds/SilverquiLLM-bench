@@ -1,12 +1,12 @@
 """Card implementation for Skyknight Squire."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
-from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
+from engine.card import Creature
+from engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer
+from engine.types import CardType, Keyword, ManaCost
+from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Return True if *obj* is on any player's battlefield."""
@@ -39,8 +39,8 @@ class SkyknightSquire(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register ETB trigger and threshold continuous effect."""
-        from benchmarks.sos.workspace.engine.game import add_counter
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.game import add_counter
+        from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

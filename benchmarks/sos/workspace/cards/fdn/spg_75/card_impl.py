@@ -1,17 +1,17 @@
 """Card implementation for Sphinx's Tutelage."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import ActivatedAbility, Artifact, Creature, Enchantment, Instant, ManaAbility, Sorcery
-from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, DURATION_PERMANENT, Layer, SubLayer
-from benchmarks.sos.workspace.engine.types import CardType, Color, HybridManaSymbol, Keyword, ManaCost, ManaType, Supertype, Zone
-from benchmarks.sos.workspace.engine.events import DrawsCardTriggeredEvent
+from engine.card import ActivatedAbility, Artifact, Creature, Enchantment, Instant, ManaAbility, Sorcery
+from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, DURATION_PERMANENT, Layer, SubLayer
+from engine.types import CardType, Color, HybridManaSymbol, Keyword, ManaCost, ManaType, Supertype, Zone
+from engine.events import DrawsCardTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from engine.game_state import GameState
+    from cards.registry import CardRegistry
 
 def _get_colors_of_permanent(obj: Any) -> set[Color]:
     """Return the set of MTG colors for a permanent based on its mana cost."""
-    from benchmarks.sos.workspace.engine.protection import get_colors
+    from engine.protection import get_colors
     return get_colors(obj)
 
 class SphinxsTutelage(Enchantment):
@@ -65,7 +65,7 @@ class SphinxsTutelage(Enchantment):
         return False
 
     def register_triggers(self, game: Any) -> None:
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.triggers import TriggerRegistration
         source = self
 
         def _condition(g: Any, event: dict) -> bool:
@@ -108,7 +108,7 @@ class SphinxsTutelage(Enchantment):
             return True
 
         def _effect(game: Any) -> None:
-            from benchmarks.sos.workspace.engine.game import draw_card, discard
+            from engine.game import draw_card, discard
             controller = source.controller or source.owner
             if controller is None:
                 return

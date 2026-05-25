@@ -17,19 +17,19 @@ from __future__ import annotations
 
 from typing import Any
 
-from benchmarks.sos.workspace.engine.card import CardImpl, Creature
-from benchmarks.sos.workspace.engine.casting import cast_spell as _engine_cast_spell
-from benchmarks.sos.workspace.engine.combat import (
+from engine.card import CardImpl, Creature
+from engine.casting import cast_spell as _engine_cast_spell
+from engine.combat import (
     CombatState,
     declare_attackers_step,
     declare_blockers_step,
 )
-from benchmarks.sos.workspace.engine.game import create_game as _engine_create_game
-from benchmarks.sos.workspace.engine.game_state import GameState, _TURN_SEQUENCE
-from benchmarks.sos.workspace.engine.mana import ManaPool
-from benchmarks.sos.workspace.engine.player import DeterministicPlayer
-from benchmarks.sos.workspace.engine.stack import priority_loop
-from benchmarks.sos.workspace.engine.types import ManaType, Phase, Step, Zone
+from engine.game import create_game as _engine_create_game
+from engine.game_state import GameState, _TURN_SEQUENCE
+from engine.mana import ManaPool
+from engine.player import DeterministicPlayer
+from engine.stack import priority_loop
+from engine.types import ManaType, Phase, Step, Zone
 
 
 class TestSetupError(Exception):
@@ -237,7 +237,7 @@ def cast_spell(
         )
 
     # Ensure sorcery-speed timing for non-instant spells
-    from benchmarks.sos.workspace.engine.types import CardType, Keyword
+    from engine.types import CardType, Keyword
 
     is_instant = CardType.INSTANT in getattr(card, "card_types", set())
     has_flash = Keyword.FLASH in getattr(card, "keywords", Keyword(0))
@@ -279,7 +279,7 @@ def _resolve_top_of_stack(game: GameState) -> None:
     Both players pass priority so the top of the stack resolves.
     Repeats until the stack is empty.
     """
-    from benchmarks.sos.workspace.engine.state_based_actions import resolve_state_based_actions
+    from engine.state_based_actions import resolve_state_based_actions
 
     while not game.stack.is_empty():
         obj = game.stack.pop()

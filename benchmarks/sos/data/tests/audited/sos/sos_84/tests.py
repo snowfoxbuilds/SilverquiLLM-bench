@@ -11,9 +11,9 @@ import pytest
 
 from card_impl import ForumNecroscribe
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
-from benchmarks.sos.workspace.engine.types import Keyword
+from engine.card import Creature
+from engine.types import CardType, ManaCost
+from engine.types import Keyword
 
 
 @pytest.mark.basic
@@ -63,7 +63,7 @@ class TestForumNecroscribeAbilities:
 
     def test_repartee_registers_trigger(self) -> None:
         """Repartee must register a triggered ability."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = ForumNecroscribe(name="Forum Necroscribe", owner=player)
@@ -77,8 +77,8 @@ class TestForumNecroscribeAbilities:
 
     def test_repartee_requires_creature_target(self) -> None:
         """Repartee only triggers for spells targeting a creature."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         card = ForumNecroscribe(name="Forum Necroscribe", owner=player)
@@ -95,9 +95,9 @@ class TestForumNecroscribeAbilities:
 
     def test_repartee_produces_effect(self) -> None:
         """Repartee trigger should produce an observable effect."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = ForumNecroscribe(name="Forum Necroscribe", owner=player)
@@ -118,9 +118,9 @@ class TestForumNecroscribeAbilities:
 
     def test_causes_discard(self) -> None:
         """Resolution should cause discard."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Sorcery
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Sorcery
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -137,9 +137,9 @@ class TestForumNecroscribeAbilities:
 
     def test_returns_from_graveyard(self) -> None:
         """Resolution should return card from graveyard."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         gy_card = Creature(name="Returned", owner=player, base_power=1, base_toughness=1)
@@ -163,8 +163,8 @@ class TestForumNecroscribeEdgeCases:
 
     def test_zone_transition_graveyard(self) -> None:
         """Creature should properly move to graveyard on death."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = ForumNecroscribe(name="Forum Necroscribe", owner=player)
@@ -182,8 +182,8 @@ class TestForumNecroscribeInteractions:
 
     def test_get_targets_finds_creatures(self) -> None:
         """get_targets should return valid creature targets."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -196,8 +196,8 @@ class TestForumNecroscribeInteractions:
 
     def test_coexists_with_other_creatures(self) -> None:
         """Card should coexist with other creatures on battlefield."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         card = ForumNecroscribe(name="Forum Necroscribe", owner=player)

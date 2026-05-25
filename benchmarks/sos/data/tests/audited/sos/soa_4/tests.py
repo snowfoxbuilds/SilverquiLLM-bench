@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import DutyBeyondDeath
 
-from benchmarks.sos.workspace.engine.card import Instant
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Instant
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -51,8 +51,8 @@ class TestDutyBeyondDeathAbilities:
 
     def test_adds_plus_counter(self) -> None:
         """Resolution should add +1/+1 counter to target."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         target = Creature(name="Target", owner=player, base_power=2, base_toughness=2)
@@ -71,9 +71,9 @@ class TestDutyBeyondDeathAbilities:
 
     def test_grants_indestructible(self) -> None:
         """Resolution should grant indestructible."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Keyword
         game = create_game()
         player = game.players[0]
         target = Creature(name="KWTarget", owner=player, base_power=2, base_toughness=2)
@@ -90,7 +90,7 @@ class TestDutyBeyondDeathAbilities:
 
     def test_additional_cost_declared(self) -> None:
         """Card must declare additional cost mechanism."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = DutyBeyondDeath(name="Duty Beyond Death", owner=player)
@@ -109,7 +109,7 @@ class TestDutyBeyondDeathEdgeCases:
 
     def test_spell_resolution_on_empty_board(self) -> None:
         """Spell should handle resolution when no valid targets exist."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = DutyBeyondDeath(name="Duty Beyond Death", owner=player)
@@ -128,8 +128,8 @@ class TestDutyBeyondDeathInteractions:
 
     def test_resolution_with_board_state(self) -> None:
         """Card should resolve correctly with established board."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -151,8 +151,8 @@ class TestDutyBeyondDeathInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         own = Creature(name="Own", owner=player, base_power=4, base_toughness=4)

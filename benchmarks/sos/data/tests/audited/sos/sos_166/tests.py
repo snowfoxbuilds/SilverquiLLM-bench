@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import VastlandsScavengerBindToLife
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -62,13 +62,13 @@ class TestVastlandsScavengerBindToLifeAbilities:
 
     def test_has_prepared(self) -> None:
         """Vastlands Scavenger // Bind to Life must have Prepared keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = VastlandsScavengerBindToLife(name="Vastlands Scavenger // Bind to Life", owner=None, base_power=4, base_toughness=4)
         assert Keyword.PREPARED in card.keywords, "Vastlands Scavenger // Bind to Life should have Prepared"
 
     def test_has_deathtouch(self) -> None:
         """Vastlands Scavenger // Bind to Life must have Deathtouch keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = VastlandsScavengerBindToLife(name="Vastlands Scavenger // Bind to Life", owner=None, base_power=4, base_toughness=4)
         assert Keyword.DEATHTOUCH in card.keywords, "Vastlands Scavenger // Bind to Life should have Deathtouch"
 
@@ -106,8 +106,8 @@ class TestVastlandsScavengerBindToLifeEdgeCases:
 
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = VastlandsScavengerBindToLife(name="Vastlands Scavenger // Bind to Life", owner=player, base_power=4, base_toughness=4)
@@ -125,9 +125,9 @@ class TestVastlandsScavengerBindToLifeInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -143,9 +143,9 @@ class TestVastlandsScavengerBindToLifeInteractions:
 
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         other = Creature(name="Companion", owner=player, base_power=2, base_toughness=2)

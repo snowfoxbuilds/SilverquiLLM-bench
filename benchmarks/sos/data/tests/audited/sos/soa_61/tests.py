@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import BringToLight
 
-from benchmarks.sos.workspace.engine.card import Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Sorcery
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -53,13 +53,13 @@ class TestBringToLightAbilities:
 
     def test_has_converge(self) -> None:
         """Bring to Light must have Converge keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = BringToLight(name="Bring to Light", owner=None)
         assert Keyword.CONVERGE in card.keywords, "Bring to Light should have Converge"
 
     def test_cost_reduction_implemented(self) -> None:
         """Cost reduction must be implemented per oracle text."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = BringToLight(name="Bring to Light", owner=player)
@@ -70,7 +70,7 @@ class TestBringToLightAbilities:
 
     def test_converge_scaling(self) -> None:
         """Converge effect must scale with colors of mana spent."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = BringToLight(name="Bring to Light", owner=player)
@@ -83,9 +83,9 @@ class TestBringToLightAbilities:
 
     def test_resolution_exiles_target(self) -> None:
         """Spell resolution must exile target per oracle text."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -105,7 +105,7 @@ class TestBringToLightEdgeCases:
 
     def test_cost_reduction_floor_at_zero(self) -> None:
         """Cost reduction must not reduce cost below zero."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = BringToLight(name="Bring to Light", owner=player)
@@ -119,7 +119,7 @@ class TestBringToLightEdgeCases:
 
     def test_converge_zero_colors_no_bonus(self) -> None:
         """With 0 colors, converge should produce no bonus."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = BringToLight(name="Bring to Light", owner=player)
@@ -135,7 +135,7 @@ class TestBringToLightEdgeCases:
 
     def test_converge_five_colors_maximum(self) -> None:
         """With 5 colors, converge should produce maximum bonus."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = BringToLight(name="Bring to Light", owner=player)
@@ -170,9 +170,9 @@ class TestBringToLightInteractions:
 
     def test_spell_to_graveyard_after_resolution(self) -> None:
         """Resolved spell must go to graveyard."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
-        from benchmarks.sos.workspace.engine.types import Zone
-        from benchmarks.sos.workspace.engine.zones import move_to_zone
+        from test_utils import create_game
+        from engine.types import Zone
+        from engine.zones import move_to_zone
         game = create_game()
         player = game.players[0]
         card = BringToLight(name="Bring to Light", owner=player)
@@ -183,9 +183,9 @@ class TestBringToLightInteractions:
 
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         other = Creature(name="Companion", owner=player, base_power=2, base_toughness=2)

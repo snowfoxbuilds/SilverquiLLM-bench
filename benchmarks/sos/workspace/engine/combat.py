@@ -27,11 +27,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.types import Keyword
+from engine.types import Keyword
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
-    from benchmarks.sos.workspace.engine.player import Player
+    from engine.game_state import GameState
+    from engine.player import Player
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +127,7 @@ def _can_block(blocker: Any, attacker: Any) -> bool:
             return False
 
     # Protection check — attacker with protection from blocker can't be blocked
-    from benchmarks.sos.workspace.engine.protection import has_protection_from
+    from engine.protection import has_protection_from
 
     if has_protection_from(attacker, blocker):
         return False
@@ -170,7 +170,7 @@ def _deal_damage(
         return
 
     # Protection prevents damage (D in DEBT).
-    from benchmarks.sos.workspace.engine.protection import has_protection_from
+    from engine.protection import has_protection_from
 
     if has_protection_from(target, source):
         return
@@ -221,7 +221,7 @@ def declare_attackers_step(game: GameState) -> None:
     defending = game.non_active_player
 
     # Gather legal attackers from the active player's battlefield
-    from benchmarks.sos.workspace.engine.types import Zone
+    from engine.types import Zone
     bf = active.zones[Zone.BATTLEFIELD]
     eligible = [
         c for c in bf.get_all()
@@ -282,7 +282,7 @@ def declare_blockers_step(game: GameState) -> None:
     defending = game.non_active_player
     active = game.active_player
 
-    from benchmarks.sos.workspace.engine.types import Zone
+    from engine.types import Zone
     bf_defending = defending.zones[Zone.BATTLEFIELD]
     eligible_blockers = [
         c for c in bf_defending.get_all()
@@ -371,7 +371,7 @@ def combat_damage_step(game: GameState) -> None:
     Parameters:
         game: The current game state.
     """
-    from benchmarks.sos.workspace.engine.state_based_actions import resolve_state_based_actions
+    from engine.state_based_actions import resolve_state_based_actions
 
     combat = game.combat_state
 
@@ -425,7 +425,7 @@ def _assign_combat_damage(
     the battlefield (e.g. killed by first-strike damage and removed by
     SBAs) are skipped.
     """
-    from benchmarks.sos.workspace.engine.types import Zone
+    from engine.types import Zone
 
     # Track which blockers have already dealt their damage this sub-step
     # (blockers only deal damage once even if blocking multiple attackers)

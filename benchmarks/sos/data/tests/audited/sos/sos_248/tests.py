@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import DiaryOfDreams
 
-from benchmarks.sos.workspace.engine.card import Artifact
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Artifact
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -51,9 +51,9 @@ class TestDiaryOfDreamsAbilities:
 
     def test_draws_cards(self) -> None:
         """Resolution should draw card(s)."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
-        from benchmarks.sos.workspace.engine.card import Sorcery
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game
+        from engine.card import Sorcery
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         filler = Sorcery(name="Filler", owner=player)
@@ -70,8 +70,8 @@ class TestDiaryOfDreamsAbilities:
 
     def test_cost_reduction_applies(self) -> None:
         """cost_reduction should return > 0 when condition met."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         card = DiaryOfDreams(name="Diary of Dreams", owner=player)
@@ -87,7 +87,7 @@ class TestDiaryOfDreamsAbilities:
 
     def test_has_activated_ability(self) -> None:
         """Card must expose at least one activated ability."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = DiaryOfDreams(name="Diary of Dreams", owner=player)
@@ -103,8 +103,8 @@ class TestDiaryOfDreamsEdgeCases:
 
     def test_no_reduction_when_condition_unmet(self) -> None:
         """No cost reduction when condition is not met."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         card = DiaryOfDreams(name="Diary of Dreams", owner=player)
@@ -123,8 +123,8 @@ class TestDiaryOfDreamsInteractions:
 
     def test_resolution_with_board_state(self) -> None:
         """Card should resolve correctly with established board."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -146,8 +146,8 @@ class TestDiaryOfDreamsInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         own = Creature(name="Own", owner=player, base_power=4, base_toughness=4)

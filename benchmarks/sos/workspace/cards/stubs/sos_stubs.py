@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from benchmarks.sos.workspace.engine.card import (
+from engine.card import (
     Artifact,
     ArtifactCreature,
     CardImpl,
@@ -21,10 +21,10 @@ from benchmarks.sos.workspace.engine.card import (
     Planeswalker,
     Sorcery,
 )
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Supertype
+from engine.types import CardType, ManaCost, Supertype
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from cards.registry import CardRegistry
 
 
 class TheDawningArchaic(Creature):
@@ -8799,7 +8799,7 @@ _STUB_CARDS: list[tuple[str, type, str, str, str | None, str | None, list[str], 
 
 def register_sos_stubs(registry: CardRegistry) -> None:
     """Register all SOS Draft Set stub cards with *registry*."""
-    from benchmarks.sos.workspace.cards.registry import CardMetadata
+    from cards.registry import CardMetadata
 
     for (name, impl_class, mana_cost_str, type_line, power,
          toughness, colors, keywords, rarity, set_code, collector_number) in _STUB_CARDS:

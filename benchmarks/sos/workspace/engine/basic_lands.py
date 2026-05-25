@@ -15,14 +15,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import Land, ManaAbility
-from benchmarks.sos.workspace.engine.types import ManaType, Supertype
+from engine.card import Land, ManaAbility
+from engine.types import ManaType, Supertype
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
-    from benchmarks.sos.workspace.engine.player import Player
+    from engine.game_state import GameState
+    from engine.player import Player
 
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from cards.registry import CardRegistry
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +199,7 @@ def register_basic_lands(registry: CardRegistry) -> None:
     :class:`~cards.registry.CardMetadata` reflecting its type line, colors,
     and lack of mana cost.
     """
-    from benchmarks.sos.workspace.cards.registry import CardMetadata
+    from cards.registry import CardMetadata
 
     _BASIC_LANDS: list[tuple[str, type[Land], str]] = [
         ("Plains", Plains, "W"),

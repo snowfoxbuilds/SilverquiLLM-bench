@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from benchmarks.sos.workspace.cards.registry import CardMetadata
+from cards.registry import CardMetadata
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

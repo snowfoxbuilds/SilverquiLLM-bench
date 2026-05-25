@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
-from benchmarks.sos.workspace.engine.types import Color, ManaType
+from engine.types import Color, ManaType
 
 if TYPE_CHECKING:
     pass

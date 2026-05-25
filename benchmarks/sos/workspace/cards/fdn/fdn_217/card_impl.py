@@ -1,12 +1,12 @@
 """Card implementation for Dwynen, Gilt-Leaf Daen."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Supertype
-from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent
+from engine.card import Creature
+from engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
+from engine.types import CardType, Keyword, ManaCost, Supertype
+from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     for player in game.players:
@@ -38,7 +38,7 @@ class DwynenGiltLeafDaen(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register lord effect and attack trigger."""
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

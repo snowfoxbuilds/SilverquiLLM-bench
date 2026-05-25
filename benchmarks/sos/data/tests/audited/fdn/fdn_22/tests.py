@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from card_impl import RaiseThePast
-from benchmarks.sos.workspace.engine.card import Creature, Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
+from engine.card import Creature, Sorcery
+from engine.types import CardType, ManaCost, Zone
+from test_utils import create_game
 
 
 class TestRaiseThePastBasics:
@@ -73,7 +73,7 @@ class TestRaiseThePastResolve:
     def test_non_creature_cards_ignored(self) -> None:
         game = create_game()
         p1 = game.players[0]
-        from benchmarks.sos.workspace.engine.card import Instant
+        from engine.card import Instant
         non_creature = Instant(name="Shock", mana_cost=ManaCost.parse("{R}"),
                                owner=p1, controller=p1)
         p1.zones[Zone.GRAVEYARD].add(non_creature)

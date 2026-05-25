@@ -2,13 +2,13 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import ActivatedAbility, Creature, Enchantment
-from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
-from benchmarks.sos.workspace.engine.events import LosesLifeTriggeredEvent, SpellCastTriggeredEvent
+from engine.card import ActivatedAbility, Creature, Enchantment
+from engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
+from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+from engine.events import LosesLifeTriggeredEvent, SpellCastTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from engine.game_state import GameState
+    from cards.registry import CardRegistry
 
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Check if *obj* is on any player's battlefield."""
@@ -36,7 +36,7 @@ class PainfulQuandary(Enchantment):
         pass
 
     def register_triggers(self, game: GameState) -> None:
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.triggers import TriggerRegistration
         source = self
 
         def _condition(game: Any, event: dict) -> bool:
@@ -55,7 +55,7 @@ class PainfulQuandary(Enchantment):
             controller = source.controller
             if controller is None:
                 return
-            from benchmarks.sos.workspace.engine.game import deal_damage
+            from engine.game import deal_damage
             for player in game.players:
                 if player is not controller:
                     player.life -= 5

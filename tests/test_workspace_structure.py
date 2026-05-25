@@ -18,7 +18,7 @@ EXPECTED_DIRS = [
     "engine",
     "cards/fdn",
     "cards/sos",
-    "tests",
+    "engine_tests",
 ]
 
 EXPECTED_FILES = [

@@ -1,12 +1,12 @@
 """Card implementation for Battlesong Berserker."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
-from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent
+from engine.card import Creature
+from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
+from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class BattlesongBerserker(Creature):
     """Battlesong Berserker — {3}{R} — 3/4 — Human Berserker.
@@ -28,7 +28,7 @@ class BattlesongBerserker(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register attack trigger for +1/+0 and menace."""
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

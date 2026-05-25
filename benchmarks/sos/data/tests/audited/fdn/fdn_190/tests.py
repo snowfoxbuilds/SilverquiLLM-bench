@@ -6,9 +6,9 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from benchmarks.sos.workspace.engine.card import CardImpl, Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
-from benchmarks.sos.workspace.tests.test_utils import create_game
+from engine.card import CardImpl, Sorcery
+from engine.types import CardType, ManaCost
+from test_utils import create_game
 
 # The conftest name derivation produces "BrassSBounty" but the impl uses
 # "BrasssBounty".  Import the real class directly.

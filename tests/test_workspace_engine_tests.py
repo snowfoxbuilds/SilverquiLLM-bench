@@ -27,29 +27,29 @@ def repo_root() -> Path:
 
 
 class TestEngineTestsStaged:
-    """Engine regression tests must be staged into workspace/tests/engine/."""
+    """Engine regression tests must be staged into workspace/engine_tests/."""
 
     def test_tests_engine_directory_exists(self, staged):
         workspace, _ = staged
-        assert (workspace / "tests" / "engine").is_dir()
+        assert (workspace / "engine_tests").is_dir()
 
     def test_engine_test_files_are_present(self, staged, repo_root):
-        """At least some .py test files from tests/engine/ are staged."""
+        """At least some .py test files from engine_tests/ are staged."""
         workspace, _ = staged
-        staged_dir = workspace / "tests" / "engine"
+        staged_dir = workspace / "engine_tests"
         staged_files = list(staged_dir.glob("*.py"))
-        assert len(staged_files) > 0, "No .py files staged in tests/engine/"
+        assert len(staged_files) > 0, "No .py files staged in engine_tests/"
 
     def test_staged_files_match_source(self, staged, repo_root):
-        """Every .py file in source tests/engine/ should appear in workspace."""
+        """Every .py file in source engine_tests/ should appear in workspace."""
         workspace, _ = staged
-        src_dir = repo_root / "tests" / "engine"
-        staged_dir = workspace / "tests" / "engine"
+        src_dir = repo_root / "benchmarks" / "sos" / "workspace" / "engine_tests"
+        staged_dir = workspace / "engine_tests"
         src_files = {f.name for f in src_dir.glob("*.py") if f.name != "__init__.py" or True}
         staged_files = {f.name for f in staged_dir.glob("*.py")}
         # All source files should be staged (except __pycache__ contents)
         for f in src_files:
-            assert f in staged_files, f"Source file {f} not found in staged tests/engine/"
+            assert f in staged_files, f"Source file {f} not found in staged engine_tests/"
 
 
 # ------------------------------------------------------------------
@@ -62,13 +62,13 @@ class TestPycacheExcluded:
 
     def test_no_pycache_directory(self, staged):
         workspace, _ = staged
-        staged_dir = workspace / "tests" / "engine"
+        staged_dir = workspace / "engine_tests"
         pycache_dirs = list(staged_dir.rglob("__pycache__"))
         assert pycache_dirs == [], f"Found __pycache__: {pycache_dirs}"
 
     def test_no_pyc_files(self, staged):
         workspace, _ = staged
-        staged_dir = workspace / "tests" / "engine"
+        staged_dir = workspace / "engine_tests"
         pyc_files = list(staged_dir.rglob("*.pyc"))
         assert pyc_files == [], f"Found .pyc files: {pyc_files}"
 
@@ -106,7 +106,7 @@ class TestPromptNoModifyRule:
         assert "do not modify" in _PROMPT_TEXT.lower() or "Do not modify" in _PROMPT_TEXT
 
     def test_prompt_text_references_workspace_tests_engine(self):
-        assert "workspace/tests/engine/" in _PROMPT_TEXT or "workspace/tests/engine" in _PROMPT_TEXT
+        assert "workspace/engine_tests/" in _PROMPT_TEXT or "workspace/tests/engine" in _PROMPT_TEXT
 
     def test_staged_prompt_file_contains_no_modify(self, staged):
         workspace, _ = staged
@@ -120,20 +120,19 @@ class TestPromptNoModifyRule:
 
 
 class TestGracefulMissing:
-    """If tests/engine/ doesn't exist in repo, staging should not crash."""
+    """If engine_tests/ doesn't exist in repo, staging should not crash."""
 
     def test_no_crash_when_source_missing(self, tmp_path, monkeypatch):
-        """stage_workspace should not raise if tests/engine/ is absent."""
+        """stage_workspace should not raise if engine_tests/ is absent."""
         import silverquillm.workspace as ws_mod
 
-        # Point _REPO_ROOT to a fake dir that has no tests/engine/
+        # Point _REPO_ROOT to a fake dir that has no engine_tests/
         fake_root = tmp_path / "fake_repo"
         fake_root.mkdir()
         # Create minimal structure needed for stage_workspace to work
         (fake_root / "benchmarks" / "sos" / "workspace" / "engine").mkdir(parents=True)
         (fake_root / "benchmarks" / "sos" / "workspace" / "engine" / "card.py").write_text("# stub")
-        (fake_root / "benchmarks" / "sos" / "workspace" / "tests").mkdir(parents=True, exist_ok=True)
-        (fake_root / "benchmarks" / "sos" / "workspace" / "tests" / "test_utils.md").write_text("# stub")
+        (fake_root / "benchmarks" / "sos" / "workspace" / "test_utils.md").write_text("# stub")
         (fake_root / "cards" / "sos").mkdir(parents=True)
         (fake_root / "cards" / "fdn").mkdir(parents=True)
         (fake_root / "docs").mkdir()
@@ -148,5 +147,5 @@ class TestGracefulMissing:
         monkeypatch.setattr(ws_mod, "_REPO_ROOT", fake_root)
         # Should not raise
         workspace, output = stage_workspace(out_dir)
-        # tests/engine/ should simply not exist
-        assert not (workspace / "tests" / "engine").exists()
+        # engine_tests/ should simply not exist
+        assert not (workspace / "engine_tests").exists()

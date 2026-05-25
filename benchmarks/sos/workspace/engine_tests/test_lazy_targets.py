@@ -12,10 +12,10 @@ from typing import Any
 
 import pytest
 
-from benchmarks.sos.workspace.engine.card import Creature, Instant
-from benchmarks.sos.workspace.engine.game_state import GameState
-from benchmarks.sos.workspace.engine.player import DeterministicPlayer
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+from engine.card import Creature, Instant
+from engine.game_state import GameState
+from engine.player import DeterministicPlayer
+from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
 
 
 # ---------------------------------------------------------------------------
@@ -104,14 +104,14 @@ class TestLazyTargetFilter:
         target_reqs = spell.get_targets(game)
         filter_fn = target_reqs[0].filter_fn
 
-        from benchmarks.sos.workspace.engine.card import Artifact
+        from engine.card import Artifact
         artifact = Artifact(name="Artifact", owner=p1, controller=p1)
         assert filter_fn(artifact) is False
 
     def test_keyword_based_filter_sees_updated_keywords(self) -> None:
         """If a creature gains/loses flying after filter creation, the
         filter should see the updated keywords."""
-        from benchmarks.sos.workspace.cards.fdn.fdn_214.card_impl import BrokenWings
+        from cards.fdn.fdn_214.card_impl import BrokenWings
 
         game = _make_game()
         p1, p2 = game.players
@@ -135,7 +135,7 @@ class TestLazyTargetFilter:
     def test_power_based_filter_sees_updated_power(self) -> None:
         """If a creature's power changes after filter creation, the
         filter should see the updated power."""
-        from benchmarks.sos.workspace.cards.fdn.fdn_143.card_impl import MakeYourMove
+        from cards.fdn.fdn_143.card_impl import MakeYourMove
 
         game = _make_game()
         p1, p2 = game.players
@@ -158,7 +158,7 @@ class TestLazyTargetFilter:
         """BanishingLight targets 'nonland permanent an opponent controls'.
         If control of a permanent changes after filter creation, the filter
         should reflect the new controller."""
-        from benchmarks.sos.workspace.cards.fdn.fdn_138.card_impl import BanishingLight
+        from cards.fdn.fdn_138.card_impl import BanishingLight
 
         game = _make_game()
         p1, p2 = game.players
@@ -235,7 +235,7 @@ class TestLazyTargetFilter:
         game = _make_game()
         p1 = game.players[0]
 
-        from benchmarks.sos.workspace.engine.card import Instant
+        from engine.card import Instant
         vanilla_spell = Instant(name="Opt", mana_cost=ManaCost.parse("{U}"), owner=p1, controller=p1)
         assert vanilla_spell.get_targets(game) == []
 

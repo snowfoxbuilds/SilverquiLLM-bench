@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import BertaWiseExtrapolator
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -90,8 +90,8 @@ class TestBertaWiseExtrapolatorEdgeCases:
 
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = BertaWiseExtrapolator(name="Berta, Wise Extrapolator", owner=player, base_power=1, base_toughness=4)
@@ -109,7 +109,7 @@ class TestBertaWiseExtrapolatorInteractions:
 
     def test_counters_survive_end_of_turn(self) -> None:
         """Permanent counters must persist through end of turn."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = BertaWiseExtrapolator(name="Berta, Wise Extrapolator", owner=player, base_power=1, base_toughness=4)
@@ -125,9 +125,9 @@ class TestBertaWiseExtrapolatorInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -143,8 +143,8 @@ class TestBertaWiseExtrapolatorInteractions:
 
     def test_tokens_appear_on_battlefield(self) -> None:
         """Tokens created must appear on the battlefield."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = BertaWiseExtrapolator(name="Berta, Wise Extrapolator", owner=player, base_power=1, base_toughness=4)

@@ -1,10 +1,10 @@
 """Audited tests for FDN 58 — Bloodthirsty Conqueror."""
 from __future__ import annotations
 from card_impl import BloodthirstyConqueror
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import Keyword, ManaCost, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
-from benchmarks.sos.workspace.engine.events import LosesLifeTriggeredEvent
+from engine.card import Creature
+from engine.types import Keyword, ManaCost, Zone
+from test_utils import create_game
+from engine.events import LosesLifeTriggeredEvent
 
 class TestBloodthirstyConquerorBasics:
     """Basic card properties."""

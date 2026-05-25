@@ -366,10 +366,10 @@ class TestSOSConftestBehavior:
                 sys.modules.pop("card_impl", None)
 
     def test_sos_conftest_references_register_sos_stubs(self) -> None:
-        """SOS conftest must call register_sos_stubs() from benchmarks.sos.workspace.cards.stubs.sos_stubs."""
+        """SOS conftest must call register_sos_stubs() from cards.stubs.sos_stubs."""
         content = (_PROJECT_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos" / "conftest.py").read_text()
         assert "register_sos_stubs" in content
-        assert "benchmarks.sos.workspace.cards.stubs.sos_stubs" in content
+        assert "cards.stubs.sos_stubs" in content
 
     def test_sos_does_not_replace_real_explicit_card_impl(self) -> None:
         """SOS conftest must not replace an evaluator-provided real card_impl.py."""
@@ -537,8 +537,8 @@ class TestSOSSetPrefixedResolution:
         - SOA card cn=1, set_code="soa" → dir "soa_1"
         - SPG card cn=149, set_code="spg" → dir "spg_149"
         """
-        from benchmarks.sos.workspace.cards.registry import CardRegistry, CardMetadata
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from cards.registry import CardRegistry, CardMetadata
+        from engine.card import CardImpl
 
         # Create distinct stub classes
         SOSBaseCard = type("SOSBaseCard", (CardImpl,), {"__init__": lambda self, **kw: None})
@@ -562,7 +562,7 @@ class TestSOSSetPrefixedResolution:
                 CardMetadata(collector_number="149", set_code="spg"),
             )
 
-        fake_mod = types.ModuleType("benchmarks.sos.workspace.cards.stubs.sos_stubs")
+        fake_mod = types.ModuleType("cards.stubs.sos_stubs")
         fake_mod.register_sos_stubs = register_sos_stubs
         return fake_mod
 
@@ -571,9 +571,9 @@ class TestSOSSetPrefixedResolution:
         sos = _load_sos_conftest_module()
         fake_stubs = self._make_fake_sos_stubs_module()
 
-        original_stubs = sys.modules.get("benchmarks.sos.workspace.cards.stubs.sos_stubs")
+        original_stubs = sys.modules.get("cards.stubs.sos_stubs")
         try:
-            sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = fake_stubs
+            sys.modules["cards.stubs.sos_stubs"] = fake_stubs
             cn_to_entry, _classname_to_class = sos._load_sos_stubs_and_build_registry()
 
             assert "sos_1" in cn_to_entry, "Set-prefixed 'sos_1' must map to SOS base card"
@@ -587,18 +587,18 @@ class TestSOSSetPrefixedResolution:
             )
         finally:
             if original_stubs is not None:
-                sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = original_stubs
+                sys.modules["cards.stubs.sos_stubs"] = original_stubs
             else:
-                sys.modules.pop("benchmarks.sos.workspace.cards.stubs.sos_stubs", None)
+                sys.modules.pop("cards.stubs.sos_stubs", None)
 
     def test_spg_prefix_maps_correctly(self) -> None:
         """'spg_149' must map to the SPG guest card."""
         sos = _load_sos_conftest_module()
         fake_stubs = self._make_fake_sos_stubs_module()
 
-        original_stubs = sys.modules.get("benchmarks.sos.workspace.cards.stubs.sos_stubs")
+        original_stubs = sys.modules.get("cards.stubs.sos_stubs")
         try:
-            sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = fake_stubs
+            sys.modules["cards.stubs.sos_stubs"] = fake_stubs
             cn_to_entry, _classname_to_class = sos._load_sos_stubs_and_build_registry()
 
             assert "spg_149" in cn_to_entry, "Set-prefixed 'spg_149' must exist"
@@ -606,18 +606,18 @@ class TestSOSSetPrefixedResolution:
             assert spg_class.__name__ == "SPGGuestCard"
         finally:
             if original_stubs is not None:
-                sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = original_stubs
+                sys.modules["cards.stubs.sos_stubs"] = original_stubs
             else:
-                sys.modules.pop("benchmarks.sos.workspace.cards.stubs.sos_stubs", None)
+                sys.modules.pop("cards.stubs.sos_stubs", None)
 
     def test_sos_base_card_uses_set_prefix(self) -> None:
         """SOS base set cards (set_code='sos') must use the 'sos_N' prefixed form."""
         sos = _load_sos_conftest_module()
         fake_stubs = self._make_fake_sos_stubs_module()
 
-        original_stubs = sys.modules.get("benchmarks.sos.workspace.cards.stubs.sos_stubs")
+        original_stubs = sys.modules.get("cards.stubs.sos_stubs")
         try:
-            sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = fake_stubs
+            sys.modules["cards.stubs.sos_stubs"] = fake_stubs
             cn_to_entry, _classname_to_class = sos._load_sos_stubs_and_build_registry()
 
             # sos_1 must exist — SOS base cards use set-prefixed dirs to match cards/sos/
@@ -630,18 +630,18 @@ class TestSOSSetPrefixedResolution:
             )
         finally:
             if original_stubs is not None:
-                sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = original_stubs
+                sys.modules["cards.stubs.sos_stubs"] = original_stubs
             else:
-                sys.modules.pop("benchmarks.sos.workspace.cards.stubs.sos_stubs", None)
+                sys.modules.pop("cards.stubs.sos_stubs", None)
 
     def test_sos_synthetic_resolves_soa_card_from_prefixed_dir(self) -> None:
         """Synthetic card_impl with detected dir 'soa_1' must return SOA card class."""
         sos = _load_sos_conftest_module()
         fake_stubs = self._make_fake_sos_stubs_module()
 
-        original_stubs = sys.modules.get("benchmarks.sos.workspace.cards.stubs.sos_stubs")
+        original_stubs = sys.modules.get("cards.stubs.sos_stubs")
         try:
-            sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = fake_stubs
+            sys.modules["cards.stubs.sos_stubs"] = fake_stubs
             cn_to_entry, classname_to_class = sos._load_sos_stubs_and_build_registry()
             synthetic = sos._make_card_impl_module(cn_to_entry, classname_to_class)
 
@@ -652,18 +652,18 @@ class TestSOSSetPrefixedResolution:
                 assert result.__name__ == "SOAArchiveCard"
         finally:
             if original_stubs is not None:
-                sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = original_stubs
+                sys.modules["cards.stubs.sos_stubs"] = original_stubs
             else:
-                sys.modules.pop("benchmarks.sos.workspace.cards.stubs.sos_stubs", None)
+                sys.modules.pop("cards.stubs.sos_stubs", None)
 
     def test_sos_synthetic_rejects_wrong_card_from_prefixed_dir(self) -> None:
         """Importing wrong class from 'soa_1' dir must raise AttributeError."""
         sos = _load_sos_conftest_module()
         fake_stubs = self._make_fake_sos_stubs_module()
 
-        original_stubs = sys.modules.get("benchmarks.sos.workspace.cards.stubs.sos_stubs")
+        original_stubs = sys.modules.get("cards.stubs.sos_stubs")
         try:
-            sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = fake_stubs
+            sys.modules["cards.stubs.sos_stubs"] = fake_stubs
             cn_to_entry, classname_to_class = sos._load_sos_stubs_and_build_registry()
 
             import unittest.mock as mock
@@ -673,18 +673,18 @@ class TestSOSSetPrefixedResolution:
                     synthetic.__getattr__("SPGGuestCard")
         finally:
             if original_stubs is not None:
-                sys.modules["benchmarks.sos.workspace.cards.stubs.sos_stubs"] = original_stubs
+                sys.modules["cards.stubs.sos_stubs"] = original_stubs
             else:
-                sys.modules.pop("benchmarks.sos.workspace.cards.stubs.sos_stubs", None)
+                sys.modules.pop("cards.stubs.sos_stubs", None)
 
 
 class TestPlainsTestExecution:
     """Actually run Plains resolution to verify end-to-end infrastructure."""
 
     def test_plains_is_land_subclass(self) -> None:
-        from benchmarks.sos.workspace.cards.registry import CardRegistry
-        from benchmarks.sos.workspace.engine.basic_lands import register_basic_lands
-        from benchmarks.sos.workspace.engine.card import Land
+        from cards.registry import CardRegistry
+        from engine.basic_lands import register_basic_lands
+        from engine.card import Land
 
         registry = CardRegistry()
         register_basic_lands(registry)
@@ -693,8 +693,8 @@ class TestPlainsTestExecution:
         assert isinstance(card, Land)
 
     def test_plains_has_mana_abilities(self) -> None:
-        from benchmarks.sos.workspace.cards.registry import CardRegistry
-        from benchmarks.sos.workspace.engine.basic_lands import register_basic_lands
+        from cards.registry import CardRegistry
+        from engine.basic_lands import register_basic_lands
 
         registry = CardRegistry()
         register_basic_lands(registry)

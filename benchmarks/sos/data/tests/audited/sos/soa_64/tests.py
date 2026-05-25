@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import ExpressiveIteration
 
-from benchmarks.sos.workspace.engine.card import Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Sorcery
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -56,9 +56,9 @@ class TestExpressiveIterationAbilities:
         Oracle: Look at the top three cards of your library. Put one of them into your hand, put one of them on the 
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game
-        from benchmarks.sos.workspace.engine.types import Zone
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from test_utils import create_game
+        from engine.types import Zone
+        from engine.card import CardImpl
 
         game = create_game()
         player = game.players[0]
@@ -79,9 +79,9 @@ class TestExpressiveIterationAbilities:
         Oracle: Look at the top three cards of your library. Put one of them into your hand, put one of them on the 
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game
-        from benchmarks.sos.workspace.engine.types import Zone
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from test_utils import create_game
+        from engine.types import Zone
+        from engine.card import CardImpl
 
         game = create_game()
         player = game.players[0]

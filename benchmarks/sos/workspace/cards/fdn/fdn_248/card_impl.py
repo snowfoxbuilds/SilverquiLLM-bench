@@ -1,11 +1,11 @@
 """Card implementation for Thousand-Year Storm."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Enchantment
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
-from benchmarks.sos.workspace.engine.events import SpellCastTriggeredEvent
+from engine.card import Enchantment
+from engine.types import CardType, ManaCost
+from engine.events import SpellCastTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 class ThousandYearStorm(Enchantment):
@@ -30,8 +30,8 @@ class ThousandYearStorm(Enchantment):
         super().__init__(**kwargs)
 
     def register_triggers(self, game: 'GameState') -> None:
-        from benchmarks.sos.workspace.engine.stack import copy_spell
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.stack import copy_spell
+        from engine.triggers import TriggerRegistration
 
         source = self
         controller = getattr(self, 'controller', None) or game.active_player

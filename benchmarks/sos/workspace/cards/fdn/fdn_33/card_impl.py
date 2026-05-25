@@ -1,11 +1,11 @@
 """Card implementation for Clinquant Skymage."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
-from benchmarks.sos.workspace.engine.events import DrawsCardTriggeredEvent
+from engine.card import Creature
+from engine.types import Keyword, ManaCost
+from engine.events import DrawsCardTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class ClinquantSkymage(Creature):
     """Clinquant Skymage — {3}{U} — 1/1 — Bird Wizard — Flying.
@@ -27,8 +27,8 @@ class ClinquantSkymage(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register draw trigger: +1/+1 counter on each card drawn."""
-        from benchmarks.sos.workspace.engine.game import add_counter
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.game import add_counter
+        from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

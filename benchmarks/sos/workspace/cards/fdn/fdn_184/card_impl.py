@@ -1,11 +1,11 @@
 """Card implementation for Rune-Scarred Demon."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Zone
-from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
+from engine.card import Creature
+from engine.types import CardType, Keyword, ManaCost, Zone
+from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class RuneScarredDemon(Creature):
     """Rune-Scarred Demon — {5}{B}{B} — 6/6 — Demon — Flying.
@@ -51,7 +51,7 @@ class RuneScarredDemon(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """ETB: search library for any card, put into hand, shuffle."""
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

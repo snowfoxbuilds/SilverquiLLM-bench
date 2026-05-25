@@ -30,6 +30,12 @@ if _ENV_FILE.exists():
 
 import click
 
+from silverquillm._bootstrap import ensure_workspace_on_path
+
+# Bootstrap workspace dir on sys.path so `engine` / `cards` / `test_utils`
+# resolve in the CLI process and in subprocesses that inherit our env.
+ensure_workspace_on_path()
+
 from silverquillm.card_loader import is_template, load_all_card_specs
 from silverquillm.card_names import build_card_name_map
 from silverquillm.runner import ContainerLifecycle
@@ -281,13 +287,18 @@ def _harvest_results(
     # Per-card status
     _write_card_statuses(workspace, run_dir, timed_out, card_filter=filter_set)
 
-    # Materialize workspace_final/ snapshot
+    # Materialize workspace_final/ snapshot. ``benchmarks/`` is excluded as a
+    # belt-and-braces guard: a prior crash class was a recursive absolute
+    # symlink at ``workspace/benchmarks/sos/workspace`` that an agent created
+    # to satisfy the old ``benchmarks.sos.workspace.*`` import prefix. The
+    # flat-import refactor removes the motivation, but ignoring the path here
+    # makes the harvest robust if the symlink ever reappears for other reasons.
     workspace_final = run_dir / "workspace_final"
     if workspace.exists():
         shutil.copytree(
             workspace,
             workspace_final,
-            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "benchmarks"),
             dirs_exist_ok=True,
         )
 

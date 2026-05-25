@@ -16,8 +16,8 @@ from __future__ import annotations
 
 import pytest
 
-from benchmarks.sos.workspace.engine.mana import ManaPool
-from benchmarks.sos.workspace.engine.types import HybridManaSymbol, ManaCost, ManaType
+from engine.mana import ManaPool
+from engine.types import HybridManaSymbol, ManaCost, ManaType
 
 
 # ---------------------------------------------------------------------------
@@ -321,5 +321,5 @@ class TestHybridManaPay:
         pool.add(ManaType.BLACK, 1)
         cost = ManaCost.parse("{B/G}")
         pool.pay(cost)
-        from benchmarks.sos.workspace.engine.types import Color
+        from engine.types import Color
         assert Color.BLACK in pool.last_payment_colors

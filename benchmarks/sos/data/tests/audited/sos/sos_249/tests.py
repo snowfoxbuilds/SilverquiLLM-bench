@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import MageTowerReferee
 
-from benchmarks.sos.workspace.engine.card import ArtifactCreature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import ArtifactCreature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -63,7 +63,7 @@ class TestMageTowerRefereeAbilities:
         Oracle: Whenever you cast a multicolored spell, put a +1/+1 counter on this creature.
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
 
         game = create_game()
         player = game.players[0]

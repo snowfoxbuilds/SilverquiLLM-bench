@@ -22,7 +22,7 @@ from typing import Any
 
 import pytest
 
-from benchmarks.sos.workspace.cards.registry import CardMetadata
+from cards.registry import CardMetadata
 
 VALID_TIERS = {"trivial", "simple", "medium", "complex", "expert"}
 

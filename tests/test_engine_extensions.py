@@ -12,18 +12,18 @@ from __future__ import annotations
 
 import pytest
 
-from benchmarks.sos.workspace.engine.card import (
+from engine.card import (
     CardImpl,
     Creature,
     Instant,
     Land,
     Planeswalker,
 )
-from benchmarks.sos.workspace.engine.casting import cast_spell, CastingError
-from benchmarks.sos.workspace.engine.game_state import GameState
-from benchmarks.sos.workspace.engine.mana import ManaPool
-from benchmarks.sos.workspace.engine.player import DeterministicPlayer
-from benchmarks.sos.workspace.engine.types import (
+from engine.casting import cast_spell, CastingError
+from engine.game_state import GameState
+from engine.mana import ManaPool
+from engine.player import DeterministicPlayer
+from engine.types import (
     CardType,
     Color,
     Keyword,
@@ -358,7 +358,7 @@ class TestManaToColorMapping:
     """Verify the internal _MANA_TO_COLOR mapping is complete and correct."""
 
     def test_all_five_colored_mana_types_mapped(self) -> None:
-        from benchmarks.sos.workspace.engine.mana import _MANA_TO_COLOR
+        from engine.mana import _MANA_TO_COLOR
         assert _MANA_TO_COLOR[ManaType.WHITE] == Color.WHITE
         assert _MANA_TO_COLOR[ManaType.BLUE] == Color.BLUE
         assert _MANA_TO_COLOR[ManaType.BLACK] == Color.BLACK
@@ -366,7 +366,7 @@ class TestManaToColorMapping:
         assert _MANA_TO_COLOR[ManaType.GREEN] == Color.GREEN
 
     def test_colorless_not_in_mapping(self) -> None:
-        from benchmarks.sos.workspace.engine.mana import _MANA_TO_COLOR
+        from engine.mana import _MANA_TO_COLOR
         assert ManaType.COLORLESS not in _MANA_TO_COLOR
 
 

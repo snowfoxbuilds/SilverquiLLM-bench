@@ -21,22 +21,19 @@ class TestNewLocationsExist:
     """Verify that workspace test files exist at their new locations."""
 
     def test_test_utils_py_exists(self):
-        assert (WORKSPACE / "tests" / "test_utils.py").is_file()
+        assert (WORKSPACE / "test_utils.py").is_file()
 
     def test_conftest_py_exists(self):
-        assert (WORKSPACE / "tests" / "conftest.py").is_file()
-
-    def test_init_py_exists(self):
-        assert (WORKSPACE / "tests" / "__init__.py").is_file()
+        assert (WORKSPACE / "conftest.py").is_file()
 
     def test_test_utils_md_exists(self):
-        assert (WORKSPACE / "tests" / "test_utils.md").is_file()
+        assert (WORKSPACE / "test_utils.md").is_file()
 
     def test_engine_dir_exists(self):
-        assert (WORKSPACE / "tests" / "engine").is_dir()
+        assert (WORKSPACE / "engine_tests").is_dir()
 
     def test_engine_has_test_files(self):
-        engine_dir = WORKSPACE / "tests" / "engine"
+        engine_dir = WORKSPACE / "engine_tests"
         test_files = list(engine_dir.glob("test_*.py"))
         assert len(test_files) > 0, "engine/ should contain test_*.py files"
 
@@ -51,9 +48,6 @@ class TestOldLocationsRemoved:
 
     def test_no_toplevel_test_utils_py(self):
         assert not (REPO_ROOT / "tests" / "test_utils.py").exists()
-
-    def test_no_toplevel_conftest_py(self):
-        assert not (REPO_ROOT / "tests" / "conftest.py").exists()
 
     def test_no_docs_test_utils_md(self):
         assert not (REPO_ROOT / "docs" / "test_utils.md").exists()
@@ -72,7 +66,7 @@ class TestPytestDiscovery:
 
     def test_engine_test_files_are_valid_python(self):
         """All test_*.py in engine/ must be syntactically valid Python."""
-        engine_dir = WORKSPACE / "tests" / "engine"
+        engine_dir = WORKSPACE / "engine_tests"
         test_files = list(engine_dir.glob("test_*.py"))
         for tf in test_files:
             result = subprocess.run(
@@ -88,7 +82,7 @@ class TestPytestDiscovery:
         Note: full collection may fail until engine modules are implemented,
         but pytest must at least find and attempt to process the test files.
         """
-        engine_dir = WORKSPACE / "tests" / "engine"
+        engine_dir = WORKSPACE / "engine_tests"
         result = subprocess.run(
             [
                 sys.executable,
@@ -117,7 +111,7 @@ class TestPytestDiscovery:
         """The workspace conftest.py should be importable as a module."""
         result = subprocess.run(
             [sys.executable, "-c", "import ast; ast.parse(open(r'{}').read())".format(
-                WORKSPACE / "tests" / "conftest.py"
+                WORKSPACE / "conftest.py"
             )],
             capture_output=True,
             text=True,

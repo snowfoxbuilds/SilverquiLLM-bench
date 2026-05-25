@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import QuandrixTheProof
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -63,19 +63,19 @@ class TestQuandrixTheProofAbilities:
 
     def test_has_flying(self) -> None:
         """Quandrix, the Proof must have Flying keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = QuandrixTheProof(name="Quandrix, the Proof", owner=None, base_power=6, base_toughness=6)
         assert Keyword.FLYING in card.keywords, "Quandrix, the Proof should have Flying"
 
     def test_has_trample(self) -> None:
         """Quandrix, the Proof must have Trample keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = QuandrixTheProof(name="Quandrix, the Proof", owner=None, base_power=6, base_toughness=6)
         assert Keyword.TRAMPLE in card.keywords, "Quandrix, the Proof should have Trample"
 
     def test_cost_reduction_implemented(self) -> None:
         """Cost reduction must be implemented per oracle text."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = QuandrixTheProof(name="Quandrix, the Proof", owner=player, base_power=6, base_toughness=6)
@@ -91,7 +91,7 @@ class TestQuandrixTheProofEdgeCases:
 
     def test_cost_reduction_floor_at_zero(self) -> None:
         """Cost reduction must not reduce cost below zero."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = QuandrixTheProof(name="Quandrix, the Proof", owner=player, base_power=6, base_toughness=6)
@@ -123,9 +123,9 @@ class TestQuandrixTheProofInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -141,9 +141,9 @@ class TestQuandrixTheProofInteractions:
 
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         other = Creature(name="Companion", owner=player, base_power=2, base_toughness=2)

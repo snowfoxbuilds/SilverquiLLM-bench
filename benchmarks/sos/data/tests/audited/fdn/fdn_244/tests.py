@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from card_impl import Progenitus
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.events import CreatureDiesReplacementEvent
-from benchmarks.sos.workspace.engine.types import ManaCost, Supertype, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
+from engine.card import Creature
+from engine.events import CreatureDiesReplacementEvent
+from engine.types import ManaCost, Supertype, Zone
+from test_utils import create_game
 
 
 class TestProgenitusBasics:

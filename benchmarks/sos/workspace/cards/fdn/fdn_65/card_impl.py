@@ -1,11 +1,11 @@
 """Card implementation for Midnight Snack."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Enchantment, Creature, ActivatedAbility
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Zone
-from benchmarks.sos.workspace.engine.events import EndStepTriggeredEvent
+from engine.card import Enchantment, Creature, ActivatedAbility
+from engine.types import CardType, ManaCost, Zone
+from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class MidnightSnack(Enchantment):
     """Midnight Snack — {2}{B} — Enchantment.
@@ -26,8 +26,8 @@ class MidnightSnack(Enchantment):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register end step trigger for Raid Food creation."""
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
-        from benchmarks.sos.workspace.engine.game import create_token
+        from engine.triggers import TriggerRegistration
+        from engine.game import create_token
         source = self
 
         def _condition(game: Any, event: dict) -> bool:
@@ -40,7 +40,7 @@ class MidnightSnack(Enchantment):
             controller = getattr(source, 'controller', None)
             if controller is None:
                 return
-            from benchmarks.sos.workspace.engine.card import Artifact
+            from engine.card import Artifact
             food = Artifact(name='Food', subtypes={'Food'}, is_token=True)
             create_token(game, controller, food)
         controller = getattr(self, 'controller', None) or game.active_player
@@ -51,7 +51,7 @@ class MidnightSnack(Enchantment):
         source = self
 
         def _sac_effect(game: 'GameState') -> None:
-            from benchmarks.sos.workspace.engine.game import sacrifice
+            from engine.game import sacrifice
             controller = getattr(source, 'controller', None)
             if controller is None:
                 return

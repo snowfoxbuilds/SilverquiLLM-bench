@@ -1,11 +1,11 @@
 """Card implementation for Extravagant Replication."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Enchantment
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Zone
-from benchmarks.sos.workspace.engine.events import BeginningOfUpkeepTriggeredEvent
+from engine.card import Enchantment
+from engine.types import CardType, ManaCost, Zone
+from engine.events import BeginningOfUpkeepTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class ExtravagantReplication(Enchantment):
     """Extravagant Replication — {4}{U}{U} — Enchantment.
@@ -24,8 +24,8 @@ class ExtravagantReplication(Enchantment):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register upkeep trigger to copy a nonland permanent."""
-        from benchmarks.sos.workspace.engine.game import create_token
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.game import create_token
+        from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

@@ -3,12 +3,12 @@
 from __future__ import annotations
 import random
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import ActivatedAbility, ArtifactCreature, Creature, ManaAbility
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
+from engine.card import ActivatedAbility, ArtifactCreature, Creature, ManaAbility
+from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from cards.registry import CardRegistry
 
 class HeartfireImmolator(Creature):
     """Heartfire Immolator — {1}{R} — 2/2 — Human Wizard
@@ -48,12 +48,12 @@ class HeartfireImmolator(Creature):
             # Snapshot power before sacrifice (last known information)
             src._snapshot_power = getattr(src, "power", src.modified_power)
             # Sacrifice self
-            from benchmarks.sos.workspace.engine.game import sacrifice
+            from engine.game import sacrifice
             sacrifice(game, controller, src)
             return True
 
         def _effect(game: Any) -> None:
-            from benchmarks.sos.workspace.engine.game import deal_damage
+            from engine.game import deal_damage
 
             target = getattr(source, "_current_target", None)
             if target is None:

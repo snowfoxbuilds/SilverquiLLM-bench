@@ -11,9 +11,9 @@ import pytest
 
 from card_impl import PestMascot
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
-from benchmarks.sos.workspace.engine.types import Keyword
+from engine.card import Creature
+from engine.types import CardType, ManaCost
+from engine.types import Keyword
 
 
 @pytest.mark.basic
@@ -68,8 +68,8 @@ class TestPestMascotAbilities:
 
     def test_adds_plus_counter(self) -> None:
         """Resolution should add +1/+1 counter to target."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         target = Creature(name="Target", owner=player, base_power=2, base_toughness=2)
@@ -88,7 +88,7 @@ class TestPestMascotAbilities:
 
     def test_gains_life(self) -> None:
         """Resolution should gain life."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = PestMascot(name="Pest Mascot", owner=player)
@@ -106,8 +106,8 @@ class TestPestMascotEdgeCases:
 
     def test_zone_transition_graveyard(self) -> None:
         """Creature should properly move to graveyard on death."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = PestMascot(name="Pest Mascot", owner=player)
@@ -125,8 +125,8 @@ class TestPestMascotInteractions:
 
     def test_resolution_with_board_state(self) -> None:
         """Card should resolve correctly with established board."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -148,8 +148,8 @@ class TestPestMascotInteractions:
 
     def test_coexists_with_other_creatures(self) -> None:
         """Card should coexist with other creatures on battlefield."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         card = PestMascot(name="Pest Mascot", owner=player)

@@ -5,10 +5,10 @@ from __future__ import annotations
 import pytest
 
 from card_impl import VivienReid
-from benchmarks.sos.workspace.engine.card import Creature, Planeswalker
-from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, Layer
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+from engine.card import Creature, Planeswalker
+from engine.continuous_effects import ContinuousEffect, Layer
+from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
+from test_utils import create_game, set_board_state
 
 
 class TestVivienBasics:
@@ -60,7 +60,7 @@ class TestVivienPlus1:
 
         # Set up library with a creature on top
         creature = Creature(name="Elk", base_power=3, base_toughness=3, owner=p1)
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from engine.card import CardImpl
         non_creature = CardImpl(name="Spell", owner=p1, card_types={CardType.INSTANT})
         p1.zones[Zone.LIBRARY].add(non_creature)  # bottom
         p1.zones[Zone.LIBRARY].add(creature)  # top
@@ -79,7 +79,7 @@ class TestVivienPlus1:
         game.get_battlefield(p1).add(vivien)
 
         creature = Creature(name="Elk", base_power=3, base_toughness=3, owner=p1)
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from engine.card import CardImpl
         spell1 = CardImpl(name="Spell1", owner=p1, card_types={CardType.INSTANT})
         spell2 = CardImpl(name="Spell2", owner=p1, card_types={CardType.INSTANT})
         spell3 = CardImpl(name="Spell3", owner=p1, card_types={CardType.INSTANT})
@@ -102,7 +102,7 @@ class TestVivienPlus1:
         vivien = VivienReid(owner=p1, controller=p1)
         game.get_battlefield(p1).add(vivien)
 
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from engine.card import CardImpl
         for i in range(4):
             spell = CardImpl(name=f"Spell{i}", owner=p1, card_types={CardType.INSTANT})
             p1.zones[Zone.LIBRARY].add(spell)
@@ -136,7 +136,7 @@ class TestVivienPlus1:
         # Set up library with multiple eligible cards (creatures and lands)
         creature1 = Creature(name="Elk", base_power=3, base_toughness=3, owner=p1)
         creature2 = Creature(name="Bear", base_power=2, base_toughness=2, owner=p1)
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from engine.card import CardImpl
         land = CardImpl(name="Forest", owner=p1, card_types={CardType.LAND})
         spell = CardImpl(name="Spell", owner=p1, card_types={CardType.INSTANT})
         # Add bottom to top
@@ -166,7 +166,7 @@ class TestVivienMinus3:
         p1 = game.players[0]
         p2 = game.players[1]
         vivien = VivienReid(owner=p1, controller=p1)
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from engine.card import CardImpl
         artifact = CardImpl(name="Sol Ring", owner=p2, controller=p2, card_types={CardType.ARTIFACT})
         game.get_battlefield(p1).add(vivien)
         game.get_battlefield(p2).add(artifact)
@@ -183,7 +183,7 @@ class TestVivienMinus3:
         p1 = game.players[0]
         p2 = game.players[1]
         vivien = VivienReid(owner=p1, controller=p1)
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from engine.card import CardImpl
         enchantment = CardImpl(name="Omen", owner=p2, controller=p2, card_types={CardType.ENCHANTMENT})
         game.get_battlefield(p1).add(vivien)
         game.get_battlefield(p2).add(enchantment)

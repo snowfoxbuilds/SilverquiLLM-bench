@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+from engine.card import Creature
+from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 class SunBlessedHealer(Creature):
@@ -79,7 +79,7 @@ class SunBlessedHealer(Creature):
         if not self.kicked:
             return
 
-        from benchmarks.sos.workspace.engine.zones import move_to_zone
+        from engine.zones import move_to_zone
 
         chosen = getattr(self, "chosen_targets", None)
         target = chosen[0] if chosen else getattr(self, "_resolve_target", None)

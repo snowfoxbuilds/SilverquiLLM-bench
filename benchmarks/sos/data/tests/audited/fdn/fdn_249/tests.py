@@ -1,10 +1,10 @@
 """Audited tests for FDN 249 — Adventuring Gear."""
 from __future__ import annotations
 from card_impl import AdventuringGear
-from benchmarks.sos.workspace.engine.card import Artifact, CardImpl, Creature
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
-from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
+from engine.card import Artifact, CardImpl, Creature
+from engine.types import CardType, Keyword, ManaCost, ManaType, Zone
+from test_utils import create_game
+from engine.events import EntersBattlefieldTriggeredEvent
 
 class TestAdventuringGearBasics:
     """Basic card properties."""

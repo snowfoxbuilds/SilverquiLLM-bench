@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from card_impl import HeraldOfEternalDawn
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
-from benchmarks.sos.workspace.tests.test_utils import create_game
+from engine.card import Creature
+from engine.types import CardType, Keyword, ManaCost
+from test_utils import create_game
 
 
 class TestHeraldOfEternalDawnBasics:

@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import QuickStudy
 
-from benchmarks.sos.workspace.engine.card import Instant
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Instant
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -56,9 +56,9 @@ class TestQuickStudyAbilities:
         Oracle: Draw two cards.
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
+        from engine.card import CardImpl
 
         game = create_game()
         player = game.players[0]

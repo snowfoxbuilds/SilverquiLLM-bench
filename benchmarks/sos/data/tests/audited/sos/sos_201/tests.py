@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import LoreholdTheHistorian
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -63,13 +63,13 @@ class TestLoreholdTheHistorianAbilities:
 
     def test_has_flying(self) -> None:
         """Lorehold, the Historian must have Flying keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = LoreholdTheHistorian(name="Lorehold, the Historian", owner=None, base_power=5, base_toughness=5)
         assert Keyword.FLYING in card.keywords, "Lorehold, the Historian should have Flying"
 
     def test_has_haste(self) -> None:
         """Lorehold, the Historian must have Haste keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = LoreholdTheHistorian(name="Lorehold, the Historian", owner=None, base_power=5, base_toughness=5)
         assert Keyword.HASTE in card.keywords, "Lorehold, the Historian should have Haste"
 
@@ -93,8 +93,8 @@ class TestLoreholdTheHistorianEdgeCases:
 
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = LoreholdTheHistorian(name="Lorehold, the Historian", owner=player, base_power=5, base_toughness=5)
@@ -112,9 +112,9 @@ class TestLoreholdTheHistorianInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -130,9 +130,9 @@ class TestLoreholdTheHistorianInteractions:
 
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         other = Creature(name="Companion", owner=player, base_power=2, base_toughness=2)

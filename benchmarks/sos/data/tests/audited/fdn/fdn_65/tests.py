@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from card_impl import MidnightSnack
-from benchmarks.sos.workspace.engine.card import Enchantment
-from benchmarks.sos.workspace.engine.types import ManaCost, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
+from engine.card import Enchantment
+from engine.types import ManaCost, Zone
+from test_utils import create_game
 
 
 class TestMidnightSnackBasics:

@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import SpiritMascot
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -66,7 +66,7 @@ class TestSpiritMascotAbilities:
         Oracle: Whenever one or more cards leave your graveyard, put a +1/+1 counter on this creature.
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
 
         game = create_game()
         player = game.players[0]

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import Instant
-from benchmarks.sos.workspace.engine.types import ManaCost, TargetRequirement, Zone
+from engine.card import Instant
+from engine.types import ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 class HidetsugusSecondRite(Instant):
@@ -42,7 +42,7 @@ class HidetsugusSecondRite(Instant):
 
     def on_resolve(self, game: "GameState") -> None:
         """Deal 10 damage if target has exactly 10 life."""
-        from benchmarks.sos.workspace.engine.game import deal_damage
+        from engine.game import deal_damage
 
         chosen = getattr(self, "chosen_targets", None)
         target = chosen[0] if chosen else None
