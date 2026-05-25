@@ -129,7 +129,14 @@ def _parse_timestamp_from_dirname(run_dir: Path) -> str:
 
 
 def generate_run_summary(
-    run_dir: Path, image_name: str, cards_dir: Path | None = None
+    run_dir: Path,
+    image_name: str,
+    cards_dir: Path | None = None,
+    *,
+    resumed_from: str | None = None,
+    resumed_image_changed: bool | None = None,
+    run_status: str | None = None,
+    wall_clock_seconds: float | None = None,
 ) -> dict:
     """Generate a run summary from per-card results under *run_dir*.
 
@@ -323,6 +330,7 @@ def generate_run_summary(
     timeout_seconds = 7200  # default
 
     summary: dict = {
+        "docker_image": image_name,
         "run_metadata": {
             "image": image_name,
             "timestamp": _parse_timestamp_from_dirname(run_dir),
@@ -347,6 +355,15 @@ def generate_run_summary(
         },
         "per_card": per_card,
     }
+
+    if run_status is not None:
+        summary["run_status"] = run_status
+    if wall_clock_seconds is not None:
+        summary["wall_clock_seconds"] = round(wall_clock_seconds, 3)
+    if resumed_from is not None:
+        summary["resumed_from"] = resumed_from
+    if resumed_image_changed is not None:
+        summary["resumed_image_changed"] = resumed_image_changed
 
     # Write to run_dir/run_summary.json
     summary_path = run_dir / "run_summary.json"

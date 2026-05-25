@@ -18,7 +18,11 @@ from pathlib import Path
 
 import click
 
-__all__ = ["stage_workspace"]
+__all__ = [
+    "stage_workspace",
+    "stage_workspace_from_prior_run",
+    "build_resume_preamble",
+]
 
 # ---------------------------------------------------------------------------
 # Repo root — resolved once at import time
@@ -110,6 +114,170 @@ def stage_workspace(
     )
 
     return workspace, output
+
+
+# ---------------------------------------------------------------------------
+# Resume staging variant
+# ---------------------------------------------------------------------------
+
+
+def stage_workspace_from_prior_run(
+    output_dir: Path,
+    prior_run_dir: Path,
+    *,
+    prompt_text: str,
+    run_manifest: dict,
+) -> tuple[Path, Path]:
+    """Build the workspace tree for a Resume Leg by copying a prior run's
+    ``workspace_final/`` wholesale.
+
+    Differences from :func:`stage_workspace`:
+
+    - Source is ``prior_run_dir / "workspace_final/"`` instead of the bench
+      repo's canonical workspace.
+    - Prior ``.git`` history is preserved verbatim — no ``git init`` and no
+      seed commit.
+    - Only ``prompt.md`` and ``run_manifest.json`` are overwritten. Every
+      other file (including agent-prompt-layer tracking files like
+      ``KEY_DECISIONS.md`` / ``RUN_DECISIONS.md`` / ``MODEL_AUDIT.jsonl`` /
+      ``FILES_MODIFIED.json``, if present) is carried over byte-for-byte.
+
+    Parameters
+    ----------
+    output_dir:
+        Parent directory where ``workspace/`` and ``output/`` are created.
+    prior_run_dir:
+        Path to the prior run's results directory (must contain
+        ``workspace_final/.git/``).
+    prompt_text:
+        The full ``prompt.md`` body to write — typically the canonical User
+        Prompt with a Resume Preamble prepended.
+    run_manifest:
+        Dict to serialize as ``run_manifest.json`` for this Resume Leg.
+
+    Returns
+    -------
+    tuple[Path, Path]
+        ``(workspace_path, output_path)``.
+    """
+    src = prior_run_dir / "workspace_final"
+    if not src.is_dir():
+        raise FileNotFoundError(
+            f"Prior run has no workspace_final/ at {src}"
+        )
+    if not (src / ".git").is_dir():
+        raise FileNotFoundError(
+            f"Prior workspace_final/ has no .git history at {src}"
+        )
+
+    workspace = output_dir / "workspace"
+    output = output_dir / "output"
+
+    if workspace.exists():
+        shutil.rmtree(workspace)
+    if output.exists():
+        shutil.rmtree(output)
+
+    # copytree preserves .git/ and every tracking file the prior run
+    # accumulated. No ignore patterns — we want byte-for-byte continuity.
+    shutil.copytree(src, workspace)
+    output.mkdir(parents=True, exist_ok=True)
+
+    # Refresh per-run files only. Do NOT touch agent-prompt-layer tracking
+    # files (KEY_DECISIONS.md, MODEL_AUDIT.jsonl, FILES_MODIFIED.json,
+    # RUN_DECISIONS.md); they hold prior-session state.
+    (workspace / "prompt.md").write_text(prompt_text, encoding="utf-8")
+    (workspace / "run_manifest.json").write_text(
+        json.dumps(run_manifest, indent=2) + "\n", encoding="utf-8"
+    )
+
+    return workspace, output
+
+
+# ---------------------------------------------------------------------------
+# Resume Preamble
+# ---------------------------------------------------------------------------
+
+
+def build_resume_preamble(
+    prior_run_id: str,
+    *,
+    snapshot_fallback_used: bool = False,
+    snapshot_utc: str | None = None,
+    image_changed: bool = False,
+    prior_image: str | None = None,
+    new_image: str | None = None,
+    filter_mismatch: bool = False,
+    prior_card_filter: list[str] | None = None,
+    new_card_filter: list[str] | None = None,
+    missing_summary: bool = False,
+) -> str:
+    """Return the image-agnostic Resume Preamble block.
+
+    Placed at the top of ``prompt.md`` under a ``## Resume context`` heading
+    and followed by a ``---`` separator and the original User Prompt body.
+
+    Conditional disclosure lines are appended only when the corresponding
+    flag is set; the always-included base block tells the agent that this
+    is a resume of ``<prior-run-id>``, that prior tests/implementations may
+    already exist, that the workspace ``.git`` records prior commits, and
+    that it should inspect current state before doing new work.
+    """
+    lines: list[str] = ["## Resume context", ""]
+    lines.append(
+        f"This is a Resume Leg of prior Benchmark Run `{prior_run_id}`."
+    )
+    lines.append(
+        "Prior tests and card implementations may already exist in this "
+        "workspace; the `.git` history records earlier commits made during "
+        "the prior run. Inspect the current workspace state (`git log`, "
+        "`git status`, existing files under `cards/sos/` and `engine/`) "
+        "before doing new work — duplicating prior effort wastes budget."
+    )
+
+    if snapshot_fallback_used:
+        when = f" (snapshot from {snapshot_utc})" if snapshot_utc else ""
+        lines.append(
+            f"- Snapshot fallback was used to harvest the prior run{when}. "
+            "The workspace you inherit was rolled back to the last viable "
+            "engine snapshot; it is NOT where the prior agent stopped. Some "
+            "work performed after that snapshot was not preserved."
+        )
+
+    if image_changed:
+        prior = f"`{prior_image}`" if prior_image else "a different image"
+        current = f"`{new_image}`" if new_image else "the current image"
+        lines.append(
+            f"- This leg is running under {current}, but the prior leg used "
+            f"{prior}. Workspace tracking files (e.g. agent-internal "
+            "decision logs) may follow the prior agent's conventions; treat "
+            "them as informational rather than authoritative."
+        )
+
+    if filter_mismatch:
+        prior_fmt = (
+            ",".join(prior_card_filter) if prior_card_filter else "all cards"
+        )
+        new_fmt = (
+            ",".join(new_card_filter) if new_card_filter else "all cards"
+        )
+        lines.append(
+            f"- This leg's card filter ({new_fmt}) differs from the prior "
+            f"leg's filter ({prior_fmt}). Prior-implemented cards that lie "
+            "outside this leg's filter are inherited workspace state, not "
+            "part of this leg's scope — do not redo them, but do not score "
+            "them either."
+        )
+
+    if missing_summary:
+        lines.append(
+            "- The prior run's `run_summary.json` was missing or "
+            "unreadable; some prior-run metadata could not be carried "
+            "forward into this preamble. Treat the inherited workspace as "
+            "the source of truth."
+        )
+
+    return "\n".join(lines) + "\n"
 
 
 # ---------------------------------------------------------------------------

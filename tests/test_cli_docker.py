@@ -648,8 +648,13 @@ class TestRunManifest:
 
     @patch("silverquillm.cli.ContainerLifecycle")
     @patch("silverquillm.cli.stage_workspace")
-    def test_manifest_has_exactly_two_fields(self, mock_stage, mock_lifecycle_cls, runner, tmp_path):
-        """run_manifest.json must contain exactly two fields."""
+    def test_manifest_has_required_fields(self, mock_stage, mock_lifecycle_cls, runner, tmp_path):
+        """run_manifest.json must include the audit-trail fields resume reads.
+
+        Per ADR-009 the manifest is the source of truth for ``docker_image``
+        and ``card_filter`` (read at resume-staging time). The advisory
+        timeout fields remain required.
+        """
         workspace = tmp_path / "workspace"
         output = tmp_path / "output"
         workspace.mkdir()
@@ -664,7 +669,9 @@ class TestRunManifest:
         runner.invoke(main, ["run", "--image", "test-img", "--timeout", "300", "--results-dir", str(tmp_path / "results")])
 
         manifest = json.loads((workspace / "run_manifest.json").read_text())
-        assert set(manifest.keys()) == {"timeout_seconds", "deadline_utc"}
+        required = {"timeout_seconds", "deadline_utc", "docker_image", "card_filter", "benchmark_set"}
+        assert required.issubset(manifest.keys())
+        assert manifest["docker_image"] == "test-img"
 
     def test_harvest_copies_manifest_to_results(self, tmp_path):
         """_harvest_results should copy run_manifest.json to run results dir."""
