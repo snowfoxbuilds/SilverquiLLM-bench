@@ -7,7 +7,7 @@ LLM benchmark that evaluates coding ability by tasking models with implementing 
 - Language: Python ≥3.12
 - Engine: Python port of XMage (Java, MIT)
 - Base set: FDN Draft Set (301 cards: FDN 001–291 + SPG 074–083) — used as in-context examples
-- Benchmark set: SOS Draft Set (346 cards: SOS ≤271 + SOA 1–65 + SPG 149–158, released 2026-04-24) — benchmark targets
+- Benchmark set: SOS Draft Set (271 cards: SOS 001–271, released 2026-04-24) — benchmark targets
 - Agents: Docker-based black-box containers (one image per agent+mode+strategy variant)
 - License: MIT (matching XMage)
 - Card implementations: one class per card, subclassing `CardImpl`
@@ -57,6 +57,9 @@ Architectural decisions are documented under the ADRs page:
 | `ADR-004` | Docker Agent Containers replace Python adapters — image is full agent config; runner stages, launches, harvests, evaluates |
 | `ADR-005` | In-place Workspace engine with Git snapshot fallback — agent edits `/workspace/engine/`; runner evaluates `workspace_final/` |
 | `ADR-006` | Engine tests staged into workspace — local regression loop for agents; grading still uses host copies; SOS/FDN tests stay hidden |
+| `ADR-007` | Workspace as pre-built directory — wholesale `cp -r` from `benchmarks/sos/workspace/`; canonical engine source; collapses staging code and removes spec/code drift |
+| `ADR-008` | Resume Legs are independent Benchmark Runs — `silverquillm resume <prior-run-id>` stages from prior `workspace_final/`; legs linked via `resumed_from`; prompt-layer owns resume detection |
+| `ADR-009` | Resume reads prefer run-time artifacts over harvest-time artifacts — manifest + snapshot ledger over `run_summary.json`; resilient to partial harvester failure; ledger format now load-bearing |
 
 ## Harness Structure
 

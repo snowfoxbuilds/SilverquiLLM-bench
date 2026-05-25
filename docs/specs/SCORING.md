@@ -33,7 +33,7 @@ Measures whether the agent's engine extensions broke existing card behavior. FDN
 
 ### Dimension 3: Engine Regression
 
-Measures whether the agent's engine extensions broke fundamental game mechanics. Core engine tests (`tests/engine/`) are run against the agent's `engine_work/`.
+Measures whether the agent's engine extensions broke fundamental game mechanics. Core engine tests (`engine_tests/`) are run against the agent's `engine_work/`.
 
 | Metric | Definition |
 | --- | --- |

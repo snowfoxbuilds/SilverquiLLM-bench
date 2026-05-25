@@ -2,7 +2,7 @@ Testing conventions for **bench-authored reference tests** in the SilverquiLLM-b
 
 Scope: tests we write — host-side suites under `tests/`, FDN reference tests staged into the workspace at `benchmarks/sos/workspace/cards/fdn/{collector_number}/tests.py`, and audited SOS grader tests at `benchmarks/sos/data/tests/audited/sos/{collector_number}/tests.py`.
 
-Out of scope: agent-written tests inside the workspace (e.g., `tests/engine/test_*.py` authored during a run). The grader is the source of truth for scoring, not agent test hygiene, so we deliberately do not bind the agent to these rules and we do not stage this document into the workspace. The workspace `pytest.ini` carries the `timeout = 30` safety net regardless (see [WORKSPACE-CONTRACT.md](http://workspace-contract.md/)).
+Out of scope: agent-written tests inside the workspace (e.g., `engine_tests/test_*.py` authored during a run). The grader is the source of truth for scoring, not agent test hygiene, so we deliberately do not bind the agent to these rules and we do not stage this document into the workspace. The workspace `pytest.ini` carries the `timeout = 30` safety net regardless (see [WORKSPACE-CONTRACT.md](http://workspace-contract.md/)).
 
 These rules exist to prevent tests from hanging, killing processes, or otherwise disrupting the development environment.
 

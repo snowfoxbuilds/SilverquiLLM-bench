@@ -14,7 +14,11 @@ The benchmark now treats agents as black-box containers working in a real codeba
 
 ### Source of truth
 
-The workspace contents are defined by the directory at `benchmarks/sos/workspace/` in the bench repo. Staging is a wholesale `cp -r` of that directory into a per-run tmp path, plus per-run writes for `prompt.md` and `run_manifest.json`, followed by `git init`. There is no per-file staging logic; to change what agents see, edit `benchmarks/sos/workspace/` directly. Tests should also be runnable locally from that directory (`cd benchmarks/sos/workspace && pytest cards/fdn/ && pytest tests/engine/`) — that is how we keep the workspace honest in dev.
+The workspace contents are defined by the directory at `benchmarks/sos/workspace/` in the bench repo. Staging is a wholesale `cp -r` of that directory into a per-run tmp path, plus per-run writes for `prompt.md` and `run_manifest.json`, followed by `git init`. There is no per-file staging logic; to change what agents see, edit `benchmarks/sos/workspace/` directly. Tests should also be runnable locally from that directory (`cd benchmarks/sos/workspace && pytest cards/fdn/ && pytest engine_tests/`) — that is how we keep the workspace honest in dev.
+
+### Resume staging variant
+
+`silverquillm resume <prior-run-id>` uses a staging variant that copies the prior run's `workspace_final/` wholesale into the per-run tmp directory, then overwrites only `prompt.md` and `run_manifest.json`. No `git init` — the prior `.git` history (host snapshots and any agent commits) is preserved as the new run's `.git`. The Workspace Contract itself (layout, card directory invariant, additive-only engine rules) is unchanged: the resumed agent inherits the prior run's compliance state. Resume staging is otherwise identical to fresh staging — mount the copy at `/workspace/`, same volumes, same `/output/` channel. See [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) → Resume for the runner-side CLI, refuse conditions, and Resume Preamble; see ADR-008 for design rationale.
 
 ### Workspace layout
 
@@ -24,15 +28,18 @@ The workspace contents are defined by the directory at `benchmarks/sos/workspace
   PROJECT_MAP.md        # map of files and their responsibilities
   prompt.md             # per-run User Prompt (written at stage time)
   run_manifest.json     # per-run manifest (written at stage time)
-  RULEBOOK.txt          # MTG rules reference
+  rulebook.txt           # MTG rules reference
   pytest.ini            # test config (workspace-local)
   .gitignore
   .git/                 # initialized at stage time, single seed commit
   engine/               # canonical engine source (shared with bench tooling)
-  tests/
-    conftest.py
-    test_utils.py
-    engine/             # engine regression tests (per ADR-006)
+  skills/               # bench-authored agent skills (copilot SKILL.md format)
+    grep-rulebook/
+      SKILL.md          # how to grep RULEBOOK.txt efficiently
+  conftest.py
+  test_utils.py
+  test_utils.md
+  engine_tests/         # engine regression tests (per ADR-006)
   cards/
     fdn/
       fdn_{collector_number}/
@@ -40,7 +47,7 @@ The workspace contents are defined by the directory at `benchmarks/sos/workspace
         card_impl.py    # filled reference implementation
         tests.py        # FDN Reference Test (illustrative, passing)
     sos/
-      {card_id}/
+      sos_{collector_number}/
         card_spec.json
         card_impl.py    # SOS Card Stub: class CardName(CardImpl): pass
         tests.py        # optional, agent-written in Tested Mode
@@ -67,13 +74,13 @@ Each card keeps its canonical implementation in:
 cards/{set}/{card_id}/card_impl.py
 ```
 
-FDN card directories use the `fdn_` prefix: `cards/fdn/fdn_{collector_number}/card_impl.py`. SOS card directories use collector number or set-prefixed keys for non-SOS cards in the Draft Set (e.g., `soa_1`, `spg_149`).
+FDN card directories use the `fdn_` prefix: `cards/fdn/fdn_{collector_number}/card_impl.py`. SOS card directories use the `sos_` prefix: `cards/sos/sos_{collector_number}/card_impl.py`.
 
 The canonical implementation class for a card must be importable from that file. The agent must not move or rename card directories.
 
 Failure scope:
 
-- A missing or moved `cards/sos/{card_id}/card_impl.py` is a card-level failure.
+- A missing or moved `cards/sos/sos_{collector_number}/card_impl.py` is a card-level failure.
 - Many moved cards fail individually.
 - A missing or unreadable `cards/sos/` tree is a run-level structural failure.
 - A missing or unusable `engine/` follows engine viability and snapshot fallback flow.
@@ -110,9 +117,9 @@ The prompt states three hard rules — card location, staged-test integrity, and
 
 ```plain text
 Each card's implementation class must remain in its assigned
-cards/sos/{card_id}/card_impl.py file. Do not move or rename card directories.
+cards/sos/sos_{collector_number}/card_impl.py file. Do not move or rename card directories.
 
-Do not modify any files under workspace/tests/engine/ or any FDN
+Do not modify any files under workspace/engine_tests/ or any FDN
 reference test files at workspace/cards/fdn/*/tests.py. These tests
 are for your local verification and learning only; the runner uses its
 own authoritative copies for grading. Modifying these tests will not
@@ -129,10 +136,6 @@ score regardless of card-implementation quality.
 ```
 
 The prompt does not need to mention shared helper files.
-
-### Scryfall subset cache validation
-
-The SOS Draft Set pulls fixed collector-number subsets from related Scryfall sets (SOA Mystical Archives, SPG Special Guests). Cache files use query-specific names (`soa_cn1-65.json`, `spg_cn149-158.json`) rather than generic whole-set names like `soa.json`. Freshness checks use exact sorted collector-number equality: one row for every expected collector number, no gaps, duplicates, or extra rows. Generic cache names risk reading unrelated full-set data or overwriting caches other callers expect.
 
 ### Legacy Foundations layout
 
@@ -157,10 +160,13 @@ Then delete the legacy layout.
 - **FDN and SOS share structure**: FDN examples and SOS targets use the same card directory shape.
 - **Card restructuring is card-level by default**: Individual misplaced card files fail those cards; broad Workspace destruction can become run-level failure.
 - **Legacy Foundations not staged**: After FDN migration, do not include monolithic `cards/foundations/` in the agent Workspace.
-- **Engine tests are staged into the workspace**: Per ADR-006, the workspace includes `workspace/tests/engine/` so agents have a local regression-check loop for engine modifications. Grading uses host-repo copies; agents are prompt-instructed not to modify staged tests.
+- **Engine tests are staged into the workspace**: Per ADR-006, the workspace includes `workspace/engine_tests/` so agents have a local regression-check loop for engine modifications. Grading uses host-repo copies; agents are prompt-instructed not to modify staged tests.
 - **FDN reference tests are colocated with cards**: Illustrative FDN tests live at `workspace/cards/fdn/{collector_number}/tests.py` rather than under `workspace/tests/cards/fdn/`. Colocation makes them obvious learning material attached to the card they demonstrate, and removes the directory-name collision with the host-side FDN Card Regression suite. Audited SOS grader tests remain host-side only; there is no `workspace/tests/cards/` directory. Audited FDN tests at `benchmarks/sos/data/tests/audited/fdn/{collector_number}/tests.py` exist as bench-author regression coverage — they catch engine regressions that break the canonical FDN implementations and run in bench-side CI. They are not part of agent grading (the agent is graded on SOS audited tests only) and may freely overlap in assertion content with workspace FDN tests; there is no contamination concern because the agent is not graded against either FDN suite.
-- **Workspace integrity is enforced at two points, not per-file**: `stage_workspace()` performs a cheap pre-flight assertion that `benchmarks/sos/workspace/` exists and is non-empty before `copytree`. A host-side test `tests/test_workspace_structure.py` verifies the expected top-level entries (`engine/`, `cards/fdn/`, `cards/sos/`, `tests/`, `AGENTS.md`, `PROJECT_MAP.md`, `RULEBOOK.txt`, `pytest.ini`, `.gitignore`) and fails at CI time if any are missing. This replaces the previous per-file hard-error enumeration in staging code; the canonical workspace directory is now the source of truth, and any missing file means the repo itself is broken (caught at PR-review time, not after burning agent hours).
-- **Workspace ****`pytest.ini`**** is independently configured**: `benchmarks/sos/workspace/pytest.ini` sets `timeout = 30` (matching the host-side safety net in `pyproject.toml`) and `python_files = test_*.py tests.py` so colocated FDN reference tests (`cards/fdn/{collector_number}/tests.py`) and agent-written tests (`tests/engine/test_*.py`) are both discovered. Pytest does not inherit config across rootdir boundaries, so the workspace must configure its own timeout; without this, a runaway test inside the container could hang the run or, worse, repeat PR #11-style PID 1 signal kills. [TESTING-CONVENTIONS.md](http://testing-conventions.md/) itself is not staged into the workspace — it governs bench-authored reference tests only — but the timeout safety net travels with the workspace via `pytest.ini`.
-- **`AGENTS.md`**** and ****`PROJECT_MAP.md`**** have non-overlapping scopes**: `benchmarks/sos/workspace/AGENTS.md` is the orientation doc — task framing ("you are implementing SOS cards"), hard rules (card location, staged-test integrity), canonical test commands, engine-extension permission, and pointers to where to find things. `benchmarks/sos/workspace/PROJECT_MAP.md` is a directory summary — one line per top-level file/directory, nothing else. No duplication: the agent reads [AGENTS.md](http://agents.md/) at session start and consults PROJECT_[MAP.md](http://map.md/) as a navigation lookup. `prompt.md` continues to duplicate the hard rules (card location + staged-test integrity) because the User Prompt is the only thing the agent is contractually guaranteed to read; [AGENTS.md](http://agents.md/) is convention. The `test_utils` helper API reference lives as `benchmarks/sos/workspace/tests/test_utils.md` colocated with `test_utils.py`, not inside PROJECT_[MAP.md](http://map.md/).
-- **Engine extension is additive — no renaming, no refactoring**: Agents may add new methods, classes, helpers, and files inside `/workspace/engine/`, and may modify the bodies of existing functions to implement card behavior. They may NOT rename, move, or delete anything that already exists in `engine/` — no renaming functions/classes/files, no moving symbols between modules, no refactoring existing structure. Audited grader tests live host-side and `import` from `engine/` by path and symbol name; any rename/move/delete causes `ImportError` before assertions run. The flat rule (rather than enumerating a protected symbol list) keeps the prompt and [AGENTS.md](http://agents.md/) short and removes any drift risk as audited tests evolve. The staged `tests/engine/` regression suite is the agent's local proxy for "did I keep the engine importable."
+- **Workspace integrity is enforced at two points, not per-file**: `stage_workspace()` performs a cheap pre-flight assertion that `benchmarks/sos/workspace/` exists and is non-empty before `copytree`. A host-side test `tests/test_workspace_structure.py` verifies the expected top-level entries (`engine/`, `cards/fdn/`, `cards/sos/`, `engine_tests/`, `conftest.py`, `test_utils.py`, `AGENTS.md`, `PROJECT_MAP.md`, `rulebook.txt`, `pytest.ini`, `.gitignore`) and fails at CI time if any are missing. This replaces the previous per-file hard-error enumeration in staging code; the canonical workspace directory is now the source of truth, and any missing file means the repo itself is broken (caught at PR-review time, not after burning agent hours).
+- **Workspace ****`pytest.ini`**** is independently configured**: `benchmarks/sos/workspace/pytest.ini` sets `timeout = 300` (longer than the host-side `pyproject.toml` safety net to accommodate slower card tests running inside the agent container) and `python_files = test_*.py tests.py` so colocated FDN reference tests (`cards/fdn/fdn_{collector_number}/tests.py`) and agent-written tests (`engine_tests/test_*.py`) are both discovered. Pytest does not inherit config across rootdir boundaries, so the workspace must configure its own timeout; without this, a runaway test inside the container could hang the run or, worse, repeat PR #11-style PID 1 signal kills. [TESTING-CONVENTIONS.md](http://testing-conventions.md/) itself is not staged into the workspace — it governs bench-authored reference tests only — but the timeout safety net travels with the workspace via `pytest.ini`.
+- **`AGENTS.md`**** and ****`PROJECT_MAP.md`**** have non-overlapping scopes**: `benchmarks/sos/workspace/AGENTS.md` is the orientation doc — task framing ("you are implementing SOS cards"), hard rules (card location, staged-test integrity), canonical test commands, engine-extension permission, and pointers to where to find things. `benchmarks/sos/workspace/PROJECT_MAP.md` is a directory summary — one line per top-level file/directory, nothing else. No duplication: the agent reads [AGENTS.md](http://agents.md/) at session start and consults PROJECT_[MAP.md](http://map.md/) as a navigation lookup. `prompt.md` continues to duplicate the hard rules (card location + staged-test integrity) because the User Prompt is the only thing the agent is contractually guaranteed to read; [AGENTS.md](http://agents.md/) is convention. The `test_utils` helper API reference lives as `benchmarks/sos/workspace/test_utils.md` colocated with `test_utils.py`, not inside PROJECT_[MAP.md](http://map.md/).
+- **Engine extension is additive — no renaming, no refactoring**: Agents may add new methods, classes, helpers, and files inside `/workspace/engine/`, and may modify the bodies of existing functions to implement card behavior. They may NOT rename, move, or delete anything that already exists in `engine/` — no renaming functions/classes/files, no moving symbols between modules, no refactoring existing structure. Audited grader tests live host-side and `import` from `engine/` by path and symbol name; any rename/move/delete causes `ImportError` before assertions run. The flat rule (rather than enumerating a protected symbol list) keeps the prompt and [AGENTS.md](http://agents.md/) short and removes any drift risk as audited tests evolve. The staged `engine_tests/` regression suite is the agent's local proxy for "did I keep the engine importable."
 - **Each benchmark set is fully self-contained**: `benchmarks/{target_set}/` is the unit of versioning. Each contains its own `workspace/` (with its own `engine/`, `cards/`, `tests/`, `AGENTS.md`, etc.) and its own `data/` (raw inputs, scoring rubric, audited grader tests). Engine baselines explicitly diverge across benchmark generations — Foundations 2 may add or remove mechanics the SOS engine never knew about, and that's the intended degree of freedom. The shared `silverquillm/` runner is benchmark-agnostic and operates on any `benchmarks/{set}/` directory by path; only the benchmark inputs change across runs. Slight engine source duplication is the price for reproducibility: a re-run of the 2026-05-24 SOS benchmark a year from now produces the same workspace against the same engine baseline regardless of where later benchmarks took the codebase. Today only `benchmarks/sos/` exists; the rule is documented now so the directory layout doesn't need to be retrofitted when Foundations 2 lands.
+- **Bench-authored agent skills travel with the workspace**: `workspace/skills/{skill_name}/SKILL.md` files are copilot-format skills the bench team writes to give agents reusable subroutines (e.g. `grep-rulebook` for efficient `RULEBOOK.txt` lookups). They are part of the workspace contract and are staged into `/workspace/skills/` inside the container alongside `engine/`, `cards/`, `tests/`. Updating a skill means editing the [SKILL.md](http://skill.md/) in the bench repo and re-running.
+- **Resume staging preserves prior workspace ****`.git`**: The resume staging variant copies the prior run's `workspace_final/` wholesale and overwrites only `prompt.md` and `run_manifest.json`. No `git init`. Prior commit history (host snapshots, any agent commits) is preserved as the new run's history. The Workspace Contract is unchanged — the resumed agent inherits prior compliance state. See [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) → Resume and ADR-008. [NEW]
+- **Tracking files like ****`KEY_DECISIONS.md`****, ****`FILES_MODIFIED.json`****, ****`RUN_DECISIONS.md`****, ****`MODEL_AUDIT.jsonl`**** are agent-prompt-layer conventions, not workspace contract**: These files may appear in the Workspace as a side effect of specific agent prompt templates (e.g., a coordinator-style Pi-blind prompt). The Workspace Contract does not require, name, or specify their format. Resume detection and continuation logic that depends on these files lives in the prompt layer, not the runner; this keeps the contract image-agnostic and the runner ignorant of agent-internal scratch. If multiple agent images later converge on a common pattern, promotion to the contract can be revisited. [NEW]

@@ -62,7 +62,7 @@ Future evaluation layer: each agent's code tested against every other agent's te
 
 **Draft Set**
 
-All cards contained in draft booster packs for a given MTG release. A Draft Set may span multiple Scryfall set codes. The SOS Draft Set = SOS base (cn ≤271) + SOA Mystical Archives (cn 1–65) + SPG Special Guests (cn 149–158). The FDN Draft Set = FDN 001–291 + SPG 074–083. Draft Set defines the card pool for Replay Validation because 17lands replays are from draft games.
+All cards contained in draft booster packs for a given MTG release. A Draft Set may span multiple Scryfall set codes. The SOS Draft Set = SOS base (cn 001–271). The FDN Draft Set = FDN 001–291 + SPG 074–083. Draft Set defines the card pool for Replay Validation because 17lands replays are from draft games.
 
 *Avoid*: "target set" (deprecated), "set" alone (ambiguous — could mean a single Scryfall set code)
 
@@ -89,6 +89,24 @@ A benchmark run whose purpose is to validate that the orchestration pipeline wor
 Engine correctness check that replays 17lands GRE (Game Rules Engine) state streams through the Python engine and verifies full game state at every GRE message boundary. Data source: 17lands pre-parsed GRE JSON — clean JSON files containing `GameStateType_Full` and `GameStateType_Diff` messages with object-level fidelity (zones, gameObjects by `grpId`/`instanceId`, life totals, annotations). Execution model: **observer mode** with state-diff comparison — seat 1 (17lands user) fully validated, seat 2 (opponent) actions oracle-injected from public game objects. Single parser, single format. See [17lands Replay Data Schema](https://www.notion.so/35b6a7adc8ed80978dccdf724213b6f8) and [ADR-003](https://www.notion.so/37a8b903f91b4309a15b91d149a90f7c).
 
 *Avoid*: "differential testing" (deprecated XMage approach), "checkpoint validation" (we do full state comparison, not just EOT checkpoints), "aggregate CSV" (that's a different 17lands dataset)
+
+**Resume Chain**
+
+Sequence of Benchmark Runs linked via `resumed_from`, where each run after the first stages from the prior run's `workspace_final/`. Each leg is an independent Benchmark Run with its own `run_name`, results directory, Hard Timeout, snapshots, and evaluation. The chain is an audit-trail concept; the runner does not aggregate results across legs. CLI: `silverquillm resume <prior-run-id>`. See ADR-008.
+
+*Avoid*: "session" (deprecated — too vague; use Resume Chain + Resume Leg), "continuation run"
+
+**Resume Leg**
+
+A Benchmark Run with `resumed_from` set — any run in a Resume Chain other than the first. Resume Legs are independent Benchmark Runs in every other respect (own results dir, own snapshots, own evaluation, own `run_summary.json`). Leaderboard validity policy for Resume Legs is TBD — the existing `leaderboard_valid` field in `run_summary.json` is the eventual control surface; default for legs is unspecified until policy is formalized.
+
+*Avoid*: "resumed session", "continuation run"
+
+**Resume Preamble**
+
+Extra lines the runner appends to the User Prompt when staging a Resume Leg. Always informs the agent (a) that this is a resume of `<prior-run-id>`, (b) that prior tests/implementations may already exist, and (c) that the workspace `.git` records prior commits. Conditional additional lines disclose (i) prior-run snapshot-fallback rollback when applicable, and (ii) image change when `--image` differs from the prior run's image. Image-agnostic — agents with no internal coordinator/cycle structure benefit equally.
+
+*Avoid*: "resume notice", "resume header"
 
 **Run Manifest**
 
@@ -140,7 +158,7 @@ Modification or addition to `engine/` files by the agent during a benchmark run.
 
 **Workspace**
 
-The directory at `benchmarks/sos/workspace/` in the bench repo, copied wholesale to a per-run tmp path and mounted into the agent container at `/workspace/`. Contains the engine (canonical single copy, shared with bench tooling), all cards (FDN reference implementations + SOS Card Stubs), tests (`tests/conftest.py`, `tests/test_utils.py`, `tests/engine/`), agent-facing documentation (`AGENTS.md`, `PROJECT_MAP.md`, `RULEBOOK.txt`), and supporting files (`pytest.ini`, `.gitignore`). Per-run files (`prompt.md`, `run_manifest.json`) are written into the copy at stage time, followed by an initial `git init && git commit` so the agent has clean version-control state. The agent has read-write access to the entire workspace.
+The directory at `benchmarks/sos/workspace/` in the bench repo, copied wholesale to a per-run tmp path and mounted into the agent container at `/workspace/`. Contains the engine (canonical single copy, shared with bench tooling), all cards (FDN reference implementations + SOS Card Stubs), tests (`tests/conftest.py`, `tests/test_utils.py`, `tests/engine/`), agent-facing documentation (`AGENTS.md`, `PROJECT_MAP.md`, `rulebook.txt`), and supporting files (`pytest.ini`, `.gitignore`). Per-run files (`prompt.md`, `run_manifest.json`) are written into the copy at stage time, followed by an initial `git init && git commit` so the agent has clean version-control state. The resume staging variant (see Resume Chain) skips `git init` and preserves the prior run's `workspace_final/` `.git` history instead. The agent has read-write access to the entire workspace.
 
 *Avoid*: "working directory", "sandbox", "per-card workspace" (deprecated — workspace is per-run), "staged from scratch" (deprecated — workspace is a pre-built directory copied wholesale)
 
@@ -186,7 +204,7 @@ Task-specific instruction written by the runner to `/workspace/prompt.md` at sta
 - Engine Regression: evaluator runs `tests/engine/` against agent's final Writable Engine. Detects broken rules mechanics.
 - Cross-Eval and Self-Eval deferred to v2 (requires test harvester).
 - The Base Set forms the reference codebase agents can browse. No Expanded Pool — agents implement new mechanics from scratch.
-- A Draft Set may span multiple Scryfall set codes (e.g., SOS + SOA + SPG).
+- A Draft Set may span multiple Scryfall set codes (e.g., FDN + SPG).
 - Draft Set defines the card pool for Replay Validation (17lands replays are draft games).
 - All card tests follow a uniform structure: `tests/audited/{set_code}/{collector_number}/tests.py`, importing from `card_impl`. FDN and SOS tests share this structure.
 - The Base Set (FDN 001–291 + SPG 074–083) is validated via Replay Validation against 17lands GRE JSON data before scored benchmark runs.

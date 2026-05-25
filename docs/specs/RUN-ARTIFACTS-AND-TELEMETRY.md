@@ -39,7 +39,7 @@ docker/<image-dir>/results/<run_name>/snapshots/
     run_manifest.json
     engine/
     cards/
-    RULEBOOK.txt
+    rulebook.txt
     engine_api.md
     base_classes.py
     test_utils.md
@@ -60,8 +60,8 @@ Snapshot fallback recovers from final Workspace corruption, especially scrambled
 Algorithm:
 
 1. Try final harvested Workspace.
-2. If `tests/engine/` fails, errors on import, hangs, times out, or cannot start, walk snapshots backward.
-3. Select the latest whole-Workspace snapshot whose `tests/engine/` completes and passes within the normal engine-test timeout.
+2. If `engine_tests/` fails, errors on import, hangs, times out, or cannot start, walk snapshots backward.
+3. Select the latest whole-Workspace snapshot whose `engine_tests/` completes and passes within the normal engine-test timeout.
 4. Materialize that selected snapshot as `workspace_final/`.
 5. Evaluate all dimensions from `workspace_final/`.
 Snapshot fallback is whole-Workspace fallback, not engine-only fallback. The runner must not combine final card implementations with an earlier engine snapshot.
@@ -184,8 +184,12 @@ v1 ships a `silverquillm logs --run` tabbed log viewer over the per-channel file
 - `fallback_scope`
 - `fallback_reason`
 - `workspace_final`
+- `resumed_from` (Resume Leg only — `run_name` of the immediate prior leg)
+- `resumed_image_changed` (Resume Leg only — true when `--image` differs from prior leg's `docker_image`)
 - three evaluation dimensions
 - telemetry/log artifact paths
+Resume Legs (Benchmark Runs with `resumed_from` set) are linked into a Resume Chain via `resumed_from`. Chain traversal is by repeated lookup; the runner does not aggregate results across legs. Leaderboard validity policy for Resume Legs is deferred — `leaderboard_valid` default for legs is unspecified until leaderboard policy is formalized.
+
 ### Filtered runs
 
 The `--cards` filter is for development, debugging, and Pipeline Validation Runs only.
@@ -213,7 +217,7 @@ Rules:
 - **`workspace_final/`**** is canonical**: Evaluation reads from `docker/<image-dir>/results/<run_name>/workspace_final/`.
 - **Snapshots are full Workspace Git commits**: Snapshot every 60 seconds, host-side, outside the container.
 - **Snapshot fallback is whole-Workspace**: Do not mix final card implementations with earlier engine snapshots.
-- **Fallback viability uses Engine Regression only**: `tests/engine/` is the snapshot selection gate.
+- **Fallback viability uses Engine Regression only**: `engine_tests/` is the snapshot selection gate.
 - **No viable snapshot means no viable output**: Mark the run `no_viable_output_produced` and skip SOS/FDN correctness.
 - **Telemetry is filesystem-only**: Do not parse/import agent code for telemetry.
 - **`/output/`**** is optional telemetry**: No required files; no scoring dependency.
@@ -223,4 +227,6 @@ Rules:
 - **Each terminal channel has a backing file**: Every channel the runner prints is mirrored to an append-only file in the run directory (see Terminal channels above). This file-backed substrate makes the tabbed log viewer (`silverquillm logs --run`) a thin read-only consumer in both live and archived modes.
 - **v1 includes a tabbed post-run log viewer**: Originally deferred to a later version; lifted now that the runner is stable and the 2026-05-23 run surfaced concrete triage pain. Live labeled streaming remains the default for users who don't want to launch the viewer.
 - **JS entrypoint output channel pattern**: JavaScript entrypoints use a `log()` helper that writes to `/output/system.log`, tee agent output to `/output/agent_stdout.log`, and pass agent output through `process.stdout.write()` so Docker logs still capture it. Future bash entrypoints follow the same file-based channel separation.
-- **Docker logs are direct-written to ****`run_dir`**: Pipe-reader threads write `docker_stdout.log` and `docker_stderr.log` directly into `run_dir` in append mode. No `.tmp` intermediate, no post-run copy step. Harvest reads the files in place. As a backwards-compatibility fallback, `_harvest_results` still copies `docker_stdout.log` / `docker_stderr.log` from `/output/` into `run_dir` *only if* the file isn't already present (i.e. the direct-stream path didn't write it). New runs hit the skip branch; pre-streaming runs hit the copy branch.
+- **Docker logs are direct-written to ****`run_dir`**: Pipe-reader threads write `docker_stdout.log` and `docker_stderr.log` directly into `run_dir` in append mode. No `.tmp` intermediate, no post-run copy step. Harvest reads the files in place.
+- **Resume Legs link via ****`resumed_from`**: Each Resume Leg's `run_summary.json` records `resumed_from` (the immediate prior leg's `run_name`) and `resumed_image_changed` (bool). Chain traversal is by repeated lookup; the runner does not aggregate across legs. The `silverquillm chain <run-id>` reader ships alongside `silverquillm resume` to ensure `resumed_from` always has at least one consumer. See ADR-008. [NEW]
+- **Resume reads prefer run-time artifacts over harvest-time artifacts**: When a resume needs information about the prior run, the runner prefers artifacts written *during* the run (manifest at staging, snapshot ledger during execution) over artifacts written *at harvest* (`run_summary.json`). Manifest is the source of truth for input fields (image, timeout); the snapshot ledger is the source of truth for snapshot-fallback detection. `run_summary.json` is used only for fields it uniquely owns (notably `run_status`), and missing-summary handling is explicit per [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) → Resume. See ADR-009. [NEW]

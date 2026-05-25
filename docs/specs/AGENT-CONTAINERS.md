@@ -63,7 +63,7 @@ This manifest is advisory runtime context only. It is not agent configuration; m
 /workspace/
   prompt.md                          # Single input prompt
   run_manifest.json                  # Advisory runtime timeout facts
-  RULEBOOK.txt                       # Comprehensive MTG rules reference
+  rulebook.md                        # Comprehensive MTG rules reference
   engine/                            # Game engine source (read-write copy)
   engine_api.md                      # Engine API reference
   base_classes.py                    # CardImpl base class source
@@ -98,7 +98,7 @@ The input prompt is minimal and natural — like handing a developer a codebase:
 
 > 
 
-> Use the completed FDN cards in `/workspace/cards/fdn/` as implementation examples. Refer to `RULEBOOK.txt` for detailed game rules and `engine_api.md` for the engine API.
+> Use the completed FDN cards in `/workspace/cards/fdn/` as implementation examples. Refer to `rulebook.md` for detailed game rules and `engine_api.md` for the engine API.
 
 The prompt does not dictate ordering, strategy, or iteration approach. The agent decides how to tackle the workload. This tests planning and self-management, not just code generation.
 
@@ -334,9 +334,9 @@ Card directory restructuring is normally a card-level failure. If one expected `
 
 Evaluation reads from `docker/<image-dir>/results/<run_name>/workspace_final/` as the official source. Any legacy per-card artifacts under the run's `cards/{card_id}/` directory are optional derived convenience outputs and are not a recovery mechanism for broken Workspace structure.
 
-Snapshot fallback selection uses Engine Regression only (`tests/engine/`) as the viability gate. FDN Card Regression and SOS Card Correctness are evaluated after selection, not used to choose the snapshot.
+Snapshot fallback selection uses Engine Regression only (`engine_tests/`) as the viability gate. FDN Card Regression and SOS Card Correctness are evaluated after selection, not used to choose the snapshot.
 
-Snapshot fallback triggers when final `tests/engine/` fails, errors on import, times out, hangs, or cannot start because engine files are corrupted. A snapshot is viable only if `tests/engine/` completes and passes within the normal engine-test timeout.
+Snapshot fallback triggers when final `engine_tests/` fails, errors on import, times out, hangs, or cannot start because engine files are corrupted. A snapshot is viable only if `engine_tests/` completes and passes within the normal engine-test timeout.
 
 If no snapshot is viable, the run is marked `no_viable_output_produced`. This means the agent broke the engine before the first viable snapshot, so the runner does not evaluate SOS or FDN card correctness for that run.
 

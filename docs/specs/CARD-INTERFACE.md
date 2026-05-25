@@ -109,43 +109,19 @@ def get_modes(self) -> list[Mode]:
 
 ### Replacement Effects
 
-Replacement effects modify events before they happen (no stack). Separate from triggers via `register_replacement_effects()`. Registration goes through `game.replacement_manager.register(...)` using a typed `ReplacementEffect` and a typed event class (no string event names):
+Replacement effects modify events before they happen (no stack). Separate from triggers via `register_replacement_effects()`:
 
 ```python
-from engine.events import MoveToGraveyardReplacementEvent
-from engine.replacement_effects import ReplacementEffect
-
-def register_replacement_effects(self, game):
-    source = self
-
-    def _condition(game, event):
-        return event.card is source
-
-    def _replacement(game, event):
-        # Canonical replacement: mutate the event in place and return it.
-        # Here we redirect the would-be graveyard move to exile.
-        event.destination = "exile"
-        return event
-
-    game.replacement_manager.register(
-        ReplacementEffect(
-            event_type=MoveToGraveyardReplacementEvent,
-            source=source,
-            condition=_condition,
-            replacement=_replacement,
-            controller=getattr(self, "controller", None),
-        )
+def register_replacement_effects(self, game, permanent):
+    game.register_replacement(
+        event="creature_dies",
+        source=permanent,
+        condition=lambda e: True,
+        replacement=lambda e: game.exile(e.card),
     )
 ```
 
-Key points:
-
-- `event_type=` references a **class** (subclass of `ReplacementEvent`), not a string.
-- The replacement callback receives the event object and **returns the (possibly mutated) event**.
-- Mutate fields like `event.destination` directly; do not call zone-move helper APIs from inside a replacement (those create new events and short-circuit the replacement chain).
-- A replacement registered for a parent event class also fires for any subclass — so registering against `MoveToGraveyardReplacementEvent` covers `CreatureDiesReplacementEvent`, `SacrificeReplacementEvent`, etc.
-
-Other differences from triggers: no stack, in-place event modification, "instead" semantics, one replacement per event (affected player chooses if multiple apply).
+Key differences from triggers: no stack, in-place event modification, "instead" semantics, one replacement per event (affected player chooses if multiple apply).
 
 ### Example: Vanilla Creature
 
