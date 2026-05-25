@@ -160,3 +160,9 @@ tests/test_logs_viewer.py — Log viewer tests (pre-existing, verify no regressi
 tests/test_runner.py — Runner tests (pre-existing, verify no regressions)
 Implementation
 silverquillm/cli.py — Added _runner_log() helper with ISO-8601 timestamped file logging; replaced ~15 bare click.echo calls in run/smoke commands
+
+Item 14: Hide structurally-empty channels in live mode with rediscovery polling
+Tests
+tests/test_logs_viewer.py — existing viewer tests (all 33 pass, no regressions)
+Implementation
+silverquillm/logs_viewer.py — added _ever_visible set, visible_channels property, _poll_channel_visibility() method, 2s discovery poll in event loop, tab bar filters by visibility
