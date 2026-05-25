@@ -1,8 +1,8 @@
-# Directory Summary — `tests/engine/`
+# Directory Summary — `benchmarks/sos/workspace/tests/engine/`
 
 ## Purpose
 
-Unit tests for all engine modules in `engine/`. One test file per engine module, covering types, zones, players, mana, cards, casting, stack, combat, triggers, abilities, continuous effects, replacement effects, state-based actions, protection, game state, extra turns, lazy target evaluation, chosen_targets refactor, and the game loop. ~1,140+ test functions.
+Unit tests for all engine modules in `benchmarks/sos/workspace/engine/`. One test file per engine module, covering types, zones, players, mana, cards, casting, stack, combat, triggers, abilities, continuous effects, replacement effects, state-based actions, protection, game state, extra turns, lazy target evaluation, chosen_targets refactor, and the game loop. ~1,140+ test functions.
 
 ## Key Files
 

@@ -1,8 +1,8 @@
-# Directory Summary — `engine/`
+# Directory Summary — `benchmarks/sos/workspace/engine/`
 
 ## Purpose
 
-Core game engine for a Magic: The Gathering implementation. Contains **17 Python modules** implementing MTG rules (types, zones, players, mana, cards, casting, stack, combat, triggers, abilities, continuous effects, replacement effects, state-based actions, protection, and the game loop). This is the rules engine layer — card-specific implementations live in `cards/`.
+Core game engine for a Magic: The Gathering implementation, now located within the canonical agent workspace at `benchmarks/sos/workspace/engine/`. Contains **17 Python modules** implementing MTG rules (types, zones, players, mana, cards, casting, stack, combat, triggers, abilities, continuous effects, replacement effects, state-based actions, protection, and the game loop). This is the rules engine layer — card-specific implementations live in `benchmarks/sos/workspace/cards/`. Imported as `benchmarks.sos.workspace.engine`.
 
 ## Key Files
 

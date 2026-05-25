@@ -1,8 +1,8 @@
-# Directory Summary — `cards/`
+# Directory Summary — `benchmarks/sos/workspace/cards/`
 
 ## Purpose
 
-Card registry, data pipeline, and card implementations for the SilverquiLLM MTG engine. Maps card names to implementation classes and metadata, fetches card data from Scryfall, and houses the `fdn/` subdirectory with per-card FDN set implementations (276 card directories, 286 `card_impl.py` files covering the full FDN set) and the `stubs/` subdirectory with auto-generated SOS Draft Set stub classes (346 cards).
+Card registry, data pipeline, and card implementations for the SilverquiLLM MTG engine. Now located within the canonical agent workspace at `benchmarks/sos/workspace/cards/`. Maps card names to implementation classes and metadata, fetches card data from Scryfall, and houses the `fdn/` subdirectory with per-card FDN set implementations (276 card directories, 286 `card_impl.py` files covering the full FDN set) and the `stubs/` subdirectory with auto-generated SOS Draft Set stub classes (346 cards). Imported as `benchmarks.sos.workspace.cards`.
 
 ## Key Files
 

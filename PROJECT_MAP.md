@@ -18,13 +18,13 @@ The benchmark architecture now treats the **Workspace** as the only evaluatable 
 
 Host runner
 
-├── stages Workspace
+├── stages Workspace (copytree of benchmarks/sos/workspace/)
 
 ├── writes /workspace/run_manifest.json immediately before launch
 
 ├── launches Docker Agent Container
 
-├── streams + saves Docker stdout/stderr
+├── streams + saves Docker stdout/stderr directly to run_dir
 
 ├── snapshots full Workspace every 60s as host-side Git commits
 
@@ -67,8 +67,7 @@ Agent Container
 │                                                                      │
 
 │  silverquillm/[workspace.py](http://workspace.py)                                           │
-
-│    └── stage_workspace()                                             │
+│    └── stage_workspace() — copytree of benchmarks/sos/workspace/     │
 
 │                                                                      │
 
@@ -141,10 +140,8 @@ Agent Container
 │                                                                      │
 
 │  /output/                                                            │
-
 │    └── optional telemetry only                                       │
-
-│        progress.jsonl, system.log, agent_stdout.log, etc.            │
+│        system.log, agent_stdout.log, etc.                            │
 
 └──────────────────────────────────────────────────────────────────────┘
 
@@ -153,27 +150,29 @@ Agent Container
 
 | Directory | Status | Purpose | Notes |
 |---|---:|---|---|
-| `engine/` | Active | Core MTG game engine | Agent edits staged copy in `/workspace/engine/` during runs |
-| `cards/` | Active | Card registry and set data | Registry, Scryfall helpers, FDN/SOS card directories |
-| `cards/fdn/` | Active | FDN per-card implementations | 276 card directories with 286 `card_impl.py` files; 174 cards implemented/upgraded in Items 1–15 |
-| `cards/sos/` | Active | SOS benchmark targets | Empty/template impls before agent run; agent fills `card_impl.py` |
-| `silverquillm/` | Active | Benchmark runner package | CLI, workspace staging, evaluation, results |
+| `benchmarks/sos/workspace/engine/` | Active | Core MTG game engine | Canonical location; agent edits staged copy in `/workspace/engine/` during runs |
+| `benchmarks/sos/workspace/cards/` | Active | Card registry and set data | Registry, Scryfall helpers, FDN/SOS card directories |
+| `benchmarks/sos/workspace/cards/fdn/` | Active | FDN per-card implementations | 276 card directories with 286 `card_impl.py` files; 174 cards implemented/upgraded in Items 1–15 |
+| `benchmarks/sos/workspace/cards/sos/` | Active | SOS benchmark targets | Empty/template impls before agent run; agent fills `card_impl.py` |
+| `benchmarks/sos/workspace/tests/` | Active | Workspace-internal tests | Engine unit tests, test_utils.py, conftest.py |
+| `silverquillm/` | Active | Benchmark runner package | CLI, workspace staging, evaluation, telemetry, live viewer, results |
 | `silverquillm/replay/` | Active | 17lands replay validation pipeline | Parser, state reconstruction, executor, divergence reporting |
 | `docker/` | Active | Agent container images | Image is the full agent config |
-| `docker/pi-blind/` | Active | Pi blind-mode image | Agent-specific entrypoint and model config |
-| `docker/pi-tested/` | Active | Pi tested-mode image | Agent-specific entrypoint and model config |
-| `docker/opencode-blind/` | Active | OpenCode blind-mode image | Agent-specific entrypoint |
-| `docker/opencode-tested/` | Active | OpenCode tested-mode image | Agent-specific entrypoint |
+| `docker/homelab-pi-blind/` | Active | Pi blind-mode image (homelab) | Agent-specific entrypoint and model config |
+| `docker/local-pi-blind/` | Active | Pi blind-mode image (local) | Agent-specific entrypoint and model config |
+| `docker/copilot-gpt-4.1/` | Active | Copilot GPT-4.1 image | Agent-specific entrypoint |
+| `docker/copilot-gpt-5.4/` | Active | Copilot GPT-5.4 image | Agent-specific entrypoint |
+| `docker/copilot-gpt-5.4-mini/` | Active | Copilot GPT-5.4-mini image | Agent-specific entrypoint |
+| `docker/copilot-local/` | Active | Copilot local image | Agent-specific entrypoint |
 | `benchmarks/` | Active | Benchmark data sets | SOS data and benchmark set metadata |
 | `benchmarks/sos/` | Active | SOS Draft Set data | 346-card benchmark set |
+| `benchmarks/sos/workspace/` | Active | **Canonical agent workspace** | Copied as-is to Docker mount; contains engine, cards, tests, rulebook |
+| `benchmarks/sos/data/` | Active | SOS raw data + audited tests | sos.json, rules, tests/audited/ |
 | `data/` | Active | Runtime data cache + replay data | Scryfall cache, replay files |
 | `data/replays/` | Active | Replay card ID maps and samples | Used by replay validation |
 | `scripts/` | Active | Utility scripts | Card ID maps, card spec generation, migration scripts |
-| `tests/` | Active | Test root | Engine, runner, card, replay, and integration tests |
-| `tests/engine/` | Active | Core engine regression tests | Snapshot fallback viability gate |
-| `tests/audited/fdn/` | Active | FDN audited regression tests | 286 card test directories; used for FDN Card Regression |
-| `tests/audited/sos/` | Active | SOS audited correctness tests | Used for SOS Card Correctness |
-| `tests/cards/` | Legacy / active during migration | Existing card tests | May be folded into audited structure over time |
+| `tests/` | Active | Test root | Runner, card, replay, integration, and host-side validation tests |
+| `tests/integration/` | Active | Integration tests | Workspace staging integration tests |
 | `docs/` | Active | Specs and generated docs | Export target for Notion specs |
 
 ## Key Specs
@@ -197,10 +196,12 @@ Agent Container
 
 - **Image-as-config**: Docker image encodes agent, mode, strategy, model, and prompt behavior.
 - **Workspace-as-output**: The Workspace is the only evaluatable output state.
+- **Workspace copytree**: `stage_workspace()` copies `benchmarks/sos/workspace/` as-is, then applies per-run overlays.
 - **In-place engine editing**: Agents modify `/workspace/engine/` directly.
 - **Host baseline engine**: Runner computes `engine_diff.patch` against the original host engine.
 - **Snapshot fallback**: Runner can recover from corrupted final engine state using whole-Workspace Git snapshots.
-- **Telemetry-only output**: `/output/` and Docker logs are for monitoring/debugging only.
+- **Telemetry-only output**: `/output/` and Docker logs are for monitoring/debugging only. No progress.jsonl channel.
+- **Direct docker log streaming**: Docker stdout/stderr are streamed line-by-line directly to run_dir during container execution.
 - **Evaluation from `workspace_final/`**: Evaluation never depends on `/output/`.
 - **Card structure invariant**: Each card class must remain in `cards/{set}/{card_id}/card_impl.py`.
 - **Filtered runs are not leaderboard-valid**: `--cards` is for development and pipeline validation only.
