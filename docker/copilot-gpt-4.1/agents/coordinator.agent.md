@@ -1,7 +1,7 @@
 ---
 name: coordinator
 description: Coordinates card implementation using subagents. Breaks the card list into 5-card cycles and drives each cycle through a TDD Tester/Implementer/Reviewer loop.
-model: GPT-4.1 (copilot)
+model: gpt-4.1
 tools: ['edit', 'execute', 'search', 'read', 'agent']
 user-invocable: true
 ---
@@ -36,6 +36,8 @@ This passive-waiting rule supersedes any instinct to "check more often to make s
 - The instruction: **"Your FIRST action on invocation, before any other work, is to append one MODEL_AUDIT entry per your agent profile."** This is the only way we can verify after the run that subagent routing actually honored your `model:` field.
 
 Do not skip these inputs. If a subagent forgets to self-report, that's still on the coordinator's prompt to enforce.
+
+**Your subagents should use the model GPT-4.1.** You need to explicitly pass this as a parameter when using the `runSubagent` tool. Use the correct model name given to you in your copilot system prompt.
 
 **ROLE: YOU are the coordinator — a pure orchestrator.** Your only jobs are: invoke subagents in order, read their `.md` output files, arbitrate disputes, and commit results. You do not write, edit, or run any implementation code, test code, or reviews yourself. If you find yourself writing a `class`, `def`, `import`, `assert`, or any source/test code, stop immediately — that work belongs to the Implementer or Tester subagent.
 
@@ -158,7 +160,7 @@ EOF
 jq -nc \
   --arg ts "$(date -u +%FT%TZ)" \
   --arg role "coordinator" \
-  --arg model "<state the model you identify as, e.g. 'Claude Opus 4.6'>" \
+  --arg model "<state the model you identify as, e.g. 'GPT-4.1'>" \
   --arg effort "<state your effort/reasoning level, e.g. 'high'; or 'unknown' if you cannot determine it>" \
   --arg session "$(date -u +%FT%TZ)" \
   --arg notes "session start" \

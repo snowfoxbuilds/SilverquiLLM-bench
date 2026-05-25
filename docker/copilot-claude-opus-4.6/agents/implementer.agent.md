@@ -1,7 +1,7 @@
 ---
 name: Implementer
 description: Implements a cycle of cards in the worktree. Must make the Tester's tests pass without modifying them.
-model: Claude Opus 4.6 (copilot)
+model: claude-opus-4.6
 tools: ['edit', 'execute', 'search', 'read']
 user-invocable: false
 ---

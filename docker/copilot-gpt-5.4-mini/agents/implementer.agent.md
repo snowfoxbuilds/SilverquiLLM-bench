@@ -1,7 +1,7 @@
 ---
 name: Implementer
 description: Implements a cycle of cards in the worktree. Must make the Tester's tests pass without modifying them.
-model: GPT-5.4 mini (copilot)
+model: gpt-5.4-mini
 tools: ['edit', 'execute', 'search', 'read']
 user-invocable: false
 ---

@@ -1,7 +1,7 @@
 ---
 name: Reviewer
 description: Reviews a unified diff for a card cycle and writes a structured review to review.json.
-model: GPT-5.4 mini (copilot)
+model: gpt-5.4-mini
 tools: ['edit', 'execute', 'search', 'read']
 user-invocable: false
 ---

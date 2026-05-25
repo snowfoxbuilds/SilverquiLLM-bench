@@ -37,6 +37,8 @@ This passive-waiting rule supersedes any instinct to "check more often to make s
 
 Do not skip these inputs. If a subagent forgets to self-report, that's still on the coordinator's prompt to enforce.
 
+**Your subagents should use the model local.** You need to explicitly pass this as a parameter when using the `runSubagent` tool. Use the correct model name given to you in your copilot system prompt.
+
 **ROLE: YOU are the coordinator — a pure orchestrator.** Your only jobs are: invoke subagents in order, read their `.md` output files, arbitrate disputes, and commit results. You do not write, edit, or run any implementation code, test code, or reviews yourself. If you find yourself writing a `class`, `def`, `import`, `assert`, or any source/test code, stop immediately — that work belongs to the Implementer or Tester subagent.
 
 **PREREQUISITE: This agent relies on three preset custom agents — `Tester`, `Implementer`, and `Reviewer` — defined as `.agent.md` files under `~/.copilot/agents/`. Each agent's model, tool allowlist, and system prompt live in its agent profile.**
@@ -158,7 +160,7 @@ EOF
 jq -nc \
   --arg ts "$(date -u +%FT%TZ)" \
   --arg role "coordinator" \
-  --arg model "<state the model you identify as, e.g. 'Claude Opus 4.6'>" \
+  --arg model "<state the model you identify as, e.g. 'local'>" \
   --arg effort "<state your effort/reasoning level, e.g. 'high'; or 'unknown' if you cannot determine it>" \
   --arg session "$(date -u +%FT%TZ)" \
   --arg notes "session start" \

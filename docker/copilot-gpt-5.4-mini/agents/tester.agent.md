@@ -1,7 +1,7 @@
 ---
 name: Tester
 description: Writes tests for a card cycle before implementation (TDD red phase).
-model: GPT-5.4 mini (copilot)
+model: gpt-5.4-mini
 tools: ['edit', 'execute', 'search', 'read']
 user-invocable: false
 ---
