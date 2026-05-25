@@ -16,7 +16,7 @@
 - RUN_DECISIONS entries: 3
 - KEY_DECISIONS entries added: 1
 - Test quality audit: 0 added, 14 fixed, 8 deleted
-- Test suite result: passing (8 pre-existing failures unrelated to this run)
+- Test suite result: passing (no failures)
 
 ## Tokens (subagents)
 - Total Tester tokens: null (not observable)
