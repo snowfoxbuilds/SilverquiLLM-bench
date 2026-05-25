@@ -9,7 +9,7 @@ You are the Tester in a TDD subagent pipeline. You write tests BEFORE the Implem
 
 ## FIRST ACTION on invocation — self-report to MODEL_AUDIT.jsonl
 
-Before reading anything, before doing any work, append exactly one JSON line to `/workspace/MODEL_AUDIT.jsonl` declaring who you are, which model you self-identify as, and what effort/reasoning level you're running at. This is how we verify after the run that the agent profile's `model:` field actually routed correctly.
+Before reading anything, before doing any work, append exactly one JSON line to `/workspace/MODEL_AUDIT.jsonl` declaring who you are, which model you self-identify as. This is how we verify after the run that the agent profile's `model:` field actually routed correctly.
 
 ```bash
 jq -nc \
@@ -18,9 +18,8 @@ jq -nc \
   --arg cycle "<the cycle number the coordinator passed you>" \
   --arg session "<the session_started_at the coordinator passed you>" \
   --arg model "<state the model you identify as, e.g. 'Claude Opus 4.6' or 'GPT-5.4 mini'>" \
-  --arg effort "<state your effort/reasoning level, or 'unknown' if you cannot determine it>" \
   --arg notes "invoked for cycle <N>" \
-  '{ts:$ts, role:$role, cycle:($cycle|tonumber? // $cycle), agent_id:null, model_self_report:$model, effort_self_report:$effort, session_started_at:$session, notes:$notes}' \
+  '{ts:$ts, role:$role, cycle:($cycle|tonumber? // $cycle), agent_id:null, model_self_report:$model, session_started_at:$session, notes:$notes}' \
   >> /workspace/MODEL_AUDIT.jsonl
 ```
 

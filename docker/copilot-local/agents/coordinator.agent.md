@@ -161,10 +161,9 @@ jq -nc \
   --arg ts "$(date -u +%FT%TZ)" \
   --arg role "coordinator" \
   --arg model "<state the model you identify as, e.g. 'local'>" \
-  --arg effort "<state your effort/reasoning level, e.g. 'high'; or 'unknown' if you cannot determine it>" \
   --arg session "$(date -u +%FT%TZ)" \
   --arg notes "session start" \
-  '{ts:$ts, role:$role, cycle:null, agent_id:null, model_self_report:$model, effort_self_report:$effort, session_started_at:$session, notes:$notes}' \
+  '{ts:$ts, role:$role, cycle:null, agent_id:null, model_self_report:$model, session_started_at:$session, notes:$notes}' \
   >> MODEL_AUDIT.jsonl
 ```
 

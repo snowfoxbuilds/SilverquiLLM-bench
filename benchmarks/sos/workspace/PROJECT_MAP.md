@@ -5,7 +5,7 @@ AGENTS.md          — Workspace orientation and rules
 PROJECT_MAP.md     — This file; directory summary
 RULEBOOK.txt       — The entire MTG comprehensive rules. Grep — do not read whole.
 prompt.md          — Per-run task prompt (written at stage time)
-run_manifest.json  — Per-run manifest (benchmark set, card filter, timeout, deadline)
+run_manifest.json  — Per-run manifest written by the harness: `{timeout_seconds, deadline_utc}`. Harness-owned — do not edit.
 pytest.ini         — Pytest configuration for the workspace
 conftest.py        — Pytest fixtures shared across the workspace
 test_utils.py      — Shared test helpers (`create_game`, `set_board_state`, …)
