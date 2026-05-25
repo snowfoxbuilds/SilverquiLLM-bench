@@ -34,9 +34,19 @@ For an FDN reference card:
 ```
 cards/fdn/fdn_<N>/card_spec.json   — card metadata
 cards/fdn/fdn_<N>/card_impl.py     — completed reference implementation (read for examples)
-cards/fdn/fdn_<N>/tests.py         — only present for a handful of cards (e.g. fdn_13,
-                                     fdn_142, fdn_205, fdn_215, fdn_244); read as test examples
+cards/fdn/fdn_<N>/tests.py         — only present for the cards listed below; read as test examples
 ```
+
+### FDN cards that ship with a `tests.py`
+
+This is the canonical list — agent prompts refer back here instead of duplicating it.
+Discover the current set at any time with:
+
+```bash
+find cards/fdn -mindepth 2 -maxdepth 2 -name tests.py -printf '%h\n' | sort -V
+```
+
+As of the latest workspace stage, the list is: `fdn_13`, `fdn_142`, `fdn_205`, `fdn_215`, `fdn_244`. If you suspect the list has grown, re-run the `find` command above — it is authoritative.
 
 ## Imports
 
@@ -45,6 +55,6 @@ The workspace root is on `sys.path`, so use bare package imports:
 ```python
 from cards.sos.sos_1.card_impl import TheDawningArchaic
 from engine.card import CardImpl, Creature, Instant
-from engine.types import CardType, Keyword, ManaCost, Zone
+from engine.types import CardType, Keyword, ManaCost, ManaType, Zone
 from test_utils import create_game, set_board_state
 ```
