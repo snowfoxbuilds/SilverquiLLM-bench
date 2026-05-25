@@ -17,7 +17,7 @@ Benchmark data and artifacts for the **Shadows over Sonnenthal (SOS)** Draft Set
 
 | Directory | Contents |
 |-----------|----------|
-| `workspace/` | **Canonical agent workspace** — copied as-is into Docker containers. Contains engine/, cards/, tests/, rulebook.md, pytest.ini, AGENTS.md. See `benchmarks/sos/workspace/` summaries. |
+| `workspace/` | **Canonical agent workspace** — copied as-is into Docker containers. Contains engine/, cards/, tests/, RULEBOOK.txt, pytest.ini, AGENTS.md. See `benchmarks/sos/workspace/` summaries. |
 | `data/` | Raw and processed data files, plus `tests/audited/` (FDN/SOS audited test suites). |
 | `cards/` | Per-card directories (`1/`–`271/` for SOS, `soa_1/`–`soa_65/` for SOA, `spg_149/`–`spg_158/` for SPG), each containing `card_spec.json`. |
 | `results/` | **Deprecated.** Benchmark results are now stored under `docker/<image_dir>/results/`. |

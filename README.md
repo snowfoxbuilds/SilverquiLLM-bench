@@ -97,7 +97,7 @@ Canonical layout:
 /workspace/
   prompt.md
   run_manifest.json
-  rulebook.md
+  RULEBOOK.txt
   engine_api.md
   base_classes.py
   test_utils.md

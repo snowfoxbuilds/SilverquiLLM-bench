@@ -2,7 +2,7 @@
 
 Verifies:
 - The staged directory matches benchmarks/sos/workspace/ byte-for-byte
-  (source tree files like rulebook.md, test_utils.md are copytree integrity)
+  (source tree files like RULEBOOK.txt, test_utils.md are copytree integrity)
 - Per-run overlay files (prompt.md, run_manifest.json) are written correctly
 - A git repository is initialized with exactly one commit
 - The source workspace structure is preserved intact
@@ -65,9 +65,9 @@ class TestCopytreeIntegrity:
             )
 
     def test_rulebook_md_present_from_source_tree(self, staged):
-        """rulebook.md exists in source tree and must be present after copytree."""
+        """RULEBOOK.txt exists in source tree and must be present after copytree."""
         workspace, _ = staged
-        assert (workspace / "rulebook.md").is_file()
+        assert (workspace / "RULEBOOK.txt").is_file()
 
     def test_no_pycache_in_staged(self, staged):
         """__pycache__ directories must not be staged."""

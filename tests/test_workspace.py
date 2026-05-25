@@ -100,7 +100,7 @@ class TestWorkspaceStructure:
 
     def test_rulebook_md_exists(self, staged):
         workspace, _ = staged
-        assert (workspace / "rulebook.md").is_file()
+        assert (workspace / "RULEBOOK.txt").is_file()
 
     def test_test_utils_md_exists(self, staged):
         workspace, _ = staged

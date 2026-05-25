@@ -24,7 +24,7 @@ EXPECTED_DIRS = [
 EXPECTED_FILES = [
     "AGENTS.md",
     "PROJECT_MAP.md",
-    "rulebook.md",
+    "RULEBOOK.txt",
     "pytest.ini",
     ".gitignore",
 ]

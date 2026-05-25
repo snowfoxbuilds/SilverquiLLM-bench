@@ -9,7 +9,6 @@ build/
 config.yaml
 replay_page*
 
-benchmarks/*
 
 # Scryfall cache data
 data/sets/*.json

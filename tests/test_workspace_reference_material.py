@@ -36,20 +36,20 @@ class TestRulebookSource:
 
     def test_rulebook_md_exists(self, staged):
         workspace, _ = staged
-        assert (workspace / "rulebook.md").is_file()
+        assert (workspace / "RULEBOOK.txt").is_file()
 
     def test_rulebook_content_is_substantial(self, staged):
-        """rulebook.md content must be substantial (not empty or stub)."""
+        """RULEBOOK.txt content must be substantial (not empty or stub)."""
         workspace, _ = staged
-        actual = (workspace / "rulebook.md").read_text()
-        # After copytree rewrite (Item 8), rulebook.md comes from
-        # benchmarks/sos/workspace/rulebook.md directly, not comprehensive_rules.txt
-        assert len(actual) > 1000, "rulebook.md should be substantial"
+        actual = (workspace / "RULEBOOK.txt").read_text()
+        # After copytree rewrite (Item 8), RULEBOOK.txt comes from
+        # benchmarks/sos/workspace/RULEBOOK.txt directly, not comprehensive_rules.txt
+        assert len(actual) > 1000, "RULEBOOK.txt should be substantial"
 
     def test_rulebook_is_not_a_stub(self, staged):
-        """rulebook.md must not be a stub placeholder."""
+        """RULEBOOK.txt must not be a stub placeholder."""
         workspace, _ = staged
-        text = (workspace / "rulebook.md").read_text()
+        text = (workspace / "RULEBOOK.txt").read_text()
         assert "Stub" not in text
         assert "source not found" not in text
 
@@ -118,10 +118,10 @@ class TestPromptText:
         assert "engine/events.py" in text
 
     def test_prompt_mentions_rulebook(self, staged):
-        """Prompt should reference rulebook.md for deep rules."""
+        """Prompt should reference RULEBOOK.txt for deep rules."""
         workspace, _ = staged
         text = (workspace / "prompt.md").read_text()
-        assert "rulebook.md" in text
+        assert "RULEBOOK.txt" in text
 
 
 # ------------------------------------------------------------------

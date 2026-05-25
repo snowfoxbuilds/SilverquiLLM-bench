@@ -1,4 +1,4 @@
-"""Tests for TODO 1.2: rulebook.md lives in the workspace."""
+"""Tests for TODO 1.2: RULEBOOK.txt lives in the workspace."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ def workspace(repo_root: Path) -> Path:
 @pytest.fixture()
 def rulebook(workspace: Path) -> Path:
     """Return the rulebook path."""
-    return workspace / "rulebook.md"
+    return workspace / "RULEBOOK.txt"
 
 
 # ------------------------------------------------------------------
@@ -32,24 +32,24 @@ def rulebook(workspace: Path) -> Path:
 
 
 class TestRulebookExists:
-    """rulebook.md must exist at the correct workspace path."""
+    """RULEBOOK.txt must exist at the correct workspace path."""
 
     def test_rulebook_exists(self, rulebook: Path):
-        assert rulebook.is_file(), "benchmarks/sos/workspace/rulebook.md must exist"
+        assert rulebook.is_file(), "benchmarks/sos/workspace/RULEBOOK.txt must exist"
 
     def test_no_rulebook_at_repo_root(self, repo_root: Path):
-        assert not (repo_root / "rulebook.md").exists(), (
-            "rulebook.md should not exist at the repo root"
+        assert not (repo_root / "RULEBOOK.txt").exists(), (
+            "RULEBOOK.txt should not exist at the repo root"
         )
 
     def test_no_rulebook_in_docs(self, repo_root: Path):
-        assert not (repo_root / "docs" / "rulebook.md").exists(), (
-            "rulebook.md should not exist in docs/"
+        assert not (repo_root / "docs" / "RULEBOOK.txt").exists(), (
+            "RULEBOOK.txt should not exist in docs/"
         )
 
     def test_no_rulebook_in_benchmarks_root(self, repo_root: Path):
-        assert not (repo_root / "benchmarks" / "rulebook.md").exists(), (
-            "rulebook.md should not exist at benchmarks/ root"
+        assert not (repo_root / "benchmarks" / "RULEBOOK.txt").exists(), (
+            "RULEBOOK.txt should not exist at benchmarks/ root"
         )
 
 
@@ -59,14 +59,14 @@ class TestRulebookExists:
 
 
 class TestRulebookContent:
-    """rulebook.md must contain meaningful MTG rules content."""
+    """RULEBOOK.txt must contain meaningful MTG rules content."""
 
     @pytest.fixture()
     def content(self, rulebook: Path) -> str:
         return rulebook.read_text()
 
     def test_not_empty(self, content: str):
-        assert len(content.strip()) > 100, "rulebook.md must have substantial content"
+        assert len(content.strip()) > 100, "RULEBOOK.txt must have substantial content"
 
     def test_mentions_creature(self, content: str):
         assert "creature" in content.lower()
@@ -90,12 +90,12 @@ class TestRulebookContent:
 
 
 class TestRulebookReferences:
-    """Any markdown reference to rulebook.md should use the workspace path."""
+    """Any markdown reference to RULEBOOK.txt should use the workspace path."""
 
     @pytest.fixture()
     def markdown_files(self, repo_root: Path) -> list[Path]:
         """All markdown files in the repo excluding meta/planning files."""
-        rulebook_path = repo_root / "benchmarks" / "sos" / "workspace" / "rulebook.md"
+        rulebook_path = repo_root / "benchmarks" / "sos" / "workspace" / "RULEBOOK.txt"
         excluded_names = {"TODO.md", "FILES_MODIFIED.md", "KEY_DECISIONS.md", "CONTEXT.md", "RUN_DECISIONS.md"}
         return [
             p
@@ -108,16 +108,16 @@ class TestRulebookReferences:
     def test_no_broken_rulebook_references(
         self, markdown_files: list[Path], repo_root: Path
     ):
-        """No markdown file should reference rulebook.md at an old/wrong path.
+        """No markdown file should reference RULEBOOK.txt at an old/wrong path.
 
         Valid references include:
-        - workspace/rulebook.md (full workspace-relative path)
-        - /workspace/rulebook.md (absolute workspace path from agent POV)
-        - bare `rulebook.md` in docs describing workspace contents (listing)
+        - workspace/RULEBOOK.txt (full workspace-relative path)
+        - /workspace/RULEBOOK.txt (absolute workspace path from agent POV)
+        - bare `RULEBOOK.txt` in docs describing workspace contents (listing)
         - references in TODO/changelog about the move itself
         """
-        # We specifically check for references that place rulebook.md
-        # outside the workspace (e.g., docs/rulebook.md, ./rulebook.md at root)
+        # We specifically check for references that place RULEBOOK.txt
+        # outside the workspace (e.g., docs/RULEBOOK.txt, ./RULEBOOK.txt at root)
         wrong_path_patterns = [
             re.compile(r"\bdocs/rulebook\.md\b"),
             re.compile(r"\./rulebook\.md\b"),
@@ -134,6 +134,6 @@ class TestRulebookReferences:
                         issues.append(f"{rel}:{i}: {line.strip()}")
                         break
         assert not issues, (
-            f"Found references to rulebook.md at wrong paths:\n"
+            f"Found references to RULEBOOK.txt at wrong paths:\n"
             + "\n".join(issues)
         )

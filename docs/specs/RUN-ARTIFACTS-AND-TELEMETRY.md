@@ -39,7 +39,7 @@ docker/<image-dir>/results/<run_name>/snapshots/
     run_manifest.json
     engine/
     cards/
-    rulebook.md
+    RULEBOOK.txt
     engine_api.md
     base_classes.py
     test_utils.md

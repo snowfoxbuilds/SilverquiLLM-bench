@@ -41,7 +41,7 @@ Implement all SOS cards in `/workspace/cards/sos/`. Each card directory contains
 a `card_spec.json` with the card's details and a `card_impl.py` template to fill in.
 Use the completed FDN cards in `/workspace/cards/fdn/` as implementation examples. \
 Refer to `rules_overview.md` for a compact rules skim (always read first) and \
-`rulebook.md` for the full deep-reference rules text.
+`RULEBOOK.txt` for the full deep-reference rules text.
 For engine API discovery, read the source modules directly — they have rich docstrings: \
 `engine/card.py`, `engine/events.py`, `engine/triggers.py`, \
 `engine/replacement_effects.py`, `engine/zones.py`.
