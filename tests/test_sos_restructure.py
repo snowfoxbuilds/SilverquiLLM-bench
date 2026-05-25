@@ -60,10 +60,10 @@ class TestDirectoryStructure:
 # ---------------------------------------------------------------------------
 
 class TestCardCount:
-    def test_at_least_340_card_directories(self):
+    def test_at_least_271_card_directories(self):
         subdirs = _get_card_subdirs()
-        assert len(subdirs) >= 340, (
-            f"Expected at least 340 card directories, found {len(subdirs)}"
+        assert len(subdirs) >= 271, (
+            f"Expected at least 271 card directories, found {len(subdirs)}"
         )
 
     def test_exactly_271_base_sos_cards(self):

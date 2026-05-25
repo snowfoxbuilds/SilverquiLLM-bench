@@ -78,16 +78,16 @@ class TestNumericCollectorNumberFilter:
 
     def test_harvest_with_numeric_filter_matches_card(self, tmp_path):
         """_harvest_results with card_filter=['1'] should match the card whose
-        card_spec.json has collector_number='1' (directory soa_1)."""
+        card_spec.json has collector_number='1' (directory sos_1)."""
         workspace = tmp_path / "ws" / "workspace"
         output = tmp_path / "ws" / "output"
         results = tmp_path / "results"
         workspace.mkdir(parents=True)
         output.mkdir(parents=True)
 
-        # soa_1 has collector_number "1" in its card_spec.json
+        # sos_1 has collector_number "1" in its card_spec.json
         # Set up workspace with that directory
-        _setup_workspace_with_cards(workspace, ["soa_1"])
+        _setup_workspace_with_cards(workspace, ["sos_1"])
 
         run_dir = _harvest_results(
             workspace, output, results, "test-run",
@@ -109,7 +109,7 @@ class TestNumericCollectorNumberFilter:
         output.mkdir(parents=True)
 
         # Set up workspace with multiple cards
-        _setup_workspace_with_cards(workspace, ["soa_1", "sos_53"])
+        _setup_workspace_with_cards(workspace, ["sos_1", "sos_53"])
 
         run_dir = _harvest_results(
             workspace, output, results, "test-run",
@@ -131,7 +131,7 @@ class TestNumericCollectorNumberFilter:
         workspace.mkdir(parents=True)
         output.mkdir(parents=True)
 
-        _setup_workspace_with_cards(workspace, ["soa_1", "sos_53"])
+        _setup_workspace_with_cards(workspace, ["sos_1", "sos_53"])
 
         run_dir = _harvest_results(
             workspace, output, results, "test-run",
@@ -150,7 +150,7 @@ class TestNumericCollectorNumberFilter:
         run_dir = tmp_path / "run"
         run_dir.mkdir()
 
-        _setup_workspace_with_cards(workspace, ["soa_1"])
+        _setup_workspace_with_cards(workspace, ["sos_1"])
 
         # Use numeric filter set (as _harvest_results would compute it)
         _write_card_statuses(workspace, run_dir, timed_out=False, card_filter={"1"})
@@ -178,7 +178,7 @@ class TestZeroPaddedCollectorNumbers:
         workspace.mkdir(parents=True)
         output.mkdir(parents=True)
 
-        _setup_workspace_with_cards(workspace, ["soa_1"])
+        _setup_workspace_with_cards(workspace, ["sos_1"])
 
         # '001'.isdigit() is True, str(int('001')) == '1'
         run_dir = _harvest_results(
@@ -224,13 +224,13 @@ class TestZeroPaddedCollectorNumbers:
 
     def test_cli_parsing_preserves_non_numeric_values(self):
         """CLI --cards parsing preserves non-numeric values unchanged."""
-        cards_input = "soa_1,soa_10"
+        cards_input = "sos_1,sos_10"
         card_filter = [
             str(int(c)) if c.isdigit() else c.strip()
             for c in (tok.strip() for tok in cards_input.split(","))
             if c
         ]
-        assert card_filter == ["soa_1", "soa_10"]
+        assert card_filter == ["sos_1", "sos_10"]
 
 
 # ---------------------------------------------------------------------------
