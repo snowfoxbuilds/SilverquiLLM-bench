@@ -143,7 +143,10 @@ class TestPerCardSpecDirectories:
 
     def test_spec_directory_count_is_346(self) -> None:
         """There should be exactly 346 card spec directories."""
-        dirs = [d for d in _CARDS_DIR.iterdir() if d.is_dir()]
+        dirs = [
+            d for d in _CARDS_DIR.iterdir()
+            if d.is_dir() and d.name != "__pycache__"
+        ]
         assert len(dirs) == 346, f"Expected 346 spec dirs, found {len(dirs)}"
 
     def test_every_classified_card_has_spec_dir(self, classified_cards: list[dict]) -> None:

@@ -54,12 +54,21 @@ class TestCardsRelocation:
             capture_output=True,
             text=True,
         )
-        # Filter out matches inside the cards package itself
+        # Filter out matches inside the cards package itself, historical
+        # benchmark run artifacts under docker/ (captured agent outputs),
+        # and third-party packages under venv/.
         cards_pkg = str(REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards")
+        docker_dir = str(REPO_ROOT / "docker")
+        venv_dir = str(REPO_ROOT / "venv")
         stale_files = [
             f
             for f in result.stdout.strip().splitlines()
-            if f and not f.startswith(cards_pkg)
+            if (
+                f
+                and not f.startswith(cards_pkg)
+                and not f.startswith(docker_dir)
+                and not f.startswith(venv_dir)
+            )
         ]
         assert stale_files == [], (
             f"Stale cards imports found outside cards package:\n"

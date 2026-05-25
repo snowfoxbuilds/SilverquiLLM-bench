@@ -61,13 +61,22 @@ class TestEngineRelocation:
             capture_output=True,
             text=True,
         )
-        # Filter out matches inside the engine package itself and false positives
-        # from string literals in test assertion messages
+        # Filter out matches inside the engine package itself, historical
+        # benchmark run artifacts under docker/, third-party packages under
+        # venv/, and false positives from string literals in test assertion
+        # messages.
         engine_pkg = str(REPO_ROOT / "benchmarks" / "sos" / "workspace" / "engine")
+        docker_dir = str(REPO_ROOT / "docker")
+        venv_dir = str(REPO_ROOT / "venv")
         tests_dir = str(REPO_ROOT / "tests")
         stale_files = []
         for f in result.stdout.strip().splitlines():
-            if not f or f.startswith(engine_pkg):
+            if (
+                not f
+                or f.startswith(engine_pkg)
+                or f.startswith(docker_dir)
+                or f.startswith(venv_dir)
+            ):
                 continue
             # For files in tests/, verify it's an actual import not a string literal
             if f.startswith(tests_dir):

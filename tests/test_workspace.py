@@ -104,7 +104,7 @@ class TestWorkspaceStructure:
 
     def test_test_utils_md_exists(self, staged):
         workspace, _ = staged
-        assert (workspace / "test_utils.md").is_file()
+        assert (workspace / "tests" / "test_utils.md").is_file()
 
     def test_engine_directory_exists(self, staged):
         workspace, _ = staged
@@ -262,7 +262,7 @@ class TestReferenceDocs:
 
     def test_test_utils_has_content(self, staged):
         workspace, _ = staged
-        text = (workspace / "test_utils.md").read_text()
+        text = (workspace / "tests" / "test_utils.md").read_text()
         assert len(text) > 50
 
 
