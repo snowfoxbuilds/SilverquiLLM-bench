@@ -15,11 +15,11 @@ cards/sos/{card_id}/card_impl.py
    remain in `cards/sos/{card_id}/card_impl.py`. Do not move or rename card
    directories.
 
-2. **Staged-test integrity** — Do not modify any files under `tests/engine/` or
-   any FDN reference test files at `cards/fdn/*/tests.py`. These tests are for
-   your local verification and learning only; the runner uses its own
-   authoritative copies for grading. Modifying these tests will not change your
-   score — it will only mislead you about whether your engine changes are
+2. **Staged-test integrity** — Do not modify any files under `engine_tests/` or
+   any existing FDN reference test files at `cards/fdn/fdn_*/tests.py`. These
+   tests are for your local verification and learning only; the runner uses its
+   own authoritative copies for grading. Modifying these tests will not change
+   your score — it will only mislead you about whether your engine changes are
    correct.
 
 3. **Additive-only engine modifications** — You may add new methods, classes,
@@ -40,11 +40,24 @@ pytest
 ```
 
 This discovers:
-- FDN reference tests at `cards/fdn/{collector_number}/tests.py`
-- Engine regression tests at `tests/engine/test_*.py`
+- Engine regression tests at `engine_tests/test_*.py`.
+- Per-card FDN reference tests at `cards/fdn/fdn_{collector_number}/tests.py`.
+  Only a handful of FDN cards ship with a `tests.py` (currently `fdn_13`,
+  `fdn_142`, `fdn_205`, `fdn_215`, `fdn_244`) — use them as illustrative
+  per-card test examples when present.
+- Per-card SOS tests you write at `cards/sos/sos_{collector_number}/tests.py`.
 
 The workspace `pytest.ini` configures `python_files = test_*.py tests.py` for
-discovery of both patterns.
+discovery of all three patterns and sets a per-test timeout (5 minutes).
+
+Standard imports inside per-card tests:
+
+```python
+from cards.sos.sos_<N>.card_impl import <ClassName>
+from engine.card import Creature, Instant            # or whichever base
+from engine.types import CardType, Keyword, ManaCost, Zone
+from test_utils import create_game, set_board_state
+```
 
 ## Engine Extension Scope
 

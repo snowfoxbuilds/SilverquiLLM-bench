@@ -27,11 +27,13 @@ Set zone contents and player state. Only zones explicitly provided are modified.
 ```python
 from test_utils import create_game, set_board_state
 from engine.types import ManaType
-from cards.card_impl import Bear, BoltCard
+from cards.fdn.fdn_13.card_impl import FleetingFlight
+from engine.card import Creature
 
 game = create_game()
-set_board_state(game, 0, hand=[BoltCard()], mana={ManaType.RED: 2})
-set_board_state(game, 1, battlefield=[Bear()], life=15)
+set_board_state(game, 0, hand=[FleetingFlight(owner=None)], mana={ManaType.WHITE: 2})
+bear = Creature(name="Grizzly Bears", base_power=2, base_toughness=2)
+set_board_state(game, 1, battlefield=[bear], life=15)
 ```
 
 ### `cast_spell`
@@ -43,11 +45,11 @@ Find a card in hand by name, cast it, and resolve. Sets sorcery-speed timing aut
 ```python
 from test_utils import create_game, set_board_state, cast_spell
 from engine.types import ManaType
-from cards.card_impl import HealingCard
+from cards.fdn.fdn_13.card_impl import FleetingFlight
 
 game = create_game()
-set_board_state(game, 0, hand=[HealingCard()], mana={ManaType.WHITE: 2})
-cast_spell(game, 0, "HealingCard")
+set_board_state(game, 0, hand=[FleetingFlight(owner=None)], mana={ManaType.WHITE: 2})
+cast_spell(game, 0, "Fleeting Flight")
 ```
 
 ### `advance_to_phase`
@@ -72,11 +74,12 @@ Advance to combat and declare creatures as attackers by name from the active pla
 
 ```python
 from test_utils import create_game, set_board_state, declare_attackers
-from cards.card_impl import Bear
+from engine.card import Creature
 
 game = create_game()
-set_board_state(game, 0, battlefield=[Bear()])
-declare_attackers(game, ["Bear"])
+bear = Creature(name="Grizzly Bears", base_power=2, base_toughness=2)
+set_board_state(game, 0, battlefield=[bear])
+declare_attackers(game, ["Grizzly Bears"])
 ```
 
 ### `declare_blockers`
@@ -87,13 +90,15 @@ Assign blockers by name mapping: `{"attacker_name": ["blocker_name", ...]}`.
 
 ```python
 from test_utils import create_game, set_board_state, declare_attackers, declare_blockers
-from cards.card_impl import Bear, Wall
+from engine.card import Creature
 
 game = create_game()
-set_board_state(game, 0, battlefield=[Bear()])
-set_board_state(game, 1, battlefield=[Wall()])
-declare_attackers(game, ["Bear"])
-declare_blockers(game, {"Bear": ["Wall"]})
+bear = Creature(name="Grizzly Bears", base_power=2, base_toughness=2)
+wall = Creature(name="Wall of Wood", base_power=0, base_toughness=3)
+set_board_state(game, 0, battlefield=[bear])
+set_board_state(game, 1, battlefield=[wall])
+declare_attackers(game, ["Grizzly Bears"])
+declare_blockers(game, {"Grizzly Bears": ["Wall of Wood"]})
 ```
 
 ## Test Structure
@@ -101,14 +106,15 @@ declare_blockers(game, {"Bear": ["Wall"]})
 ```python
 import pytest
 from test_utils import create_game, set_board_state, cast_spell
-from cards.card_impl import MyCard
+from cards.sos.sos_1.card_impl import TheDawningArchaic
 from engine.types import ManaType
 
-class TestMyCard:
+class TestTheDawningArchaic:
     def test_basic_cast(self):
         game = create_game()
-        set_board_state(game, 0, hand=[MyCard()], mana={ManaType.WHITE: 3})
-        cast_spell(game, 0, "MyCard")
+        set_board_state(game, 0, hand=[TheDawningArchaic(owner=None)],
+                        mana={ManaType.COLORLESS: 10})
+        cast_spell(game, 0, "The Dawning Archaic")
         assert game.players[0].life == 20
 ```
 
@@ -116,4 +122,5 @@ class TestMyCard:
 
 - **Max 30 tests per card.**
 - Import helpers from `test_utils`.
-- Import card implementations from `cards.card_impl`.
+- Import card implementations from `cards.sos.sos_<N>.card_impl` (SOS cards you
+  are building) or `cards.fdn.fdn_<N>.card_impl` (FDN reference cards).
