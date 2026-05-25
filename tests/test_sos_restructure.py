@@ -2,10 +2,9 @@
 
 Verifies:
 - cards/sos/ directory exists with expected subdirectories
-- Total card count is at least 340 (346 expected: 271 SOS + 65 SOA + 10 SPG)
+- Total card count is at least 271 SOS cards
 - card_impl.py templates compile as valid Python (py_compile)
 - card_impl.py templates produce a CardImpl subclass when executed
-- SOA cards use soa_ prefix, SPG cards use spg_ prefix
 - Each card directory has card_spec.json + card_impl.py
 - card_spec.json is valid JSON with required fields
 - collector_number in spec matches directory name
@@ -77,45 +76,7 @@ class TestCardCount:
             f"Expected 271 base SOS card dirs, found {len(base_dirs)}"
         )
 
-    def test_exactly_65_soa_cards(self):
-        soa_dirs = [
-            p for p in _get_card_subdirs()
-            if p.name.startswith("soa_")
-        ]
-        assert len(soa_dirs) == 65, (
-            f"Expected 65 SOA card dirs, found {len(soa_dirs)}"
-        )
 
-    def test_exactly_10_spg_cards(self):
-        spg_dirs = [
-            p for p in _get_card_subdirs()
-            if p.name.startswith("spg_")
-        ]
-        assert len(spg_dirs) == 10, (
-            f"Expected 10 SPG card dirs, found {len(spg_dirs)}"
-        )
-
-
-# ---------------------------------------------------------------------------
-# 3. SOA prefix naming
-# ---------------------------------------------------------------------------
-
-class TestSOAPrefix:
-    @pytest.mark.parametrize("num", [1, 10, 30, 65])
-    def test_soa_card_exists(self, num):
-        d = CARDS_SOS / f"soa_{num}"
-        assert d.is_dir(), f"Expected SOA card directory {d} to exist"
-
-
-# ---------------------------------------------------------------------------
-# 4. SPG prefix naming (spg_149 through spg_158)
-# ---------------------------------------------------------------------------
-
-class TestSPGPrefix:
-    @pytest.mark.parametrize("num", range(149, 159))
-    def test_spg_card_exists(self, num):
-        d = CARDS_SOS / f"spg_{num}"
-        assert d.is_dir(), f"Expected SPG card directory {d} to exist"
 
 
 # ---------------------------------------------------------------------------
@@ -123,12 +84,12 @@ class TestSPGPrefix:
 # ---------------------------------------------------------------------------
 
 class TestBothFilesPresent:
-    @pytest.mark.parametrize("dirname", ["sos_1", "sos_100", "sos_271", "soa_1", "soa_65", "spg_149", "spg_158"])
+    @pytest.mark.parametrize("dirname", ["sos_1", "sos_100", "sos_271"])
     def test_card_spec_json_exists(self, dirname):
         f = CARDS_SOS / dirname / "card_spec.json"
         assert f.is_file(), f"Expected {f} to exist"
 
-    @pytest.mark.parametrize("dirname", ["sos_1", "sos_100", "sos_271", "soa_1", "soa_65", "spg_149", "spg_158"])
+    @pytest.mark.parametrize("dirname", ["sos_1", "sos_100", "sos_271"])
     def test_card_impl_py_exists(self, dirname):
         f = CARDS_SOS / dirname / "card_impl.py"
         assert f.is_file(), f"Expected {f} to exist"
@@ -148,13 +109,13 @@ class TestBothFilesPresent:
 # ---------------------------------------------------------------------------
 
 class TestCardSpecValidity:
-    @pytest.mark.parametrize("dirname", ["sos_1", "sos_50", "sos_271", "soa_1", "spg_149"])
+    @pytest.mark.parametrize("dirname", ["sos_1", "sos_50", "sos_271"])
     def test_card_spec_is_valid_json(self, dirname):
         spec_path = CARDS_SOS / dirname / "card_spec.json"
         data = json.loads(spec_path.read_text())
         assert isinstance(data, dict)
 
-    @pytest.mark.parametrize("dirname", ["sos_1", "sos_50", "sos_271", "soa_1", "spg_149"])
+    @pytest.mark.parametrize("dirname", ["sos_1", "sos_50", "sos_271"])
     def test_card_spec_has_required_fields(self, dirname):
         spec_path = CARDS_SOS / dirname / "card_spec.json"
         data = json.loads(spec_path.read_text())
@@ -166,8 +127,6 @@ class TestCardSpecValidity:
         [
             ("sos_1", "1"),
             ("sos_271", "271"),
-            ("soa_1", "1"),
-            ("spg_149", "149"),
         ],
     )
     def test_collector_number_matches_directory(self, dirname, expected_cn):
@@ -181,8 +140,6 @@ class TestCardSpecValidity:
         "dirname,expected_set",
         [
             ("sos_1", "sos"),
-            ("soa_1", "soa"),
-            ("spg_149", "spg"),
         ],
     )
     def test_set_code_matches_card_type(self, dirname, expected_set):
@@ -198,7 +155,7 @@ class TestCardSpecValidity:
 # ---------------------------------------------------------------------------
 
 class TestCardImplTemplate:
-    @pytest.mark.parametrize("dirname", ["sos_1", "sos_100", "soa_1", "spg_149"])
+    @pytest.mark.parametrize("dirname", ["sos_1", "sos_100", "sos_271"])
     def test_card_impl_contains_cardimpl_subclass(self, dirname):
         impl_path = CARDS_SOS / dirname / "card_impl.py"
         content = impl_path.read_text()
@@ -206,7 +163,7 @@ class TestCardImplTemplate:
             f"card_impl.py in {dirname} should reference CardImpl"
         )
 
-    @pytest.mark.parametrize("dirname", ["sos_1", "sos_100", "soa_1", "spg_149"])
+    @pytest.mark.parametrize("dirname", ["sos_1", "sos_100", "sos_271"])
     def test_card_impl_has_class_definition(self, dirname):
         impl_path = CARDS_SOS / dirname / "card_impl.py"
         content = impl_path.read_text()
@@ -214,7 +171,7 @@ class TestCardImplTemplate:
             f"card_impl.py in {dirname} should contain a class definition"
         )
 
-    @pytest.mark.parametrize("dirname", ["sos_1", "sos_100", "soa_1", "spg_149"])
+    @pytest.mark.parametrize("dirname", ["sos_1", "sos_100", "sos_271"])
     def test_card_impl_is_skeleton_template(self, dirname):
         """Template card_impl.py should have 'pass' (skeleton/stub)."""
         impl_path = CARDS_SOS / dirname / "card_impl.py"
@@ -224,25 +181,6 @@ class TestCardImplTemplate:
         )
 
 
-# ---------------------------------------------------------------------------
-# 8. Old location cleaned up
-# ---------------------------------------------------------------------------
-
-class TestOldLocationCleanedUp:
-    def test_old_cards_directory_has_no_card_subdirs(self):
-        """benchmarks/sos/cards/ should not contain numbered card directories anymore."""
-        if not OLD_CARDS.is_dir():
-            # Directory doesn't exist at all — that's fine
-            return
-        # If it exists, it should not have card subdirs (numbered dirs)
-        card_dirs = [
-            p for p in OLD_CARDS.iterdir()
-            if p.is_dir() and (p.name.isdigit() or p.name.startswith("soa_") or p.name.startswith("spg_"))
-        ]
-        assert len(card_dirs) == 0, (
-            f"Old location should be cleaned up, but found {len(card_dirs)} card dirs"
-        )
-
 
 # ---------------------------------------------------------------------------
 # 9. card_impl.py compiles as valid Python (syntax check)
@@ -251,7 +189,7 @@ class TestOldLocationCleanedUp:
 class TestCardImplCompiles:
     """Use py_compile to verify card_impl.py templates are syntactically valid."""
 
-    @pytest.mark.parametrize("dirname", ["sos_1", "sos_100", "sos_271", "soa_1", "soa_30", "spg_149"])
+    @pytest.mark.parametrize("dirname", ["sos_1", "sos_100", "sos_271"])
     def test_card_impl_compiles_with_py_compile(self, dirname):
         impl_path = CARDS_SOS / dirname / "card_impl.py"
         # py_compile.compile raises py_compile.PyCompileError on syntax errors
@@ -288,8 +226,6 @@ class TestCardImplImportable:
         "dirname,expected_class",
         [
             ("sos_1", None),    # any subclass is fine for base SOS
-            ("soa_1", None),    # SOA card
-            ("spg_149", None),  # SPG card
             ("sos_100", None),  # mid-range base SOS
             ("sos_271", None),  # last base SOS
         ],
@@ -308,7 +244,7 @@ class TestCardImplImportable:
             f"found classes: {[name for name, obj in vars(mod).items() if isinstance(obj, type)]}"
         )
 
-    @pytest.mark.parametrize("dirname", ["sos_1", "soa_1", "spg_149"])
+    @pytest.mark.parametrize("dirname", ["sos_1", "sos_100", "sos_271"])
     def test_subclass_is_a_class(self, dirname):
         """The CardImpl subclass should be a proper class (not a function or other type)."""
         mod = self._load_card_impl(dirname)

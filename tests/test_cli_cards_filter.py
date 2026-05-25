@@ -45,7 +45,7 @@ def _get_real_sos_collector_numbers() -> list[str]:
     for d in sorted(sos_dir.iterdir()):
         spec = d / "card_spec.json"
         if d.is_dir() and spec.exists():
-            result.append(d.name)  # e.g., "soa_1", "soa_10"
+            result.append(d.name)  # e.g., "sos_1", "sos_10"
     return result
 
 
