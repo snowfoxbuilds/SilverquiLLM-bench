@@ -597,10 +597,35 @@ def run(
             _snapshot_state["index"] += 1
             idx = _snapshot_state["index"]
             elapsed = time.monotonic() - _snapshot_state["start"]
-            # Count files in output directory as proxy for files_changed
+            # files_changed = workspace card_impl.py + engine/ files differing
+            # from the staged baseline. stage_workspace() git-inits + commits
+            # the workspace, so `git status --porcelain` reports anything the
+            # agent touched (modified-tracked + new untracked). We filter to
+            # the two file groups that meaningfully represent agent work.
             try:
-                files_changed = sum(1 for _ in output.rglob("*") if _.is_file())
-            except OSError:
+                # --untracked-files=all expands untracked directories so each
+                # contained file is reported individually (needed to catch a
+                # new card_impl.py in a brand-new card dir).
+                status = subprocess.run(
+                    ["git", "status", "--porcelain", "-z", "--untracked-files=all"],
+                    cwd=workspace,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                paths = (
+                    [p for p in status.stdout.split("\0") if p]
+                    if status.returncode == 0
+                    else []
+                )
+                # Porcelain v1 prefixes each entry with a two-char status + space.
+                files_changed = sum(
+                    1
+                    for entry in paths
+                    for path in [entry[3:] if len(entry) > 3 else entry]
+                    if path.endswith("/card_impl.py") or path.startswith("engine/")
+                )
+            except (OSError, subprocess.SubprocessError):
                 files_changed = 0
             record = {
                 "ts": datetime.now(tz=timezone.utc).isoformat(timespec="milliseconds"),
