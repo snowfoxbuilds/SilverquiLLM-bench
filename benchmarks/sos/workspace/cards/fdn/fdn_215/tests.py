@@ -8,10 +8,10 @@ card as ``chosen_mode`` (an int index into ``get_modes()``) and
 
 from __future__ import annotations
 
-from benchmarks.sos.workspace.cards.fdn.fdn_215.card_impl import Bushwhack
-from benchmarks.sos.workspace.engine.card import Mode, Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Supertype, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
+from cards.fdn.fdn_215.card_impl import Bushwhack
+from engine.card import Mode, Sorcery
+from engine.types import CardType, ManaCost, Supertype, Zone
+from test_utils import create_game
 
 
 class TestBushwhackProperties:
@@ -51,7 +51,7 @@ class TestBushwhackModeSelection:
     def test_chosen_mode_zero_runs_land_search(self) -> None:
         """Mode 0 = search library for a basic land. With no basic lands
         in the library, the search no-ops but does not raise."""
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from engine.card import CardImpl
 
         game = create_game()
         p1 = game.players[0]

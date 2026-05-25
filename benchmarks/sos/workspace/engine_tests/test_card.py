@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import pytest
 
-from benchmarks.sos.workspace.engine.card import (
+from engine.card import (
     ActivatedAbility,
     Artifact,
     ArtifactCreature,
@@ -40,9 +40,9 @@ from benchmarks.sos.workspace.engine.card import (
     Planeswalker,
     Sorcery,
 )
-from benchmarks.sos.workspace.engine.game_state import GameState
-from benchmarks.sos.workspace.engine.player import DeterministicPlayer
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Supertype
+from engine.game_state import GameState
+from engine.player import DeterministicPlayer
+from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype
 
 
 # ---------------------------------------------------------------------------

@@ -6,8 +6,8 @@ from abc import ABC, abstractmethod
 from collections import deque
 from typing import Any
 
-from benchmarks.sos.workspace.engine.mana import ManaPool
-from benchmarks.sos.workspace.engine.zones import Zones
+from engine.mana import ManaPool
+from engine.zones import Zones
 
 
 class ScriptExhaustedError(Exception):

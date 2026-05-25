@@ -1,11 +1,11 @@
 """Card implementation for Slumbering Cerberus."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import ManaCost
-from benchmarks.sos.workspace.engine.events import EndStepTriggeredEvent
+from engine.card import Creature
+from engine.types import ManaCost
+from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class SlumberingCerberus(Creature):
     """Slumbering Cerberus — {1}{R} — 4/2 — Dog.
@@ -29,7 +29,7 @@ class SlumberingCerberus(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register end-step Morbid trigger for untapping."""
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

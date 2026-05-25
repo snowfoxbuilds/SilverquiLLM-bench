@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import TheDawningArchaic
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -62,15 +62,15 @@ class TestTheDawningArchaicAbilities:
 
     def test_has_reach(self) -> None:
         """The Dawning Archaic must have Reach keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = TheDawningArchaic(name="The Dawning Archaic", owner=None, base_power=7, base_toughness=7)
         assert Keyword.REACH in card.keywords, "The Dawning Archaic should have Reach"
 
     def test_attack_trigger_uses_graveyard(self) -> None:
         """Attack trigger must interact with graveyard per oracle text."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Instant
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Instant
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         fodder = Instant(name="Bolt", owner=player)
@@ -86,7 +86,7 @@ class TestTheDawningArchaicAbilities:
 
     def test_cost_reduction_implemented(self) -> None:
         """Cost reduction must be implemented per oracle text."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = TheDawningArchaic(name="The Dawning Archaic", owner=player, base_power=7, base_toughness=7)
@@ -102,8 +102,8 @@ class TestTheDawningArchaicEdgeCases:
 
     def test_fizzle_no_targets_creature_stays(self) -> None:
         """If ETB ability fizzles, the creature remains on battlefield."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = TheDawningArchaic(name="The Dawning Archaic", owner=player, base_power=7, base_toughness=7)
@@ -120,7 +120,7 @@ class TestTheDawningArchaicEdgeCases:
 
     def test_cost_reduction_floor_at_zero(self) -> None:
         """Cost reduction must not reduce cost below zero."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = TheDawningArchaic(name="The Dawning Archaic", owner=player, base_power=7, base_toughness=7)
@@ -152,9 +152,9 @@ class TestTheDawningArchaicInteractions:
 
     def test_exile_from_graveyard_interaction(self) -> None:
         """Cards exiled from graveyard must move to exile zone."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Instant
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Instant
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         fodder = Instant(name="Fodder", owner=player)
@@ -173,9 +173,9 @@ class TestTheDawningArchaicInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]

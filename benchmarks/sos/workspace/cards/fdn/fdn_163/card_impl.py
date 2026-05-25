@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, TargetRequirement, Zone
+from engine.card import Sorcery
+from engine.types import CardType, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 class SelfReflection(Sorcery):
@@ -48,7 +48,7 @@ class SelfReflection(Sorcery):
         """Create a token copy of target creature you control."""
         import copy
 
-        from benchmarks.sos.workspace.engine.game import create_token
+        from engine.game import create_token
 
         chosen = getattr(self, "chosen_targets", None)
         target = chosen[0] if chosen else None

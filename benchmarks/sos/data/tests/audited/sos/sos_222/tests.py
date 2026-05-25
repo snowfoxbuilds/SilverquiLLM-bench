@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import RootManipulation
 
-from benchmarks.sos.workspace.engine.card import Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Sorcery
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -56,8 +56,8 @@ class TestRootManipulationAbilities:
         Oracle: Until end of turn, creatures you control get +2/+2 and gain menace and "Whenever this creature attac
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature as CreatureBase
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature as CreatureBase
 
         game = create_game()
         player = game.players[0]

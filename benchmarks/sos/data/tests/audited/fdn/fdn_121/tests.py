@@ -1,10 +1,10 @@
 """Audited tests for FDN 121 — Koma, World-Eater."""
 from __future__ import annotations
 from card_impl import KomaWorldEater
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
-from benchmarks.sos.workspace.tests.test_utils import create_game
-from benchmarks.sos.workspace.engine.events import DealsDamageTriggeredEvent
+from engine.card import Creature
+from engine.types import Keyword, ManaCost
+from test_utils import create_game
+from engine.events import DealsDamageTriggeredEvent
 
 def _resolve_stack(game):
     """Pop and resolve all objects on the stack."""

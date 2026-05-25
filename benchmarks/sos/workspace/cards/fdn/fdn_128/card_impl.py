@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import (
+from engine.card import (
     Artifact,
     ArtifactCreature,
     ActivatedAbility,
     ManaAbility,
 )
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Supertype
+from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
-    from benchmarks.sos.workspace.engine.player import Player
+    from engine.game_state import GameState
+    from engine.player import Player
 
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from cards.registry import CardRegistry
 
 class FishingPole(Artifact):
     """Fishing Pole — {1} — Equipment with bait counter mechanics."""

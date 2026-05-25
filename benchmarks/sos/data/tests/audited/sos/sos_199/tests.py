@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import LluwenExchangeStudentPestFriend
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -63,7 +63,7 @@ class TestLluwenExchangeStudentPestFriendAbilities:
 
     def test_has_prepared(self) -> None:
         """Lluwen, Exchange Student // Pest Friend must have Prepared keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = LluwenExchangeStudentPestFriend(name="Lluwen, Exchange Student // Pest Friend", owner=None, base_power=3, base_toughness=4)
         assert Keyword.PREPARED in card.keywords, "Lluwen, Exchange Student // Pest Friend should have Prepared"
 
@@ -101,8 +101,8 @@ class TestLluwenExchangeStudentPestFriendEdgeCases:
 
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = LluwenExchangeStudentPestFriend(name="Lluwen, Exchange Student // Pest Friend", owner=player, base_power=3, base_toughness=4)
@@ -120,9 +120,9 @@ class TestLluwenExchangeStudentPestFriendInteractions:
 
     def test_exile_from_graveyard_interaction(self) -> None:
         """Cards exiled from graveyard must move to exile zone."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Instant
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Instant
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         fodder = Instant(name="Fodder", owner=player)
@@ -141,9 +141,9 @@ class TestLluwenExchangeStudentPestFriendInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]

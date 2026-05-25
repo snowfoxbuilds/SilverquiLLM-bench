@@ -1,12 +1,12 @@
 """Card implementation for Fake Your Own Death."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import CardImpl, Instant, Creature
-from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, TargetRequirement, Zone
-from benchmarks.sos.workspace.engine.events import CreatureDiesTriggeredEvent, EndOfTurnTriggeredEvent
+from engine.card import CardImpl, Instant, Creature
+from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
+from engine.types import CardType, ManaCost, TargetRequirement, Zone
+from engine.events import CreatureDiesTriggeredEvent, EndOfTurnTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class FakeYourOwnDeath(Instant):
     """Fake Your Own Death — {1}{B} — Instant.
@@ -30,9 +30,9 @@ class FakeYourOwnDeath(Instant):
 
     def on_resolve(self, game: 'GameState') -> None:
         """Apply +2/+0 and death trigger until end of turn."""
-        from benchmarks.sos.workspace.engine.game import create_token
-        from benchmarks.sos.workspace.engine.zones import move_to_zone
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.game import create_token
+        from engine.zones import move_to_zone
+        from engine.triggers import TriggerRegistration
         chosen = getattr(self, 'chosen_targets', None)
         target = chosen[0] if chosen else None
         if target is None:

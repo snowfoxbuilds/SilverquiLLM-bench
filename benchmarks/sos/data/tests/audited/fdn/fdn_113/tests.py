@@ -1,11 +1,11 @@
 """Audited tests for FDN 113 — Sylvan Scavenging."""
 from __future__ import annotations
 from card_impl import SylvanScavenging
-from benchmarks.sos.workspace.engine.card import Creature, Enchantment
-from benchmarks.sos.workspace.engine.player import DeterministicPlayer
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
-from benchmarks.sos.workspace.tests.test_utils import create_game
-from benchmarks.sos.workspace.engine.events import EndStepTriggeredEvent
+from engine.card import Creature, Enchantment
+from engine.player import DeterministicPlayer
+from engine.types import CardType, ManaCost
+from test_utils import create_game
+from engine.events import EndStepTriggeredEvent
 
 def _resolve_stack(game):
     while not game.stack.is_empty():

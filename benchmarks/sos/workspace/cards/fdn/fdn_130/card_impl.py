@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import ActivatedAbility, Artifact
-from benchmarks.sos.workspace.engine.continuous_effects import (
+from engine.card import ActivatedAbility, Artifact
+from engine.continuous_effects import (
     ContinuousEffect,
     DURATION_PERMANENT,
     Layer,
     SubLayer,
 )
-from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
+from engine.types import Keyword, ManaCost
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from cards.registry import CardRegistry
 
 def _make_equip_ability(
     equipment: Artifact,

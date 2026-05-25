@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import HarshAnnotation
 
-from benchmarks.sos.workspace.engine.card import Instant
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Instant
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -51,8 +51,8 @@ class TestHarshAnnotationAbilities:
 
     def test_destroys_target_creature(self) -> None:
         """Must destroy the targeted creature."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -73,8 +73,8 @@ class TestHarshAnnotationAbilities:
 
     def test_token_for_destroyed_creatures_controller(self) -> None:
         """Token goes to destroyed creature controller, not caster."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         caster = game.players[0]
         opponent = game.players[1]
@@ -94,7 +94,7 @@ class TestHarshAnnotationAbilities:
 
     def test_creates_token(self) -> None:
         """Resolution should create token(s) on battlefield."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = HarshAnnotation(name="Harsh Annotation", owner=player)
@@ -113,7 +113,7 @@ class TestHarshAnnotationEdgeCases:
 
     def test_spell_resolution_on_empty_board(self) -> None:
         """Spell should handle resolution when no valid targets exist."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = HarshAnnotation(name="Harsh Annotation", owner=player)
@@ -132,8 +132,8 @@ class TestHarshAnnotationInteractions:
 
     def test_get_targets_finds_creatures(self) -> None:
         """get_targets should return valid creature targets."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -146,8 +146,8 @@ class TestHarshAnnotationInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         own = Creature(name="Own", owner=player, base_power=4, base_toughness=4)

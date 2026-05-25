@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import Pterafractyl
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -63,13 +63,13 @@ class TestPterafractylAbilities:
 
     def test_has_flying(self) -> None:
         """Pterafractyl must have Flying keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = Pterafractyl(name="Pterafractyl", owner=None, base_power=1, base_toughness=0)
         assert Keyword.FLYING in card.keywords, "Pterafractyl should have Flying"
 
     def test_etb_adds_counters(self) -> None:
         """ETB must add +1/+1 counters per oracle text."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = Pterafractyl(name="Pterafractyl", owner=player, base_power=1, base_toughness=0)
@@ -101,8 +101,8 @@ class TestPterafractylEdgeCases:
 
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = Pterafractyl(name="Pterafractyl", owner=player, base_power=1, base_toughness=0)
@@ -120,7 +120,7 @@ class TestPterafractylInteractions:
 
     def test_counters_survive_end_of_turn(self) -> None:
         """Permanent counters must persist through end of turn."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = Pterafractyl(name="Pterafractyl", owner=player, base_power=1, base_toughness=0)
@@ -136,9 +136,9 @@ class TestPterafractylInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]

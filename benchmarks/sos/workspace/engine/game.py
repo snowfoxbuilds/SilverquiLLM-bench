@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.events import (
+from engine.events import (
     CreatureDiesReplacementEvent,
     DealsDamageTriggeredEvent,
     DrawsCardTriggeredEvent,
@@ -25,14 +25,14 @@ from benchmarks.sos.workspace.engine.events import (
     PermanentDestroyedReplacementEvent,
     SacrificeReplacementEvent,
 )
-from benchmarks.sos.workspace.engine.game_state import GameState
-from benchmarks.sos.workspace.engine.turn import run_turn
-from benchmarks.sos.workspace.engine.types import Zone
-from benchmarks.sos.workspace.engine.zones import move_to_zone
+from engine.game_state import GameState
+from engine.turn import run_turn
+from engine.types import Zone
+from engine.zones import move_to_zone
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.card import CardImpl, Creature
-    from benchmarks.sos.workspace.engine.player import Player
+    from engine.card import CardImpl, Creature
+    from engine.player import Player
 
 
 # Maximum number of turns before the game is considered a draw.
@@ -131,8 +131,8 @@ def deal_damage(game: GameState, source: Any, target: Any, amount: int) -> None:
     if amount <= 0:
         return
 
-    from benchmarks.sos.workspace.engine.protection import has_protection_from
-    from benchmarks.sos.workspace.engine.types import Keyword
+    from engine.protection import has_protection_from
+    from engine.types import Keyword
 
     # Protection prevents damage from sources with the protected-from quality.
     if has_protection_from(target, source):
@@ -184,7 +184,7 @@ def destroy(game: GameState, permanent: Any) -> None:
         game: The current game state.
         permanent: The permanent to destroy.
     """
-    from benchmarks.sos.workspace.engine.types import Keyword
+    from engine.types import Keyword
 
     # Indestructible permanents cannot be destroyed
     kw = getattr(permanent, "keywords", Keyword(0))
@@ -206,7 +206,7 @@ def destroy(game: GameState, permanent: Any) -> None:
     if not bf.contains(permanent):
         return
 
-    from benchmarks.sos.workspace.engine.types import CardType
+    from engine.types import CardType
 
     card_types = getattr(permanent, "card_types", set())
     is_creature = CardType.CREATURE in card_types
@@ -495,7 +495,7 @@ def run_game(game: GameState) -> Player | None:
         The winning player, or ``None`` if the game ended in a draw (or
         hit the turn limit).
     """
-    from benchmarks.sos.workspace.engine.state_based_actions import resolve_state_based_actions
+    from engine.state_based_actions import resolve_state_based_actions
 
     while not game.is_game_over and game.turn_number <= MAX_TURNS:
         # Check SBAs before the turn (catches pre-existing conditions)

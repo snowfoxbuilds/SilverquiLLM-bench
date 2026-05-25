@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import KilliansConfidence
 
-from benchmarks.sos.workspace.engine.card import Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Sorcery
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -52,9 +52,9 @@ class TestKilliansConfidenceAbilities:
 
     def test_draws_cards(self) -> None:
         """Resolution should draw card(s)."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
-        from benchmarks.sos.workspace.engine.card import Sorcery
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game
+        from engine.card import Sorcery
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         filler = Sorcery(name="Filler", owner=player)
@@ -71,8 +71,8 @@ class TestKilliansConfidenceAbilities:
 
     def test_pump_effect(self) -> None:
         """Resolution should grant +1/+1."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         target = Creature(name="PumpTarget", owner=player, base_power=1, base_toughness=1)
@@ -90,9 +90,9 @@ class TestKilliansConfidenceAbilities:
 
     def test_returns_from_graveyard(self) -> None:
         """Resolution should return card from graveyard."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         gy_card = Creature(name="Returned", owner=player, base_power=1, base_toughness=1)
@@ -116,8 +116,8 @@ class TestKilliansConfidenceEdgeCases:
 
     def test_targets_only_own_permanents(self) -> None:
         """Should only target permanents you control."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -139,8 +139,8 @@ class TestKilliansConfidenceInteractions:
 
     def test_get_targets_finds_own_creatures(self) -> None:
         """get_targets should return valid own creatures."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         creature = Creature(name="Mine", owner=player, base_power=2, base_toughness=2)
@@ -152,8 +152,8 @@ class TestKilliansConfidenceInteractions:
 
     def test_does_not_affect_non_targets(self) -> None:
         """Resolution should not affect non-targeted permanents."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         own = Creature(name="Own", owner=player, base_power=4, base_toughness=4)

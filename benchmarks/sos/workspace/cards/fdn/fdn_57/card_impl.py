@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Zone
+from engine.card import Sorcery
+from engine.types import CardType, ManaCost, Zone
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 class BlasphemousEdict(Sorcery):
@@ -54,7 +54,7 @@ class BlasphemousEdict(Sorcery):
 
     def on_resolve(self, game: "GameState") -> None:
         """Each player sacrifices thirteen creatures of their choice."""
-        from benchmarks.sos.workspace.engine.game import sacrifice
+        from engine.game import sacrifice
 
         for player in game.players:
             bf = game.get_battlefield(player)

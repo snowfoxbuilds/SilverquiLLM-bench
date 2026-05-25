@@ -238,7 +238,7 @@ def _setup_cards_dir(tmp_path: Path, fdn_cards: list[str]) -> Path:
 
 def _setup_engine_tests(tmp_path: Path) -> Path:
     """Create a fake engine tests directory."""
-    engine_tests = tmp_path / "tests" / "engine"
+    engine_tests = tmp_path / "benchmarks" / "sos" / "workspace" / "engine_tests"
     engine_tests.mkdir(parents=True)
     (engine_tests / "test_core.py").write_text("# engine tests\n")
     return engine_tests

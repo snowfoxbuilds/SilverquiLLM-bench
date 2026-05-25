@@ -1,10 +1,10 @@
 """Audited tests for FDN 33 — Clinquant Skymage."""
 from __future__ import annotations
 from card_impl import ClinquantSkymage
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import Keyword, ManaCost, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
-from benchmarks.sos.workspace.engine.events import DrawsCardTriggeredEvent
+from engine.card import Creature
+from engine.types import Keyword, ManaCost, Zone
+from test_utils import create_game
+from engine.events import DrawsCardTriggeredEvent
 
 class TestClinquantSkymageBasics:
     """Basic card properties."""

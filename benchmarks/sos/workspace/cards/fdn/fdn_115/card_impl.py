@@ -1,11 +1,11 @@
 """Card implementation for Alesha, Who Laughs at Fate."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import Keyword, ManaCost, Zone
-from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent, EndStepTriggeredEvent
+from engine.card import Creature
+from engine.types import Keyword, ManaCost, Zone
+from engine.events import AttacksTriggeredEvent, EndStepTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class AleshaWhoLaughsAtFate(Creature):
     """Alesha, Who Laughs at Fate — {1}{B}{R} — 2/2 — Legendary Human Warrior.
@@ -32,10 +32,10 @@ class AleshaWhoLaughsAtFate(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register attack trigger and Raid end-step trigger."""
-        from benchmarks.sos.workspace.engine.game import add_counter
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
-        from benchmarks.sos.workspace.engine.zones import move_to_zone
-        from benchmarks.sos.workspace.engine.types import CardType
+        from engine.game import add_counter
+        from engine.triggers import TriggerRegistration
+        from engine.zones import move_to_zone
+        from engine.types import CardType
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

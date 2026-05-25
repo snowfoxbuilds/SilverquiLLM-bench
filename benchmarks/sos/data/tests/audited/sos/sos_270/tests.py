@@ -9,8 +9,8 @@ import pytest
 
 from card_impl import Mountain
 
-from benchmarks.sos.workspace.engine.card import Land
-from benchmarks.sos.workspace.engine.types import CardType, Supertype
+from engine.card import Land
+from engine.types import CardType, Supertype
 
 
 @pytest.mark.basic

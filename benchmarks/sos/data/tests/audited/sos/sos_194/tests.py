@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import HardenedAcademic
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -63,13 +63,13 @@ class TestHardenedAcademicAbilities:
 
     def test_has_flying(self) -> None:
         """Hardened Academic must have Flying keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = HardenedAcademic(name="Hardened Academic", owner=None, base_power=2, base_toughness=1)
         assert Keyword.FLYING in card.keywords, "Hardened Academic should have Flying"
 
     def test_has_haste(self) -> None:
         """Hardened Academic must have Haste keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = HardenedAcademic(name="Hardened Academic", owner=None, base_power=2, base_toughness=1)
         assert Keyword.HASTE in card.keywords, "Hardened Academic should have Haste"
 
@@ -80,8 +80,8 @@ class TestHardenedAcademicEdgeCases:
 
     def test_fizzle_no_targets_creature_stays(self) -> None:
         """If ETB ability fizzles, the creature remains on battlefield."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = HardenedAcademic(name="Hardened Academic", owner=player, base_power=2, base_toughness=1)
@@ -116,7 +116,7 @@ class TestHardenedAcademicInteractions:
 
     def test_counters_survive_end_of_turn(self) -> None:
         """Permanent counters must persist through end of turn."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = HardenedAcademic(name="Hardened Academic", owner=player, base_power=2, base_toughness=1)
@@ -132,9 +132,9 @@ class TestHardenedAcademicInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]

@@ -1,13 +1,13 @@
 """Card implementation for Ambush Wolf."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import ArtifactCreature, Creature
-from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Zone
-from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
+from engine.card import ArtifactCreature, Creature
+from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
+from engine.types import CardType, Keyword, ManaCost, Zone
+from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from engine.game_state import GameState
+    from cards.registry import CardRegistry
 
 def _self_etb_condition(source: Any):
     """Return a condition callable that matches only when *source* enters."""
@@ -41,7 +41,7 @@ class AmbushWolf(Creature):
         super().__init__(**kwargs)
 
     def register_triggers(self, game: GameState) -> None:
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.triggers import TriggerRegistration
         source = self
 
         def _effect(game: GameState) -> None:

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from card_impl import InspiringCall
-from benchmarks.sos.workspace.engine.card import Creature, Instant
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
+from engine.card import Creature, Instant
+from engine.types import CardType, Keyword, ManaCost, Zone
+from test_utils import create_game
 
 
 class TestInspiringCallBasics:
@@ -40,7 +40,7 @@ class TestInspiringCallResolve:
         game.get_battlefield(p1).add(c2)
         game.get_battlefield(p1).add(c3)
         # Put cards in library to draw
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from engine.card import CardImpl
         for i in range(5):
             p1.zones[Zone.LIBRARY].add(CardImpl(name=f"Card{i}", owner=p1))
         spell = InspiringCall(owner=p1, controller=p1)
@@ -55,7 +55,7 @@ class TestInspiringCallResolve:
         c1 = Creature(name="Bear", base_power=2, base_toughness=2, owner=p1, controller=p1)
         c1.plus_one_counters = 1
         game.get_battlefield(p1).add(c1)
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from engine.card import CardImpl
         p1.zones[Zone.LIBRARY].add(CardImpl(name="Card", owner=p1))
         spell = InspiringCall(owner=p1, controller=p1)
         spell.on_resolve(game)

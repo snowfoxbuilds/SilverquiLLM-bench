@@ -16,7 +16,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from benchmarks.sos.workspace.cards.registry import CardMetadata
+from cards.registry import CardMetadata
 
 __all__ = ["generate_card_spec", "generate_all_specs", "card_name_to_class_name"]
 

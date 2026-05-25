@@ -1,10 +1,10 @@
 """Card implementation for Tinybones, Bauble Burglar."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import ActivatedAbility, Creature
-from benchmarks.sos.workspace.engine.types import Keyword, ManaCost, Zone
+from engine.card import ActivatedAbility, Creature
+from engine.types import Keyword, ManaCost, Zone
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class TinybonesBaubleBurglar(Creature):
     """Tinybones, Bauble Burglar — {1}{B} — 1/3 — Legendary Skeleton Rogue.
@@ -34,8 +34,8 @@ class TinybonesBaubleBurglar(Creature):
         Whenever an opponent discards a card, exile it from their graveyard
         with a stash counter on it.
         """
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
-        from benchmarks.sos.workspace.engine.game import exile, add_counter
+        from engine.triggers import TriggerRegistration
+        from engine.game import exile, add_counter
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 
@@ -44,7 +44,7 @@ class TinybonesBaubleBurglar(Creature):
         source = self
 
         def _discard_effect(game: 'GameState') -> None:
-            from benchmarks.sos.workspace.engine.game import discard, exile, add_counter
+            from engine.game import discard, exile, add_counter
             controller = getattr(source, 'controller', None)
             if controller is None:
                 return
@@ -69,7 +69,7 @@ class TinybonesBaubleBurglar(Creature):
 
         def _cost(game: 'GameState', src=source) -> bool:
             """Pay {3}{B}, tap. Only at sorcery speed."""
-            from benchmarks.sos.workspace.engine.casting import is_sorcery_speed
+            from engine.casting import is_sorcery_speed
             controller = getattr(src, 'controller', None)
             if controller is None:
                 return False

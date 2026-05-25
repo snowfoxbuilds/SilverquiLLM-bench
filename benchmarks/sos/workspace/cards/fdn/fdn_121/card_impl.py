@@ -1,11 +1,11 @@
 """Card implementation for Koma, World-Eater."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
-from benchmarks.sos.workspace.engine.events import DealsDamageTriggeredEvent
+from engine.card import Creature
+from engine.types import Keyword, ManaCost
+from engine.events import DealsDamageTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class KomaWorldEater(Creature):
     """Koma, World-Eater — {3}{G}{G}{U}{U} — 8/12 — Legendary Serpent.
@@ -32,9 +32,9 @@ class KomaWorldEater(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register combat damage trigger for Serpent token creation."""
-        from benchmarks.sos.workspace.engine.card import Creature as _Creature
-        from benchmarks.sos.workspace.engine.game import create_token
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.card import Creature as _Creature
+        from engine.game import create_token
+        from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

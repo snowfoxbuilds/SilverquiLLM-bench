@@ -4,17 +4,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.continuous_effects import (
+from engine.card import Creature
+from engine.continuous_effects import (
     ContinuousEffect,
     DURATION_PERMANENT,
     Layer,
     SubLayer,
 )
-from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
+from engine.types import Keyword, ManaCost
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 class TwinflameTyrant(Creature):
@@ -49,7 +49,7 @@ class TwinflameTyrant(Creature):
         that any source controlled by the Tyrant's controller deals
         double damage to opponents and their permanents.
         """
-        from benchmarks.sos.workspace.engine import game as game_module
+        from engine import game as game_module
 
         source = self
         _original_deal_damage = game_module.deal_damage

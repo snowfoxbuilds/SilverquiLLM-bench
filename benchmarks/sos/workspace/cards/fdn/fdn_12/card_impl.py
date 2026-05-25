@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+from engine.card import Creature
+from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
@@ -70,7 +70,7 @@ class FelidarSavior(Creature):
     def on_resolve(self, game: "GameState") -> None:
         """ETB: put a +1/+1 counter on each of up to two other target
         creatures you control."""
-        from benchmarks.sos.workspace.engine.game import add_counter
+        from engine.game import add_counter
 
         controller = self.controller
         if controller is None:

@@ -38,9 +38,9 @@ class TestCardsRelocation:
         assert sos_dir.is_dir(), f"sos/ subdirectory not found at {sos_dir}"
 
     def test_no_stale_cards_imports_outside_cards_package(self) -> None:
-        """No .py file outside benchmarks/sos/workspace/cards/ should use bare cards imports.
+        """No .py file should use the legacy ``benchmarks.sos.workspace.cards`` prefix.
 
-        This catches both top-level and indented imports (e.g. inside functions/classes).
+        Flat ``from cards.X import …`` is canonical after Option A.
         """
         result = subprocess.run(
             [
@@ -48,30 +48,25 @@ class TestCardsRelocation:
                 "-rln",
                 "--include=*.py",
                 "-P",
-                r"(?:from\s+cards\b|import\s+cards\b)",
+                r"benchmarks\.sos\.workspace\.cards",
                 str(REPO_ROOT),
             ],
             capture_output=True,
             text=True,
         )
-        # Filter out matches inside the cards package itself, historical
-        # benchmark run artifacts under docker/ (captured agent outputs),
-        # and third-party packages under venv/.
-        cards_pkg = str(REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards")
+        from pathlib import Path
         docker_dir = str(REPO_ROOT / "docker")
         venv_dir = str(REPO_ROOT / "venv")
+        self_path = str(Path(__file__).resolve())
         stale_files = [
             f
             for f in result.stdout.strip().splitlines()
-            if (
-                f
-                and not f.startswith(cards_pkg)
-                and not f.startswith(docker_dir)
-                and not f.startswith(venv_dir)
-            )
+            if f and not f.startswith(docker_dir)
+            and not f.startswith(venv_dir)
+            and f != self_path
         ]
         assert stale_files == [], (
-            f"Stale cards imports found outside cards package:\n"
+            f"Legacy benchmarks.sos.workspace.cards references found:\n"
             + "\n".join(stale_files)
         )
 
@@ -105,9 +100,9 @@ class TestSOSCardImplModules:
     @pytest.mark.parametrize("card_id", _SAMPLE_SOS_CARDS)
     def test_card_impl_defines_cardimpl_subclass(self, card_id: str) -> None:
         """Each SOS card_impl module must define at least one class inheriting from CardImpl."""
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from engine.card import CardImpl
 
-        module_path = f"benchmarks.sos.workspace.cards.sos.{card_id}.card_impl"
+        module_path = f"cards.sos.{card_id}.card_impl"
         mod = importlib.import_module(module_path)
 
         # Find classes that inherit from CardImpl

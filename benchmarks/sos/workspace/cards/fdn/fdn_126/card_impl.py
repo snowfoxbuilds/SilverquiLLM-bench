@@ -1,11 +1,11 @@
 """Card implementation for Zimone, Paradox Sculptor."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import ActivatedAbility, Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Zone
-from benchmarks.sos.workspace.engine.events import BeginningOfCombatTriggeredEvent
+from engine.card import ActivatedAbility, Creature
+from engine.types import CardType, ManaCost, Zone
+from engine.events import BeginningOfCombatTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class ZimoneParadoxSculptor(Creature):
     """Zimone, Paradox Sculptor — {2}{G}{U} — 1/4 — Legendary Human Wizard.
@@ -30,8 +30,8 @@ class ZimoneParadoxSculptor(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register beginning-of-combat trigger for +1/+1 counters."""
-        from benchmarks.sos.workspace.engine.game import add_counter
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.game import add_counter
+        from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 
@@ -91,16 +91,16 @@ class ZimoneParadoxSculptor(Creature):
             for target in targets_chosen:
                 plus_one = getattr(target, 'plus_one_counters', 0)
                 if plus_one > 0:
-                    from benchmarks.sos.workspace.engine.game import add_counter
+                    from engine.game import add_counter
                     add_counter(game, target, '+1/+1', plus_one)
                     target._base_plus_one_counters = target.plus_one_counters
                 minus_one = getattr(target, 'minus_one_counters', 0)
                 if minus_one > 0:
-                    from benchmarks.sos.workspace.engine.game import add_counter as _add
+                    from engine.game import add_counter as _add
                     _add(game, target, '-1/-1', minus_one)
                 loyalty = getattr(target, 'loyalty', 0)
                 if loyalty > 0 and hasattr(target, 'loyalty'):
-                    from benchmarks.sos.workspace.engine.game import add_counter as _add2
+                    from engine.game import add_counter as _add2
                     _add2(game, target, 'loyalty', loyalty)
                 generic = {}
                 if hasattr(target, 'counters') and isinstance(target.counters, dict):
@@ -112,7 +112,7 @@ class ZimoneParadoxSculptor(Creature):
                     if ctype in ('+1/+1', '-1/-1'):
                         continue
                     if count > 0:
-                        from benchmarks.sos.workspace.engine.game import add_counter as _add3
+                        from engine.game import add_counter as _add3
                         _add3(game, target, ctype, count)
 
         def _cost(game: 'GameState', src: Any=source) -> bool:

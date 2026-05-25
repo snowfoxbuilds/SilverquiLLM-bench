@@ -1,11 +1,11 @@
 """Card implementation for High-Society Hunter."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Zone
-from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent, CreatureDiesTriggeredEvent
+from engine.card import Creature
+from engine.types import CardType, Keyword, ManaCost, Zone
+from engine.events import AttacksTriggeredEvent, CreatureDiesTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class HighSocietyHunter(Creature):
     """High-Society Hunter — {3}{B}{B} — 5/3 — Vampire Noble — Flying.
@@ -30,8 +30,8 @@ class HighSocietyHunter(Creature):
     def register_triggers(self, game: 'GameState') -> None:
         """Register attack trigger (sacrifice for +1/+1 counter) and death
         trigger (draw when another nontoken creature dies)."""
-        from benchmarks.sos.workspace.engine.game import add_counter, draw_card, sacrifice
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.game import add_counter, draw_card, sacrifice
+        from engine.triggers import TriggerRegistration
         source = self
 
         def _attack_condition(game: Any, event: dict) -> bool:

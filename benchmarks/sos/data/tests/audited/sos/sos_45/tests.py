@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import EmeritusOfIdeationAncestralRecall
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -62,19 +62,19 @@ class TestEmeritusOfIdeationAncestralRecallAbilities:
 
     def test_has_flying(self) -> None:
         """Emeritus of Ideation // Ancestral Recall must have Flying keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = EmeritusOfIdeationAncestralRecall(name="Emeritus of Ideation // Ancestral Recall", owner=None, base_power=5, base_toughness=5)
         assert Keyword.FLYING in card.keywords, "Emeritus of Ideation // Ancestral Recall should have Flying"
 
     def test_has_prepared(self) -> None:
         """Emeritus of Ideation // Ancestral Recall must have Prepared keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = EmeritusOfIdeationAncestralRecall(name="Emeritus of Ideation // Ancestral Recall", owner=None, base_power=5, base_toughness=5)
         assert Keyword.PREPARED in card.keywords, "Emeritus of Ideation // Ancestral Recall should have Prepared"
 
     def test_has_ward(self) -> None:
         """Emeritus of Ideation // Ancestral Recall must have Ward keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = EmeritusOfIdeationAncestralRecall(name="Emeritus of Ideation // Ancestral Recall", owner=None, base_power=5, base_toughness=5)
         assert Keyword.WARD in card.keywords, "Emeritus of Ideation // Ancestral Recall should have Ward"
 
@@ -86,9 +86,9 @@ class TestEmeritusOfIdeationAncestralRecallAbilities:
 
     def test_attack_trigger_uses_graveyard(self) -> None:
         """Attack trigger must interact with graveyard per oracle text."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Instant
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Instant
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         fodder = Instant(name="Bolt", owner=player)
@@ -130,8 +130,8 @@ class TestEmeritusOfIdeationAncestralRecallEdgeCases:
 
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = EmeritusOfIdeationAncestralRecall(name="Emeritus of Ideation // Ancestral Recall", owner=player, base_power=5, base_toughness=5)
@@ -149,9 +149,9 @@ class TestEmeritusOfIdeationAncestralRecallInteractions:
 
     def test_exile_from_graveyard_interaction(self) -> None:
         """Cards exiled from graveyard must move to exile zone."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Instant
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Instant
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         fodder = Instant(name="Fodder", owner=player)
@@ -170,9 +170,9 @@ class TestEmeritusOfIdeationAncestralRecallInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]

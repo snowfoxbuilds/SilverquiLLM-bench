@@ -3,12 +3,12 @@
 from __future__ import annotations
 import random
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import ActivatedAbility, ArtifactCreature, Creature, ManaAbility
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
+from engine.card import ActivatedAbility, ArtifactCreature, Creature, ManaAbility
+from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from cards.registry import CardRegistry
 
 def _tap_cost(game: Any, source: Any) -> bool:
     """Generic tap-cost: check untapped, then tap."""
@@ -76,7 +76,7 @@ class ElvishArchdruid(Creature):
         # ENGINE LIMITATION: Static abilities should use the continuous effect
         # layer system. This simplified version applies immediately on ETB.
         """
-        from benchmarks.sos.workspace.engine.continuous_effects import (
+        from engine.continuous_effects import (
             ContinuousEffect,
             DURATION_PERMANENT,
             Layer,

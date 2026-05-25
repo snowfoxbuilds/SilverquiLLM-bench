@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from card_impl import RuneScarredDemon
-from benchmarks.sos.workspace.engine.card import CardImpl, Creature
-from benchmarks.sos.workspace.engine.types import Keyword, ManaCost, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
+from engine.card import CardImpl, Creature
+from engine.types import Keyword, ManaCost, Zone
+from test_utils import create_game
 
 
 class TestRuneScarredDemonBasics:

@@ -1,10 +1,10 @@
 """Audited tests for FDN 217 — Dwynen, Gilt-Leaf Daen."""
 from __future__ import annotations
 from card_impl import DwynenGiltLeafDaen
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Supertype
-from benchmarks.sos.workspace.tests.test_utils import create_game
-from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent
+from engine.card import Creature
+from engine.types import CardType, Keyword, ManaCost, Supertype
+from test_utils import create_game
+from engine.events import AttacksTriggeredEvent
 
 def _resolve_stack(game):
     while not game.stack.is_empty():

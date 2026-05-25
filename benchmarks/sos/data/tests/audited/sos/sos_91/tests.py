@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import MoseoVeinsNewDean
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -62,20 +62,20 @@ class TestMoseoVeinsNewDeanAbilities:
 
     def test_has_infusion(self) -> None:
         """Moseo, Vein's New Dean must have Infusion keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = MoseoVeinsNewDean(name="Moseo, Vein's New Dean", owner=None, base_power=2, base_toughness=1)
         assert Keyword.INFUSION in card.keywords, "Moseo, Vein's New Dean should have Infusion"
 
     def test_has_flying(self) -> None:
         """Moseo, Vein's New Dean must have Flying keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = MoseoVeinsNewDean(name="Moseo, Vein's New Dean", owner=None, base_power=2, base_toughness=1)
         assert Keyword.FLYING in card.keywords, "Moseo, Vein's New Dean should have Flying"
 
     def test_etb_creates_tokens(self) -> None:
         """ETB must create tokens per oracle text."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = MoseoVeinsNewDean(name="Moseo, Vein's New Dean", owner=player, base_power=2, base_toughness=1)
@@ -89,9 +89,9 @@ class TestMoseoVeinsNewDeanAbilities:
 
     def test_attack_trigger_uses_graveyard(self) -> None:
         """Attack trigger must interact with graveyard per oracle text."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Instant
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Instant
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         fodder = Instant(name="Bolt", owner=player)
@@ -120,8 +120,8 @@ class TestMoseoVeinsNewDeanEdgeCases:
 
     def test_fizzle_no_targets_creature_stays(self) -> None:
         """If ETB ability fizzles, the creature remains on battlefield."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = MoseoVeinsNewDean(name="Moseo, Vein's New Dean", owner=player, base_power=2, base_toughness=1)
@@ -138,9 +138,9 @@ class TestMoseoVeinsNewDeanEdgeCases:
 
     def test_infusion_base_effect_without_condition(self) -> None:
         """Without infusion condition, only base effect applies."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -154,9 +154,9 @@ class TestMoseoVeinsNewDeanEdgeCases:
 
     def test_infusion_enhanced_effect_with_condition(self) -> None:
         """With infusion condition met, enhanced effect applies."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -188,9 +188,9 @@ class TestMoseoVeinsNewDeanInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -206,8 +206,8 @@ class TestMoseoVeinsNewDeanInteractions:
 
     def test_tokens_appear_on_battlefield(self) -> None:
         """Tokens created must appear on the battlefield."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = MoseoVeinsNewDean(name="Moseo, Vein's New Dean", owner=player, base_power=2, base_toughness=1)

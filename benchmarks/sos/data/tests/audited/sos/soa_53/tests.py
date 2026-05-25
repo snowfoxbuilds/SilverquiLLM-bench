@@ -7,8 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 from __future__ import annotations
 import pytest
 from card_impl import GlimpseOfNature
-from benchmarks.sos.workspace.engine.card import Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Sorcery
+from engine.types import CardType, ManaCost
 
 @pytest.mark.basic
 class TestGlimpseOfNatureBasicProperties:
@@ -50,9 +50,9 @@ class TestGlimpseOfNatureAbilities:
         Oracle: Whenever you cast a creature spell this turn, draw a card.
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
+        from engine.card import CardImpl
         game = create_game()
         player = game.players[0]
         for i in range(10):
@@ -71,7 +71,7 @@ class TestGlimpseOfNatureAbilities:
         Oracle: Whenever you cast a creature spell this turn, draw a card.
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = GlimpseOfNature(name='Glimpse of Nature', owner=player)

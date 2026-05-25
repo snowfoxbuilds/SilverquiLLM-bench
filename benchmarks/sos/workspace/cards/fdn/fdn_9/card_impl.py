@@ -1,11 +1,11 @@
 """Card implementation for Dazzling Angel."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
-from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent, GainsLifeTriggeredEvent
+from engine.card import Creature
+from engine.types import CardType, Keyword, ManaCost
+from engine.events import EntersBattlefieldTriggeredEvent, GainsLifeTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class DazzlingAngel(Creature):
     """Dazzling Angel — {2}{W} — 2/3 — Angel — Flying.
@@ -27,7 +27,7 @@ class DazzlingAngel(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register ETB trigger: another creature enters → gain 1 life."""
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

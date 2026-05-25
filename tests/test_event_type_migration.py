@@ -53,14 +53,14 @@ class TestFdn244UsesTypedEventClasses:
         return path.read_text(encoding="utf-8")
 
     def test_imports_event_class(self, card_impl_source: str) -> None:
-        """Should import a typed event class from benchmarks.sos.workspace.engine.events."""
+        """Should import a typed event class from engine.events."""
         assert re.search(
-            r"from benchmarks\.sos\.workspace\.engine\.events import .+Event", card_impl_source
-        ), "fdn_244/card_impl.py should import a typed event class from benchmarks.sos.workspace.engine.events"
+            r"from engine\.events import .+Event", card_impl_source
+        ), "fdn_244/card_impl.py should import a typed event class from engine.events"
 
     def test_imports_replacement_effect(self, card_impl_source: str) -> None:
-        """Should import ReplacementEffect from benchmarks.sos.workspace.engine.replacement_effects."""
-        assert "from benchmarks.sos.workspace.engine.replacement_effects import ReplacementEffect" in card_impl_source
+        """Should import ReplacementEffect from engine.replacement_effects."""
+        assert "from engine.replacement_effects import ReplacementEffect" in card_impl_source
 
     def test_registers_with_replacement_manager(self, card_impl_source: str) -> None:
         """Should use game.replacement_manager.register(), not game.register_replacement()."""
@@ -96,9 +96,9 @@ class TestCardInterfaceSpecUsesTypedAPI:
         assert "game.register_replacement(" not in spec_source
 
     def test_imports_typed_event_class(self, spec_source: str) -> None:
-        """Should import a typed event class (ending in Event) from benchmarks.sos.workspace.engine.events."""
+        """Should import a typed event class (ending in Event) from engine.events."""
         assert re.search(
-            r"from benchmarks\.sos\.workspace\.engine\.events import \w+Event", spec_source
+            r"from engine\.events import \w+Event", spec_source
         ), "CARD-INTERFACE.md should show importing typed event classes"
 
     def test_event_type_references_class_not_string(self, spec_source: str) -> None:

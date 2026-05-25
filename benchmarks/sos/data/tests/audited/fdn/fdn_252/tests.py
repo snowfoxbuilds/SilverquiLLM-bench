@@ -1,10 +1,10 @@
 """Audited tests for FDN 252 — Gleaming Barrier."""
 from __future__ import annotations
 from card_impl import GleamingBarrier
-from benchmarks.sos.workspace.engine.card import ArtifactCreature
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
-from benchmarks.sos.workspace.engine.events import CreatureDiesTriggeredEvent
+from engine.card import ArtifactCreature
+from engine.types import CardType, Keyword, ManaCost, Zone
+from test_utils import create_game
+from engine.events import CreatureDiesTriggeredEvent
 
 class TestGleamingBarrierBasics:
     """Basic card properties."""
@@ -72,7 +72,7 @@ class TestGleamingBarrierDeathTrigger:
         barrier = GleamingBarrier(owner=p1, controller=p1)
         game.get_battlefield(p1).add(barrier)
         barrier.register_triggers(game)
-        from benchmarks.sos.workspace.engine.card import Creature
+        from engine.card import Creature
         other = Creature(name='Bear', base_power=2, base_toughness=2, owner=p1, controller=p1)
         bf_before = len(game.get_battlefield(p1).get_all())
         game.trigger_manager.fire_event(game, CreatureDiesTriggeredEvent(creature=other))

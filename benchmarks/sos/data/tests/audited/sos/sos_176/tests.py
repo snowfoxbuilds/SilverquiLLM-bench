@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import BlechLoafingPest
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Supertype
+from engine.card import Creature
+from engine.types import CardType, ManaCost, Supertype
 
 
 @pytest.mark.basic
@@ -66,7 +66,7 @@ class TestBlechLoafingPestAbilities:
         Oracle: Whenever you gain life, put a +1/+1 counter on each Pest, Bat, Insect, Snake, and Spider you control
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
 
         game = create_game()
         player = game.players[0]

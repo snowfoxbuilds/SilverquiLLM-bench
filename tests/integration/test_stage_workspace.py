@@ -179,9 +179,9 @@ class TestTopLevelEntries:
         workspace, _ = staged
         assert (workspace / "cards").is_dir()
 
-    def test_tests_dir_present(self, staged):
+    def test_engine_tests_dir_present(self, staged):
         workspace, _ = staged
-        assert (workspace / "tests").is_dir()
+        assert (workspace / "engine_tests").is_dir()
 
     def test_pytest_ini_present(self, staged):
         workspace, _ = staged

@@ -1,10 +1,10 @@
 """Audited tests for FDN 257 — Solemn Simulacrum."""
 from __future__ import annotations
 from card_impl import SolemnSimulacrum
-from benchmarks.sos.workspace.engine.card import ArtifactCreature, CardImpl
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Supertype, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
-from benchmarks.sos.workspace.engine.events import CreatureDiesTriggeredEvent, EntersBattlefieldTriggeredEvent
+from engine.card import ArtifactCreature, CardImpl
+from engine.types import CardType, ManaCost, Supertype, Zone
+from test_utils import create_game
+from engine.events import CreatureDiesTriggeredEvent, EntersBattlefieldTriggeredEvent
 
 class TestSolemnSimulacrumBasics:
     """Basic card properties."""
@@ -112,7 +112,7 @@ class TestSolemnSimulacrumDeath:
         card_in_lib = CardImpl(name='Spell', mana_cost=ManaCost(generic=0), owner=p1, controller=p1)
         p1.zones[Zone.LIBRARY].add(card_in_lib)
         sim.register_triggers(game)
-        from benchmarks.sos.workspace.engine.card import Creature
+        from engine.card import Creature
         other = Creature(name='Bear', base_power=2, base_toughness=2, owner=p1, controller=p1)
         hand_before = len(p1.zones[Zone.HAND].get_all())
         game.trigger_manager.fire_event(game, CreatureDiesTriggeredEvent(creature=other))

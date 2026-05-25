@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import ThunderdrumSoloist
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -62,13 +62,13 @@ class TestThunderdrumSoloistAbilities:
 
     def test_has_reach(self) -> None:
         """Thunderdrum Soloist must have Reach keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = ThunderdrumSoloist(name="Thunderdrum Soloist", owner=None, base_power=1, base_toughness=3)
         assert Keyword.REACH in card.keywords, "Thunderdrum Soloist should have Reach"
 
     def test_has_opus(self) -> None:
         """Thunderdrum Soloist must have Opus keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = ThunderdrumSoloist(name="Thunderdrum Soloist", owner=None, base_power=1, base_toughness=3)
         assert Keyword.OPUS in card.keywords, "Thunderdrum Soloist should have Opus"
 
@@ -86,7 +86,7 @@ class TestThunderdrumSoloistEdgeCases:
 
     def test_opus_no_trigger_without_spell(self) -> None:
         """Opus should not boost without casting instant/sorcery."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = ThunderdrumSoloist(name="Thunderdrum Soloist", owner=player, base_power=1, base_toughness=3)
@@ -115,9 +115,9 @@ class TestThunderdrumSoloistInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -133,9 +133,9 @@ class TestThunderdrumSoloistInteractions:
 
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         other = Creature(name="Companion", owner=player, base_power=2, base_toughness=2)

@@ -82,16 +82,19 @@ class TestAuditedTestsRelocation:
         )
 
     def test_audited_test_files_use_correct_engine_imports(self) -> None:
-        """Audited test files must import from benchmarks.sos.workspace.engine, not bare engine."""
+        """Audited test files must use flat ``from engine.X`` imports.
+
+        The legacy ``benchmarks.sos.workspace.engine`` prefix should not
+        appear.
+        """
         audited_dir = REPO_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited"
-        # Find all .py files with engine imports
         result = subprocess.run(
             [
                 "grep",
                 "-rln",
                 "--include=*.py",
                 "-P",
-                r"(?:from\s+engine\b|import\s+engine\b)",
+                r"benchmarks\.sos\.workspace\.engine",
                 str(audited_dir),
             ],
             capture_output=True,
@@ -99,6 +102,6 @@ class TestAuditedTestsRelocation:
         )
         stale_files = [f for f in result.stdout.strip().split("\n") if f]
         assert len(stale_files) == 0, (
-            f"Found {len(stale_files)} files with bare 'engine' imports "
-            f"(should use benchmarks.sos.workspace.engine): {stale_files[:5]}"
+            f"Found {len(stale_files)} audited test files with legacy "
+            f"benchmarks.sos.workspace.engine prefix: {stale_files[:5]}"
         )

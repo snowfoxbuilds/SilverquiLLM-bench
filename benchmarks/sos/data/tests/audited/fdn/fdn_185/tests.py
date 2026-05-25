@@ -1,10 +1,10 @@
 """Audited tests for FDN 185 — Stromkirk Bloodthief."""
 from __future__ import annotations
 from card_impl import StromkirkBloodthief
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import ManaCost
-from benchmarks.sos.workspace.tests.test_utils import create_game
-from benchmarks.sos.workspace.engine.events import EndStepTriggeredEvent
+from engine.card import Creature
+from engine.types import ManaCost
+from test_utils import create_game
+from engine.events import EndStepTriggeredEvent
 
 def _resolve_stack(game):
     while not game.stack.is_empty():

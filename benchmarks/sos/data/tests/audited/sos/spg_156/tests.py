@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import AdrixAndNevTwincasters
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -63,7 +63,7 @@ class TestAdrixAndNevTwincastersAbilities:
 
     def test_has_ward(self) -> None:
         """Adrix and Nev, Twincasters must have Ward keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = AdrixAndNevTwincasters(name="Adrix and Nev, Twincasters", owner=None, base_power=2, base_toughness=2)
         assert Keyword.WARD in card.keywords, "Adrix and Nev, Twincasters should have Ward"
 
@@ -83,8 +83,8 @@ class TestAdrixAndNevTwincastersEdgeCases:
 
     def test_fizzle_no_targets_creature_stays(self) -> None:
         """If ETB ability fizzles, the creature remains on battlefield."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = AdrixAndNevTwincasters(name="Adrix and Nev, Twincasters", owner=player, base_power=2, base_toughness=2)
@@ -119,9 +119,9 @@ class TestAdrixAndNevTwincastersInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -137,8 +137,8 @@ class TestAdrixAndNevTwincastersInteractions:
 
     def test_tokens_appear_on_battlefield(self) -> None:
         """Tokens created must appear on the battlefield."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = AdrixAndNevTwincasters(name="Adrix and Nev, Twincasters", owner=player, base_power=2, base_toughness=2)

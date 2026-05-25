@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import Instant
-from benchmarks.sos.workspace.engine.types import ManaCost, Zone
+from engine.card import Instant
+from engine.types import ManaCost, Zone
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 class TimeStop(Instant):
@@ -63,7 +63,7 @@ class TimeStop(Instant):
             hand = active.zones[Zone.HAND]
             hand_cards = list(hand.get_all())
             while len(hand_cards) > max_hand:
-                from benchmarks.sos.workspace.engine.game import discard
+                from engine.game import discard
                 try:
                     chosen = active.choose_card(
                         hand_cards, "Discard down to hand size"

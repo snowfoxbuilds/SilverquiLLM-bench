@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import pytest
 
-from benchmarks.sos.workspace.engine.game_state import GameState
-from benchmarks.sos.workspace.engine.player import DeterministicPlayer
-from benchmarks.sos.workspace.engine.stack import Stack, StackObject, check_state_based_actions, priority_loop
+from engine.game_state import GameState
+from engine.player import DeterministicPlayer
+from engine.stack import Stack, StackObject, check_state_based_actions, priority_loop
 
 
 # ---------------------------------------------------------------------------
@@ -473,11 +473,11 @@ class TestGameStateStackInit:
 # Integration — run_turn with stack
 # ===========================================================================
 class TestRunTurnWithStack:
-    """Verify run_turn works correctly with the real priority_loop from benchmarks.sos.workspace.engine.stack."""
+    """Verify run_turn works correctly with the real priority_loop from engine.stack."""
 
     def test_run_turn_completes_with_empty_stack(self) -> None:
         """run_turn should complete normally with an empty stack and advance to turn 2."""
-        from benchmarks.sos.workspace.engine.turn import run_turn
+        from engine.turn import run_turn
 
         game = _make_game()
         run_turn(game)
@@ -485,7 +485,7 @@ class TestRunTurnWithStack:
 
     def test_run_turn_stack_remains_empty(self) -> None:
         """After run_turn, the stack should still be empty."""
-        from benchmarks.sos.workspace.engine.turn import run_turn
+        from engine.turn import run_turn
 
         game = _make_game()
         run_turn(game)

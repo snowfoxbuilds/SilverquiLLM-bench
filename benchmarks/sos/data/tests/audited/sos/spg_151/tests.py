@@ -7,8 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 from __future__ import annotations
 import pytest
 from card_impl import MurmuringMystic
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 @pytest.mark.basic
 class TestMurmuringMysticBasicProperties:
@@ -60,7 +60,7 @@ class TestMurmuringMysticAbilities:
         Oracle: Whenever you cast an instant or sorcery spell, create a 1/1 blue Bird Illusion creature token with f
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = MurmuringMystic(name='Murmuring Mystic', owner=player)

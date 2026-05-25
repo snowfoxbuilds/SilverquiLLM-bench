@@ -21,11 +21,14 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-# Allow running as script from repo root
+# Allow running as script from repo root. Put the workspace dir on sys.path
+# so `cards.scryfall` (etc.) resolves the same way it does for the agent /
+# pytest at runtime. `_REPO_ROOT` is the bench repo root; it's used below
+# for locating cached data files.
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(_REPO_ROOT))
+sys.path.insert(0, str(_REPO_ROOT / "benchmarks" / "sos" / "workspace"))
 
-from benchmarks.sos.workspace.cards.scryfall import fetch_set, fetch_scryfall_query  # noqa: E402
+from cards.scryfall import fetch_set, fetch_scryfall_query  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

@@ -6,10 +6,10 @@ import warnings
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
-from benchmarks.sos.workspace.engine.stack import priority_loop
-from benchmarks.sos.workspace.engine.types import Phase, Step, Zone
+from engine.stack import priority_loop
+from engine.types import Phase, Step, Zone
 
 
 # Maximum hand size — players discard down to this during cleanup.
@@ -53,7 +53,7 @@ def _do_draw_step(game: GameState) -> None:
     if game.turn_number == 1 and game.active_player_index == 0:
         return
 
-    from benchmarks.sos.workspace.engine.game import draw_card
+    from engine.game import draw_card
 
     draw_card(game, game.active_player)
 
@@ -65,7 +65,7 @@ def _do_combat_step(game: GameState, step: Step) -> None:
         game: The current game state.
         step: The combat step to execute.
     """
-    from benchmarks.sos.workspace.engine.combat import (
+    from engine.combat import (
         combat_damage_step,
         declare_attackers_step,
         declare_blockers_step,
@@ -100,9 +100,9 @@ def _do_cleanup_step(game: GameState) -> None:
     7. If triggers fired during cleanup (e.g. from discarding), process
        them (give priority, resolve stack) and perform another cleanup step.
     """
-    from benchmarks.sos.workspace.engine.game import discard as _discard
-    from benchmarks.sos.workspace.engine.player import ScriptExhaustedError
-    from benchmarks.sos.workspace.engine.state_based_actions import resolve_state_based_actions
+    from engine.game import discard as _discard
+    from engine.player import ScriptExhaustedError
+    from engine.state_based_actions import resolve_state_based_actions
 
     # --- Step 1: Discard to hand size ---
     active = game.active_player
@@ -200,7 +200,7 @@ def run_turn(game: GameState) -> None:
         if current == (Phase.BEGINNING, Step.UNTAP):
             _do_untap_step(game)
         elif current == (Phase.BEGINNING, Step.UPKEEP):
-            from benchmarks.sos.workspace.engine.events import BeginningOfUpkeepTriggeredEvent
+            from engine.events import BeginningOfUpkeepTriggeredEvent
             game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
         elif current == (Phase.BEGINNING, Step.DRAW):
             _do_draw_step(game)

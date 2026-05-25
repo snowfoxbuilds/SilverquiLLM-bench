@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import FractalAnomaly
 
-from benchmarks.sos.workspace.engine.card import Instant
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Instant
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -56,9 +56,9 @@ class TestFractalAnomalyAbilities:
         Oracle: Create a 0/0 green and blue Fractal creature token and put X +1/+1 counters on it, where X is the number of cards you've drawn this turn.
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game
-        from benchmarks.sos.workspace.engine.types import Zone
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from test_utils import create_game
+        from engine.types import Zone
+        from engine.card import CardImpl
 
         game = create_game()
         player = game.players[0]
@@ -83,8 +83,8 @@ class TestFractalAnomalyAbilities:
         Oracle: Create a 0/0 green and blue Fractal creature token and put X +1/+1 counters on it, where X is the nu
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game
+        from engine.types import Zone
 
         game = create_game()
         player = game.players[0]

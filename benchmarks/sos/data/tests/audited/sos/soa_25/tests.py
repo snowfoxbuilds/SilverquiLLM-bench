@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import AdNauseam
 
-from benchmarks.sos.workspace.engine.card import Instant
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Instant
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -56,9 +56,9 @@ class TestAdNauseamAbilities:
         Oracle: Reveal the top card of your library and put that card into your hand. You lose life equal to its mana value. You may repeat this process any number of times.
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game
-        from benchmarks.sos.workspace.engine.types import Zone, ManaCost
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from test_utils import create_game
+        from engine.types import Zone, ManaCost
+        from engine.card import CardImpl
 
         game = create_game()
         player = game.players[0]
@@ -83,9 +83,9 @@ class TestAdNauseamAbilities:
         Oracle: Reveal the top card of your library and put that card into your hand.
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game
-        from benchmarks.sos.workspace.engine.types import Zone, ManaCost
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from test_utils import create_game
+        from engine.types import Zone, ManaCost
+        from engine.card import CardImpl
 
         game = create_game()
         player = game.players[0]

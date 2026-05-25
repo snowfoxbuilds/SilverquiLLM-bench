@@ -3,10 +3,10 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
-from benchmarks.sos.workspace.engine.creatures import make_vanilla
+from engine.creatures import make_vanilla
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from cards.registry import CardRegistry
 
 AegisTurtle = make_vanilla(
     "Aegis Turtle", "{U}", 0, 5,

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Zone
+from engine.card import Sorcery
+from engine.types import CardType, ManaCost, Zone
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 class RaiseThePast(Sorcery):
@@ -33,7 +33,7 @@ class RaiseThePast(Sorcery):
     def on_resolve(self, game: "GameState") -> None:
         """Return all creature cards with mana value <= 2 from graveyard
         to the battlefield."""
-        from benchmarks.sos.workspace.engine.zones import move_to_zone
+        from engine.zones import move_to_zone
 
         controller = self.controller
         if controller is None:

@@ -9,16 +9,16 @@ reads ``chosen_targets`` and applies the effect to the chosen target.
 
 from __future__ import annotations
 
-from benchmarks.sos.workspace.cards.fdn.fdn_13.card_impl import FleetingFlight
-from benchmarks.sos.workspace.engine.card import Creature, Instant
-from benchmarks.sos.workspace.engine.types import (
+from cards.fdn.fdn_13.card_impl import FleetingFlight
+from engine.card import Creature, Instant
+from engine.types import (
     CardType,
     Keyword,
     ManaCost,
     TargetRequirement,
     Zone,
 )
-from benchmarks.sos.workspace.tests.test_utils import create_game
+from test_utils import create_game
 
 
 class TestFleetingFlightProperties:

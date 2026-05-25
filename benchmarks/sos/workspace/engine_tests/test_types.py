@@ -15,7 +15,7 @@ import enum
 
 import pytest
 
-from benchmarks.sos.workspace.engine.types import (
+from engine.types import (
     CardType,
     Color,
     HybridManaSymbol,

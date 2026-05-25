@@ -1,10 +1,10 @@
 """Audited tests for FDN 154 — Extravagant Replication."""
 from __future__ import annotations
 from card_impl import ExtravagantReplication
-from benchmarks.sos.workspace.engine.card import Creature, Enchantment
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
-from benchmarks.sos.workspace.tests.test_utils import create_game
-from benchmarks.sos.workspace.engine.events import BeginningOfUpkeepTriggeredEvent
+from engine.card import Creature, Enchantment
+from engine.types import CardType, ManaCost
+from test_utils import create_game
+from engine.events import BeginningOfUpkeepTriggeredEvent
 
 def _resolve_stack(game):
     while not game.stack.is_empty():
@@ -38,7 +38,7 @@ class TestExtravagantReplicationTrigger:
         game.get_battlefield(p1).add(target)
         ench.register_triggers(game)
         game.active_player_index = 0
-        from benchmarks.sos.workspace.engine.player import DeterministicPlayer
+        from engine.player import DeterministicPlayer
         if isinstance(p1, DeterministicPlayer):
             p1._script.append(target)
         game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())

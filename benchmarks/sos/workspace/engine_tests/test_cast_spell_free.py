@@ -13,16 +13,16 @@ from __future__ import annotations
 
 import pytest
 
-from benchmarks.sos.workspace.engine.card import (
+from engine.card import (
     Creature,
     Instant,
     Sorcery,
 )
-from benchmarks.sos.workspace.engine.casting import cast_spell_free
-from benchmarks.sos.workspace.engine.game_state import GameState
-from benchmarks.sos.workspace.engine.player import DeterministicPlayer
-from benchmarks.sos.workspace.engine.stack import StackObject
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, ManaType, Phase, Zone
+from engine.casting import cast_spell_free
+from engine.game_state import GameState
+from engine.player import DeterministicPlayer
+from engine.stack import StackObject
+from engine.types import CardType, ManaCost, ManaType, Phase, Zone
 
 
 # ---------------------------------------------------------------------------
@@ -300,7 +300,7 @@ class TestCastSpellFreeCounteredByRealCounter:
 
     def test_counter_spell_removes_free_cast_from_stack_to_graveyard(self):
         """_counter_spell targeting a free-cast spell removes it and moves card to graveyard."""
-        from benchmarks.sos.workspace.cards.fdn.fdn_160.card_impl import _counter_spell
+        from cards.fdn.fdn_160.card_impl import _counter_spell
 
         game = _make_game()
         player = game.players[0]
@@ -328,7 +328,7 @@ class TestCastSpellFreeCounteredByRealCounter:
 
     def test_counter_spell_prevents_on_resolve_from_firing(self):
         """A countered free-cast spell's on_resolve never executes."""
-        from benchmarks.sos.workspace.cards.fdn.fdn_160.card_impl import _counter_spell
+        from cards.fdn.fdn_160.card_impl import _counter_spell
 
         game = _make_game()
         player = game.players[0]
@@ -356,7 +356,7 @@ class TestCastSpellFreeCounteredByRealCounter:
 
     def test_counter_creature_free_cast_prevents_battlefield_entry(self):
         """A creature countered after cast_spell_free never enters the battlefield."""
-        from benchmarks.sos.workspace.cards.fdn.fdn_160.card_impl import _counter_spell
+        from cards.fdn.fdn_160.card_impl import _counter_spell
 
         game = _make_game()
         player = game.players[0]
@@ -380,7 +380,7 @@ class TestCastSpellFreeCounteredByRealCounter:
 
     def test_counter_targets_specific_spell_among_multiple_on_stack(self):
         """When multiple free-cast spells are on the stack, counter targets only one."""
-        from benchmarks.sos.workspace.cards.fdn.fdn_160.card_impl import _counter_spell
+        from cards.fdn.fdn_160.card_impl import _counter_spell
 
         game = _make_game()
         player = game.players[0]

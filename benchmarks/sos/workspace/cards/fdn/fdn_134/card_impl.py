@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import LoyaltyAbility, Planeswalker
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, ManaType, Supertype
+from engine.card import LoyaltyAbility, Planeswalker
+from engine.types import CardType, ManaCost, ManaType, Supertype
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
-    from benchmarks.sos.workspace.engine.player import Player
+    from engine.game_state import GameState
+    from engine.player import Player
 
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from cards.registry import CardRegistry
 
 class AjaniCallerOfThePride(Planeswalker):
     """Ajani, Caller of the Pride — {1}{W}{W} — 4 loyalty.
@@ -50,15 +50,15 @@ class AjaniCallerOfThePride(Planeswalker):
             # Target creature gains flying and double strike until end of turn.
             target = getattr(pw, "_resolve_target", None)
             if target is not None and hasattr(target, "keywords"):
-                from benchmarks.sos.workspace.engine.types import Keyword
+                from engine.types import Keyword
                 target.keywords = target.keywords | Keyword.FLYING | Keyword.DOUBLE_STRIKE
 
         def _minus8(game: Any) -> None:
             # Create X 2/2 white Cat creature tokens, where X is your life total.
             controller = pw.controller
             if controller is not None:
-                from benchmarks.sos.workspace.engine.card import Creature
-                from benchmarks.sos.workspace.engine.game import create_token
+                from engine.card import Creature
+                from engine.game import create_token
                 life = getattr(controller, "life", 0)
                 for _ in range(max(0, life)):
                     token = Creature(name="Cat", base_power=2, base_toughness=2)

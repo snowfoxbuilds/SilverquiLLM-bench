@@ -20,27 +20,27 @@ systems work together through real engine APIs:
 """
 from __future__ import annotations
 import pytest
-from benchmarks.sos.workspace.engine.basic_lands import Forest, Island, Mountain, Plains
-from benchmarks.sos.workspace.cards.fdn.fdn_150.card_impl import AegisTurtle
-from benchmarks.sos.workspace.cards.fdn.fdn_146.card_impl import SavannahLions
-from benchmarks.sos.workspace.cards.fdn.fdn_147.card_impl import SerraAngel
-from benchmarks.sos.workspace.cards.fdn.fdn_192.card_impl import BurstLightning
-from benchmarks.sos.workspace.cards.fdn.fdn_223.card_impl import GiantGrowth
-from benchmarks.sos.workspace.cards.fdn.fdn_175.card_impl import HerosDownfall
-from benchmarks.sos.workspace.cards.fdn.fdn_224.card_impl import GnarlidColony
-from benchmarks.sos.workspace.cards.fdn.fdn_153.card_impl import EssenceScatter
-from benchmarks.sos.workspace.cards.fdn.fdn_142.card_impl import HealersHawk
-from benchmarks.sos.workspace.cards.fdn.fdn_114.card_impl import TreetopSnarespinner
-from benchmarks.sos.workspace.engine.abilities import ActivatedAbilityInstance, activate_ability
-from benchmarks.sos.workspace.engine.casting import cast_spell as engine_cast_spell, play_land
-from benchmarks.sos.workspace.engine.combat import combat_damage_step, declare_attackers_step, declare_blockers_step, end_combat_step
-from benchmarks.sos.workspace.engine.stack import priority_loop
-from benchmarks.sos.workspace.engine.state_based_actions import resolve_state_based_actions
-from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
-from benchmarks.sos.workspace.engine.turn import _do_cleanup_step
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaType, Phase, Step, Zone
-from benchmarks.sos.workspace.tests.test_utils import cast_spell, create_game, set_board_state
-from benchmarks.sos.workspace.engine.events import DealsDamageTriggeredEvent
+from engine.basic_lands import Forest, Island, Mountain, Plains
+from cards.fdn.fdn_150.card_impl import AegisTurtle
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_147.card_impl import SerraAngel
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_223.card_impl import GiantGrowth
+from cards.fdn.fdn_175.card_impl import HerosDownfall
+from cards.fdn.fdn_224.card_impl import GnarlidColony
+from cards.fdn.fdn_153.card_impl import EssenceScatter
+from cards.fdn.fdn_142.card_impl import HealersHawk
+from cards.fdn.fdn_114.card_impl import TreetopSnarespinner
+from engine.abilities import ActivatedAbilityInstance, activate_ability
+from engine.casting import cast_spell as engine_cast_spell, play_land
+from engine.combat import combat_damage_step, declare_attackers_step, declare_blockers_step, end_combat_step
+from engine.stack import priority_loop
+from engine.state_based_actions import resolve_state_based_actions
+from engine.triggers import TriggerRegistration
+from engine.turn import _do_cleanup_step
+from engine.types import CardType, Keyword, ManaType, Phase, Step, Zone
+from test_utils import cast_spell, create_game, set_board_state
+from engine.events import DealsDamageTriggeredEvent
 
 def _tap_land_for_mana(game, player, land):
     """Activate a land's mana ability via the engine's activate_ability.
@@ -70,7 +70,7 @@ def _setup_turn(game, *, turn, active):
     player = game.players[active]
     player.land_plays_remaining = 1
     if turn > 1:
-        from benchmarks.sos.workspace.engine.turn import _do_untap_step
+        from engine.turn import _do_untap_step
         _do_untap_step(game)
 
 def _do_combat(game, *, attackers, blocker_map=None):

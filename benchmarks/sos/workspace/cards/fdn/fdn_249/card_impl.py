@@ -1,13 +1,13 @@
 """Card implementation for Adventuring Gear."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import ActivatedAbility, Artifact
-from benchmarks.sos.workspace.engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
-from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
-from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
+from engine.card import ActivatedAbility, Artifact
+from engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
+from engine.types import Keyword, ManaCost
+from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from engine.game_state import GameState
+    from cards.registry import CardRegistry
 
 def _make_equip_ability(equipment: Artifact, generic_cost: int) -> ActivatedAbility:
     """Return an :class:`ActivatedAbility` representing *Equip {N}*.
@@ -66,7 +66,7 @@ class AdventuringGear(Artifact):
     def register_triggers(self, game: Any) -> None:
         """Register landfall trigger: whenever a land you control enters,
         equipped creature gets +2/+2 until end of turn."""
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.triggers import TriggerRegistration
         source = self
 
         def _condition(game: Any, event: dict) -> bool:
@@ -74,7 +74,7 @@ class AdventuringGear(Artifact):
             permanent = event.permanent
             if permanent is None:
                 return False
-            from benchmarks.sos.workspace.engine.types import CardType as _CT
+            from engine.types import CardType as _CT
             if _CT.LAND not in getattr(permanent, 'card_types', set()):
                 return False
             controller = getattr(source, 'controller', None)

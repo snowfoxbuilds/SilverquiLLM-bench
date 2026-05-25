@@ -3,12 +3,12 @@
 from __future__ import annotations
 import random
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import ActivatedAbility, ArtifactCreature, Creature, ManaAbility
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
+from engine.card import ActivatedAbility, ArtifactCreature, Creature, ManaAbility
+from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from cards.registry import CardRegistry
 
 def _is_on_battlefield(game: Any, card: Any) -> bool:
     """Check if *card* is on any player's battlefield."""
@@ -52,7 +52,7 @@ class ScavengingOoze(Creature):
             return True
 
         def _effect(game: Any) -> None:
-            from benchmarks.sos.workspace.engine.game import add_counter, exile
+            from engine.game import add_counter, exile
 
             target = getattr(source, "_current_target", None)
             if target is None:

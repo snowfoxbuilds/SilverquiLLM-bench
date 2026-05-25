@@ -1,11 +1,11 @@
 """Card implementation for Kykar, Zephyr Awakener."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Zone
-from benchmarks.sos.workspace.engine.events import EndStepTriggeredEvent, SpellCastTriggeredEvent
+from engine.card import Creature
+from engine.types import CardType, Keyword, ManaCost, Zone
+from engine.events import EndStepTriggeredEvent, SpellCastTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class KykarZephyrAwakener(Creature):
     """Kykar, Zephyr Awakener — {2}{W}{U} — 3/4 — Legendary Bird Wizard.
@@ -33,10 +33,10 @@ class KykarZephyrAwakener(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register noncreature spell cast trigger."""
-        from benchmarks.sos.workspace.engine.card import Creature as _Creature
-        from benchmarks.sos.workspace.engine.game import create_token
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
-        from benchmarks.sos.workspace.engine.zones import move_to_zone
+        from engine.card import Creature as _Creature
+        from engine.game import create_token
+        from engine.triggers import TriggerRegistration
+        from engine.zones import move_to_zone
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

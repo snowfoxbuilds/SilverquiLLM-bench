@@ -1,12 +1,12 @@
 """Card implementation for Doubling Season."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Enchantment
-from benchmarks.sos.workspace.engine.replacement_effects import ReplacementEffect
-from benchmarks.sos.workspace.engine.types import ManaCost
-from benchmarks.sos.workspace.engine.events import AddCounterReplacementEvent, CreateTokenReplacementEvent
+from engine.card import Enchantment
+from engine.replacement_effects import ReplacementEffect
+from engine.types import ManaCost
+from engine.events import AddCounterReplacementEvent, CreateTokenReplacementEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class DoublingSeason(Enchantment):
     """Doubling Season — {4}{G} — Enchantment.

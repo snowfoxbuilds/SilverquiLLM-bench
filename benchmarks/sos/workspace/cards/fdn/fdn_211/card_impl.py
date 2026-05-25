@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, TargetRequirement, Zone
+from engine.card import Creature
+from engine.types import CardType, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 class AffectionateIndrik(Creature):
@@ -35,7 +35,7 @@ class AffectionateIndrik(Creature):
 
     def on_resolve(self, game: "GameState") -> None:
         """ETB: fight target creature you don't control."""
-        from benchmarks.sos.workspace.engine.game import deal_damage
+        from engine.game import deal_damage
 
         controller = self.controller
         if controller is None:

@@ -47,7 +47,7 @@ For engine API discovery, read the source modules directly — they have rich do
 You are expected to make changes to the engine to implement new mechanics. The existing \
 code base may not be perfect, you are free to make changes that don't break current behavior.
 
-Do not modify any files under workspace/tests/engine/. These tests are staged for your \
+Do not modify any files under workspace/engine_tests/. These tests are staged for your \
 local verification only; the runner uses its own authoritative copies for grading. \
 Modifying the workspace tests will not change your score — it will only mislead you \
 about whether your engine changes are correct.

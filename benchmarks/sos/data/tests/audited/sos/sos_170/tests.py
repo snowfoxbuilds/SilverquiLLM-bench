@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import AbigalePoetLaureateHeroicStanza
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -63,13 +63,13 @@ class TestAbigalePoetLaureateHeroicStanzaAbilities:
 
     def test_has_flying(self) -> None:
         """Abigale, Poet Laureate // Heroic Stanza must have Flying keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = AbigalePoetLaureateHeroicStanza(name="Abigale, Poet Laureate // Heroic Stanza", owner=None, base_power=2, base_toughness=3)
         assert Keyword.FLYING in card.keywords, "Abigale, Poet Laureate // Heroic Stanza should have Flying"
 
     def test_has_prepared(self) -> None:
         """Abigale, Poet Laureate // Heroic Stanza must have Prepared keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = AbigalePoetLaureateHeroicStanza(name="Abigale, Poet Laureate // Heroic Stanza", owner=None, base_power=2, base_toughness=3)
         assert Keyword.PREPARED in card.keywords, "Abigale, Poet Laureate // Heroic Stanza should have Prepared"
 
@@ -101,8 +101,8 @@ class TestAbigalePoetLaureateHeroicStanzaEdgeCases:
 
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = AbigalePoetLaureateHeroicStanza(name="Abigale, Poet Laureate // Heroic Stanza", owner=player, base_power=2, base_toughness=3)
@@ -120,9 +120,9 @@ class TestAbigalePoetLaureateHeroicStanzaInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -138,9 +138,9 @@ class TestAbigalePoetLaureateHeroicStanzaInteractions:
 
     def test_coexists_with_other_permanents(self) -> None:
         """Card must coexist with other permanents without errors."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         other = Creature(name="Companion", owner=player, base_power=2, base_toughness=2)

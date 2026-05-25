@@ -1,12 +1,12 @@
 """Card implementation for Nine-Lives Familiar."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import ArtifactCreature, Creature
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Supertype, Zone
-from benchmarks.sos.workspace.engine.events import CreatureDiesTriggeredEvent, EntersBattlefieldTriggeredEvent
+from engine.card import ArtifactCreature, Creature
+from engine.types import CardType, Keyword, ManaCost, Supertype, Zone
+from engine.events import CreatureDiesTriggeredEvent, EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from engine.game_state import GameState
+    from cards.registry import CardRegistry
 
 class NineLivesFamiliar(Creature):
     """Nine-Lives Familiar — {1}{B}{B} — 1/1 — Cat
@@ -30,8 +30,8 @@ class NineLivesFamiliar(Creature):
         self.revival_counters: int = 0
 
     def register_triggers(self, game: GameState) -> None:
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
-        from benchmarks.sos.workspace.engine.zones import move_to_zone
+        from engine.triggers import TriggerRegistration
+        from engine.zones import move_to_zone
         source = self
 
         def _etb_condition(game: Any, event: dict) -> bool:

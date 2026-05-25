@@ -86,13 +86,13 @@ class TestDirectoryStructure:
             "benchmarks/sos/workspace/engine",
             "benchmarks/sos/workspace/cards",
             "tests",
-            "benchmarks/sos/workspace/tests/engine",
+            "benchmarks/sos/workspace/engine_tests",
         ],
         ids=[
             "engine",
             "benchmarks/sos/workspace/cards",
             "tests",
-            "tests/engine",
+            "engine_tests",
         ],
     )
     def test_directory_has_init_py(self, package_dir: str) -> None:
@@ -108,12 +108,12 @@ class TestPackageImportability:
 
     def test_import_engine(self) -> None:
         """The 'engine' package must be importable."""
-        mod = importlib.import_module("benchmarks.sos.workspace.engine")
+        mod = importlib.import_module("engine")
         assert mod is not None
 
     def test_import_cards(self) -> None:
         """The 'cards' package must be importable."""
-        mod = importlib.import_module("benchmarks.sos.workspace.cards")
+        mod = importlib.import_module("cards")
         assert mod is not None
 
     def test_import_cards_fdn(self) -> None:

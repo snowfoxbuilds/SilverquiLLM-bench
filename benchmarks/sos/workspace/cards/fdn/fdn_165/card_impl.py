@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import Instant
-from benchmarks.sos.workspace.engine.types import ManaCost
+from engine.card import Instant
+from engine.types import ManaCost
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 class ThinkTwice(Instant):
@@ -32,7 +32,7 @@ class ThinkTwice(Instant):
 
     def on_resolve(self, game: "GameState") -> None:
         """Draw a card."""
-        from benchmarks.sos.workspace.engine.game import draw_card
+        from engine.game import draw_card
 
         controller = self.controller
         if controller is None:

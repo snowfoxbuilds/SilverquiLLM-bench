@@ -17,11 +17,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable
 
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Supertype
+from engine.types import CardType, Keyword, ManaCost, Supertype
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
-    from benchmarks.sos.workspace.engine.player import Player
+    from engine.game_state import GameState
+    from engine.player import Player
 
 
 # ---------------------------------------------------------------------------

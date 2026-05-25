@@ -12,7 +12,7 @@ class TestPlains:
 
     @pytest.mark.basic
     def test_plains_is_land(self) -> None:
-        from benchmarks.sos.workspace.engine.card import Land
+        from engine.card import Land
         card = Plains(name="Plains", owner=None)
         assert isinstance(card, Land)
 

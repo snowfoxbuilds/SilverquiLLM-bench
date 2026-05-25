@@ -1,10 +1,10 @@
 """Audited tests for FDN 47 — Mischievous Mystic."""
 from __future__ import annotations
 from card_impl import MischievousMystic
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.events import DrawsCardTriggeredEvent
-from benchmarks.sos.workspace.engine.types import Keyword, ManaCost, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
+from engine.card import Creature
+from engine.events import DrawsCardTriggeredEvent
+from engine.types import Keyword, ManaCost, Zone
+from test_utils import create_game
 
 def _fire_and_resolve(game, event):
     game.trigger_manager.fire_event(game, event)

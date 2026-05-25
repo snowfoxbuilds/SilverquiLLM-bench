@@ -1,4 +1,4 @@
-"""Test that key engine symbols are importable from benchmarks.sos.workspace.engine.*."""
+"""Test that key engine symbols are importable from engine.*."""
 
 from __future__ import annotations
 
@@ -14,22 +14,22 @@ class TestEngineImportSurface:
     """Each critical engine symbol must be importable from the new location."""
 
     def test_import_card_impl(self) -> None:
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from engine.card import CardImpl
 
         assert CardImpl is not None
 
     def test_import_cast_spell(self) -> None:
-        from benchmarks.sos.workspace.engine.casting import cast_spell
+        from engine.casting import cast_spell
 
         assert cast_spell is not None
 
     def test_import_cast_spell_free(self) -> None:
-        from benchmarks.sos.workspace.engine.casting import cast_spell_free
+        from engine.casting import cast_spell_free
 
         assert cast_spell_free is not None
 
     def test_import_resolve_top(self) -> None:
-        from benchmarks.sos.workspace.engine.casting import resolve_top
+        from engine.casting import resolve_top
 
         assert resolve_top is not None
 
@@ -45,9 +45,10 @@ class TestEngineRelocation:
         )
 
     def test_no_stale_engine_imports_outside_engine_package(self) -> None:
-        """No .py file outside benchmarks/sos/workspace/engine/ should use bare engine imports.
+        """No .py file should use the legacy ``benchmarks.sos.workspace.engine`` prefix.
 
-        This catches both top-level and indented imports (e.g. inside functions/classes).
+        Flat ``from engine.X import …`` is canonical after Option A. This guards
+        against regressions to the long-form prefix.
         """
         result = subprocess.run(
             [
@@ -55,42 +56,33 @@ class TestEngineRelocation:
                 "-rln",
                 "--include=*.py",
                 "-P",
-                r"(?:from\s+engine\b|import\s+engine\b)",
+                r"benchmarks\.sos\.workspace\.engine",
                 str(REPO_ROOT),
             ],
             capture_output=True,
             text=True,
         )
-        # Filter out matches inside the engine package itself, historical
-        # benchmark run artifacts under docker/, third-party packages under
-        # venv/, and false positives from string literals in test assertion
-        # messages.
-        engine_pkg = str(REPO_ROOT / "benchmarks" / "sos" / "workspace" / "engine")
+        # Historical benchmark run artifacts under docker/ and third-party
+        # packages under venv/ are exempt. The self-referential mention in
+        # this test file is also expected.
         docker_dir = str(REPO_ROOT / "docker")
         venv_dir = str(REPO_ROOT / "venv")
-        tests_dir = str(REPO_ROOT / "tests")
-        stale_files = []
-        for f in result.stdout.strip().splitlines():
-            if (
-                not f
-                or f.startswith(engine_pkg)
-                or f.startswith(docker_dir)
-                or f.startswith(venv_dir)
-            ):
-                continue
-            # For files in tests/, verify it's an actual import not a string literal
-            if f.startswith(tests_dir):
-                with open(f) as fh:
-                    has_real_import = any(
-                        (line.lstrip().startswith("from engine")
-                         or line.lstrip().startswith("import engine"))
-                        for line in fh
-                    )
-                if not has_real_import:
-                    continue
-            stale_files.append(f)
+        # Guardrail tests that intentionally mention the legacy prefix in
+        # assertion regexes are exempt.
+        exempt = {
+            str(Path(__file__).resolve()),
+            str(REPO_ROOT / "tests" / "test_cards_relocation.py"),
+            str(REPO_ROOT / "tests" / "test_audited_tests_relocation.py"),
+        }
+        stale_files = [
+            f
+            for f in result.stdout.strip().splitlines()
+            if f and not f.startswith(docker_dir)
+            and not f.startswith(venv_dir)
+            and f not in exempt
+        ]
         assert stale_files == [], (
-            f"Stale engine imports found outside engine package:\n"
+            f"Legacy benchmarks.sos.workspace.engine references found:\n"
             + "\n".join(stale_files)
         )
 
@@ -116,4 +108,4 @@ class TestEngineRelocation:
 
     def test_engine_package_is_importable_as_package(self) -> None:
         """The engine directory must be a proper Python package."""
-        import benchmarks.sos.workspace.engine  # noqa: F401
+        import engine  # noqa: F401

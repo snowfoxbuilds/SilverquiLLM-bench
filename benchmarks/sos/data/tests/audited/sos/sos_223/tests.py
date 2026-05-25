@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import SanarUnfinishedGeniusWildIdea
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -63,14 +63,14 @@ class TestSanarUnfinishedGeniusWildIdeaAbilities:
 
     def test_has_prepared(self) -> None:
         """Sanar, Unfinished Genius // Wild Idea must have Prepared keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = SanarUnfinishedGeniusWildIdea(name="Sanar, Unfinished Genius // Wild Idea", owner=None, base_power=0, base_toughness=4)
         assert Keyword.PREPARED in card.keywords, "Sanar, Unfinished Genius // Wild Idea should have Prepared"
 
     def test_etb_creates_tokens(self) -> None:
         """ETB must create tokens per oracle text."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = SanarUnfinishedGeniusWildIdea(name="Sanar, Unfinished Genius // Wild Idea", owner=player, base_power=0, base_toughness=4)
@@ -110,8 +110,8 @@ class TestSanarUnfinishedGeniusWildIdeaEdgeCases:
 
     def test_survives_nonfatal_damage(self) -> None:
         """Creature must survive damage less than its toughness."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = SanarUnfinishedGeniusWildIdea(name="Sanar, Unfinished Genius // Wild Idea", owner=player, base_power=0, base_toughness=4)
@@ -129,9 +129,9 @@ class TestSanarUnfinishedGeniusWildIdeaInteractions:
 
     def test_combat_with_opponent(self) -> None:
         """Must be able to engage in combat with opponent creatures."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -147,8 +147,8 @@ class TestSanarUnfinishedGeniusWildIdeaInteractions:
 
     def test_tokens_appear_on_battlefield(self) -> None:
         """Tokens created must appear on the battlefield."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = SanarUnfinishedGeniusWildIdea(name="Sanar, Unfinished Genius // Wild Idea", owner=player, base_power=0, base_toughness=4)

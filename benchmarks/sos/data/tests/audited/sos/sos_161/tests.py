@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import SnarlSong
 
-from benchmarks.sos.workspace.engine.card import Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Sorcery
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -52,13 +52,13 @@ class TestSnarlSongAbilities:
 
     def test_has_converge(self) -> None:
         """Snarl Song must have Converge keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = SnarlSong(name="Snarl Song", owner=None)
         assert Keyword.CONVERGE in card.keywords, "Snarl Song should have Converge"
 
     def test_converge_adds_counters(self) -> None:
         """Converge must add +1/+1 counters per color of mana spent."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = SnarlSong(name="Snarl Song", owner=player)
@@ -79,7 +79,7 @@ class TestSnarlSongEdgeCases:
 
     def test_converge_zero_colors_no_bonus(self) -> None:
         """With 0 colors, converge should produce no bonus."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = SnarlSong(name="Snarl Song", owner=player)
@@ -95,7 +95,7 @@ class TestSnarlSongEdgeCases:
 
     def test_converge_five_colors_maximum(self) -> None:
         """With 5 colors, converge should produce maximum bonus."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = SnarlSong(name="Snarl Song", owner=player)
@@ -131,9 +131,9 @@ class TestSnarlSongInteractions:
 
     def test_spell_to_graveyard_after_resolution(self) -> None:
         """Resolved spell must go to graveyard."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
-        from benchmarks.sos.workspace.engine.types import Zone
-        from benchmarks.sos.workspace.engine.zones import move_to_zone
+        from test_utils import create_game
+        from engine.types import Zone
+        from engine.zones import move_to_zone
         game = create_game()
         player = game.players[0]
         card = SnarlSong(name="Snarl Song", owner=player)
@@ -144,8 +144,8 @@ class TestSnarlSongInteractions:
 
     def test_tokens_appear_on_battlefield(self) -> None:
         """Tokens created must appear on the battlefield."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
         game = create_game()
         player = game.players[0]
         card = SnarlSong(name="Snarl Song", owner=player)

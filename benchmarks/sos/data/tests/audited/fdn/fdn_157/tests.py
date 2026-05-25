@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from card_impl import LightshellDuo
-from benchmarks.sos.workspace.engine.card import CardImpl, Creature
-from benchmarks.sos.workspace.engine.types import Keyword, ManaCost, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
+from engine.card import CardImpl, Creature
+from engine.types import Keyword, ManaCost, Zone
+from test_utils import create_game
 
 
 class TestLightshellDuoBasics:
@@ -52,7 +52,7 @@ class TestLightshellDuoSurveil:
         p1.zones[Zone.LIBRARY].add(c1)
         p1.zones[Zone.LIBRARY].add(c2)
         # Script: put both into graveyard (yes for both)
-        from benchmarks.sos.workspace.engine.player import DeterministicPlayer
+        from engine.player import DeterministicPlayer
         if isinstance(p1, DeterministicPlayer):
             p1._script.append(True)  # put Card2 in GY
             p1._script.append(True)  # put Card1 in GY
@@ -69,7 +69,7 @@ class TestLightshellDuoSurveil:
         c2 = CardImpl(name="Card2", owner=p1)
         p1.zones[Zone.LIBRARY].add(c1)
         p1.zones[Zone.LIBRARY].add(c2)
-        from benchmarks.sos.workspace.engine.player import DeterministicPlayer
+        from engine.player import DeterministicPlayer
         if isinstance(p1, DeterministicPlayer):
             p1._script.append(False)  # keep on top
             p1._script.append(False)  # keep on top

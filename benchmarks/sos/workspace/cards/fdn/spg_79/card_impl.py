@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import (
+from engine.card import (
     ActivatedAbility,
     Artifact,
     Creature,
@@ -11,18 +11,18 @@ from benchmarks.sos.workspace.engine.card import (
     ManaAbility,
     Sorcery,
 )
-from benchmarks.sos.workspace.engine.continuous_effects import (
+from engine.continuous_effects import (
     ContinuousEffect,
     DURATION_END_OF_TURN,
     DURATION_PERMANENT,
     Layer,
     SubLayer,
 )
-from benchmarks.sos.workspace.engine.types import CardType, Color, HybridManaSymbol, Keyword, ManaCost, ManaType, Supertype, Zone
+from engine.types import CardType, Color, HybridManaSymbol, Keyword, ManaCost, ManaType, Supertype, Zone
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from cards.registry import CardRegistry
 
 def _tap_cost(game: Any, source: Any) -> bool:
     """Generic tap-cost: check untapped, then tap."""
@@ -32,7 +32,7 @@ def _tap_cost(game: Any, source: Any) -> bool:
     return True
 def _get_colors_of_permanent(obj: Any) -> set[Color]:
     """Return the set of MTG colors for a permanent based on its mana cost."""
-    from benchmarks.sos.workspace.engine.protection import get_colors
+    from engine.protection import get_colors
     return get_colors(obj)
 
 class BloomTender(Creature):

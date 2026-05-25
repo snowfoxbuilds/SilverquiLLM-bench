@@ -1,11 +1,11 @@
 """Card implementation for Searslicer Goblin."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import ManaCost
-from benchmarks.sos.workspace.engine.events import EndStepTriggeredEvent
+from engine.card import Creature
+from engine.types import ManaCost
+from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class SearslicerGoblin(Creature):
     """Searslicer Goblin — {1}{R} — 2/1 — Goblin Warrior.
@@ -27,7 +27,7 @@ class SearslicerGoblin(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register end-step Raid trigger for Goblin token creation."""
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 
@@ -44,8 +44,8 @@ class SearslicerGoblin(Creature):
             return attacked
 
         def _effect(game: 'GameState') -> None:
-            from benchmarks.sos.workspace.engine.card import Creature as _Creature
-            from benchmarks.sos.workspace.engine.game import create_token
+            from engine.card import Creature as _Creature
+            from engine.game import create_token
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return

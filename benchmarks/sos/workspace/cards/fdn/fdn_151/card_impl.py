@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import Instant
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Zone
+from engine.card import Instant
+from engine.types import CardType, ManaCost, Zone
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 class Aetherize(Instant):
@@ -30,7 +30,7 @@ class Aetherize(Instant):
 
     def on_resolve(self, game: "GameState") -> None:
         """Return all attacking creatures to their owner's hand."""
-        from benchmarks.sos.workspace.engine.zones import move_to_zone
+        from engine.zones import move_to_zone
 
         attackers = []
         for player in game.players:

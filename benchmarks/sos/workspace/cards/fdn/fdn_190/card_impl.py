@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from benchmarks.sos.workspace.engine.card import CardImpl, Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import CardImpl, Sorcery
+from engine.types import CardType, ManaCost
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 
 class BrasssBounty(Sorcery):
@@ -30,7 +30,7 @@ class BrasssBounty(Sorcery):
 
     def on_resolve(self, game: "GameState") -> None:
         """Create a Treasure token for each land you control."""
-        from benchmarks.sos.workspace.engine.game import create_token
+        from engine.game import create_token
 
         controller = self.controller
         if controller is None:

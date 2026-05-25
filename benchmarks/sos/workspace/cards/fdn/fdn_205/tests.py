@@ -9,10 +9,10 @@ card's ``on_resolve`` reads that value to drive token creation.
 
 from __future__ import annotations
 
-from benchmarks.sos.workspace.cards.fdn.fdn_205.card_impl import WardensOfTheCycle
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import ManaCost, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
+from cards.fdn.fdn_205.card_impl import WardensOfTheCycle
+from engine.card import Creature
+from engine.types import ManaCost, Zone
+from test_utils import create_game
 
 
 class TestWardensProperties:

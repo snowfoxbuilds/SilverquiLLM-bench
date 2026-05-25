@@ -18,20 +18,20 @@ from __future__ import annotations
 
 import pytest
 
-from benchmarks.sos.workspace.engine.card import CardImpl, Creature
-from benchmarks.sos.workspace.engine.combat import CombatState
-from benchmarks.sos.workspace.engine.continuous_effects import (
+from engine.card import CardImpl, Creature
+from engine.combat import CombatState
+from engine.continuous_effects import (
     ContinuousEffect,
     DURATION_END_OF_TURN,
     DURATION_PERMANENT,
     Layer,
     SubLayer,
 )
-from benchmarks.sos.workspace.engine.game_state import GameState
-from benchmarks.sos.workspace.engine.mana import ManaPool
-from benchmarks.sos.workspace.engine.player import DeterministicPlayer
-from benchmarks.sos.workspace.engine.turn import _do_cleanup_step, MAX_HAND_SIZE
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaType, Phase, Step, Zone
+from engine.game_state import GameState
+from engine.mana import ManaPool
+from engine.player import DeterministicPlayer
+from engine.turn import _do_cleanup_step, MAX_HAND_SIZE
+from engine.types import CardType, Keyword, ManaType, Phase, Step, Zone
 
 
 # ---------------------------------------------------------------------------
@@ -714,7 +714,7 @@ class TestReCleanupLoop:
         a triggered ability. The priority_loop should resolve it, and then
         a second cleanup should run (clearing mana, damage, etc. again).
         """
-        from benchmarks.sos.workspace.engine.stack import StackObject
+        from engine.stack import StackObject
 
         game, p1, p2 = _make_game()
         resolved = []

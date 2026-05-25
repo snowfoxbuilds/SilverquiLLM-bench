@@ -1,11 +1,11 @@
 """Card implementation for Etali, Primal Storm."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Zone
-from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent
+from engine.card import Creature
+from engine.types import CardType, ManaCost, Zone
+from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class EtaliPrimalStorm(Creature):
     """Etali, Primal Storm — {4}{R}{R} — 6/6 — Legendary Elder Dinosaur.
@@ -29,9 +29,9 @@ class EtaliPrimalStorm(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register attack trigger for exile-and-cast."""
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
-        from benchmarks.sos.workspace.engine.zones import move_to_zone
-        from benchmarks.sos.workspace.engine.casting import cast_spell_free
+        from engine.triggers import TriggerRegistration
+        from engine.zones import move_to_zone
+        from engine.casting import cast_spell_free
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

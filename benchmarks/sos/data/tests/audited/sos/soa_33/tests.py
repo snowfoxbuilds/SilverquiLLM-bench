@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import Smallpox
 
-from benchmarks.sos.workspace.engine.card import Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Sorcery
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -56,9 +56,9 @@ class TestSmallpoxAbilities:
         Oracle: Each player loses 1 life, discards a card, sacrifices a creature of their choice, then sacrifices a 
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
+        from engine.card import CardImpl
 
         game = create_game()
         player = game.players[0]
@@ -81,8 +81,8 @@ class TestSmallpoxAbilities:
         Oracle: Each player loses 1 life, discards a card, sacrifices a creature of their choice, then sacrifices a 
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game
+        from engine.types import Zone
 
         game = create_game()
         player = game.players[0]
@@ -100,9 +100,9 @@ class TestSmallpoxAbilities:
         Oracle: Each player loses 1 life, discards a card, sacrifices a creature of their choice, then sacrifices a land of their choice.
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
-        from benchmarks.sos.workspace.engine.card import Creature as CreatureBase, Land
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
+        from engine.card import Creature as CreatureBase, Land
 
         game = create_game()
         player = game.players[0]

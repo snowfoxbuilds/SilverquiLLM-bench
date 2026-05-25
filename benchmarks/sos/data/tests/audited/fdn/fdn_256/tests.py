@@ -1,10 +1,10 @@
 """Audited tests for FDN 256 — Meteor Golem."""
 from __future__ import annotations
 from card_impl import MeteorGolem
-from benchmarks.sos.workspace.engine.card import ArtifactCreature, CardImpl
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
-from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
+from engine.card import ArtifactCreature, CardImpl
+from engine.types import CardType, ManaCost, Zone
+from test_utils import create_game
+from engine.events import EntersBattlefieldTriggeredEvent
 
 class TestMeteorGolemBasics:
     """Basic card properties."""

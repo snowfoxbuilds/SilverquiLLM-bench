@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import (
+from engine.card import (
     Artifact,
     ArtifactCreature,
     ActivatedAbility,
     ManaAbility,
 )
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType, Supertype
+from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
-    from benchmarks.sos.workspace.engine.player import Player
+    from engine.game_state import GameState
+    from engine.player import Player
 
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from cards.registry import CardRegistry
 
 class RavenousAmulet(Artifact):
     """Ravenous Amulet — {2} — Sacrifice creature to draw; sac self to drain."""
@@ -39,7 +39,7 @@ class RavenousAmulet(Artifact):
                 return False
             src.is_tapped = True
             # Sacrifice a creature as part of the cost
-            from benchmarks.sos.workspace.engine.game import sacrifice
+            from engine.game import sacrifice
             controller = source.controller
             if controller is not None:
                 bf = game.get_battlefield(controller)
@@ -52,7 +52,7 @@ class RavenousAmulet(Artifact):
             return True
 
         def _sac_creature_effect(game: Any) -> None:
-            from benchmarks.sos.workspace.engine.game import draw_card
+            from engine.game import draw_card
             controller = source.controller
             if controller is not None:
                 draw_card(game, controller)
@@ -65,7 +65,7 @@ class RavenousAmulet(Artifact):
             return True
 
         def _drain_effect(game: Any) -> None:
-            from benchmarks.sos.workspace.engine.game import sacrifice
+            from engine.game import sacrifice
             controller = source.controller
             if controller is not None:
                 # Sacrifice this artifact

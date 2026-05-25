@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import EternalStudent
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -66,8 +66,8 @@ class TestEternalStudentAbilities:
         Oracle: {1}{B}, Exile this card from your graveyard: Create two 1/1 white and black Inkling creature tokens 
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
 
         game = create_game()
         player = game.players[0]

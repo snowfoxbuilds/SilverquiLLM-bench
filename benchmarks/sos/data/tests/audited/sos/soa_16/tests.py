@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import Deduce
 
-from benchmarks.sos.workspace.engine.card import Instant
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Instant
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -56,9 +56,9 @@ class TestDeduceAbilities:
         Oracle: Draw a card. Investigate. (Create a Clue token. It's an artifact with "{2}, Sacrifice this token: Dr
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
+        from engine.card import CardImpl
 
         game = create_game()
         player = game.players[0]
@@ -83,8 +83,8 @@ class TestDeduceAbilities:
         Oracle: Draw a card. Investigate. (Create a Clue token. It's an artifact with "{2}, Sacrifice this token: Dr
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game
+        from engine.types import Zone
 
         game = create_game()
         player = game.players[0]
@@ -104,12 +104,12 @@ class TestDeduceAbilities:
         Oracle: Draw a card. Investigate. (Create a Clue token. It's an artifact with "{2}, Sacrifice this token: Dr
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game
+        from engine.types import Zone
 
         game = create_game()
         player = game.players[0]
-        from benchmarks.sos.workspace.engine.card import CardImpl
+        from engine.card import CardImpl
         for i in range(5):
             player.zones[Zone.LIBRARY].add(CardImpl(name=f"Lib{i}", owner=player))
         card = Deduce(name="Deduce", owner=player)

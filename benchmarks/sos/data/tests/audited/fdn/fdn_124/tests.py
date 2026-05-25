@@ -1,10 +1,10 @@
 """Audited tests for FDN 124 — Perforating Artist."""
 from __future__ import annotations
 from card_impl import PerforatingArtist
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import Keyword, ManaCost, Zone
-from benchmarks.sos.workspace.tests.test_utils import create_game
-from benchmarks.sos.workspace.engine.events import EndStepTriggeredEvent
+from engine.card import Creature
+from engine.types import Keyword, ManaCost, Zone
+from test_utils import create_game
+from engine.events import EndStepTriggeredEvent
 
 def _resolve_stack(game):
     """Pop and resolve all objects on the stack."""

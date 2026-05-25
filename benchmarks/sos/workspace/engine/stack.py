@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
-    from benchmarks.sos.workspace.engine.player import Player
+    from engine.game_state import GameState
+    from engine.player import Player
 
 
 @dataclass
@@ -122,7 +122,7 @@ def check_state_based_actions(game: GameState) -> None:
     :func:`~engine.state_based_actions.check_state_based_actions` directly
     from :mod:`engine.state_based_actions`.
     """
-    from benchmarks.sos.workspace.engine.state_based_actions import resolve_state_based_actions
+    from engine.state_based_actions import resolve_state_based_actions
 
     resolve_state_based_actions(game)
 

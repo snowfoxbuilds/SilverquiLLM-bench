@@ -1,10 +1,10 @@
 """Audited tests for FDN 229 — Nessian Hornbeetle."""
 from __future__ import annotations
 from card_impl import NessianHornbeetle
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
-from benchmarks.sos.workspace.tests.test_utils import create_game
-from benchmarks.sos.workspace.engine.events import BeginningOfCombatTriggeredEvent
+from engine.card import Creature
+from engine.types import CardType, ManaCost
+from test_utils import create_game
+from engine.events import BeginningOfCombatTriggeredEvent
 
 def _resolve_stack(game):
     while not game.stack.is_empty():

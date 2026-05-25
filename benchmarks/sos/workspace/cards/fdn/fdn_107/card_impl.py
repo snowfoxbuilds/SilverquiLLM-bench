@@ -1,11 +1,11 @@
 """Card implementation for Mossborn Hydra."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
-from benchmarks.sos.workspace.engine.events import EntersBattlefieldTriggeredEvent
+from engine.card import Creature
+from engine.types import CardType, Keyword, ManaCost
+from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class MossbornHydra(Creature):
     """Mossborn Hydra — {2}{G} — 0/0 — Elemental Hydra — Trample.
@@ -29,12 +29,12 @@ class MossbornHydra(Creature):
 
     def on_resolve(self, game: 'GameState') -> None:
         """ETB: enters with a +1/+1 counter."""
-        from benchmarks.sos.workspace.engine.game import add_counter
+        from engine.game import add_counter
         add_counter(game, self, '+1/+1')
         self._base_plus_one_counters = self.plus_one_counters
 
     def register_triggers(self, game: 'GameState') -> None:
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

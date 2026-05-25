@@ -7,8 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 from __future__ import annotations
 import pytest
 from card_impl import ZaffaiAndTheTempests
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, Supertype
+from engine.card import Creature
+from engine.types import CardType, ManaCost, Supertype
 
 @pytest.mark.basic
 class TestZaffaiAndTheTempestsBasicProperties:
@@ -60,7 +60,7 @@ class TestZaffaiAndTheTempestsAbilities:
         Oracle: Once during each of your turns, you may cast an instant or sorcery spell from your hand without payi
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = ZaffaiAndTheTempests(name='Zaffai and the Tempests', owner=player)

@@ -1,11 +1,11 @@
 """Card implementation for Vanguard Seraph."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
-from benchmarks.sos.workspace.engine.events import GainsLifeTriggeredEvent
+from engine.card import Creature
+from engine.types import CardType, Keyword, ManaCost
+from engine.events import GainsLifeTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class VanguardSeraph(Creature):
     """Vanguard Seraph — {3}{W} — 3/3 — Angel Warrior — Flying.
@@ -29,7 +29,7 @@ class VanguardSeraph(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register life-gain trigger: first time each turn -> surveil 1."""
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
         source._vanguard_surveil_on_turn: int = -1
@@ -50,7 +50,7 @@ class VanguardSeraph(Creature):
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return
-            from benchmarks.sos.workspace.engine.types import Zone
+            from engine.types import Zone
             library = ctrl.zones[Zone.LIBRARY]
             cards = list(library.get_all())
             if not cards:

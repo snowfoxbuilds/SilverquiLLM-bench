@@ -1,10 +1,10 @@
 """Audited tests for FDN 4 — Cat Collector."""
 from __future__ import annotations
 from card_impl import CatCollector
-from benchmarks.sos.workspace.engine.card import Artifact, Creature
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost
-from benchmarks.sos.workspace.tests.test_utils import create_game
-from benchmarks.sos.workspace.engine.events import GainsLifeTriggeredEvent
+from engine.card import Artifact, Creature
+from engine.types import CardType, Keyword, ManaCost
+from test_utils import create_game
+from engine.events import GainsLifeTriggeredEvent
 
 class TestCatCollectorBasics:
     """Basic card properties."""

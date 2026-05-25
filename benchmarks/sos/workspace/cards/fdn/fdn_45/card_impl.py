@@ -1,11 +1,11 @@
 """Card implementation for Kiora, the Rising Tide."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import Keyword, ManaCost, Supertype, Zone
-from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent
+from engine.card import Creature
+from engine.types import Keyword, ManaCost, Supertype, Zone
+from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
-    from benchmarks.sos.workspace.engine.game_state import GameState
+    from engine.game_state import GameState
 
 class KioraTheRisingTide(Creature):
     """Kiora, the Rising Tide — {2}{U} — 3/2 — Merfolk Noble — Legendary.
@@ -31,7 +31,7 @@ class KioraTheRisingTide(Creature):
 
     def on_resolve(self, game: 'GameState') -> None:
         """ETB: draw 2, then discard 2."""
-        from benchmarks.sos.workspace.engine.game import discard, draw_card
+        from engine.game import discard, draw_card
         controller = self.controller
         if controller is None:
             return
@@ -51,8 +51,8 @@ class KioraTheRisingTide(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register attack trigger: threshold → create Scion of the Deep token."""
-        from benchmarks.sos.workspace.engine.game import create_token
-        from benchmarks.sos.workspace.engine.triggers import TriggerRegistration
+        from engine.game import create_token
+        from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 

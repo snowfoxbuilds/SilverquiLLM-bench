@@ -12,8 +12,8 @@ import pytest
 
 from card_impl import TogetherAsOne
 
-from benchmarks.sos.workspace.engine.card import Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Sorcery
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -52,13 +52,13 @@ class TestTogetherAsOneAbilities:
 
     def test_has_converge(self) -> None:
         """Together as One must have Converge keyword."""
-        from benchmarks.sos.workspace.engine.types import Keyword
+        from engine.types import Keyword
         card = TogetherAsOne(name="Together as One", owner=None)
         assert Keyword.CONVERGE in card.keywords, "Together as One should have Converge"
 
     def test_converge_scaling(self) -> None:
         """Converge effect must scale with colors of mana spent."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         card = TogetherAsOne(name="Together as One", owner=player)
@@ -71,7 +71,7 @@ class TestTogetherAsOneAbilities:
 
     def test_resolution_deals_damage(self) -> None:
         """Spell resolution must deal damage per oracle text."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -88,9 +88,9 @@ class TestTogetherAsOneEdgeCases:
 
     def test_fizzle_spell_goes_to_graveyard(self) -> None:
         """Fizzled spell must end up in graveyard."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
-        from benchmarks.sos.workspace.engine.types import Zone
-        from benchmarks.sos.workspace.engine.zones import move_to_zone
+        from test_utils import create_game
+        from engine.types import Zone
+        from engine.zones import move_to_zone
         game = create_game()
         player = game.players[0]
         card = TogetherAsOne(name="Together as One", owner=player)
@@ -105,7 +105,7 @@ class TestTogetherAsOneEdgeCases:
 
     def test_converge_zero_colors_no_bonus(self) -> None:
         """With 0 colors, converge should produce no bonus."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = TogetherAsOne(name="Together as One", owner=player)
@@ -121,7 +121,7 @@ class TestTogetherAsOneEdgeCases:
 
     def test_converge_five_colors_maximum(self) -> None:
         """With 5 colors, converge should produce maximum bonus."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = TogetherAsOne(name="Together as One", owner=player)
@@ -156,8 +156,8 @@ class TestTogetherAsOneInteractions:
 
     def test_targets_valid_objects(self) -> None:
         """Spell targeting must find valid targets."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.card import Creature
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
@@ -172,9 +172,9 @@ class TestTogetherAsOneInteractions:
 
     def test_spell_to_graveyard_after_resolution(self) -> None:
         """Resolved spell must go to graveyard."""
-        from benchmarks.sos.workspace.tests.test_utils import create_game
-        from benchmarks.sos.workspace.engine.types import Zone
-        from benchmarks.sos.workspace.engine.zones import move_to_zone
+        from test_utils import create_game
+        from engine.types import Zone
+        from engine.zones import move_to_zone
         game = create_game()
         player = game.players[0]
         card = TogetherAsOne(name="Together as One", owner=player)

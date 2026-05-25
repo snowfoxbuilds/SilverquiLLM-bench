@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import SharedRoots
 
-from benchmarks.sos.workspace.engine.card import Sorcery
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Sorcery
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -56,9 +56,9 @@ class TestSharedRootsAbilities:
         Oracle: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
-        from benchmarks.sos.workspace.engine.card import CardImpl, Land
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
+        from engine.card import CardImpl, Land
 
         game = create_game()
         player = game.players[0]

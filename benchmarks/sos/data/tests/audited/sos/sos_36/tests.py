@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import StoneDocent
 
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -66,8 +66,8 @@ class TestStoneDocentAbilities:
         Oracle: {W}, Exile this card from your graveyard: You gain 2 life. Surveil 1. Activate only as a sorcery. (L
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
-        from benchmarks.sos.workspace.engine.types import Zone
+        from test_utils import create_game, set_board_state
+        from engine.types import Zone
 
         game = create_game()
         player = game.players[0]

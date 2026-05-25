@@ -7,8 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 from __future__ import annotations
 import pytest
 from card_impl import AbstractPaintmage
-from benchmarks.sos.workspace.engine.card import Creature
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Creature
+from engine.types import CardType, ManaCost
 
 @pytest.mark.basic
 class TestAbstractPaintmageBasicProperties:
@@ -60,7 +60,7 @@ class TestAbstractPaintmageAbilities:
         Oracle: At the beginning of your first main phase, add {U}{R}. Spend this mana only to cast instant and sorc
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game, set_board_state
+        from test_utils import create_game, set_board_state
         game = create_game()
         player = game.players[0]
         card = AbstractPaintmage(name='Abstract Paintmage', owner=player)

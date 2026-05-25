@@ -71,7 +71,7 @@ def _load_sos_stubs_and_build_registry() -> tuple:
             (expected to be created by TODO item 6).
     """
     try:
-        sos_stubs = importlib.import_module("benchmarks.sos.workspace.cards.stubs.sos_stubs")
+        sos_stubs = importlib.import_module("cards.stubs.sos_stubs")
     except (ImportError, ModuleNotFoundError) as exc:
         raise ImportError(
             "SOS stub classes are not available yet. "
@@ -79,7 +79,7 @@ def _load_sos_stubs_and_build_registry() -> tuple:
             f"Original error: {exc}"
         ) from exc
 
-    from benchmarks.sos.workspace.cards.registry import CardRegistry
+    from cards.registry import CardRegistry
 
     registry = CardRegistry()
     register_fn = getattr(sos_stubs, "register_sos_stubs", None)

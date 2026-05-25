@@ -11,8 +11,8 @@ import pytest
 
 from card_impl import DeflectingPalm
 
-from benchmarks.sos.workspace.engine.card import Instant
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost
+from engine.card import Instant
+from engine.types import CardType, ManaCost
 
 
 @pytest.mark.basic
@@ -56,7 +56,7 @@ class TestDeflectingPalmAbilities:
         Oracle: The next time a source of your choice would deal damage to you this turn, prevent that damage. If da
         This test will fail against stubs (expected).
         """
-        from benchmarks.sos.workspace.tests.test_utils import create_game
+        from test_utils import create_game
 
         game = create_game()
         player = game.players[0]

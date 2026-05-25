@@ -16,16 +16,16 @@ from __future__ import annotations
 
 import pytest
 
-from benchmarks.sos.workspace.engine.card import CardImpl, Creature, Instant
-from benchmarks.sos.workspace.engine.casting import (
+from engine.card import CardImpl, Creature, Instant
+from engine.casting import (
     CastingError,
     _apply_cost_reduction,
     get_cost_reduction,
     cast_spell,
 )
-from benchmarks.sos.workspace.engine.game_state import GameState
-from benchmarks.sos.workspace.engine.player import DeterministicPlayer
-from benchmarks.sos.workspace.engine.types import CardType, ManaCost, ManaType, Phase, Step
+from engine.game_state import GameState
+from engine.player import DeterministicPlayer
+from engine.types import CardType, ManaCost, ManaType, Phase, Step
 
 
 # ---------------------------------------------------------------------------

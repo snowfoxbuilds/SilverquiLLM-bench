@@ -5,10 +5,10 @@ from __future__ import annotations
 import pytest
 
 from card_impl import SwiftfootBoots
-from benchmarks.sos.workspace.engine.card import Artifact, Creature
-from benchmarks.sos.workspace.engine.continuous_effects import Layer
-from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, ManaType
-from benchmarks.sos.workspace.tests.test_utils import create_game
+from engine.card import Artifact, Creature
+from engine.continuous_effects import Layer
+from engine.types import CardType, Keyword, ManaCost, ManaType
+from test_utils import create_game
 
 
 class TestSwiftfootBootsBasics:
