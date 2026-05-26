@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from silverquillm.cli import main, _make_run_name, _image_dir, _image_results_dir, _api_key_env_args, _harvest_results
+from silverquillm.cli import main, _make_run_name, _image_dir, _image_results_dir, _api_key_env_args, _harvest_results, _rewrite_diff_headers
 from silverquillm.runner import LifecycleResult
 
 
@@ -338,6 +338,87 @@ class TestHarvest:
             assert patch_file.exists()
             content = patch_file.read_text()
             assert "modified" in content or "extra_file" in content
+
+
+class TestRewriteDiffHeaders:
+    """_rewrite_diff_headers converts absolute paths to a/<file> / b/<file>."""
+
+    def test_strips_absolute_paths_from_headers(self):
+        raw = (
+            "diff -ruN /repo/engine/card.py /tmp/run_xyz/workspace/engine/card.py\n"
+            "--- /repo/engine/card.py\t2026-05-25 16:43:11.728292087 +0000\n"
+            "+++ /tmp/run_xyz/workspace/engine/card.py\t2026-05-26 00:11:01.765075517 +0000\n"
+            "@@ -1,1 +1,1 @@\n"
+            "-old line\n"
+            "+new line\n"
+        )
+        out = _rewrite_diff_headers(raw, "/repo/engine", "/tmp/run_xyz/workspace/engine")
+        assert "diff -ruN a/card.py b/card.py" in out
+        assert "--- a/card.py" in out
+        assert "+++ b/card.py" in out
+        # Content lines untouched
+        assert "-old line" in out
+        assert "+new line" in out
+
+    def test_handles_nested_paths(self):
+        raw = (
+            "diff -ruN /repo/engine/sub/card.py /tmp/ws/engine/sub/card.py\n"
+            "--- /repo/engine/sub/card.py\n"
+            "+++ /tmp/ws/engine/sub/card.py\n"
+        )
+        out = _rewrite_diff_headers(raw, "/repo/engine", "/tmp/ws/engine")
+        assert "a/sub/card.py" in out
+        assert "b/sub/card.py" in out
+
+    def test_does_not_rewrite_content_lines(self):
+        """Absolute paths that appear as patch content must not be rewritten."""
+        raw = (
+            "diff -ruN /repo/engine/card.py /tmp/ws/engine/card.py\n"
+            "--- /repo/engine/card.py\n"
+            "+++ /tmp/ws/engine/card.py\n"
+            "@@ -1 +1 @@\n"
+            '-PATH = "/repo/engine/card.py"\n'
+            '+PATH = "/tmp/ws/engine/card.py"\n'
+        )
+        out = _rewrite_diff_headers(raw, "/repo/engine", "/tmp/ws/engine")
+        assert '-PATH = "/repo/engine/card.py"' in out
+        assert '+PATH = "/tmp/ws/engine/card.py"' in out
+
+
+class TestRewrittenPatchApplies:
+    """End-to-end: harvest produces a patch that `git apply -p1` accepts."""
+
+    def test_rewritten_patch_applies_with_git(self, tmp_path):
+        # Build a fake repo engine and a "workspace" engine with one tweaked file.
+        repo_engine = tmp_path / "repo" / "engine"
+        repo_engine.mkdir(parents=True)
+        (repo_engine / "card.py").write_text("def foo():\n    return 1\n")
+
+        ws_engine = tmp_path / "ws" / "engine"
+        ws_engine.mkdir(parents=True)
+        (ws_engine / "card.py").write_text("def foo():\n    return 2\n")
+
+        raw = subprocess.run(
+            ["diff", "-ruN", str(repo_engine), str(ws_engine)],
+            capture_output=True, text=True,
+        ).stdout
+        patch_text = _rewrite_diff_headers(raw, str(repo_engine), str(ws_engine))
+
+        # Stage a fresh baseline + apply with -p1 the way the evaluator does.
+        staging = tmp_path / "staging" / "engine"
+        staging.mkdir(parents=True)
+        (staging / "card.py").write_text("def foo():\n    return 1\n")
+
+        patch_file = tmp_path / "engine_diff.patch"
+        patch_file.write_text(patch_text)
+
+        result = subprocess.run(
+            ["git", "apply", "-p1", str(patch_file)],
+            cwd=str(staging),
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        assert (staging / "card.py").read_text() == "def foo():\n    return 2\n"
 
 
 # ---------------------------------------------------------------------------

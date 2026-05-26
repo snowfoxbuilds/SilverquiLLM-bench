@@ -193,6 +193,30 @@ def _make_run_name(
 # ---------------------------------------------------------------------------
 
 
+def _rewrite_diff_headers(diff_text: str, old_a: str, old_b: str) -> str:
+    """Rewrite absolute paths in unified-diff headers to ``a/<file>`` / ``b/<file>``.
+
+    ``diff -ruN /abs/A /abs/B`` emits headers that embed the absolute
+    arg paths, which makes the patch unappliable elsewhere. Rewrite the
+    ``diff -ruN``, ``---``, and ``+++`` lines so the resulting patch can
+    be applied with ``git apply --directory <target> -p1`` against any
+    engine copy.
+    """
+    old_a = old_a.rstrip("/")
+    old_b = old_b.rstrip("/")
+    out_lines: list[str] = []
+    for line in diff_text.splitlines(keepends=True):
+        if line.startswith("diff -ruN "):
+            line = line.replace(old_a + "/", "a/").replace(old_b + "/", "b/")
+        elif line.startswith("--- ") or line.startswith("+++ "):
+            prefix = line[:4]
+            rest = line[4:]
+            rest = rest.replace(old_a + "/", "a/", 1).replace(old_b + "/", "b/", 1)
+            line = prefix + rest
+        out_lines.append(line)
+    return "".join(out_lines)
+
+
 def _harvest_results(
     workspace: Path,
     output: Path,
@@ -258,7 +282,9 @@ def _harvest_results(
         if tests_src.exists():
             shutil.copy2(tests_src, card_results / "tests.py")
 
-    # Engine diff — compare repo engine against workspace engine
+    # Engine diff — compare repo engine against workspace engine.
+    # Rewrite absolute paths to a/<file> and b/<file> so the patch is portable
+    # and can be applied with ``git apply --directory <target> -p1``.
     engine_repo = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "engine"
     engine_ws = workspace / "engine"
     if engine_repo.exists() and engine_ws.exists():
@@ -269,8 +295,11 @@ def _harvest_results(
                 text=True,
             )
             if diff_result.stdout.strip():
+                patch_text = _rewrite_diff_headers(
+                    diff_result.stdout, str(engine_repo), str(engine_ws)
+                )
                 (run_dir / "engine_diff.patch").write_text(
-                    diff_result.stdout, encoding="utf-8"
+                    patch_text, encoding="utf-8"
                 )
         except FileNotFoundError:
             pass  # diff not available

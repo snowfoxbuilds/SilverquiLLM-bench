@@ -19,6 +19,7 @@ Tests verify:
 from __future__ import annotations
 
 import json
+import subprocess
 from dataclasses import asdict
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -27,6 +28,7 @@ import pytest
 
 from silverquillm.evaluator import (
     CardResult,
+    EnginePatchError,
     EngineResult,
     FullEvalResult,
     evaluate,
@@ -510,6 +512,87 @@ class TestEngineDiffPatch:
             if c.args and any("git" in str(a) for a in c.args[0])
         ]
         assert len(git_calls) == 0, "git apply should NOT be called when engine_work/ exists"
+
+    @patch("silverquillm.evaluator.subprocess.run")
+    def test_workspace_final_engine_preferred_over_patch(self, mock_run, tmp_path):
+        """workspace_final/engine/ takes precedence over engine_diff.patch."""
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        (run_dir / "status.json").write_text("{}")
+
+        # Both a snapshot and a patch are present — snapshot should win.
+        snapshot = run_dir / "workspace_final" / "engine"
+        snapshot.mkdir(parents=True)
+        (snapshot / "__init__.py").write_text("")
+        (snapshot / "card.py").write_text("# from snapshot\n")
+        (run_dir / "engine_diff.patch").write_text("--- fake patch ---\n")
+
+        cards_dir = _setup_cards_dir(tmp_path, [])
+        engine_dir = tmp_path / "engine"
+        engine_dir.mkdir()
+        _setup_engine_tests(tmp_path)
+
+        mock_run.return_value = _make_pytest_result(passed=5, failed=0)
+
+        with patch("silverquillm.evaluator._REPO_ROOT", tmp_path):
+            evaluate(run_dir, cards_dir, engine_dir, timeout=10)
+
+        # No git apply calls — snapshot bypassed the patch path entirely.
+        git_calls = [
+            c for c in mock_run.call_args_list
+            if c.args and any("git" in str(a) for a in c.args[0])
+        ]
+        assert len(git_calls) == 0, (
+            "git apply should NOT be called when workspace_final/engine/ exists"
+        )
+
+    @patch("silverquillm.evaluator.subprocess.run")
+    def test_patch_apply_failure_surfaced_on_engine_result(self, mock_run, tmp_path):
+        """A failed git apply should populate engine_result.errors, not silently use baseline."""
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        (run_dir / "status.json").write_text("{}")
+        (run_dir / "engine_diff.patch").write_text(
+            "diff -ruN a/card.py b/card.py\n--- a/card.py\n+++ b/card.py\n"
+        )
+
+        cards_dir = _setup_cards_dir(tmp_path, [])
+        engine_dir = tmp_path / "engine"
+        engine_dir.mkdir()
+        (engine_dir / "__init__.py").write_text("")
+        _setup_engine_tests(tmp_path)
+
+        pytest_ok = _make_pytest_result(passed=5, failed=0)
+
+        def _side_effect(cmd, *args, **kwargs):
+            if cmd and "git" in str(cmd[0]):
+                raise subprocess.CalledProcessError(
+                    returncode=1,
+                    cmd=cmd,
+                    stderr="error: card.py: No such file or directory",
+                )
+            return pytest_ok
+
+        mock_run.side_effect = _side_effect
+
+        with patch("silverquillm.evaluator._REPO_ROOT", tmp_path):
+            result = evaluate(run_dir, cards_dir, engine_dir, timeout=10)
+
+        # Engine result should record the failure rather than silently scoring
+        # against the unmodified baseline.
+        assert result.engine_result.errors, (
+            "engine_result.errors should contain the patch failure"
+        )
+        assert any(
+            "engine_diff.patch" in e for e in result.engine_result.errors
+        ), result.engine_result.errors
+
+
+class TestEnginePatchErrorExport:
+    """EnginePatchError must be part of the public API."""
+
+    def test_subclass_of_runtime_error(self):
+        assert issubclass(EnginePatchError, RuntimeError)
 
 
 class TestEvaluateReturnType:
