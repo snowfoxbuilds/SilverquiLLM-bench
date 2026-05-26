@@ -17,7 +17,7 @@ jq -nc \
   --arg role "Implementer" \
   --arg cycle "<the cycle number the coordinator passed you>" \
   --arg session "<the session_started_at the coordinator passed you>" \
-  --arg model "<state the model you identify as, e.g. 'Claude Opus 4.6' or 'GPT-5.4 mini'>" \
+  --arg model "<state the full model you identify as, e.g. 'deepseek v4.1 pro' or 'Gemeni 3.5 Flash'>" \
   --arg notes "invoked for cycle <N> (round: initial | revision | final-pass)" \
   '{ts:$ts, role:$role, cycle:($cycle|tonumber? // $cycle), agent_id:null, model_self_report:$model, session_started_at:$session, notes:$notes}' \
   >> /workspace/MODEL_AUDIT.jsonl

@@ -1,7 +1,7 @@
 ---
 name: Reviewer
 description: Reviews a unified diff for a card cycle and writes a structured review to review.json.
-model: claude-opus-4.6
+model: claude-sonnet-4.6
 tools: ['edit', 'execute', 'search', 'read']
 user-invocable: false
 ---

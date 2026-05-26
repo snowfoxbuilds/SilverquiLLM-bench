@@ -160,7 +160,7 @@ EOF
 jq -nc \
   --arg ts "$(date -u +%FT%TZ)" \
   --arg role "coordinator" \
-  --arg model "<state the model you identify as, e.g. 'local'>" \
+  --arg model "<state the full model you identify as, e.g. 'deepseek v4.1 pro' or 'Gemeni 3.5 Flash'>" \
   --arg session "$(date -u +%FT%TZ)" \
   --arg notes "session start" \
   '{ts:$ts, role:$role, cycle:null, agent_id:null, model_self_report:$model, session_started_at:$session, notes:$notes}' \

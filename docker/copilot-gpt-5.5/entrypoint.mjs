@@ -32,7 +32,7 @@ for (const dir of ["skills", "agents"]) {
 const prompt = readFileSync("/workspace/prompt.md", "utf-8");
 log("Starting copilot session");
 
-copilotProc = spawn("copilot", ["-p", prompt, "--yolo", "--model=gpt-5.4-mini", "--agent=coordinator", "--effort=high"], {
+copilotProc = spawn("copilot", ["-p", prompt, "--yolo", "--model=gpt-5.5", "--agent=coordinator", "--effort=high"], {
   cwd: "/workspace",
   env: { ...process.env, HOME: "/root" },
 });

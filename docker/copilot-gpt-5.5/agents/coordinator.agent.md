@@ -1,7 +1,7 @@
 ---
 name: coordinator
 description: Coordinates card implementation using subagents. Breaks the card list into 5-card cycles and drives each cycle through a TDD Tester/Implementer/Reviewer loop.
-model: gpt-5.4-mini
+model: gpt-5.5
 tools: ['edit', 'execute', 'search', 'read', 'agent']
 user-invocable: true
 ---
@@ -37,7 +37,7 @@ This passive-waiting rule supersedes any instinct to "check more often to make s
 
 Do not skip these inputs. If a subagent forgets to self-report, that's still on the coordinator's prompt to enforce.
 
-**Your subagents should use the model GPT-5.4 mini.** You need to explicitly pass this as a parameter when using the `runSubagent` tool. Use the correct model name given to you in your copilot system prompt.
+**Your subagents should use the model GPT 5.5.** You need to explicitly pass this as a parameter when using the `runSubagent` tool. Use the correct model name given to you in your copilot system prompt.
 
 **ROLE: YOU are the coordinator — a pure orchestrator.** Your only jobs are: invoke subagents in order, read their `.md` output files, arbitrate disputes, and commit results. You do not write, edit, or run any implementation code, test code, or reviews yourself. If you find yourself writing a `class`, `def`, `import`, `assert`, or any source/test code, stop immediately — that work belongs to the Implementer or Tester subagent.
 

@@ -19,7 +19,10 @@ docker build -t silverquillm-local-pi-blind:latest docker/local-pi-blind/
 docker build -t silverquillm-copilot-gpt-4.1:latest docker/copilot-gpt-4.1/
 docker build -t silverquillm-copilot-gpt-5.4-mini:latest docker/copilot-gpt-5.4-mini/
 docker build -t silverquillm-copilot-gpt-5.4:latest docker/copilot-gpt-5.4/
+docker build -t silverquillm-copilot-gpt-5.5:latest docker/copilot-gpt-5.5/
 docker build -t silverquillm-copilot-claude-opus-4.6:latest docker/copilot-claude-opus-4.6/
+docker build -t silverquillm-copilot-claude-opus-4.7:latest docker/copilot-claude-opus-4.7/
+docker build -t silverquillm-copilot-claude-sonnet-4.6:latest docker/copilot-claude-sonnet-4.6/
 
 # Smoke
 silverquillm smoke --image silverquillm-local-pi-blind:latest
@@ -30,7 +33,9 @@ silverquillm run --image silverquillm-local-pi-blind:latest --cards 1,7,13,44,97
 silverquillm run --image silverquillm-copilot-gpt-4.1:latest --cards 1,7,13,44,97 --timeout 36000
 silverquillm run --image silverquillm-copilot-gpt-5.4-mini:latest --timeout 360000
 silverquillm run --image silverquillm-copilot-gpt-5.4:latest --timeout 360000
+silverquillm run --image silverquillm-copilot-gpt-5.5:latest --timeout 360000
 silverquillm run --image silverquillm-copilot-claude-opus-4.6:latest --timeout 360000
+silverquillm run --image silverquillm-copilot-claude-sonnet-4.6:latest --timeout 360000
 
 silverquillm run \
   --image silverquillm-local-pi-blind:latest \

@@ -1,7 +1,7 @@
 ---
 name: Implementer
 description: Implements a cycle of cards in the worktree. Must make the Tester's tests pass without modifying them.
-model: gpt-5.4
+model: claude-opus-4.7
 tools: ['edit', 'execute', 'search', 'read']
 user-invocable: false
 ---
