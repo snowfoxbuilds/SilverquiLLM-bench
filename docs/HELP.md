@@ -36,6 +36,10 @@ silverquillm run \
   --image silverquillm-local-pi-blind:latest \
   --timeout 600 
 
+# Resume
+
+silverquillm resume sos-copilot-claude-opus-4.6-2026-05-25T22-52 --timeout 360000
+
 # TUI
 
 silverquillm logs --run sos-copilot-gpt-4.1-2026-05-24T06-51 

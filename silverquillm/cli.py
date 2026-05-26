@@ -1498,3 +1498,49 @@ def chain(run_id: str) -> None:
     click.echo(fmt.format(*("-" * w for w in widths)))
     for r in rows:
         click.echo(fmt.format(*r))
+
+
+@main.command()
+@click.argument("run_id")
+@click.option(
+    "--cards",
+    default=None,
+    help="Comma-separated collector numbers to rescore (default: all completed).",
+)
+def rescore(run_id: str, cards: str | None) -> None:
+    """Re-run audited tests against an existing run and rewrite its scores.
+
+    RUN_ID may be a bare run name (e.g. sos-copilot-claude-opus-4.6-2026-05-25T22-52)
+    or a full path to the run directory. Rewrites eval_result.json,
+    per-card cards/<cn>/result.json + postmortem.jsonl, and run_summary.json
+    in place. The agent's workspace_final/engine and cards/ are reused —
+    nothing is re-executed inside Docker.
+    """
+    run_dir = _resolve_prior_run(run_id)
+    if not run_dir.is_dir():
+        raise click.ClickException(f"Run directory not found: {run_dir}")
+
+    manifest = _read_prior_manifest(run_dir)
+    image_name = manifest.get("docker_image", "")
+
+    card_filter: list[str] | None = None
+    if cards:
+        card_filter = [c.strip() for c in cards.split(",") if c.strip()]
+
+    prior_summary = _read_prior_summary(run_dir)
+    run_status = None
+    wall_clock_seconds: float | None = None
+    if prior_summary:
+        run_status = prior_summary.get("run_status")
+        wcs = prior_summary.get("wall_clock_seconds")
+        if isinstance(wcs, (int, float)):
+            wall_clock_seconds = float(wcs)
+
+    _evaluate_results(run_dir, card_filter=card_filter)
+    _generate_run_summary(
+        run_dir,
+        image_name,
+        card_filter=card_filter,
+        run_status=run_status,
+        wall_clock_seconds=wall_clock_seconds,
+    )
