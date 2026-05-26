@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ComfortingCounsel
 
 from engine.card import Enchantment
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestComfortingCounselBasicProperties:
@@ -42,8 +43,7 @@ class TestComfortingCounselBasicProperties:
     def test_colors(self) -> None:
         """Comforting Counsel must have correct colors."""
         card = ComfortingCounsel(name="Comforting Counsel", owner=None)
-        assert "G" in card.colors
-
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestComfortingCounselAbilities:
@@ -81,7 +81,6 @@ class TestComfortingCounselAbilities:
             f"Should gain life: {life_before} -> {player.life}"
         )
 
-
 @pytest.mark.edge
 class TestComfortingCounselEdgeCases:
     """Edge case tests for Comforting Counsel."""
@@ -99,7 +98,6 @@ class TestComfortingCounselEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestComfortingCounselInteractions:

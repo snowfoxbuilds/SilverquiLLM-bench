@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import InklingMascot
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestInklingMascotBasicProperties:
@@ -42,8 +43,8 @@ class TestInklingMascotBasicProperties:
     def test_colors(self) -> None:
         """Inkling Mascot must have correct colors."""
         card = InklingMascot(name="Inkling Mascot", owner=None)
-        assert "B" in card.colors
-        assert "W" in card.colors
+        assert "B" in card_colors(card)
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Inkling Mascot must have base power 2."""
@@ -54,7 +55,6 @@ class TestInklingMascotBasicProperties:
         """Inkling Mascot must have base toughness 2."""
         card = InklingMascot(name="Inkling Mascot", owner=None)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestInklingMascotAbilities:
@@ -152,7 +152,6 @@ class TestInklingMascotAbilities:
             "Surveil should manipulate library/graveyard"
         )
 
-
 @pytest.mark.edge
 class TestInklingMascotEdgeCases:
     """Edge case tests for Inkling Mascot."""
@@ -170,7 +169,6 @@ class TestInklingMascotEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestInklingMascotInteractions:

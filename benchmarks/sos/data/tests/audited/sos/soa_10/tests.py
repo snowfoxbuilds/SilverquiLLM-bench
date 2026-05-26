@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import RequisitionRaid
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestRequisitionRaidBasicProperties:
@@ -43,8 +44,7 @@ class TestRequisitionRaidBasicProperties:
     def test_colors(self) -> None:
         """Requisition Raid must have correct colors."""
         card = RequisitionRaid(name="Requisition Raid", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestRequisitionRaidAbilities:
@@ -76,7 +76,6 @@ class TestRequisitionRaidAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Requisition Raid must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestRequisitionRaidEdgeCases:
@@ -111,7 +110,6 @@ class TestRequisitionRaidEdgeCases:
         card = RequisitionRaid(name="Requisition Raid", owner=None)
         assert card.mana_cost.cmc == 1, \
             f"CMC must be 1, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestRequisitionRaidInteractions:

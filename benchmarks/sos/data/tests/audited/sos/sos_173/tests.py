@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ArkOfHunger
 
 from engine.card import Artifact
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestArkOfHungerBasicProperties:
@@ -42,9 +43,8 @@ class TestArkOfHungerBasicProperties:
     def test_colors(self) -> None:
         """Ark of Hunger must have correct colors."""
         card = ArkOfHunger(name="Ark of Hunger", owner=None)
-        assert "R" in card.colors
-        assert "W" in card.colors
-
+        assert "R" in card_colors(card)
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestArkOfHungerAbilities:
@@ -111,7 +111,6 @@ class TestArkOfHungerAbilities:
         abilities_list = card.get_activated_abilities()
         assert len(abilities_list) > 0, "Card must have activated ability"
 
-
 @pytest.mark.edge
 class TestArkOfHungerEdgeCases:
     """Edge case tests for Ark of Hunger."""
@@ -129,7 +128,6 @@ class TestArkOfHungerEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestArkOfHungerInteractions:

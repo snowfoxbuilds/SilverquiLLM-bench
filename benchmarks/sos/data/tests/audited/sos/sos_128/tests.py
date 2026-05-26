@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import RubbleRouser
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestRubbleRouserBasicProperties:
@@ -42,7 +43,7 @@ class TestRubbleRouserBasicProperties:
     def test_colors(self) -> None:
         """Rubble Rouser must have correct colors."""
         card = RubbleRouser(name="Rubble Rouser", owner=None)
-        assert "R" in card.colors
+        assert "R" in card_colors(card)
 
     def test_power(self) -> None:
         """Rubble Rouser must have base power 1."""
@@ -53,7 +54,6 @@ class TestRubbleRouserBasicProperties:
         """Rubble Rouser must have base toughness 4."""
         card = RubbleRouser(name="Rubble Rouser", owner=None)
         assert card.base_toughness == 4
-
 
 @pytest.mark.ability
 class TestRubbleRouserAbilities:
@@ -126,7 +126,6 @@ class TestRubbleRouserAbilities:
         abilities_list = card.get_activated_abilities()
         assert len(abilities_list) > 0, "Card must have activated ability"
 
-
 @pytest.mark.edge
 class TestRubbleRouserEdgeCases:
     """Edge case tests for Rubble Rouser."""
@@ -144,7 +143,6 @@ class TestRubbleRouserEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestRubbleRouserInteractions:

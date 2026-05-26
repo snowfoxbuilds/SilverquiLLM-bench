@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import CodieVociferousCodex
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestCodieVociferousCodexBasicProperties:
@@ -43,7 +44,7 @@ class TestCodieVociferousCodexBasicProperties:
     def test_colorless(self) -> None:
         """Codie, Vociferous Codex must be colorless."""
         card = CodieVociferousCodex(name="Codie, Vociferous Codex", owner=None, base_power=1, base_toughness=4)
-        assert len(card.colors) == 0
+        assert len(card_colors(card)) == 0
 
     def test_power(self) -> None:
         """Codie, Vociferous Codex must have base power 1."""
@@ -54,7 +55,6 @@ class TestCodieVociferousCodexBasicProperties:
         """Codie, Vociferous Codex must have base toughness 4."""
         card = CodieVociferousCodex(name="Codie, Vociferous Codex", owner=None, base_power=1, base_toughness=4)
         assert card.base_toughness == 4
-
 
 @pytest.mark.ability
 class TestCodieVociferousCodexAbilities:
@@ -79,7 +79,6 @@ class TestCodieVociferousCodexAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Codie, Vociferous Codex must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestCodieVociferousCodexEdgeCases:
@@ -111,7 +110,6 @@ class TestCodieVociferousCodexEdgeCases:
         card = CodieVociferousCodex(name="Codie, Vociferous Codex", owner=None, base_power=1, base_toughness=4)
         assert card.mana_cost.cmc == 3, \
             f"CMC must be 3, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestCodieVociferousCodexInteractions:

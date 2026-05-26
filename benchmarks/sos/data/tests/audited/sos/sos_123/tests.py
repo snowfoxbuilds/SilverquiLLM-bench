@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import MagmabloodArchaic
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestMagmabloodArchaicBasicProperties:
@@ -43,7 +44,7 @@ class TestMagmabloodArchaicBasicProperties:
     def test_colors(self) -> None:
         """Magmablood Archaic must have correct colors."""
         card = MagmabloodArchaic(name="Magmablood Archaic", owner=None, base_power=2, base_toughness=2)
-        assert "R" in card.colors
+        assert "R" in card_colors(card)
 
     def test_power(self) -> None:
         """Magmablood Archaic must have base power 2."""
@@ -54,7 +55,6 @@ class TestMagmabloodArchaicBasicProperties:
         """Magmablood Archaic must have base toughness 2."""
         card = MagmabloodArchaic(name="Magmablood Archaic", owner=None, base_power=2, base_toughness=2)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestMagmabloodArchaicAbilities:
@@ -108,7 +108,6 @@ class TestMagmabloodArchaicAbilities:
         p1p1 = counters.get("+1/+1", counters.get("p1p1", 0))
         assert p1p1 == 3, f"Converge with 3 colors should add 3 counters, got {p1p1}"
 
-
 @pytest.mark.edge
 class TestMagmabloodArchaicEdgeCases:
     """Edge case and trap tests for Magmablood Archaic."""
@@ -159,7 +158,6 @@ class TestMagmabloodArchaicEdgeCases:
         card = MagmabloodArchaic(name="Magmablood Archaic", owner=None, base_power=2, base_toughness=2)
         assert card.mana_cost.cmc == 3, \
             f"CMC must be 3, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestMagmabloodArchaicInteractions:

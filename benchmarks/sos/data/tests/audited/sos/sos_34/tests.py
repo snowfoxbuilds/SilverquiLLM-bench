@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import StandUpForYourself
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestStandUpForYourselfBasicProperties:
@@ -42,8 +43,7 @@ class TestStandUpForYourselfBasicProperties:
     def test_colors(self) -> None:
         """Stand Up for Yourself must have correct colors."""
         card = StandUpForYourself(name="Stand Up for Yourself", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestStandUpForYourselfAbilities:
@@ -70,7 +70,6 @@ class TestStandUpForYourselfAbilities:
             f"Target should be destroyed: bf {bf_before} -> {bf_after}"
         )
 
-
 @pytest.mark.edge
 class TestStandUpForYourselfEdgeCases:
     """Edge case tests for Stand Up for Yourself."""
@@ -90,7 +89,6 @@ class TestStandUpForYourselfEdgeCases:
         targets = card.get_targets(game)
         assert big in targets, "Power >= 3 should be valid"
         assert small not in targets, "Power < 3 should be invalid"
-
 
 @pytest.mark.interaction
 class TestStandUpForYourselfInteractions:

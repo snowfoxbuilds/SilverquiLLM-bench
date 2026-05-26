@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SummonedDromedary
@@ -14,7 +16,6 @@ from card_impl import SummonedDromedary
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestSummonedDromedaryBasicProperties:
@@ -43,7 +44,7 @@ class TestSummonedDromedaryBasicProperties:
     def test_colors(self) -> None:
         """Summoned Dromedary must have correct colors."""
         card = SummonedDromedary(name="Summoned Dromedary", owner=None)
-        assert "W" in card.colors
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Summoned Dromedary must have base power 4."""
@@ -59,7 +60,6 @@ class TestSummonedDromedaryBasicProperties:
         """Summoned Dromedary must have Vigilance keyword."""
         card = SummonedDromedary(name="Summoned Dromedary", owner=None)
         assert Keyword.VIGILANCE in card.keywords
-
 
 @pytest.mark.ability
 class TestSummonedDromedaryAbilities:
@@ -97,7 +97,6 @@ class TestSummonedDromedaryAbilities:
             f"Should return from gy: {gy_before} -> {gy_after}"
         )
 
-
 @pytest.mark.edge
 class TestSummonedDromedaryEdgeCases:
     """Edge case tests for Summoned Dromedary."""
@@ -115,7 +114,6 @@ class TestSummonedDromedaryEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestSummonedDromedaryInteractions:

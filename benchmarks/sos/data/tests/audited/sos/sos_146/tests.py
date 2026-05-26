@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import EmilVastlandsRoamer
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestEmilVastlandsRoamerBasicProperties:
@@ -42,7 +43,7 @@ class TestEmilVastlandsRoamerBasicProperties:
     def test_colors(self) -> None:
         """Emil, Vastlands Roamer must have correct colors."""
         card = EmilVastlandsRoamer(name="Emil, Vastlands Roamer", owner=None)
-        assert "G" in card.colors
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Emil, Vastlands Roamer must have base power 3."""
@@ -53,7 +54,6 @@ class TestEmilVastlandsRoamerBasicProperties:
         """Emil, Vastlands Roamer must have base toughness 3."""
         card = EmilVastlandsRoamer(name="Emil, Vastlands Roamer", owner=None)
         assert card.base_toughness == 3
-
 
 @pytest.mark.ability
 class TestEmilVastlandsRoamerAbilities:
@@ -104,7 +104,6 @@ class TestEmilVastlandsRoamerAbilities:
         abilities_list = card.get_activated_abilities()
         assert len(abilities_list) > 0, "Card must have activated ability"
 
-
 @pytest.mark.edge
 class TestEmilVastlandsRoamerEdgeCases:
     """Edge case tests for Emil, Vastlands Roamer."""
@@ -122,7 +121,6 @@ class TestEmilVastlandsRoamerEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestEmilVastlandsRoamerInteractions:

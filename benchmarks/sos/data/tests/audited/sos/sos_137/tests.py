@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ZealousLorecaster
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestZealousLorecasterBasicProperties:
@@ -42,7 +43,7 @@ class TestZealousLorecasterBasicProperties:
     def test_colors(self) -> None:
         """Zealous Lorecaster must have correct colors."""
         card = ZealousLorecaster(name="Zealous Lorecaster", owner=None)
-        assert "R" in card.colors
+        assert "R" in card_colors(card)
 
     def test_power(self) -> None:
         """Zealous Lorecaster must have base power 4."""
@@ -53,7 +54,6 @@ class TestZealousLorecasterBasicProperties:
         """Zealous Lorecaster must have base toughness 4."""
         card = ZealousLorecaster(name="Zealous Lorecaster", owner=None)
         assert card.base_toughness == 4
-
 
 @pytest.mark.ability
 class TestZealousLorecasterAbilities:
@@ -80,7 +80,6 @@ class TestZealousLorecasterAbilities:
             f"Should return from gy: {gy_before} -> {gy_after}"
         )
 
-
 @pytest.mark.edge
 class TestZealousLorecasterEdgeCases:
     """Edge case tests for Zealous Lorecaster."""
@@ -98,7 +97,6 @@ class TestZealousLorecasterEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestZealousLorecasterInteractions:

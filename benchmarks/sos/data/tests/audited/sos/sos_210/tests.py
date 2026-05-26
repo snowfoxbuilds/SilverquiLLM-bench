@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import PracticedScrollsmith
@@ -14,7 +16,6 @@ from card_impl import PracticedScrollsmith
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestPracticedScrollsmithBasicProperties:
@@ -43,8 +44,8 @@ class TestPracticedScrollsmithBasicProperties:
     def test_colors(self) -> None:
         """Practiced Scrollsmith must have correct colors."""
         card = PracticedScrollsmith(name="Practiced Scrollsmith", owner=None)
-        assert "R" in card.colors
-        assert "W" in card.colors
+        assert "R" in card_colors(card)
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Practiced Scrollsmith must have base power 3."""
@@ -60,7 +61,6 @@ class TestPracticedScrollsmithBasicProperties:
         """Practiced Scrollsmith must have First strike keyword."""
         card = PracticedScrollsmith(name="Practiced Scrollsmith", owner=None)
         assert Keyword.FIRST_STRIKE in card.keywords
-
 
 @pytest.mark.ability
 class TestPracticedScrollsmithAbilities:
@@ -84,7 +84,6 @@ class TestPracticedScrollsmithAbilities:
         exile = player.zones[Zone.EXILE].get_all()
         assert target in exile, "Target should be in exile"
 
-
 @pytest.mark.edge
 class TestPracticedScrollsmithEdgeCases:
     """Edge case tests for Practiced Scrollsmith."""
@@ -102,7 +101,6 @@ class TestPracticedScrollsmithEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestPracticedScrollsmithInteractions:

@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ShamanicRevelation
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestShamanicRevelationBasicProperties:
@@ -42,8 +43,7 @@ class TestShamanicRevelationBasicProperties:
     def test_colors(self) -> None:
         """Shamanic Revelation must have correct colors."""
         card = ShamanicRevelation(name="Shamanic Revelation", owner=None)
-        assert "G" in card.colors
-
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestShamanicRevelationAbilities:
@@ -81,7 +81,6 @@ class TestShamanicRevelationAbilities:
             f"Should gain life: {life_before} -> {player.life}"
         )
 
-
 @pytest.mark.edge
 class TestShamanicRevelationEdgeCases:
     """Edge case tests for Shamanic Revelation."""
@@ -101,7 +100,6 @@ class TestShamanicRevelationEdgeCases:
         targets = card.get_targets(game)
         assert big in targets, "Power >= 4 should be valid"
         assert small not in targets, "Power < 4 should be invalid"
-
 
 @pytest.mark.interaction
 class TestShamanicRevelationInteractions:

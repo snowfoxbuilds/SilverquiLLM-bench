@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ExpressiveFiredancer
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestExpressiveFiredancerBasicProperties:
@@ -43,7 +44,7 @@ class TestExpressiveFiredancerBasicProperties:
     def test_colors(self) -> None:
         """Expressive Firedancer must have correct colors."""
         card = ExpressiveFiredancer(name="Expressive Firedancer", owner=None, base_power=2, base_toughness=2)
-        assert "R" in card.colors
+        assert "R" in card_colors(card)
 
     def test_power(self) -> None:
         """Expressive Firedancer must have base power 2."""
@@ -54,7 +55,6 @@ class TestExpressiveFiredancerBasicProperties:
         """Expressive Firedancer must have base toughness 2."""
         card = ExpressiveFiredancer(name="Expressive Firedancer", owner=None, base_power=2, base_toughness=2)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestExpressiveFiredancerAbilities:
@@ -72,7 +72,6 @@ class TestExpressiveFiredancerAbilities:
         assert callable(getattr(card, "on_spell_cast", None)) or \
             callable(getattr(card, "opus_trigger", None)), \
             "Expressive Firedancer must implement opus trigger per oracle text"
-
 
 @pytest.mark.edge
 class TestExpressiveFiredancerEdgeCases:
@@ -103,7 +102,6 @@ class TestExpressiveFiredancerEdgeCases:
         card = ExpressiveFiredancer(name="Expressive Firedancer", owner=None, base_power=2, base_toughness=2)
         assert card.mana_cost.cmc == 2, \
             f"CMC must be 2, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestExpressiveFiredancerInteractions:

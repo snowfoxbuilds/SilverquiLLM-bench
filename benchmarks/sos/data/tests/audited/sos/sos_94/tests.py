@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import PoxPlague
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestPoxPlagueBasicProperties:
@@ -43,8 +44,7 @@ class TestPoxPlagueBasicProperties:
         """Pox Plague must have colors ['B']."""
         card = PoxPlague(name="Pox Plague", owner=None)
         for c in ["B"]:
-            assert c in card.colors, f"Expected color {c} in {card.colors}"
-
+            assert c in card_colors(card), f"Expected color {c} in {card_colors(card)}"
 
 @pytest.mark.ability
 class TestPoxPlagueAbilities:

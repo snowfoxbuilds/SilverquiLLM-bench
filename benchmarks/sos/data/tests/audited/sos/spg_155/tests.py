@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SylvanLibrary
 
 from engine.card import Enchantment
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestSylvanLibraryBasicProperties:
@@ -43,8 +44,7 @@ class TestSylvanLibraryBasicProperties:
     def test_colors(self) -> None:
         """Sylvan Library must have correct colors."""
         card = SylvanLibrary(name="Sylvan Library", owner=None)
-        assert "G" in card.colors
-
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestSylvanLibraryAbilities:
@@ -75,7 +75,6 @@ class TestSylvanLibraryAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Sylvan Library must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestSylvanLibraryEdgeCases:
@@ -108,7 +107,6 @@ class TestSylvanLibraryEdgeCases:
             pass  # Fizzle on empty board is acceptable
         # Verify game state is consistent
         assert player.life == 20, "Caster life should be unchanged on fizzle"
-
 
 @pytest.mark.interaction
 class TestSylvanLibraryInteractions:

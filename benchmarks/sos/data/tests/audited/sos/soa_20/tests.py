@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import Pongify
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestPongifyBasicProperties:
@@ -42,8 +43,7 @@ class TestPongifyBasicProperties:
     def test_colors(self) -> None:
         """Pongify must have correct colors."""
         card = Pongify(name="Pongify", owner=None)
-        assert "U" in card.colors
-
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestPongifyAbilities:
@@ -106,7 +106,6 @@ class TestPongifyAbilities:
             f"Should create token: bf {bf_before} -> {bf_after}"
         )
 
-
 @pytest.mark.edge
 class TestPongifyEdgeCases:
     """Edge case tests for Pongify."""
@@ -124,7 +123,6 @@ class TestPongifyEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestPongifyInteractions:

@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SunderingArchaic
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestSunderingArchaicBasicProperties:
@@ -43,7 +44,7 @@ class TestSunderingArchaicBasicProperties:
     def test_colorless(self) -> None:
         """Sundering Archaic must be colorless."""
         card = SunderingArchaic(name="Sundering Archaic", owner=None, base_power=3, base_toughness=3)
-        assert len(card.colors) == 0
+        assert len(card_colors(card)) == 0
 
     def test_power(self) -> None:
         """Sundering Archaic must have base power 3."""
@@ -54,7 +55,6 @@ class TestSunderingArchaicBasicProperties:
         """Sundering Archaic must have base toughness 3."""
         card = SunderingArchaic(name="Sundering Archaic", owner=None, base_power=3, base_toughness=3)
         assert card.base_toughness == 3
-
 
 @pytest.mark.ability
 class TestSunderingArchaicAbilities:
@@ -97,7 +97,6 @@ class TestSunderingArchaicAbilities:
         assert callable(getattr(card, "on_resolve", None)) or \
             callable(getattr(card, "on_enter_battlefield", None)), \
             "Sundering Archaic must implement converge scaling per oracle text"
-
 
 @pytest.mark.edge
 class TestSunderingArchaicEdgeCases:
@@ -166,7 +165,6 @@ class TestSunderingArchaicEdgeCases:
         card = SunderingArchaic(name="Sundering Archaic", owner=None, base_power=3, base_toughness=3)
         assert card.mana_cost.cmc == 6, \
             f"CMC must be 6, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestSunderingArchaicInteractions:

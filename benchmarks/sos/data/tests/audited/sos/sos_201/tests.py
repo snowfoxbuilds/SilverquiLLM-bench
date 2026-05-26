@@ -8,13 +8,14 @@ Complexity tier: expert.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import LoreholdTheHistorian
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestLoreholdTheHistorianBasicProperties:
@@ -43,8 +44,8 @@ class TestLoreholdTheHistorianBasicProperties:
     def test_colors(self) -> None:
         """Lorehold, the Historian must have correct colors."""
         card = LoreholdTheHistorian(name="Lorehold, the Historian", owner=None, base_power=5, base_toughness=5)
-        assert "R" in card.colors
-        assert "W" in card.colors
+        assert "R" in card_colors(card)
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Lorehold, the Historian must have base power 5."""
@@ -55,7 +56,6 @@ class TestLoreholdTheHistorianBasicProperties:
         """Lorehold, the Historian must have base toughness 5."""
         card = LoreholdTheHistorian(name="Lorehold, the Historian", owner=None, base_power=5, base_toughness=5)
         assert card.base_toughness == 5
-
 
 @pytest.mark.ability
 class TestLoreholdTheHistorianAbilities:
@@ -72,7 +72,6 @@ class TestLoreholdTheHistorianAbilities:
         from engine.types import Keyword
         card = LoreholdTheHistorian(name="Lorehold, the Historian", owner=None, base_power=5, base_toughness=5)
         assert Keyword.HASTE in card.keywords, "Lorehold, the Historian should have Haste"
-
 
 @pytest.mark.edge
 class TestLoreholdTheHistorianEdgeCases:
@@ -104,7 +103,6 @@ class TestLoreholdTheHistorianEdgeCases:
             card.damage_taken = 4
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestLoreholdTheHistorianInteractions:

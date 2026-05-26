@@ -5,6 +5,9 @@ Basic tests verify stats/attributes (should pass against stubs).
 Ability tests verify oracle text behavior (expected to fail against stubs).
 """
 from __future__ import annotations
+
+from test_utils import card_colors
+
 import pytest
 from card_impl import AbstractPaintmage
 from engine.card import Creature
@@ -38,7 +41,7 @@ class TestAbstractPaintmageBasicProperties:
         """Abstract Paintmage must have colors ['R', 'U']."""
         card = AbstractPaintmage(name='Abstract Paintmage', owner=None)
         for c in ['R', 'U']:
-            assert c in card.colors, f'Expected color {c} in {card.colors}'
+            assert c in card_colors(card), f'Expected color {c} in {card_colors(card)}'
 
     def test_power(self) -> None:
         """Abstract Paintmage must have power 2."""

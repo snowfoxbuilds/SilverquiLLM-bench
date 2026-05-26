@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import DivergentEquation
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestDivergentEquationBasicProperties:
@@ -42,8 +43,7 @@ class TestDivergentEquationBasicProperties:
     def test_colors(self) -> None:
         """Divergent Equation must have correct colors."""
         card = DivergentEquation(name="Divergent Equation", owner=None)
-        assert "U" in card.colors
-
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestDivergentEquationAbilities:
@@ -70,7 +70,6 @@ class TestDivergentEquationAbilities:
             f"Should return from gy: {gy_before} -> {gy_after}"
         )
 
-
 @pytest.mark.edge
 class TestDivergentEquationEdgeCases:
     """Edge case tests for Divergent Equation."""
@@ -88,7 +87,6 @@ class TestDivergentEquationEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestDivergentEquationInteractions:

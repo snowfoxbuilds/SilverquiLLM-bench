@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import UlnaAlleyShopkeep
@@ -14,7 +16,6 @@ from card_impl import UlnaAlleyShopkeep
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestUlnaAlleyShopkeepBasicProperties:
@@ -43,7 +44,7 @@ class TestUlnaAlleyShopkeepBasicProperties:
     def test_colors(self) -> None:
         """Ulna Alley Shopkeep must have correct colors."""
         card = UlnaAlleyShopkeep(name="Ulna Alley Shopkeep", owner=None)
-        assert "B" in card.colors
+        assert "B" in card_colors(card)
 
     def test_power(self) -> None:
         """Ulna Alley Shopkeep must have base power 2."""
@@ -59,7 +60,6 @@ class TestUlnaAlleyShopkeepBasicProperties:
         """Ulna Alley Shopkeep must have Menace keyword."""
         card = UlnaAlleyShopkeep(name="Ulna Alley Shopkeep", owner=None)
         assert Keyword.MENACE in card.keywords
-
 
 @pytest.mark.ability
 class TestUlnaAlleyShopkeepAbilities:
@@ -97,7 +97,6 @@ class TestUlnaAlleyShopkeepAbilities:
             f"Should gain life: {life_before} -> {player.life}"
         )
 
-
 @pytest.mark.edge
 class TestUlnaAlleyShopkeepEdgeCases:
     """Edge case tests for Ulna Alley Shopkeep."""
@@ -115,7 +114,6 @@ class TestUlnaAlleyShopkeepEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestUlnaAlleyShopkeepInteractions:

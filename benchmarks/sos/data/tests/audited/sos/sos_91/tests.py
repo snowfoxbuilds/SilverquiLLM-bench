@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import MoseoVeinsNewDean
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestMoseoVeinsNewDeanBasicProperties:
@@ -43,7 +44,7 @@ class TestMoseoVeinsNewDeanBasicProperties:
     def test_colors(self) -> None:
         """Moseo, Vein's New Dean must have correct colors."""
         card = MoseoVeinsNewDean(name="Moseo, Vein's New Dean", owner=None, base_power=2, base_toughness=1)
-        assert "B" in card.colors
+        assert "B" in card_colors(card)
 
     def test_power(self) -> None:
         """Moseo, Vein's New Dean must have base power 2."""
@@ -54,7 +55,6 @@ class TestMoseoVeinsNewDeanBasicProperties:
         """Moseo, Vein's New Dean must have base toughness 1."""
         card = MoseoVeinsNewDean(name="Moseo, Vein's New Dean", owner=None, base_power=2, base_toughness=1)
         assert card.base_toughness == 1
-
 
 @pytest.mark.ability
 class TestMoseoVeinsNewDeanAbilities:
@@ -112,7 +112,6 @@ class TestMoseoVeinsNewDeanAbilities:
             callable(getattr(card, "infusion_active", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Moseo, Vein's New Dean must implement infusion per oracle text"
-
 
 @pytest.mark.edge
 class TestMoseoVeinsNewDeanEdgeCases:
@@ -180,7 +179,6 @@ class TestMoseoVeinsNewDeanEdgeCases:
         card = MoseoVeinsNewDean(name="Moseo, Vein's New Dean", owner=None, base_power=2, base_toughness=1)
         assert card.mana_cost.cmc == 3, \
             f"CMC must be 3, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestMoseoVeinsNewDeanInteractions:

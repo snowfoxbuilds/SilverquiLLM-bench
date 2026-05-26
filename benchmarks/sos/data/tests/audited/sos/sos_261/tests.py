@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SkycoachWaypoint
 
 from engine.card import Land
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestSkycoachWaypointBasicProperties:
@@ -43,8 +44,7 @@ class TestSkycoachWaypointBasicProperties:
     def test_colorless(self) -> None:
         """Skycoach Waypoint must be colorless."""
         card = SkycoachWaypoint(name="Skycoach Waypoint", owner=None)
-        assert len(card.colors) == 0
-
+        assert len(card_colors(card)) == 0
 
 @pytest.mark.ability
 class TestSkycoachWaypointAbilities:
@@ -63,7 +63,6 @@ class TestSkycoachWaypointAbilities:
             callable(getattr(card, "prepared_effect", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Skycoach Waypoint must implement prepared mechanic"
-
 
 @pytest.mark.edge
 class TestSkycoachWaypointEdgeCases:
@@ -98,7 +97,6 @@ class TestSkycoachWaypointEdgeCases:
         card = SkycoachWaypoint(name="Skycoach Waypoint", owner=None)
         assert card.mana_cost.cmc == 0, \
             f"CMC must be 0, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestSkycoachWaypointInteractions:

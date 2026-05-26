@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import TabletOfDiscovery
 
 from engine.card import Artifact
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestTabletOfDiscoveryBasicProperties:
@@ -43,8 +44,7 @@ class TestTabletOfDiscoveryBasicProperties:
     def test_colors(self) -> None:
         """Tablet of Discovery must have correct colors."""
         card = TabletOfDiscovery(name="Tablet of Discovery", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestTabletOfDiscoveryAbilities:
@@ -58,7 +58,6 @@ class TestTabletOfDiscoveryAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Tablet of Discovery must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestTabletOfDiscoveryEdgeCases:
@@ -91,7 +90,6 @@ class TestTabletOfDiscoveryEdgeCases:
             pass  # Fizzle on empty board is acceptable
         # Verify game state is consistent
         assert player.life == 20, "Caster life should be unchanged on fizzle"
-
 
 @pytest.mark.interaction
 class TestTabletOfDiscoveryInteractions:

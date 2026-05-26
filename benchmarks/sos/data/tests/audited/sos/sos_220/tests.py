@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import RenderSpeechless
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestRenderSpeechlessBasicProperties:
@@ -42,9 +43,8 @@ class TestRenderSpeechlessBasicProperties:
     def test_colors(self) -> None:
         """Render Speechless must have correct colors."""
         card = RenderSpeechless(name="Render Speechless", owner=None)
-        assert "B" in card.colors
-        assert "W" in card.colors
-
+        assert "B" in card_colors(card)
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestRenderSpeechlessAbilities:
@@ -89,7 +89,6 @@ class TestRenderSpeechlessAbilities:
             f"Should discard: hand {hand_before} -> {hand_after}"
         )
 
-
 @pytest.mark.edge
 class TestRenderSpeechlessEdgeCases:
     """Edge case tests for Render Speechless."""
@@ -107,7 +106,6 @@ class TestRenderSpeechlessEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestRenderSpeechlessInteractions:

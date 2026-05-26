@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import AntiquitiesOnTheLoose
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestAntiquitiesOnTheLooseBasicProperties:
@@ -43,8 +44,7 @@ class TestAntiquitiesOnTheLooseBasicProperties:
     def test_colors(self) -> None:
         """Antiquities on the Loose must have correct colors."""
         card = AntiquitiesOnTheLoose(name="Antiquities on the Loose", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestAntiquitiesOnTheLooseAbilities:
@@ -75,7 +75,6 @@ class TestAntiquitiesOnTheLooseAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Antiquities on the Loose must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestAntiquitiesOnTheLooseEdgeCases:
@@ -108,7 +107,6 @@ class TestAntiquitiesOnTheLooseEdgeCases:
             pass  # Fizzle on empty board is acceptable
         # Verify game state is consistent
         assert player.life == 20, "Caster life should be unchanged on fizzle"
-
 
 @pytest.mark.interaction
 class TestAntiquitiesOnTheLooseInteractions:

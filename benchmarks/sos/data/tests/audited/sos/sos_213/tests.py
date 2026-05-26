@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ProctorsGaze
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestProctorsGazeBasicProperties:
@@ -42,9 +43,8 @@ class TestProctorsGazeBasicProperties:
     def test_colors(self) -> None:
         """Proctor's Gaze must have correct colors."""
         card = ProctorsGaze(name="Proctor's Gaze", owner=None)
-        assert "G" in card.colors
-        assert "U" in card.colors
-
+        assert "G" in card_colors(card)
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestProctorsGazeAbilities:
@@ -90,7 +90,6 @@ class TestProctorsGazeAbilities:
             f"Should search library: {lib_before} -> {lib_after}"
         )
 
-
 @pytest.mark.edge
 class TestProctorsGazeEdgeCases:
     """Edge case tests for Proctor's Gaze."""
@@ -108,7 +107,6 @@ class TestProctorsGazeEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestProctorsGazeInteractions:

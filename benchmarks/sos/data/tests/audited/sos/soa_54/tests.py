@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import KnockoutManeuver
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestKnockoutManeuverBasicProperties:
@@ -42,8 +43,7 @@ class TestKnockoutManeuverBasicProperties:
     def test_colors(self) -> None:
         """Knockout Maneuver must have correct colors."""
         card = KnockoutManeuver(name="Knockout Maneuver", owner=None)
-        assert "G" in card.colors
-
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestKnockoutManeuverAbilities:
@@ -69,7 +69,6 @@ class TestKnockoutManeuverAbilities:
             f"+1/+1 counter: power {power_before} -> {power_after}"
         )
 
-
 @pytest.mark.edge
 class TestKnockoutManeuverEdgeCases:
     """Edge case tests for Knockout Maneuver."""
@@ -91,7 +90,6 @@ class TestKnockoutManeuverEdgeCases:
         if len(targets) > 0:
             assert own in targets, "Own creature should be valid"
             assert enemy not in targets, "Opponent creature should be invalid"
-
 
 @pytest.mark.interaction
 class TestKnockoutManeuverInteractions:

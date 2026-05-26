@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ElementalMascot
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestElementalMascotBasicProperties:
@@ -43,8 +44,8 @@ class TestElementalMascotBasicProperties:
     def test_colors(self) -> None:
         """Elemental Mascot must have correct colors."""
         card = ElementalMascot(name="Elemental Mascot", owner=None, base_power=1, base_toughness=4)
-        assert "R" in card.colors
-        assert "U" in card.colors
+        assert "R" in card_colors(card)
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Elemental Mascot must have base power 1."""
@@ -55,7 +56,6 @@ class TestElementalMascotBasicProperties:
         """Elemental Mascot must have base toughness 4."""
         card = ElementalMascot(name="Elemental Mascot", owner=None, base_power=1, base_toughness=4)
         assert card.base_toughness == 4
-
 
 @pytest.mark.ability
 class TestElementalMascotAbilities:
@@ -86,7 +86,6 @@ class TestElementalMascotAbilities:
             callable(getattr(card, "opus_trigger", None)), \
             "Elemental Mascot must implement opus trigger per oracle text"
 
-
 @pytest.mark.edge
 class TestElementalMascotEdgeCases:
     """Edge case and trap tests for Elemental Mascot."""
@@ -116,7 +115,6 @@ class TestElementalMascotEdgeCases:
         card = ElementalMascot(name="Elemental Mascot", owner=None, base_power=1, base_toughness=4)
         assert card.mana_cost.cmc == 3, \
             f"CMC must be 3, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestElementalMascotInteractions:

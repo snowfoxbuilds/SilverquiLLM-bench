@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import BiblioplexTomekeeper
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestBiblioplexTomekeeperBasicProperties:
@@ -43,7 +44,7 @@ class TestBiblioplexTomekeeperBasicProperties:
     def test_colorless(self) -> None:
         """Biblioplex Tomekeeper must be colorless."""
         card = BiblioplexTomekeeper(name="Biblioplex Tomekeeper", owner=None, base_power=3, base_toughness=4)
-        assert len(card.colors) == 0
+        assert len(card_colors(card)) == 0
 
     def test_power(self) -> None:
         """Biblioplex Tomekeeper must have base power 3."""
@@ -54,7 +55,6 @@ class TestBiblioplexTomekeeperBasicProperties:
         """Biblioplex Tomekeeper must have base toughness 4."""
         card = BiblioplexTomekeeper(name="Biblioplex Tomekeeper", owner=None, base_power=3, base_toughness=4)
         assert card.base_toughness == 4
-
 
 @pytest.mark.ability
 class TestBiblioplexTomekeeperAbilities:
@@ -79,7 +79,6 @@ class TestBiblioplexTomekeeperAbilities:
             callable(getattr(card, "prepared_effect", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Biblioplex Tomekeeper must implement prepared mechanic"
-
 
 @pytest.mark.edge
 class TestBiblioplexTomekeeperEdgeCases:
@@ -115,7 +114,6 @@ class TestBiblioplexTomekeeperEdgeCases:
         card = BiblioplexTomekeeper(name="Biblioplex Tomekeeper", owner=None, base_power=3, base_toughness=4)
         assert card.mana_cost.cmc == 4, \
             f"CMC must be 4, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestBiblioplexTomekeeperInteractions:

@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import EliteInterceptorRejoinder
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestEliteInterceptorRejoinderBasicProperties:
@@ -43,7 +44,7 @@ class TestEliteInterceptorRejoinderBasicProperties:
     def test_colors(self) -> None:
         """Elite Interceptor // Rejoinder must have correct colors."""
         card = EliteInterceptorRejoinder(name="Elite Interceptor // Rejoinder", owner=None, base_power=1, base_toughness=2)
-        assert "W" in card.colors
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Elite Interceptor // Rejoinder must have base power 1."""
@@ -54,7 +55,6 @@ class TestEliteInterceptorRejoinderBasicProperties:
         """Elite Interceptor // Rejoinder must have base toughness 2."""
         card = EliteInterceptorRejoinder(name="Elite Interceptor // Rejoinder", owner=None, base_power=1, base_toughness=2)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestEliteInterceptorRejoinderAbilities:
@@ -79,7 +79,6 @@ class TestEliteInterceptorRejoinderAbilities:
             callable(getattr(card, "prepared_effect", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Elite Interceptor // Rejoinder must implement prepared mechanic"
-
 
 @pytest.mark.edge
 class TestEliteInterceptorRejoinderEdgeCases:
@@ -111,7 +110,6 @@ class TestEliteInterceptorRejoinderEdgeCases:
             card.damage_taken = 1
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestEliteInterceptorRejoinderInteractions:

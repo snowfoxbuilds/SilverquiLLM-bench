@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ShatteredAcolyte
@@ -14,7 +16,6 @@ from card_impl import ShatteredAcolyte
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestShatteredAcolyteBasicProperties:
@@ -43,7 +44,7 @@ class TestShatteredAcolyteBasicProperties:
     def test_colors(self) -> None:
         """Shattered Acolyte must have correct colors."""
         card = ShatteredAcolyte(name="Shattered Acolyte", owner=None)
-        assert "W" in card.colors
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Shattered Acolyte must have base power 2."""
@@ -59,7 +60,6 @@ class TestShatteredAcolyteBasicProperties:
         """Shattered Acolyte must have Lifelink keyword."""
         card = ShatteredAcolyte(name="Shattered Acolyte", owner=None)
         assert Keyword.LIFELINK in card.keywords
-
 
 @pytest.mark.ability
 class TestShatteredAcolyteAbilities:
@@ -97,7 +97,6 @@ class TestShatteredAcolyteAbilities:
         abilities_list = card.get_activated_abilities()
         assert len(abilities_list) > 0, "Card must have activated ability"
 
-
 @pytest.mark.edge
 class TestShatteredAcolyteEdgeCases:
     """Edge case tests for Shattered Acolyte."""
@@ -115,7 +114,6 @@ class TestShatteredAcolyteEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestShatteredAcolyteInteractions:

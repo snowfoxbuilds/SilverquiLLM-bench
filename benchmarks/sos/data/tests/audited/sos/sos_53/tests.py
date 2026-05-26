@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import Homesickness
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestHomesicknessBasicProperties:
@@ -43,8 +44,7 @@ class TestHomesicknessBasicProperties:
     def test_colors(self) -> None:
         """Homesickness must have correct colors."""
         card = Homesickness(name="Homesickness", owner=None)
-        assert "U" in card.colors
-
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestHomesicknessAbilities:
@@ -75,7 +75,6 @@ class TestHomesicknessAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Homesickness must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestHomesicknessEdgeCases:
@@ -110,7 +109,6 @@ class TestHomesicknessEdgeCases:
         card = Homesickness(name="Homesickness", owner=None)
         assert card.mana_cost.cmc == 6, \
             f"CMC must be 6, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestHomesicknessInteractions:

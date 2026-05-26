@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import AzizaMageTowerCaptain
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestAzizaMageTowerCaptainBasicProperties:
@@ -42,8 +43,8 @@ class TestAzizaMageTowerCaptainBasicProperties:
     def test_colors(self) -> None:
         """Aziza, Mage Tower Captain must have correct colors."""
         card = AzizaMageTowerCaptain(name="Aziza, Mage Tower Captain", owner=None)
-        assert "R" in card.colors
-        assert "W" in card.colors
+        assert "R" in card_colors(card)
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Aziza, Mage Tower Captain must have base power 2."""
@@ -54,7 +55,6 @@ class TestAzizaMageTowerCaptainBasicProperties:
         """Aziza, Mage Tower Captain must have base toughness 2."""
         card = AzizaMageTowerCaptain(name="Aziza, Mage Tower Captain", owner=None)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestAzizaMageTowerCaptainAbilities:
@@ -88,7 +88,6 @@ class TestAzizaMageTowerCaptainAbilities:
         )
         assert changed, "on_resolve must change game state"
 
-
 @pytest.mark.edge
 class TestAzizaMageTowerCaptainEdgeCases:
     """Edge case tests for Aziza, Mage Tower Captain."""
@@ -110,7 +109,6 @@ class TestAzizaMageTowerCaptainEdgeCases:
         if len(targets) > 0:
             assert own in targets, "Own creature should be valid"
             assert enemy not in targets, "Opponent creature should be invalid"
-
 
 @pytest.mark.interaction
 class TestAzizaMageTowerCaptainInteractions:

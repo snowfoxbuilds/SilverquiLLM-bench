@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ThornfistStriker
@@ -14,7 +16,6 @@ from card_impl import ThornfistStriker
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestThornfistStrikerBasicProperties:
@@ -43,7 +44,7 @@ class TestThornfistStrikerBasicProperties:
     def test_colors(self) -> None:
         """Thornfist Striker must have correct colors."""
         card = ThornfistStriker(name="Thornfist Striker", owner=None)
-        assert "G" in card.colors
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Thornfist Striker must have base power 3."""
@@ -59,7 +60,6 @@ class TestThornfistStrikerBasicProperties:
         """Thornfist Striker must have Ward keyword."""
         card = ThornfistStriker(name="Thornfist Striker", owner=None)
         assert Keyword.WARD in card.keywords
-
 
 @pytest.mark.ability
 class TestThornfistStrikerAbilities:
@@ -97,7 +97,6 @@ class TestThornfistStrikerAbilities:
             f"Should gain life: {life_before} -> {player.life}"
         )
 
-
 @pytest.mark.edge
 class TestThornfistStrikerEdgeCases:
     """Edge case tests for Thornfist Striker."""
@@ -119,7 +118,6 @@ class TestThornfistStrikerEdgeCases:
         if len(targets) > 0:
             assert own in targets, "Own creature should be valid"
             assert enemy not in targets, "Opponent creature should be invalid"
-
 
 @pytest.mark.interaction
 class TestThornfistStrikerInteractions:

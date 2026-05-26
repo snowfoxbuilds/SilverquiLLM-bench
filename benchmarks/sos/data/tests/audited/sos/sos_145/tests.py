@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import EmeritusOfAbundanceRegrowth
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestEmeritusOfAbundanceRegrowthBasicProperties:
@@ -43,7 +44,7 @@ class TestEmeritusOfAbundanceRegrowthBasicProperties:
     def test_colors(self) -> None:
         """Emeritus of Abundance // Regrowth must have correct colors."""
         card = EmeritusOfAbundanceRegrowth(name="Emeritus of Abundance // Regrowth", owner=None, base_power=3, base_toughness=4)
-        assert "G" in card.colors
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Emeritus of Abundance // Regrowth must have base power 3."""
@@ -54,7 +55,6 @@ class TestEmeritusOfAbundanceRegrowthBasicProperties:
         """Emeritus of Abundance // Regrowth must have base toughness 4."""
         card = EmeritusOfAbundanceRegrowth(name="Emeritus of Abundance // Regrowth", owner=None, base_power=3, base_toughness=4)
         assert card.base_toughness == 4
-
 
 @pytest.mark.ability
 class TestEmeritusOfAbundanceRegrowthAbilities:
@@ -92,7 +92,6 @@ class TestEmeritusOfAbundanceRegrowthAbilities:
             callable(getattr(card, "on_resolve", None)), \
             "Emeritus of Abundance // Regrowth must implement prepared mechanic"
 
-
 @pytest.mark.edge
 class TestEmeritusOfAbundanceRegrowthEdgeCases:
     """Edge case and trap tests for Emeritus of Abundance // Regrowth."""
@@ -123,7 +122,6 @@ class TestEmeritusOfAbundanceRegrowthEdgeCases:
             card.damage_taken = 3
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestEmeritusOfAbundanceRegrowthInteractions:

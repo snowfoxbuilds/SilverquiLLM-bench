@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import GrimHaruspex
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestGrimHaruspexBasicProperties:
@@ -42,7 +43,7 @@ class TestGrimHaruspexBasicProperties:
     def test_colors(self) -> None:
         """Grim Haruspex must have correct colors."""
         card = GrimHaruspex(name="Grim Haruspex", owner=None)
-        assert "B" in card.colors
+        assert "B" in card_colors(card)
 
     def test_power(self) -> None:
         """Grim Haruspex must have base power 3."""
@@ -53,7 +54,6 @@ class TestGrimHaruspexBasicProperties:
         """Grim Haruspex must have base toughness 2."""
         card = GrimHaruspex(name="Grim Haruspex", owner=None)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestGrimHaruspexAbilities:
@@ -78,7 +78,6 @@ class TestGrimHaruspexAbilities:
             f"Should draw: hand {hand_before} -> {hand_after}"
         )
 
-
 @pytest.mark.edge
 class TestGrimHaruspexEdgeCases:
     """Edge case tests for Grim Haruspex."""
@@ -96,7 +95,6 @@ class TestGrimHaruspexEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestGrimHaruspexInteractions:

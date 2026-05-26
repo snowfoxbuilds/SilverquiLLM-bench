@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import MoltenCoreMaestro
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestMoltenCoreMaestroBasicProperties:
@@ -43,7 +44,7 @@ class TestMoltenCoreMaestroBasicProperties:
     def test_colors(self) -> None:
         """Molten-Core Maestro must have correct colors."""
         card = MoltenCoreMaestro(name="Molten-Core Maestro", owner=None, base_power=2, base_toughness=2)
-        assert "R" in card.colors
+        assert "R" in card_colors(card)
 
     def test_power(self) -> None:
         """Molten-Core Maestro must have base power 2."""
@@ -54,7 +55,6 @@ class TestMoltenCoreMaestroBasicProperties:
         """Molten-Core Maestro must have base toughness 2."""
         card = MoltenCoreMaestro(name="Molten-Core Maestro", owner=None, base_power=2, base_toughness=2)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestMoltenCoreMaestroAbilities:
@@ -78,7 +78,6 @@ class TestMoltenCoreMaestroAbilities:
         assert callable(getattr(card, "on_spell_cast", None)) or \
             callable(getattr(card, "opus_trigger", None)), \
             "Molten-Core Maestro must implement opus trigger per oracle text"
-
 
 @pytest.mark.edge
 class TestMoltenCoreMaestroEdgeCases:
@@ -107,7 +106,6 @@ class TestMoltenCoreMaestroEdgeCases:
         card = MoltenCoreMaestro(name="Molten-Core Maestro", owner=None, base_power=2, base_toughness=2)
         assert card.mana_cost.cmc == 2, \
             f"CMC must be 2, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestMoltenCoreMaestroInteractions:

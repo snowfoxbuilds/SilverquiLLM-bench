@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import StoneDocent
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestStoneDocentBasicProperties:
@@ -43,7 +44,7 @@ class TestStoneDocentBasicProperties:
         """Stone Docent must have colors ['W']."""
         card = StoneDocent(name="Stone Docent", owner=None)
         for c in ["W"]:
-            assert c in card.colors, f"Expected color {c} in {card.colors}"
+            assert c in card_colors(card), f"Expected color {c} in {card_colors(card)}"
 
     def test_power(self) -> None:
         """Stone Docent must have power 3."""
@@ -54,7 +55,6 @@ class TestStoneDocentBasicProperties:
         """Stone Docent must have toughness 1."""
         card = StoneDocent(name="Stone Docent", owner=None)
         assert card.base_toughness == 1
-
 
 @pytest.mark.ability
 class TestStoneDocentAbilities:

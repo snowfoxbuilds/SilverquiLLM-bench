@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import BurstLightning
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestBurstLightningBasicProperties:
@@ -43,8 +44,7 @@ class TestBurstLightningBasicProperties:
     def test_colors(self) -> None:
         """Burst Lightning must have correct colors."""
         card = BurstLightning(name="Burst Lightning", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestBurstLightningAbilities:
@@ -70,7 +70,6 @@ class TestBurstLightningAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Burst Lightning must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestBurstLightningEdgeCases:
@@ -105,7 +104,6 @@ class TestBurstLightningEdgeCases:
         card = BurstLightning(name="Burst Lightning", owner=None)
         assert card.mana_cost.cmc == 1, \
             f"CMC must be 1, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestBurstLightningInteractions:

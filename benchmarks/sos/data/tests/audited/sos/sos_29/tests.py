@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import RehearsedDebater
@@ -14,7 +16,6 @@ from card_impl import RehearsedDebater
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestRehearsedDebaterBasicProperties:
@@ -43,7 +44,7 @@ class TestRehearsedDebaterBasicProperties:
     def test_colors(self) -> None:
         """Rehearsed Debater must have correct colors."""
         card = RehearsedDebater(name="Rehearsed Debater", owner=None)
-        assert "W" in card.colors
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Rehearsed Debater must have base power 3."""
@@ -59,7 +60,6 @@ class TestRehearsedDebaterBasicProperties:
         """Rehearsed Debater must have Vigilance keyword."""
         card = RehearsedDebater(name="Rehearsed Debater", owner=None)
         assert Keyword.VIGILANCE in card.keywords
-
 
 @pytest.mark.ability
 class TestRehearsedDebaterAbilities:
@@ -139,7 +139,6 @@ class TestRehearsedDebaterAbilities:
             f"Should pump to 2 power, got {actual_power}"
         )
 
-
 @pytest.mark.edge
 class TestRehearsedDebaterEdgeCases:
     """Edge case tests for Rehearsed Debater."""
@@ -157,7 +156,6 @@ class TestRehearsedDebaterEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestRehearsedDebaterInteractions:

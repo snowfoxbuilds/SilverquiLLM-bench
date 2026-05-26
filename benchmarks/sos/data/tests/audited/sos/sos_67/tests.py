@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SkycoachConductorAllAboard
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestSkycoachConductorAllAboardBasicProperties:
@@ -43,7 +44,7 @@ class TestSkycoachConductorAllAboardBasicProperties:
     def test_colors(self) -> None:
         """Skycoach Conductor // All Aboard must have correct colors."""
         card = SkycoachConductorAllAboard(name="Skycoach Conductor // All Aboard", owner=None, base_power=2, base_toughness=3)
-        assert "U" in card.colors
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Skycoach Conductor // All Aboard must have base power 2."""
@@ -54,7 +55,6 @@ class TestSkycoachConductorAllAboardBasicProperties:
         """Skycoach Conductor // All Aboard must have base toughness 3."""
         card = SkycoachConductorAllAboard(name="Skycoach Conductor // All Aboard", owner=None, base_power=2, base_toughness=3)
         assert card.base_toughness == 3
-
 
 @pytest.mark.ability
 class TestSkycoachConductorAllAboardAbilities:
@@ -98,7 +98,6 @@ class TestSkycoachConductorAllAboardAbilities:
             callable(getattr(card, "on_resolve", None)), \
             "Skycoach Conductor // All Aboard must implement prepared mechanic"
 
-
 @pytest.mark.edge
 class TestSkycoachConductorAllAboardEdgeCases:
     """Edge case and trap tests for Skycoach Conductor // All Aboard."""
@@ -129,7 +128,6 @@ class TestSkycoachConductorAllAboardEdgeCases:
             card.damage_taken = 2
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestSkycoachConductorAllAboardInteractions:

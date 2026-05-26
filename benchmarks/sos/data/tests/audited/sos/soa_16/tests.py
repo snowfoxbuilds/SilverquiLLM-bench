@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import Deduce
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestDeduceBasicProperties:
@@ -43,8 +44,7 @@ class TestDeduceBasicProperties:
         """Deduce must have colors ['U']."""
         card = Deduce(name="Deduce", owner=None)
         for c in ["U"]:
-            assert c in card.colors, f"Expected color {c} in {card.colors}"
-
+            assert c in card_colors(card), f"Expected color {c} in {card_colors(card)}"
 
 @pytest.mark.ability
 class TestDeduceAbilities:

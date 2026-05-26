@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import PestMascot
@@ -14,7 +16,6 @@ from card_impl import PestMascot
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestPestMascotBasicProperties:
@@ -43,8 +44,8 @@ class TestPestMascotBasicProperties:
     def test_colors(self) -> None:
         """Pest Mascot must have correct colors."""
         card = PestMascot(name="Pest Mascot", owner=None)
-        assert "B" in card.colors
-        assert "G" in card.colors
+        assert "B" in card_colors(card)
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Pest Mascot must have base power 2."""
@@ -60,7 +61,6 @@ class TestPestMascotBasicProperties:
         """Pest Mascot must have Trample keyword."""
         card = PestMascot(name="Pest Mascot", owner=None)
         assert Keyword.TRAMPLE in card.keywords
-
 
 @pytest.mark.ability
 class TestPestMascotAbilities:
@@ -99,7 +99,6 @@ class TestPestMascotAbilities:
             f"Should gain life: {life_before} -> {player.life}"
         )
 
-
 @pytest.mark.edge
 class TestPestMascotEdgeCases:
     """Edge case tests for Pest Mascot."""
@@ -117,7 +116,6 @@ class TestPestMascotEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestPestMascotInteractions:

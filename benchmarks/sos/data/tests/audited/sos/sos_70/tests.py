@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import TextbookTabulator
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestTextbookTabulatorBasicProperties:
@@ -43,7 +44,7 @@ class TestTextbookTabulatorBasicProperties:
     def test_colors(self) -> None:
         """Textbook Tabulator must have correct colors."""
         card = TextbookTabulator(name="Textbook Tabulator", owner=None, base_power=0, base_toughness=3)
-        assert "U" in card.colors
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Textbook Tabulator must have base power 0."""
@@ -54,7 +55,6 @@ class TestTextbookTabulatorBasicProperties:
         """Textbook Tabulator must have base toughness 3."""
         card = TextbookTabulator(name="Textbook Tabulator", owner=None, base_power=0, base_toughness=3)
         assert card.base_toughness == 3
-
 
 @pytest.mark.ability
 class TestTextbookTabulatorAbilities:
@@ -82,7 +82,6 @@ class TestTextbookTabulatorAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Textbook Tabulator must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestTextbookTabulatorEdgeCases:
@@ -114,7 +113,6 @@ class TestTextbookTabulatorEdgeCases:
             card.damage_taken = 2
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestTextbookTabulatorInteractions:

@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import Pterafractyl
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestPterafractylBasicProperties:
@@ -43,8 +44,8 @@ class TestPterafractylBasicProperties:
     def test_colors(self) -> None:
         """Pterafractyl must have correct colors."""
         card = Pterafractyl(name="Pterafractyl", owner=None, base_power=1, base_toughness=0)
-        assert "G" in card.colors
-        assert "U" in card.colors
+        assert "G" in card_colors(card)
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Pterafractyl must have base power 1."""
@@ -55,7 +56,6 @@ class TestPterafractylBasicProperties:
         """Pterafractyl must have base toughness 0."""
         card = Pterafractyl(name="Pterafractyl", owner=None, base_power=1, base_toughness=0)
         assert card.base_toughness == 0
-
 
 @pytest.mark.ability
 class TestPterafractylAbilities:
@@ -80,7 +80,6 @@ class TestPterafractylAbilities:
         counters = getattr(card, "counters", {})
         p1p1 = counters.get("+1/+1", counters.get("p1p1", 0))
         assert p1p1 > 0, "ETB must add +1/+1 counters per oracle"
-
 
 @pytest.mark.edge
 class TestPterafractylEdgeCases:
@@ -112,7 +111,6 @@ class TestPterafractylEdgeCases:
             card.damage_taken = 0
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestPterafractylInteractions:

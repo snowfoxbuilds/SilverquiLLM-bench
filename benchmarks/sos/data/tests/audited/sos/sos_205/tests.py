@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import MomentOfReckoning
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestMomentOfReckoningBasicProperties:
@@ -43,9 +44,8 @@ class TestMomentOfReckoningBasicProperties:
     def test_colors(self) -> None:
         """Moment of Reckoning must have correct colors."""
         card = MomentOfReckoning(name="Moment of Reckoning", owner=None)
-        assert "B" in card.colors
-        assert "W" in card.colors
-
+        assert "B" in card_colors(card)
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestMomentOfReckoningAbilities:
@@ -77,7 +77,6 @@ class TestMomentOfReckoningAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Moment of Reckoning must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestMomentOfReckoningEdgeCases:
@@ -112,7 +111,6 @@ class TestMomentOfReckoningEdgeCases:
         card = MomentOfReckoning(name="Moment of Reckoning", owner=None)
         assert card.mana_cost.cmc == 7, \
             f"CMC must be 7, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestMomentOfReckoningInteractions:

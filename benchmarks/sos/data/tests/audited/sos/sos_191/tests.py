@@ -5,6 +5,9 @@ Basic tests verify stats/attributes (should pass against stubs).
 Ability tests verify oracle text behavior (expected to fail against stubs).
 """
 from __future__ import annotations
+
+from test_utils import card_colors
+
 import pytest
 from card_impl import GeometersArthropod
 from engine.card import Creature
@@ -38,7 +41,7 @@ class TestGeometersArthropodBasicProperties:
         """Geometer's Arthropod must have colors ['G', 'U']."""
         card = GeometersArthropod(name="Geometer's Arthropod", owner=None)
         for c in ['G', 'U']:
-            assert c in card.colors, f'Expected color {c} in {card.colors}'
+            assert c in card_colors(card), f'Expected color {c} in {card_colors(card)}'
 
     def test_power(self) -> None:
         """Geometer's Arthropod must have power 1."""

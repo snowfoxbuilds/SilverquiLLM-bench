@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import FollowTheLumarets
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestFollowTheLumaretsBasicProperties:
@@ -43,8 +44,7 @@ class TestFollowTheLumaretsBasicProperties:
     def test_colors(self) -> None:
         """Follow the Lumarets must have correct colors."""
         card = FollowTheLumarets(name="Follow the Lumarets", owner=None)
-        assert "G" in card.colors
-
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestFollowTheLumaretsAbilities:
@@ -63,7 +63,6 @@ class TestFollowTheLumaretsAbilities:
             callable(getattr(card, "infusion_active", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Follow the Lumarets must implement infusion per oracle text"
-
 
 @pytest.mark.edge
 class TestFollowTheLumaretsEdgeCases:
@@ -113,7 +112,6 @@ class TestFollowTheLumaretsEdgeCases:
         card = FollowTheLumarets(name="Follow the Lumarets", owner=None)
         assert card.mana_cost.cmc == 2, \
             f"CMC must be 2, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestFollowTheLumaretsInteractions:

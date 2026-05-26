@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import NitaForumConciliator
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestNitaForumConciliatorBasicProperties:
@@ -43,8 +44,8 @@ class TestNitaForumConciliatorBasicProperties:
     def test_colors(self) -> None:
         """Nita, Forum Conciliator must have correct colors."""
         card = NitaForumConciliator(name="Nita, Forum Conciliator", owner=None, base_power=2, base_toughness=3)
-        assert "B" in card.colors
-        assert "W" in card.colors
+        assert "B" in card_colors(card)
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Nita, Forum Conciliator must have base power 2."""
@@ -55,7 +56,6 @@ class TestNitaForumConciliatorBasicProperties:
         """Nita, Forum Conciliator must have base toughness 3."""
         card = NitaForumConciliator(name="Nita, Forum Conciliator", owner=None, base_power=2, base_toughness=3)
         assert card.base_toughness == 3
-
 
 @pytest.mark.ability
 class TestNitaForumConciliatorAbilities:
@@ -69,7 +69,6 @@ class TestNitaForumConciliatorAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Nita, Forum Conciliator must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestNitaForumConciliatorEdgeCases:
@@ -105,7 +104,6 @@ class TestNitaForumConciliatorEdgeCases:
         card = NitaForumConciliator(name="Nita, Forum Conciliator", owner=None, base_power=2, base_toughness=3)
         assert card.mana_cost.cmc == 3, \
             f"CMC must be 3, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestNitaForumConciliatorInteractions:

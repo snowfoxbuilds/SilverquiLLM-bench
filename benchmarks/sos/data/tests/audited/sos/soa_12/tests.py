@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import WindsOfAbandon
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestWindsOfAbandonBasicProperties:
@@ -43,8 +44,7 @@ class TestWindsOfAbandonBasicProperties:
     def test_colors(self) -> None:
         """Winds of Abandon must have correct colors."""
         card = WindsOfAbandon(name="Winds of Abandon", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestWindsOfAbandonAbilities:
@@ -75,7 +75,6 @@ class TestWindsOfAbandonAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Winds of Abandon must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestWindsOfAbandonEdgeCases:
@@ -110,7 +109,6 @@ class TestWindsOfAbandonEdgeCases:
         card = WindsOfAbandon(name="Winds of Abandon", owner=None)
         assert card.mana_cost.cmc == 2, \
             f"CMC must be 2, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestWindsOfAbandonInteractions:

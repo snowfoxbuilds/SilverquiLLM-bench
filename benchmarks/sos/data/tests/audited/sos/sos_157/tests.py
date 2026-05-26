@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import PestbroodSloth
@@ -14,7 +16,6 @@ from card_impl import PestbroodSloth
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestPestbroodSlothBasicProperties:
@@ -43,7 +44,7 @@ class TestPestbroodSlothBasicProperties:
     def test_colors(self) -> None:
         """Pestbrood Sloth must have correct colors."""
         card = PestbroodSloth(name="Pestbrood Sloth", owner=None)
-        assert "G" in card.colors
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Pestbrood Sloth must have base power 4."""
@@ -59,7 +60,6 @@ class TestPestbroodSlothBasicProperties:
         """Pestbrood Sloth must have Reach keyword."""
         card = PestbroodSloth(name="Pestbrood Sloth", owner=None)
         assert Keyword.REACH in card.keywords
-
 
 @pytest.mark.ability
 class TestPestbroodSlothAbilities:
@@ -92,7 +92,6 @@ class TestPestbroodSlothAbilities:
             f"Should gain life: {life_before} -> {player.life}"
         )
 
-
 @pytest.mark.edge
 class TestPestbroodSlothEdgeCases:
     """Edge case tests for Pestbrood Sloth."""
@@ -110,7 +109,6 @@ class TestPestbroodSlothEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestPestbroodSlothInteractions:

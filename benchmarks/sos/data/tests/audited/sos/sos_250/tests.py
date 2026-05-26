@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import PageLooseLeaf
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestPageLooseLeafBasicProperties:
@@ -42,7 +43,7 @@ class TestPageLooseLeafBasicProperties:
     def test_colors(self) -> None:
         """Page, Loose Leaf must have correct colors."""
         card = PageLooseLeaf(name="Page, Loose Leaf", owner=None)
-        assert len(card.colors) == 0
+        assert len(card_colors(card)) == 0
 
     def test_power(self) -> None:
         """Page, Loose Leaf must have base power 0."""
@@ -53,7 +54,6 @@ class TestPageLooseLeafBasicProperties:
         """Page, Loose Leaf must have base toughness 2."""
         card = PageLooseLeaf(name="Page, Loose Leaf", owner=None)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestPageLooseLeafAbilities:
@@ -89,7 +89,6 @@ class TestPageLooseLeafAbilities:
         abilities_list = card.get_activated_abilities()
         assert len(abilities_list) > 0, "Card must have activated ability"
 
-
 @pytest.mark.edge
 class TestPageLooseLeafEdgeCases:
     """Edge case tests for Page, Loose Leaf."""
@@ -107,7 +106,6 @@ class TestPageLooseLeafEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestPageLooseLeafInteractions:

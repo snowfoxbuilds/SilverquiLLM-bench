@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import GrappleWithDeath
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestGrappleWithDeathBasicProperties:
@@ -42,9 +43,8 @@ class TestGrappleWithDeathBasicProperties:
     def test_colors(self) -> None:
         """Grapple with Death must have correct colors."""
         card = GrappleWithDeath(name="Grapple with Death", owner=None)
-        assert "B" in card.colors
-        assert "G" in card.colors
-
+        assert "B" in card_colors(card)
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestGrappleWithDeathAbilities:
@@ -84,7 +84,6 @@ class TestGrappleWithDeathAbilities:
             f"Should gain life: {life_before} -> {player.life}"
         )
 
-
 @pytest.mark.edge
 class TestGrappleWithDeathEdgeCases:
     """Edge case tests for Grapple with Death."""
@@ -102,7 +101,6 @@ class TestGrappleWithDeathEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestGrappleWithDeathInteractions:

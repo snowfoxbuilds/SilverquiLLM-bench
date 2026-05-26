@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import AdventurousEaterHaveABite
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestAdventurousEaterHaveABiteBasicProperties:
@@ -43,7 +44,7 @@ class TestAdventurousEaterHaveABiteBasicProperties:
     def test_colors(self) -> None:
         """Adventurous Eater // Have a Bite must have correct colors."""
         card = AdventurousEaterHaveABite(name="Adventurous Eater // Have a Bite", owner=None, base_power=3, base_toughness=2)
-        assert "B" in card.colors
+        assert "B" in card_colors(card)
 
     def test_power(self) -> None:
         """Adventurous Eater // Have a Bite must have base power 3."""
@@ -54,7 +55,6 @@ class TestAdventurousEaterHaveABiteBasicProperties:
         """Adventurous Eater // Have a Bite must have base toughness 2."""
         card = AdventurousEaterHaveABite(name="Adventurous Eater // Have a Bite", owner=None, base_power=3, base_toughness=2)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestAdventurousEaterHaveABiteAbilities:
@@ -79,7 +79,6 @@ class TestAdventurousEaterHaveABiteAbilities:
             callable(getattr(card, "prepared_effect", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Adventurous Eater // Have a Bite must implement prepared mechanic"
-
 
 @pytest.mark.edge
 class TestAdventurousEaterHaveABiteEdgeCases:
@@ -111,7 +110,6 @@ class TestAdventurousEaterHaveABiteEdgeCases:
             card.damage_taken = 1
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestAdventurousEaterHaveABiteInteractions:

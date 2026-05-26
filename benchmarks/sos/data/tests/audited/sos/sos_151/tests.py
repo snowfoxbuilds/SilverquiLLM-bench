@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import HungryGraffalon
@@ -14,7 +16,6 @@ from card_impl import HungryGraffalon
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestHungryGraffalonBasicProperties:
@@ -43,7 +44,7 @@ class TestHungryGraffalonBasicProperties:
     def test_colors(self) -> None:
         """Hungry Graffalon must have correct colors."""
         card = HungryGraffalon(name="Hungry Graffalon", owner=None)
-        assert "G" in card.colors
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Hungry Graffalon must have base power 3."""
@@ -59,7 +60,6 @@ class TestHungryGraffalonBasicProperties:
         """Hungry Graffalon must have Reach keyword."""
         card = HungryGraffalon(name="Hungry Graffalon", owner=None)
         assert Keyword.REACH in card.keywords
-
 
 @pytest.mark.ability
 class TestHungryGraffalonAbilities:
@@ -85,7 +85,6 @@ class TestHungryGraffalonAbilities:
             f"+1/+1 counter: power {power_before} -> {power_after}"
         )
 
-
 @pytest.mark.edge
 class TestHungryGraffalonEdgeCases:
     """Edge case tests for Hungry Graffalon."""
@@ -103,7 +102,6 @@ class TestHungryGraffalonEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestHungryGraffalonInteractions:

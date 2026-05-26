@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ManaSculpt
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestManaSculptBasicProperties:
@@ -42,8 +43,7 @@ class TestManaSculptBasicProperties:
     def test_colors(self) -> None:
         """Mana Sculpt must have correct colors."""
         card = ManaSculpt(name="Mana Sculpt", owner=None)
-        assert "U" in card.colors
-
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestManaSculptAbilities:
@@ -56,21 +56,22 @@ class TestManaSculptAbilities:
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
+        from engine.stack import StackObject
+        from engine.types import Zone
         target_spell = Instant(name="Enemy", owner=opponent)
         target_spell.controller = opponent
-        game.stack.append(target_spell)
+        target_stack_obj = StackObject(source=target_spell, controller=opponent)
+        game.stack.push(target_stack_obj)
+        opponent.zones[Zone.STACK].add(target_spell)
         stack_before = len(game.stack)
         card = ManaSculpt(name="Mana Sculpt", owner=player)
         card.controller = player
-        card._targets = [target_spell]
-        if hasattr(card, "set_targets"):
-            card.set_targets([target_spell])
+        card.chosen_targets = [target_stack_obj]
         card.on_resolve(game)
         stack_after = len(game.stack)
         assert stack_after < stack_before, (
             f"Should counter: stack {stack_before} -> {stack_after}"
         )
-
 
 @pytest.mark.edge
 class TestManaSculptEdgeCases:
@@ -94,7 +95,6 @@ class TestManaSculptEdgeCases:
             assert own in targets, "Own creature should be valid"
             assert enemy not in targets, "Opponent creature should be invalid"
 
-
 @pytest.mark.interaction
 class TestManaSculptInteractions:
     """Interaction tests for Mana Sculpt."""
@@ -106,9 +106,13 @@ class TestManaSculptInteractions:
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
+        from engine.stack import StackObject
+        from engine.types import Zone
         spell = Instant(name="OnStack", owner=opponent)
         spell.controller = opponent
-        game.stack.append(spell)
+        stack_obj = StackObject(source=spell, controller=opponent)
+        game.stack.push(stack_obj)
+        opponent.zones[Zone.STACK].add(spell)
         card = ManaSculpt(name="Mana Sculpt", owner=player)
         card.controller = player
         targets = card.get_targets(game)

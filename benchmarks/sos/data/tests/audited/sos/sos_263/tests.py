@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import StormcarvedCoast
 
 from engine.card import Land
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestStormcarvedCoastBasicProperties:
@@ -42,8 +43,7 @@ class TestStormcarvedCoastBasicProperties:
     def test_colors(self) -> None:
         """Stormcarved Coast must have correct colors."""
         card = StormcarvedCoast(name="Stormcarved Coast", owner=None)
-        assert len(card.colors) == 0
-
+        assert len(card_colors(card)) == 0
 
 @pytest.mark.ability
 class TestStormcarvedCoastAbilities:
@@ -59,7 +59,6 @@ class TestStormcarvedCoastAbilities:
         set_board_state(game, 0, battlefield=[card])
         abilities_list = card.get_activated_abilities()
         assert len(abilities_list) > 0, "Card must have activated ability"
-
 
 @pytest.mark.edge
 class TestStormcarvedCoastEdgeCases:
@@ -78,7 +77,6 @@ class TestStormcarvedCoastEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestStormcarvedCoastInteractions:

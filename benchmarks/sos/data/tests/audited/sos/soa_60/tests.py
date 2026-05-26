@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import VeilOfSummer
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestVeilOfSummerBasicProperties:
@@ -43,8 +44,7 @@ class TestVeilOfSummerBasicProperties:
     def test_colors(self) -> None:
         """Veil of Summer must have correct colors."""
         card = VeilOfSummer(name="Veil of Summer", owner=None)
-        assert "G" in card.colors
-
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestVeilOfSummerAbilities:
@@ -75,7 +75,6 @@ class TestVeilOfSummerAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Veil of Summer must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestVeilOfSummerEdgeCases:
@@ -110,7 +109,6 @@ class TestVeilOfSummerEdgeCases:
         card = VeilOfSummer(name="Veil of Summer", owner=None)
         assert card.mana_cost.cmc == 1, \
             f"CMC must be 1, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestVeilOfSummerInteractions:

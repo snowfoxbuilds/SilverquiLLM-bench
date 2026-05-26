@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import AdditiveEvolution
 
 from engine.card import Enchantment
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestAdditiveEvolutionBasicProperties:
@@ -42,8 +43,7 @@ class TestAdditiveEvolutionBasicProperties:
     def test_colors(self) -> None:
         """Additive Evolution must have correct colors."""
         card = AdditiveEvolution(name="Additive Evolution", owner=None)
-        assert "G" in card.colors
-
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestAdditiveEvolutionAbilities:
@@ -102,7 +102,6 @@ class TestAdditiveEvolutionAbilities:
             "Target should have vigilance after resolution"
         )
 
-
 @pytest.mark.edge
 class TestAdditiveEvolutionEdgeCases:
     """Edge case tests for Additive Evolution."""
@@ -124,7 +123,6 @@ class TestAdditiveEvolutionEdgeCases:
         if len(targets) > 0:
             assert own in targets, "Own creature should be valid"
             assert enemy not in targets, "Opponent creature should be invalid"
-
 
 @pytest.mark.interaction
 class TestAdditiveEvolutionInteractions:

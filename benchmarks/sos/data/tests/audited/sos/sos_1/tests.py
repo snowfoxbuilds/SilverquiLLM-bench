@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import TheDawningArchaic
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestTheDawningArchaicBasicProperties:
@@ -43,7 +44,7 @@ class TestTheDawningArchaicBasicProperties:
     def test_colorless(self) -> None:
         """The Dawning Archaic must be colorless."""
         card = TheDawningArchaic(name="The Dawning Archaic", owner=None, base_power=7, base_toughness=7)
-        assert len(card.colors) == 0
+        assert len(card_colors(card)) == 0
 
     def test_power(self) -> None:
         """The Dawning Archaic must have base power 7."""
@@ -54,7 +55,6 @@ class TestTheDawningArchaicBasicProperties:
         """The Dawning Archaic must have base toughness 7."""
         card = TheDawningArchaic(name="The Dawning Archaic", owner=None, base_power=7, base_toughness=7)
         assert card.base_toughness == 7
-
 
 @pytest.mark.ability
 class TestTheDawningArchaicAbilities:
@@ -94,7 +94,6 @@ class TestTheDawningArchaicAbilities:
         assert callable(getattr(card, "get_adjusted_cost", None)) or \
             callable(getattr(card, "cost_reduction", None)), \
             "The Dawning Archaic must implement cost reduction per oracle text"
-
 
 @pytest.mark.edge
 class TestTheDawningArchaicEdgeCases:
@@ -144,7 +143,6 @@ class TestTheDawningArchaicEdgeCases:
         card = TheDawningArchaic(name="The Dawning Archaic", owner=None, base_power=7, base_toughness=7)
         assert card.mana_cost.cmc == 10, \
             f"CMC must be 10, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestTheDawningArchaicInteractions:

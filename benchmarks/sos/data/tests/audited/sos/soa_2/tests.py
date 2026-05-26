@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import AngelsGrace
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestAngelsGraceBasicProperties:
@@ -43,8 +44,7 @@ class TestAngelsGraceBasicProperties:
     def test_colors(self) -> None:
         """Angel's Grace must have correct colors."""
         card = AngelsGrace(name="Angel's Grace", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestAngelsGraceAbilities:
@@ -70,7 +70,6 @@ class TestAngelsGraceAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Angel's Grace must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestAngelsGraceEdgeCases:
@@ -103,7 +102,6 @@ class TestAngelsGraceEdgeCases:
             pass  # Fizzle on empty board is acceptable
         # Verify game state is consistent
         assert player.life == 20, "Caster life should be unchanged on fizzle"
-
 
 @pytest.mark.interaction
 class TestAngelsGraceInteractions:

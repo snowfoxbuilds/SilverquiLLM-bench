@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SeizeTheSpoils
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestSeizeTheSpoilsBasicProperties:
@@ -42,8 +43,7 @@ class TestSeizeTheSpoilsBasicProperties:
     def test_colors(self) -> None:
         """Seize the Spoils must have correct colors."""
         card = SeizeTheSpoils(name="Seize the Spoils", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestSeizeTheSpoilsAbilities:
@@ -126,7 +126,6 @@ class TestSeizeTheSpoilsAbilities:
         abilities_list = card.get_activated_abilities()
         assert len(abilities_list) > 0, "Card must have activated ability"
 
-
 @pytest.mark.edge
 class TestSeizeTheSpoilsEdgeCases:
     """Edge case tests for Seize the Spoils."""
@@ -144,7 +143,6 @@ class TestSeizeTheSpoilsEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestSeizeTheSpoilsInteractions:

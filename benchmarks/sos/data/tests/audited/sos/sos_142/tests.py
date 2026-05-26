@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ChelonianTackle
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestChelonianTackleBasicProperties:
@@ -42,8 +43,7 @@ class TestChelonianTackleBasicProperties:
     def test_colors(self) -> None:
         """Chelonian Tackle must have correct colors."""
         card = ChelonianTackle(name="Chelonian Tackle", owner=None)
-        assert "G" in card.colors
-
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestChelonianTackleAbilities:
@@ -68,7 +68,6 @@ class TestChelonianTackleAbilities:
             f"Should pump to 1 power, got {actual_power}"
         )
 
-
 @pytest.mark.edge
 class TestChelonianTackleEdgeCases:
     """Edge case tests for Chelonian Tackle."""
@@ -90,7 +89,6 @@ class TestChelonianTackleEdgeCases:
         if len(targets) > 0:
             assert own in targets, "Own creature should be valid"
             assert enemy not in targets, "Opponent creature should be invalid"
-
 
 @pytest.mark.interaction
 class TestChelonianTackleInteractions:

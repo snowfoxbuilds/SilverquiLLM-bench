@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import MatterbendingMage
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestMatterbendingMageBasicProperties:
@@ -42,7 +43,7 @@ class TestMatterbendingMageBasicProperties:
     def test_colors(self) -> None:
         """Matterbending Mage must have correct colors."""
         card = MatterbendingMage(name="Matterbending Mage", owner=None)
-        assert "U" in card.colors
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Matterbending Mage must have base power 2."""
@@ -53,7 +54,6 @@ class TestMatterbendingMageBasicProperties:
         """Matterbending Mage must have base toughness 2."""
         card = MatterbendingMage(name="Matterbending Mage", owner=None)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestMatterbendingMageAbilities:
@@ -81,7 +81,6 @@ class TestMatterbendingMageAbilities:
             f"Target should leave bf: {bf_before} -> {bf_after}"
         )
 
-
 @pytest.mark.edge
 class TestMatterbendingMageEdgeCases:
     """Edge case tests for Matterbending Mage."""
@@ -99,7 +98,6 @@ class TestMatterbendingMageEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestMatterbendingMageInteractions:

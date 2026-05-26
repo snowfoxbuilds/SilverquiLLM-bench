@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ImpracticalJoke
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestImpracticalJokeBasicProperties:
@@ -42,8 +43,7 @@ class TestImpracticalJokeBasicProperties:
     def test_colors(self) -> None:
         """Impractical Joke must have correct colors."""
         card = ImpracticalJoke(name="Impractical Joke", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestImpracticalJokeAbilities:
@@ -67,7 +67,6 @@ class TestImpracticalJokeAbilities:
             f"Should deal damage: life {life_before} -> {life_after}"
         )
 
-
 @pytest.mark.edge
 class TestImpracticalJokeEdgeCases:
     """Edge case tests for Impractical Joke."""
@@ -85,7 +84,6 @@ class TestImpracticalJokeEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestImpracticalJokeInteractions:

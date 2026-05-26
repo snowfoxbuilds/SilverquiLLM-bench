@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import KilliansConfidence
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestKilliansConfidenceBasicProperties:
@@ -42,9 +43,8 @@ class TestKilliansConfidenceBasicProperties:
     def test_colors(self) -> None:
         """Killian's Confidence must have correct colors."""
         card = KilliansConfidence(name="Killian's Confidence", owner=None)
-        assert "B" in card.colors
-        assert "W" in card.colors
-
+        assert "B" in card_colors(card)
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestKilliansConfidenceAbilities:
@@ -109,7 +109,6 @@ class TestKilliansConfidenceAbilities:
             f"Should return from gy: {gy_before} -> {gy_after}"
         )
 
-
 @pytest.mark.edge
 class TestKilliansConfidenceEdgeCases:
     """Edge case tests for Killian's Confidence."""
@@ -131,7 +130,6 @@ class TestKilliansConfidenceEdgeCases:
         if len(targets) > 0:
             assert own in targets, "Own creature should be valid"
             assert enemy not in targets, "Opponent creature should be invalid"
-
 
 @pytest.mark.interaction
 class TestKilliansConfidenceInteractions:

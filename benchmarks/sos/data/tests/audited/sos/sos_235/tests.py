@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import StressDream
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestStressDreamBasicProperties:
@@ -42,9 +43,8 @@ class TestStressDreamBasicProperties:
     def test_colors(self) -> None:
         """Stress Dream must have correct colors."""
         card = StressDream(name="Stress Dream", owner=None)
-        assert "R" in card.colors
-        assert "U" in card.colors
-
+        assert "R" in card_colors(card)
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestStressDreamAbilities:
@@ -68,7 +68,6 @@ class TestStressDreamAbilities:
             f"Should deal damage: life {life_before} -> {life_after}"
         )
 
-
 @pytest.mark.edge
 class TestStressDreamEdgeCases:
     """Edge case tests for Stress Dream."""
@@ -86,7 +85,6 @@ class TestStressDreamEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestStressDreamInteractions:

@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import BringToLight
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestBringToLightBasicProperties:
@@ -43,9 +44,8 @@ class TestBringToLightBasicProperties:
     def test_colors(self) -> None:
         """Bring to Light must have correct colors."""
         card = BringToLight(name="Bring to Light", owner=None)
-        assert "G" in card.colors
-        assert "U" in card.colors
-
+        assert "G" in card_colors(card)
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestBringToLightAbilities:
@@ -97,7 +97,6 @@ class TestBringToLightAbilities:
         card.on_resolve(game)
         exile = opponent.zones[Zone.EXILE].get_all()
         assert target in exile, "Bring to Light must exile target"
-
 
 @pytest.mark.edge
 class TestBringToLightEdgeCases:
@@ -162,7 +161,6 @@ class TestBringToLightEdgeCases:
         card = BringToLight(name="Bring to Light", owner=None)
         assert card.mana_cost.cmc == 5, \
             f"CMC must be 5, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestBringToLightInteractions:

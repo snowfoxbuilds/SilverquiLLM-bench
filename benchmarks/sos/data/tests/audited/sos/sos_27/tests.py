@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import QuillBladeLaureateTwofoldIntent
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestQuillBladeLaureateTwofoldIntentBasicProperties:
@@ -43,7 +44,7 @@ class TestQuillBladeLaureateTwofoldIntentBasicProperties:
     def test_colors(self) -> None:
         """Quill-Blade Laureate // Twofold Intent must have correct colors."""
         card = QuillBladeLaureateTwofoldIntent(name="Quill-Blade Laureate // Twofold Intent", owner=None, base_power=1, base_toughness=1)
-        assert "W" in card.colors
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Quill-Blade Laureate // Twofold Intent must have base power 1."""
@@ -54,7 +55,6 @@ class TestQuillBladeLaureateTwofoldIntentBasicProperties:
         """Quill-Blade Laureate // Twofold Intent must have base toughness 1."""
         card = QuillBladeLaureateTwofoldIntent(name="Quill-Blade Laureate // Twofold Intent", owner=None, base_power=1, base_toughness=1)
         assert card.base_toughness == 1
-
 
 @pytest.mark.ability
 class TestQuillBladeLaureateTwofoldIntentAbilities:
@@ -86,7 +86,6 @@ class TestQuillBladeLaureateTwofoldIntentAbilities:
             callable(getattr(card, "on_resolve", None)), \
             "Quill-Blade Laureate // Twofold Intent must implement prepared mechanic"
 
-
 @pytest.mark.edge
 class TestQuillBladeLaureateTwofoldIntentEdgeCases:
     """Edge case and trap tests for Quill-Blade Laureate // Twofold Intent."""
@@ -117,7 +116,6 @@ class TestQuillBladeLaureateTwofoldIntentEdgeCases:
             card.damage_taken = 0
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestQuillBladeLaureateTwofoldIntentInteractions:

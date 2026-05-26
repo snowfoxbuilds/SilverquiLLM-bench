@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import RapierWit
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestRapierWitBasicProperties:
@@ -43,8 +44,7 @@ class TestRapierWitBasicProperties:
     def test_colors(self) -> None:
         """Rapier Wit must have correct colors."""
         card = RapierWit(name="Rapier Wit", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestRapierWitAbilities:
@@ -75,7 +75,6 @@ class TestRapierWitAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Rapier Wit must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestRapierWitEdgeCases:
@@ -110,7 +109,6 @@ class TestRapierWitEdgeCases:
         card = RapierWit(name="Rapier Wit", owner=None)
         assert card.mana_cost.cmc == 2, \
             f"CMC must be 2, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestRapierWitInteractions:

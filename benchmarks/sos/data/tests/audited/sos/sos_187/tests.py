@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import EssenceknitScholar
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestEssenceknitScholarBasicProperties:
@@ -42,8 +43,8 @@ class TestEssenceknitScholarBasicProperties:
     def test_colors(self) -> None:
         """Essenceknit Scholar must have correct colors."""
         card = EssenceknitScholar(name="Essenceknit Scholar", owner=None)
-        assert "B" in card.colors
-        assert "G" in card.colors
+        assert "B" in card_colors(card)
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Essenceknit Scholar must have base power 3."""
@@ -54,7 +55,6 @@ class TestEssenceknitScholarBasicProperties:
         """Essenceknit Scholar must have base toughness 1."""
         card = EssenceknitScholar(name="Essenceknit Scholar", owner=None)
         assert card.base_toughness == 1
-
 
 @pytest.mark.ability
 class TestEssenceknitScholarAbilities:
@@ -106,7 +106,6 @@ class TestEssenceknitScholarAbilities:
             f"Should gain life: {life_before} -> {player.life}"
         )
 
-
 @pytest.mark.edge
 class TestEssenceknitScholarEdgeCases:
     """Edge case tests for Essenceknit Scholar."""
@@ -124,7 +123,6 @@ class TestEssenceknitScholarEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestEssenceknitScholarInteractions:

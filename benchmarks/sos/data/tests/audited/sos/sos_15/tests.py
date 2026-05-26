@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import Erode
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestErodeBasicProperties:
@@ -42,8 +43,7 @@ class TestErodeBasicProperties:
     def test_colors(self) -> None:
         """Erode must have correct colors."""
         card = Erode(name="Erode", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestErodeAbilities:
@@ -70,7 +70,6 @@ class TestErodeAbilities:
             f"Target should be destroyed: bf {bf_before} -> {bf_after}"
         )
 
-
 @pytest.mark.edge
 class TestErodeEdgeCases:
     """Edge case tests for Erode."""
@@ -88,7 +87,6 @@ class TestErodeEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestErodeInteractions:

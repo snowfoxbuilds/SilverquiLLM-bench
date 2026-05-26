@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import FieldsOfStrife
 
 from engine.card import Land
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestFieldsOfStrifeBasicProperties:
@@ -43,8 +44,7 @@ class TestFieldsOfStrifeBasicProperties:
     def test_colorless(self) -> None:
         """Fields of Strife must be colorless."""
         card = FieldsOfStrife(name="Fields of Strife", owner=None)
-        assert len(card.colors) == 0
-
+        assert len(card_colors(card)) == 0
 
 @pytest.mark.ability
 class TestFieldsOfStrifeAbilities:
@@ -58,7 +58,6 @@ class TestFieldsOfStrifeAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Fields of Strife must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestFieldsOfStrifeEdgeCases:
@@ -91,7 +90,6 @@ class TestFieldsOfStrifeEdgeCases:
             pass  # Fizzle on empty board is acceptable
         # Verify game state is consistent
         assert player.life == 20, "Caster life should be unchanged on fizzle"
-
 
 @pytest.mark.interaction
 class TestFieldsOfStrifeInteractions:

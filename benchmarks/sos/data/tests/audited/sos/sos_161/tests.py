@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SnarlSong
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestSnarlSongBasicProperties:
@@ -43,8 +44,7 @@ class TestSnarlSongBasicProperties:
     def test_colors(self) -> None:
         """Snarl Song must have correct colors."""
         card = SnarlSong(name="Snarl Song", owner=None)
-        assert "G" in card.colors
-
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestSnarlSongAbilities:
@@ -71,7 +71,6 @@ class TestSnarlSongAbilities:
         counters = getattr(card, "counters", {})
         p1p1 = counters.get("+1/+1", counters.get("p1p1", 0))
         assert p1p1 == 3, f"Converge with 3 colors should add 3 counters, got {p1p1}"
-
 
 @pytest.mark.edge
 class TestSnarlSongEdgeCases:
@@ -123,7 +122,6 @@ class TestSnarlSongEdgeCases:
         card = SnarlSong(name="Snarl Song", owner=None)
         assert card.mana_cost.cmc == 6, \
             f"CMC must be 6, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestSnarlSongInteractions:

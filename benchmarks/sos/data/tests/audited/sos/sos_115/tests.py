@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import Flashback
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestFlashbackBasicProperties:
@@ -42,8 +43,7 @@ class TestFlashbackBasicProperties:
     def test_colors(self) -> None:
         """Flashback must have correct colors."""
         card = Flashback(name="Flashback", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestFlashbackAbilities:
@@ -90,7 +90,6 @@ class TestFlashbackAbilities:
         gy_after = player.zones[Zone.GRAVEYARD].get_all()
         assert card not in gy_after, "Card must leave graveyard after flashback"
 
-
 @pytest.mark.edge
 class TestFlashbackEdgeCases:
     """Edge case tests for Flashback."""
@@ -108,7 +107,6 @@ class TestFlashbackEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestFlashbackInteractions:

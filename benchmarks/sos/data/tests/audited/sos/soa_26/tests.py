@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import BitterTriumph
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestBitterTriumphBasicProperties:
@@ -42,8 +43,7 @@ class TestBitterTriumphBasicProperties:
     def test_colors(self) -> None:
         """Bitter Triumph must have correct colors."""
         card = BitterTriumph(name="Bitter Triumph", owner=None)
-        assert "B" in card.colors
-
+        assert "B" in card_colors(card)
 
 @pytest.mark.ability
 class TestBitterTriumphAbilities:
@@ -103,7 +103,6 @@ class TestBitterTriumphAbilities:
         )
         assert has_addl, "Card must declare additional cost"
 
-
 @pytest.mark.edge
 class TestBitterTriumphEdgeCases:
     """Edge case tests for Bitter Triumph."""
@@ -121,7 +120,6 @@ class TestBitterTriumphEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestBitterTriumphInteractions:

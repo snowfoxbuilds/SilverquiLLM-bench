@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import OldGrowthEducator
@@ -14,7 +16,6 @@ from card_impl import OldGrowthEducator
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestOldGrowthEducatorBasicProperties:
@@ -43,8 +44,8 @@ class TestOldGrowthEducatorBasicProperties:
     def test_colors(self) -> None:
         """Old-Growth Educator must have correct colors."""
         card = OldGrowthEducator(name="Old-Growth Educator", owner=None)
-        assert "B" in card.colors
-        assert "G" in card.colors
+        assert "B" in card_colors(card)
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Old-Growth Educator must have base power 4."""
@@ -65,7 +66,6 @@ class TestOldGrowthEducatorBasicProperties:
         """Old-Growth Educator must have Vigilance keyword."""
         card = OldGrowthEducator(name="Old-Growth Educator", owner=None)
         assert Keyword.VIGILANCE in card.keywords
-
 
 @pytest.mark.ability
 class TestOldGrowthEducatorAbilities:
@@ -104,7 +104,6 @@ class TestOldGrowthEducatorAbilities:
             f"Should gain life: {life_before} -> {player.life}"
         )
 
-
 @pytest.mark.edge
 class TestOldGrowthEducatorEdgeCases:
     """Edge case tests for Old-Growth Educator."""
@@ -122,7 +121,6 @@ class TestOldGrowthEducatorEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestOldGrowthEducatorInteractions:

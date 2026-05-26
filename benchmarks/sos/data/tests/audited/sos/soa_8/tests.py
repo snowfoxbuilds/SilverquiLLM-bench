@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import RepelCalamity
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestRepelCalamityBasicProperties:
@@ -42,8 +43,7 @@ class TestRepelCalamityBasicProperties:
     def test_colors(self) -> None:
         """Repel Calamity must have correct colors."""
         card = RepelCalamity(name="Repel Calamity", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestRepelCalamityAbilities:
@@ -70,7 +70,6 @@ class TestRepelCalamityAbilities:
             f"Target should be destroyed: bf {bf_before} -> {bf_after}"
         )
 
-
 @pytest.mark.edge
 class TestRepelCalamityEdgeCases:
     """Edge case tests for Repel Calamity."""
@@ -88,7 +87,6 @@ class TestRepelCalamityEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestRepelCalamityInteractions:

@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import DelugeVirtuoso
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestDelugeVirtuosoBasicProperties:
@@ -43,7 +44,7 @@ class TestDelugeVirtuosoBasicProperties:
     def test_colors(self) -> None:
         """Deluge Virtuoso must have correct colors."""
         card = DelugeVirtuoso(name="Deluge Virtuoso", owner=None, base_power=2, base_toughness=2)
-        assert "U" in card.colors
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Deluge Virtuoso must have base power 2."""
@@ -54,7 +55,6 @@ class TestDelugeVirtuosoBasicProperties:
         """Deluge Virtuoso must have base toughness 2."""
         card = DelugeVirtuoso(name="Deluge Virtuoso", owner=None, base_power=2, base_toughness=2)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestDelugeVirtuosoAbilities:
@@ -90,7 +90,6 @@ class TestDelugeVirtuosoAbilities:
         assert callable(getattr(card, "on_spell_cast", None)) or \
             callable(getattr(card, "opus_trigger", None)), \
             "Deluge Virtuoso must implement opus trigger per oracle text"
-
 
 @pytest.mark.edge
 class TestDelugeVirtuosoEdgeCases:
@@ -139,7 +138,6 @@ class TestDelugeVirtuosoEdgeCases:
         card = DelugeVirtuoso(name="Deluge Virtuoso", owner=None, base_power=2, base_toughness=2)
         assert card.mana_cost.cmc == 3, \
             f"CMC must be 3, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestDelugeVirtuosoInteractions:

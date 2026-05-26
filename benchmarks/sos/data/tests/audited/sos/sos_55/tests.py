@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import JadziStewardOfFateOraclesGift
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestJadziStewardOfFateOraclesGiftBasicProperties:
@@ -43,7 +44,7 @@ class TestJadziStewardOfFateOraclesGiftBasicProperties:
     def test_colors(self) -> None:
         """Jadzi, Steward of Fate // Oracle's Gift must have correct colors."""
         card = JadziStewardOfFateOraclesGift(name="Jadzi, Steward of Fate // Oracle's Gift", owner=None, base_power=2, base_toughness=4)
-        assert "U" in card.colors
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Jadzi, Steward of Fate // Oracle's Gift must have base power 2."""
@@ -54,7 +55,6 @@ class TestJadziStewardOfFateOraclesGiftBasicProperties:
         """Jadzi, Steward of Fate // Oracle's Gift must have base toughness 4."""
         card = JadziStewardOfFateOraclesGift(name="Jadzi, Steward of Fate // Oracle's Gift", owner=None, base_power=2, base_toughness=4)
         assert card.base_toughness == 4
-
 
 @pytest.mark.ability
 class TestJadziStewardOfFateOraclesGiftAbilities:
@@ -93,7 +93,6 @@ class TestJadziStewardOfFateOraclesGiftAbilities:
             callable(getattr(card, "on_resolve", None)), \
             "Jadzi, Steward of Fate // Oracle's Gift must implement prepared mechanic"
 
-
 @pytest.mark.edge
 class TestJadziStewardOfFateOraclesGiftEdgeCases:
     """Edge case and trap tests for Jadzi, Steward of Fate // Oracle's Gift."""
@@ -124,7 +123,6 @@ class TestJadziStewardOfFateOraclesGiftEdgeCases:
             card.damage_taken = 3
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestJadziStewardOfFateOraclesGiftInteractions:

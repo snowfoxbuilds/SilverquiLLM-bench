@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ChoreographedSparks
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestChoreographedSparksBasicProperties:
@@ -43,8 +44,7 @@ class TestChoreographedSparksBasicProperties:
     def test_colors(self) -> None:
         """Choreographed Sparks must have correct colors."""
         card = ChoreographedSparks(name="Choreographed Sparks", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestChoreographedSparksAbilities:
@@ -58,7 +58,6 @@ class TestChoreographedSparksAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Choreographed Sparks must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestChoreographedSparksEdgeCases:
@@ -93,7 +92,6 @@ class TestChoreographedSparksEdgeCases:
         card = ChoreographedSparks(name="Choreographed Sparks", owner=None)
         assert card.mana_cost.cmc == 2, \
             f"CMC must be 2, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestChoreographedSparksInteractions:

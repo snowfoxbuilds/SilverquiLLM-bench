@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import WitherbloomCharm
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestWitherbloomCharmBasicProperties:
@@ -43,9 +44,8 @@ class TestWitherbloomCharmBasicProperties:
     def test_colors(self) -> None:
         """Witherbloom Charm must have correct colors."""
         card = WitherbloomCharm(name="Witherbloom Charm", owner=None)
-        assert "B" in card.colors
-        assert "G" in card.colors
-
+        assert "B" in card_colors(card)
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestWitherbloomCharmAbilities:
@@ -77,7 +77,6 @@ class TestWitherbloomCharmAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Witherbloom Charm must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestWitherbloomCharmEdgeCases:
@@ -112,7 +111,6 @@ class TestWitherbloomCharmEdgeCases:
         card = WitherbloomCharm(name="Witherbloom Charm", owner=None)
         assert card.mana_cost.cmc == 2, \
             f"CMC must be 2, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestWitherbloomCharmInteractions:

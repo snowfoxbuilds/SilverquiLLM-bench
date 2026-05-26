@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import TranscendentArchaic
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestTranscendentArchaicBasicProperties:
@@ -43,7 +44,7 @@ class TestTranscendentArchaicBasicProperties:
     def test_colorless(self) -> None:
         """Transcendent Archaic must be colorless."""
         card = TranscendentArchaic(name="Transcendent Archaic", owner=None, base_power=6, base_toughness=6)
-        assert len(card.colors) == 0
+        assert len(card_colors(card)) == 0
 
     def test_power(self) -> None:
         """Transcendent Archaic must have base power 6."""
@@ -54,7 +55,6 @@ class TestTranscendentArchaicBasicProperties:
         """Transcendent Archaic must have base toughness 6."""
         card = TranscendentArchaic(name="Transcendent Archaic", owner=None, base_power=6, base_toughness=6)
         assert card.base_toughness == 6
-
 
 @pytest.mark.ability
 class TestTranscendentArchaicAbilities:
@@ -103,7 +103,6 @@ class TestTranscendentArchaicAbilities:
         assert callable(getattr(card, "on_resolve", None)) or \
             callable(getattr(card, "on_enter_battlefield", None)), \
             "Transcendent Archaic must implement converge scaling per oracle text"
-
 
 @pytest.mark.edge
 class TestTranscendentArchaicEdgeCases:
@@ -154,7 +153,6 @@ class TestTranscendentArchaicEdgeCases:
         card = TranscendentArchaic(name="Transcendent Archaic", owner=None, base_power=6, base_toughness=6)
         assert card.mana_cost.cmc == 7, \
             f"CMC must be 7, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestTranscendentArchaicInteractions:

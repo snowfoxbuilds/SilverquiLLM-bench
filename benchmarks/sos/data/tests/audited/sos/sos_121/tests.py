@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import LivingHistory
 
 from engine.card import Enchantment
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestLivingHistoryBasicProperties:
@@ -42,8 +43,7 @@ class TestLivingHistoryBasicProperties:
     def test_colors(self) -> None:
         """Living History must have correct colors."""
         card = LivingHistory(name="Living History", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestLivingHistoryAbilities:
@@ -82,7 +82,6 @@ class TestLivingHistoryAbilities:
             f"Should pump to 3 power, got {actual_power}"
         )
 
-
 @pytest.mark.edge
 class TestLivingHistoryEdgeCases:
     """Edge case tests for Living History."""
@@ -100,7 +99,6 @@ class TestLivingHistoryEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestLivingHistoryInteractions:

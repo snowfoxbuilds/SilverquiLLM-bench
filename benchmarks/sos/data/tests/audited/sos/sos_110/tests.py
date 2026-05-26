@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ChargingStrifeknight
@@ -14,7 +16,6 @@ from card_impl import ChargingStrifeknight
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestChargingStrifeknightBasicProperties:
@@ -43,7 +44,7 @@ class TestChargingStrifeknightBasicProperties:
     def test_colors(self) -> None:
         """Charging Strifeknight must have correct colors."""
         card = ChargingStrifeknight(name="Charging Strifeknight", owner=None)
-        assert "R" in card.colors
+        assert "R" in card_colors(card)
 
     def test_power(self) -> None:
         """Charging Strifeknight must have base power 3."""
@@ -59,7 +60,6 @@ class TestChargingStrifeknightBasicProperties:
         """Charging Strifeknight must have Haste keyword."""
         card = ChargingStrifeknight(name="Charging Strifeknight", owner=None)
         assert Keyword.HASTE in card.keywords
-
 
 @pytest.mark.ability
 class TestChargingStrifeknightAbilities:
@@ -114,7 +114,6 @@ class TestChargingStrifeknightAbilities:
         abilities_list = card.get_activated_abilities()
         assert len(abilities_list) > 0, "Card must have activated ability"
 
-
 @pytest.mark.edge
 class TestChargingStrifeknightEdgeCases:
     """Edge case tests for Charging Strifeknight."""
@@ -132,7 +131,6 @@ class TestChargingStrifeknightEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestChargingStrifeknightInteractions:

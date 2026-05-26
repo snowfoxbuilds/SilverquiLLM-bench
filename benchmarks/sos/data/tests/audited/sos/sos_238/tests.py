@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import TeachersPest
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestTeachersPestBasicProperties:
@@ -43,8 +44,8 @@ class TestTeachersPestBasicProperties:
     def test_colors(self) -> None:
         """Teacher's Pest must have correct colors."""
         card = TeachersPest(name="Teacher's Pest", owner=None, base_power=1, base_toughness=1)
-        assert "B" in card.colors
-        assert "G" in card.colors
+        assert "B" in card_colors(card)
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Teacher's Pest must have base power 1."""
@@ -55,7 +56,6 @@ class TestTeachersPestBasicProperties:
         """Teacher's Pest must have base toughness 1."""
         card = TeachersPest(name="Teacher's Pest", owner=None, base_power=1, base_toughness=1)
         assert card.base_toughness == 1
-
 
 @pytest.mark.ability
 class TestTeachersPestAbilities:
@@ -84,7 +84,6 @@ class TestTeachersPestAbilities:
             card.on_attack(game)
         gy_after = len(player.zones[Zone.GRAVEYARD].get_all())
         assert gy_after != gy_before, "Attack trigger must interact with graveyard"
-
 
 @pytest.mark.edge
 class TestTeachersPestEdgeCases:
@@ -116,7 +115,6 @@ class TestTeachersPestEdgeCases:
             card.damage_taken = 0
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestTeachersPestInteractions:

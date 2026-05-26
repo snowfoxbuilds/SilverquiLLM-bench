@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import PigmentWranglerStrikingPalette
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestPigmentWranglerStrikingPaletteBasicProperties:
@@ -43,7 +44,7 @@ class TestPigmentWranglerStrikingPaletteBasicProperties:
     def test_colors(self) -> None:
         """Pigment Wrangler // Striking Palette must have correct colors."""
         card = PigmentWranglerStrikingPalette(name="Pigment Wrangler // Striking Palette", owner=None, base_power=4, base_toughness=4)
-        assert "R" in card.colors
+        assert "R" in card_colors(card)
 
     def test_power(self) -> None:
         """Pigment Wrangler // Striking Palette must have base power 4."""
@@ -54,7 +55,6 @@ class TestPigmentWranglerStrikingPaletteBasicProperties:
         """Pigment Wrangler // Striking Palette must have base toughness 4."""
         card = PigmentWranglerStrikingPalette(name="Pigment Wrangler // Striking Palette", owner=None, base_power=4, base_toughness=4)
         assert card.base_toughness == 4
-
 
 @pytest.mark.ability
 class TestPigmentWranglerStrikingPaletteAbilities:
@@ -86,7 +86,6 @@ class TestPigmentWranglerStrikingPaletteAbilities:
             callable(getattr(card, "on_resolve", None)), \
             "Pigment Wrangler // Striking Palette must implement prepared mechanic"
 
-
 @pytest.mark.edge
 class TestPigmentWranglerStrikingPaletteEdgeCases:
     """Edge case and trap tests for Pigment Wrangler // Striking Palette."""
@@ -117,7 +116,6 @@ class TestPigmentWranglerStrikingPaletteEdgeCases:
             card.damage_taken = 3
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestPigmentWranglerStrikingPaletteInteractions:

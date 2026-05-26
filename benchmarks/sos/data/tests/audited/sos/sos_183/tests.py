@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import CuboidColony
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestCuboidColonyBasicProperties:
@@ -43,8 +44,8 @@ class TestCuboidColonyBasicProperties:
     def test_colors(self) -> None:
         """Cuboid Colony must have correct colors."""
         card = CuboidColony(name="Cuboid Colony", owner=None, base_power=1, base_toughness=1)
-        assert "G" in card.colors
-        assert "U" in card.colors
+        assert "G" in card_colors(card)
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Cuboid Colony must have base power 1."""
@@ -55,7 +56,6 @@ class TestCuboidColonyBasicProperties:
         """Cuboid Colony must have base toughness 1."""
         card = CuboidColony(name="Cuboid Colony", owner=None, base_power=1, base_toughness=1)
         assert card.base_toughness == 1
-
 
 @pytest.mark.ability
 class TestCuboidColonyAbilities:
@@ -78,7 +78,6 @@ class TestCuboidColonyAbilities:
         from engine.types import Keyword
         card = CuboidColony(name="Cuboid Colony", owner=None, base_power=1, base_toughness=1)
         assert Keyword.FLASH in card.keywords, "Cuboid Colony should have Flash"
-
 
 @pytest.mark.edge
 class TestCuboidColonyEdgeCases:
@@ -110,7 +109,6 @@ class TestCuboidColonyEdgeCases:
             card.damage_taken = 0
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestCuboidColonyInteractions:

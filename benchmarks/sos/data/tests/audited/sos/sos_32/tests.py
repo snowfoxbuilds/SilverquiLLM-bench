@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SoaringStoneglider
@@ -14,7 +16,6 @@ from card_impl import SoaringStoneglider
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestSoaringStonegliderBasicProperties:
@@ -43,7 +44,7 @@ class TestSoaringStonegliderBasicProperties:
     def test_colors(self) -> None:
         """Soaring Stoneglider must have correct colors."""
         card = SoaringStoneglider(name="Soaring Stoneglider", owner=None)
-        assert "W" in card.colors
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Soaring Stoneglider must have base power 4."""
@@ -65,7 +66,6 @@ class TestSoaringStonegliderBasicProperties:
         card = SoaringStoneglider(name="Soaring Stoneglider", owner=None)
         assert Keyword.VIGILANCE in card.keywords
 
-
 @pytest.mark.ability
 class TestSoaringStonegliderAbilities:
     """Ability tests for Soaring Stoneglider — expected to fail against stubs."""
@@ -84,7 +84,6 @@ class TestSoaringStonegliderAbilities:
         )
         assert has_addl, "Card must declare additional cost"
 
-
 @pytest.mark.edge
 class TestSoaringStonegliderEdgeCases:
     """Edge case tests for Soaring Stoneglider."""
@@ -102,7 +101,6 @@ class TestSoaringStonegliderEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestSoaringStonegliderInteractions:

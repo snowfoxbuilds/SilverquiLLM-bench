@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ChaseInspiration
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestChaseInspirationBasicProperties:
@@ -42,8 +43,7 @@ class TestChaseInspirationBasicProperties:
     def test_colors(self) -> None:
         """Chase Inspiration must have correct colors."""
         card = ChaseInspiration(name="Chase Inspiration", owner=None)
-        assert "U" in card.colors
-
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestChaseInspirationAbilities:
@@ -87,7 +87,6 @@ class TestChaseInspirationAbilities:
             "Target should have hexproof after resolution"
         )
 
-
 @pytest.mark.edge
 class TestChaseInspirationEdgeCases:
     """Edge case tests for Chase Inspiration."""
@@ -109,7 +108,6 @@ class TestChaseInspirationEdgeCases:
         if len(targets) > 0:
             assert own in targets, "Own creature should be valid"
             assert enemy not in targets, "Opponent creature should be invalid"
-
 
 @pytest.mark.interaction
 class TestChaseInspirationInteractions:

@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import AppliedGeometry
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestAppliedGeometryBasicProperties:
@@ -42,9 +43,8 @@ class TestAppliedGeometryBasicProperties:
     def test_colors(self) -> None:
         """Applied Geometry must have correct colors."""
         card = AppliedGeometry(name="Applied Geometry", owner=None)
-        assert "G" in card.colors
-        assert "U" in card.colors
-
+        assert "G" in card_colors(card)
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestAppliedGeometryAbilities:
@@ -84,7 +84,6 @@ class TestAppliedGeometryAbilities:
             f"+1/+1 counter: power {power_before} -> {power_after}"
         )
 
-
 @pytest.mark.edge
 class TestAppliedGeometryEdgeCases:
     """Edge case tests for Applied Geometry."""
@@ -106,7 +105,6 @@ class TestAppliedGeometryEdgeCases:
         if len(targets) > 0:
             assert own in targets, "Own creature should be valid"
             assert enemy not in targets, "Opponent creature should be invalid"
-
 
 @pytest.mark.interaction
 class TestAppliedGeometryInteractions:

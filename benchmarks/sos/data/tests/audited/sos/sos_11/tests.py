@@ -5,6 +5,9 @@ Basic tests verify stats/attributes (should pass against stubs).
 Ability tests verify oracle text behavior (expected to fail against stubs).
 """
 from __future__ import annotations
+
+from test_utils import card_colors
+
 import pytest
 from card_impl import EagerGlyphmage
 from engine.card import Creature
@@ -39,7 +42,7 @@ class TestEagerGlyphmageBasicProperties:
         """Eager Glyphmage must have colors ['W']."""
         card = EagerGlyphmage(name='Eager Glyphmage', owner=None)
         for c in ['W']:
-            assert c in card.colors, f'Expected color {c} in {card.colors}'
+            assert c in card_colors(card), f'Expected color {c} in {card_colors(card)}'
 
     def test_power(self) -> None:
         """Eager Glyphmage must have power 3."""

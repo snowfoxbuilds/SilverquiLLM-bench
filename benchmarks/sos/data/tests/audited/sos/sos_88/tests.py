@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import LeechCollectorBloodletting
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestLeechCollectorBloodlettingBasicProperties:
@@ -43,7 +44,7 @@ class TestLeechCollectorBloodlettingBasicProperties:
     def test_colors(self) -> None:
         """Leech Collector // Bloodletting must have correct colors."""
         card = LeechCollectorBloodletting(name="Leech Collector // Bloodletting", owner=None, base_power=2, base_toughness=2)
-        assert "B" in card.colors
+        assert "B" in card_colors(card)
 
     def test_power(self) -> None:
         """Leech Collector // Bloodletting must have base power 2."""
@@ -54,7 +55,6 @@ class TestLeechCollectorBloodlettingBasicProperties:
         """Leech Collector // Bloodletting must have base toughness 2."""
         card = LeechCollectorBloodletting(name="Leech Collector // Bloodletting", owner=None, base_power=2, base_toughness=2)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestLeechCollectorBloodlettingAbilities:
@@ -73,7 +73,6 @@ class TestLeechCollectorBloodlettingAbilities:
             callable(getattr(card, "prepared_effect", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Leech Collector // Bloodletting must implement prepared mechanic"
-
 
 @pytest.mark.edge
 class TestLeechCollectorBloodlettingEdgeCases:
@@ -105,7 +104,6 @@ class TestLeechCollectorBloodlettingEdgeCases:
             card.damage_taken = 1
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestLeechCollectorBloodlettingInteractions:

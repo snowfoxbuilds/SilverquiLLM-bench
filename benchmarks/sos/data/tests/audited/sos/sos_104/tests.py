@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import WanderOff
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestWanderOffBasicProperties:
@@ -42,8 +43,7 @@ class TestWanderOffBasicProperties:
     def test_colors(self) -> None:
         """Wander Off must have correct colors."""
         card = WanderOff(name="Wander Off", owner=None)
-        assert "B" in card.colors
-
+        assert "B" in card_colors(card)
 
 @pytest.mark.ability
 class TestWanderOffAbilities:
@@ -67,7 +67,6 @@ class TestWanderOffAbilities:
         exile = player.zones[Zone.EXILE].get_all()
         assert target in exile, "Target should be in exile"
 
-
 @pytest.mark.edge
 class TestWanderOffEdgeCases:
     """Edge case tests for Wander Off."""
@@ -85,7 +84,6 @@ class TestWanderOffEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestWanderOffInteractions:

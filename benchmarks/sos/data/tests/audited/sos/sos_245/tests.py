@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import WitherbloomTheBalancer
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestWitherbloomTheBalancerBasicProperties:
@@ -43,8 +44,8 @@ class TestWitherbloomTheBalancerBasicProperties:
     def test_colors(self) -> None:
         """Witherbloom, the Balancer must have correct colors."""
         card = WitherbloomTheBalancer(name="Witherbloom, the Balancer", owner=None, base_power=5, base_toughness=5)
-        assert "B" in card.colors
-        assert "G" in card.colors
+        assert "B" in card_colors(card)
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Witherbloom, the Balancer must have base power 5."""
@@ -55,7 +56,6 @@ class TestWitherbloomTheBalancerBasicProperties:
         """Witherbloom, the Balancer must have base toughness 5."""
         card = WitherbloomTheBalancer(name="Witherbloom, the Balancer", owner=None, base_power=5, base_toughness=5)
         assert card.base_toughness == 5
-
 
 @pytest.mark.ability
 class TestWitherbloomTheBalancerAbilities:
@@ -83,7 +83,6 @@ class TestWitherbloomTheBalancerAbilities:
         assert callable(getattr(card, "get_adjusted_cost", None)) or \
             callable(getattr(card, "cost_reduction", None)), \
             "Witherbloom, the Balancer must implement cost reduction per oracle text"
-
 
 @pytest.mark.edge
 class TestWitherbloomTheBalancerEdgeCases:
@@ -115,7 +114,6 @@ class TestWitherbloomTheBalancerEdgeCases:
         card = WitherbloomTheBalancer(name="Witherbloom, the Balancer", owner=None, base_power=5, base_toughness=5)
         assert card.mana_cost.cmc == 8, \
             f"CMC must be 8, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestWitherbloomTheBalancerInteractions:

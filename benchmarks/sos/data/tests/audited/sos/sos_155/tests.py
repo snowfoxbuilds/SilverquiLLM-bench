@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import NoxiousNewt
@@ -14,7 +16,6 @@ from card_impl import NoxiousNewt
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestNoxiousNewtBasicProperties:
@@ -43,7 +44,7 @@ class TestNoxiousNewtBasicProperties:
     def test_colors(self) -> None:
         """Noxious Newt must have correct colors."""
         card = NoxiousNewt(name="Noxious Newt", owner=None)
-        assert "G" in card.colors
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Noxious Newt must have base power 1."""
@@ -60,7 +61,6 @@ class TestNoxiousNewtBasicProperties:
         card = NoxiousNewt(name="Noxious Newt", owner=None)
         assert Keyword.DEATHTOUCH in card.keywords
 
-
 @pytest.mark.ability
 class TestNoxiousNewtAbilities:
     """Ability tests for Noxious Newt — expected to fail against stubs."""
@@ -75,7 +75,6 @@ class TestNoxiousNewtAbilities:
         set_board_state(game, 0, battlefield=[card])
         abilities_list = card.get_activated_abilities()
         assert len(abilities_list) > 0, "Card must have activated ability"
-
 
 @pytest.mark.edge
 class TestNoxiousNewtEdgeCases:
@@ -94,7 +93,6 @@ class TestNoxiousNewtEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestNoxiousNewtInteractions:

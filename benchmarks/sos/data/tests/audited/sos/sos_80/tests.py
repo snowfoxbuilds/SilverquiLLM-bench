@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import EmeritusOfWoeDemonicTutor
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestEmeritusOfWoeDemonicTutorBasicProperties:
@@ -43,7 +44,7 @@ class TestEmeritusOfWoeDemonicTutorBasicProperties:
     def test_colors(self) -> None:
         """Emeritus of Woe // Demonic Tutor must have correct colors."""
         card = EmeritusOfWoeDemonicTutor(name="Emeritus of Woe // Demonic Tutor", owner=None, base_power=5, base_toughness=4)
-        assert "B" in card.colors
+        assert "B" in card_colors(card)
 
     def test_power(self) -> None:
         """Emeritus of Woe // Demonic Tutor must have base power 5."""
@@ -54,7 +55,6 @@ class TestEmeritusOfWoeDemonicTutorBasicProperties:
         """Emeritus of Woe // Demonic Tutor must have base toughness 4."""
         card = EmeritusOfWoeDemonicTutor(name="Emeritus of Woe // Demonic Tutor", owner=None, base_power=5, base_toughness=4)
         assert card.base_toughness == 4
-
 
 @pytest.mark.ability
 class TestEmeritusOfWoeDemonicTutorAbilities:
@@ -79,7 +79,6 @@ class TestEmeritusOfWoeDemonicTutorAbilities:
             callable(getattr(card, "prepared_effect", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Emeritus of Woe // Demonic Tutor must implement prepared mechanic"
-
 
 @pytest.mark.edge
 class TestEmeritusOfWoeDemonicTutorEdgeCases:
@@ -111,7 +110,6 @@ class TestEmeritusOfWoeDemonicTutorEdgeCases:
             card.damage_taken = 3
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestEmeritusOfWoeDemonicTutorInteractions:

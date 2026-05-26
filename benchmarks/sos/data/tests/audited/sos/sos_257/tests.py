@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import GreatHallOfTheBiblioplex
 
 from engine.card import Land
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestGreatHallOfTheBiblioplexBasicProperties:
@@ -43,8 +44,7 @@ class TestGreatHallOfTheBiblioplexBasicProperties:
     def test_colorless(self) -> None:
         """Great Hall of the Biblioplex must be colorless."""
         card = GreatHallOfTheBiblioplex(name="Great Hall of the Biblioplex", owner=None)
-        assert len(card.colors) == 0
-
+        assert len(card_colors(card)) == 0
 
 @pytest.mark.ability
 class TestGreatHallOfTheBiblioplexAbilities:
@@ -58,7 +58,6 @@ class TestGreatHallOfTheBiblioplexAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Great Hall of the Biblioplex must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestGreatHallOfTheBiblioplexEdgeCases:
@@ -91,7 +90,6 @@ class TestGreatHallOfTheBiblioplexEdgeCases:
             pass  # Fizzle on empty board is acceptable
         # Verify game state is consistent
         assert player.life == 20, "Caster life should be unchanged on fizzle"
-
 
 @pytest.mark.interaction
 class TestGreatHallOfTheBiblioplexInteractions:

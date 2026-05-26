@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import QuandrixTheProof
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestQuandrixTheProofBasicProperties:
@@ -43,8 +44,8 @@ class TestQuandrixTheProofBasicProperties:
     def test_colors(self) -> None:
         """Quandrix, the Proof must have correct colors."""
         card = QuandrixTheProof(name="Quandrix, the Proof", owner=None, base_power=6, base_toughness=6)
-        assert "G" in card.colors
-        assert "U" in card.colors
+        assert "G" in card_colors(card)
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Quandrix, the Proof must have base power 6."""
@@ -55,7 +56,6 @@ class TestQuandrixTheProofBasicProperties:
         """Quandrix, the Proof must have base toughness 6."""
         card = QuandrixTheProof(name="Quandrix, the Proof", owner=None, base_power=6, base_toughness=6)
         assert card.base_toughness == 6
-
 
 @pytest.mark.ability
 class TestQuandrixTheProofAbilities:
@@ -83,7 +83,6 @@ class TestQuandrixTheProofAbilities:
         assert callable(getattr(card, "get_adjusted_cost", None)) or \
             callable(getattr(card, "cost_reduction", None)), \
             "Quandrix, the Proof must implement cost reduction per oracle text"
-
 
 @pytest.mark.edge
 class TestQuandrixTheProofEdgeCases:
@@ -115,7 +114,6 @@ class TestQuandrixTheProofEdgeCases:
         card = QuandrixTheProof(name="Quandrix, the Proof", owner=None, base_power=6, base_toughness=6)
         assert card.mana_cost.cmc == 6, \
             f"CMC must be 6, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestQuandrixTheProofInteractions:

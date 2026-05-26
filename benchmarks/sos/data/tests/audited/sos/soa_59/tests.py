@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import TriumphOfTheHordes
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestTriumphOfTheHordesBasicProperties:
@@ -43,8 +44,7 @@ class TestTriumphOfTheHordesBasicProperties:
         """Triumph of the Hordes must have colors ['G']."""
         card = TriumphOfTheHordes(name="Triumph of the Hordes", owner=None)
         for c in ["G"]:
-            assert c in card.colors, f"Expected color {c} in {card.colors}"
-
+            assert c in card_colors(card), f"Expected color {c} in {card_colors(card)}"
 
 @pytest.mark.ability
 class TestTriumphOfTheHordesAbilities:

@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import EmptyTheWarrens
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestEmptyTheWarrensBasicProperties:
@@ -42,8 +43,7 @@ class TestEmptyTheWarrensBasicProperties:
     def test_colors(self) -> None:
         """Empty the Warrens must have correct colors."""
         card = EmptyTheWarrens(name="Empty the Warrens", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestEmptyTheWarrensAbilities:
@@ -63,7 +63,6 @@ class TestEmptyTheWarrensAbilities:
             f"Should create token: bf {bf_before} -> {bf_after}"
         )
 
-
 @pytest.mark.edge
 class TestEmptyTheWarrensEdgeCases:
     """Edge case tests for Empty the Warrens."""
@@ -81,7 +80,6 @@ class TestEmptyTheWarrensEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestEmptyTheWarrensInteractions:

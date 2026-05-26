@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SpectacularSkywhale
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestSpectacularSkywhaleBasicProperties:
@@ -43,8 +44,8 @@ class TestSpectacularSkywhaleBasicProperties:
     def test_colors(self) -> None:
         """Spectacular Skywhale must have correct colors."""
         card = SpectacularSkywhale(name="Spectacular Skywhale", owner=None, base_power=1, base_toughness=4)
-        assert "R" in card.colors
-        assert "U" in card.colors
+        assert "R" in card_colors(card)
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Spectacular Skywhale must have base power 1."""
@@ -55,7 +56,6 @@ class TestSpectacularSkywhaleBasicProperties:
         """Spectacular Skywhale must have base toughness 4."""
         card = SpectacularSkywhale(name="Spectacular Skywhale", owner=None, base_power=1, base_toughness=4)
         assert card.base_toughness == 4
-
 
 @pytest.mark.ability
 class TestSpectacularSkywhaleAbilities:
@@ -79,7 +79,6 @@ class TestSpectacularSkywhaleAbilities:
         assert callable(getattr(card, "on_spell_cast", None)) or \
             callable(getattr(card, "opus_trigger", None)), \
             "Spectacular Skywhale must implement opus trigger per oracle text"
-
 
 @pytest.mark.edge
 class TestSpectacularSkywhaleEdgeCases:
@@ -110,7 +109,6 @@ class TestSpectacularSkywhaleEdgeCases:
         card = SpectacularSkywhale(name="Spectacular Skywhale", owner=None, base_power=1, base_toughness=4)
         assert card.mana_cost.cmc == 4, \
             f"CMC must be 4, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestSpectacularSkywhaleInteractions:

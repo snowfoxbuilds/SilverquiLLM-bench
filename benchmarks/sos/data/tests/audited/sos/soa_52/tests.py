@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import GiantGrowth
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestGiantGrowthBasicProperties:
@@ -42,8 +43,7 @@ class TestGiantGrowthBasicProperties:
     def test_colors(self) -> None:
         """Giant Growth must have correct colors."""
         card = GiantGrowth(name="Giant Growth", owner=None)
-        assert "G" in card.colors
-
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestGiantGrowthAbilities:
@@ -68,7 +68,6 @@ class TestGiantGrowthAbilities:
             f"Should pump to 4 power, got {actual_power}"
         )
 
-
 @pytest.mark.edge
 class TestGiantGrowthEdgeCases:
     """Edge case tests for Giant Growth."""
@@ -86,7 +85,6 @@ class TestGiantGrowthEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestGiantGrowthInteractions:

@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SpellbookSeekerCarefulStudy
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestSpellbookSeekerCarefulStudyBasicProperties:
@@ -43,7 +44,7 @@ class TestSpellbookSeekerCarefulStudyBasicProperties:
     def test_colors(self) -> None:
         """Spellbook Seeker // Careful Study must have correct colors."""
         card = SpellbookSeekerCarefulStudy(name="Spellbook Seeker // Careful Study", owner=None, base_power=3, base_toughness=3)
-        assert "U" in card.colors
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Spellbook Seeker // Careful Study must have base power 3."""
@@ -54,7 +55,6 @@ class TestSpellbookSeekerCarefulStudyBasicProperties:
         """Spellbook Seeker // Careful Study must have base toughness 3."""
         card = SpellbookSeekerCarefulStudy(name="Spellbook Seeker // Careful Study", owner=None, base_power=3, base_toughness=3)
         assert card.base_toughness == 3
-
 
 @pytest.mark.ability
 class TestSpellbookSeekerCarefulStudyAbilities:
@@ -86,7 +86,6 @@ class TestSpellbookSeekerCarefulStudyAbilities:
             callable(getattr(card, "on_resolve", None)), \
             "Spellbook Seeker // Careful Study must implement prepared mechanic"
 
-
 @pytest.mark.edge
 class TestSpellbookSeekerCarefulStudyEdgeCases:
     """Edge case and trap tests for Spellbook Seeker // Careful Study."""
@@ -117,7 +116,6 @@ class TestSpellbookSeekerCarefulStudyEdgeCases:
             card.damage_taken = 2
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestSpellbookSeekerCarefulStudyInteractions:

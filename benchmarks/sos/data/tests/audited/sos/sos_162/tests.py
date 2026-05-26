@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import StudiousFirstYearRampantGrowth
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestStudiousFirstYearRampantGrowthBasicProperties:
@@ -43,7 +44,7 @@ class TestStudiousFirstYearRampantGrowthBasicProperties:
     def test_colors(self) -> None:
         """Studious First-Year // Rampant Growth must have correct colors."""
         card = StudiousFirstYearRampantGrowth(name="Studious First-Year // Rampant Growth", owner=None, base_power=1, base_toughness=1)
-        assert "G" in card.colors
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Studious First-Year // Rampant Growth must have base power 1."""
@@ -54,7 +55,6 @@ class TestStudiousFirstYearRampantGrowthBasicProperties:
         """Studious First-Year // Rampant Growth must have base toughness 1."""
         card = StudiousFirstYearRampantGrowth(name="Studious First-Year // Rampant Growth", owner=None, base_power=1, base_toughness=1)
         assert card.base_toughness == 1
-
 
 @pytest.mark.ability
 class TestStudiousFirstYearRampantGrowthAbilities:
@@ -79,7 +79,6 @@ class TestStudiousFirstYearRampantGrowthAbilities:
             callable(getattr(card, "prepared_effect", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Studious First-Year // Rampant Growth must implement prepared mechanic"
-
 
 @pytest.mark.edge
 class TestStudiousFirstYearRampantGrowthEdgeCases:
@@ -111,7 +110,6 @@ class TestStudiousFirstYearRampantGrowthEdgeCases:
             card.damage_taken = 0
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestStudiousFirstYearRampantGrowthInteractions:

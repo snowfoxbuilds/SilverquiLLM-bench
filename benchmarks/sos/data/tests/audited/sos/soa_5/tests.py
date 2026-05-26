@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import HelpingHand
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestHelpingHandBasicProperties:
@@ -42,8 +43,7 @@ class TestHelpingHandBasicProperties:
     def test_colors(self) -> None:
         """Helping Hand must have correct colors."""
         card = HelpingHand(name="Helping Hand", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestHelpingHandAbilities:
@@ -70,7 +70,6 @@ class TestHelpingHandAbilities:
             f"Should return from gy: {gy_before} -> {gy_after}"
         )
 
-
 @pytest.mark.edge
 class TestHelpingHandEdgeCases:
     """Edge case tests for Helping Hand."""
@@ -88,7 +87,6 @@ class TestHelpingHandEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestHelpingHandInteractions:

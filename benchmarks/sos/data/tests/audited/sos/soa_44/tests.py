@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import JeskasWill
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestJeskasWillBasicProperties:
@@ -43,8 +44,7 @@ class TestJeskasWillBasicProperties:
     def test_colors(self) -> None:
         """Jeska's Will must have correct colors."""
         card = JeskasWill(name="Jeska's Will", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestJeskasWillAbilities:
@@ -75,7 +75,6 @@ class TestJeskasWillAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Jeska's Will must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestJeskasWillEdgeCases:
@@ -110,7 +109,6 @@ class TestJeskasWillEdgeCases:
         card = JeskasWill(name="Jeska's Will", owner=None)
         assert card.mana_cost.cmc == 3, \
             f"CMC must be 3, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestJeskasWillInteractions:

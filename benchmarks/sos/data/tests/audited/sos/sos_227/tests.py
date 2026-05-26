@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SnoopingPage
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestSnoopingPageBasicProperties:
@@ -42,8 +43,8 @@ class TestSnoopingPageBasicProperties:
     def test_colors(self) -> None:
         """Snooping Page must have correct colors."""
         card = SnoopingPage(name="Snooping Page", owner=None)
-        assert "B" in card.colors
-        assert "W" in card.colors
+        assert "B" in card_colors(card)
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Snooping Page must have base power 2."""
@@ -54,7 +55,6 @@ class TestSnoopingPageBasicProperties:
         """Snooping Page must have base toughness 3."""
         card = SnoopingPage(name="Snooping Page", owner=None)
         assert card.base_toughness == 3
-
 
 @pytest.mark.ability
 class TestSnoopingPageAbilities:
@@ -148,7 +148,6 @@ class TestSnoopingPageAbilities:
             f"Should lose life: {life_before} -> {opponent.life}"
         )
 
-
 @pytest.mark.edge
 class TestSnoopingPageEdgeCases:
     """Edge case tests for Snooping Page."""
@@ -166,7 +165,6 @@ class TestSnoopingPageEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestSnoopingPageInteractions:

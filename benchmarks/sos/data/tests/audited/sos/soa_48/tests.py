@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SubterraneanTremors
 
 from engine.card import Sorcery
 from engine.types import CardType
-
 
 @pytest.mark.basic
 class TestSubterraneanTremorsBasicProperties:
@@ -43,8 +44,7 @@ class TestSubterraneanTremorsBasicProperties:
         """Subterranean Tremors must have colors ['R']."""
         card = SubterraneanTremors(name="Subterranean Tremors", owner=None)
         for c in ["R"]:
-            assert c in card.colors, f"Expected color {c} in {card.colors}"
-
+            assert c in card_colors(card), f"Expected color {c} in {card_colors(card)}"
 
 @pytest.mark.ability
 class TestSubterraneanTremorsAbilities:

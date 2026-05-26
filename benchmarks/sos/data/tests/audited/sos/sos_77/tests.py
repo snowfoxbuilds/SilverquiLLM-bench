@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import CostOfBrilliance
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestCostOfBrillianceBasicProperties:
@@ -42,8 +43,7 @@ class TestCostOfBrillianceBasicProperties:
     def test_colors(self) -> None:
         """Cost of Brilliance must have correct colors."""
         card = CostOfBrilliance(name="Cost of Brilliance", owner=None)
-        assert "B" in card.colors
-
+        assert "B" in card_colors(card)
 
 @pytest.mark.ability
 class TestCostOfBrillianceAbilities:
@@ -102,7 +102,6 @@ class TestCostOfBrillianceAbilities:
             f"Should lose life: {life_before} -> {opponent.life}"
         )
 
-
 @pytest.mark.edge
 class TestCostOfBrillianceEdgeCases:
     """Edge case tests for Cost of Brilliance."""
@@ -120,7 +119,6 @@ class TestCostOfBrillianceEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestCostOfBrillianceInteractions:

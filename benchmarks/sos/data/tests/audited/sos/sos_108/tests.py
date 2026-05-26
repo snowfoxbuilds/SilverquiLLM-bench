@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ArtisticProcess
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestArtisticProcessBasicProperties:
@@ -43,8 +44,7 @@ class TestArtisticProcessBasicProperties:
     def test_colors(self) -> None:
         """Artistic Process must have correct colors."""
         card = ArtisticProcess(name="Artistic Process", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestArtisticProcessAbilities:
@@ -70,7 +70,6 @@ class TestArtisticProcessAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Artistic Process must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestArtisticProcessEdgeCases:
@@ -105,7 +104,6 @@ class TestArtisticProcessEdgeCases:
         card = ArtisticProcess(name="Artistic Process", owner=None)
         assert card.mana_cost.cmc == 5, \
             f"CMC must be 5, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestArtisticProcessInteractions:

@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SpectacleSummit
 
 from engine.card import Land
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestSpectacleSummitBasicProperties:
@@ -43,8 +44,7 @@ class TestSpectacleSummitBasicProperties:
     def test_colorless(self) -> None:
         """Spectacle Summit must be colorless."""
         card = SpectacleSummit(name="Spectacle Summit", owner=None)
-        assert len(card.colors) == 0
-
+        assert len(card_colors(card)) == 0
 
 @pytest.mark.ability
 class TestSpectacleSummitAbilities:
@@ -58,7 +58,6 @@ class TestSpectacleSummitAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Spectacle Summit must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestSpectacleSummitEdgeCases:
@@ -91,7 +90,6 @@ class TestSpectacleSummitEdgeCases:
             pass  # Fizzle on empty board is acceptable
         # Verify game state is consistent
         assert player.life == 20, "Caster life should be unchanged on fizzle"
-
 
 @pytest.mark.interaction
 class TestSpectacleSummitInteractions:

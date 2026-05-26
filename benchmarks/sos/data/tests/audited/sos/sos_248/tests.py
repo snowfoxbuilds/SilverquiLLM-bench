@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import DiaryOfDreams
 
 from engine.card import Artifact
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestDiaryOfDreamsBasicProperties:
@@ -42,8 +43,7 @@ class TestDiaryOfDreamsBasicProperties:
     def test_colors(self) -> None:
         """Diary of Dreams must have correct colors."""
         card = DiaryOfDreams(name="Diary of Dreams", owner=None)
-        assert len(card.colors) == 0
-
+        assert len(card_colors(card)) == 0
 
 @pytest.mark.ability
 class TestDiaryOfDreamsAbilities:
@@ -96,7 +96,6 @@ class TestDiaryOfDreamsAbilities:
         abilities_list = card.get_activated_abilities()
         assert len(abilities_list) > 0, "Card must have activated ability"
 
-
 @pytest.mark.edge
 class TestDiaryOfDreamsEdgeCases:
     """Edge case tests for Diary of Dreams."""
@@ -115,7 +114,6 @@ class TestDiaryOfDreamsEdgeCases:
         card._targets = [target]
         reduction = card.cost_reduction(game)
         assert reduction == 0, f"No reduction when unmet, got {reduction}"
-
 
 @pytest.mark.interaction
 class TestDiaryOfDreamsInteractions:

@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import WildgrowthArchaic
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestWildgrowthArchaicBasicProperties:
@@ -43,7 +44,7 @@ class TestWildgrowthArchaicBasicProperties:
     def test_colors(self) -> None:
         """Wildgrowth Archaic must have correct colors."""
         card = WildgrowthArchaic(name="Wildgrowth Archaic", owner=None, base_power=0, base_toughness=0)
-        assert "G" in card.colors
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Wildgrowth Archaic must have base power 0."""
@@ -54,7 +55,6 @@ class TestWildgrowthArchaicBasicProperties:
         """Wildgrowth Archaic must have base toughness 0."""
         card = WildgrowthArchaic(name="Wildgrowth Archaic", owner=None, base_power=0, base_toughness=0)
         assert card.base_toughness == 0
-
 
 @pytest.mark.ability
 class TestWildgrowthArchaicAbilities:
@@ -108,7 +108,6 @@ class TestWildgrowthArchaicAbilities:
         p1p1 = counters.get("+1/+1", counters.get("p1p1", 0))
         assert p1p1 == 3, f"Converge with 3 colors should add 3 counters, got {p1p1}"
 
-
 @pytest.mark.edge
 class TestWildgrowthArchaicEdgeCases:
     """Edge case and trap tests for Wildgrowth Archaic."""
@@ -159,7 +158,6 @@ class TestWildgrowthArchaicEdgeCases:
         card = WildgrowthArchaic(name="Wildgrowth Archaic", owner=None, base_power=0, base_toughness=0)
         assert card.mana_cost.cmc == 2, \
             f"CMC must be 2, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestWildgrowthArchaicInteractions:

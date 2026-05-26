@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import Dismember
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestDismemberBasicProperties:
@@ -42,8 +43,7 @@ class TestDismemberBasicProperties:
     def test_colors(self) -> None:
         """Dismember must have correct colors."""
         card = Dismember(name="Dismember", owner=None)
-        assert "B" in card.colors
-
+        assert "B" in card_colors(card)
 
 @pytest.mark.ability
 class TestDismemberAbilities:
@@ -77,7 +77,6 @@ class TestDismemberAbilities:
         )
         assert changed, "on_resolve must change game state"
 
-
 @pytest.mark.edge
 class TestDismemberEdgeCases:
     """Edge case tests for Dismember."""
@@ -95,7 +94,6 @@ class TestDismemberEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestDismemberInteractions:

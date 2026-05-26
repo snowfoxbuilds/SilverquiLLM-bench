@@ -8,13 +8,14 @@ Complexity tier: expert.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import RalZarekGuestLecturer
 
 from engine.card import Planeswalker
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestRalZarekGuestLecturerBasicProperties:
@@ -43,8 +44,7 @@ class TestRalZarekGuestLecturerBasicProperties:
     def test_colors(self) -> None:
         """Ral Zarek, Guest Lecturer must have correct colors."""
         card = RalZarekGuestLecturer(name="Ral Zarek, Guest Lecturer", owner=None)
-        assert "B" in card.colors
-
+        assert "B" in card_colors(card)
 
 @pytest.mark.ability
 class TestRalZarekGuestLecturerAbilities:
@@ -75,7 +75,6 @@ class TestRalZarekGuestLecturerAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Ral Zarek, Guest Lecturer must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestRalZarekGuestLecturerEdgeCases:
@@ -110,7 +109,6 @@ class TestRalZarekGuestLecturerEdgeCases:
         card = RalZarekGuestLecturer(name="Ral Zarek, Guest Lecturer", owner=None)
         assert card.mana_cost.cmc == 3, \
             f"CMC must be 3, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestRalZarekGuestLecturerInteractions:

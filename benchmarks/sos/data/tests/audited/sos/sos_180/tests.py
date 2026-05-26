@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ColorstormStallion
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestColorstormStallionBasicProperties:
@@ -43,8 +44,8 @@ class TestColorstormStallionBasicProperties:
     def test_colors(self) -> None:
         """Colorstorm Stallion must have correct colors."""
         card = ColorstormStallion(name="Colorstorm Stallion", owner=None, base_power=3, base_toughness=3)
-        assert "R" in card.colors
-        assert "U" in card.colors
+        assert "R" in card_colors(card)
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Colorstorm Stallion must have base power 3."""
@@ -55,7 +56,6 @@ class TestColorstormStallionBasicProperties:
         """Colorstorm Stallion must have base toughness 3."""
         card = ColorstormStallion(name="Colorstorm Stallion", owner=None, base_power=3, base_toughness=3)
         assert card.base_toughness == 3
-
 
 @pytest.mark.ability
 class TestColorstormStallionAbilities:
@@ -86,7 +86,6 @@ class TestColorstormStallionAbilities:
             callable(getattr(card, "opus_trigger", None)), \
             "Colorstorm Stallion must implement opus trigger per oracle text"
 
-
 @pytest.mark.edge
 class TestColorstormStallionEdgeCases:
     """Edge case and trap tests for Colorstorm Stallion."""
@@ -116,7 +115,6 @@ class TestColorstormStallionEdgeCases:
         card = ColorstormStallion(name="Colorstorm Stallion", owner=None, base_power=3, base_toughness=3)
         assert card.mana_cost.cmc == 3, \
             f"CMC must be 3, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestColorstormStallionInteractions:

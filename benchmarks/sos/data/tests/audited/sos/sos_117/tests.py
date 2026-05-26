@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import GoblinGlasswrightCraftWithPride
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestGoblinGlasswrightCraftWithPrideBasicProperties:
@@ -43,7 +44,7 @@ class TestGoblinGlasswrightCraftWithPrideBasicProperties:
     def test_colors(self) -> None:
         """Goblin Glasswright // Craft with Pride must have correct colors."""
         card = GoblinGlasswrightCraftWithPride(name="Goblin Glasswright // Craft with Pride", owner=None, base_power=2, base_toughness=2)
-        assert "R" in card.colors
+        assert "R" in card_colors(card)
 
     def test_power(self) -> None:
         """Goblin Glasswright // Craft with Pride must have base power 2."""
@@ -54,7 +55,6 @@ class TestGoblinGlasswrightCraftWithPrideBasicProperties:
         """Goblin Glasswright // Craft with Pride must have base toughness 2."""
         card = GoblinGlasswrightCraftWithPride(name="Goblin Glasswright // Craft with Pride", owner=None, base_power=2, base_toughness=2)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestGoblinGlasswrightCraftWithPrideAbilities:
@@ -79,7 +79,6 @@ class TestGoblinGlasswrightCraftWithPrideAbilities:
             callable(getattr(card, "prepared_effect", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Goblin Glasswright // Craft with Pride must implement prepared mechanic"
-
 
 @pytest.mark.edge
 class TestGoblinGlasswrightCraftWithPrideEdgeCases:
@@ -111,7 +110,6 @@ class TestGoblinGlasswrightCraftWithPrideEdgeCases:
             card.damage_taken = 1
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestGoblinGlasswrightCraftWithPrideInteractions:

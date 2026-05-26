@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import TackleArtist
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestTackleArtistBasicProperties:
@@ -43,7 +44,7 @@ class TestTackleArtistBasicProperties:
     def test_colors(self) -> None:
         """Tackle Artist must have correct colors."""
         card = TackleArtist(name="Tackle Artist", owner=None, base_power=4, base_toughness=3)
-        assert "R" in card.colors
+        assert "R" in card_colors(card)
 
     def test_power(self) -> None:
         """Tackle Artist must have base power 4."""
@@ -54,7 +55,6 @@ class TestTackleArtistBasicProperties:
         """Tackle Artist must have base toughness 3."""
         card = TackleArtist(name="Tackle Artist", owner=None, base_power=4, base_toughness=3)
         assert card.base_toughness == 3
-
 
 @pytest.mark.ability
 class TestTackleArtistAbilities:
@@ -78,7 +78,6 @@ class TestTackleArtistAbilities:
         assert callable(getattr(card, "on_spell_cast", None)) or \
             callable(getattr(card, "opus_trigger", None)), \
             "Tackle Artist must implement opus trigger per oracle text"
-
 
 @pytest.mark.edge
 class TestTackleArtistEdgeCases:
@@ -107,7 +106,6 @@ class TestTackleArtistEdgeCases:
         card = TackleArtist(name="Tackle Artist", owner=None, base_power=4, base_toughness=3)
         assert card.mana_cost.cmc == 4, \
             f"CMC must be 4, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestTackleArtistInteractions:

@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import BulkUp
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestBulkUpBasicProperties:
@@ -42,8 +43,7 @@ class TestBulkUpBasicProperties:
     def test_colors(self) -> None:
         """Bulk Up must have correct colors."""
         card = BulkUp(name="Bulk Up", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestBulkUpAbilities:
@@ -90,7 +90,6 @@ class TestBulkUpAbilities:
         gy_after = player.zones[Zone.GRAVEYARD].get_all()
         assert card not in gy_after, "Card must leave graveyard after flashback"
 
-
 @pytest.mark.edge
 class TestBulkUpEdgeCases:
     """Edge case tests for Bulk Up."""
@@ -108,7 +107,6 @@ class TestBulkUpEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestBulkUpInteractions:

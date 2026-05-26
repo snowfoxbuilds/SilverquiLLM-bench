@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import DissectionPractice
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestDissectionPracticeBasicProperties:
@@ -43,8 +44,7 @@ class TestDissectionPracticeBasicProperties:
     def test_colors(self) -> None:
         """Dissection Practice must have correct colors."""
         card = DissectionPractice(name="Dissection Practice", owner=None)
-        assert "B" in card.colors
-
+        assert "B" in card_colors(card)
 
 @pytest.mark.ability
 class TestDissectionPracticeAbilities:
@@ -58,7 +58,6 @@ class TestDissectionPracticeAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Dissection Practice must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestDissectionPracticeEdgeCases:
@@ -93,7 +92,6 @@ class TestDissectionPracticeEdgeCases:
         card = DissectionPractice(name="Dissection Practice", owner=None)
         assert card.mana_cost.cmc == 1, \
             f"CMC must be 1, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestDissectionPracticeInteractions:

@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import Reprieve
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestReprieveBasicProperties:
@@ -42,8 +43,7 @@ class TestReprieveBasicProperties:
     def test_colors(self) -> None:
         """Reprieve must have correct colors."""
         card = Reprieve(name="Reprieve", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestReprieveAbilities:
@@ -90,7 +90,6 @@ class TestReprieveAbilities:
             f"Target should leave bf: {bf_before} -> {bf_after}"
         )
 
-
 @pytest.mark.edge
 class TestReprieveEdgeCases:
     """Edge case tests for Reprieve."""
@@ -108,7 +107,6 @@ class TestReprieveEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestReprieveInteractions:

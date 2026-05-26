@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import GarrisonExcavator
@@ -14,7 +16,6 @@ from card_impl import GarrisonExcavator
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestGarrisonExcavatorBasicProperties:
@@ -43,7 +44,7 @@ class TestGarrisonExcavatorBasicProperties:
     def test_colors(self) -> None:
         """Garrison Excavator must have correct colors."""
         card = GarrisonExcavator(name="Garrison Excavator", owner=None)
-        assert "R" in card.colors
+        assert "R" in card_colors(card)
 
     def test_power(self) -> None:
         """Garrison Excavator must have base power 3."""
@@ -59,7 +60,6 @@ class TestGarrisonExcavatorBasicProperties:
         """Garrison Excavator must have Menace keyword."""
         card = GarrisonExcavator(name="Garrison Excavator", owner=None)
         assert Keyword.MENACE in card.keywords
-
 
 @pytest.mark.ability
 class TestGarrisonExcavatorAbilities:
@@ -79,7 +79,6 @@ class TestGarrisonExcavatorAbilities:
             f"Should create token: bf {bf_before} -> {bf_after}"
         )
 
-
 @pytest.mark.edge
 class TestGarrisonExcavatorEdgeCases:
     """Edge case tests for Garrison Excavator."""
@@ -97,7 +96,6 @@ class TestGarrisonExcavatorEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestGarrisonExcavatorInteractions:

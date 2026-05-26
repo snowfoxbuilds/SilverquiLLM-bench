@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ArchaicsAgony
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestArchaicsAgonyBasicProperties:
@@ -43,8 +44,7 @@ class TestArchaicsAgonyBasicProperties:
     def test_colors(self) -> None:
         """Archaic's Agony must have correct colors."""
         card = ArchaicsAgony(name="Archaic's Agony", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestArchaicsAgonyAbilities:
@@ -80,7 +80,6 @@ class TestArchaicsAgonyAbilities:
         initial_life = opponent.life
         card.on_resolve(game)
         assert opponent.life < initial_life, "Archaic's Agony must deal damage on resolution"
-
 
 @pytest.mark.edge
 class TestArchaicsAgonyEdgeCases:
@@ -148,7 +147,6 @@ class TestArchaicsAgonyEdgeCases:
         card = ArchaicsAgony(name="Archaic's Agony", owner=None)
         assert card.mana_cost.cmc == 5, \
             f"CMC must be 5, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestArchaicsAgonyInteractions:

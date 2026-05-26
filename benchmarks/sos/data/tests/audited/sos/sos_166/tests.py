@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import VastlandsScavengerBindToLife
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestVastlandsScavengerBindToLifeBasicProperties:
@@ -43,7 +44,7 @@ class TestVastlandsScavengerBindToLifeBasicProperties:
     def test_colors(self) -> None:
         """Vastlands Scavenger // Bind to Life must have correct colors."""
         card = VastlandsScavengerBindToLife(name="Vastlands Scavenger // Bind to Life", owner=None, base_power=4, base_toughness=4)
-        assert "G" in card.colors
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Vastlands Scavenger // Bind to Life must have base power 4."""
@@ -54,7 +55,6 @@ class TestVastlandsScavengerBindToLifeBasicProperties:
         """Vastlands Scavenger // Bind to Life must have base toughness 4."""
         card = VastlandsScavengerBindToLife(name="Vastlands Scavenger // Bind to Life", owner=None, base_power=4, base_toughness=4)
         assert card.base_toughness == 4
-
 
 @pytest.mark.ability
 class TestVastlandsScavengerBindToLifeAbilities:
@@ -86,7 +86,6 @@ class TestVastlandsScavengerBindToLifeAbilities:
             callable(getattr(card, "on_resolve", None)), \
             "Vastlands Scavenger // Bind to Life must implement prepared mechanic"
 
-
 @pytest.mark.edge
 class TestVastlandsScavengerBindToLifeEdgeCases:
     """Edge case and trap tests for Vastlands Scavenger // Bind to Life."""
@@ -117,7 +116,6 @@ class TestVastlandsScavengerBindToLifeEdgeCases:
             card.damage_taken = 3
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestVastlandsScavengerBindToLifeInteractions:

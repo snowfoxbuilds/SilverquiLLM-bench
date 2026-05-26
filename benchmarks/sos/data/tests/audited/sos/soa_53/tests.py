@@ -5,6 +5,9 @@ Basic tests verify stats/attributes (should pass against stubs).
 Ability tests verify oracle text behavior (expected to fail against stubs).
 """
 from __future__ import annotations
+
+from test_utils import card_colors
+
 import pytest
 from card_impl import GlimpseOfNature
 from engine.card import Sorcery
@@ -38,7 +41,7 @@ class TestGlimpseOfNatureBasicProperties:
         """Glimpse of Nature must have colors ['G']."""
         card = GlimpseOfNature(name='Glimpse of Nature', owner=None)
         for c in ['G']:
-            assert c in card.colors, f'Expected color {c} in {card.colors}'
+            assert c in card_colors(card), f'Expected color {c} in {card_colors(card)}'
 
 @pytest.mark.ability
 class TestGlimpseOfNatureAbilities:

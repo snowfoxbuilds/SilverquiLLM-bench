@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import MoltenNote
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestMoltenNoteBasicProperties:
@@ -42,9 +43,8 @@ class TestMoltenNoteBasicProperties:
     def test_colors(self) -> None:
         """Molten Note must have correct colors."""
         card = MoltenNote(name="Molten Note", owner=None)
-        assert "R" in card.colors
-        assert "W" in card.colors
-
+        assert "R" in card_colors(card)
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestMoltenNoteAbilities:
@@ -91,7 +91,6 @@ class TestMoltenNoteAbilities:
         gy_after = player.zones[Zone.GRAVEYARD].get_all()
         assert card not in gy_after, "Card must leave graveyard after flashback"
 
-
 @pytest.mark.edge
 class TestMoltenNoteEdgeCases:
     """Edge case tests for Molten Note."""
@@ -113,7 +112,6 @@ class TestMoltenNoteEdgeCases:
         if len(targets) > 0:
             assert own in targets, "Own creature should be valid"
             assert enemy not in targets, "Opponent creature should be invalid"
-
 
 @pytest.mark.interaction
 class TestMoltenNoteInteractions:

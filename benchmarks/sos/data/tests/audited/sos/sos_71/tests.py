@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import WisdomOfAges
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestWisdomOfAgesBasicProperties:
@@ -42,8 +43,7 @@ class TestWisdomOfAgesBasicProperties:
     def test_colors(self) -> None:
         """Wisdom of Ages must have correct colors."""
         card = WisdomOfAges(name="Wisdom of Ages", owner=None)
-        assert "U" in card.colors
-
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestWisdomOfAgesAbilities:
@@ -70,7 +70,6 @@ class TestWisdomOfAgesAbilities:
             f"Should return from gy: {gy_before} -> {gy_after}"
         )
 
-
 @pytest.mark.edge
 class TestWisdomOfAgesEdgeCases:
     """Edge case tests for Wisdom of Ages."""
@@ -88,7 +87,6 @@ class TestWisdomOfAgesEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestWisdomOfAgesInteractions:

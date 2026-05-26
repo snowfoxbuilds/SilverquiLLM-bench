@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import Efflorescence
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestEfflorescenceBasicProperties:
@@ -42,8 +43,7 @@ class TestEfflorescenceBasicProperties:
     def test_colors(self) -> None:
         """Efflorescence must have correct colors."""
         card = Efflorescence(name="Efflorescence", owner=None)
-        assert "G" in card.colors
-
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestEfflorescenceAbilities:
@@ -101,7 +101,6 @@ class TestEfflorescenceAbilities:
             f"Should gain life: {life_before} -> {player.life}"
         )
 
-
 @pytest.mark.edge
 class TestEfflorescenceEdgeCases:
     """Edge case tests for Efflorescence."""
@@ -119,7 +118,6 @@ class TestEfflorescenceEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestEfflorescenceInteractions:

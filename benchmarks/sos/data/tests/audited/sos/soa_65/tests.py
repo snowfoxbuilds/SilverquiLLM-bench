@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import Fracture
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestFractureBasicProperties:
@@ -42,9 +43,8 @@ class TestFractureBasicProperties:
     def test_colors(self) -> None:
         """Fracture must have correct colors."""
         card = Fracture(name="Fracture", owner=None)
-        assert "B" in card.colors
-        assert "W" in card.colors
-
+        assert "B" in card_colors(card)
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestFractureAbilities:
@@ -71,7 +71,6 @@ class TestFractureAbilities:
             f"Target should be destroyed: bf {bf_before} -> {bf_after}"
         )
 
-
 @pytest.mark.edge
 class TestFractureEdgeCases:
     """Edge case tests for Fracture."""
@@ -89,7 +88,6 @@ class TestFractureEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestFractureInteractions:

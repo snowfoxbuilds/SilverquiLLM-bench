@@ -36,6 +36,29 @@ class TestSetupError(Exception):
     """Raised when a test utility function encounters an invalid setup."""
 
 
+def card_colors(card: Any) -> set[str]:
+    """Return a card's colors as single-letter strings, derived from its mana cost.
+
+    Hybrid pips contribute both options. {C} and {X} contribute nothing.
+    Returns an empty set for cards with no mana cost or only colorless/X pips.
+    Used by audited tests that previously asserted against a non-existent
+    ``card.colors`` attribute.
+    """
+    colors: set[str] = set()
+    cost = getattr(card, "mana_cost", None)
+    if cost is None:
+        return colors
+    for mt in getattr(cost, "pips", {}):
+        if mt != ManaType.COLORLESS:
+            colors.add(mt.value)
+    for hybrid in getattr(cost, "hybrid", []):
+        if hybrid.option_a != ManaType.COLORLESS:
+            colors.add(hybrid.option_a.value)
+        if hybrid.option_b != ManaType.COLORLESS:
+            colors.add(hybrid.option_b.value)
+    return colors
+
+
 # ---------------------------------------------------------------------------
 # create_game
 # ---------------------------------------------------------------------------

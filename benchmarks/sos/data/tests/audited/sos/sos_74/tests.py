@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ArnynDeathbloomBotanist
@@ -14,7 +16,6 @@ from card_impl import ArnynDeathbloomBotanist
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestArnynDeathbloomBotanistBasicProperties:
@@ -43,7 +44,7 @@ class TestArnynDeathbloomBotanistBasicProperties:
     def test_colors(self) -> None:
         """Arnyn, Deathbloom Botanist must have correct colors."""
         card = ArnynDeathbloomBotanist(name="Arnyn, Deathbloom Botanist", owner=None)
-        assert "B" in card.colors
+        assert "B" in card_colors(card)
 
     def test_power(self) -> None:
         """Arnyn, Deathbloom Botanist must have base power 2."""
@@ -59,7 +60,6 @@ class TestArnynDeathbloomBotanistBasicProperties:
         """Arnyn, Deathbloom Botanist must have Deathtouch keyword."""
         card = ArnynDeathbloomBotanist(name="Arnyn, Deathbloom Botanist", owner=None)
         assert Keyword.DEATHTOUCH in card.keywords
-
 
 @pytest.mark.ability
 class TestArnynDeathbloomBotanistAbilities:
@@ -92,7 +92,6 @@ class TestArnynDeathbloomBotanistAbilities:
             f"Should lose life: {life_before} -> {opponent.life}"
         )
 
-
 @pytest.mark.edge
 class TestArnynDeathbloomBotanistEdgeCases:
     """Edge case tests for Arnyn, Deathbloom Botanist."""
@@ -114,7 +113,6 @@ class TestArnynDeathbloomBotanistEdgeCases:
         if len(targets) > 0:
             assert own in targets, "Own creature should be valid"
             assert enemy not in targets, "Opponent creature should be invalid"
-
 
 @pytest.mark.interaction
 class TestArnynDeathbloomBotanistInteractions:

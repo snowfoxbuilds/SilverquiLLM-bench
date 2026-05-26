@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import BigScore
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestBigScoreBasicProperties:
@@ -42,8 +43,7 @@ class TestBigScoreBasicProperties:
     def test_colors(self) -> None:
         """Big Score must have correct colors."""
         card = BigScore(name="Big Score", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestBigScoreAbilities:
@@ -126,7 +126,6 @@ class TestBigScoreAbilities:
         abilities_list = card.get_activated_abilities()
         assert len(abilities_list) > 0, "Card must have activated ability"
 
-
 @pytest.mark.edge
 class TestBigScoreEdgeCases:
     """Edge case tests for Big Score."""
@@ -144,7 +143,6 @@ class TestBigScoreEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestBigScoreInteractions:

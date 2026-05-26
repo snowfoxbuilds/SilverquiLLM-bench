@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import BanishingBetrayal
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestBanishingBetrayalBasicProperties:
@@ -42,8 +43,7 @@ class TestBanishingBetrayalBasicProperties:
     def test_colors(self) -> None:
         """Banishing Betrayal must have correct colors."""
         card = BanishingBetrayal(name="Banishing Betrayal", owner=None)
-        assert "U" in card.colors
-
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestBanishingBetrayalAbilities:
@@ -110,7 +110,6 @@ class TestBanishingBetrayalAbilities:
             f"Should return from gy: {gy_before} -> {gy_after}"
         )
 
-
 @pytest.mark.edge
 class TestBanishingBetrayalEdgeCases:
     """Edge case tests for Banishing Betrayal."""
@@ -128,7 +127,6 @@ class TestBanishingBetrayalEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestBanishingBetrayalInteractions:

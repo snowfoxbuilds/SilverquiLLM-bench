@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import PoisonersApprentice
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestPoisonersApprenticeBasicProperties:
@@ -42,7 +43,7 @@ class TestPoisonersApprenticeBasicProperties:
     def test_colors(self) -> None:
         """Poisoner's Apprentice must have correct colors."""
         card = PoisonersApprentice(name="Poisoner's Apprentice", owner=None)
-        assert "B" in card.colors
+        assert "B" in card_colors(card)
 
     def test_power(self) -> None:
         """Poisoner's Apprentice must have base power 2."""
@@ -53,7 +54,6 @@ class TestPoisonersApprenticeBasicProperties:
         """Poisoner's Apprentice must have base toughness 2."""
         card = PoisonersApprentice(name="Poisoner's Apprentice", owner=None)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestPoisonersApprenticeAbilities:
@@ -72,7 +72,6 @@ class TestPoisonersApprenticeAbilities:
             f"Should gain life: {life_before} -> {player.life}"
         )
 
-
 @pytest.mark.edge
 class TestPoisonersApprenticeEdgeCases:
     """Edge case tests for Poisoner's Apprentice."""
@@ -90,7 +89,6 @@ class TestPoisonersApprenticeEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestPoisonersApprenticeInteractions:

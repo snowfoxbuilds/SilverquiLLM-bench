@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import HardenedAcademic
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestHardenedAcademicBasicProperties:
@@ -43,8 +44,8 @@ class TestHardenedAcademicBasicProperties:
     def test_colors(self) -> None:
         """Hardened Academic must have correct colors."""
         card = HardenedAcademic(name="Hardened Academic", owner=None, base_power=2, base_toughness=1)
-        assert "R" in card.colors
-        assert "W" in card.colors
+        assert "R" in card_colors(card)
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Hardened Academic must have base power 2."""
@@ -55,7 +56,6 @@ class TestHardenedAcademicBasicProperties:
         """Hardened Academic must have base toughness 1."""
         card = HardenedAcademic(name="Hardened Academic", owner=None, base_power=2, base_toughness=1)
         assert card.base_toughness == 1
-
 
 @pytest.mark.ability
 class TestHardenedAcademicAbilities:
@@ -72,7 +72,6 @@ class TestHardenedAcademicAbilities:
         from engine.types import Keyword
         card = HardenedAcademic(name="Hardened Academic", owner=None, base_power=2, base_toughness=1)
         assert Keyword.HASTE in card.keywords, "Hardened Academic should have Haste"
-
 
 @pytest.mark.edge
 class TestHardenedAcademicEdgeCases:
@@ -108,7 +107,6 @@ class TestHardenedAcademicEdgeCases:
         card = HardenedAcademic(name="Hardened Academic", owner=None, base_power=2, base_toughness=1)
         assert card.mana_cost.cmc == 2, \
             f"CMC must be 2, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestHardenedAcademicInteractions:

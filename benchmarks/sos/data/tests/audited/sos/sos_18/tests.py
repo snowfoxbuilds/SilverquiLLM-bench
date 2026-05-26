@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import HarshAnnotation
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestHarshAnnotationBasicProperties:
@@ -42,8 +43,7 @@ class TestHarshAnnotationBasicProperties:
     def test_colors(self) -> None:
         """Harsh Annotation must have correct colors."""
         card = HarshAnnotation(name="Harsh Annotation", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestHarshAnnotationAbilities:
@@ -106,7 +106,6 @@ class TestHarshAnnotationAbilities:
             f"Should create token: bf {bf_before} -> {bf_after}"
         )
 
-
 @pytest.mark.edge
 class TestHarshAnnotationEdgeCases:
     """Edge case tests for Harsh Annotation."""
@@ -124,7 +123,6 @@ class TestHarshAnnotationEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestHarshAnnotationInteractions:

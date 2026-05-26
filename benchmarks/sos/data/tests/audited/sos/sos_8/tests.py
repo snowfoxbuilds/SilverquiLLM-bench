@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import AscendantDustspeaker
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestAscendantDustspeakerBasicProperties:
@@ -43,7 +44,7 @@ class TestAscendantDustspeakerBasicProperties:
     def test_colors(self) -> None:
         """Ascendant Dustspeaker must have correct colors."""
         card = AscendantDustspeaker(name="Ascendant Dustspeaker", owner=None, base_power=3, base_toughness=4)
-        assert "W" in card.colors
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Ascendant Dustspeaker must have base power 3."""
@@ -54,7 +55,6 @@ class TestAscendantDustspeakerBasicProperties:
         """Ascendant Dustspeaker must have base toughness 4."""
         card = AscendantDustspeaker(name="Ascendant Dustspeaker", owner=None, base_power=3, base_toughness=4)
         assert card.base_toughness == 4
-
 
 @pytest.mark.ability
 class TestAscendantDustspeakerAbilities:
@@ -84,7 +84,6 @@ class TestAscendantDustspeakerAbilities:
             card.on_enter_battlefield(game)
         exile = opponent.zones[Zone.EXILE].get_all()
         assert target in exile, "ETB must exile the target per oracle"
-
 
 @pytest.mark.edge
 class TestAscendantDustspeakerEdgeCases:
@@ -120,7 +119,6 @@ class TestAscendantDustspeakerEdgeCases:
         card = AscendantDustspeaker(name="Ascendant Dustspeaker", owner=None, base_power=3, base_toughness=4)
         assert card.mana_cost.cmc == 5, \
             f"CMC must be 5, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestAscendantDustspeakerInteractions:

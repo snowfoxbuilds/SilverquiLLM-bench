@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import StrixhavenSkycoach
 
 from engine.card import Artifact
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestStrixhavenSkycoachBasicProperties:
@@ -43,8 +44,7 @@ class TestStrixhavenSkycoachBasicProperties:
     def test_colorless(self) -> None:
         """Strixhaven Skycoach must be colorless."""
         card = StrixhavenSkycoach(name="Strixhaven Skycoach", owner=None)
-        assert len(card.colors) == 0
-
+        assert len(card_colors(card)) == 0
 
 @pytest.mark.ability
 class TestStrixhavenSkycoachAbilities:
@@ -64,7 +64,6 @@ class TestStrixhavenSkycoachAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Strixhaven Skycoach must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestStrixhavenSkycoachEdgeCases:
@@ -97,7 +96,6 @@ class TestStrixhavenSkycoachEdgeCases:
             pass  # Fizzle on empty board is acceptable
         # Verify game state is consistent
         assert player.life == 20, "Caster life should be unchanged on fizzle"
-
 
 @pytest.mark.interaction
 class TestStrixhavenSkycoachInteractions:

@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import BrainFreeze
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestBrainFreezeBasicProperties:
@@ -42,8 +43,7 @@ class TestBrainFreezeBasicProperties:
     def test_colors(self) -> None:
         """Brain Freeze must have correct colors."""
         card = BrainFreeze(name="Brain Freeze", owner=None)
-        assert "U" in card.colors
-
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestBrainFreezeAbilities:
@@ -68,7 +68,6 @@ class TestBrainFreezeAbilities:
             f"Should mill: gy {gy_before} -> {gy_after}"
         )
 
-
 @pytest.mark.edge
 class TestBrainFreezeEdgeCases:
     """Edge case tests for Brain Freeze."""
@@ -86,7 +85,6 @@ class TestBrainFreezeEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestBrainFreezeInteractions:

@@ -11,7 +11,7 @@ from silverquillm.workspace import _PROMPT_TEXT, stage_workspace
 
 # The exact sentence that must appear in the prompt.
 _ENGINE_PERMISSION = (
-    "You are expected to make changes to the engine to implement new mechanics. "
+    "You are expected to make changes to the engine to implement new keywords and mechanics. "
     "The existing code base may not be perfect, you are free to make changes that "
     "don't break current behavior."
 )

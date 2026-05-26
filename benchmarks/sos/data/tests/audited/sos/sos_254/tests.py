@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import DreamrootCascade
 
 from engine.card import Land
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestDreamrootCascadeBasicProperties:
@@ -42,8 +43,7 @@ class TestDreamrootCascadeBasicProperties:
     def test_colors(self) -> None:
         """Dreamroot Cascade must have correct colors."""
         card = DreamrootCascade(name="Dreamroot Cascade", owner=None)
-        assert len(card.colors) == 0
-
+        assert len(card_colors(card)) == 0
 
 @pytest.mark.ability
 class TestDreamrootCascadeAbilities:
@@ -59,7 +59,6 @@ class TestDreamrootCascadeAbilities:
         set_board_state(game, 0, battlefield=[card])
         abilities_list = card.get_activated_abilities()
         assert len(abilities_list) > 0, "Card must have activated ability"
-
 
 @pytest.mark.edge
 class TestDreamrootCascadeEdgeCases:
@@ -78,7 +77,6 @@ class TestDreamrootCascadeEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestDreamrootCascadeInteractions:

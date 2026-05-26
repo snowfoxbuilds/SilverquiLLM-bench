@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import CyclonicRift
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestCyclonicRiftBasicProperties:
@@ -42,8 +43,7 @@ class TestCyclonicRiftBasicProperties:
     def test_colors(self) -> None:
         """Cyclonic Rift must have correct colors."""
         card = CyclonicRift(name="Cyclonic Rift", owner=None)
-        assert "U" in card.colors
-
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestCyclonicRiftAbilities:
@@ -71,7 +71,6 @@ class TestCyclonicRiftAbilities:
             f"Target should leave bf: {bf_before} -> {bf_after}"
         )
 
-
 @pytest.mark.edge
 class TestCyclonicRiftEdgeCases:
     """Edge case tests for Cyclonic Rift."""
@@ -89,7 +88,6 @@ class TestCyclonicRiftEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestCyclonicRiftInteractions:

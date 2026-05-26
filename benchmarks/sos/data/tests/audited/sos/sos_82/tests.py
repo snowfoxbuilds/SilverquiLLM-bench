@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import EternalStudent
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestEternalStudentBasicProperties:
@@ -43,7 +44,7 @@ class TestEternalStudentBasicProperties:
         """Eternal Student must have colors ['B']."""
         card = EternalStudent(name="Eternal Student", owner=None)
         for c in ["B"]:
-            assert c in card.colors, f"Expected color {c} in {card.colors}"
+            assert c in card_colors(card), f"Expected color {c} in {card_colors(card)}"
 
     def test_power(self) -> None:
         """Eternal Student must have power 4."""
@@ -54,7 +55,6 @@ class TestEternalStudentBasicProperties:
         """Eternal Student must have toughness 2."""
         card = EternalStudent(name="Eternal Student", owner=None)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestEternalStudentAbilities:

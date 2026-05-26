@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import StrifeScholarAwakenTheAges
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestStrifeScholarAwakenTheAgesBasicProperties:
@@ -43,7 +44,7 @@ class TestStrifeScholarAwakenTheAgesBasicProperties:
     def test_colors(self) -> None:
         """Strife Scholar // Awaken the Ages must have correct colors."""
         card = StrifeScholarAwakenTheAges(name="Strife Scholar // Awaken the Ages", owner=None, base_power=3, base_toughness=2)
-        assert "R" in card.colors
+        assert "R" in card_colors(card)
 
     def test_power(self) -> None:
         """Strife Scholar // Awaken the Ages must have base power 3."""
@@ -54,7 +55,6 @@ class TestStrifeScholarAwakenTheAgesBasicProperties:
         """Strife Scholar // Awaken the Ages must have base toughness 2."""
         card = StrifeScholarAwakenTheAges(name="Strife Scholar // Awaken the Ages", owner=None, base_power=3, base_toughness=2)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestStrifeScholarAwakenTheAgesAbilities:
@@ -86,7 +86,6 @@ class TestStrifeScholarAwakenTheAgesAbilities:
             callable(getattr(card, "on_resolve", None)), \
             "Strife Scholar // Awaken the Ages must implement prepared mechanic"
 
-
 @pytest.mark.edge
 class TestStrifeScholarAwakenTheAgesEdgeCases:
     """Edge case and trap tests for Strife Scholar // Awaken the Ages."""
@@ -117,7 +116,6 @@ class TestStrifeScholarAwakenTheAgesEdgeCases:
             card.damage_taken = 1
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestStrifeScholarAwakenTheAgesInteractions:

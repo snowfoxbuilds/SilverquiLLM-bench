@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import GroupProject
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestGroupProjectBasicProperties:
@@ -42,8 +43,7 @@ class TestGroupProjectBasicProperties:
     def test_colors(self) -> None:
         """Group Project must have correct colors."""
         card = GroupProject(name="Group Project", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestGroupProjectAbilities:
@@ -104,7 +104,6 @@ class TestGroupProjectAbilities:
             f"Should create token: bf {bf_before} -> {bf_after}"
         )
 
-
 @pytest.mark.edge
 class TestGroupProjectEdgeCases:
     """Edge case tests for Group Project."""
@@ -122,7 +121,6 @@ class TestGroupProjectEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestGroupProjectInteractions:

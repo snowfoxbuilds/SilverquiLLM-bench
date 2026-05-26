@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ResonatingLute
 
 from engine.card import Artifact
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestResonatingLuteBasicProperties:
@@ -42,9 +43,8 @@ class TestResonatingLuteBasicProperties:
     def test_colors(self) -> None:
         """Resonating Lute must have correct colors."""
         card = ResonatingLute(name="Resonating Lute", owner=None)
-        assert "R" in card.colors
-        assert "U" in card.colors
-
+        assert "R" in card_colors(card)
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestResonatingLuteAbilities:
@@ -80,7 +80,6 @@ class TestResonatingLuteAbilities:
         abilities_list = card.get_activated_abilities()
         assert len(abilities_list) > 0, "Card must have activated ability"
 
-
 @pytest.mark.edge
 class TestResonatingLuteEdgeCases:
     """Edge case tests for Resonating Lute."""
@@ -98,7 +97,6 @@ class TestResonatingLuteEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestResonatingLuteInteractions:

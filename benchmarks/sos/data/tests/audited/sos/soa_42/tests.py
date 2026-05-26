@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import CrackleWithPower
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestCrackleWithPowerBasicProperties:
@@ -42,8 +43,7 @@ class TestCrackleWithPowerBasicProperties:
     def test_colors(self) -> None:
         """Crackle with Power must have correct colors."""
         card = CrackleWithPower(name="Crackle with Power", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestCrackleWithPowerAbilities:
@@ -77,7 +77,6 @@ class TestCrackleWithPowerAbilities:
         )
         assert changed, "on_resolve must change game state"
 
-
 @pytest.mark.edge
 class TestCrackleWithPowerEdgeCases:
     """Edge case tests for Crackle with Power."""
@@ -95,7 +94,6 @@ class TestCrackleWithPowerEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestCrackleWithPowerInteractions:

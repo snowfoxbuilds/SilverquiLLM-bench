@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SlumberingTrudge
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestSlumberingTrudgeBasicProperties:
@@ -43,7 +44,7 @@ class TestSlumberingTrudgeBasicProperties:
     def test_colors(self) -> None:
         """Slumbering Trudge must have correct colors."""
         card = SlumberingTrudge(name="Slumbering Trudge", owner=None, base_power=6, base_toughness=6)
-        assert "G" in card.colors
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Slumbering Trudge must have base power 6."""
@@ -54,7 +55,6 @@ class TestSlumberingTrudgeBasicProperties:
         """Slumbering Trudge must have base toughness 6."""
         card = SlumberingTrudge(name="Slumbering Trudge", owner=None, base_power=6, base_toughness=6)
         assert card.base_toughness == 6
-
 
 @pytest.mark.ability
 class TestSlumberingTrudgeAbilities:
@@ -74,7 +74,6 @@ class TestSlumberingTrudgeAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Slumbering Trudge must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestSlumberingTrudgeEdgeCases:
@@ -106,7 +105,6 @@ class TestSlumberingTrudgeEdgeCases:
             card.damage_taken = 5
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestSlumberingTrudgeInteractions:

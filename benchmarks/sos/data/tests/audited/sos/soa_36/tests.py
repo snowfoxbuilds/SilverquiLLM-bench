@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import Zombify
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestZombifyBasicProperties:
@@ -42,8 +43,7 @@ class TestZombifyBasicProperties:
     def test_colors(self) -> None:
         """Zombify must have correct colors."""
         card = Zombify(name="Zombify", owner=None)
-        assert "B" in card.colors
-
+        assert "B" in card_colors(card)
 
 @pytest.mark.ability
 class TestZombifyAbilities:
@@ -70,7 +70,6 @@ class TestZombifyAbilities:
             f"Should return from gy: {gy_before} -> {gy_after}"
         )
 
-
 @pytest.mark.edge
 class TestZombifyEdgeCases:
     """Edge case tests for Zombify."""
@@ -88,7 +87,6 @@ class TestZombifyEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestZombifyInteractions:

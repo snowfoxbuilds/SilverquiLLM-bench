@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import StirringHopesinger
@@ -14,7 +16,6 @@ from card_impl import StirringHopesinger
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestStirringHopesingerBasicProperties:
@@ -43,7 +44,7 @@ class TestStirringHopesingerBasicProperties:
     def test_colors(self) -> None:
         """Stirring Hopesinger must have correct colors."""
         card = StirringHopesinger(name="Stirring Hopesinger", owner=None)
-        assert "W" in card.colors
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Stirring Hopesinger must have base power 1."""
@@ -64,7 +65,6 @@ class TestStirringHopesingerBasicProperties:
         """Stirring Hopesinger must have Lifelink keyword."""
         card = StirringHopesinger(name="Stirring Hopesinger", owner=None)
         assert Keyword.LIFELINK in card.keywords
-
 
 @pytest.mark.ability
 class TestStirringHopesingerAbilities:
@@ -122,7 +122,6 @@ class TestStirringHopesingerAbilities:
             f"Repartee should add counter: power {power_before} -> {power_after}"
         )
 
-
 @pytest.mark.edge
 class TestStirringHopesingerEdgeCases:
     """Edge case tests for Stirring Hopesinger."""
@@ -144,7 +143,6 @@ class TestStirringHopesingerEdgeCases:
         if len(targets) > 0:
             assert own in targets, "Own creature should be valid"
             assert enemy not in targets, "Opponent creature should be invalid"
-
 
 @pytest.mark.interaction
 class TestStirringHopesingerInteractions:

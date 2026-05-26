@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import JoinedResearchersSecretRendezvous
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestJoinedResearchersSecretRendezvousBasicProperties:
@@ -43,7 +44,7 @@ class TestJoinedResearchersSecretRendezvousBasicProperties:
     def test_colors(self) -> None:
         """Joined Researchers // Secret Rendezvous must have correct colors."""
         card = JoinedResearchersSecretRendezvous(name="Joined Researchers // Secret Rendezvous", owner=None, base_power=2, base_toughness=2)
-        assert "W" in card.colors
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Joined Researchers // Secret Rendezvous must have base power 2."""
@@ -54,7 +55,6 @@ class TestJoinedResearchersSecretRendezvousBasicProperties:
         """Joined Researchers // Secret Rendezvous must have base toughness 2."""
         card = JoinedResearchersSecretRendezvous(name="Joined Researchers // Secret Rendezvous", owner=None, base_power=2, base_toughness=2)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestJoinedResearchersSecretRendezvousAbilities:
@@ -79,7 +79,6 @@ class TestJoinedResearchersSecretRendezvousAbilities:
             callable(getattr(card, "prepared_effect", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Joined Researchers // Secret Rendezvous must implement prepared mechanic"
-
 
 @pytest.mark.edge
 class TestJoinedResearchersSecretRendezvousEdgeCases:
@@ -111,7 +110,6 @@ class TestJoinedResearchersSecretRendezvousEdgeCases:
             card.damage_taken = 1
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestJoinedResearchersSecretRendezvousInteractions:

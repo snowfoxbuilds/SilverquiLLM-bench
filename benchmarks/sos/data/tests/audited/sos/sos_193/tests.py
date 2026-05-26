@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import GrowthCurve
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestGrowthCurveBasicProperties:
@@ -42,9 +43,8 @@ class TestGrowthCurveBasicProperties:
     def test_colors(self) -> None:
         """Growth Curve must have correct colors."""
         card = GrowthCurve(name="Growth Curve", owner=None)
-        assert "G" in card.colors
-        assert "U" in card.colors
-
+        assert "G" in card_colors(card)
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestGrowthCurveAbilities:
@@ -70,7 +70,6 @@ class TestGrowthCurveAbilities:
             f"+1/+1 counter: power {power_before} -> {power_after}"
         )
 
-
 @pytest.mark.edge
 class TestGrowthCurveEdgeCases:
     """Edge case tests for Growth Curve."""
@@ -92,7 +91,6 @@ class TestGrowthCurveEdgeCases:
         if len(targets) > 0:
             assert own in targets, "Own creature should be valid"
             assert enemy not in targets, "Opponent creature should be invalid"
-
 
 @pytest.mark.interaction
 class TestGrowthCurveInteractions:

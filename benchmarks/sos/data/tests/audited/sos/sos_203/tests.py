@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import MindRoots
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestMindRootsBasicProperties:
@@ -42,9 +43,8 @@ class TestMindRootsBasicProperties:
     def test_colors(self) -> None:
         """Mind Roots must have correct colors."""
         card = MindRoots(name="Mind Roots", owner=None)
-        assert "B" in card.colors
-        assert "G" in card.colors
-
+        assert "B" in card_colors(card)
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestMindRootsAbilities:
@@ -69,7 +69,6 @@ class TestMindRootsAbilities:
             f"Should discard: hand {hand_before} -> {hand_after}"
         )
 
-
 @pytest.mark.edge
 class TestMindRootsEdgeCases:
     """Edge case tests for Mind Roots."""
@@ -87,7 +86,6 @@ class TestMindRootsEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestMindRootsInteractions:

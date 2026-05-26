@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ScoldingAdministrator
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestScoldingAdministratorBasicProperties:
@@ -43,8 +44,8 @@ class TestScoldingAdministratorBasicProperties:
     def test_colors(self) -> None:
         """Scolding Administrator must have correct colors."""
         card = ScoldingAdministrator(name="Scolding Administrator", owner=None, base_power=2, base_toughness=2)
-        assert "B" in card.colors
-        assert "W" in card.colors
+        assert "B" in card_colors(card)
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Scolding Administrator must have base power 2."""
@@ -55,7 +56,6 @@ class TestScoldingAdministratorBasicProperties:
         """Scolding Administrator must have base toughness 2."""
         card = ScoldingAdministrator(name="Scolding Administrator", owner=None, base_power=2, base_toughness=2)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestScoldingAdministratorAbilities:
@@ -73,7 +73,6 @@ class TestScoldingAdministratorAbilities:
         assert callable(getattr(card, "on_death", None)) or \
             callable(getattr(card, "death_trigger", None)), \
             "Scolding Administrator must implement death trigger per oracle text"
-
 
 @pytest.mark.edge
 class TestScoldingAdministratorEdgeCases:
@@ -109,7 +108,6 @@ class TestScoldingAdministratorEdgeCases:
         card = ScoldingAdministrator(name="Scolding Administrator", owner=None, base_power=2, base_toughness=2)
         assert card.mana_cost.cmc == 2, \
             f"CMC must be 2, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestScoldingAdministratorInteractions:

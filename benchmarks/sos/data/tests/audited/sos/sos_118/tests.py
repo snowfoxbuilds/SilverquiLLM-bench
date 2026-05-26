@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import HeatedArgument
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestHeatedArgumentBasicProperties:
@@ -42,8 +43,7 @@ class TestHeatedArgumentBasicProperties:
     def test_colors(self) -> None:
         """Heated Argument must have correct colors."""
         card = HeatedArgument(name="Heated Argument", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestHeatedArgumentAbilities:
@@ -67,7 +67,6 @@ class TestHeatedArgumentAbilities:
             f"Should deal damage: life {life_before} -> {life_after}"
         )
 
-
 @pytest.mark.edge
 class TestHeatedArgumentEdgeCases:
     """Edge case tests for Heated Argument."""
@@ -85,7 +84,6 @@ class TestHeatedArgumentEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestHeatedArgumentInteractions:

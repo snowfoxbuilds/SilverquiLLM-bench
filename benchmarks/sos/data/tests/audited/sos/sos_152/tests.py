@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import InfirmaryHealerStreamOfLife
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestInfirmaryHealerStreamOfLifeBasicProperties:
@@ -43,7 +44,7 @@ class TestInfirmaryHealerStreamOfLifeBasicProperties:
     def test_colors(self) -> None:
         """Infirmary Healer // Stream of Life must have correct colors."""
         card = InfirmaryHealerStreamOfLife(name="Infirmary Healer // Stream of Life", owner=None, base_power=2, base_toughness=3)
-        assert "G" in card.colors
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Infirmary Healer // Stream of Life must have base power 2."""
@@ -54,7 +55,6 @@ class TestInfirmaryHealerStreamOfLifeBasicProperties:
         """Infirmary Healer // Stream of Life must have base toughness 3."""
         card = InfirmaryHealerStreamOfLife(name="Infirmary Healer // Stream of Life", owner=None, base_power=2, base_toughness=3)
         assert card.base_toughness == 3
-
 
 @pytest.mark.ability
 class TestInfirmaryHealerStreamOfLifeAbilities:
@@ -79,7 +79,6 @@ class TestInfirmaryHealerStreamOfLifeAbilities:
             callable(getattr(card, "prepared_effect", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Infirmary Healer // Stream of Life must implement prepared mechanic"
-
 
 @pytest.mark.edge
 class TestInfirmaryHealerStreamOfLifeEdgeCases:
@@ -111,7 +110,6 @@ class TestInfirmaryHealerStreamOfLifeEdgeCases:
             card.damage_taken = 2
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestInfirmaryHealerStreamOfLifeInteractions:

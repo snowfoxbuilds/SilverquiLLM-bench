@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import RunBehind
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestRunBehindBasicProperties:
@@ -42,8 +43,7 @@ class TestRunBehindBasicProperties:
     def test_colors(self) -> None:
         """Run Behind must have correct colors."""
         card = RunBehind(name="Run Behind", owner=None)
-        assert "U" in card.colors
-
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestRunBehindAbilities:
@@ -66,7 +66,6 @@ class TestRunBehindAbilities:
         reduction = card.cost_reduction(game)
         assert reduction > 0, f"Cost reduction should apply, got {reduction}"
 
-
 @pytest.mark.edge
 class TestRunBehindEdgeCases:
     """Edge case tests for Run Behind."""
@@ -85,7 +84,6 @@ class TestRunBehindEdgeCases:
         card._targets = [target]
         reduction = card.cost_reduction(game)
         assert reduction == 0, f"No reduction when unmet, got {reduction}"
-
 
 @pytest.mark.interaction
 class TestRunBehindInteractions:

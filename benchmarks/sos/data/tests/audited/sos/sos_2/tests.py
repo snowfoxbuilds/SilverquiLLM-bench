@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import RancorousArchaic
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestRancorousArchaicBasicProperties:
@@ -43,7 +44,7 @@ class TestRancorousArchaicBasicProperties:
     def test_colorless(self) -> None:
         """Rancorous Archaic must be colorless."""
         card = RancorousArchaic(name="Rancorous Archaic", owner=None, base_power=2, base_toughness=2)
-        assert len(card.colors) == 0
+        assert len(card_colors(card)) == 0
 
     def test_power(self) -> None:
         """Rancorous Archaic must have base power 2."""
@@ -54,7 +55,6 @@ class TestRancorousArchaicBasicProperties:
         """Rancorous Archaic must have base toughness 2."""
         card = RancorousArchaic(name="Rancorous Archaic", owner=None, base_power=2, base_toughness=2)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestRancorousArchaicAbilities:
@@ -108,7 +108,6 @@ class TestRancorousArchaicAbilities:
         p1p1 = counters.get("+1/+1", counters.get("p1p1", 0))
         assert p1p1 == 3, f"Converge with 3 colors should add 3 counters, got {p1p1}"
 
-
 @pytest.mark.edge
 class TestRancorousArchaicEdgeCases:
     """Edge case and trap tests for Rancorous Archaic."""
@@ -159,7 +158,6 @@ class TestRancorousArchaicEdgeCases:
         card = RancorousArchaic(name="Rancorous Archaic", owner=None, base_power=2, base_toughness=2)
         assert card.mana_cost.cmc == 5, \
             f"CMC must be 5, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestRancorousArchaicInteractions:

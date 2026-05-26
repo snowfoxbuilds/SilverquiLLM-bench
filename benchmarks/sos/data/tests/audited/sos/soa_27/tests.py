@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import CullingTheWeak
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestCullingTheWeakBasicProperties:
@@ -42,8 +43,7 @@ class TestCullingTheWeakBasicProperties:
     def test_colors(self) -> None:
         """Culling the Weak must have correct colors."""
         card = CullingTheWeak(name="Culling the Weak", owner=None)
-        assert "B" in card.colors
-
+        assert "B" in card_colors(card)
 
 @pytest.mark.ability
 class TestCullingTheWeakAbilities:
@@ -63,7 +63,6 @@ class TestCullingTheWeakAbilities:
         )
         assert has_addl, "Card must declare additional cost"
 
-
 @pytest.mark.edge
 class TestCullingTheWeakEdgeCases:
     """Edge case tests for Culling the Weak."""
@@ -81,7 +80,6 @@ class TestCullingTheWeakEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestCullingTheWeakInteractions:

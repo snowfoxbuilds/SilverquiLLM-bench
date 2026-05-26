@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import PursueThePast
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestPursueThePastBasicProperties:
@@ -42,9 +43,8 @@ class TestPursueThePastBasicProperties:
     def test_colors(self) -> None:
         """Pursue the Past must have correct colors."""
         card = PursueThePast(name="Pursue the Past", owner=None)
-        assert "R" in card.colors
-        assert "W" in card.colors
-
+        assert "R" in card_colors(card)
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestPursueThePastAbilities:
@@ -142,7 +142,6 @@ class TestPursueThePastAbilities:
             f"Should gain life: {life_before} -> {player.life}"
         )
 
-
 @pytest.mark.edge
 class TestPursueThePastEdgeCases:
     """Edge case tests for Pursue the Past."""
@@ -160,7 +159,6 @@ class TestPursueThePastEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestPursueThePastInteractions:

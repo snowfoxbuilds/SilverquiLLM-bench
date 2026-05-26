@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import HydroChanneler
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestHydroChannelerBasicProperties:
@@ -42,7 +43,7 @@ class TestHydroChannelerBasicProperties:
     def test_colors(self) -> None:
         """Hydro-Channeler must have correct colors."""
         card = HydroChanneler(name="Hydro-Channeler", owner=None)
-        assert "U" in card.colors
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Hydro-Channeler must have base power 1."""
@@ -53,7 +54,6 @@ class TestHydroChannelerBasicProperties:
         """Hydro-Channeler must have base toughness 3."""
         card = HydroChanneler(name="Hydro-Channeler", owner=None)
         assert card.base_toughness == 3
-
 
 @pytest.mark.ability
 class TestHydroChannelerAbilities:
@@ -69,7 +69,6 @@ class TestHydroChannelerAbilities:
         set_board_state(game, 0, battlefield=[card])
         abilities_list = card.get_activated_abilities()
         assert len(abilities_list) > 0, "Card must have activated ability"
-
 
 @pytest.mark.edge
 class TestHydroChannelerEdgeCases:
@@ -88,7 +87,6 @@ class TestHydroChannelerEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestHydroChannelerInteractions:

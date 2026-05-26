@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import PostmortemProfessor
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestPostmortemProfessorBasicProperties:
@@ -43,7 +44,7 @@ class TestPostmortemProfessorBasicProperties:
     def test_colors(self) -> None:
         """Postmortem Professor must have correct colors."""
         card = PostmortemProfessor(name="Postmortem Professor", owner=None, base_power=2, base_toughness=2)
-        assert "B" in card.colors
+        assert "B" in card_colors(card)
 
     def test_power(self) -> None:
         """Postmortem Professor must have base power 2."""
@@ -54,7 +55,6 @@ class TestPostmortemProfessorBasicProperties:
         """Postmortem Professor must have base toughness 2."""
         card = PostmortemProfessor(name="Postmortem Professor", owner=None, base_power=2, base_toughness=2)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestPostmortemProfessorAbilities:
@@ -87,7 +87,6 @@ class TestPostmortemProfessorAbilities:
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Postmortem Professor must implement behavioral method"
 
-
 @pytest.mark.edge
 class TestPostmortemProfessorEdgeCases:
     """Edge case and trap tests for Postmortem Professor."""
@@ -118,7 +117,6 @@ class TestPostmortemProfessorEdgeCases:
             card.damage_taken = 1
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestPostmortemProfessorInteractions:

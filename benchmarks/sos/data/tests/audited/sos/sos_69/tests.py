@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import TesterOfTheTangential
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestTesterOfTheTangentialBasicProperties:
@@ -43,7 +44,7 @@ class TestTesterOfTheTangentialBasicProperties:
     def test_colors(self) -> None:
         """Tester of the Tangential must have correct colors."""
         card = TesterOfTheTangential(name="Tester of the Tangential", owner=None, base_power=1, base_toughness=1)
-        assert "U" in card.colors
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Tester of the Tangential must have base power 1."""
@@ -54,7 +55,6 @@ class TestTesterOfTheTangentialBasicProperties:
         """Tester of the Tangential must have base toughness 1."""
         card = TesterOfTheTangential(name="Tester of the Tangential", owner=None, base_power=1, base_toughness=1)
         assert card.base_toughness == 1
-
 
 @pytest.mark.ability
 class TestTesterOfTheTangentialAbilities:
@@ -68,7 +68,6 @@ class TestTesterOfTheTangentialAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Tester of the Tangential must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestTesterOfTheTangentialEdgeCases:
@@ -104,7 +103,6 @@ class TestTesterOfTheTangentialEdgeCases:
         card = TesterOfTheTangential(name="Tester of the Tangential", owner=None, base_power=1, base_toughness=1)
         assert card.mana_cost.cmc == 2, \
             f"CMC must be 2, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestTesterOfTheTangentialInteractions:

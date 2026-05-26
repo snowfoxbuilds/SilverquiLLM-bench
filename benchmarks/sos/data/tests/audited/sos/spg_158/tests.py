@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import LibraryOfLeng
 
 from engine.card import Artifact
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestLibraryOfLengBasicProperties:
@@ -43,8 +44,7 @@ class TestLibraryOfLengBasicProperties:
     def test_colorless(self) -> None:
         """Library of Leng must be colorless."""
         card = LibraryOfLeng(name="Library of Leng", owner=None)
-        assert len(card.colors) == 0
-
+        assert len(card_colors(card)) == 0
 
 @pytest.mark.ability
 class TestLibraryOfLengAbilities:
@@ -58,7 +58,6 @@ class TestLibraryOfLengAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Library of Leng must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestLibraryOfLengEdgeCases:
@@ -91,7 +90,6 @@ class TestLibraryOfLengEdgeCases:
             pass  # Fizzle on empty board is acceptable
         # Verify game state is consistent
         assert player.life == 20, "Caster life should be unchanged on fizzle"
-
 
 @pytest.mark.interaction
 class TestLibraryOfLengInteractions:

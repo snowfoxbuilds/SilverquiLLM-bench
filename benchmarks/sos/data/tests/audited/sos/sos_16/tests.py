@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import GraduationDay
 
 from engine.card import Enchantment
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestGraduationDayBasicProperties:
@@ -42,8 +43,7 @@ class TestGraduationDayBasicProperties:
     def test_colors(self) -> None:
         """Graduation Day must have correct colors."""
         card = GraduationDay(name="Graduation Day", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestGraduationDayAbilities:
@@ -101,7 +101,6 @@ class TestGraduationDayAbilities:
             f"Repartee should add counter: power {power_before} -> {power_after}"
         )
 
-
 @pytest.mark.edge
 class TestGraduationDayEdgeCases:
     """Edge case tests for Graduation Day."""
@@ -123,7 +122,6 @@ class TestGraduationDayEdgeCases:
         if len(targets) > 0:
             assert own in targets, "Own creature should be valid"
             assert enemy not in targets, "Opponent creature should be invalid"
-
 
 @pytest.mark.interaction
 class TestGraduationDayInteractions:

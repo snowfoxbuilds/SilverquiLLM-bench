@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import Berserk
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestBerserkBasicProperties:
@@ -42,8 +43,7 @@ class TestBerserkBasicProperties:
     def test_colors(self) -> None:
         """Berserk must have correct colors."""
         card = Berserk(name="Berserk", owner=None)
-        assert "G" in card.colors
-
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestBerserkAbilities:
@@ -68,7 +68,6 @@ class TestBerserkAbilities:
             "Target should have trample after resolution"
         )
 
-
 @pytest.mark.edge
 class TestBerserkEdgeCases:
     """Edge case tests for Berserk."""
@@ -86,7 +85,6 @@ class TestBerserkEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestBerserkInteractions:

@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ColossusOfTheBloodAge
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestColossusOfTheBloodAgeBasicProperties:
@@ -42,8 +43,8 @@ class TestColossusOfTheBloodAgeBasicProperties:
     def test_colors(self) -> None:
         """Colossus of the Blood Age must have correct colors."""
         card = ColossusOfTheBloodAge(name="Colossus of the Blood Age", owner=None)
-        assert "R" in card.colors
-        assert "W" in card.colors
+        assert "R" in card_colors(card)
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Colossus of the Blood Age must have base power 6."""
@@ -54,7 +55,6 @@ class TestColossusOfTheBloodAgeBasicProperties:
         """Colossus of the Blood Age must have base toughness 6."""
         card = ColossusOfTheBloodAge(name="Colossus of the Blood Age", owner=None)
         assert card.base_toughness == 6
-
 
 @pytest.mark.ability
 class TestColossusOfTheBloodAgeAbilities:
@@ -110,7 +110,6 @@ class TestColossusOfTheBloodAgeAbilities:
             f"Should gain life: {life_before} -> {player.life}"
         )
 
-
 @pytest.mark.edge
 class TestColossusOfTheBloodAgeEdgeCases:
     """Edge case tests for Colossus of the Blood Age."""
@@ -128,7 +127,6 @@ class TestColossusOfTheBloodAgeEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestColossusOfTheBloodAgeInteractions:

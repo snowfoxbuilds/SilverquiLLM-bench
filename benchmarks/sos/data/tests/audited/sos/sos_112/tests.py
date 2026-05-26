@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import DuelTactics
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestDuelTacticsBasicProperties:
@@ -42,8 +43,7 @@ class TestDuelTacticsBasicProperties:
     def test_colors(self) -> None:
         """Duel Tactics must have correct colors."""
         card = DuelTactics(name="Duel Tactics", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestDuelTacticsAbilities:
@@ -108,7 +108,6 @@ class TestDuelTacticsAbilities:
             f"Should deal damage: life {life_before} -> {life_after}"
         )
 
-
 @pytest.mark.edge
 class TestDuelTacticsEdgeCases:
     """Edge case tests for Duel Tactics."""
@@ -126,7 +125,6 @@ class TestDuelTacticsEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestDuelTacticsInteractions:

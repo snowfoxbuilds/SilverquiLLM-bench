@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SpiritcallEnthusiastScrollboost
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestSpiritcallEnthusiastScrollboostBasicProperties:
@@ -43,7 +44,7 @@ class TestSpiritcallEnthusiastScrollboostBasicProperties:
     def test_colors(self) -> None:
         """Spiritcall Enthusiast // Scrollboost must have correct colors."""
         card = SpiritcallEnthusiastScrollboost(name="Spiritcall Enthusiast // Scrollboost", owner=None, base_power=3, base_toughness=3)
-        assert "W" in card.colors
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Spiritcall Enthusiast // Scrollboost must have base power 3."""
@@ -54,7 +55,6 @@ class TestSpiritcallEnthusiastScrollboostBasicProperties:
         """Spiritcall Enthusiast // Scrollboost must have base toughness 3."""
         card = SpiritcallEnthusiastScrollboost(name="Spiritcall Enthusiast // Scrollboost", owner=None, base_power=3, base_toughness=3)
         assert card.base_toughness == 3
-
 
 @pytest.mark.ability
 class TestSpiritcallEnthusiastScrollboostAbilities:
@@ -89,7 +89,6 @@ class TestSpiritcallEnthusiastScrollboostAbilities:
             callable(getattr(card, "on_resolve", None)), \
             "Spiritcall Enthusiast // Scrollboost must implement prepared mechanic"
 
-
 @pytest.mark.edge
 class TestSpiritcallEnthusiastScrollboostEdgeCases:
     """Edge case and trap tests for Spiritcall Enthusiast // Scrollboost."""
@@ -120,7 +119,6 @@ class TestSpiritcallEnthusiastScrollboostEdgeCases:
             card.damage_taken = 2
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestSpiritcallEnthusiastScrollboostInteractions:

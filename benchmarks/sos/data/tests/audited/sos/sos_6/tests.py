@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import AjanisResponse
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestAjanisResponseBasicProperties:
@@ -42,8 +43,7 @@ class TestAjanisResponseBasicProperties:
     def test_colors(self) -> None:
         """Ajani's Response must have correct colors."""
         card = AjanisResponse(name="Ajani's Response", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestAjanisResponseAbilities:
@@ -87,7 +87,6 @@ class TestAjanisResponseAbilities:
         reduction = card.cost_reduction(game)
         assert reduction > 0, f"Cost reduction should apply, got {reduction}"
 
-
 @pytest.mark.edge
 class TestAjanisResponseEdgeCases:
     """Edge case tests for Ajani's Response."""
@@ -106,7 +105,6 @@ class TestAjanisResponseEdgeCases:
         card._targets = [target]
         reduction = card.cost_reduction(game)
         assert reduction == 0, f"No reduction when unmet, got {reduction}"
-
 
 @pytest.mark.interaction
 class TestAjanisResponseInteractions:

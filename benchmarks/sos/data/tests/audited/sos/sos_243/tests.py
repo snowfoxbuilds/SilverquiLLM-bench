@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import WiltInTheHeat
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestWiltInTheHeatBasicProperties:
@@ -43,9 +44,8 @@ class TestWiltInTheHeatBasicProperties:
     def test_colors(self) -> None:
         """Wilt in the Heat must have correct colors."""
         card = WiltInTheHeat(name="Wilt in the Heat", owner=None)
-        assert "R" in card.colors
-        assert "W" in card.colors
-
+        assert "R" in card_colors(card)
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestWiltInTheHeatAbilities:
@@ -73,7 +73,6 @@ class TestWiltInTheHeatAbilities:
         initial_life = opponent.life
         card.on_resolve(game)
         assert opponent.life < initial_life, "Wilt in the Heat must deal damage on resolution"
-
 
 @pytest.mark.edge
 class TestWiltInTheHeatEdgeCases:
@@ -122,7 +121,6 @@ class TestWiltInTheHeatEdgeCases:
         card = WiltInTheHeat(name="Wilt in the Heat", owner=None)
         assert card.mana_cost.cmc == 4, \
             f"CMC must be 4, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestWiltInTheHeatInteractions:

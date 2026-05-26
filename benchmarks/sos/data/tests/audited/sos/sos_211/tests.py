@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import PrismariCharm
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestPrismariCharmBasicProperties:
@@ -43,9 +44,8 @@ class TestPrismariCharmBasicProperties:
     def test_colors(self) -> None:
         """Prismari Charm must have correct colors."""
         card = PrismariCharm(name="Prismari Charm", owner=None)
-        assert "R" in card.colors
-        assert "U" in card.colors
-
+        assert "R" in card_colors(card)
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestPrismariCharmAbilities:
@@ -71,7 +71,6 @@ class TestPrismariCharmAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Prismari Charm must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestPrismariCharmEdgeCases:
@@ -106,7 +105,6 @@ class TestPrismariCharmEdgeCases:
         card = PrismariCharm(name="Prismari Charm", owner=None)
         assert card.mana_cost.cmc == 2, \
             f"CMC must be 2, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestPrismariCharmInteractions:

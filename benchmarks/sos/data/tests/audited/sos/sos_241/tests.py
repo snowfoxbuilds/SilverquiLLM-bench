@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ViciousRivalry
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestViciousRivalryBasicProperties:
@@ -42,9 +43,8 @@ class TestViciousRivalryBasicProperties:
     def test_colors(self) -> None:
         """Vicious Rivalry must have correct colors."""
         card = ViciousRivalry(name="Vicious Rivalry", owner=None)
-        assert "B" in card.colors
-        assert "G" in card.colors
-
+        assert "B" in card_colors(card)
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestViciousRivalryAbilities:
@@ -64,7 +64,6 @@ class TestViciousRivalryAbilities:
         )
         assert has_addl, "Card must declare additional cost"
 
-
 @pytest.mark.edge
 class TestViciousRivalryEdgeCases:
     """Edge case tests for Vicious Rivalry."""
@@ -82,7 +81,6 @@ class TestViciousRivalryEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestViciousRivalryInteractions:

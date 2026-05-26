@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import RearingEmbermare
@@ -14,7 +16,6 @@ from card_impl import RearingEmbermare
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestRearingEmbermareBasicProperties:
@@ -43,7 +44,7 @@ class TestRearingEmbermareBasicProperties:
     def test_colors(self) -> None:
         """Rearing Embermare must have correct colors."""
         card = RearingEmbermare(name="Rearing Embermare", owner=None)
-        assert "R" in card.colors
+        assert "R" in card_colors(card)
 
     def test_power(self) -> None:
         """Rearing Embermare must have base power 4."""
@@ -64,7 +65,6 @@ class TestRearingEmbermareBasicProperties:
         """Rearing Embermare must have Haste keyword."""
         card = RearingEmbermare(name="Rearing Embermare", owner=None)
         assert Keyword.HASTE in card.keywords
-
 
 @pytest.mark.ability
 class TestRearingEmbermareAbilities:
@@ -98,7 +98,6 @@ class TestRearingEmbermareAbilities:
         )
         assert changed, "on_resolve must change game state"
 
-
 @pytest.mark.edge
 class TestRearingEmbermareEdgeCases:
     """Edge case tests for Rearing Embermare."""
@@ -116,7 +115,6 @@ class TestRearingEmbermareEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestRearingEmbermareInteractions:

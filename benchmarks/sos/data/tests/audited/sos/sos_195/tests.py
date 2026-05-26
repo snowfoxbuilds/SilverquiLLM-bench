@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ImperiousInkmage
@@ -14,7 +16,6 @@ from card_impl import ImperiousInkmage
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestImperiousInkmageBasicProperties:
@@ -43,8 +44,8 @@ class TestImperiousInkmageBasicProperties:
     def test_colors(self) -> None:
         """Imperious Inkmage must have correct colors."""
         card = ImperiousInkmage(name="Imperious Inkmage", owner=None)
-        assert "B" in card.colors
-        assert "W" in card.colors
+        assert "B" in card_colors(card)
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Imperious Inkmage must have base power 3."""
@@ -60,7 +61,6 @@ class TestImperiousInkmageBasicProperties:
         """Imperious Inkmage must have Vigilance keyword."""
         card = ImperiousInkmage(name="Imperious Inkmage", owner=None)
         assert Keyword.VIGILANCE in card.keywords
-
 
 @pytest.mark.ability
 class TestImperiousInkmageAbilities:
@@ -84,7 +84,6 @@ class TestImperiousInkmageAbilities:
             "Surveil should manipulate library/graveyard"
         )
 
-
 @pytest.mark.edge
 class TestImperiousInkmageEdgeCases:
     """Edge case tests for Imperious Inkmage."""
@@ -102,7 +101,6 @@ class TestImperiousInkmageEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestImperiousInkmageInteractions:

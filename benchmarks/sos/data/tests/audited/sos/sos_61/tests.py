@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import MusesEncouragement
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestMusesEncouragementBasicProperties:
@@ -42,8 +43,7 @@ class TestMusesEncouragementBasicProperties:
     def test_colors(self) -> None:
         """Muse's Encouragement must have correct colors."""
         card = MusesEncouragement(name="Muse's Encouragement", owner=None)
-        assert "U" in card.colors
-
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestMusesEncouragementAbilities:
@@ -81,7 +81,6 @@ class TestMusesEncouragementAbilities:
             "Surveil should manipulate library/graveyard"
         )
 
-
 @pytest.mark.edge
 class TestMusesEncouragementEdgeCases:
     """Edge case tests for Muse's Encouragement."""
@@ -99,7 +98,6 @@ class TestMusesEncouragementEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestMusesEncouragementInteractions:

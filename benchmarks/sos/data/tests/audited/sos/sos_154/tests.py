@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import MindfulBiomancer
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestMindfulBiomancerBasicProperties:
@@ -42,7 +43,7 @@ class TestMindfulBiomancerBasicProperties:
     def test_colors(self) -> None:
         """Mindful Biomancer must have correct colors."""
         card = MindfulBiomancer(name="Mindful Biomancer", owner=None)
-        assert "G" in card.colors
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Mindful Biomancer must have base power 2."""
@@ -53,7 +54,6 @@ class TestMindfulBiomancerBasicProperties:
         """Mindful Biomancer must have base toughness 2."""
         card = MindfulBiomancer(name="Mindful Biomancer", owner=None)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestMindfulBiomancerAbilities:
@@ -102,7 +102,6 @@ class TestMindfulBiomancerAbilities:
         abilities_list = card.get_activated_abilities()
         assert len(abilities_list) > 0, "Card must have activated ability"
 
-
 @pytest.mark.edge
 class TestMindfulBiomancerEdgeCases:
     """Edge case tests for Mindful Biomancer."""
@@ -120,7 +119,6 @@ class TestMindfulBiomancerEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestMindfulBiomancerInteractions:

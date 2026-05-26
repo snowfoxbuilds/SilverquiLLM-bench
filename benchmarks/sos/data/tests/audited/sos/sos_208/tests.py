@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ParadoxSurveyor
@@ -14,7 +16,6 @@ from card_impl import ParadoxSurveyor
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestParadoxSurveyorBasicProperties:
@@ -43,8 +44,8 @@ class TestParadoxSurveyorBasicProperties:
     def test_colors(self) -> None:
         """Paradox Surveyor must have correct colors."""
         card = ParadoxSurveyor(name="Paradox Surveyor", owner=None)
-        assert "G" in card.colors
-        assert "U" in card.colors
+        assert "G" in card_colors(card)
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Paradox Surveyor must have base power 3."""
@@ -60,7 +61,6 @@ class TestParadoxSurveyorBasicProperties:
         """Paradox Surveyor must have Reach keyword."""
         card = ParadoxSurveyor(name="Paradox Surveyor", owner=None)
         assert Keyword.REACH in card.keywords
-
 
 @pytest.mark.ability
 class TestParadoxSurveyorAbilities:
@@ -94,7 +94,6 @@ class TestParadoxSurveyorAbilities:
         )
         assert changed, "on_resolve must change game state"
 
-
 @pytest.mark.edge
 class TestParadoxSurveyorEdgeCases:
     """Edge case tests for Paradox Surveyor."""
@@ -112,7 +111,6 @@ class TestParadoxSurveyorEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestParadoxSurveyorInteractions:

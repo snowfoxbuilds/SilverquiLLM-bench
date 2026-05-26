@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import MagusOfTheLibrary
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestMagusOfTheLibraryBasicProperties:
@@ -42,7 +43,7 @@ class TestMagusOfTheLibraryBasicProperties:
     def test_colors(self) -> None:
         """Magus of the Library must have correct colors."""
         card = MagusOfTheLibrary(name="Magus of the Library", owner=None)
-        assert "G" in card.colors
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Magus of the Library must have base power 1."""
@@ -53,7 +54,6 @@ class TestMagusOfTheLibraryBasicProperties:
         """Magus of the Library must have base toughness 1."""
         card = MagusOfTheLibrary(name="Magus of the Library", owner=None)
         assert card.base_toughness == 1
-
 
 @pytest.mark.ability
 class TestMagusOfTheLibraryAbilities:
@@ -89,7 +89,6 @@ class TestMagusOfTheLibraryAbilities:
         abilities_list = card.get_activated_abilities()
         assert len(abilities_list) > 0, "Card must have activated ability"
 
-
 @pytest.mark.edge
 class TestMagusOfTheLibraryEdgeCases:
     """Edge case tests for Magus of the Library."""
@@ -107,7 +106,6 @@ class TestMagusOfTheLibraryEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestMagusOfTheLibraryInteractions:

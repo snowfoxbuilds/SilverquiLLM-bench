@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import InkshapeDemonstrator
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestInkshapeDemonstratorBasicProperties:
@@ -43,7 +44,7 @@ class TestInkshapeDemonstratorBasicProperties:
     def test_colors(self) -> None:
         """Inkshape Demonstrator must have correct colors."""
         card = InkshapeDemonstrator(name="Inkshape Demonstrator", owner=None, base_power=3, base_toughness=4)
-        assert "W" in card.colors
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Inkshape Demonstrator must have base power 3."""
@@ -54,7 +55,6 @@ class TestInkshapeDemonstratorBasicProperties:
         """Inkshape Demonstrator must have base toughness 4."""
         card = InkshapeDemonstrator(name="Inkshape Demonstrator", owner=None, base_power=3, base_toughness=4)
         assert card.base_toughness == 4
-
 
 @pytest.mark.ability
 class TestInkshapeDemonstratorAbilities:
@@ -74,7 +74,6 @@ class TestInkshapeDemonstratorAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Inkshape Demonstrator must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestInkshapeDemonstratorEdgeCases:
@@ -110,7 +109,6 @@ class TestInkshapeDemonstratorEdgeCases:
         card = InkshapeDemonstrator(name="Inkshape Demonstrator", owner=None, base_power=3, base_toughness=4)
         assert card.mana_cost.cmc == 4, \
             f"CMC must be 4, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestInkshapeDemonstratorInteractions:

@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import PrismariTheInspiration
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestPrismariTheInspirationBasicProperties:
@@ -43,8 +44,8 @@ class TestPrismariTheInspirationBasicProperties:
     def test_colors(self) -> None:
         """Prismari, the Inspiration must have correct colors."""
         card = PrismariTheInspiration(name="Prismari, the Inspiration", owner=None, base_power=7, base_toughness=7)
-        assert "R" in card.colors
-        assert "U" in card.colors
+        assert "R" in card_colors(card)
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Prismari, the Inspiration must have base power 7."""
@@ -55,7 +56,6 @@ class TestPrismariTheInspirationBasicProperties:
         """Prismari, the Inspiration must have base toughness 7."""
         card = PrismariTheInspiration(name="Prismari, the Inspiration", owner=None, base_power=7, base_toughness=7)
         assert card.base_toughness == 7
-
 
 @pytest.mark.ability
 class TestPrismariTheInspirationAbilities:
@@ -72,7 +72,6 @@ class TestPrismariTheInspirationAbilities:
         from engine.types import Keyword
         card = PrismariTheInspiration(name="Prismari, the Inspiration", owner=None, base_power=7, base_toughness=7)
         assert Keyword.WARD in card.keywords, "Prismari, the Inspiration should have Ward"
-
 
 @pytest.mark.edge
 class TestPrismariTheInspirationEdgeCases:
@@ -108,7 +107,6 @@ class TestPrismariTheInspirationEdgeCases:
         card = PrismariTheInspiration(name="Prismari, the Inspiration", owner=None, base_power=7, base_toughness=7)
         assert card.mana_cost.cmc == 7, \
             f"CMC must be 7, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestPrismariTheInspirationInteractions:

@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import AberrantManawurm
@@ -14,7 +16,6 @@ from card_impl import AberrantManawurm
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestAberrantManawurmBasicProperties:
@@ -43,7 +44,7 @@ class TestAberrantManawurmBasicProperties:
     def test_colors(self) -> None:
         """Aberrant Manawurm must have correct colors."""
         card = AberrantManawurm(name="Aberrant Manawurm", owner=None)
-        assert "G" in card.colors
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Aberrant Manawurm must have base power 2."""
@@ -59,7 +60,6 @@ class TestAberrantManawurmBasicProperties:
         """Aberrant Manawurm must have Trample keyword."""
         card = AberrantManawurm(name="Aberrant Manawurm", owner=None)
         assert Keyword.TRAMPLE in card.keywords
-
 
 @pytest.mark.ability
 class TestAberrantManawurmAbilities:
@@ -93,7 +93,6 @@ class TestAberrantManawurmAbilities:
         )
         assert changed, "on_resolve must change game state"
 
-
 @pytest.mark.edge
 class TestAberrantManawurmEdgeCases:
     """Edge case tests for Aberrant Manawurm."""
@@ -111,7 +110,6 @@ class TestAberrantManawurmEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestAberrantManawurmInteractions:

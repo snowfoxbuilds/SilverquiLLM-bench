@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import BrotherhoodsEnd
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestBrotherhoodsEndBasicProperties:
@@ -43,8 +44,7 @@ class TestBrotherhoodsEndBasicProperties:
     def test_colors(self) -> None:
         """Brotherhood's End must have correct colors."""
         card = BrotherhoodsEnd(name="Brotherhood's End", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestBrotherhoodsEndAbilities:
@@ -70,7 +70,6 @@ class TestBrotherhoodsEndAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Brotherhood's End must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestBrotherhoodsEndEdgeCases:
@@ -103,7 +102,6 @@ class TestBrotherhoodsEndEdgeCases:
             pass  # Fizzle on empty board is acceptable
         # Verify game state is consistent
         assert player.life == 20, "Caster life should be unchanged on fizzle"
-
 
 @pytest.mark.interaction
 class TestBrotherhoodsEndInteractions:

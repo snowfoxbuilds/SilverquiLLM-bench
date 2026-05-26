@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import MuseSeeker
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestMuseSeekerBasicProperties:
@@ -43,7 +44,7 @@ class TestMuseSeekerBasicProperties:
     def test_colors(self) -> None:
         """Muse Seeker must have correct colors."""
         card = MuseSeeker(name="Muse Seeker", owner=None, base_power=1, base_toughness=2)
-        assert "U" in card.colors
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Muse Seeker must have base power 1."""
@@ -54,7 +55,6 @@ class TestMuseSeekerBasicProperties:
         """Muse Seeker must have base toughness 2."""
         card = MuseSeeker(name="Muse Seeker", owner=None, base_power=1, base_toughness=2)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestMuseSeekerAbilities:
@@ -72,7 +72,6 @@ class TestMuseSeekerAbilities:
         assert callable(getattr(card, "on_spell_cast", None)) or \
             callable(getattr(card, "opus_trigger", None)), \
             "Muse Seeker must implement opus trigger per oracle text"
-
 
 @pytest.mark.edge
 class TestMuseSeekerEdgeCases:
@@ -101,7 +100,6 @@ class TestMuseSeekerEdgeCases:
         card = MuseSeeker(name="Muse Seeker", owner=None, base_power=1, base_toughness=2)
         assert card.mana_cost.cmc == 2, \
             f"CMC must be 2, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestMuseSeekerInteractions:

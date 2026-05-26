@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import WildHypothesis
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestWildHypothesisBasicProperties:
@@ -42,8 +43,7 @@ class TestWildHypothesisBasicProperties:
     def test_colors(self) -> None:
         """Wild Hypothesis must have correct colors."""
         card = WildHypothesis(name="Wild Hypothesis", owner=None)
-        assert "G" in card.colors
-
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestWildHypothesisAbilities:
@@ -101,7 +101,6 @@ class TestWildHypothesisAbilities:
             "Surveil should manipulate library/graveyard"
         )
 
-
 @pytest.mark.edge
 class TestWildHypothesisEdgeCases:
     """Edge case tests for Wild Hypothesis."""
@@ -119,7 +118,6 @@ class TestWildHypothesisEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestWildHypothesisInteractions:

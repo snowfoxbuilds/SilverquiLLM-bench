@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ReturnToTheRanks
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestReturnToTheRanksBasicProperties:
@@ -42,8 +43,7 @@ class TestReturnToTheRanksBasicProperties:
     def test_colors(self) -> None:
         """Return to the Ranks must have correct colors."""
         card = ReturnToTheRanks(name="Return to the Ranks", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestReturnToTheRanksAbilities:
@@ -70,7 +70,6 @@ class TestReturnToTheRanksAbilities:
             f"Should return from gy: {gy_before} -> {gy_after}"
         )
 
-
 @pytest.mark.edge
 class TestReturnToTheRanksEdgeCases:
     """Edge case tests for Return to the Ranks."""
@@ -88,7 +87,6 @@ class TestReturnToTheRanksEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestReturnToTheRanksInteractions:

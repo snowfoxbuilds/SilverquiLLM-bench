@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import WitheringCurse
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestWitheringCurseBasicProperties:
@@ -43,8 +44,7 @@ class TestWitheringCurseBasicProperties:
     def test_colors(self) -> None:
         """Withering Curse must have correct colors."""
         card = WitheringCurse(name="Withering Curse", owner=None)
-        assert "B" in card.colors
-
+        assert "B" in card_colors(card)
 
 @pytest.mark.ability
 class TestWitheringCurseAbilities:
@@ -81,7 +81,6 @@ class TestWitheringCurseAbilities:
         bf = opponent.zones[Zone.BATTLEFIELD].get_all()
         gy = opponent.zones[Zone.GRAVEYARD].get_all()
         assert target not in bf or target in gy, "Withering Curse must remove creature"
-
 
 @pytest.mark.edge
 class TestWitheringCurseEdgeCases:
@@ -140,7 +139,6 @@ class TestWitheringCurseEdgeCases:
         card = WitheringCurse(name="Withering Curse", owner=None)
         assert card.mana_cost.cmc == 3, \
             f"CMC must be 3, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestWitheringCurseInteractions:

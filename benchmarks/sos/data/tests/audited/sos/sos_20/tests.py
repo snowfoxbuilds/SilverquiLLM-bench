@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import InformedInkwright
@@ -14,7 +16,6 @@ from card_impl import InformedInkwright
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestInformedInkwrightBasicProperties:
@@ -43,7 +44,7 @@ class TestInformedInkwrightBasicProperties:
     def test_colors(self) -> None:
         """Informed Inkwright must have correct colors."""
         card = InformedInkwright(name="Informed Inkwright", owner=None)
-        assert "W" in card.colors
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Informed Inkwright must have base power 2."""
@@ -59,7 +60,6 @@ class TestInformedInkwrightBasicProperties:
         """Informed Inkwright must have Vigilance keyword."""
         card = InformedInkwright(name="Informed Inkwright", owner=None)
         assert Keyword.VIGILANCE in card.keywords
-
 
 @pytest.mark.ability
 class TestInformedInkwrightAbilities:
@@ -117,7 +117,6 @@ class TestInformedInkwrightAbilities:
             f"Repartee should create token: bf {bf_before} -> {bf_after}"
         )
 
-
 @pytest.mark.edge
 class TestInformedInkwrightEdgeCases:
     """Edge case tests for Informed Inkwright."""
@@ -135,7 +134,6 @@ class TestInformedInkwrightEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestInformedInkwrightInteractions:

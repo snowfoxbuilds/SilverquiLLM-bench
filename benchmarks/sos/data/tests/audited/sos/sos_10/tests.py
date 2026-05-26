@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import DigSiteInventory
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestDigSiteInventoryBasicProperties:
@@ -42,8 +43,7 @@ class TestDigSiteInventoryBasicProperties:
     def test_colors(self) -> None:
         """Dig Site Inventory must have correct colors."""
         card = DigSiteInventory(name="Dig Site Inventory", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestDigSiteInventoryAbilities:
@@ -129,7 +129,6 @@ class TestDigSiteInventoryAbilities:
             "Target should have vigilance after resolution"
         )
 
-
 @pytest.mark.edge
 class TestDigSiteInventoryEdgeCases:
     """Edge case tests for Dig Site Inventory."""
@@ -151,7 +150,6 @@ class TestDigSiteInventoryEdgeCases:
         if len(targets) > 0:
             assert own in targets, "Own creature should be valid"
             assert enemy not in targets, "Opponent creature should be invalid"
-
 
 @pytest.mark.interaction
 class TestDigSiteInventoryInteractions:

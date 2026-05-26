@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import HarmonizedTrioBrainstorm
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestHarmonizedTrioBrainstormBasicProperties:
@@ -43,7 +44,7 @@ class TestHarmonizedTrioBrainstormBasicProperties:
     def test_colors(self) -> None:
         """Harmonized Trio // Brainstorm must have correct colors."""
         card = HarmonizedTrioBrainstorm(name="Harmonized Trio // Brainstorm", owner=None, base_power=1, base_toughness=1)
-        assert "U" in card.colors
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Harmonized Trio // Brainstorm must have base power 1."""
@@ -54,7 +55,6 @@ class TestHarmonizedTrioBrainstormBasicProperties:
         """Harmonized Trio // Brainstorm must have base toughness 1."""
         card = HarmonizedTrioBrainstorm(name="Harmonized Trio // Brainstorm", owner=None, base_power=1, base_toughness=1)
         assert card.base_toughness == 1
-
 
 @pytest.mark.ability
 class TestHarmonizedTrioBrainstormAbilities:
@@ -73,7 +73,6 @@ class TestHarmonizedTrioBrainstormAbilities:
             callable(getattr(card, "prepared_effect", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Harmonized Trio // Brainstorm must implement prepared mechanic"
-
 
 @pytest.mark.edge
 class TestHarmonizedTrioBrainstormEdgeCases:
@@ -105,7 +104,6 @@ class TestHarmonizedTrioBrainstormEdgeCases:
             card.damage_taken = 0
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestHarmonizedTrioBrainstormInteractions:

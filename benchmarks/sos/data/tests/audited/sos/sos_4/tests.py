@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import TogetherAsOne
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestTogetherAsOneBasicProperties:
@@ -43,8 +44,7 @@ class TestTogetherAsOneBasicProperties:
     def test_colorless(self) -> None:
         """Together as One must be colorless."""
         card = TogetherAsOne(name="Together as One", owner=None)
-        assert len(card.colors) == 0
-
+        assert len(card_colors(card)) == 0
 
 @pytest.mark.ability
 class TestTogetherAsOneAbilities:
@@ -80,7 +80,6 @@ class TestTogetherAsOneAbilities:
         initial_life = opponent.life
         card.on_resolve(game)
         assert opponent.life < initial_life, "Together as One must deal damage on resolution"
-
 
 @pytest.mark.edge
 class TestTogetherAsOneEdgeCases:
@@ -148,7 +147,6 @@ class TestTogetherAsOneEdgeCases:
         card = TogetherAsOne(name="Together as One", owner=None)
         assert card.mana_cost.cmc == 6, \
             f"CMC must be 6, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestTogetherAsOneInteractions:

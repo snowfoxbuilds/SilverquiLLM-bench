@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ThunderdrumSoloist
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestThunderdrumSoloistBasicProperties:
@@ -43,7 +44,7 @@ class TestThunderdrumSoloistBasicProperties:
     def test_colors(self) -> None:
         """Thunderdrum Soloist must have correct colors."""
         card = ThunderdrumSoloist(name="Thunderdrum Soloist", owner=None, base_power=1, base_toughness=3)
-        assert "R" in card.colors
+        assert "R" in card_colors(card)
 
     def test_power(self) -> None:
         """Thunderdrum Soloist must have base power 1."""
@@ -54,7 +55,6 @@ class TestThunderdrumSoloistBasicProperties:
         """Thunderdrum Soloist must have base toughness 3."""
         card = ThunderdrumSoloist(name="Thunderdrum Soloist", owner=None, base_power=1, base_toughness=3)
         assert card.base_toughness == 3
-
 
 @pytest.mark.ability
 class TestThunderdrumSoloistAbilities:
@@ -78,7 +78,6 @@ class TestThunderdrumSoloistAbilities:
         assert callable(getattr(card, "on_spell_cast", None)) or \
             callable(getattr(card, "opus_trigger", None)), \
             "Thunderdrum Soloist must implement opus trigger per oracle text"
-
 
 @pytest.mark.edge
 class TestThunderdrumSoloistEdgeCases:
@@ -107,7 +106,6 @@ class TestThunderdrumSoloistEdgeCases:
         card = ThunderdrumSoloist(name="Thunderdrum Soloist", owner=None, base_power=1, base_toughness=3)
         assert card.mana_cost.cmc == 2, \
             f"CMC must be 2, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestThunderdrumSoloistInteractions:

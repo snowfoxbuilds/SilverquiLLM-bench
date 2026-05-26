@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import OrysaTideChoreographer
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestOrysaTideChoreographerBasicProperties:
@@ -42,7 +43,7 @@ class TestOrysaTideChoreographerBasicProperties:
     def test_colors(self) -> None:
         """Orysa, Tide Choreographer must have correct colors."""
         card = OrysaTideChoreographer(name="Orysa, Tide Choreographer", owner=None)
-        assert "U" in card.colors
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Orysa, Tide Choreographer must have base power 2."""
@@ -53,7 +54,6 @@ class TestOrysaTideChoreographerBasicProperties:
         """Orysa, Tide Choreographer must have base toughness 2."""
         card = OrysaTideChoreographer(name="Orysa, Tide Choreographer", owner=None)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestOrysaTideChoreographerAbilities:
@@ -95,7 +95,6 @@ class TestOrysaTideChoreographerAbilities:
         reduction = card.cost_reduction(game)
         assert reduction > 0, f"Cost reduction should apply, got {reduction}"
 
-
 @pytest.mark.edge
 class TestOrysaTideChoreographerEdgeCases:
     """Edge case tests for Orysa, Tide Choreographer."""
@@ -114,7 +113,6 @@ class TestOrysaTideChoreographerEdgeCases:
         card._targets = [target]
         reduction = card.cost_reduction(game)
         assert reduction == 0, f"No reduction when unmet, got {reduction}"
-
 
 @pytest.mark.interaction
 class TestOrysaTideChoreographerInteractions:

@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import MindIntoMatter
 
 from engine.card import Sorcery
 from engine.types import CardType
-
 
 @pytest.mark.basic
 class TestMindIntoMatterBasicProperties:
@@ -43,8 +44,7 @@ class TestMindIntoMatterBasicProperties:
         """Mind into Matter must have colors ['G', 'U']."""
         card = MindIntoMatter(name="Mind into Matter", owner=None)
         for c in ["G", "U"]:
-            assert c in card.colors, f"Expected color {c} in {card.colors}"
-
+            assert c in card_colors(card), f"Expected color {c} in {card_colors(card)}"
 
 @pytest.mark.ability
 class TestMindIntoMatterAbilities:

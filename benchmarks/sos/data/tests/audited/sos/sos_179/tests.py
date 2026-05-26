@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import CauldronOfEssence
 
 from engine.card import Artifact
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestCauldronOfEssenceBasicProperties:
@@ -42,9 +43,8 @@ class TestCauldronOfEssenceBasicProperties:
     def test_colors(self) -> None:
         """Cauldron of Essence must have correct colors."""
         card = CauldronOfEssence(name="Cauldron of Essence", owner=None)
-        assert "B" in card.colors
-        assert "G" in card.colors
-
+        assert "B" in card_colors(card)
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestCauldronOfEssenceAbilities:
@@ -109,7 +109,6 @@ class TestCauldronOfEssenceAbilities:
             f"Should return from gy: {gy_before} -> {gy_after}"
         )
 
-
 @pytest.mark.edge
 class TestCauldronOfEssenceEdgeCases:
     """Edge case tests for Cauldron of Essence."""
@@ -131,7 +130,6 @@ class TestCauldronOfEssenceEdgeCases:
         if len(targets) > 0:
             assert own in targets, "Own creature should be valid"
             assert enemy not in targets, "Opponent creature should be invalid"
-
 
 @pytest.mark.interaction
 class TestCauldronOfEssenceInteractions:

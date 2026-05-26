@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import BurrogBarrage
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestBurrogBarrageBasicProperties:
@@ -42,8 +43,7 @@ class TestBurrogBarrageBasicProperties:
     def test_colors(self) -> None:
         """Burrog Barrage must have correct colors."""
         card = BurrogBarrage(name="Burrog Barrage", owner=None)
-        assert "G" in card.colors
-
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestBurrogBarrageAbilities:
@@ -68,7 +68,6 @@ class TestBurrogBarrageAbilities:
             f"Should pump to 2 power, got {actual_power}"
         )
 
-
 @pytest.mark.edge
 class TestBurrogBarrageEdgeCases:
     """Edge case tests for Burrog Barrage."""
@@ -90,7 +89,6 @@ class TestBurrogBarrageEdgeCases:
         if len(targets) > 0:
             assert own in targets, "Own creature should be valid"
             assert enemy not in targets, "Opponent creature should be invalid"
-
 
 @pytest.mark.interaction
 class TestBurrogBarrageInteractions:

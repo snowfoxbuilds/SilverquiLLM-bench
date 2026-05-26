@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import HonorboundPageForumsFavor
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestHonorboundPageForumsFavorBasicProperties:
@@ -43,7 +44,7 @@ class TestHonorboundPageForumsFavorBasicProperties:
     def test_colors(self) -> None:
         """Honorbound Page // Forum's Favor must have correct colors."""
         card = HonorboundPageForumsFavor(name="Honorbound Page // Forum's Favor", owner=None, base_power=3, base_toughness=3)
-        assert "W" in card.colors
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Honorbound Page // Forum's Favor must have base power 3."""
@@ -54,7 +55,6 @@ class TestHonorboundPageForumsFavorBasicProperties:
         """Honorbound Page // Forum's Favor must have base toughness 3."""
         card = HonorboundPageForumsFavor(name="Honorbound Page // Forum's Favor", owner=None, base_power=3, base_toughness=3)
         assert card.base_toughness == 3
-
 
 @pytest.mark.ability
 class TestHonorboundPageForumsFavorAbilities:
@@ -86,7 +86,6 @@ class TestHonorboundPageForumsFavorAbilities:
             callable(getattr(card, "on_resolve", None)), \
             "Honorbound Page // Forum's Favor must implement prepared mechanic"
 
-
 @pytest.mark.edge
 class TestHonorboundPageForumsFavorEdgeCases:
     """Edge case and trap tests for Honorbound Page // Forum's Favor."""
@@ -117,7 +116,6 @@ class TestHonorboundPageForumsFavorEdgeCases:
             card.damage_taken = 2
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestHonorboundPageForumsFavorInteractions:

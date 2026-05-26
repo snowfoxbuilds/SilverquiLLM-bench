@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import EnnisDebateModerator
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestEnnisDebateModeratorBasicProperties:
@@ -43,7 +44,7 @@ class TestEnnisDebateModeratorBasicProperties:
     def test_colors(self) -> None:
         """Ennis, Debate Moderator must have correct colors."""
         card = EnnisDebateModerator(name="Ennis, Debate Moderator", owner=None, base_power=1, base_toughness=1)
-        assert "W" in card.colors
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Ennis, Debate Moderator must have base power 1."""
@@ -54,7 +55,6 @@ class TestEnnisDebateModeratorBasicProperties:
         """Ennis, Debate Moderator must have base toughness 1."""
         card = EnnisDebateModerator(name="Ennis, Debate Moderator", owner=None, base_power=1, base_toughness=1)
         assert card.base_toughness == 1
-
 
 @pytest.mark.ability
 class TestEnnisDebateModeratorAbilities:
@@ -87,7 +87,6 @@ class TestEnnisDebateModeratorAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Ennis, Debate Moderator must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestEnnisDebateModeratorEdgeCases:
@@ -123,7 +122,6 @@ class TestEnnisDebateModeratorEdgeCases:
         card = EnnisDebateModerator(name="Ennis, Debate Moderator", owner=None, base_power=1, base_toughness=1)
         assert card.mana_cost.cmc == 2, \
             f"CMC must be 2, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestEnnisDebateModeratorInteractions:

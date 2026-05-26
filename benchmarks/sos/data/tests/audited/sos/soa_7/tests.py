@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import PrismaticEnding
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestPrismaticEndingBasicProperties:
@@ -43,8 +44,7 @@ class TestPrismaticEndingBasicProperties:
     def test_colors(self) -> None:
         """Prismatic Ending must have correct colors."""
         card = PrismaticEnding(name="Prismatic Ending", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestPrismaticEndingAbilities:
@@ -85,7 +85,6 @@ class TestPrismaticEndingAbilities:
         card.on_resolve(game)
         exile = opponent.zones[Zone.EXILE].get_all()
         assert target in exile, "Prismatic Ending must exile target"
-
 
 @pytest.mark.edge
 class TestPrismaticEndingEdgeCases:
@@ -153,7 +152,6 @@ class TestPrismaticEndingEdgeCases:
         card = PrismaticEnding(name="Prismatic Ending", owner=None)
         assert card.mana_cost.cmc == 1, \
             f"CMC must be 1, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestPrismaticEndingInteractions:

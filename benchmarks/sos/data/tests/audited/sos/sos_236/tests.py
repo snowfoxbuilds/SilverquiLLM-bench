@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SuspendAggression
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestSuspendAggressionBasicProperties:
@@ -42,9 +43,8 @@ class TestSuspendAggressionBasicProperties:
     def test_colors(self) -> None:
         """Suspend Aggression must have correct colors."""
         card = SuspendAggression(name="Suspend Aggression", owner=None)
-        assert "R" in card.colors
-        assert "W" in card.colors
-
+        assert "R" in card_colors(card)
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestSuspendAggressionAbilities:
@@ -68,7 +68,6 @@ class TestSuspendAggressionAbilities:
         exile = player.zones[Zone.EXILE].get_all()
         assert target in exile, "Target should be in exile"
 
-
 @pytest.mark.edge
 class TestSuspendAggressionEdgeCases:
     """Edge case tests for Suspend Aggression."""
@@ -86,7 +85,6 @@ class TestSuspendAggressionEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestSuspendAggressionInteractions:

@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import CampusComposerAqueousAria
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestCampusComposerAqueousAriaBasicProperties:
@@ -43,7 +44,7 @@ class TestCampusComposerAqueousAriaBasicProperties:
     def test_colors(self) -> None:
         """Campus Composer // Aqueous Aria must have correct colors."""
         card = CampusComposerAqueousAria(name="Campus Composer // Aqueous Aria", owner=None, base_power=3, base_toughness=4)
-        assert "U" in card.colors
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Campus Composer // Aqueous Aria must have base power 3."""
@@ -54,7 +55,6 @@ class TestCampusComposerAqueousAriaBasicProperties:
         """Campus Composer // Aqueous Aria must have base toughness 4."""
         card = CampusComposerAqueousAria(name="Campus Composer // Aqueous Aria", owner=None, base_power=3, base_toughness=4)
         assert card.base_toughness == 4
-
 
 @pytest.mark.ability
 class TestCampusComposerAqueousAriaAbilities:
@@ -86,7 +86,6 @@ class TestCampusComposerAqueousAriaAbilities:
             callable(getattr(card, "on_resolve", None)), \
             "Campus Composer // Aqueous Aria must implement prepared mechanic"
 
-
 @pytest.mark.edge
 class TestCampusComposerAqueousAriaEdgeCases:
     """Edge case and trap tests for Campus Composer // Aqueous Aria."""
@@ -117,7 +116,6 @@ class TestCampusComposerAqueousAriaEdgeCases:
             card.damage_taken = 3
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestCampusComposerAqueousAriaInteractions:

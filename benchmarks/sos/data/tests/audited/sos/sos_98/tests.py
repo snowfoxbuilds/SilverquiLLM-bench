@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ScathingShadelockVenomousWords
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestScathingShadelockVenomousWordsBasicProperties:
@@ -43,7 +44,7 @@ class TestScathingShadelockVenomousWordsBasicProperties:
     def test_colors(self) -> None:
         """Scathing Shadelock // Venomous Words must have correct colors."""
         card = ScathingShadelockVenomousWords(name="Scathing Shadelock // Venomous Words", owner=None, base_power=4, base_toughness=6)
-        assert "B" in card.colors
+        assert "B" in card_colors(card)
 
     def test_power(self) -> None:
         """Scathing Shadelock // Venomous Words must have base power 4."""
@@ -54,7 +55,6 @@ class TestScathingShadelockVenomousWordsBasicProperties:
         """Scathing Shadelock // Venomous Words must have base toughness 6."""
         card = ScathingShadelockVenomousWords(name="Scathing Shadelock // Venomous Words", owner=None, base_power=4, base_toughness=6)
         assert card.base_toughness == 6
-
 
 @pytest.mark.ability
 class TestScathingShadelockVenomousWordsAbilities:
@@ -73,7 +73,6 @@ class TestScathingShadelockVenomousWordsAbilities:
             callable(getattr(card, "prepared_effect", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Scathing Shadelock // Venomous Words must implement prepared mechanic"
-
 
 @pytest.mark.edge
 class TestScathingShadelockVenomousWordsEdgeCases:
@@ -105,7 +104,6 @@ class TestScathingShadelockVenomousWordsEdgeCases:
             card.damage_taken = 5
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestScathingShadelockVenomousWordsInteractions:

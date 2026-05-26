@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import AkromasWill
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestAkromasWillBasicProperties:
@@ -43,8 +44,7 @@ class TestAkromasWillBasicProperties:
     def test_colors(self) -> None:
         """Akroma's Will must have correct colors."""
         card = AkromasWill(name="Akroma's Will", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestAkromasWillAbilities:
@@ -58,7 +58,6 @@ class TestAkromasWillAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Akroma's Will must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestAkromasWillEdgeCases:
@@ -91,7 +90,6 @@ class TestAkromasWillEdgeCases:
             pass  # Fizzle on empty board is acceptable
         # Verify game state is consistent
         assert player.life == 20, "Caster life should be unchanged on fizzle"
-
 
 @pytest.mark.interaction
 class TestAkromasWillInteractions:

@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import AmbitiousAugmenter
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestAmbitiousAugmenterBasicProperties:
@@ -43,7 +44,7 @@ class TestAmbitiousAugmenterBasicProperties:
     def test_colors(self) -> None:
         """Ambitious Augmenter must have correct colors."""
         card = AmbitiousAugmenter(name="Ambitious Augmenter", owner=None, base_power=1, base_toughness=1)
-        assert "G" in card.colors
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Ambitious Augmenter must have base power 1."""
@@ -54,7 +55,6 @@ class TestAmbitiousAugmenterBasicProperties:
         """Ambitious Augmenter must have base toughness 1."""
         card = AmbitiousAugmenter(name="Ambitious Augmenter", owner=None, base_power=1, base_toughness=1)
         assert card.base_toughness == 1
-
 
 @pytest.mark.ability
 class TestAmbitiousAugmenterAbilities:
@@ -75,7 +75,6 @@ class TestAmbitiousAugmenterAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Ambitious Augmenter must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestAmbitiousAugmenterEdgeCases:
@@ -107,7 +106,6 @@ class TestAmbitiousAugmenterEdgeCases:
             card.damage_taken = 0
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestAmbitiousAugmenterInteractions:

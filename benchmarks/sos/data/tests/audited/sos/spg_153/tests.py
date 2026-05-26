@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import DualcasterMage
@@ -14,7 +16,6 @@ from card_impl import DualcasterMage
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestDualcasterMageBasicProperties:
@@ -43,7 +44,7 @@ class TestDualcasterMageBasicProperties:
     def test_colors(self) -> None:
         """Dualcaster Mage must have correct colors."""
         card = DualcasterMage(name="Dualcaster Mage", owner=None)
-        assert "R" in card.colors
+        assert "R" in card_colors(card)
 
     def test_power(self) -> None:
         """Dualcaster Mage must have base power 2."""
@@ -59,7 +60,6 @@ class TestDualcasterMageBasicProperties:
         """Dualcaster Mage must have Flash keyword."""
         card = DualcasterMage(name="Dualcaster Mage", owner=None)
         assert Keyword.FLASH in card.keywords
-
 
 @pytest.mark.ability
 class TestDualcasterMageAbilities:
@@ -93,7 +93,6 @@ class TestDualcasterMageAbilities:
         )
         assert changed, "on_resolve must change game state"
 
-
 @pytest.mark.edge
 class TestDualcasterMageEdgeCases:
     """Edge case tests for Dualcaster Mage."""
@@ -111,7 +110,6 @@ class TestDualcasterMageEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestDualcasterMageInteractions:

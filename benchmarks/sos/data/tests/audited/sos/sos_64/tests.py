@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import Procrastinate
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestProcrastinateBasicProperties:
@@ -43,8 +44,7 @@ class TestProcrastinateBasicProperties:
     def test_colors(self) -> None:
         """Procrastinate must have correct colors."""
         card = Procrastinate(name="Procrastinate", owner=None)
-        assert "U" in card.colors
-
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestProcrastinateAbilities:
@@ -58,7 +58,6 @@ class TestProcrastinateAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Procrastinate must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestProcrastinateEdgeCases:
@@ -93,7 +92,6 @@ class TestProcrastinateEdgeCases:
         card = Procrastinate(name="Procrastinate", owner=None)
         assert card.mana_cost.cmc == 1, \
             f"CMC must be 1, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestProcrastinateInteractions:

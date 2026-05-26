@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import QuandrixCharm
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestQuandrixCharmBasicProperties:
@@ -43,9 +44,8 @@ class TestQuandrixCharmBasicProperties:
     def test_colors(self) -> None:
         """Quandrix Charm must have correct colors."""
         card = QuandrixCharm(name="Quandrix Charm", owner=None)
-        assert "G" in card.colors
-        assert "U" in card.colors
-
+        assert "G" in card_colors(card)
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestQuandrixCharmAbilities:
@@ -77,7 +77,6 @@ class TestQuandrixCharmAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Quandrix Charm must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestQuandrixCharmEdgeCases:
@@ -112,7 +111,6 @@ class TestQuandrixCharmEdgeCases:
         card = QuandrixCharm(name="Quandrix Charm", owner=None)
         assert card.mana_cost.cmc == 2, \
             f"CMC must be 2, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestQuandrixCharmInteractions:

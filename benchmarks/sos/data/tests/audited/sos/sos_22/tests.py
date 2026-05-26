@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import Interjection
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestInterjectionBasicProperties:
@@ -42,8 +43,7 @@ class TestInterjectionBasicProperties:
     def test_colors(self) -> None:
         """Interjection must have correct colors."""
         card = Interjection(name="Interjection", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestInterjectionAbilities:
@@ -87,7 +87,6 @@ class TestInterjectionAbilities:
             "Target should have first strike after resolution"
         )
 
-
 @pytest.mark.edge
 class TestInterjectionEdgeCases:
     """Edge case tests for Interjection."""
@@ -105,7 +104,6 @@ class TestInterjectionEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestInterjectionInteractions:

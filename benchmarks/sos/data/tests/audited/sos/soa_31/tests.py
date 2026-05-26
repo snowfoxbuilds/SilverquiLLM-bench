@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import LocustSpray
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestLocustSprayBasicProperties:
@@ -42,8 +43,7 @@ class TestLocustSprayBasicProperties:
     def test_colors(self) -> None:
         """Locust Spray must have correct colors."""
         card = LocustSpray(name="Locust Spray", owner=None)
-        assert "B" in card.colors
-
+        assert "B" in card_colors(card)
 
 @pytest.mark.ability
 class TestLocustSprayAbilities:
@@ -98,7 +98,6 @@ class TestLocustSprayAbilities:
         abilities_list = card.get_activated_abilities()
         assert len(abilities_list) > 0, "Card must have activated ability"
 
-
 @pytest.mark.edge
 class TestLocustSprayEdgeCases:
     """Edge case tests for Locust Spray."""
@@ -116,7 +115,6 @@ class TestLocustSprayEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestLocustSprayInteractions:

@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import AdNauseam
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestAdNauseamBasicProperties:
@@ -43,8 +44,7 @@ class TestAdNauseamBasicProperties:
         """Ad Nauseam must have colors ['B']."""
         card = AdNauseam(name="Ad Nauseam", owner=None)
         for c in ["B"]:
-            assert c in card.colors, f"Expected color {c} in {card.colors}"
-
+            assert c in card_colors(card), f"Expected color {c} in {card_colors(card)}"
 
 @pytest.mark.ability
 class TestAdNauseamAbilities:

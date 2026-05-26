@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import EmeritusOfTruceSwordsToPlowshares
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestEmeritusOfTruceSwordsToPlowsharesBasicProperties:
@@ -43,7 +44,7 @@ class TestEmeritusOfTruceSwordsToPlowsharesBasicProperties:
     def test_colors(self) -> None:
         """Emeritus of Truce // Swords to Plowshares must have correct colors."""
         card = EmeritusOfTruceSwordsToPlowshares(name="Emeritus of Truce // Swords to Plowshares", owner=None, base_power=3, base_toughness=3)
-        assert "W" in card.colors
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Emeritus of Truce // Swords to Plowshares must have base power 3."""
@@ -54,7 +55,6 @@ class TestEmeritusOfTruceSwordsToPlowsharesBasicProperties:
         """Emeritus of Truce // Swords to Plowshares must have base toughness 3."""
         card = EmeritusOfTruceSwordsToPlowshares(name="Emeritus of Truce // Swords to Plowshares", owner=None, base_power=3, base_toughness=3)
         assert card.base_toughness == 3
-
 
 @pytest.mark.ability
 class TestEmeritusOfTruceSwordsToPlowsharesAbilities:
@@ -88,7 +88,6 @@ class TestEmeritusOfTruceSwordsToPlowsharesAbilities:
             callable(getattr(card, "prepared_effect", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Emeritus of Truce // Swords to Plowshares must implement prepared mechanic"
-
 
 @pytest.mark.edge
 class TestEmeritusOfTruceSwordsToPlowsharesEdgeCases:
@@ -124,7 +123,6 @@ class TestEmeritusOfTruceSwordsToPlowsharesEdgeCases:
         card = EmeritusOfTruceSwordsToPlowshares(name="Emeritus of Truce // Swords to Plowshares", owner=None, base_power=3, base_toughness=3)
         assert card.mana_cost.cmc == 4, \
             f"CMC must be 4, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestEmeritusOfTruceSwordsToPlowsharesInteractions:

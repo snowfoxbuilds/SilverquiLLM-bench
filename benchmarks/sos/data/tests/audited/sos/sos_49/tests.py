@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import FlowState
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestFlowStateBasicProperties:
@@ -43,8 +44,7 @@ class TestFlowStateBasicProperties:
     def test_colors(self) -> None:
         """Flow State must have correct colors."""
         card = FlowState(name="Flow State", owner=None)
-        assert "U" in card.colors
-
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestFlowStateAbilities:
@@ -58,7 +58,6 @@ class TestFlowStateAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Flow State must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestFlowStateEdgeCases:
@@ -91,7 +90,6 @@ class TestFlowStateEdgeCases:
             pass  # Fizzle on empty board is acceptable
         # Verify game state is consistent
         assert player.life == 20, "Caster life should be unchanged on fizzle"
-
 
 @pytest.mark.interaction
 class TestFlowStateInteractions:

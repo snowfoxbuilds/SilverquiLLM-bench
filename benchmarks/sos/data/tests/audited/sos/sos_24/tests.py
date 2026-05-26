@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import OwlinHistorian
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestOwlinHistorianBasicProperties:
@@ -43,7 +44,7 @@ class TestOwlinHistorianBasicProperties:
     def test_colors(self) -> None:
         """Owlin Historian must have correct colors."""
         card = OwlinHistorian(name="Owlin Historian", owner=None, base_power=2, base_toughness=3)
-        assert "W" in card.colors
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Owlin Historian must have base power 2."""
@@ -54,7 +55,6 @@ class TestOwlinHistorianBasicProperties:
         """Owlin Historian must have base toughness 3."""
         card = OwlinHistorian(name="Owlin Historian", owner=None, base_power=2, base_toughness=3)
         assert card.base_toughness == 3
-
 
 @pytest.mark.ability
 class TestOwlinHistorianAbilities:
@@ -79,7 +79,6 @@ class TestOwlinHistorianAbilities:
         counters = getattr(card, "counters", {})
         p1p1 = counters.get("+1/+1", counters.get("p1p1", 0))
         assert p1p1 > 0, "ETB must add +1/+1 counters per oracle"
-
 
 @pytest.mark.edge
 class TestOwlinHistorianEdgeCases:
@@ -111,7 +110,6 @@ class TestOwlinHistorianEdgeCases:
             card.damage_taken = 2
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestOwlinHistorianInteractions:

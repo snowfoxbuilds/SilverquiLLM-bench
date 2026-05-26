@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import Fractalize
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestFractalizeBasicProperties:
@@ -42,8 +43,7 @@ class TestFractalizeBasicProperties:
     def test_colors(self) -> None:
         """Fractalize must have correct colors."""
         card = Fractalize(name="Fractalize", owner=None)
-        assert "U" in card.colors
-
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestFractalizeAbilities:
@@ -77,7 +77,6 @@ class TestFractalizeAbilities:
         )
         assert changed, "on_resolve must change game state"
 
-
 @pytest.mark.edge
 class TestFractalizeEdgeCases:
     """Edge case tests for Fractalize."""
@@ -95,7 +94,6 @@ class TestFractalizeEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestFractalizeInteractions:

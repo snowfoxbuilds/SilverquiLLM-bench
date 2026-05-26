@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import BlechLoafingPest
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost, Supertype
-
 
 @pytest.mark.basic
 class TestBlechLoafingPestBasicProperties:
@@ -43,7 +44,7 @@ class TestBlechLoafingPestBasicProperties:
         """Blech, Loafing Pest must have colors ['B', 'G']."""
         card = BlechLoafingPest(name="Blech, Loafing Pest", owner=None)
         for c in ["B", "G"]:
-            assert c in card.colors, f"Expected color {c} in {card.colors}"
+            assert c in card_colors(card), f"Expected color {c} in {card_colors(card)}"
 
     def test_power(self) -> None:
         """Blech, Loafing Pest must have power 3."""
@@ -54,7 +55,6 @@ class TestBlechLoafingPestBasicProperties:
         """Blech, Loafing Pest must have toughness 4."""
         card = BlechLoafingPest(name="Blech, Loafing Pest", owner=None)
         assert card.base_toughness == 4
-
 
 @pytest.mark.ability
 class TestBlechLoafingPestAbilities:

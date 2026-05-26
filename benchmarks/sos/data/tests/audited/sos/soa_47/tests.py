@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ReturnTheFavor
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestReturnTheFavorBasicProperties:
@@ -43,8 +44,7 @@ class TestReturnTheFavorBasicProperties:
     def test_colors(self) -> None:
         """Return the Favor must have correct colors."""
         card = ReturnTheFavor(name="Return the Favor", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestReturnTheFavorAbilities:
@@ -58,7 +58,6 @@ class TestReturnTheFavorAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Return the Favor must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestReturnTheFavorEdgeCases:
@@ -93,7 +92,6 @@ class TestReturnTheFavorEdgeCases:
         card = ReturnTheFavor(name="Return the Favor", owner=None)
         assert card.mana_cost.cmc == 2, \
             f"CMC must be 2, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestReturnTheFavorInteractions:

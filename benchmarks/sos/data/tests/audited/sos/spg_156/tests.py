@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import AdrixAndNevTwincasters
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestAdrixAndNevTwincastersBasicProperties:
@@ -43,8 +44,8 @@ class TestAdrixAndNevTwincastersBasicProperties:
     def test_colors(self) -> None:
         """Adrix and Nev, Twincasters must have correct colors."""
         card = AdrixAndNevTwincasters(name="Adrix and Nev, Twincasters", owner=None, base_power=2, base_toughness=2)
-        assert "G" in card.colors
-        assert "U" in card.colors
+        assert "G" in card_colors(card)
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Adrix and Nev, Twincasters must have base power 2."""
@@ -55,7 +56,6 @@ class TestAdrixAndNevTwincastersBasicProperties:
         """Adrix and Nev, Twincasters must have base toughness 2."""
         card = AdrixAndNevTwincasters(name="Adrix and Nev, Twincasters", owner=None, base_power=2, base_toughness=2)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestAdrixAndNevTwincastersAbilities:
@@ -75,7 +75,6 @@ class TestAdrixAndNevTwincastersAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Adrix and Nev, Twincasters must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestAdrixAndNevTwincastersEdgeCases:
@@ -111,7 +110,6 @@ class TestAdrixAndNevTwincastersEdgeCases:
         card = AdrixAndNevTwincasters(name="Adrix and Nev, Twincasters", owner=None, base_power=2, base_toughness=2)
         assert card.mana_cost.cmc == 4, \
             f"CMC must be 4, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestAdrixAndNevTwincastersInteractions:

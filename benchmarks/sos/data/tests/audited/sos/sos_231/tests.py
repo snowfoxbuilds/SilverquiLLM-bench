@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SplatterTechnique
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestSplatterTechniqueBasicProperties:
@@ -43,9 +44,8 @@ class TestSplatterTechniqueBasicProperties:
     def test_colors(self) -> None:
         """Splatter Technique must have correct colors."""
         card = SplatterTechnique(name="Splatter Technique", owner=None)
-        assert "R" in card.colors
-        assert "U" in card.colors
-
+        assert "R" in card_colors(card)
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestSplatterTechniqueAbilities:
@@ -71,7 +71,6 @@ class TestSplatterTechniqueAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Splatter Technique must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestSplatterTechniqueEdgeCases:
@@ -104,7 +103,6 @@ class TestSplatterTechniqueEdgeCases:
             pass  # Fizzle on empty board is acceptable
         # Verify game state is consistent
         assert player.life == 20, "Caster life should be unchanged on fizzle"
-
 
 @pytest.mark.interaction
 class TestSplatterTechniqueInteractions:

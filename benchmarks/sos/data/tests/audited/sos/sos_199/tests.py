@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import LluwenExchangeStudentPestFriend
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestLluwenExchangeStudentPestFriendBasicProperties:
@@ -43,8 +44,8 @@ class TestLluwenExchangeStudentPestFriendBasicProperties:
     def test_colors(self) -> None:
         """Lluwen, Exchange Student // Pest Friend must have correct colors."""
         card = LluwenExchangeStudentPestFriend(name="Lluwen, Exchange Student // Pest Friend", owner=None, base_power=3, base_toughness=4)
-        assert "B" in card.colors
-        assert "G" in card.colors
+        assert "B" in card_colors(card)
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Lluwen, Exchange Student // Pest Friend must have base power 3."""
@@ -55,7 +56,6 @@ class TestLluwenExchangeStudentPestFriendBasicProperties:
         """Lluwen, Exchange Student // Pest Friend must have base toughness 4."""
         card = LluwenExchangeStudentPestFriend(name="Lluwen, Exchange Student // Pest Friend", owner=None, base_power=3, base_toughness=4)
         assert card.base_toughness == 4
-
 
 @pytest.mark.ability
 class TestLluwenExchangeStudentPestFriendAbilities:
@@ -80,7 +80,6 @@ class TestLluwenExchangeStudentPestFriendAbilities:
             callable(getattr(card, "prepared_effect", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Lluwen, Exchange Student // Pest Friend must implement prepared mechanic"
-
 
 @pytest.mark.edge
 class TestLluwenExchangeStudentPestFriendEdgeCases:
@@ -112,7 +111,6 @@ class TestLluwenExchangeStudentPestFriendEdgeCases:
             card.damage_taken = 3
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestLluwenExchangeStudentPestFriendInteractions:

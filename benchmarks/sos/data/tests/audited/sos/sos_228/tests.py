@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SocialSnub
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestSocialSnubBasicProperties:
@@ -42,9 +43,8 @@ class TestSocialSnubBasicProperties:
     def test_colors(self) -> None:
         """Social Snub must have correct colors."""
         card = SocialSnub(name="Social Snub", owner=None)
-        assert "B" in card.colors
-        assert "W" in card.colors
-
+        assert "B" in card_colors(card)
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestSocialSnubAbilities:
@@ -77,7 +77,6 @@ class TestSocialSnubAbilities:
             f"Should lose life: {life_before} -> {opponent.life}"
         )
 
-
 @pytest.mark.edge
 class TestSocialSnubEdgeCases:
     """Edge case tests for Social Snub."""
@@ -95,7 +94,6 @@ class TestSocialSnubEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestSocialSnubInteractions:

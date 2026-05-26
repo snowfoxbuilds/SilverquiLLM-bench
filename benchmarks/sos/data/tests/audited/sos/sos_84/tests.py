@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ForumNecroscribe
@@ -14,7 +16,6 @@ from card_impl import ForumNecroscribe
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestForumNecroscribeBasicProperties:
@@ -43,7 +44,7 @@ class TestForumNecroscribeBasicProperties:
     def test_colors(self) -> None:
         """Forum Necroscribe must have correct colors."""
         card = ForumNecroscribe(name="Forum Necroscribe", owner=None)
-        assert "B" in card.colors
+        assert "B" in card_colors(card)
 
     def test_power_toughness(self) -> None:
         """Forum Necroscribe must have base power 5 and toughness 4."""
@@ -55,7 +56,6 @@ class TestForumNecroscribeBasicProperties:
         """Forum Necroscribe must have Ward keyword."""
         card = ForumNecroscribe(name="Forum Necroscribe", owner=None)
         assert Keyword.WARD in card.keywords
-
 
 @pytest.mark.ability
 class TestForumNecroscribeAbilities:
@@ -156,7 +156,6 @@ class TestForumNecroscribeAbilities:
             f"Should return from gy: {gy_before} -> {gy_after}"
         )
 
-
 @pytest.mark.edge
 class TestForumNecroscribeEdgeCases:
     """Edge case tests for Forum Necroscribe."""
@@ -174,7 +173,6 @@ class TestForumNecroscribeEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestForumNecroscribeInteractions:

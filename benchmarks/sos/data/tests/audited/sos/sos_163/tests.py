@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import TenuredConcocter
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestTenuredConcocterBasicProperties:
@@ -43,7 +44,7 @@ class TestTenuredConcocterBasicProperties:
     def test_colors(self) -> None:
         """Tenured Concocter must have correct colors."""
         card = TenuredConcocter(name="Tenured Concocter", owner=None, base_power=4, base_toughness=5)
-        assert "G" in card.colors
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Tenured Concocter must have base power 4."""
@@ -54,7 +55,6 @@ class TestTenuredConcocterBasicProperties:
         """Tenured Concocter must have base toughness 5."""
         card = TenuredConcocter(name="Tenured Concocter", owner=None, base_power=4, base_toughness=5)
         assert card.base_toughness == 5
-
 
 @pytest.mark.ability
 class TestTenuredConcocterAbilities:
@@ -79,7 +79,6 @@ class TestTenuredConcocterAbilities:
             callable(getattr(card, "infusion_active", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Tenured Concocter must implement infusion per oracle text"
-
 
 @pytest.mark.edge
 class TestTenuredConcocterEdgeCases:
@@ -147,7 +146,6 @@ class TestTenuredConcocterEdgeCases:
         card = TenuredConcocter(name="Tenured Concocter", owner=None, base_power=4, base_toughness=5)
         assert card.mana_cost.cmc == 5, \
             f"CMC must be 5, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestTenuredConcocterInteractions:

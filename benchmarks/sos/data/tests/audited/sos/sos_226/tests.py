@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SilverquillTheDisputant
@@ -14,7 +16,6 @@ from card_impl import SilverquillTheDisputant
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestSilverquillTheDisputantBasicProperties:
@@ -43,8 +44,8 @@ class TestSilverquillTheDisputantBasicProperties:
     def test_colors(self) -> None:
         """Silverquill, the Disputant must have correct colors."""
         card = SilverquillTheDisputant(name="Silverquill, the Disputant", owner=None)
-        assert "B" in card.colors
-        assert "W" in card.colors
+        assert "B" in card_colors(card)
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Silverquill, the Disputant must have base power 4."""
@@ -65,7 +66,6 @@ class TestSilverquillTheDisputantBasicProperties:
         """Silverquill, the Disputant must have Vigilance keyword."""
         card = SilverquillTheDisputant(name="Silverquill, the Disputant", owner=None)
         assert Keyword.VIGILANCE in card.keywords
-
 
 @pytest.mark.ability
 class TestSilverquillTheDisputantAbilities:
@@ -99,7 +99,6 @@ class TestSilverquillTheDisputantAbilities:
         )
         assert changed, "on_resolve must change game state"
 
-
 @pytest.mark.edge
 class TestSilverquillTheDisputantEdgeCases:
     """Edge case tests for Silverquill, the Disputant."""
@@ -119,7 +118,6 @@ class TestSilverquillTheDisputantEdgeCases:
         targets = card.get_targets(game)
         assert big in targets, "Power >= 1 should be valid"
         assert small not in targets, "Power < 1 should be invalid"
-
 
 @pytest.mark.interaction
 class TestSilverquillTheDisputantInteractions:

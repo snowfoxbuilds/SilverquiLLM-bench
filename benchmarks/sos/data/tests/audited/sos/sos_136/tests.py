@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import UnsubtleMockery
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestUnsubtleMockeryBasicProperties:
@@ -42,8 +43,7 @@ class TestUnsubtleMockeryBasicProperties:
     def test_colors(self) -> None:
         """Unsubtle Mockery must have correct colors."""
         card = UnsubtleMockery(name="Unsubtle Mockery", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestUnsubtleMockeryAbilities:
@@ -85,7 +85,6 @@ class TestUnsubtleMockeryAbilities:
             "Surveil should manipulate library/graveyard"
         )
 
-
 @pytest.mark.edge
 class TestUnsubtleMockeryEdgeCases:
     """Edge case tests for Unsubtle Mockery."""
@@ -103,7 +102,6 @@ class TestUnsubtleMockeryEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestUnsubtleMockeryInteractions:

@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import PullFromTheGrave
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestPullFromTheGraveBasicProperties:
@@ -42,8 +43,7 @@ class TestPullFromTheGraveBasicProperties:
     def test_colors(self) -> None:
         """Pull from the Grave must have correct colors."""
         card = PullFromTheGrave(name="Pull from the Grave", owner=None)
-        assert "B" in card.colors
-
+        assert "B" in card_colors(card)
 
 @pytest.mark.ability
 class TestPullFromTheGraveAbilities:
@@ -83,7 +83,6 @@ class TestPullFromTheGraveAbilities:
             f"Should return from gy: {gy_before} -> {gy_after}"
         )
 
-
 @pytest.mark.edge
 class TestPullFromTheGraveEdgeCases:
     """Edge case tests for Pull from the Grave."""
@@ -101,7 +100,6 @@ class TestPullFromTheGraveEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestPullFromTheGraveInteractions:

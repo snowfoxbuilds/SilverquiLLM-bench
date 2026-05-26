@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import Abrade
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestAbradeBasicProperties:
@@ -43,8 +44,7 @@ class TestAbradeBasicProperties:
     def test_colors(self) -> None:
         """Abrade must have correct colors."""
         card = Abrade(name="Abrade", owner=None)
-        assert "R" in card.colors
-
+        assert "R" in card_colors(card)
 
 @pytest.mark.ability
 class TestAbradeAbilities:
@@ -70,7 +70,6 @@ class TestAbradeAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Abrade must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestAbradeEdgeCases:
@@ -105,7 +104,6 @@ class TestAbradeEdgeCases:
         card = Abrade(name="Abrade", owner=None)
         assert card.mana_cost.cmc == 2, \
             f"CMC must be 2, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestAbradeInteractions:

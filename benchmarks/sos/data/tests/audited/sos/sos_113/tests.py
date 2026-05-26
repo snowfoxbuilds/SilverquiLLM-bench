@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import EmeritusOfConflictLightningBolt
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestEmeritusOfConflictLightningBoltBasicProperties:
@@ -43,7 +44,7 @@ class TestEmeritusOfConflictLightningBoltBasicProperties:
     def test_colors(self) -> None:
         """Emeritus of Conflict // Lightning Bolt must have correct colors."""
         card = EmeritusOfConflictLightningBolt(name="Emeritus of Conflict // Lightning Bolt", owner=None, base_power=2, base_toughness=2)
-        assert "R" in card.colors
+        assert "R" in card_colors(card)
 
     def test_power(self) -> None:
         """Emeritus of Conflict // Lightning Bolt must have base power 2."""
@@ -54,7 +55,6 @@ class TestEmeritusOfConflictLightningBoltBasicProperties:
         """Emeritus of Conflict // Lightning Bolt must have base toughness 2."""
         card = EmeritusOfConflictLightningBolt(name="Emeritus of Conflict // Lightning Bolt", owner=None, base_power=2, base_toughness=2)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestEmeritusOfConflictLightningBoltAbilities:
@@ -79,7 +79,6 @@ class TestEmeritusOfConflictLightningBoltAbilities:
             callable(getattr(card, "prepared_effect", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Emeritus of Conflict // Lightning Bolt must implement prepared mechanic"
-
 
 @pytest.mark.edge
 class TestEmeritusOfConflictLightningBoltEdgeCases:
@@ -111,7 +110,6 @@ class TestEmeritusOfConflictLightningBoltEdgeCases:
             card.damage_taken = 1
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestEmeritusOfConflictLightningBoltInteractions:

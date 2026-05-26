@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import EmeritusOfIdeationAncestralRecall
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestEmeritusOfIdeationAncestralRecallBasicProperties:
@@ -43,7 +44,7 @@ class TestEmeritusOfIdeationAncestralRecallBasicProperties:
     def test_colors(self) -> None:
         """Emeritus of Ideation // Ancestral Recall must have correct colors."""
         card = EmeritusOfIdeationAncestralRecall(name="Emeritus of Ideation // Ancestral Recall", owner=None, base_power=5, base_toughness=5)
-        assert "U" in card.colors
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Emeritus of Ideation // Ancestral Recall must have base power 5."""
@@ -54,7 +55,6 @@ class TestEmeritusOfIdeationAncestralRecallBasicProperties:
         """Emeritus of Ideation // Ancestral Recall must have base toughness 5."""
         card = EmeritusOfIdeationAncestralRecall(name="Emeritus of Ideation // Ancestral Recall", owner=None, base_power=5, base_toughness=5)
         assert card.base_toughness == 5
-
 
 @pytest.mark.ability
 class TestEmeritusOfIdeationAncestralRecallAbilities:
@@ -110,7 +110,6 @@ class TestEmeritusOfIdeationAncestralRecallAbilities:
             callable(getattr(card, "on_resolve", None)), \
             "Emeritus of Ideation // Ancestral Recall must implement prepared mechanic"
 
-
 @pytest.mark.edge
 class TestEmeritusOfIdeationAncestralRecallEdgeCases:
     """Edge case and trap tests for Emeritus of Ideation // Ancestral Recall."""
@@ -141,7 +140,6 @@ class TestEmeritusOfIdeationAncestralRecallEdgeCases:
             card.damage_taken = 4
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestEmeritusOfIdeationAncestralRecallInteractions:

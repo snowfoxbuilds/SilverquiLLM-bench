@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import GloriousDecay
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestGloriousDecayBasicProperties:
@@ -43,8 +44,7 @@ class TestGloriousDecayBasicProperties:
     def test_colors(self) -> None:
         """Glorious Decay must have correct colors."""
         card = GloriousDecay(name="Glorious Decay", owner=None)
-        assert "G" in card.colors
-
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestGloriousDecayAbilities:
@@ -70,7 +70,6 @@ class TestGloriousDecayAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Glorious Decay must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestGloriousDecayEdgeCases:
@@ -105,7 +104,6 @@ class TestGloriousDecayEdgeCases:
         card = GloriousDecay(name="Glorious Decay", owner=None)
         assert card.mana_cost.cmc == 2, \
             f"CMC must be 2, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestGloriousDecayInteractions:

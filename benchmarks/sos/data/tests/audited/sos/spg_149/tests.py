@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import Archaeomancer
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestArchaeomancerBasicProperties:
@@ -42,7 +43,7 @@ class TestArchaeomancerBasicProperties:
     def test_colors(self) -> None:
         """Archaeomancer must have correct colors."""
         card = Archaeomancer(name="Archaeomancer", owner=None)
-        assert "U" in card.colors
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Archaeomancer must have base power 1."""
@@ -53,7 +54,6 @@ class TestArchaeomancerBasicProperties:
         """Archaeomancer must have base toughness 2."""
         card = Archaeomancer(name="Archaeomancer", owner=None)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestArchaeomancerAbilities:
@@ -80,7 +80,6 @@ class TestArchaeomancerAbilities:
             f"Should return from gy: {gy_before} -> {gy_after}"
         )
 
-
 @pytest.mark.edge
 class TestArchaeomancerEdgeCases:
     """Edge case tests for Archaeomancer."""
@@ -98,7 +97,6 @@ class TestArchaeomancerEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestArchaeomancerInteractions:

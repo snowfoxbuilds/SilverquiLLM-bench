@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import EssenceScatter
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestEssenceScatterBasicProperties:
@@ -42,8 +43,7 @@ class TestEssenceScatterBasicProperties:
     def test_colors(self) -> None:
         """Essence Scatter must have correct colors."""
         card = EssenceScatter(name="Essence Scatter", owner=None)
-        assert "U" in card.colors
-
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestEssenceScatterAbilities:
@@ -56,21 +56,22 @@ class TestEssenceScatterAbilities:
         game = create_game()
         player = game.players[0]
         opponent = game.players[1]
+        from engine.stack import StackObject
+        from engine.types import Zone
         target_spell = Instant(name="Enemy", owner=opponent)
         target_spell.controller = opponent
-        game.stack.append(target_spell)
+        target_stack_obj = StackObject(source=target_spell, controller=opponent)
+        game.stack.push(target_stack_obj)
+        opponent.zones[Zone.STACK].add(target_spell)
         stack_before = len(game.stack)
         card = EssenceScatter(name="Essence Scatter", owner=player)
         card.controller = player
-        card._targets = [target_spell]
-        if hasattr(card, "set_targets"):
-            card.set_targets([target_spell])
+        card.chosen_targets = [target_stack_obj]
         card.on_resolve(game)
         stack_after = len(game.stack)
         assert stack_after < stack_before, (
             f"Should counter: stack {stack_before} -> {stack_after}"
         )
-
 
 @pytest.mark.edge
 class TestEssenceScatterEdgeCases:
@@ -89,7 +90,6 @@ class TestEssenceScatterEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestEssenceScatterInteractions:

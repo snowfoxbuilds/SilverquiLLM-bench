@@ -8,13 +8,14 @@ Complexity tier: expert.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ProfessorDellianFel
 
 from engine.card import Planeswalker
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestProfessorDellianFelBasicProperties:
@@ -43,9 +44,8 @@ class TestProfessorDellianFelBasicProperties:
     def test_colors(self) -> None:
         """Professor Dellian Fel must have correct colors."""
         card = ProfessorDellianFel(name="Professor Dellian Fel", owner=None)
-        assert "B" in card.colors
-        assert "G" in card.colors
-
+        assert "B" in card_colors(card)
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestProfessorDellianFelAbilities:
@@ -77,7 +77,6 @@ class TestProfessorDellianFelAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Professor Dellian Fel must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestProfessorDellianFelEdgeCases:
@@ -112,7 +111,6 @@ class TestProfessorDellianFelEdgeCases:
         card = ProfessorDellianFel(name="Professor Dellian Fel", owner=None)
         assert card.mana_cost.cmc == 4, \
             f"CMC must be 4, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestProfessorDellianFelInteractions:

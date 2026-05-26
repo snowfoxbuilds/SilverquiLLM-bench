@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import BorrowedKnowledge
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestBorrowedKnowledgeBasicProperties:
@@ -43,9 +44,8 @@ class TestBorrowedKnowledgeBasicProperties:
     def test_colors(self) -> None:
         """Borrowed Knowledge must have correct colors."""
         card = BorrowedKnowledge(name="Borrowed Knowledge", owner=None)
-        assert "R" in card.colors
-        assert "W" in card.colors
-
+        assert "R" in card_colors(card)
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestBorrowedKnowledgeAbilities:
@@ -76,7 +76,6 @@ class TestBorrowedKnowledgeAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Borrowed Knowledge must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestBorrowedKnowledgeEdgeCases:
@@ -111,7 +110,6 @@ class TestBorrowedKnowledgeEdgeCases:
         card = BorrowedKnowledge(name="Borrowed Knowledge", owner=None)
         assert card.mana_cost.cmc == 4, \
             f"CMC must be 4, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestBorrowedKnowledgeInteractions:

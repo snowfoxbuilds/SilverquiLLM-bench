@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ConciliatorsDuelist
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestConciliatorsDuelistBasicProperties:
@@ -43,8 +44,8 @@ class TestConciliatorsDuelistBasicProperties:
     def test_colors(self) -> None:
         """Conciliator's Duelist must have correct colors."""
         card = ConciliatorsDuelist(name="Conciliator's Duelist", owner=None, base_power=4, base_toughness=3)
-        assert "B" in card.colors
-        assert "W" in card.colors
+        assert "B" in card_colors(card)
+        assert "W" in card_colors(card)
 
     def test_power(self) -> None:
         """Conciliator's Duelist must have base power 4."""
@@ -55,7 +56,6 @@ class TestConciliatorsDuelistBasicProperties:
         """Conciliator's Duelist must have base toughness 3."""
         card = ConciliatorsDuelist(name="Conciliator's Duelist", owner=None, base_power=4, base_toughness=3)
         assert card.base_toughness == 3
-
 
 @pytest.mark.ability
 class TestConciliatorsDuelistAbilities:
@@ -88,7 +88,6 @@ class TestConciliatorsDuelistAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Conciliator's Duelist must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestConciliatorsDuelistEdgeCases:
@@ -124,7 +123,6 @@ class TestConciliatorsDuelistEdgeCases:
         card = ConciliatorsDuelist(name="Conciliator's Duelist", owner=None, base_power=4, base_toughness=3)
         assert card.mana_cost.cmc == 4, \
             f"CMC must be 4, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestConciliatorsDuelistInteractions:

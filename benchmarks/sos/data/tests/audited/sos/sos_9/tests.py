@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import Daydream
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestDaydreamBasicProperties:
@@ -42,8 +43,7 @@ class TestDaydreamBasicProperties:
     def test_colors(self) -> None:
         """Daydream must have correct colors."""
         card = Daydream(name="Daydream", owner=None)
-        assert "W" in card.colors
-
+        assert "W" in card_colors(card)
 
 @pytest.mark.ability
 class TestDaydreamAbilities:
@@ -145,7 +145,6 @@ class TestDaydreamAbilities:
         bf_after = game.get_battlefield(player).get_all()
         assert target in bf_after, "Flickered creature should return to battlefield"
 
-
 @pytest.mark.edge
 class TestDaydreamEdgeCases:
     """Edge case tests for Daydream."""
@@ -167,7 +166,6 @@ class TestDaydreamEdgeCases:
         if len(targets) > 0:
             assert own in targets, "Own creature should be valid"
             assert enemy not in targets, "Opponent creature should be invalid"
-
 
 @pytest.mark.interaction
 class TestDaydreamInteractions:

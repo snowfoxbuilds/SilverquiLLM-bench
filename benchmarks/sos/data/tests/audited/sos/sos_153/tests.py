@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import LumaretsFavor
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestLumaretsFavorBasicProperties:
@@ -42,8 +43,7 @@ class TestLumaretsFavorBasicProperties:
     def test_colors(self) -> None:
         """Lumaret's Favor must have correct colors."""
         card = LumaretsFavor(name="Lumaret's Favor", owner=None)
-        assert "G" in card.colors
-
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestLumaretsFavorAbilities:
@@ -81,7 +81,6 @@ class TestLumaretsFavorAbilities:
             f"Should gain life: {life_before} -> {player.life}"
         )
 
-
 @pytest.mark.edge
 class TestLumaretsFavorEdgeCases:
     """Edge case tests for Lumaret's Favor."""
@@ -99,7 +98,6 @@ class TestLumaretsFavorEdgeCases:
             pass
         # No TypeError/AttributeError means optional is handled
         assert True
-
 
 @pytest.mark.interaction
 class TestLumaretsFavorInteractions:

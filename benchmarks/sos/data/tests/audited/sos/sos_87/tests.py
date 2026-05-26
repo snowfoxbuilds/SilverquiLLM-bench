@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import LecturingScornmage
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestLecturingScornmageBasicProperties:
@@ -42,7 +43,7 @@ class TestLecturingScornmageBasicProperties:
     def test_colors(self) -> None:
         """Lecturing Scornmage must have correct colors."""
         card = LecturingScornmage(name="Lecturing Scornmage", owner=None)
-        assert "B" in card.colors
+        assert "B" in card_colors(card)
 
     def test_power(self) -> None:
         """Lecturing Scornmage must have base power 1."""
@@ -53,7 +54,6 @@ class TestLecturingScornmageBasicProperties:
         """Lecturing Scornmage must have base toughness 1."""
         card = LecturingScornmage(name="Lecturing Scornmage", owner=None)
         assert card.base_toughness == 1
-
 
 @pytest.mark.ability
 class TestLecturingScornmageAbilities:
@@ -111,7 +111,6 @@ class TestLecturingScornmageAbilities:
             f"Repartee should add counter: power {power_before} -> {power_after}"
         )
 
-
 @pytest.mark.edge
 class TestLecturingScornmageEdgeCases:
     """Edge case tests for Lecturing Scornmage."""
@@ -129,7 +128,6 @@ class TestLecturingScornmageEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestLecturingScornmageInteractions:

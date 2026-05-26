@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import MaelstromArtisanRocketVolley
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestMaelstromArtisanRocketVolleyBasicProperties:
@@ -43,7 +44,7 @@ class TestMaelstromArtisanRocketVolleyBasicProperties:
     def test_colors(self) -> None:
         """Maelstrom Artisan // Rocket Volley must have correct colors."""
         card = MaelstromArtisanRocketVolley(name="Maelstrom Artisan // Rocket Volley", owner=None, base_power=3, base_toughness=2)
-        assert "R" in card.colors
+        assert "R" in card_colors(card)
 
     def test_power(self) -> None:
         """Maelstrom Artisan // Rocket Volley must have base power 3."""
@@ -54,7 +55,6 @@ class TestMaelstromArtisanRocketVolleyBasicProperties:
         """Maelstrom Artisan // Rocket Volley must have base toughness 2."""
         card = MaelstromArtisanRocketVolley(name="Maelstrom Artisan // Rocket Volley", owner=None, base_power=3, base_toughness=2)
         assert card.base_toughness == 2
-
 
 @pytest.mark.ability
 class TestMaelstromArtisanRocketVolleyAbilities:
@@ -86,7 +86,6 @@ class TestMaelstromArtisanRocketVolleyAbilities:
             callable(getattr(card, "on_resolve", None)), \
             "Maelstrom Artisan // Rocket Volley must implement prepared mechanic"
 
-
 @pytest.mark.edge
 class TestMaelstromArtisanRocketVolleyEdgeCases:
     """Edge case and trap tests for Maelstrom Artisan // Rocket Volley."""
@@ -117,7 +116,6 @@ class TestMaelstromArtisanRocketVolleyEdgeCases:
             card.damage_taken = 1
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestMaelstromArtisanRocketVolleyInteractions:

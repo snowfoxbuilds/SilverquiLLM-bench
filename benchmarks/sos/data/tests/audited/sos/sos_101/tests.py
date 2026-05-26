@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SneeringShadewriter
@@ -14,7 +16,6 @@ from card_impl import SneeringShadewriter
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestSneeringShadewriterBasicProperties:
@@ -43,7 +44,7 @@ class TestSneeringShadewriterBasicProperties:
     def test_colors(self) -> None:
         """Sneering Shadewriter must have correct colors."""
         card = SneeringShadewriter(name="Sneering Shadewriter", owner=None)
-        assert "B" in card.colors
+        assert "B" in card_colors(card)
 
     def test_power(self) -> None:
         """Sneering Shadewriter must have base power 3."""
@@ -59,7 +60,6 @@ class TestSneeringShadewriterBasicProperties:
         """Sneering Shadewriter must have Flying keyword."""
         card = SneeringShadewriter(name="Sneering Shadewriter", owner=None)
         assert Keyword.FLYING in card.keywords
-
 
 @pytest.mark.ability
 class TestSneeringShadewriterAbilities:
@@ -92,7 +92,6 @@ class TestSneeringShadewriterAbilities:
             f"Should lose life: {life_before} -> {opponent.life}"
         )
 
-
 @pytest.mark.edge
 class TestSneeringShadewriterEdgeCases:
     """Edge case tests for Sneering Shadewriter."""
@@ -110,7 +109,6 @@ class TestSneeringShadewriterEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestSneeringShadewriterInteractions:

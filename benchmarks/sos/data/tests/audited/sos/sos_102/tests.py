@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import TragedyFeaster
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestTragedyFeasterBasicProperties:
@@ -43,7 +44,7 @@ class TestTragedyFeasterBasicProperties:
     def test_colors(self) -> None:
         """Tragedy Feaster must have correct colors."""
         card = TragedyFeaster(name="Tragedy Feaster", owner=None, base_power=7, base_toughness=6)
-        assert "B" in card.colors
+        assert "B" in card_colors(card)
 
     def test_power(self) -> None:
         """Tragedy Feaster must have base power 7."""
@@ -54,7 +55,6 @@ class TestTragedyFeasterBasicProperties:
         """Tragedy Feaster must have base toughness 6."""
         card = TragedyFeaster(name="Tragedy Feaster", owner=None, base_power=7, base_toughness=6)
         assert card.base_toughness == 6
-
 
 @pytest.mark.ability
 class TestTragedyFeasterAbilities:
@@ -85,7 +85,6 @@ class TestTragedyFeasterAbilities:
             callable(getattr(card, "infusion_active", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Tragedy Feaster must implement infusion per oracle text"
-
 
 @pytest.mark.edge
 class TestTragedyFeasterEdgeCases:
@@ -135,7 +134,6 @@ class TestTragedyFeasterEdgeCases:
         card = TragedyFeaster(name="Tragedy Feaster", owner=None, base_power=7, base_toughness=6)
         assert card.mana_cost.cmc == 4, \
             f"CMC must be 4, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestTragedyFeasterInteractions:

@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ArcaneOmens
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestArcaneOmensBasicProperties:
@@ -43,8 +44,7 @@ class TestArcaneOmensBasicProperties:
     def test_colors(self) -> None:
         """Arcane Omens must have correct colors."""
         card = ArcaneOmens(name="Arcane Omens", owner=None)
-        assert "B" in card.colors
-
+        assert "B" in card_colors(card)
 
 @pytest.mark.ability
 class TestArcaneOmensAbilities:
@@ -68,7 +68,6 @@ class TestArcaneOmensAbilities:
         assert callable(getattr(card, "on_resolve", None)) or \
             callable(getattr(card, "on_enter_battlefield", None)), \
             "Arcane Omens must implement converge scaling per oracle text"
-
 
 @pytest.mark.edge
 class TestArcaneOmensEdgeCases:
@@ -136,7 +135,6 @@ class TestArcaneOmensEdgeCases:
         card = ArcaneOmens(name="Arcane Omens", owner=None)
         assert card.mana_cost.cmc == 5, \
             f"CMC must be 5, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestArcaneOmensInteractions:

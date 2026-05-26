@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import FractalMascot
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestFractalMascotBasicProperties:
@@ -43,8 +44,8 @@ class TestFractalMascotBasicProperties:
     def test_colors(self) -> None:
         """Fractal Mascot must have correct colors."""
         card = FractalMascot(name="Fractal Mascot", owner=None, base_power=6, base_toughness=6)
-        assert "G" in card.colors
-        assert "U" in card.colors
+        assert "G" in card_colors(card)
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Fractal Mascot must have base power 6."""
@@ -55,7 +56,6 @@ class TestFractalMascotBasicProperties:
         """Fractal Mascot must have base toughness 6."""
         card = FractalMascot(name="Fractal Mascot", owner=None, base_power=6, base_toughness=6)
         assert card.base_toughness == 6
-
 
 @pytest.mark.ability
 class TestFractalMascotAbilities:
@@ -84,7 +84,6 @@ class TestFractalMascotAbilities:
         if callable(getattr(card, "on_enter_battlefield", None)):
             card.on_enter_battlefield(game)
         assert getattr(target, "tapped", False), "ETB must tap the target creature"
-
 
 @pytest.mark.edge
 class TestFractalMascotEdgeCases:
@@ -120,7 +119,6 @@ class TestFractalMascotEdgeCases:
         card = FractalMascot(name="Fractal Mascot", owner=None, base_power=6, base_toughness=6)
         assert card.mana_cost.cmc == 6, \
             f"CMC must be 6, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestFractalMascotInteractions:

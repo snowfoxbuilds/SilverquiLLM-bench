@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import ShopkeepersBane
@@ -14,7 +16,6 @@ from card_impl import ShopkeepersBane
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestShopkeepersBaneBasicProperties:
@@ -43,7 +44,7 @@ class TestShopkeepersBaneBasicProperties:
     def test_colors(self) -> None:
         """Shopkeeper's Bane must have correct colors."""
         card = ShopkeepersBane(name="Shopkeeper's Bane", owner=None)
-        assert "G" in card.colors
+        assert "G" in card_colors(card)
 
     def test_power(self) -> None:
         """Shopkeeper's Bane must have base power 4."""
@@ -59,7 +60,6 @@ class TestShopkeepersBaneBasicProperties:
         """Shopkeeper's Bane must have Trample keyword."""
         card = ShopkeepersBane(name="Shopkeeper's Bane", owner=None)
         assert Keyword.TRAMPLE in card.keywords
-
 
 @pytest.mark.ability
 class TestShopkeepersBaneAbilities:
@@ -78,7 +78,6 @@ class TestShopkeepersBaneAbilities:
             f"Should gain life: {life_before} -> {player.life}"
         )
 
-
 @pytest.mark.edge
 class TestShopkeepersBaneEdgeCases:
     """Edge case tests for Shopkeeper's Bane."""
@@ -96,7 +95,6 @@ class TestShopkeepersBaneEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestShopkeepersBaneInteractions:

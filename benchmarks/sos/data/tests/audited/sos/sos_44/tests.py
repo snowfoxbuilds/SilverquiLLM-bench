@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import EchocastingSymposium
 
 from engine.card import Sorcery
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestEchocastingSymposiumBasicProperties:
@@ -43,8 +44,7 @@ class TestEchocastingSymposiumBasicProperties:
     def test_colors(self) -> None:
         """Echocasting Symposium must have correct colors."""
         card = EchocastingSymposium(name="Echocasting Symposium", owner=None)
-        assert "U" in card.colors
-
+        assert "U" in card_colors(card)
 
 @pytest.mark.ability
 class TestEchocastingSymposiumAbilities:
@@ -75,7 +75,6 @@ class TestEchocastingSymposiumAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Echocasting Symposium must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestEchocastingSymposiumEdgeCases:
@@ -110,7 +109,6 @@ class TestEchocastingSymposiumEdgeCases:
         card = EchocastingSymposium(name="Echocasting Symposium", owner=None)
         assert card.mana_cost.cmc == 6, \
             f"CMC must be 6, got {card.mana_cost.cmc}"
-
 
 @pytest.mark.interaction
 class TestEchocastingSymposiumInteractions:

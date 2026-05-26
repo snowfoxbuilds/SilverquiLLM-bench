@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import LastGasp
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestLastGaspBasicProperties:
@@ -42,8 +43,7 @@ class TestLastGaspBasicProperties:
     def test_colors(self) -> None:
         """Last Gasp must have correct colors."""
         card = LastGasp(name="Last Gasp", owner=None)
-        assert "B" in card.colors
-
+        assert "B" in card_colors(card)
 
 @pytest.mark.ability
 class TestLastGaspAbilities:
@@ -77,7 +77,6 @@ class TestLastGaspAbilities:
         )
         assert changed, "on_resolve must change game state"
 
-
 @pytest.mark.edge
 class TestLastGaspEdgeCases:
     """Edge case tests for Last Gasp."""
@@ -95,7 +94,6 @@ class TestLastGaspEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestLastGaspInteractions:

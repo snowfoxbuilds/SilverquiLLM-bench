@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import LandscapePainterVibrantIdea
 
 from engine.card import Creature
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestLandscapePainterVibrantIdeaBasicProperties:
@@ -43,7 +44,7 @@ class TestLandscapePainterVibrantIdeaBasicProperties:
     def test_colors(self) -> None:
         """Landscape Painter // Vibrant Idea must have correct colors."""
         card = LandscapePainterVibrantIdea(name="Landscape Painter // Vibrant Idea", owner=None, base_power=2, base_toughness=1)
-        assert "U" in card.colors
+        assert "U" in card_colors(card)
 
     def test_power(self) -> None:
         """Landscape Painter // Vibrant Idea must have base power 2."""
@@ -54,7 +55,6 @@ class TestLandscapePainterVibrantIdeaBasicProperties:
         """Landscape Painter // Vibrant Idea must have base toughness 1."""
         card = LandscapePainterVibrantIdea(name="Landscape Painter // Vibrant Idea", owner=None, base_power=2, base_toughness=1)
         assert card.base_toughness == 1
-
 
 @pytest.mark.ability
 class TestLandscapePainterVibrantIdeaAbilities:
@@ -79,7 +79,6 @@ class TestLandscapePainterVibrantIdeaAbilities:
             callable(getattr(card, "prepared_effect", None)) or \
             callable(getattr(card, "on_resolve", None)), \
             "Landscape Painter // Vibrant Idea must implement prepared mechanic"
-
 
 @pytest.mark.edge
 class TestLandscapePainterVibrantIdeaEdgeCases:
@@ -111,7 +110,6 @@ class TestLandscapePainterVibrantIdeaEdgeCases:
             card.damage_taken = 0
         bf = player.zones[Zone.BATTLEFIELD].get_all()
         assert card in bf, "Creature must survive non-lethal damage"
-
 
 @pytest.mark.interaction
 class TestLandscapePainterVibrantIdeaInteractions:

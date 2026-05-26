@@ -7,6 +7,8 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import BurrogBanemaker
@@ -14,7 +16,6 @@ from card_impl import BurrogBanemaker
 from engine.card import Creature
 from engine.types import CardType, ManaCost
 from engine.types import Keyword
-
 
 @pytest.mark.basic
 class TestBurrogBanemakerBasicProperties:
@@ -43,7 +44,7 @@ class TestBurrogBanemakerBasicProperties:
     def test_colors(self) -> None:
         """Burrog Banemaker must have correct colors."""
         card = BurrogBanemaker(name="Burrog Banemaker", owner=None)
-        assert "B" in card.colors
+        assert "B" in card_colors(card)
 
     def test_power(self) -> None:
         """Burrog Banemaker must have base power 1."""
@@ -59,7 +60,6 @@ class TestBurrogBanemakerBasicProperties:
         """Burrog Banemaker must have Deathtouch keyword."""
         card = BurrogBanemaker(name="Burrog Banemaker", owner=None)
         assert Keyword.DEATHTOUCH in card.keywords
-
 
 @pytest.mark.ability
 class TestBurrogBanemakerAbilities:
@@ -95,7 +95,6 @@ class TestBurrogBanemakerAbilities:
         abilities_list = card.get_activated_abilities()
         assert len(abilities_list) > 0, "Card must have activated ability"
 
-
 @pytest.mark.edge
 class TestBurrogBanemakerEdgeCases:
     """Edge case tests for Burrog Banemaker."""
@@ -113,7 +112,6 @@ class TestBurrogBanemakerEdgeCases:
         bf.remove(card)
         player.zones[Zone.GRAVEYARD].add(card)
         assert card in player.zones[Zone.GRAVEYARD].get_all()
-
 
 @pytest.mark.interaction
 class TestBurrogBanemakerInteractions:

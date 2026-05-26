@@ -8,13 +8,14 @@ Complexity tier: complex.
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import SheoldredsEdict
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestSheoldredsEdictBasicProperties:
@@ -43,8 +44,7 @@ class TestSheoldredsEdictBasicProperties:
     def test_colors(self) -> None:
         """Sheoldred's Edict must have correct colors."""
         card = SheoldredsEdict(name="Sheoldred's Edict", owner=None)
-        assert "B" in card.colors
-
+        assert "B" in card_colors(card)
 
 @pytest.mark.ability
 class TestSheoldredsEdictAbilities:
@@ -58,7 +58,6 @@ class TestSheoldredsEdictAbilities:
                    "opus_trigger", "check_infusion", "check_prepared"]
         found = [m for m in methods if callable(getattr(card, m, None))]
         assert len(found) > 0, "Sheoldred's Edict must implement behavioral method"
-
 
 @pytest.mark.edge
 class TestSheoldredsEdictEdgeCases:
@@ -91,7 +90,6 @@ class TestSheoldredsEdictEdgeCases:
             pass  # Fizzle on empty board is acceptable
         # Verify game state is consistent
         assert player.life == 20, "Caster life should be unchanged on fizzle"
-
 
 @pytest.mark.interaction
 class TestSheoldredsEdictInteractions:

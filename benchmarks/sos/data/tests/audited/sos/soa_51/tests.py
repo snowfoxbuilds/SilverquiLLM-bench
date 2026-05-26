@@ -7,13 +7,14 @@ Ability tests verify oracle text behavior (expected to fail against stubs).
 
 from __future__ import annotations
 
+from test_utils import card_colors
+
 import pytest
 
 from card_impl import CropRotation
 
 from engine.card import Instant
 from engine.types import CardType, ManaCost
-
 
 @pytest.mark.basic
 class TestCropRotationBasicProperties:
@@ -42,8 +43,7 @@ class TestCropRotationBasicProperties:
     def test_colors(self) -> None:
         """Crop Rotation must have correct colors."""
         card = CropRotation(name="Crop Rotation", owner=None)
-        assert "G" in card.colors
-
+        assert "G" in card_colors(card)
 
 @pytest.mark.ability
 class TestCropRotationAbilities:
@@ -81,7 +81,6 @@ class TestCropRotationAbilities:
             f"Should search library: {lib_before} -> {lib_after}"
         )
 
-
 @pytest.mark.edge
 class TestCropRotationEdgeCases:
     """Edge case tests for Crop Rotation."""
@@ -99,7 +98,6 @@ class TestCropRotationEdgeCases:
             pass  # Expected if targets required
         # Should not raise TypeError/AttributeError
         assert True
-
 
 @pytest.mark.interaction
 class TestCropRotationInteractions:
