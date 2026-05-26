@@ -37,7 +37,7 @@ silverquillm run --image silverquillm-copilot-gpt-5.4:latest --timeout 360000
 silverquillm run --image silverquillm-copilot-gpt-5.5:latest --timeout 360000
 silverquillm run --image silverquillm-copilot-claude-opus-4.6:latest --timeout 360000
 silverquillm run --image silverquillm-copilot-claude-sonnet-4.6:latest --timeout 360000
-silverquillm run --image silverquillm-copilot-sonnet-single:latest --cards 1, 4, 13, 52, 57, 80, 97, 107, 113, 120, 125, 201, 212, 214, 218, 226, 236, 245, 246, 257  --timeout 360000
+silverquillm run --image silverquillm-copilot-sonnet-single:latest --cards 1,4,13,52,57,80,97,107,113,120,125,201,212,214,218,226,236,245,246,257  --timeout 360000
 
 silverquillm run \
   --image silverquillm-local-pi-blind:latest \
@@ -48,7 +48,7 @@ silverquillm run \
 silverquillm resume sos-copilot-claude-opus-4.6-2026-05-25T22-52 --timeout 360000
 
 # Difficult cards
---cards 1, 4, 13, 52, 57, 80, 97, 107, 113, 120, 125, 201, 212, 214, 218, 226, 236, 245, 246, 257
+--cards 1,4,13,52,57,80,97,107,113,120,125,201,212,214,218,226,236,245,246,257
 
 # TUI
 
