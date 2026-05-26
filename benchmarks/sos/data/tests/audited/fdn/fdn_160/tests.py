@@ -2,16 +2,7 @@
 
 from __future__ import annotations
 
-import importlib.util
-from pathlib import Path
-
-# The conftest name-mangling turns "Can't" → "CanT" which doesn't
-# match the impl class "AnOfferYouCantRefuse".  Direct-load the implementation.
-_impl_path = Path(__file__).resolve().parent.parent.parent.parent.parent / "cards" / "fdn" / "fdn_160" / "card_impl.py"
-_spec = importlib.util.spec_from_file_location("_fdn160_impl", _impl_path)
-_mod = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_mod)
-AnOfferYouCantRefuse = _mod.AnOfferYouCantRefuse
+from card_impl import AnOfferYouCantRefuse
 from engine.card import CardImpl, Creature, Instant
 from engine.types import CardType, ManaCost, Zone
 from test_utils import create_game

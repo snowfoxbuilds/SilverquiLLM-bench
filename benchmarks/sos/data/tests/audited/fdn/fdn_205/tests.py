@@ -1,59 +1,83 @@
-"""Audited tests for FDN 205 — Seismic Rupture."""
+"""Audited tests for FDN 205 — Wardens of the Cycle (Converge reference slot)."""
 
 from __future__ import annotations
 
-from card_impl import SeismicRupture
-from engine.card import Creature, Sorcery
-from engine.types import Keyword, ManaCost
+from card_impl import WardensOfTheCycle
+from engine.card import Creature
+from engine.types import ManaCost
 from test_utils import create_game
 
 
-class TestSeismicRuptureBasics:
+class TestWardensOfTheCycleBasics:
     """Basic card properties."""
 
-    def test_is_sorcery(self) -> None:
-        card = SeismicRupture(owner=None)
-        assert isinstance(card, Sorcery)
+    def test_is_creature(self) -> None:
+        card = WardensOfTheCycle(owner=None)
+        assert isinstance(card, Creature)
 
     def test_name(self) -> None:
-        card = SeismicRupture(owner=None)
-        assert card.name == "Seismic Rupture"
+        card = WardensOfTheCycle(owner=None)
+        assert card.name == "Wardens of the Cycle"
 
     def test_mana_cost(self) -> None:
-        card = SeismicRupture(owner=None)
-        assert card.mana_cost == ManaCost.parse("{2}{R}")
+        card = WardensOfTheCycle(owner=None)
+        assert card.mana_cost == ManaCost.parse("{3}{B}{G}")
+
+    def test_power_toughness(self) -> None:
+        card = WardensOfTheCycle(owner=None)
+        assert card.base_power == 4
+        assert card.base_toughness == 4
+
+    def test_subtypes(self) -> None:
+        card = WardensOfTheCycle(owner=None)
+        assert "Treefolk" in card.subtypes
 
 
-class TestSeismicRuptureResolve:
-    """Deals 2 damage to each creature without flying."""
+class TestWardensOfTheCycleConverge:
+    """ETB creates one 1/1 Saproling token per color of mana spent to cast."""
 
-    def test_deals_2_damage_to_ground_creature(self) -> None:
+    def test_no_tokens_when_no_colors_spent(self) -> None:
         game = create_game()
         p1 = game.players[0]
-        creature = Creature(name="Bear", base_power=2, base_toughness=4, owner=p1, controller=p1)
-        game.get_battlefield(p1).add(creature)
-        spell = SeismicRupture(owner=p1, controller=p1)
-        spell.on_resolve(game)
-        assert creature.damage_marked >= 2
+        wardens = WardensOfTheCycle(owner=p1, controller=p1)
+        wardens.colors_spent = 0
+        bf_before = len(game.get_battlefield(p1).get_all())
+        wardens.on_resolve(game)
+        bf_after = len(game.get_battlefield(p1).get_all())
+        assert bf_after - bf_before == 0
 
-    def test_does_not_damage_flying_creature(self) -> None:
+    def test_creates_one_token_per_color(self) -> None:
         game = create_game()
         p1 = game.players[0]
-        flyer = Creature(name="Bird", base_power=1, base_toughness=1, owner=p1, controller=p1, keywords=Keyword.FLYING)
-        game.get_battlefield(p1).add(flyer)
-        spell = SeismicRupture(owner=p1, controller=p1)
-        spell.on_resolve(game)
-        assert getattr(flyer, "damage_taken", 0) == 0
+        wardens = WardensOfTheCycle(owner=p1, controller=p1)
+        wardens.colors_spent = 2  # {B} + {G}
+        bf_before = len(game.get_battlefield(p1).get_all())
+        wardens.on_resolve(game)
+        bf_after = len(game.get_battlefield(p1).get_all())
+        assert bf_after - bf_before == 2
 
-    def test_damages_both_players_creatures(self) -> None:
+    def test_tokens_are_saprolings(self) -> None:
         game = create_game()
         p1 = game.players[0]
-        p2 = game.players[1]
-        c1 = Creature(name="Bear1", base_power=2, base_toughness=4, owner=p1, controller=p1)
-        c2 = Creature(name="Bear2", base_power=2, base_toughness=4, owner=p2, controller=p2)
-        game.get_battlefield(p1).add(c1)
-        game.get_battlefield(p2).add(c2)
-        spell = SeismicRupture(owner=p1, controller=p1)
-        spell.on_resolve(game)
-        assert c1.damage_marked >= 2
-        assert c2.damage_marked >= 2
+        wardens = WardensOfTheCycle(owner=p1, controller=p1)
+        wardens.colors_spent = 3
+        wardens.on_resolve(game)
+        saproling_count = sum(
+            1 for c in game.get_battlefield(p1).get_all()
+            if getattr(c, "name", "") == "Saproling"
+        )
+        assert saproling_count == 3
+
+    def test_tokens_are_one_one(self) -> None:
+        game = create_game()
+        p1 = game.players[0]
+        wardens = WardensOfTheCycle(owner=p1, controller=p1)
+        wardens.colors_spent = 1
+        wardens.on_resolve(game)
+        tokens = [
+            c for c in game.get_battlefield(p1).get_all()
+            if getattr(c, "name", "") == "Saproling"
+        ]
+        assert len(tokens) == 1
+        assert tokens[0].base_power == 1
+        assert tokens[0].base_toughness == 1

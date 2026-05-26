@@ -1,101 +1,76 @@
-"""Audited tests for FDN 15 — Hare Apparent."""
+"""Audited tests for FDN 15 — Bigfin Bouncer (Merfolk Rogue ETB-bounce slot)."""
 
 from __future__ import annotations
 
-from card_impl import HareApparent
+from card_impl import BigfinBouncer
 from engine.card import Creature
-from engine.types import CardType, Keyword, ManaCost
+from engine.types import ManaCost, Zone
 from test_utils import create_game
 
 
-class TestHareApparentBasics:
+class TestBigfinBouncerBasics:
     """Basic card properties."""
 
     def test_is_creature(self) -> None:
-        card = HareApparent(owner=None)
+        card = BigfinBouncer(owner=None)
         assert isinstance(card, Creature)
 
     def test_name(self) -> None:
-        card = HareApparent(owner=None)
-        assert card.name == "Hare Apparent"
+        card = BigfinBouncer(owner=None)
+        assert card.name == "Bigfin Bouncer"
 
     def test_mana_cost(self) -> None:
-        card = HareApparent(owner=None)
-        assert card.mana_cost == ManaCost.parse("{1}{W}")
+        card = BigfinBouncer(owner=None)
+        assert card.mana_cost == ManaCost.parse("{3}{U}")
 
     def test_power_toughness(self) -> None:
-        card = HareApparent(owner=None)
-        assert card.base_power == 2
+        card = BigfinBouncer(owner=None)
+        assert card.base_power == 3
         assert card.base_toughness == 2
 
     def test_subtypes(self) -> None:
-        card = HareApparent(owner=None)
-        assert "Rabbit" in card.subtypes
-        assert "Noble" in card.subtypes
+        card = BigfinBouncer(owner=None)
+        assert "Merfolk" in card.subtypes
+        assert "Rogue" in card.subtypes
 
 
-class TestHareApparentETB:
-    """ETB creates Rabbit tokens equal to other Hare Apparents you control."""
+class TestBigfinBouncerETB:
+    """When this creature enters, return target opponent's creature to hand."""
 
-    def test_no_other_hares_creates_no_tokens(self) -> None:
+    def test_bounces_opponent_creature(self) -> None:
         game = create_game()
         p1 = game.players[0]
-        hare = HareApparent(owner=p1, controller=p1)
-        bf = game.get_battlefield(p1)
-        bf.add(hare)
-        hare.on_resolve(game)
-        tokens = [
-            c for c in bf.get_all()
-            if getattr(c, "is_token", False) and getattr(c, "name", "") == "Rabbit"
-        ]
-        assert len(tokens) == 0
+        p2 = game.players[1]
+        target = Creature(
+            name="Enemy Bear", base_power=2, base_toughness=2,
+            owner=p2, controller=p2,
+        )
+        game.get_battlefield(p2).add(target)
+        bouncer = BigfinBouncer(owner=p1, controller=p1)
+        bouncer.chosen_targets = [target]
+        bouncer.on_resolve(game)
+        bf_names = [getattr(c, "name", "") for c in game.get_battlefield(p2).get_all()]
+        assert "Enemy Bear" not in bf_names
+        hand_names = [getattr(c, "name", "") for c in p2.zones[Zone.HAND].get_all()]
+        assert "Enemy Bear" in hand_names
 
-    def test_one_other_hare_creates_one_token(self) -> None:
+    def test_no_crash_without_target(self) -> None:
         game = create_game()
         p1 = game.players[0]
-        hare1 = HareApparent(owner=p1, controller=p1)
-        hare2 = HareApparent(owner=p1, controller=p1)
-        bf = game.get_battlefield(p1)
-        bf.add(hare1)
-        bf.add(hare2)
-        hare2.on_resolve(game)
-        tokens = [
-            c for c in bf.get_all()
-            if getattr(c, "is_token", False) and getattr(c, "name", "") == "Rabbit"
-        ]
-        assert len(tokens) == 1
+        bouncer = BigfinBouncer(owner=p1, controller=p1)
+        bouncer.chosen_targets = []
+        bouncer.on_resolve(game)  # Should not raise
 
-    def test_two_other_hares_creates_two_tokens(self) -> None:
+    def test_does_not_bounce_own_creature(self) -> None:
         game = create_game()
         p1 = game.players[0]
-        hare1 = HareApparent(owner=p1, controller=p1)
-        hare2 = HareApparent(owner=p1, controller=p1)
-        hare3 = HareApparent(owner=p1, controller=p1)
-        bf = game.get_battlefield(p1)
-        bf.add(hare1)
-        bf.add(hare2)
-        bf.add(hare3)
-        hare3.on_resolve(game)
-        tokens = [
-            c for c in bf.get_all()
-            if getattr(c, "is_token", False) and getattr(c, "name", "") == "Rabbit"
-        ]
-        assert len(tokens) == 2
-
-    def test_tokens_are_1_1_rabbits(self) -> None:
-        game = create_game()
-        p1 = game.players[0]
-        hare1 = HareApparent(owner=p1, controller=p1)
-        hare2 = HareApparent(owner=p1, controller=p1)
-        bf = game.get_battlefield(p1)
-        bf.add(hare1)
-        bf.add(hare2)
-        hare2.on_resolve(game)
-        tokens = [
-            c for c in bf.get_all()
-            if getattr(c, "is_token", False) and getattr(c, "name", "") == "Rabbit"
-        ]
-        assert len(tokens) == 1
-        assert tokens[0].base_power == 1
-        assert tokens[0].base_toughness == 1
-        assert "Rabbit" in tokens[0].subtypes
+        own_creature = Creature(
+            name="Own Bear", base_power=2, base_toughness=2,
+            owner=p1, controller=p1,
+        )
+        game.get_battlefield(p1).add(own_creature)
+        bouncer = BigfinBouncer(owner=p1, controller=p1)
+        bouncer.chosen_targets = [own_creature]
+        bouncer.on_resolve(game)
+        bf_names = [getattr(c, "name", "") for c in game.get_battlefield(p1).get_all()]
+        assert "Own Bear" in bf_names

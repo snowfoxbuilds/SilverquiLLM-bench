@@ -2,22 +2,10 @@
 
 from __future__ import annotations
 
-import importlib.util
-from pathlib import Path
-
+from card_impl import DwynensElite
 from engine.card import CardImpl, Creature
 from engine.types import CardType, ManaCost
 from test_utils import create_game
-
-# Direct import since conftest name mapping doesn't match (apostrophe)
-_spec = importlib.util.spec_from_file_location(
-    "fdn_218_impl",
-    str(Path(__file__).resolve().parent.parent.parent.parent.parent / "cards" / "fdn" / "fdn_218" / "card_impl.py"),
-)
-_mod = importlib.util.module_from_spec(_spec)
-_mod.CardImpl = CardImpl  # type: ignore
-_spec.loader.exec_module(_mod)  # type: ignore
-DwynensElite = _mod.DwynensElite
 
 
 class TestDwynensEliteBasics:

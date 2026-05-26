@@ -2,20 +2,10 @@
 
 from __future__ import annotations
 
-import importlib.util
-from pathlib import Path
-
+from card_impl import HidetsugusSecondRite
 from engine.card import Instant
 from engine.types import ManaCost
 from test_utils import create_game
-
-# The conftest name derivation produces "HidetsuguSSecondRite" but the impl
-# uses "HidetsugusSecondRite".  Import the real class directly.
-_impl_path = Path(__file__).resolve().parent.parent.parent.parent.parent / "cards" / "fdn" / "fdn_202" / "card_impl.py"
-_spec = importlib.util.spec_from_file_location("_fdn202_direct", _impl_path)
-_mod = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_mod)
-HidetsugusSecondRite = _mod.HidetsugusSecondRite
 
 
 class TestHidetsugusSecondRiteBasics:
