@@ -123,3 +123,13 @@ benchmarks/sos/data/test_oracle_workspace/engine/game_state.py — Wire Beginnin
 - `benchmarks/sos/data/test_oracle_workspace/engine/casting.py` — Extended get_cost_reduction() to scan for affinity_for_creatures_grant on bf permanents for instants/sorceries
 - `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_245/__init__.py` — Package init for test directory
 - `benchmarks/sos/data/tests/audited/sos/sos_245/tests.py` — Copy of rewritten tests to benchmarks location
+
+## Item 11: sos_257 — Great Hall of the Biblioplex oracle impl
+
+### Tests
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_257/tests.py` — 11 tests covering basic properties, abilities, edge cases, interactions
+
+### Implementation
+- `benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_257/card_impl.py` — Full oracle: Land with 2 mana abilities (colorless + restricted any-color), persistent animation to 2/4 Wizard, prowess-like spell-cast trigger
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_257/__init__.py` — Package init for test directory
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_257/tests.py` — Copy of audited tests for workspace execution

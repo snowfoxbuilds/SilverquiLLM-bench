@@ -292,6 +292,10 @@ def move_to_zone(
         card_types = getattr(card, "card_types", set())
         is_creature = CardType.CREATURE in card_types
 
+        # Call on_leave_battlefield() lifecycle hook if the card defines it.
+        if hasattr(card, "on_leave_battlefield"):
+            card.on_leave_battlefield(game)
+
         # Fire events BEFORE unregistering (KEY_DECISIONS convention).
         game.trigger_manager.fire_event(
             game,

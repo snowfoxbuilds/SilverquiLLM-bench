@@ -19,11 +19,16 @@ class ManaPool:
 
     Internal storage uses a ``dict[ManaType, int]`` mapping each mana type
     to its current count.
+
+    Restricted mana is tracked separately via ``_restricted_mana``: a list of
+    dicts with keys ``source``, ``restriction`` (str), and ``amount`` (int).
+    The casting pipeline should consult these restrictions when paying costs.
     """
 
     def __init__(self) -> None:
         self._pool: dict[ManaType, int] = {mt: 0 for mt in ManaType}
         self._last_payment_colors: list[Color] = []
+        self._restricted_mana: list[dict] = []
 
     # ------------------------------------------------------------------
     # Basic operations
@@ -40,10 +45,40 @@ class ManaPool:
             raise ValueError(f"Cannot add negative mana: {amount}")
         self._pool[mana_type] = self._pool.get(mana_type, 0) + amount
 
+    def add_restricted(
+        self,
+        mana_type: ManaType,
+        amount: int = 1,
+        restriction: str = "",
+        source: object | None = None,
+    ) -> None:
+        """Add restricted mana to the pool.
+
+        Restricted mana can only be spent on spells matching the restriction.
+        The mana is added to the normal pool for total() accounting, and
+        metadata is tracked in ``_restricted_mana``.
+
+        Parameters:
+            mana_type: The type of mana to add.
+            amount: How many mana to add.
+            restriction: A string describing the restriction (e.g.
+                ``"instant_or_sorcery"``).
+            source: The object that produced this mana.
+        """
+        if amount < 0:
+            raise ValueError(f"Cannot add negative restricted mana: {amount}")
+        self._pool[mana_type] = self._pool.get(mana_type, 0) + amount
+        self._restricted_mana.append({
+            "source": source,
+            "restriction": restriction,
+            "amount": amount,
+        })
+
     def empty(self) -> None:
         """Clear the pool — happens at phase/step transitions."""
         for mt in self._pool:
             self._pool[mt] = 0
+        self._restricted_mana.clear()
 
     def total(self) -> int:
         """Return the total amount of mana in the pool across all types."""

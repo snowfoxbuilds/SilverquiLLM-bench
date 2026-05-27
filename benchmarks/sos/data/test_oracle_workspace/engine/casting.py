@@ -167,6 +167,51 @@ def _apply_cost_reduction(cost: ManaCost, reduction: int) -> ManaCost:
     )
 
 
+def _check_restricted_mana(player: Player, card: CardImpl, cost: ManaCost, stack_zone: Any, hand: Any) -> None:
+    """Verify that restricted mana in the pool can legally pay for *card*.
+
+    If the pool contains restricted mana that must be consumed to cover the
+    cost (unrestricted mana alone is insufficient), and the spell does not
+    match the restriction, raise CastingError.
+
+    The key insight: if ``unrestricted_total < cost_total``, then some
+    restricted mana MUST be used, so the spell must satisfy those restrictions.
+    """
+    from engine.types import CardType
+
+    restricted_entries = player.mana_pool._restricted_mana
+    if not restricted_entries:
+        return
+
+    # Calculate total unrestricted mana (total pool minus restricted amounts)
+    total_restricted = sum(entry["amount"] for entry in restricted_entries)
+    total_pool = player.mana_pool.total()
+    unrestricted_total = total_pool - total_restricted
+
+    cost_total = cost.cmc
+
+    # If unrestricted mana alone can cover the cost, no restriction issue
+    if unrestricted_total >= cost_total:
+        return
+
+    # Some restricted mana must be used — check if spell matches restrictions
+    card_types = getattr(card, "card_types", set())
+    is_instant = CardType.INSTANT in card_types
+    is_sorcery = CardType.SORCERY in card_types
+
+    for entry in restricted_entries:
+        restriction = entry.get("restriction", "")
+        if restriction == "instant_or_sorcery":
+            if not (is_instant or is_sorcery):
+                # Rollback: move card from stack zone back to hand
+                stack_zone.remove(card)
+                hand.add(card)
+                raise CastingError(
+                    f"Cannot cast {card.name!r} — restricted mana cannot be "
+                    f"spent on this spell type"
+                )
+
+
 # ------------------------------------------------------------------
 # Cast spell
 # ------------------------------------------------------------------
@@ -268,6 +313,11 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
         stack_zone.remove(card)
         hand.add(card)
         raise CastingError(f"Cannot cast {card.name!r} — insufficient mana")
+
+    # Check restricted mana: if the pool contains restricted mana that
+    # would necessarily be consumed (i.e. unrestricted mana alone cannot
+    # cover the cost), verify the spell matches the restriction.
+    _check_restricted_mana(player, card, effective_cost, stack_zone, hand)
 
     # TODO: Phase 3 — support player choice for generic mana payment to optimize Converge color count
     player.mana_pool.pay(effective_cost)

@@ -125,3 +125,22 @@ skips these two files since they are already present in `run_dir`.
 - **Reasoning**: MTG rules — multiple instances of affinity stack.
 - **Impact**: `engine/casting.py` — `get_cost_reduction()`.
 
+
+## Restricted mana engine primitive
+- **Context**: sos_257 adds mana that can only be spent on instants/sorceries.
+- **Decision**: `ManaPool.add_restricted(amount, color, restriction)` stores restricted entries. `_check_restricted_mana()` in casting.py validates at cast time — if unrestricted mana alone can't cover cost, restricted mana must be used, and spell must match restriction. CastingError raised if spell type doesn't match.
+- **Reasoning**: General-purpose primitive per TODO spec; first user is sos_257's instant/sorcery restriction.
+- **Impact**: `engine/casting.py`, `engine/game.py` (ManaPool).
+
+## Persistent animation: _reset_characteristics override
+- **Context**: Engine cleanup calls `_reset_characteristics()` which resets card_types to original, killing persistent animation.
+- **Decision**: Cards with persistent animation override `_reset_characteristics()` to re-apply creature type after base reset if `_is_animated` is True.
+- **Reasoning**: Persistent animation (no end-of-turn expiry) must survive cleanup. Only the +1/+0 boost reverts at end of turn.
+- **Impact**: Pattern for any future creature-land or persistent animation card.
+
+## on_leave_battlefield and end_of_turn_cleanup wired into engine
+- **Context**: Previous items noted these hooks weren't called. Now fixed globally.
+- **Decision**: `move_to_zone()` calls `on_leave_battlefield(game)` when a card leaves battlefield. `_do_cleanup_step()` calls `end_of_turn_cleanup()` on all battlefield permanents.
+- **Reasoning**: Standard MTG lifecycle hooks needed by multiple cards.
+- **Impact**: `engine/zones.py`, `engine/turn.py` (or game.py).
+

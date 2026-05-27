@@ -135,6 +135,13 @@ def _do_cleanup_step(game: GameState) -> None:
         # Reapply remaining effects so the game state is consistent.
         game.effect_manager.apply_all(game)
 
+    # --- Step 2b: Call per-card end_of_turn_cleanup() hooks ---
+    for player in game.players:
+        bf = player.zones[Zone.BATTLEFIELD]
+        for obj in bf.get_all():
+            if hasattr(obj, "end_of_turn_cleanup"):
+                obj.end_of_turn_cleanup()
+
     # --- Step 3: Clear damage on all creatures ---
     for player in game.players:
         bf = player.zones[Zone.BATTLEFIELD]
