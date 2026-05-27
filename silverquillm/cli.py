@@ -39,6 +39,7 @@ ensure_workspace_on_path()
 from silverquillm.card_loader import is_template, load_all_card_specs
 from silverquillm.card_names import build_card_name_map
 from silverquillm.runner import ContainerLifecycle
+from silverquillm.token_report import render as render_token_report
 from silverquillm.workspace import (
     build_resume_preamble,
     stage_workspace,
@@ -126,6 +127,7 @@ _API_KEY_ENV_VARS = (
     "ANTHROPIC_API_KEY",
     "OPENROUTER_API_KEY",
     "COPILOT_GITHUB_TOKEN",
+    "CLAUDE_CODE_OAUTH_TOKEN",
 )
 
 
@@ -341,6 +343,22 @@ def _harvest_results(
         shutil.copy2(manifest_src, run_dir / "run_manifest.json")
 
     return run_dir
+
+
+def _emit_token_report(run_dir: Path) -> None:
+    """Print token usage table to runner log and save it to ``run_dir/tokens.md``.
+
+    Silently skips for agents whose log isn't Claude Code stream-json (Copilot, etc.).
+    """
+    log_path = run_dir / "agent_stdout.log"
+    report = render_token_report(log_path)
+    if report is None:
+        return
+    _runner_log("Token usage:\n" + report)
+    try:
+        (run_dir / "tokens.md").write_text(report + "\n", encoding="utf-8")
+    except OSError as exc:
+        _runner_log(f"Failed to write tokens.md: {exc}", err=True)
 
 
 def _write_card_statuses(
@@ -748,6 +766,8 @@ def run(
         )
         _runner_log(f"Results saved to: {run_dir}")
 
+        _emit_token_report(run_dir)
+
         # Evaluate and summarize
         _evaluate_results(run_dir, card_filter=card_filter)
         run_status = result.timeout_reason if result.timed_out else "completed"
@@ -811,6 +831,10 @@ def smoke(image: str) -> None:
 
         # Check results
         hello_exists = (workspace / "hello.py").exists()
+
+        token_report = render_token_report(output / "agent_stdout.log")
+        if token_report is not None:
+            _runner_log("Token usage:\n" + token_report)
 
         if exit_zero and hello_exists:
             _runner_log("PASS")
@@ -1369,6 +1393,8 @@ def resume(
             card_filter=card_filter,
         )
         _runner_log(f"Results saved to: {run_dir}")
+
+        _emit_token_report(run_dir)
 
         _evaluate_results(run_dir, card_filter=card_filter)
         run_status = result.timeout_reason if result.timed_out else "completed"
