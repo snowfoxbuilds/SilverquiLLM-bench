@@ -112,3 +112,14 @@ benchmarks/sos/data/test_oracle_workspace/engine/game_state.py — Wire Beginnin
 - `benchmarks/sos/data/test_oracle_workspace/engine/casting.py` — Added _handle_casualty() primitive: scans bf for casualty granters, offers sac, copies spell
 - `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_226/__init__.py` — Package init for test directory
 - `benchmarks/sos/data/tests/audited/sos/sos_226/tests.py` — Copy of rewritten tests to benchmarks location
+
+## Item 10: sos_245 — Witherbloom, the Balancer oracle impl
+
+### Tests
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_245/tests.py` — 10 tests: identity, keywords, affinity self-reduction, grant to instants/sorceries, no grant to creatures, grant removed on leave
+
+### Implementation
+- `benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_245/card_impl.py` — Legendary Creature 5/5 {6}{B}{G}, Flying+Deathtouch, affinity for creatures via cost_reduction(), affinity_for_creatures_grant attribute
+- `benchmarks/sos/data/test_oracle_workspace/engine/casting.py` — Extended get_cost_reduction() to scan for affinity_for_creatures_grant on bf permanents for instants/sorceries
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_245/__init__.py` — Package init for test directory
+- `benchmarks/sos/data/tests/audited/sos/sos_245/tests.py` — Copy of rewritten tests to benchmarks location

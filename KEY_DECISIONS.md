@@ -112,3 +112,16 @@ skips these two files since they are already present in `run_dir`.
 - **Reasoning**: Any instant/sorcery cast through any path should get the casualty offer while a granter is on the battlefield.
 - **Impact**: `engine/casting.py` — all three casting functions.
 
+
+## Affinity as Keyword flag + behavioral implementation
+- **Context**: Affinity is parameterized ("affinity for X") but the TODO requires it as a true keyword.
+- **Decision**: Added `Keyword.AFFINITY` to the enum for inspection purposes. Behavior is still implemented via `cost_reduction(game)` + the battlefield-scan grant pattern. The Keyword flag signals "has affinity" but doesn't encode what it has affinity for.
+- **Reasoning**: Tests and agents need to detect "has affinity" via keyword inspection; the actual reduction logic is separate.
+- **Impact**: `engine/card.py` (or types.py) Keyword enum, sos_245 card_impl.
+
+## Multiple affinity granters stack
+- **Context**: If two granters with `affinity_for_creatures_grant` are on bf, cost reduction should apply per granter.
+- **Decision**: Count granters and multiply creature_count by granter_count for total reduction.
+- **Reasoning**: MTG rules — multiple instances of affinity stack.
+- **Impact**: `engine/casting.py` — `get_cost_reduction()`.
+

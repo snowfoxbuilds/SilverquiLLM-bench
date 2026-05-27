@@ -113,6 +113,7 @@ class Keyword(enum.Flag):
     MENACE = enum.auto()
     WARD = enum.auto()
     PROWESS = enum.auto()
+    AFFINITY = enum.auto()
 
 
 # Mapping from pip string to ManaType for parsing

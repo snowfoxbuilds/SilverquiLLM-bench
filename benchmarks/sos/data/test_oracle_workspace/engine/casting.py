@@ -124,9 +124,10 @@ def get_cost_reduction(game: GameState, card: CardImpl, controller: Player) -> i
     Queries ``card.cost_reduction(game)`` and clamps the result so that
     the generic portion of the mana cost cannot go below 0.
 
-    This is a simplified single-card self-reduction model.  Full MTG
-    cost-reduction interactions (Trinisphere, multiple reductions from
-    different sources) are deferred.
+    Also checks for affinity-for-creatures grants on the controller's
+    battlefield: if any permanent has ``affinity_for_creatures_grant``
+    and the card being cast is an instant or sorcery, the creature count
+    is added to the reduction.
     """
     # Ensure card.controller is set so the hook can reference "you" / the
     # casting player even when the card was never explicitly assigned one.
@@ -136,6 +137,21 @@ def get_cost_reduction(game: GameState, card: CardImpl, controller: Player) -> i
     # Restore previous controller in case the caller doesn't want a
     # side-effect (get_cost_reduction is a query, not a mutation).
     card.controller = prev_controller
+
+    # Check for affinity-for-creatures grants (instant/sorcery only)
+    if card.card_types & {CardType.INSTANT, CardType.SORCERY}:
+        bf = game.get_battlefield(controller)
+        granter_count = sum(
+            1 for perm in bf.get_all()
+            if getattr(perm, "affinity_for_creatures_grant", False)
+        )
+        if granter_count:
+            creature_count = sum(
+                1 for perm in bf.get_all()
+                if CardType.CREATURE in getattr(perm, "card_types", set())
+            )
+            raw += creature_count * granter_count
+
     generic = card.mana_cost.generic if card.mana_cost else 0
     return max(0, min(raw, generic))
 
