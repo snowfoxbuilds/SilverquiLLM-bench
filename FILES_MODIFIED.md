@@ -93,3 +93,11 @@ benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_120/tests.py —
 Implementation
 benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_120/card_impl.py — Revised: skip lands in cast offers, replacement effect already uses ReplacementManager, recurring cast uses cast_spell_free pipeline
 benchmarks/sos/data/test_oracle_workspace/engine/game_state.py — Wire BeginningOfMainPhaseEvent into advance_phase() on PRECOMBAT_MAIN transition
+
+## Item 8: sos_201 — Lorehold, the Historian oracle impl
+
+### Implementation
+- `benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_201/card_impl.py` — Full oracle: Legendary Creature 5/5 {3}{R}{W}, Flying+Haste, miracle-grant continuous effect, opponent-upkeep discard-to-draw trigger
+- `benchmarks/sos/data/test_oracle_workspace/engine/casting.py` — Added cast_spell_for_cost() for miracle alt-cost casting primitive
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_201/__init__.py` — Package init for test directory
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_201/tests.py` — Copy of audited tests for workspace execution

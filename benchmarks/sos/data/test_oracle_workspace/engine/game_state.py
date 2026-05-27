@@ -162,6 +162,12 @@ class GameState:
 
         self.empty_mana_pools()
 
+        # Reset per-turn counters at the start of each new turn (first phase/step).
+        if (self.phase, self.step) == _TURN_SEQUENCE[0]:
+            active = self.active_player
+            if active is not None:
+                active.cards_drawn_this_turn = 0
+
         # Fire BeginningOfMainPhaseEvent when entering precombat main phase.
         if self.phase == Phase.PRECOMBAT_MAIN and self.step is None:
             from engine.events import BeginningOfMainPhaseEvent

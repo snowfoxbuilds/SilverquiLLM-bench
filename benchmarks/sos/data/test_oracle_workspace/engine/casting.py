@@ -519,6 +519,67 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
     player.land_plays_remaining -= 1
 
 
+def cast_spell_for_cost(
+    game: GameState,
+    player: Player,
+    card: CardImpl,
+    alt_cost: ManaCost,
+) -> None:
+    """Cast *card* from *player*'s hand paying *alt_cost* instead of the normal cost.
+
+    Used by miracle and other alternate-cost mechanics. Bypasses normal
+    timing restrictions (miracle allows casting at draw time).
+
+    Pipeline mirrors cast_spell but uses alt_cost for mana payment.
+
+    Raises:
+        CastingError: If payment fails or card is not in hand.
+    """
+    # Hand check
+    hand = game.get_hand(player)
+    if not hand.contains(card):
+        raise CastingError(f"Cannot cast {card.name!r} for miracle — card not in hand")
+
+    # Move card from hand to stack zone
+    stack_zone = player.zones[Zone.STACK]
+    hand.remove(card)
+    stack_zone.add(card)
+
+    # Target selection (same as cast_spell pipeline)
+    chosen_targets: list[Any] = []
+    if hasattr(card, "choose_targets"):
+        chosen_targets = card.choose_targets(game, player)
+
+    # Mana payment for alt_cost
+    if not player.mana_pool.can_pay(alt_cost):
+        # Roll back
+        stack_zone.remove(card)
+        hand.add(card)
+        raise CastingError(
+            f"Cannot cast {card.name!r} for miracle — insufficient mana for {alt_cost}"
+        )
+    player.mana_pool.pay(alt_cost)
+
+    # Call on_cast hook (same as cast_spell pipeline)
+    card.on_cast(game)
+
+    # Push StackObject
+    from engine.stack import StackObject
+
+    stack_obj = StackObject(
+        source=card,
+        controller=player,
+        targets=chosen_targets,
+        on_resolve=lambda g: None,  # replaced below
+    )
+
+    def _on_resolve(g: GameState) -> None:
+        _resolve_spell(g, card, player, stack_obj)
+
+    stack_obj.on_resolve = _on_resolve
+    game.stack.push(stack_obj)
+
+
 def resolve_top(game: GameState) -> None:
     """Resolve the top spell/ability on the stack.
 

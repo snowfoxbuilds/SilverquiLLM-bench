@@ -80,3 +80,22 @@ skips these two files since they are already present in `run_dir`.
 - **Reasoning**: Reuses existing engine infrastructure rather than inventing parallel mechanisms.
 - **Impact**: `benchmarks/sos/data/test_oracle_workspace/engine/` and sos_120 card_impl.
 
+
+## Miracle primitive: cast_spell_for_cost must mirror full casting pipeline
+- **Context**: Initial miracle implementation of `cast_spell_for_cost` skipped target selection, `on_cast()`, and passed wrong args to `_resolve_spell`.
+- **Decision**: `cast_spell_for_cost` must replicate the full `cast_spell` pipeline (target selection, on_cast, stack push with proper on_resolve closure, pass stack_obj to _resolve_spell) but substitute the mana cost.
+- **Reasoning**: Any spell with targets or cast-time hooks would break if these steps were skipped.
+- **Impact**: `engine/casting.py` — `cast_spell_for_cost()` function.
+
+## cards_drawn_this_turn reset at turn start
+- **Context**: `player.cards_drawn_this_turn` counter was only incrementing, never resetting.
+- **Decision**: Reset `active_player.cards_drawn_this_turn = 0` in `advance_phase()` at the wrap-around point (new turn start).
+- **Reasoning**: MTG tracks "first card drawn each turn" — counter must reset each turn per rules.
+- **Impact**: `engine/game.py` — `advance_phase()`.
+
+## Miracle trigger tracks specific event.card
+- **Context**: Trigger handler was rescanning the entire hand instead of tracking which card was drawn.
+- **Decision**: Use a closure variable (`_miracle_drawn_card`) shared between condition and effect functions to capture `event.card` when the trigger matches.
+- **Reasoning**: Ensures correct card is offered for miracle even if hand changes between trigger and resolution.
+- **Impact**: `cards/sos/sos_201/card_impl.py` miracle trigger.
+
