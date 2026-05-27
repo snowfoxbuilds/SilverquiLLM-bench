@@ -27,3 +27,18 @@ skips these two files since they are already present in `run_dir`.
 - **Reasoning**: Tests need fine-grained control (resolve one thing at a time) while `cast_spell()` needs the convenience of auto-draining.
 - **Impact**: `benchmarks/sos/data/test_oracle_workspace/test_utils.py`
 
+
+## Spell-to-graveyard replacement effect mechanism (oracle workspace engine)
+
+- **Context**: Cards that route spells to exile on resolution (instead of graveyard) need the engine to consult replacement effects during spell resolution.
+- **Decision**: Modified `_resolve_spell` in oracle workspace's `engine/casting.py` to fire a `_SpellToGraveyardReplacementEvent` and consult the `ReplacementManager` before moving instant/sorcery spells to graveyard. The replacement's `destination` field determines actual zone.
+- **Reasoning**: Without this, registered replacement effects had no actual effect on the engine's resolution path.
+- **Impact**: `benchmarks/sos/data/test_oracle_workspace/engine/casting.py` — oracle workspace only (ADR-010).
+
+## Attack trigger targeting uses condition-callback lock-in
+
+- **Context**: "Whenever ~ attacks, you may target..." triggers need targets locked when put on stack, not on resolution.
+- **Decision**: Targets are locked in during the trigger's condition callback (closest available hook to "ability goes on stack"). Single-target auto-selection avoids consuming a script entry.
+- **Reasoning**: The trigger system lacks a pre-resolution targeting hook. Condition check is the pragmatic alternative.
+- **Impact**: Oracle card implementations using attack triggers with targeting.
+

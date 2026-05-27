@@ -222,6 +222,17 @@ def _set_zone(
         card.owner = player
         card.controller = player
         zone_container.add(card)
+        # When adding to the battlefield, register triggers and replacement
+        # effects so that triggered abilities fire correctly during tests.
+        # Also clear summoning sickness so creatures can attack immediately
+        # (test setup assumption: cards are "already in play").
+        if zone == Zone.BATTLEFIELD:
+            if hasattr(card, "summoning_sick"):
+                card.summoning_sick = False
+            if hasattr(card, "register_triggers"):
+                card.register_triggers(game)
+            if hasattr(card, "register_replacement_effects"):
+                card.register_replacement_effects(game)
 
 
 # ---------------------------------------------------------------------------

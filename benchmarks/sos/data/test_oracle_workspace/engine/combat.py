@@ -256,6 +256,17 @@ def declare_attackers_step(game: GameState) -> None:
         if Keyword.VIGILANCE not in kw:
             attacker.is_tapped = True
 
+    # Fire AttacksTriggeredEvent for each attacker so that "whenever ~
+    # attacks" triggers are placed on the stack.
+    from engine.events import AttacksTriggeredEvent
+
+    for attacker in chosen:
+        if attacker in combat.attackers:
+            game.trigger_manager.fire_event(
+                game,
+                AttacksTriggeredEvent(creature=attacker, attacker=attacker),
+            )
+
 
 def declare_blockers_step(game: GameState) -> None:
     """Declare blockers step: defending player assigns blockers.

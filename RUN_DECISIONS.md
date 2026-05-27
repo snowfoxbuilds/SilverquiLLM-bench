@@ -8,3 +8,9 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **What was implemented instead**: Standalone test file that pytest collects directly, no evaluator flag needed.
 - **Impact**: `tests/test_audited_against_reference.py` — simpler integration, fewer moving parts.
 
+## Test infrastructure: conftest for oracle workspace audited tests
+- **Context**: Tests in `test_oracle_workspace/tests/audited/sos/` need to import from `card_impl` generically.
+- **Decision**: Created a conftest in the workspace that resolves `card_impl` imports by detecting the collector directory and loading from `cards/sos/<dir>/card_impl.py`.
+- **Reasoning**: Matches the pattern used in the canonical audited test conftest; makes tests impl-agnostic.
+- **Impact**: `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/conftest.py`
+

@@ -46,6 +46,38 @@ class CastingError(Exception):
     """Raised when a spell cast or land play is illegal."""
 
 
+# Destination string → Zone mapping for replacement-effect redirection.
+_DEST_ZONE_MAP: dict[str, Zone] = {
+    "graveyard": Zone.GRAVEYARD,
+    "exile": Zone.EXILE,
+    "hand": Zone.HAND,
+    "library": Zone.LIBRARY,
+}
+
+
+# ---------------------------------------------------------------------------
+# Spell-resolution replacement event
+# ---------------------------------------------------------------------------
+
+from dataclasses import dataclass
+from engine.events import MoveToGraveyardReplacementEvent as _MoveToGYBase
+
+
+@dataclass
+class _SpellToGraveyardReplacementEvent(_MoveToGYBase):
+    """A spell moving to graveyard on resolution (or fizzle).
+
+    Carries a reference to the spell card so that replacement-effect
+    conditions can match on card identity.
+    """
+
+    spell: Any = None
+
+    @property
+    def card(self) -> Any:  # type: ignore[override]
+        return self.spell
+
+
 # ------------------------------------------------------------------
 # Timing helpers
 # ------------------------------------------------------------------
@@ -388,7 +420,9 @@ def _resolve_spell(
     3. If the card is a permanent type, move it to the battlefield via
        :func:`~engine.zones.move_to_zone` (which handles trigger/effect
        registration and the ETB event).
-    4. Otherwise (instant / sorcery), move it to the owner's graveyard.
+    4. Otherwise (instant / sorcery), consult replacement effects for
+       graveyard redirection (e.g. exile instead), then move it to the
+       appropriate destination zone.
     """
     from engine.zones import move_to_zone
 
@@ -406,8 +440,21 @@ def _resolve_spell(
         # trigger/replacement-effect registration and ENTERS_BATTLEFIELD event.
         move_to_zone(game, card, Zone.STACK, Zone.BATTLEFIELD)
     else:
-        # Instant/sorcery: move from stack to graveyard via move_to_zone.
-        move_to_zone(game, card, Zone.STACK, Zone.GRAVEYARD)
+        # Instant/sorcery: consult replacement effects before moving to GY.
+        # This allows "if this spell would be put into a graveyard, exile it
+        # instead" effects to redirect the destination.
+        from engine.events import MoveToGraveyardReplacementEvent
+
+        event = _SpellToGraveyardReplacementEvent(
+            spell=card,
+            controller=getattr(card, "controller", player),
+            owner=getattr(card, "owner", player),
+        )
+        event = game.replacement_manager.apply(game, event)
+
+        dest_str = getattr(event, "destination", "graveyard")
+        dest_zone = _DEST_ZONE_MAP.get(dest_str, Zone.GRAVEYARD)
+        move_to_zone(game, card, Zone.STACK, dest_zone)
 
 
 # ------------------------------------------------------------------
