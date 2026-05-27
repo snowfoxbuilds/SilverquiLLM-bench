@@ -249,11 +249,20 @@ def move_to_zone(
                 break
 
     if source_player is None:
-        return  # Card not found anywhere
+        # Card not found in the source zone — graceful fallback: place it
+        # directly into the destination zone (owner or controller).
+        dest_player = owner if owner is not None else controller
+        if dest_player is None:
+            return
+        dest_player.zones[to_zone].add(card)
+        return
 
     source_container = source_player.zones[from_zone]
     if not source_container.contains(card):
-        return  # Safety: card not in any player's zone
+        # Safety fallback: card not in source zone, place in destination.
+        dest_player = owner if owner is not None else source_player
+        dest_player.zones[to_zone].add(card)
+        return
 
     if owner is None:
         owner = source_player

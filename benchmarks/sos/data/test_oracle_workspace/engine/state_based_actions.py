@@ -269,6 +269,27 @@ def _sba_aura_unattached(game: GameState) -> bool:
     return action_taken
 
 
+def _sba_planeswalker_zero_loyalty(game: GameState) -> bool:
+    """A planeswalker with loyalty 0 is put into its owner's graveyard (rule 704.5i)."""
+    action_taken = False
+    to_remove: list[tuple[Player, Any]] = []
+    for player in game.players:
+        for obj in _battlefield(game, player).get_all():
+            if (
+                hasattr(obj, "loyalty")
+                and (
+                    (hasattr(obj, "card_types") and CardType.PLANESWALKER in obj.card_types)
+                    or hasattr(obj, "starting_loyalty")
+                )
+                and obj.loyalty <= 0
+            ):
+                to_remove.append((player, obj))
+    for player, obj in to_remove:
+        _move_to_graveyard(game, player, obj)
+        action_taken = True
+    return action_taken
+
+
 def _sba_counter_annihilation(game: GameState) -> bool:
     """+1/+1 and -1/-1 counters on the same permanent annihilate in pairs."""
     action_taken = False
@@ -314,6 +335,8 @@ def check_state_based_actions(game: GameState) -> bool:
     action_taken = _sba_token_not_on_battlefield(game) or action_taken
     # Aura not attached to legal object → graveyard
     action_taken = _sba_aura_unattached(game) or action_taken
+    # Planeswalker with 0 loyalty → graveyard (rule 704.5i)
+    action_taken = _sba_planeswalker_zero_loyalty(game) or action_taken
     # +1/+1 and -1/-1 counter annihilation
     action_taken = _sba_counter_annihilation(game) or action_taken
     return action_taken

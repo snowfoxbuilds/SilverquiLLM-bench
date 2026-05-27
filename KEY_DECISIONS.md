@@ -57,3 +57,18 @@ skips these two files since they are already present in `run_dir`.
 - **Reasoning**: Matches official MTG comprehensive rules.
 - **Impact**: Oracle card implementations with mixed targeted/untargeted effects.
 
+
+## Planeswalker zero-loyalty SBA (oracle workspace engine)
+
+- **Context**: MTG rule 704.5i requires planeswalkers with 0 loyalty to be put into owner's graveyard as a state-based action.
+- **Decision**: Added planeswalker-0-loyalty check to `check_state_based_actions()` in oracle workspace engine.
+- **Reasoning**: Required for test_dies_at_zero_loyalty to pass; fundamental MTG rule.
+- **Impact**: `benchmarks/sos/data/test_oracle_workspace/engine/` — oracle workspace only.
+
+## Surveil uses scripted choices (oracle workspace engine)
+
+- **Context**: Surveil N requires looking at top N cards and choosing which to put in graveyard vs keep on top.
+- **Decision**: Surveil implementation consults player's scripted choices to determine card disposition rather than always milling all cards.
+- **Reasoning**: Matches MTG rules for surveil; enables testing both "all to gy" and "keep some on top" paths.
+- **Impact**: Oracle workspace planeswalker impls and tests using surveil.
+

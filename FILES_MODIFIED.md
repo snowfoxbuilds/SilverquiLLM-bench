@@ -57,3 +57,21 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_57/card_impl.py` — Full oracle: Instant {1}{U}{U} CMC 3, get_targets returns stack objects, on_resolve counters target spell (removes from stack, moves to owner's GY), fizzle check if target removed, Wizard-conditional colorless mana refund
 - `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_57/__init__.py` — Package init for test directory
 - `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_57/tests.py` — Copy of tests for workspace execution
+
+## Item 6: sos_97 — Ral Zarek, Guest Lecturer oracle impl
+
+### Tests
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_97/tests.py` — 12 tests covering identity, abilities, edge cases, interactions
+
+### Implementation
+- `benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_97/card_impl.py` — Full oracle: Planeswalker {1}{B}{B} loyalty 3, four loyalty abilities (+1 surveil, -1 discard, -2 GY return, -7 coin flip), get_targets, get_valid_targets_for_ability, on_resolve ETB with target removal
+- `benchmarks/sos/data/test_oracle_workspace/engine/zones.py` — Graceful fallback in move_to_zone when card not in source zone (adds to destination directly)
+- `benchmarks/sos/data/test_oracle_workspace/engine/state_based_actions.py` — Added _sba_planeswalker_zero_loyalty (rule 704.5i) to move PW with 0 loyalty to graveyard
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_97/__init__.py` — Package init for test directory
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_97/tests.py` — Copy of audited tests for workspace execution
+
+Item 6 (Revision): sos_97 — Ral Zarek, Guest Lecturer
+Tests
+benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_97/tests.py — 10 oracle tests (identity, abilities, surveil, discard, gy return, ultimate, insufficient loyalty, dies at 0, one-per-turn)
+Implementation
+benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_97/card_impl.py — Revised: proper surveil with choice mechanism, targeting via _resolve_target/_resolve_targets, removed spell-level get_targets/on_resolve
