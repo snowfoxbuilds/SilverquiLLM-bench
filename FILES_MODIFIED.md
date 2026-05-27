@@ -47,3 +47,13 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_13/card_impl.py` — Full oracle impl: Creature {1}{W}{W} CMC 3, dual-mode (front=ETB 2/1 Inkling to target player, back=exile creature+lifegain via prepared from exile), uses TargetRequirement, on_resolve handles both faces
 - `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_13/__init__.py` — Package init for test directory
 - `benchmarks/sos/data/tests/audited/sos/sos_13/tests.py` — Copy of rewritten tests to audited location
+
+## Item 5: sos_57 — Mana Sculpt oracle impl (FLAGSHIP)
+
+### Tests
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_57/tests.py` — 9 tests: identity (5 basic), counter spell, get_targets finds stack spells, excludes permanents, does not affect non-targets
+
+### Implementation
+- `benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_57/card_impl.py` — Full oracle: Instant {1}{U}{U} CMC 3, get_targets returns stack objects, on_resolve counters target spell (removes from stack, moves to owner's GY), fizzle check if target removed, Wizard-conditional colorless mana refund
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_57/__init__.py` — Package init for test directory
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_57/tests.py` — Copy of tests for workspace execution
