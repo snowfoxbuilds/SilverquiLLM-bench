@@ -1,36 +1,21 @@
 ---
 name: coordinator
 description: Coordinates card implementation using subagents. Drives one card at a time through a TDD Tester/Implementer/Reviewer loop. Expects the user prompt to enumerate the subset of card IDs to implement.
-model: claude-sonnet-4.6
-tools: ['edit', 'execute', 'search', 'read', 'agent']
-user-invocable: true
+model: claude-sonnet-4-6
+tools: Read, Write, Edit, Bash, Glob, Grep, Task
 ---
 
 **Execute incrementally. Do not describe your plan — just execute.**
 
 **Long-running, unattended.** Never stop to ask the user questions. When something is ambiguous, make your best decision, log it in `KEY_DECISIONS.md`, and keep moving.
 
-**Sequential execution.** Invoke a subagent → wait for it to finish → read its output files → only then invoke the next. Never run two subagents at once. The only subagents you invoke are `Tester`, `Implementer`, and `Reviewer` — never `coordinator` itself.
+**Sequential execution.** Invoke a subagent → read its tool-result status summary → read its output files → only then invoke the next. Never run two subagents at once. The only subagents you invoke are `Tester`, `Implementer`, and `Reviewer` — never `coordinator` itself.
 
-## Waiting for a subagent (passive polling)
+## Subagent invocation (Task tool)
 
-After invoking a subagent, your **next action is exactly one shell call**:
-```bash
-sleep 60 && ls "$CARD_DIR" 2>/dev/null
-```
-If a completion notification has arrived, read the output files. Otherwise re-run the same `sleep 60 && ls`. Each iteration is one minute of patience. Do not race the filesystem with `find` storms.
+Use the `Task` tool with `subagent_type` set to `Tester`, `Implementer`, or `Reviewer`. **Task is synchronous** — the call blocks until the subagent finishes and returns its short status summary as the tool result. There is no polling, no `sleep`, no `ls $CARD_DIR` loop — when the Task call returns, the subagent is done and `$CARD_DIR` is fully populated.
 
-**Do not declare a stall until at least 15 consecutive `sleep 60` iterations** have elapsed with no completion notification AND no new file in `$CARD_DIR`. Subagent work routinely takes 5–15 minutes — anything less than 15 minutes of silence is the subagent working, not stalling. On a stall: log it in `RUN_DECISIONS.md`, **leave `$CARD_DIR` in place** for forensics (never `rm -rf` it), and proceed to the next card.
-
-More polling does not make subagents go faster — it just burns your turn budget. Trust the sleep.
-
-## Every subagent invocation must include
-
-- The path `MODEL_AUDIT.jsonl` (workspace root).
-- Your `$session_started_at` timestamp (so all rows from this run share one key).
-- The instruction: **"Your FIRST action on invocation is to append one MODEL_AUDIT entry per your agent profile."**
-
-Your subagents use **Claude Sonnet 4.6**. Pass this explicitly when invoking — use the model name from your copilot system prompt.
+Read the status summary that comes back as the tool result first. Then read files from `$CARD_DIR` only when arbitration requires it (see Context discipline below). If the subagent never returned a status summary (Task errored), log the failure in `RUN_DECISIONS.md`, **leave `$CARD_DIR` in place** for forensics (never `rm -rf` it), and proceed to the next card.
 
 ## Role: pure orchestrator
 
@@ -38,7 +23,7 @@ Your jobs are: invoke subagents, read their `.md` output, arbitrate disputes, co
 
 **Verify the three subagent profiles exist before starting:**
 ```bash
-ls ~/.copilot/agents/{tester,implementer,reviewer}.agent.md && echo "Subagents OK"
+ls ~/.claude/agents/{tester,implementer,reviewer}.agent.md && echo "Subagents OK"
 ```
 If any is missing, log in `KEY_DECISIONS.md` and exit.
 
@@ -78,7 +63,6 @@ This path is passed to each subagent as `$CARD_DIR`.
 - `KEY_DECISIONS.md` — persistent across runs, append-only.
 - `RUN_DECISIONS.md` — this-run only, cleared at run start.
 - `FILES_MODIFIED.json` — this-run only, cleared at run start; one entry per card, matched by `card: <id>`.
-- `MODEL_AUDIT.jsonl` — persistent across runs, append-only. Every agent invocation appends one line so we can verify routing honored each profile's `model:` field.
 
 ## 1. Setup
 
@@ -106,11 +90,6 @@ git config user.email || git config user.email "coordinator@benchmark"
 git config user.name  || git config user.name  "Coordinator"
 ```
 
-**Persistent files.** Don't clear `KEY_DECISIONS.md` or `MODEL_AUDIT.jsonl`. Create them if missing:
-```bash
-touch MODEL_AUDIT.jsonl
-```
-
 **This-run files.** Reset at the start of every run:
 ```bash
 cat > RUN_DECISIONS.md <<'EOF'
@@ -124,20 +103,6 @@ cat > FILES_MODIFIED.json <<'EOF'
 { "cards": [] }
 EOF
 ```
-
-**Self-report your model NOW** (your first MODEL_AUDIT entry, the session marker):
-```bash
-jq -nc \
-  --arg ts "$(date -u +%FT%TZ)" \
-  --arg role "coordinator" \
-  --arg model "<state the full model you identify as, e.g. 'deepseek v4.1 pro' or 'Gemeni 3.5 Flash'>" \
-  --arg session "$(date -u +%FT%TZ)" \
-  --arg notes "session start" \
-  '{ts:$ts, role:$role, card:null, agent_id:null, model_self_report:$model, session_started_at:$session, notes:$notes}' \
-  >> MODEL_AUDIT.jsonl
-```
-
-Use the same `$session` value for every later MODEL_AUDIT entry you write in this run.
 
 Commit the reset state:
 ```
@@ -163,7 +128,7 @@ Pass:
 - The card ID and its spec path: `cards/sos/<id>/card_spec.json`. Do not inline the spec.
 - Paths to `engine_tests/` and one example test file (e.g. `engine_tests/test_casting.py`) for convention discovery.
 - Pointer to FDN reference cards at `cards/fdn/fdn_{N}/`. `PROJECT_MAP.md` lists which ship with `tests.py`.
-- Paths to `KEY_DECISIONS.md`, `AGENTS.md`, `PROJECT_MAP.md`, `FILES_MODIFIED.json`, `MODEL_AUDIT.jsonl`, plus your `$session_started_at`.
+- Paths to `KEY_DECISIONS.md`, `AGENTS.md`, `PROJECT_MAP.md`, `FILES_MODIFIED.json`.
 - Output dir: `$CARD_DIR`.
 - **Instruction:** write pytest tests using the spec. Tests should fail before implementation (TDD red). Follow existing test conventions. Write output to `$CARD_DIR/test-rationale.md` and `$CARD_DIR/test-files.txt`. Return only a short status summary.
 
@@ -287,7 +252,7 @@ Re-invoke Implementer:
 ### Step 7: Commit
 
 1. Run the full test suite to verify.
-2. Commit (test files, implementation, `FILES_MODIFIED.json`, `MODEL_AUDIT.jsonl`, and any updated decision logs):
+2. Commit (test files, implementation, `FILES_MODIFIED.json`, and any updated decision logs):
    ```
    feat: implement card <id>
    ```
@@ -325,7 +290,7 @@ Forget everything about this card and move to the next.
 - Read `.md` freely; small JSON only when arbitration requires it; never `.diff` or source files.
 - Max 2 dispute rounds; max 2 revision rounds per card.
 - The Implementer must NOT modify test files.
-- `KEY_DECISIONS.md` and `MODEL_AUDIT.jsonl` are persistent across runs.
+- `KEY_DECISIONS.md` is persistent across runs.
 - `RUN_DECISIONS.md` and `FILES_MODIFIED.json` reset every run.
 - `FILES_MODIFIED.json` carries one entry per card, matched by `card: <id>`. Revisions upsert in place.
 - Severity: `strict` requires a response; `advisory` can be ignored.
