@@ -101,3 +101,14 @@ benchmarks/sos/data/test_oracle_workspace/engine/game_state.py — Wire Beginnin
 - `benchmarks/sos/data/test_oracle_workspace/engine/casting.py` — Added cast_spell_for_cost() for miracle alt-cost casting primitive
 - `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_201/__init__.py` — Package init for test directory
 - `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_201/tests.py` — Copy of audited tests for workspace execution
+
+## Item 9: sos_226 — Silverquill, the Disputant oracle impl
+
+### Tests
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_226/tests.py` — 7 rewritten tests covering identity, no-get_targets, casualty mechanics, and cleanup
+
+### Implementation
+- `benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_226/card_impl.py` — Legendary Creature 4/4 {2}{W}{B}, Flying+Vigilance, casualty_grant=1 attribute for engine detection
+- `benchmarks/sos/data/test_oracle_workspace/engine/casting.py` — Added _handle_casualty() primitive: scans bf for casualty granters, offers sac, copies spell
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_226/__init__.py` — Package init for test directory
+- `benchmarks/sos/data/tests/audited/sos/sos_226/tests.py` — Copy of rewritten tests to benchmarks location

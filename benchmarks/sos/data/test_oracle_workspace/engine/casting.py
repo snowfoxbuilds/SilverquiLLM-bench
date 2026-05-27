@@ -277,6 +277,111 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     stack_obj.on_resolve = _on_resolve
     game.stack.push(stack_obj)
 
+    # 9. Casualty — if the spell is an instant/sorcery and a casualty
+    #    granter is on the controller's battlefield, offer the additional cost.
+    _handle_casualty(game, card, player, stack_obj)
+
+
+# ------------------------------------------------------------------
+# Casualty primitive
+# ------------------------------------------------------------------
+
+
+def _handle_casualty(
+    game: GameState,
+    card: CardImpl,
+    player: Player,
+    stack_obj: StackObject,
+) -> None:
+    """Check for casualty granters and offer the additional cost.
+
+    Casualty N means: as you cast an instant or sorcery, you may sacrifice
+    a creature with power >= N.  If you do, copy the spell (put a copy on
+    the stack).
+
+    Only applies to instant/sorcery spells.  The granter is any permanent
+    on the controller's battlefield that has a ``casualty_grant`` attribute
+    (an int representing the minimum power requirement).
+    """
+    # Only instants and sorceries qualify
+    if not (card.card_types & {CardType.INSTANT, CardType.SORCERY}):
+        return
+
+    # Find casualty granters on the controller's battlefield
+    bf = game.get_battlefield(player)
+    casualty_n: int | None = None
+    for perm in bf.get_all():
+        grant = getattr(perm, "casualty_grant", None)
+        if grant is not None and isinstance(grant, int):
+            casualty_n = grant
+            break  # Use the first granter found
+
+    if casualty_n is None:
+        return
+
+    # Find legal sacrifice candidates: creatures with power >= casualty_n
+    # (excluding the granter itself if it's not a valid sacrifice target)
+    candidates = []
+    for perm in bf.get_all():
+        if CardType.CREATURE in getattr(perm, "card_types", set()):
+            power = getattr(perm, "base_power", 0)
+            # Use modified_power if available (for P/T effects)
+            power = getattr(perm, "modified_power", power)
+            if power >= casualty_n:
+                candidates.append(perm)
+
+    if not candidates:
+        return  # No legal sacrifice — casualty not offered
+
+    # Ask the player whether to pay casualty (scripted choice)
+    from engine.player import DeterministicPlayer
+
+    if isinstance(player, DeterministicPlayer):
+        if not player._script:
+            return  # No script entry — auto-decline
+        choice = player._pop()
+    else:
+        choice = player.choose(candidates, "Choose a creature to sacrifice for casualty (or decline)")
+
+    if choice == "decline_casualty" or choice is None:
+        return
+
+    # Validate the chosen creature is a legal candidate
+    if choice not in candidates:
+        return  # Invalid choice — decline
+
+    # Sacrifice the chosen creature
+    from engine.game import sacrifice
+    sacrifice(game, player, choice)
+
+    # Copy the spell — create a synthetic source card so resolution of the
+    # copy doesn't move the original card between zones.
+    import copy as _copy_mod
+    copy_source = _copy_mod.copy(card)
+    # Mark copy_source so it's identifiable and won't affect real zones
+    copy_source._is_spell_copy = True  # type: ignore[attr-defined]
+
+    copy_obj = StackObject(
+        source=copy_source,
+        controller=player,
+        targets=list(stack_obj.targets) if stack_obj.targets else [],
+        on_resolve=lambda g: None,  # replaced below
+        is_mana_ability=False,
+    )
+
+    def _copy_on_resolve(g: GameState) -> None:
+        # Copies resolve their effect but cease to exist afterwards —
+        # they do NOT move to the graveyard or any other zone.
+        targets = copy_obj.targets
+        if targets is not None:
+            copy_source.chosen_targets = targets  # type: ignore[attr-defined]
+        copy_source.on_resolve(g)
+
+    copy_obj.on_resolve = _copy_on_resolve
+    # Mark as a copy for identification
+    copy_obj._is_copy = True  # type: ignore[attr-defined]
+    game.stack.push(copy_obj)
+
 
 # ------------------------------------------------------------------
 # Cast spell without paying mana cost (free-cast from any zone)
@@ -401,6 +506,9 @@ def cast_spell_free(
 
     stack_obj.on_resolve = _on_resolve
     game.stack.push(stack_obj)
+
+    # Casualty — offer for instant/sorcery spells
+    _handle_casualty(game, card, player, stack_obj)
 
 
 # ------------------------------------------------------------------
@@ -578,6 +686,9 @@ def cast_spell_for_cost(
 
     stack_obj.on_resolve = _on_resolve
     game.stack.push(stack_obj)
+
+    # Casualty — offer for instant/sorcery spells
+    _handle_casualty(game, card, player, stack_obj)
 
 
 def resolve_top(game: GameState) -> None:

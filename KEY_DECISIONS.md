@@ -99,3 +99,16 @@ skips these two files since they are already present in `run_dir`.
 - **Reasoning**: Ensures correct card is offered for miracle even if hand changes between trigger and resolution.
 - **Impact**: `cards/sos/sos_201/card_impl.py` miracle trigger.
 
+
+## Spell copies: shallow copy + no zone movement on resolution
+- **Context**: Casualty creates a copy of a spell on the stack. If the copy shares the same card object, resolving it moves the original card to graveyard.
+- **Decision**: Use `copy.copy(card)` for the copy source. The copy's on_resolve executes the spell effect but does NOT perform zone movement — spell copies cease to exist after resolving per MTG rules.
+- **Reasoning**: MTG rule 707.2 — copies of spells are not cards; they cease to exist instead of going to any zone.
+- **Impact**: `engine/casting.py` — `_handle_casualty()` copy creation.
+
+## Casualty hook wired into all casting entry points
+- **Context**: `_handle_casualty` was only called from `cast_spell()`, missing `cast_spell_for_cost()` and `cast_spell_free()`.
+- **Decision**: All three casting functions call `_handle_casualty()` after pushing the StackObject to the stack.
+- **Reasoning**: Any instant/sorcery cast through any path should get the casualty offer while a granter is on the battlefield.
+- **Impact**: `engine/casting.py` — all three casting functions.
+

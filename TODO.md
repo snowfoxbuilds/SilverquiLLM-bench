@@ -74,7 +74,7 @@ Sequencing note: Item 1 (oracle workspace + validation harness) lands first beca
 
   Testability: 8 rewritten tests pass against oracle; rerun against agent impl produces expected diffs.
 
-- [ ] **9. sos_226 — Silverquill, the Disputant: oracle impl + rewritten tests**
+- [x] **9. sos_226 — Silverquill, the Disputant: oracle impl + rewritten tests**
   Detail: Bug pattern — wrong-premise `get_targets` test on a card that targets nothing (general issue #7). Xmage analog: `CasualtyAbility` primitive + Liesa Forgotten Archangel (creatures-you-control-have-X grant pattern) + xmage issue #14823 (casualty-granting templating). Implement: Legendary Creature Elder Dragon, Flying + Vigilance keywords, **no ****`get_targets`**** method**; static continuous effect — every instant/sorcery controller casts while Silverquill on battlefield gets a Casualty 1 additional-cost option (sacrifice creature with power ≥ 1 → spell gets a copy made), checked during cast flow. Engine extension (oracle workspace only): casualty primitive. 7 rewritten tests: identity, no-get_targets, casualty-offered-on-controller-instant, casualty-with-sac-copies-spell, no-legal-sacrifice (declined), no-casualty-on-creature-spell, removed-when-Silverquill-leaves. Delete `test_power_targeting_restriction`, `test_get_targets_finds_creatures`, `test_on_resolve_changes_state`. Full detail in [Prompt: SOS 10-card Test Audit (Oracle-First)](https://www.notion.so/364f165c922043409955bc65f55a2d74) § sos_226.
 
   Files: `test_oracle_workspace/cards/sos/sos_226/card_impl.py` (new), `test_oracle_workspace/tests/audited/sos/sos_226/tests.py` (develop), `benchmarks/sos/data/tests/audited/sos/sos_226/tests.py` (copy after green).
