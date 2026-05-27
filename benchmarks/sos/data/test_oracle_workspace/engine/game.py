@@ -138,7 +138,7 @@ def deal_damage(game: GameState, source: Any, target: Any, amount: int) -> None:
     if has_protection_from(target, source):
         return
 
-    if hasattr(target, "life"):
+    if hasattr(target, "life") and hasattr(target, "zones"):
         # Target is a player
         target.life -= amount
         # Fire damage trigger
@@ -150,6 +150,14 @@ def deal_damage(game: GameState, source: Any, target: Any, amount: int) -> None:
         game.trigger_manager.fire_event(
             game,
             LosesLifeTriggeredEvent(player=target, amount=amount),
+        )
+    elif hasattr(target, "loyalty"):
+        # Target is a planeswalker — damage removes loyalty counters
+        target.loyalty = max(0, target.loyalty - amount)
+        # Fire damage trigger
+        game.trigger_manager.fire_event(
+            game,
+            DealsDamageTriggeredEvent(source=source, target=target, amount=amount),
         )
     elif hasattr(target, "damage_marked"):
         # Target is a creature

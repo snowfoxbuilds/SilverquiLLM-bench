@@ -42,3 +42,18 @@ skips these two files since they are already present in `run_dir`.
 - **Reasoning**: The trigger system lacks a pre-resolution targeting hook. Condition check is the pragmatic alternative.
 - **Impact**: Oracle card implementations using attack triggers with targeting.
 
+
+## Planeswalker damage removes loyalty counters (oracle workspace engine)
+
+- **Context**: `deal_damage()` in the oracle workspace engine needed to handle planeswalkers.
+- **Decision**: Extended `deal_damage()` in `engine/game.py` to detect planeswalkers via `hasattr(target, "loyalty")` and remove loyalty counters. Check order: player → planeswalker → creature.
+- **Reasoning**: MTG rules: damage to a planeswalker removes that many loyalty counters.
+- **Impact**: `benchmarks/sos/data/test_oracle_workspace/engine/game.py`
+
+## All-targets-illegal = spell countered on resolution (no effects)
+
+- **Context**: Multi-target spells with untargeted bonus effects (like life gain) need correct handling when all targets become illegal.
+- **Decision**: Per MTG rule 608.2b, if ALL targets are illegal at resolution, the spell is countered — no effects happen, including untargeted ones. Untargeted effects only resolve if at least one target remains legal.
+- **Reasoning**: Matches official MTG comprehensive rules.
+- **Impact**: Oracle card implementations with mixed targeted/untargeted effects.
+

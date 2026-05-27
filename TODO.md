@@ -32,7 +32,7 @@ Sequencing note: Item 1 (oracle workspace + validation harness) lands first beca
 
   Testability: 7 rewritten tests pass against oracle impl; rerun against the 2026-05-26 agent impl at `docker/copilot-opus-single/audited_results/sos-copilot-opus-single-2026-05-26T23-23/cards/sos_1/card_impl.py` produces expected verdict diffs per prompt page analysis.
 
-- [ ] **3. sos_4 — Together as One: oracle impl + rewritten tests**
+- [x] **3. sos_4 — Together as One: oracle impl + rewritten tests**
   Detail: Bug pattern — Converge asserted as `Keyword.CONVERGE` (general issue #1: ability words ≠ keywords). Xmage analogs: Radiant Flames + Bring to Light (`ConvergeCount` as X-source) + Crackling Doom (multi-target multi-effect sorcery structure). Implement: `mana_cost = {6}`, CMC 6; `colors_spent` recorded at cast time on the stack object; on resolve, target player draws X, damage X to chosen target, controller gains X life — all simultaneously; multi-effect fizzle preserves legal effects per MTG rules. 5 rewritten tests: identity (no CONVERGE keyword assertion), 1-color resolution, 5-color resolution, 0-color discriminator (catches default-count-1 bugs), fizzle-keeps-legal-effects (folds in the graveyard-destination check via real cast+resolve). Full detail in [Prompt: SOS 10-card Test Audit (Oracle-First)](https://www.notion.so/364f165c922043409955bc65f55a2d74) § sos_4.
 
   Files: `test_oracle_workspace/cards/sos/sos_4/card_impl.py` (new), `test_oracle_workspace/tests/audited/sos/sos_4/tests.py` (develop), `benchmarks/sos/data/tests/audited/sos/sos_4/tests.py` (copy after green).

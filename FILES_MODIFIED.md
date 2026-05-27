@@ -25,3 +25,15 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `benchmarks/sos/data/test_oracle_workspace/test_utils.py` — _set_zone registers triggers/replacement effects on battlefield, clears summoning sickness
 - `benchmarks/sos/data/test_oracle_workspace/engine/combat.py` — declare_attackers_step fires AttacksTriggeredEvent for each attacker
 - `benchmarks/sos/data/test_oracle_workspace/engine/casting.py` — _resolve_spell consults replacement effects before moving spells to graveyard; added _SpellToGraveyardReplacementEvent
+
+
+## Item 3: sos_4 — Together as One oracle impl
+
+### Tests
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_4/tests.py` — 11 rewritten tests: identity, 1-color resolution, 5-color resolution, 0-color discriminator, fizzle-keeps-legal-effects
+
+### Implementation
+- `benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_4/card_impl.py` — Full oracle: Sorcery with Converge, TargetRequirement with filter_fn, multi-target partial resolution, all-illegal-counters logic
+- `benchmarks/sos/data/test_oracle_workspace/engine/game.py` — Extended deal_damage() to handle planeswalker targets (remove loyalty counters)
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_4/__init__.py` — Package init for test discovery
+- `benchmarks/sos/data/tests/audited/sos/sos_4/tests.py` — Copy of rewritten tests to final audited location
