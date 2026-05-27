@@ -162,6 +162,13 @@ class GameState:
 
         self.empty_mana_pools()
 
+        # Fire BeginningOfMainPhaseEvent when entering precombat main phase.
+        if self.phase == Phase.PRECOMBAT_MAIN and self.step is None:
+            from engine.events import BeginningOfMainPhaseEvent
+            self.trigger_manager.fire_event(
+                self, BeginningOfMainPhaseEvent(player=self.active_player)
+            )
+
     def empty_mana_pools(self) -> None:
         """Empty all players' mana pools — called on each phase/step transition."""
         for player in self.players:

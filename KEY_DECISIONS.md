@@ -72,3 +72,11 @@ skips these two files since they are already present in `run_dir`.
 - **Reasoning**: Matches MTG rules for surveil; enables testing both "all to gy" and "keep some on top" paths.
 - **Impact**: Oracle workspace planeswalker impls and tests using surveil.
 
+
+## Paradigm mechanic: replacement effect + recurring trigger (oracle workspace)
+
+- **Context**: Paradigm is an ability word that routes a spell to exile on resolution and registers a recurring "may cast from exile" trigger at each main phase.
+- **Decision**: Paradigm self-exile uses the existing `ReplacementManager` / `_SpellToGraveyardReplacementEvent` mechanism built for sos_1. Recurring trigger fires via `BeginningOfMainPhaseEvent` wired into `advance_phase()`. Recurring cast uses `cast_spell_free` for proper stack flow.
+- **Reasoning**: Reuses existing engine infrastructure rather than inventing parallel mechanisms.
+- **Impact**: `benchmarks/sos/data/test_oracle_workspace/engine/` and sos_120 card_impl.
+

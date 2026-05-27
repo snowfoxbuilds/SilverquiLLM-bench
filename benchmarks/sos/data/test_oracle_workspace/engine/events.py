@@ -119,6 +119,12 @@ class CounterAddedTriggeredEvent(TriggeredEvent):
     amount: int = 0
 
 
+@dataclass
+class BeginningOfMainPhaseEvent(TriggeredEvent):
+    """Fired at the beginning of a player's first main phase."""
+    player: Any = None
+
+
 # ---------------------------------------------------------------------------
 # Replacement events
 # ---------------------------------------------------------------------------

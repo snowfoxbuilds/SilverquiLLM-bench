@@ -75,3 +75,21 @@ Tests
 benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_97/tests.py — 10 oracle tests (identity, abilities, surveil, discard, gy return, ultimate, insufficient loyalty, dies at 0, one-per-turn)
 Implementation
 benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_97/card_impl.py — Revised: proper surveil with choice mechanism, targeting via _resolve_target/_resolve_targets, removed spell-level get_targets/on_resolve
+
+## Item 7: sos_120 — Improvisation Capstone oracle impl
+
+### Tests
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_120/tests.py` — 12 rewritten tests: identity (no Keyword.PARADIGM), exile-from-library-until-threshold, does-not-target-opponent-creatures, cast-chosen-exiled-cards-for-free, paradigm-exiles-self, paradigm-recurring-cast across 3 turns, paradigm-offer-can-be-declined
+
+### Implementation
+- `benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_120/card_impl.py` — Full oracle: Sorcery {5}{R}{R} CMC 7, exile-from-library loop until MV>=4, free-cast offers via choose_yes_no, Paradigm replacement effect (self to exile), recurring trigger from exile via BeginningOfMainPhaseEvent
+- `benchmarks/sos/data/test_oracle_workspace/engine/events.py` — Added BeginningOfMainPhaseEvent triggered event for Paradigm recurring trigger
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_120/__init__.py` — Package init for test directory
+- `benchmarks/sos/data/tests/audited/sos/sos_120/tests.py` — Copy of rewritten tests to audited location
+
+Item 7 (Revision): sos_120 — Improvisation Capstone
+Tests
+benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_120/tests.py — 9 tests (identity, exile threshold, no-target, cast-free, decline, paradigm-self-exile, recurring 3 turns, paradigm-decline)
+Implementation
+benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_120/card_impl.py — Revised: skip lands in cast offers, replacement effect already uses ReplacementManager, recurring cast uses cast_spell_free pipeline
+benchmarks/sos/data/test_oracle_workspace/engine/game_state.py — Wire BeginningOfMainPhaseEvent into advance_phase() on PRECOMBAT_MAIN transition
