@@ -133,3 +133,11 @@ benchmarks/sos/data/test_oracle_workspace/engine/game_state.py — Wire Beginnin
 - `benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_257/card_impl.py` — Full oracle: Land with 2 mana abilities (colorless + restricted any-color), persistent animation to 2/4 Wizard, prowess-like spell-cast trigger
 - `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_257/__init__.py` — Package init for test directory
 - `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_257/tests.py` — Copy of audited tests for workspace execution
+
+## Item 12: CI regex audit for card-specific test naming
+
+### Tests
+- `tests/test_card_specific_test_naming.py` — parametrized CI audit ensuring each audited test references ≥2 card-specific words
+
+### Implementation
+- `tests/test_card_specific_test_naming.py` — new CI regex audit checking card-specific test naming with GENERIC_MTG_WORDS exclusion set
