@@ -1,0 +1,12 @@
+{
+  "collector_number": "sos_1",
+  "tests_passed": 14,
+  "tests_failed": 2,
+  "tests_total": 16,
+  "pass_rate": 0.875,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_kzj5jnw0/tests.py::TestTheDawningArchaicAbilities::test_attack_trigger_uses_graveyard",
+    "FAILED ../../../../tmp/eval_sos_kzj5jnw0/tests.py::TestTheDawningArchaicInteractions::test_exile_from_graveyard_interaction"
+  ],
+  "skipped": false
+}

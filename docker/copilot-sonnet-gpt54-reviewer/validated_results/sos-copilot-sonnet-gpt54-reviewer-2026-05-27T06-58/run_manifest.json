@@ -1,0 +1,18 @@
+{
+  "timeout_seconds": 360000,
+  "deadline_utc": "2026-05-31T10:58:03Z",
+  "docker_image": "silverquillm-copilot-sonnet-gpt54-reviewer:latest",
+  "card_filter": [
+    "1",
+    "4",
+    "13",
+    "57",
+    "97",
+    "120",
+    "201",
+    "226",
+    "245",
+    "257"
+  ],
+  "benchmark_set": "sos"
+}
