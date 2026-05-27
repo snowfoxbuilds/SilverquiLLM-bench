@@ -1,0 +1,193 @@
+{
+  "docker_image": "silverquillm-copilot-opus-single:latest",
+  "run_metadata": {
+    "image": "silverquillm-copilot-opus-single:latest",
+    "timestamp": "2026-05-26T23:44:20Z",
+    "card_count": 20,
+    "timeout_seconds": 7200,
+    "harness_version": "a65329b59bf333fb2f58b39562b4d211954aa8a1"
+  },
+  "sos_card_correctness": {
+    "audited_pass_rate": 0.7066,
+    "card_pass_rate": 0.0833,
+    "cards_completed": 12,
+    "cards_no_output": 8,
+    "cards_timed_out": 0
+  },
+  "fdn_regression": {
+    "fdn_test_pass_rate": 1.0,
+    "fdn_card_pass_rate": 0.6364
+  },
+  "engine_regression": {
+    "engine_test_pass_rate": 1.0,
+    "engine_churn_lines": 71
+  },
+  "per_card": [
+    {
+      "collector_number": "sos_1",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 14,
+      "audited_total": 16
+    },
+    {
+      "collector_number": "sos_107",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_113",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 0,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_120",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_125",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 12,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_13",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_201",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 14,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_212",
+      "card_name": "",
+      "status": "no_output",
+      "audited_passed": 0,
+      "audited_total": 0
+    },
+    {
+      "collector_number": "sos_214",
+      "card_name": "",
+      "status": "no_output",
+      "audited_passed": 0,
+      "audited_total": 0
+    },
+    {
+      "collector_number": "sos_218",
+      "card_name": "",
+      "status": "no_output",
+      "audited_passed": 0,
+      "audited_total": 0
+    },
+    {
+      "collector_number": "sos_226",
+      "card_name": "",
+      "status": "no_output",
+      "audited_passed": 0,
+      "audited_total": 0
+    },
+    {
+      "collector_number": "sos_236",
+      "card_name": "",
+      "status": "no_output",
+      "audited_passed": 0,
+      "audited_total": 0
+    },
+    {
+      "collector_number": "sos_245",
+      "card_name": "",
+      "status": "no_output",
+      "audited_passed": 0,
+      "audited_total": 0
+    },
+    {
+      "collector_number": "sos_246",
+      "card_name": "",
+      "status": "no_output",
+      "audited_passed": 0,
+      "audited_total": 0
+    },
+    {
+      "collector_number": "sos_257",
+      "card_name": "",
+      "status": "no_output",
+      "audited_passed": 0,
+      "audited_total": 0
+    },
+    {
+      "collector_number": "sos_4",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_52",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_57",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_80",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_97",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 12
+    }
+  ],
+  "run_status": "completed",
+  "wall_clock_seconds": 1230.502,
+  "resumed_from": "sos-copilot-opus-single-2026-05-26T22-08",
+  "resumed_image_changed": false,
+  "card_filter": [
+    "1",
+    "4",
+    "13",
+    "52",
+    "57",
+    "80",
+    "97",
+    "107",
+    "113",
+    "120",
+    "125",
+    "201",
+    "212",
+    "214",
+    "218",
+    "226",
+    "236",
+    "245",
+    "246",
+    "257"
+  ]
+}

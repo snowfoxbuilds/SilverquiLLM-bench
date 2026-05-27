@@ -1,0 +1,14 @@
+{
+  "collector_number": "sos_80",
+  "tests_passed": 11,
+  "tests_failed": 4,
+  "tests_total": 15,
+  "pass_rate": 0.7333333333333333,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_sxsjkh0z/tests.py::TestEmeritusOfWoeDemonicTutorBasicProperties::test_mana_cost_cmc",
+    "FAILED ../../../../tmp/eval_sos_sxsjkh0z/tests.py::TestEmeritusOfWoeDemonicTutorAbilities::test_has_prepared",
+    "FAILED ../../../../tmp/eval_sos_sxsjkh0z/tests.py::TestEmeritusOfWoeDemonicTutorAbilities::test_etb_trigger_callable",
+    "FAILED ../../../../tmp/eval_sos_sxsjkh0z/tests.py::TestEmeritusOfWoeDemonicTutorEdgeCases::test_mana_cost_matches_spec"
+  ],
+  "skipped": false
+}

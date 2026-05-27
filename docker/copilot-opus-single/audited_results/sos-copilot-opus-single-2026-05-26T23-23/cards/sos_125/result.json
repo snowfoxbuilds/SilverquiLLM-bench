@@ -1,0 +1,13 @@
+{
+  "collector_number": "sos_125",
+  "tests_passed": 12,
+  "tests_failed": 3,
+  "tests_total": 15,
+  "pass_rate": 0.8,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_p0p23z4c/tests.py::TestMoltenCoreMaestroAbilities::test_has_opus",
+    "FAILED ../../../../tmp/eval_sos_p0p23z4c/tests.py::TestMoltenCoreMaestroAbilities::test_opus_trigger_implemented",
+    "FAILED ../../../../tmp/eval_sos_p0p23z4c/tests.py::TestMoltenCoreMaestroInteractions::test_counters_survive_end_of_turn"
+  ],
+  "skipped": false
+}

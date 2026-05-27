@@ -1,0 +1,204 @@
+diff -ruN a/card.py b/card.py
+--- a/card.py	2026-05-25 16:43:11.728292087 +0000
++++ b/card.py	2026-05-26 22:19:26.630241899 +0000
+@@ -346,6 +346,15 @@
+         """Current toughness including counter modifications."""
+         return self.modified_toughness + self.plus_one_counters - self.minus_one_counters
+ 
++    @property
++    def damage_taken(self) -> int:
++        """Alias for damage_marked for readability in card implementations."""
++        return self.damage_marked
++
++    @damage_taken.setter
++    def damage_taken(self, value: int) -> None:
++        self.damage_marked = value
++
+ 
+ # ---------------------------------------------------------------------------
+ # Instant / Sorcery
+diff -ruN a/casting.py b/casting.py
+--- a/casting.py	2026-05-25 16:43:11.728292087 +0000
++++ b/casting.py	2026-05-26 23:36:33.308805789 +0000
+@@ -231,6 +231,19 @@
+     # 7. Call on_cast hook
+     card.on_cast(game)
+ 
++    # 7b. Fire SpellCastTriggeredEvent so triggered abilities can respond.
++    from engine.events import SpellCastTriggeredEvent
++    game.trigger_manager.fire_event(
++        game,
++        SpellCastTriggeredEvent(
++            spell=card,
++            player=player,
++            card=card,
++            controller=player,
++            mana_spent=effective_cost.cmc,
++        ),
++    )
++
+     # 8. Build on_resolve callback and push StackObject
+     stack_obj = StackObject(
+         source=card,
+diff -ruN a/events.py b/events.py
+--- a/events.py	2026-05-25 04:23:31.883982600 +0000
++++ b/events.py	2026-05-26 23:36:27.623742269 +0000
+@@ -99,6 +99,7 @@
+     player: Any = None
+     card: Any = None
+     controller: Any = None
++    mana_spent: int = 0
+ 
+ 
+ @dataclass
+diff -ruN a/game_state.py b/game_state.py
+--- a/game_state.py	2026-05-25 16:43:11.729292098 +0000
++++ b/game_state.py	2026-05-26 23:24:24.798276729 +0000
+@@ -81,6 +81,9 @@
+         # normal rotation.  When extras are exhausted the game picks up
+         # from _normal_next_index.
+         self._normal_next_index: int = 1
++        # Phase listeners: list of callables (game, phase, step) -> None
++        # that fire immediately (not via stack) on phase/step transitions.
++        self.phase_listeners: list[Any] = []
+ 
+     # ------------------------------------------------------------------
+     # Player properties
+@@ -125,6 +128,11 @@
+         """Return the exile zone for *player*."""
+         return player.zones[Zone.EXILE]
+ 
++    def get_zone(self, zone_name: str, player: "Player") -> "ZoneContainer":
++        """Return a zone by string name for *player*."""
++        zone_enum = Zone(zone_name)
++        return player.zones[zone_enum]
++
+     # ------------------------------------------------------------------
+     # Phase/step progression
+     # ------------------------------------------------------------------
+@@ -162,7 +170,30 @@
+ 
+         self.empty_mana_pools()
+ 
++        # Fire phase listeners for the new phase/step.
++        for listener in list(self.phase_listeners):
++            listener(self, self.phase, self.step)
++
+     def empty_mana_pools(self) -> None:
+         """Empty all players' mana pools — called on each phase/step transition."""
+         for player in self.players:
+             player.mana_pool.empty()
++
++    # ------------------------------------------------------------------
++    # Creature death tracking
++    # ------------------------------------------------------------------
++
++    def record_creature_death(self, creature: Any) -> None:
++        """Record that a creature died this turn.
++
++        Used by cards that check 'if N or more creatures died this turn'.
++        """
++        if not hasattr(self, "_creature_deaths_this_turn"):
++            self._creature_deaths_this_turn: list[Any] = []
++        self._creature_deaths_this_turn.append(creature)
++
++    def get_creature_deaths_this_turn(self) -> list[Any]:
++        """Return list of creatures that died this turn."""
++        if not hasattr(self, "_creature_deaths_this_turn"):
++            self._creature_deaths_this_turn = []
++        return self._creature_deaths_this_turn
+diff -ruN a/mana.py b/mana.py
+--- a/mana.py	2026-05-25 16:43:11.729292098 +0000
++++ b/mana.py	2026-05-26 22:36:33.336966985 +0000
+@@ -49,9 +49,9 @@
+         """Return the total amount of mana in the pool across all types."""
+         return sum(self._pool.values())
+ 
+-    def get(self, mana_type: ManaType) -> int:
++    def get(self, mana_type: ManaType, default: int = 0) -> int:
+         """Return the amount of a specific mana type in the pool."""
+-        return self._pool.get(mana_type, 0)
++        return self._pool.get(mana_type, default)
+ 
+     @property
+     def last_payment_colors(self) -> list[Color]:
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/abilities.cpython-311.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/abilities.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/abilities.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/abilities.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/basic_lands.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/basic_lands.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/card.cpython-311.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/card.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/card.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/card.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/casting.cpython-311.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/casting.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/casting.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/casting.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/combat.cpython-311.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/combat.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/combat.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/combat.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/continuous_effects.cpython-311.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/continuous_effects.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/continuous_effects.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/continuous_effects.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/creatures.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/creatures.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/events.cpython-311.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/events.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/events.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/events.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game.cpython-311.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/game.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/game.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game_state.cpython-311.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/game_state.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game_state.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/game_state.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/__init__.cpython-311.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/__init__.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/__init__.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/__init__.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/mana.cpython-311.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/mana.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/mana.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/mana.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/player.cpython-311.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/player.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/player.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/player.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/protection.cpython-311.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/protection.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/protection.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/protection.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/replacement_effects.cpython-311.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/replacement_effects.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/replacement_effects.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/replacement_effects.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/stack.cpython-311.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/stack.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/stack.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/stack.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/state_based_actions.cpython-311.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/state_based_actions.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/state_based_actions.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/state_based_actions.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/triggers.cpython-311.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/triggers.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/triggers.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/triggers.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/turn.cpython-311.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/turn.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/turn.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/turn.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/types.cpython-311.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/types.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/types.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/types.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/zones.cpython-311.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/zones.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/zones.cpython-312.pyc and /tmp/silverquillm_resume_25khihii/workspace/engine/__pycache__/zones.cpython-312.pyc differ
+diff -ruN a/triggers.py b/triggers.py
+--- a/triggers.py	2026-05-25 16:43:11.729292098 +0000
++++ b/triggers.py	2026-05-26 22:12:45.513003807 +0000
+@@ -70,6 +70,11 @@
+     def __init__(self) -> None:
+         self._triggers: list[TriggerRegistration] = []
+ 
++    @property
++    def triggers(self) -> list[TriggerRegistration]:
++        """Public read-only access to the list of registered triggers."""
++        return self._triggers
++
+     def register(self, trigger: TriggerRegistration) -> None:
+         """Register a triggered ability."""
+         self._triggers.append(trigger)
+diff -ruN a/zones.py b/zones.py
+--- a/zones.py	2026-05-25 16:43:11.729292098 +0000
++++ b/zones.py	2026-05-26 23:24:24.798276729 +0000
+@@ -69,6 +69,10 @@
+         """Return ``True`` if *obj* is in this zone (identity-based lookup)."""
+         return any(item is obj for item in self._objects)
+ 
++    def __contains__(self, obj: Any) -> bool:
++        """Support ``in`` operator — delegates to :meth:`contains`."""
++        return self.contains(obj)
++
+     def get_all(self) -> list[Any]:
+         """Return a shallow copy of all objects in order (bottom → top)."""
+         return list(self._objects)
+@@ -95,6 +99,10 @@
+     def __len__(self) -> int:
+         return len(self._objects)
+ 
++    def __iter__(self):
++        """Support iteration over zone contents."""
++        return iter(self._objects)
++
+     def __repr__(self) -> str:
+         return f"ZoneContainer({self._objects!r})"
+ 

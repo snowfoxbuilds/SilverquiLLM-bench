@@ -1,0 +1,25 @@
+{
+  "collector_number": "sos_113",
+  "tests_passed": 0,
+  "tests_failed": 15,
+  "tests_total": 15,
+  "pass_rate": 0.0,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_c8t_jnpc/tests.py::TestEmeritusOfConflictLightningBoltBasicProperties::test_is_creature",
+    "FAILED ../../../../tmp/eval_sos_c8t_jnpc/tests.py::TestEmeritusOfConflictLightningBoltBasicProperties::test_name",
+    "FAILED ../../../../tmp/eval_sos_c8t_jnpc/tests.py::TestEmeritusOfConflictLightningBoltBasicProperties::test_card_types",
+    "FAILED ../../../../tmp/eval_sos_c8t_jnpc/tests.py::TestEmeritusOfConflictLightningBoltBasicProperties::test_mana_cost_cmc",
+    "FAILED ../../../../tmp/eval_sos_c8t_jnpc/tests.py::TestEmeritusOfConflictLightningBoltBasicProperties::test_colors",
+    "FAILED ../../../../tmp/eval_sos_c8t_jnpc/tests.py::TestEmeritusOfConflictLightningBoltBasicProperties::test_power",
+    "FAILED ../../../../tmp/eval_sos_c8t_jnpc/tests.py::TestEmeritusOfConflictLightningBoltBasicProperties::test_toughness",
+    "FAILED ../../../../tmp/eval_sos_c8t_jnpc/tests.py::TestEmeritusOfConflictLightningBoltAbilities::test_has_first_strike",
+    "FAILED ../../../../tmp/eval_sos_c8t_jnpc/tests.py::TestEmeritusOfConflictLightningBoltAbilities::test_has_prepared",
+    "FAILED ../../../../tmp/eval_sos_c8t_jnpc/tests.py::TestEmeritusOfConflictLightningBoltAbilities::test_prepared_mechanic_implemented",
+    "FAILED ../../../../tmp/eval_sos_c8t_jnpc/tests.py::TestEmeritusOfConflictLightningBoltEdgeCases::test_instances_have_independent_state",
+    "FAILED ../../../../tmp/eval_sos_c8t_jnpc/tests.py::TestEmeritusOfConflictLightningBoltEdgeCases::test_mana_cost_matches_spec",
+    "FAILED ../../../../tmp/eval_sos_c8t_jnpc/tests.py::TestEmeritusOfConflictLightningBoltEdgeCases::test_survives_nonfatal_damage",
+    "FAILED ../../../../tmp/eval_sos_c8t_jnpc/tests.py::TestEmeritusOfConflictLightningBoltInteractions::test_combat_with_opponent",
+    "FAILED ../../../../tmp/eval_sos_c8t_jnpc/tests.py::TestEmeritusOfConflictLightningBoltInteractions::test_coexists_with_other_permanents"
+  ],
+  "skipped": false
+}

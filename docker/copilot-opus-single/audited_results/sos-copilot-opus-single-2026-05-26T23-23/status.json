@@ -1,0 +1,82 @@
+{
+  "sos_1": {
+    "status": "completed",
+    "card_name": "The Dawning Archaic"
+  },
+  "sos_107": {
+    "status": "completed",
+    "card_name": "Archaic's Agony"
+  },
+  "sos_113": {
+    "status": "completed",
+    "card_name": "Emeritus of Conflict // Lightning Bolt"
+  },
+  "sos_120": {
+    "status": "completed",
+    "card_name": "Improvisation Capstone"
+  },
+  "sos_125": {
+    "status": "completed",
+    "card_name": "Molten-Core Maestro"
+  },
+  "sos_13": {
+    "status": "completed",
+    "card_name": "Emeritus of Truce // Swords to Plowshares"
+  },
+  "sos_201": {
+    "status": "completed",
+    "card_name": "Lorehold, the Historian"
+  },
+  "sos_212": {
+    "status": "no_output",
+    "card_name": "Prismari, the Inspiration"
+  },
+  "sos_214": {
+    "status": "no_output",
+    "card_name": "Professor Dellian Fel"
+  },
+  "sos_218": {
+    "status": "no_output",
+    "card_name": "Quandrix, the Proof"
+  },
+  "sos_226": {
+    "status": "no_output",
+    "card_name": "Silverquill, the Disputant"
+  },
+  "sos_236": {
+    "status": "no_output",
+    "card_name": "Suspend Aggression"
+  },
+  "sos_245": {
+    "status": "no_output",
+    "card_name": "Witherbloom, the Balancer"
+  },
+  "sos_246": {
+    "status": "no_output",
+    "card_name": "Zaffai and the Tempests"
+  },
+  "sos_257": {
+    "status": "no_output",
+    "card_name": "Great Hall of the Biblioplex"
+  },
+  "sos_4": {
+    "status": "completed",
+    "card_name": "Together as One"
+  },
+  "sos_52": {
+    "status": "completed",
+    "card_name": "Harmonized Trio // Brainstorm"
+  },
+  "sos_57": {
+    "status": "completed",
+    "card_name": "Mana Sculpt"
+  },
+  "sos_80": {
+    "status": "completed",
+    "card_name": "Emeritus of Woe // Demonic Tutor"
+  },
+  "sos_97": {
+    "status": "completed",
+    "card_name": "Ral Zarek, Guest Lecturer"
+  }
+}
