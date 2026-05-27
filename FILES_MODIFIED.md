@@ -37,3 +37,13 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 - `benchmarks/sos/data/test_oracle_workspace/engine/game.py` — Extended deal_damage() to handle planeswalker targets (remove loyalty counters)
 - `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_4/__init__.py` — Package init for test discovery
 - `benchmarks/sos/data/tests/audited/sos/sos_4/tests.py` — Copy of rewritten tests to final audited location
+
+## Item 4: sos_13 — Emeritus of Truce // Swords to Plowshares oracle impl
+
+### Tests
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_13/tests.py` — 6 tests: identity, ETB token via cast_spell with player targeting, token characteristics (2/1 flying), prepared back-face exile+lifegain, prepared rejection, CMC invariant
+
+### Implementation
+- `benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_13/card_impl.py` — Full oracle impl: Creature {1}{W}{W} CMC 3, dual-mode (front=ETB 2/1 Inkling to target player, back=exile creature+lifegain via prepared from exile), uses TargetRequirement, on_resolve handles both faces
+- `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_13/__init__.py` — Package init for test directory
+- `benchmarks/sos/data/tests/audited/sos/sos_13/tests.py` — Copy of rewritten tests to audited location

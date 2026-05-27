@@ -14,3 +14,9 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Reasoning**: Matches the pattern used in the canonical audited test conftest; makes tests impl-agnostic.
 - **Impact**: `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/conftest.py`
 
+## Design: sos_13 dual-mode card (front creature + back instant)
+- **Context**: Emeritus of Truce // Swords to Plowshares is a split card with prepared mechanic.
+- **Decision**: Single class with `_casting_back_face` flag. Mode detected in `can_cast()` when card is in exile + prepared. `get_targets()` and `on_resolve()` branch on this flag.
+- **Reasoning**: Simpler than separate instant class; the `cast_spell_free` flow operates on same card object from exile.
+- **Impact**: `benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_13/card_impl.py`
+

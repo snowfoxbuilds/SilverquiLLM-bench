@@ -39,7 +39,7 @@ Sequencing note: Item 1 (oracle workspace + validation harness) lands first beca
 
   Testability: 5 rewritten tests pass against oracle; rerun against agent impl produces expected diffs.
 
-- [ ] **4. sos_13 — Emeritus of Truce // Swords to Plowshares: oracle impl + rewritten tests**
+- [x] **4. sos_13 — Emeritus of Truce // Swords to Plowshares: oracle impl + rewritten tests**
   Detail: Bug pattern — split-Prepared CMC summed to 4 instead of front-face 3 (general issue #2). Xmage analogs: Plargg / Augusta Dean DFC (front+back structure) + Heaven // Earth (split-card class shape). Implement: `mana_cost = {1}{W}{W}`, CMC **3** (front face only); Prepared as ability-word-gated alternative-cost-from-exile (the `// {W}` is metadata on the alt-cost ability, not part of CMC); ETB token creation on front face; alternative cast from exile when `_prepared` flag set. 6 rewritten tests: identity (CMC 3, no `PREPARED` keyword), ETB tokens (keep existing), tokens on battlefield (keep), prepared alt-cost available when in exile + prepared, prepared alt-cost rejected when not prepared (probes gating, not method name), back-half-cost-not-in-CMC redundancy check. Delete `test_mana_cost_cmc` (asserts 4) and `test_has_prepared` (asserts keyword). Full detail in [Prompt: SOS 10-card Test Audit (Oracle-First)](https://www.notion.so/364f165c922043409955bc65f55a2d74) § sos_13.
 
   Files: `test_oracle_workspace/cards/sos/sos_13/card_impl.py` (new), `test_oracle_workspace/tests/audited/sos/sos_13/tests.py` (develop), `benchmarks/sos/data/tests/audited/sos/sos_13/tests.py` (copy after green).
