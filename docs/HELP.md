@@ -24,6 +24,10 @@ docker build -t silverquillm-copilot-claude-opus-4.6:latest docker/copilot-claud
 docker build -t silverquillm-copilot-claude-opus-4.7:latest docker/copilot-claude-opus-4.7/
 docker build -t silverquillm-copilot-claude-sonnet-4.6:latest docker/copilot-claude-sonnet-4.6/
 docker build -t silverquillm-copilot-sonnet-single:latest docker/copilot-sonnet-single/
+docker build -t silverquillm-copilot-gpt54-single:latest docker/copilot-gpt54-single/
+docker build -t silverquillm-copilot-gpt54-sonnet-reviewer:latest docker/copilot-gpt54-sonnet-reviewer/
+docker build -t silverquillm-copilot-sonnet-gpt54-reviewer:latest docker/copilot-sonnet-gpt54-reviewer/
+
 docker build -t silverquillm-copilot-opus-single:latest docker/copilot-opus-single/
 
 # Smoke
@@ -38,7 +42,10 @@ silverquillm run --image silverquillm-copilot-gpt-5.4:latest --timeout 360000
 silverquillm run --image silverquillm-copilot-gpt-5.5:latest --timeout 360000
 silverquillm run --image silverquillm-copilot-claude-opus-4.6:latest --timeout 360000
 silverquillm run --image silverquillm-copilot-claude-sonnet-4.6:latest --timeout 360000
-silverquillm run --image silverquillm-copilot-sonnet-single:latest --cards 1,4,13,52,57,80,97,107,113,120,125,201,212,214,218,226,236,245,246,257  --timeout 360000
+silverquillm run --image silverquillm-copilot-sonnet-single:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000
+silverquillm run --image silverquillm-copilot-gpt54-single:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000
+silverquillm run --image silverquillm-copilot-gpt54-sonnet-reviewer:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000
+silverquillm run --image silverquillm-copilot-sonnet-gpt54-reviewer:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000
 silverquillm run --image silverquillm-copilot-opus-single:latest --cards 1,4,13,52,57,80,97,107,113,120,125,201,212,214,218,226,236,245,246,257  --timeout 360000
 
 silverquillm run \
