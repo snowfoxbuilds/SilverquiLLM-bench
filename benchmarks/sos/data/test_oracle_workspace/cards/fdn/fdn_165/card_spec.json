@@ -1,0 +1,19 @@
+{
+  "name": "Think Twice",
+  "mana_cost": "{1}{U}",
+  "type_line": "Instant",
+  "oracle_text": "Draw a card.\nFlashback {2}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Flashback"
+  ],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "165",
+  "complexity_tier": "medium"
+}

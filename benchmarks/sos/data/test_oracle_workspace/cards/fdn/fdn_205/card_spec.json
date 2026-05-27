@@ -1,0 +1,20 @@
+{
+  "name": "Wardens of the Cycle",
+  "mana_cost": "{3}{B}{G}",
+  "type_line": "Creature — Treefolk",
+  "oracle_text": "Converge — When this creature enters, create a 1/1 green Saproling creature token for each color of mana spent to cast it.",
+  "power": "4",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "B",
+    "G"
+  ],
+  "keywords": [
+    "Converge"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "205",
+  "complexity_tier": "medium"
+}

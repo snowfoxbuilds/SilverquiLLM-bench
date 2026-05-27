@@ -1,0 +1,17 @@
+{
+  "name": "Goblin Surprise",
+  "mana_cost": "{2}{R}",
+  "type_line": "Instant",
+  "oracle_text": "Choose one —\n• Creatures you control get +2/+0 until end of turn.\n• Create two 1/1 red Goblin creature tokens.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "200",
+  "complexity_tier": "medium"
+}
