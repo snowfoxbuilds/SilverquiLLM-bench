@@ -1,0 +1,10 @@
+2026-05-27T01:04:58+00:00 Starting run: sos-copilot-gpt54-single-2026-05-27T01-04
+2026-05-27T01:04:58+00:00 Image: silverquillm-copilot-gpt54-single:latest
+2026-05-27T01:04:58+00:00 Timeout: 360000s
+2026-05-27T01:04:58+00:00 Workspace staged at: /tmp/silverquillm_run_dnvagpsx/workspace
+2026-05-27T01:04:58+00:00 Running container: sqm-sos-copilot-gpt54-single-2026-05-27T01-04
+2026-05-27T04:10:28+00:00 Harvesting results...
+2026-05-27T04:10:29+00:00 Results saved to: /home/sean/repos/SilverquiLLM-bench/docker/copilot-gpt54-single/results/sos-copilot-gpt54-single-2026-05-27T01-04
+2026-05-27T04:11:10+00:00 Evaluation complete: 10 SOS cards scored
+2026-05-27T04:11:10+00:00 Run summary written to: /home/sean/repos/SilverquiLLM-bench/docker/copilot-gpt54-single/results/sos-copilot-gpt54-single-2026-05-27T01-04/run_summary.json
+2026-05-27T04:11:10+00:00 Run complete: sos-copilot-gpt54-single-2026-05-27T01-04
