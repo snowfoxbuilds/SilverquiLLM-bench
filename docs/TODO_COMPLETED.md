@@ -1,6 +1,28 @@
+## Completed 2026-05-26
+
+Phase 16: Workspace as Pre-Built Directory (10 items). Restructured the staged workspace from per-file assembly into a real pre-built directory at `benchmarks/sos/workspace/` copied wholesale at stage time. Driven by ADR-007. Major moves landed atomically (`engine/`, `cards/`, audited tests, workspace test infra); `stage_workspace()` reduced to a 4-step `cp -r` + per-run writes + `git init` flow; per-file staging code and the `_REFERENCE_DOCS`/`_RULEBOOK_SRC` constants deleted; CI-time workspace structure test added.
+
+- [x] **1.1 Create workspace skeleton and author static files**
+- [x] **1.2 Move ****`rulebook.txt`**** into the workspace**
+- [x] **1.3 Move workspace test infrastructure into the workspace**
+- [x] **1.4 Move ****`engine/`**** to ****`benchmarks/sos/workspace/engine/`**** and update all imports (LARGE STRUCTURAL MOVE)**
+- [x] **1.5 Move ****`cards/`**** to ****`benchmarks/sos/workspace/cards/`**** and normalize SOS stubs (LARGE STRUCTURAL MOVE)**
+- [x] **1.6 Author FDN Reference Tests at ****`benchmarks/sos/workspace/cards/fdn/{cn}/tests.py`**
+- [x] **1.7 Move audited tests to ****`benchmarks/sos/data/tests/audited/`**** and update evaluator paths**
+- [x] **Rewrite ****`stage_workspace()`**** to the four-step form**
+- [x] **Delete deprecated per-file staging code**
+- [x] **Add CI-time workspace structure test**
+Phase 17: TUI Telemetry Fixes (6 items). Made `silverquillm logs --live` actually populate every tab during a run. `docker_stdout.log`/`docker_stderr.log` now stream directly to `run_dir`; `snapshot_callback` wired in `cli.py` so `snapshot_telemetry.jsonl` populates every 60s; runner `click.echo` calls teed to `runner.log`/`runner_errors.log`; live mode hides structurally-empty channels with 1Hz rediscovery polling; `FastTelemetry._poll_mtimes` emits a bootstrap line on first pass; `progress.jsonl` channel and entrypoint emission dropped entirely.
+
+- [x] **Write ****`docker_stdout.log`**** and ****`docker_stderr.log`**** directly to ****`run_dir`**** during the run**
+- [x] **Wire ****`snapshot_callback`**** in ****`cli.py`**** so ****`snapshot_telemetry.jsonl`**** populates**
+- [x] **Tee runner ****`click.echo`**** calls into ****`runner.log`**** and ****`runner_errors.log`**
+- [x] **Hide structurally-empty channels in live mode with rediscovery polling**
+- [x] **Emit a bootstrap line on first ****`FastTelemetry._poll_mtimes`**** pass**
+- [x] **Drop ****`progress.jsonl`**** channel and entrypoint emission**
 ## Completed 2026-05-24
 
-Phase 13–15: Post-05-23-run findings, telemetry improvements, and workspace contract / triage (10 items). These framed the implementation cycle that fed the `sos-copilot-gpt-5.4-2026-05-24T08-05` benchmark run. Status at archive time is mixed (most landed; a few were partial); superseded by Phase 16/17 in TODO.
+Phase 13–15: Post-05-23-run findings, telemetry improvements, and workspace contract / triage (10 items). These framed the implementation cycle that fed the `sos-copilot-gpt-5.4-2026-05-24T08-05` benchmark run. Status at archive time is mixed (most landed; a few were partial); superseded by Phase 16/17 (now also completed).
 
 - [x] **Wire up workspace reference material correctly**
 - [x] **`--cards`****-aware status / summary / postmortem plumbing**

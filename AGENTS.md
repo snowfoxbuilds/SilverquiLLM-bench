@@ -60,6 +60,7 @@ Architectural decisions are documented under the ADRs page:
 | `ADR-007` | Workspace as pre-built directory — wholesale `cp -r` from `benchmarks/sos/workspace/`; canonical engine source; collapses staging code and removes spec/code drift |
 | `ADR-008` | Resume Legs are independent Benchmark Runs — `silverquillm resume <prior-run-id>` stages from prior `workspace_final/`; legs linked via `resumed_from`; prompt-layer owns resume detection |
 | `ADR-009` | Resume reads prefer run-time artifacts over harvest-time artifacts — manifest + snapshot ledger over `run_summary.json`; resilient to partial harvester failure; ledger format now load-bearing |
+| `ADR-010` | Test Oracle Workspace uses independent engine — agent-visible engine and `test_utils.py` frozen for Phase 18; oracle workspace's `engine/` may diverge with mechanic-specific extensions (miracle, casualty, paradigm primitives); audited tests use only canonical-engine APIs |
 
 ## Harness Structure
 

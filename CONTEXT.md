@@ -192,6 +192,30 @@ Task-specific instruction written by the runner to `/workspace/prompt.md` at sta
 
 *Avoid*: "task prompt", "workspace prompt"
 
+**Ability Word**
+
+Italicized flavor label printed on a card naming a triggered or static effect (e.g. Converge, Prepared, Opus, Paradigm, Landfall, Heroic). Has no inherent rules meaning — the actual rules text follows the label and produces the behavior. Tests target the behavior described by that text, never the label itself.
+
+*Avoid*: "keyword" (Ability Words are not Keyword Abilities), "flag", "tag"
+
+**Keyword Ability**
+
+MTG rules construct the engine implements (e.g. Flying, Reach, Deathtouch, Affinity, Casualty, Cascade, the Miracle keyword). Cards with a Keyword Ability inherit its rules text by reference. Tests probe the behavior produced by the keyword, not just presence in a `keywords[]` list.
+
+*Avoid*: "ability word" (distinct concept — see Ability Word)
+
+**Test Oracle Impl**
+
+Host-side `card_impl.py` inside the Test Oracle Workspace that encodes the correct mechanic for one audited SOS card, derived from xmage. Used solely as the validation oracle for the rewritten audited test suite — a test must pass against the matching Test Oracle Impl before it is committed. Never staged into agent runs.
+
+*Avoid*: "reference implementation" (already names FDN learning material at `workspace/cards/fdn/{cn}/card_impl.py`), "gold impl"
+
+**Test Oracle Workspace**
+
+Host-side pre-built workspace at `benchmarks/sos/data/test_oracle_workspace/` that **mirrors **`benchmarks/sos/workspace/`** 1:1** — `engine/`, `cards/fdn/`, `cards/sos/` (with stubs for non-audited cards), `tests/`, `test_utils.py`, `AGENTS.md`, `pytest.ini`. Contains the Test Oracle Impls for every audited SOS card and an independent copy of `engine/` that may diverge from the canonical agent-visible engine. The oracle workspace's `test_utils.py` is the **home for the host-side ergonomic helpers** used by audited tests (`set_mana_pool`, `set_hand`, `set_battlefield`, `set_library_top`, `set_graveyard`, `assert_on_stack`, `assert_in_zone`, `assert_casting_error`) — there is no separate `silverquillm/test_utils.py`. Audited tests develop against this workspace and are copied to the canonical audited path at `benchmarks/sos/data/tests/audited/` once green. Never staged into agent runs; never seen by the agent. See ADR-010.
+
+*Avoid*: "reference workspace" (reference is overloaded), "oracle" alone (ambiguous)
+
 ## Relationships
 
 - A Benchmark Run evaluates one Agent Container (one agent + one model) against one Draft Set.
@@ -219,3 +243,7 @@ Task-specific instruction written by the runner to `/workspace/prompt.md` at sta
 - Output Snapshots are runner-owned, Workspace-only, and independent of Agent Container cooperation. The runner may use prior snapshot commits as fallback if final engine state is corrupted.
 - The runner writes the User Prompt to `/workspace/prompt.md`; Agent Containers bake System Prompts into their entrypoints.
 - Hard Timeout and Hang Timeout are independent — either can trigger `docker stop -t 10` to end a benchmark run.
+- Test Oracle Workspace's `engine/` is independent of canonical `benchmarks/sos/workspace/engine/`. Canonical engine is frozen with respect to Phase 18 work to preserve cross-run benchmark comparability and to keep Engine Extension Quality scoring meaningful; engine extensions needed by Test Oracle Impls live in the oracle's engine only. See ADR-010.
+- Audited tests call only public APIs present in the canonical engine. Tests never depend on extensions present in the Test Oracle Workspace's engine but absent from canonical — otherwise correct agent impls using different primitives would fail tests for non-correctness reasons.
+- Audited tests are authored inside the Test Oracle Workspace mirror at `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_{cn}/tests.py` and copied to the canonical audited path at `benchmarks/sos/data/tests/audited/sos/sos_{cn}/tests.py` once green against the matching Test Oracle Impl. The canonical path is what the validation harness `tests/test_audited_against_reference.py` reads from when running against agent impls.
+- Audited tests target observable game-state outcomes ("what the card does"), not card-text annotations ("what the card says"). Ability Words are not tested for presence; only the behavior described by the text following the ability word is asserted.

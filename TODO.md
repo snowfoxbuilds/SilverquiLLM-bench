@@ -2,217 +2,102 @@
 
 Reference: post-05-24 run analysis on `docker/copilot-gpt-5.4/results/sos-copilot-gpt-5.4-2026-05-24T08-05`. Goal: a stable benchmark substrate for models and harnesses — staging correctness and live-mode observability come first; agent/harness prompt iteration is on-roadmap but deferred.
 
-## Phase 16: Workspace as Pre-Built Directory (post 05-24 run)
+## Phase 18: SOS 10-card Test Audit (oracle-first)
 
-Scope: Restructure the workspace from per-file staging assembled by `silverquillm/workspace.py` into a real pre-built directory at `benchmarks/sos/workspace/` in the bench repo, copied wholesale at stage time. Driven by ADR-007. The 05-24 run exposed assembly fragility (missing `AGENTS.md`/`PROJECT_MAP.md`, no pytest config, no `.git/`, no FDN test exemplars); rather than patching per-file staging item-by-item, we move the workspace into a real inspectable, dev-testable directory.
+Scope: Rewrite the audited tests for the 10-card SOS subset (sos_1, 4, 13, 57, 97, 120, 201, 226, 245, 257) to be both **correct** (validated against an xmage-derived Test Oracle Implementation) and **generic** (impl-agnostic — no method-name probes, no stack bypasses, no ability-words-as-keywords). Also codify the test-writing rules in [TEST-SUITE.md](http://test-suite.md/) so the same patterns don't recur across the rest of the SOS set.
 
-Reference: `silverquillm/workspace.py`, ADR-007, [WORKSPACE-CONTRACT.md](http://workspace-contract.md/), [BENCHMARK-RUNNER.md](http://benchmark-runner.md/), [CONTEXT.md](http://context.md/) (Workspace, SOS Card Stub, FDN Reference Tests terms).
+Driver: 2026-05-26 audit of the 10-card subset surfaced 10 recurring bug patterns in the audited suite (ability words asserted as keywords, split-card CMC summing, `move_to_zone(STACK→GY)` on never-cast cards, `on_resolve` without target setup, may-treated-as-mandatory, method-name coupling, role misreads, vacuous-pass-via-missing-method, templated test generation, hard mechanics untested). Full per-card breakdown and rewritten test lists in [Prompt: SOS 10-card Test Audit (Oracle-First)](https://www.notion.so/364f165c922043409955bc65f55a2d74).
 
----
+Reference: [Prompt: SOS 10-card Test Audit (Oracle-First)](https://www.notion.so/364f165c922043409955bc65f55a2d74), xmage repo at <[https://github.com/magefree/mage](https://github.com/magefree/mage)>, [TEST-SUITE.md](https://www.notion.so/a50ff4a1782e4badbc4419b6cbaface9), [CONTEXT.md](https://www.notion.so/3a3e1d4cf0384c3cb2735ae280b71918), [AGENTS.md](https://www.notion.so/f30d8736de64455d97acc36d05861df5).
 
-Sequencing note: Items 1.1–1.7 below replace what was previously a single mega-item. The split exists because structural moves of `engine/` and `cards/` touch many import sites and must be completed atomically within their commit — a half-finished move leaves the codebase un-importable. Items are ordered so all purely additive work lands first, then the two dangerous moves, then dependent items.
-
-- [ ] **1.1 Create workspace skeleton and author static files**
-  Detail: Purely additive commit. Create the empty directory structure and author the static workspace files. Nothing is moved yet; existing tests still pass.
-
-  - Create directories: `benchmarks/sos/workspace/{engine,cards/fdn,cards/sos,tests/engine}/`. Add `.gitkeep` or initial `__init__.py` files where needed for Python package discovery.
-  - Author `benchmarks/sos/workspace/AGENTS.md` — orientation doc only: task framing ("implement SOS cards in `cards/sos/{card_id}/card_impl.py`"), hard rules (card location, staged-test integrity, additive-only engine modifications — cross-reference [WORKSPACE-CONTRACT.md](http://workspace-contract.md/) Decisions), canonical test commands (`pytest` from workspace root discovers FDN reference tests + `tests/engine/` via the workspace `pytest.ini` `python_files` config), engine extension scope (may add files/methods and modify existing function bodies; may NOT rename, move, or delete anything existing in `engine/` — no refactoring), git availability, and a pointer to `PROJECT_MAP.md` for the directory layout. Does NOT duplicate the directory map.
-  - Author `benchmarks/sos/workspace/PROJECT_MAP.md` — directory summary only: one line per top-level file/directory. No helper API reference, no task framing, no commands — strictly a navigation lookup.
-  - Author `benchmarks/sos/workspace/pytest.ini` setting `timeout = 30` and `python_files = test_*.py tests.py` so colocated FDN reference tests (`cards/fdn/{cn}/tests.py`) are discovered alongside `tests/engine/test_*.py`.
-  - Author `benchmarks/sos/workspace/.gitignore` covering `__pycache__/`, `*.pyc`, `.pytest_cache/`, `*.log`, `*.jsonl`, `.coverage`, `htmlcov/`, `decisions.md.tmp`.
-  Files: `benchmarks/sos/workspace/{AGENTS.md,PROJECT_MAP.md,pytest.ini,.gitignore}` (new), `benchmarks/sos/workspace/{engine,cards/fdn,cards/sos,tests/engine}/` (new empty dirs).
-
-  Testability: `ls benchmarks/sos/workspace/{AGENTS.md,PROJECT_MAP.md,pytest.ini,.gitignore}` succeeds. Existing `pytest` from repo root still passes (nothing moved yet).
-
-- [ ] **1.2 Move ****`rulebook.txt`**** into the workspace**
-  Detail: Move the rulebook from its current location (root `rulebook.txt` or `docs/rulebook.txt` — locate via `find . -name 'rulebook.txt' -not -path './.git/*'`) to `benchmarks/sos/workspace/rulebook.txt` via `git mv` so history is preserved. Update any documentation references in other markdown files to the new path (`grep -rln 'rulebook.txt' --include='*.md' .`).
-
-  Files: current `rulebook.txt` location (moved), any markdown files referencing it.
-
-  Testability: `ls benchmarks/sos/workspace/rulebook.txt` succeeds; the old path no longer exists; `git log --follow benchmarks/sos/workspace/rulebook.txt` shows continuous history.
-
-- [ ] **1.3 Move workspace test infrastructure into the workspace**
-  Detail: `git mv` the workspace-local test files from top-level `tests/` into `benchmarks/sos/workspace/tests/`, and move `docs/test_utils.md` alongside its `.py` counterpart. Bodies stay identical — only locations change:
-
-  - `tests/test_utils.py` → `benchmarks/sos/workspace/tests/test_utils.py`
-  - `tests/__init__.py` → `benchmarks/sos/workspace/tests/__init__.py`
-  - `tests/conftest.py` → `benchmarks/sos/workspace/tests/conftest.py`
-  - `tests/engine/` → `benchmarks/sos/workspace/tests/engine/` (replaces the empty dir from Item 1.1)
-  - `docs/test_utils.md` → `benchmarks/sos/workspace/tests/test_utils.md`
-  - Top-level `pytest.ini` → delete (the workspace-local `pytest.ini` from Item 1.1 becomes canonical). If host-side `silverquillm/` tests need separate pytest config, move it into a `[tool.pytest.ini_options]` block in repo-root `pyproject.toml` in the same commit.
-  Sweep imports of the moved test helpers (`grep -rln '^from tests\.\|^import tests\.\|from tests import' --include='*.py' .`) and update each to the new path. Note: `tests/engine/` test files themselves don't need import updates yet because `engine/` hasn't moved — those updates happen as part of Item 1.4.
-
-  Files: paths listed above (moved), top-level `pytest.ini` (deleted), `pyproject.toml` (optional host-side pytest config), any callers of `tests.test_utils` (import updates).
-
-  Testability: `pytest benchmarks/sos/workspace/tests/engine/` runs (tests may still pass against the old top-level `engine/` since `engine/` hasn't moved yet — that is Item 1.4). After Phase 16 fully lands, `cd benchmarks/sos/workspace && pytest tests/engine/` passes.
-
-- [ ] **1.4 Move ****`engine/`**** to ****`benchmarks/sos/workspace/engine/`**** and update all imports (LARGE STRUCTURAL MOVE)**
-  Detail: Single commit that relocates the engine package and rewrites every import site. **This commit will produce intermediate broken-test states during execution. Do not abort partway through. Do not commit a partial move.** The done-state criteria below are non-negotiable; if you cannot reach them, abandon the working tree and start the item fresh.
-
-  - Step A: `git mv engine benchmarks/sos/workspace/engine` (preserve history). If the directory-level `git mv` fails for any reason, fall back to per-file `git mv` of each file under `engine/`.
-  - Step B: Enumerate all import sites: `grep -rln '^from engine\b\|^import engine\b' --include='*.py' . | sort -u`. Expected locations: every file in `silverquillm/` that touches game logic, every file in `tests/audited/`, possibly some `cards/` files that import engine internals.
-  - Step C: Update each matched file: `from engine.X` → `from benchmarks.sos.workspace.engine.X`, `import engine` → `import benchmarks.sos.workspace.engine as engine` (preserve the local `engine` alias where existing code relies on it). Use a scripted sed pass for the common cases and hand-edit any complex ones.
-  - Step D: Iterate on remaining `ImportError`s until done-state holds.
-  Done-state verification (all three must hold before committing):
-
-  1. `grep -rln '^from engine\b\|^import engine\b' --include='*.py' .` returns zero matches outside `benchmarks/sos/workspace/engine/` itself.
-  2. `pytest` from repo root exits 0 (full host-side suite, including audited tests).
-  3. `python -c "from benchmarks.sos.workspace.engine.card import CardImpl; from benchmarks.sos.workspace.engine.casting import cast_spell, cast_spell_free, resolve_top; print('ok')"` succeeds.
-  Files: `engine/**` (moved), `silverquillm/**` (import updates), `tests/audited/**` (import updates), any `cards/**` files that import engine internals (import updates).
-
-  Testability: Per the three done-state checks. Add a focused unit test `tests/test_engine_import_surface.py` (host-side) asserting each of `CardImpl`, `cast_spell`, `cast_spell_free`, `resolve_top` is importable from `benchmarks.sos.workspace.engine.*`.
-
-- [ ] **1.5 Move ****`cards/`**** to ****`benchmarks/sos/workspace/cards/`**** and normalize SOS stubs (LARGE STRUCTURAL MOVE)**
-  Detail: Single commit that relocates the cards directory, rewrites all `cards.*` import sites, and brings SOS stub files to the canonical class form. **Same atomicity rule as Item 1.4: do not commit a partial move. Do not abort partway through.**
-
-  - Step A: `git mv cards benchmarks/sos/workspace/cards` (preserve history).
-  - Step B: Enumerate import sites: `grep -rln '^from cards\b\|^import cards\b' --include='*.py' . | sort -u`. Update each from `from cards.X` → `from benchmarks.sos.workspace.cards.X` and `import cards` → `import benchmarks.sos.workspace.cards as cards`.
-  - Step C: Normalize SOS card stubs to the canonical form `class CardName(CardImpl):\n    """TODO: ..."""\n    pass`. Files currently docstring-only that need a class declaration added (post-move paths): `benchmarks/sos/workspace/cards/sos/spg_158/card_impl.py`, `.../sos_195/card_impl.py`, `.../sos_217/card_impl.py`, `.../sos_218/card_impl.py`. The `CardName` class name follows the same PascalCase-from-card-name convention used in already-normalized stubs (`sos_5`, `sos_55`).
-  - Step D: Iterate on remaining errors until done-state holds.
-  Done-state verification (all three must hold before committing):
-
-  1. `grep -rln '^from cards\b\|^import cards\b' --include='*.py' .` returns zero matches outside `benchmarks/sos/workspace/cards/`.
-  2. `pytest` from repo root exits 0.
-  3. Every SOS card module is a valid class definition: `python -c "import ast, glob; [ast.parse(open(f).read()) for f in glob.glob('benchmarks/sos/workspace/cards/sos/*/card_impl.py')]; print('ok')"` succeeds, and a parametrized check confirms each module contains at least one class inheriting from `CardImpl`.
-  Files: `cards/**` (moved), `silverquillm/**` (imports), `tests/audited/**` (imports), the four normalized SOS stub files.
-
-  Testability: Per done-state checks. Add a parametrized unit test that imports every `benchmarks.sos.workspace.cards.sos.*.card_impl` module dynamically and asserts each defines a class inheriting from `CardImpl`.
-
-- [ ] **1.6 Author FDN Reference Tests at ****`benchmarks/sos/workspace/cards/fdn/{cn}/tests.py`**
-  Detail: Author 3–5 illustrative FDN test files covering representative mechanics: Converge mana-color tracking, modal spell, targeted ETB, multi-blocker combat, replacement effect. Choose the specific FDN collector numbers based on which already-implemented FDN cards cleanly exercise each mechanic (inspect `benchmarks/sos/workspace/cards/fdn/{cn}/card_impl.py` to confirm). Use `benchmarks/sos/workspace/tests/test_utils.py` helpers and follow the patterns established in `benchmarks/sos/workspace/tests/engine/`. These tests are illustrative learning material the agent will see; they may overlap freely with audited FDN tests at `benchmarks/sos/data/tests/audited/fdn/` (no contamination concern — the agent is not graded on either FDN suite).
-
-  Files: `benchmarks/sos/workspace/cards/fdn/{cn}/tests.py` for 3–5 chosen FDN cards (new).
-
-  Testability: `cd benchmarks/sos/workspace && pytest cards/fdn/` discovers and passes the new tests. Each test imports from `benchmarks.sos.workspace.engine` and `benchmarks.sos.workspace.cards.fdn.{cn}.card_impl` (paths now correct after Items 1.4 and 1.5).
-
-- [ ] **1.7 Move audited tests to ****`benchmarks/sos/data/tests/audited/`**** and update evaluator paths**
-  Detail: Move host-side audited tests from top-level `tests/audited/` to `benchmarks/sos/data/tests/audited/{fdn,sos}/`. This consolidates the bench-side input layout under `benchmarks/sos/data/` ("everything the bench owns but the agent never sees"). Also update `silverquillm/evaluator.py` so audited-test paths and `test_utils.py` resolution both point at the new locations:
-
-  - Audited tests path: `_REPO_ROOT / "benchmarks/sos/data/tests/audited"` (or `_BENCHMARK_SET_ROOT / "data/tests/audited"` if Item 2 has already landed — either form is fine).
-  - `test_utils.py` source for eval tempdir copies: `_REPO_ROOT / "benchmarks/sos/workspace/tests/test_utils.py"` (now alongside the workspace).
-  - Update any import statements in the moved audited test files from old `engine`/`cards` paths to `benchmarks.sos.workspace.engine`/`benchmarks.sos.workspace.cards` (consequence of Items 1.4 and 1.5; these may already be updated as part of those items' import sweeps).
-  Files: `tests/audited/**` → `benchmarks/sos/data/tests/audited/**` (moved), `silverquillm/evaluator.py` (path updates).
-
-  Testability: `ls tests/audited/` fails (path no longer exists); `ls benchmarks/sos/data/tests/audited/{fdn,sos}/` succeeds. A small end-to-end evaluation run (`silverquillm run --cards 1` then `silverquillm evaluate <run>`) produces a `run_summary.json` matching a pre-restructure baseline.
-
-- [ ] **Rewrite ****`stage_workspace()`**** to the four-step form**
-  Detail: Replace per-file assembly in `silverquillm/workspace.py` with `cp -r` + per-run writes + `git init`:
-
-  ```python
-_BENCHMARK_SET_NAME = "sos"  # module-level; promote to CLI flag when adding a second target set
-_BENCHMARK_SET_ROOT = _REPO_ROOT / "benchmarks" / _BENCHMARK_SET_NAME
-
-def stage_workspace(tmp_run_dir: Path, prompt_text: str, run_manifest: dict) -> Path:
-    src = _BENCHMARK_SET_ROOT / "workspace"
-    dst = tmp_run_dir / "workspace"
-    shutil.copytree(src, dst)
-    (dst / "prompt.md").write_text(prompt_text, encoding="utf-8")
-    (dst / "run_manifest.json").write_text(json.dumps(run_manifest, indent=2), encoding="utf-8")
-    subprocess.run(["git", "init", "-q"], cwd=dst, check=True)
-    subprocess.run(["git", "add", "-A"], cwd=dst, check=True)
-    subprocess.run(["git", "-c", "user.name=runner", "-c", "user.email=runner@silverquillm", "commit", "-q", "-m", "initial workspace"], cwd=dst, check=True)
-    return dst
-  ```
-
-  Drop `_REFERENCE_DOCS`, `_RULEBOOK_SRC`, `_RULES_OVERVIEW_SRC`, and every per-file copy helper. Assert `_BENCHMARK_SET_ROOT / "workspace"` exists and is non-empty before `copytree` (cheap pre-flight; raises `FileNotFoundError` with a clear message if the canonical directory is missing). The new function is roughly 15 lines plus imports.
-
-  Files: `silverquillm/workspace.py`.
-
-  Testability: `silverquillm run --cards 1` produces a staged directory matching `benchmarks/sos/workspace/` byte-for-byte plus `prompt.md` and `run_manifest.json`. `git -C <staged_dir> log --oneline` shows exactly one commit. Add `tests/integration/test_stage_workspace.py` asserting the staged tree equals the source tree plus the two per-run files.
-
-- [ ] **Delete deprecated per-file staging code**
-  Detail: After Item 2 (the `stage_workspace()` rewrite) lands, remove the now-unused per-file staging helpers and constants from `silverquillm/workspace.py`. These were used by the old per-file workspace assembly and are dead code once `stage_workspace()` is the four-step `cp -r` form. Specifically delete:
-
-  - `_REFERENCE_DOCS` constant
-  - `_RULEBOOK_SRC`, `_RULES_OVERVIEW_SRC` constants
-  - Any helpers that built per-file copies (`_stage_reference_docs`, `_copy_with_replacement`, etc.)
-  Audited-test relocation and `evaluator.py` path updates are handled in Item 1.7, not here.
-
-  Files: `silverquillm/workspace.py`.
-
-  Testability: `grep -rn '_REFERENCE_DOCS\|_RULEBOOK_SRC\|_RULES_OVERVIEW_SRC\|_stage_reference_docs' silverquillm/` returns zero matches. `silverquillm run --cards 1` still produces a valid staged workspace (the deleted code was unreachable after Item 2).
-
-- [ ] **Add CI-time workspace structure test**
-  Detail: Author `tests/test_workspace_structure.py` (host-side, not staged into the workspace). Asserts `benchmarks/sos/workspace/` contains the expected top-level entries: `engine/`, `cards/fdn/`, `cards/sos/`, `tests/`, `AGENTS.md`, `PROJECT_MAP.md`, `rulebook.txt`, `pytest.ini`, `.gitignore`. Replaces the old per-file hard-error enumeration that used to live in `stage_workspace()` — drift is now caught at PR-review time rather than at run time.
-
-  Files: `tests/test_workspace_structure.py` (new).
-
-  Testability: Run the test against current `benchmarks/sos/workspace/` — passes. Temporarily rename or delete a top-level entry locally; the test fails with a message naming the missing entry. CI catches it before merge.
-
-## Phase 17: TUI Telemetry Fixes (live-mode observability)
-
-Scope: Make `silverquillm logs --live` actually populate every tab during a run. Currently only `[system]` populates live; the others are unwritten, written-only-on-exit, or written by an unwired callback. Sequencing matters: items 1–3 produce the missing files, then item 4 hides any channels that remain structurally empty.
-
-Reference: `silverquillm/telemetry.py`, `silverquillm/runner.py`, `silverquillm/cli.py`, `silverquillm/logs_viewer.py`, `docs/specs/RUN-ARTIFACTS-AND-TELEMETRY.md`.
+Sequencing note: Item 1 (oracle workspace + validation harness) lands first because it gates every subsequent item; items 2–11 (per-card oracle impl + rewritten tests) can run in any order after item 1, with sos_57 (item 5) as the flagship that lands first per Q10; item 12 (CI regex audit) lands last once the per-card work has shaken out the canonical patterns. **Per-card acceptance bar (Q12 (c))**: each per-card item is "done" only when (a) rewritten tests pass against the oracle impl via the validation harness, (b) oracle impl matches verbatim `card_spec.json` (no engine-clamping shortcuts), (c) per-card peer-review checkpoint passes — see [Prompt: SOS 10-card Test Audit (Oracle-First)](https://www.notion.so/364f165c922043409955bc65f55a2d74) § Completion criteria → Per-card acceptance bar.
 
 ---
 
-- [ ] **Write ****`docker_stdout.log`**** and ****`docker_stderr.log`**** directly to ****`run_dir`**** during the run**
-  Detail: `silverquillm/runner.py:_drain_pipe` currently writes to `output/docker_stdout.tmp` and `output/docker_stderr.tmp` during the run; `ContainerLifecycle.run()` copies them to `output/docker_stdout.log` / `docker_stderr.log` only after the container exits; `cli.py:_harvest_results` then copies those into `run_dir`. As a result, the `[stdout]` and `[stderr]` tabs are empty until the run finishes.
+- [ ] **1. Bootstrap Test Oracle Workspace + validation harness**
+  Detail: Bootstrap `benchmarks/sos/data/test_oracle_workspace/` by mirroring `benchmarks/sos/workspace/` (`cp -r` of `engine/`, `cards/fdn/`, `cards/sos/` with stubs, `tests/`, `test_utils.py` (the host-side helpers' home — there is no separate `silverquillm/test_utils.py`), `AGENTS.md`, `pytest.ini`). The 10 audited `cards/sos/sos_{cn}/card_impl.py` stubs are filled in per item 2.x as Test Oracle Impls. Engine extensions needed by oracle impls land in `test_oracle_workspace/engine/` only — never canonical ([ADR-010: Test Oracle Workspace Uses Independent Engine](https://www.notion.so/3517df19bf3c4b709ad6cbe40471c8b1)). Add `tests/test_audited_against_reference.py` that, for each card, runs `benchmarks/sos/data/tests/audited/sos/sos_{cn}/tests.py` against `test_oracle_workspace/cards/sos/sos_{cn}/card_impl.py` instead of the agent's impl. The harness copies the oracle impl to a temp dir as a real `card_impl.py` on `PYTHONPATH` (reusing the temp-dir mechanism in `silverquillm/evaluator.py:run_audited_eval_per_card`) so the synthetic-injection conftest at `benchmarks/sos/data/tests/audited/sos/conftest.py` sees `_has_explicit_card_impl() == True` and skips the synthetic injection. CI fails if any rewritten audited test fails against any Test Oracle Impl. Helpers landed in `test_oracle_workspace/test_utils.py`: `set_mana_pool`, `set_hand`, `set_battlefield`, `set_library_top`, `set_graveyard`, `assert_on_stack`, `assert_in_zone`, `assert_casting_error`, `resolve_top` (public alias for the existing private resolver), and `cast_spell_from_exile` (or extend `cast_spell` with `zone=Zone.EXILE` — required for sos_120 Paradigm recurring-cast tests in item 7). Tests use only canonical-engine APIs so they pass against agent impls regardless of which extensions the agent invents. Implements Q1 + Q4 from the prompt page.
 
-  Change `_drain_pipe` to open `run_dir / "docker_stdout.log"` (and stderr) directly in append mode (line-buffered) and write each line as it arrives. Drop the `.tmp` intermediate. Update `ContainerLifecycle.run()` to no longer perform the post-exit `shutil.copy2` step. Update `_harvest_results` in `cli.py` to skip these two files (they're already in `run_dir`). This intentionally breaks the `.tmp` + `.log` copy convention for these channels; document the carve-out in `KEY_DECISIONS.md`.
+  Files: `benchmarks/sos/data/test_oracle_workspace/` (new, mirrors `workspace/`), `tests/test_audited_against_reference.py` (new), `silverquillm/evaluator.py` (extend with `--against=oracle` mode or equivalent).
 
-  Thread-safety: append-mode writes from a single `_drain_pipe` thread per stream are safe. Use `open(..., "a", buffering=1, encoding="utf-8", errors="replace")` so lines flush immediately.
+  Testability: Empty Test Oracle Impl stubs + zero rewritten test files exits 0 (no cards to check). After item 2.1 lands, exits 0 only when `sos_1`'s rewritten tests pass against `sos_1`'s Test Oracle Impl.
 
-  Files: `silverquillm/runner.py` (`_drain_pipe`, `ContainerLifecycle.run`, `ContainerLifecycle.__init__` — receive `run_dir` if not already), `silverquillm/cli.py` (`_harvest_results`), `KEY_DECISIONS.md`.
+**Per-card acceptance bar (applies to items 2–11, Q12 (c) resolution 2026-05-27).** A card is "done" only when all three hold: (a) rewritten audited tests pass against the Test Oracle Impl via the validation harness; (b) oracle impl matches verbatim `card_spec.json` semantics — **no engine-clamping shortcuts** (no FDN_57-style `cost_reduction()` overrides that the canonical engine clamps away from printed semantics); (c) per-card peer-review checkpoint before the commit lands. Full criterion in [Prompt: SOS 10-card Test Audit (Oracle-First)](https://www.notion.so/364f165c922043409955bc65f55a2d74) § Completion criteria → Per-card acceptance bar.
 
-  Testability: Start a run; while it's executing, `tail -f docker/<image>/results/<run>/docker_stdout.log` shows lines arriving in real time. `silverquillm logs --run <run> --live` shows the `[stdout]` tab populating live. After the run, the file is well-formed and complete (no missing lines vs. previous behavior).
+**Per-card workflow (applies to items 2–11, per **[**ADR-010: Test Oracle Workspace Uses Independent Engine**](https://www.notion.so/3517df19bf3c4b709ad6cbe40471c8b1)** § Workflow).** Develop oracle impl + tests inside the oracle workspace at `test_oracle_workspace/cards/sos/sos_{cn}/card_impl.py` and `test_oracle_workspace/tests/audited/sos/sos_{cn}/tests.py`, importing helpers from `test_oracle_workspace/test_utils.py`. Once green against the oracle impl, **copy the test file** to the canonical audited path at `benchmarks/sos/data/tests/audited/sos/sos_{cn}/tests.py` so it's reachable by the validation harness against agent impls. Engine extensions needed by the oracle impl land in `test_oracle_workspace/engine/` only — never canonical.
 
-- [ ] **Wire ****`snapshot_callback`**** in ****`cli.py`**** so ****`snapshot_telemetry.jsonl`**** populates**
-  Detail: `ContainerLifecycle.__init__` accepts a `snapshot_callback` parameter (called every 60s by the existing snapshot loop — `_SNAPSHOT_INTERVAL = 60`), but `silverquillm/cli.py:run()` instantiates `ContainerLifecycle(...)` without passing one. As a result, `snapshot_telemetry.jsonl` is never written and the `[snapshot]` tab is permanently empty.
+- [ ] **2. sos_1 — The Dawning Archaic: oracle impl + rewritten tests**
+  Detail: Bug pattern — "may" treated as mandatory in the existing attack-trigger test (general issue #5). Xmage analogs: Charmbreaker Devils (attack-trigger gy-cast pattern) + Past in Flames (replacement-to-exile on resolve) + Yawgmoth's Will (cast-from-gy primitive) + Tolarian Terror (cost reduction per gy cards; already in repo at `cards/fdn/fdn_167/`). Implement: attack trigger registered via `register_triggers` with may-choice semantics (default decline); one-shot replacement effect scoped to the chosen cast, routing fizzle/resolve to exile instead of graveyard; `cost_reduction(game)` returns count of instant/sorcery in controller's gy. Engine extension (oracle workspace only): clean `cast_spell_free` from gy if not already present. 7 rewritten tests: identity, cost reduction with gy, attack-trigger decline path, attack-trigger accept path, replacement-routes-exile-on-resolve, on-fizzle, scope (not global). Full per-card detail in [Prompt: SOS 10-card Test Audit (Oracle-First)](https://www.notion.so/364f165c922043409955bc65f55a2d74) § sos_1.
 
-  In `cli.py`, define a callback that:
+  Files: `test_oracle_workspace/cards/sos/sos_1/card_impl.py` (new), `test_oracle_workspace/tests/audited/sos/sos_1/tests.py` (develop), `benchmarks/sos/data/tests/audited/sos/sos_1/tests.py` (copy after green).
 
-  1. Walks the staged workspace (`cards/`, `engine/`, `tests/`).
-  2. Computes the delta payload per `docs/specs/RUN-ARTIFACTS-AND-TELEMETRY.md` (changed `card_impl.py` count, changed engine files, completed-like card impls per the existing heuristic, etc.).
-  3. Appends one JSON line to `run_dir / "snapshot_telemetry.jsonl"`.
-  Pass it as `snapshot_callback=` to `ContainerLifecycle`. If the snapshot logic already exists in a helper, reuse it; otherwise extract a `silverquillm/snapshot.py:snapshot_once(workspace, run_dir, card_name_map)` helper. Snapshot payload stays IDs-only per the SETTLED scope carve-out (no `card_name` in this high-cadence file).
+  Testability: 7 rewritten tests pass against oracle impl; rerun against the 2026-05-26 agent impl at `docker/copilot-opus-single/audited_results/sos-copilot-opus-single-2026-05-26T23-23/cards/sos_1/card_impl.py` produces expected verdict diffs per prompt page analysis.
 
-  Files: `silverquillm/cli.py` (`run()` — add callback wiring), optional `silverquillm/snapshot.py` (new helper).
+- [ ] **3. sos_4 — Together as One: oracle impl + rewritten tests**
+  Detail: Bug pattern — Converge asserted as `Keyword.CONVERGE` (general issue #1: ability words ≠ keywords). Xmage analogs: Radiant Flames + Bring to Light (`ConvergeCount` as X-source) + Crackling Doom (multi-target multi-effect sorcery structure). Implement: `mana_cost = {6}`, CMC 6; `colors_spent` recorded at cast time on the stack object; on resolve, target player draws X, damage X to chosen target, controller gains X life — all simultaneously; multi-effect fizzle preserves legal effects per MTG rules. 5 rewritten tests: identity (no CONVERGE keyword assertion), 1-color resolution, 5-color resolution, 0-color discriminator (catches default-count-1 bugs), fizzle-keeps-legal-effects (folds in the graveyard-destination check via real cast+resolve). Full detail in [Prompt: SOS 10-card Test Audit (Oracle-First)](https://www.notion.so/364f165c922043409955bc65f55a2d74) § sos_4.
 
-  Testability: Start a 5-minute run; after 60s, `snapshot_telemetry.jsonl` exists with at least one line; after 3 minutes, at least 3 lines. Each line parses as JSON and contains the keys documented in `RUN-ARTIFACTS-AND-TELEMETRY.md`. Live TUI `[snapshot]` tab updates every 60s.
+  Files: `test_oracle_workspace/cards/sos/sos_4/card_impl.py` (new), `test_oracle_workspace/tests/audited/sos/sos_4/tests.py` (develop), `benchmarks/sos/data/tests/audited/sos/sos_4/tests.py` (copy after green).
 
-- [ ] **Tee runner ****`click.echo`**** calls into ****`runner.log`**** and ****`runner_errors.log`**
-  Detail: The `[runner]` and `[error]` tabs in `logs_viewer.py` map to `run_dir / "runner.log"` and `run_dir / "runner_errors.log"`, but nothing in the codebase writes to these files. Add a small helper in `cli.py`:
+  Testability: 5 rewritten tests pass against oracle; rerun against agent impl produces expected diffs.
 
-  ```python
-def _runner_log(run_dir: Path, msg: str, *, err: bool = False) -> None:
-    click.echo(msg, err=err)
-    target = run_dir / ("runner_errors.log" if err else "runner.log")
-    with target.open("a", encoding="utf-8") as f:
-        f.write(msg.rstrip("\n") + "\n")
-  ```
+- [ ] **4. sos_13 — Emeritus of Truce // Swords to Plowshares: oracle impl + rewritten tests**
+  Detail: Bug pattern — split-Prepared CMC summed to 4 instead of front-face 3 (general issue #2). Xmage analogs: Plargg / Augusta Dean DFC (front+back structure) + Heaven // Earth (split-card class shape). Implement: `mana_cost = {1}{W}{W}`, CMC **3** (front face only); Prepared as ability-word-gated alternative-cost-from-exile (the `// {W}` is metadata on the alt-cost ability, not part of CMC); ETB token creation on front face; alternative cast from exile when `_prepared` flag set. 6 rewritten tests: identity (CMC 3, no `PREPARED` keyword), ETB tokens (keep existing), tokens on battlefield (keep), prepared alt-cost available when in exile + prepared, prepared alt-cost rejected when not prepared (probes gating, not method name), back-half-cost-not-in-CMC redundancy check. Delete `test_mana_cost_cmc` (asserts 4) and `test_has_prepared` (asserts keyword). Full detail in [Prompt: SOS 10-card Test Audit (Oracle-First)](https://www.notion.so/364f165c922043409955bc65f55a2d74) § sos_13.
 
-  Route every existing `click.echo(...)` call in `run()`, `_harvest_results()`, `_evaluate_results()`, `_generate_run_summary()`, and any caught-exception print path through this helper. Pass `run_dir` explicitly (or wrap in a tiny `RunnerContext` so callers don't repeat themselves). Best-effort: if `run_dir` doesn't exist yet (very early in `run()`), skip the file write but still call `click.echo`.
+  Files: `test_oracle_workspace/cards/sos/sos_13/card_impl.py` (new), `test_oracle_workspace/tests/audited/sos/sos_13/tests.py` (develop), `benchmarks/sos/data/tests/audited/sos/sos_13/tests.py` (copy after green).
 
-  Files: `silverquillm/cli.py`.
+  Testability: 6 rewritten tests pass against oracle; rerun against agent impl produces expected diffs.
 
-  Testability: After a run, `runner.log` exists in `run_dir` and contains the same lines that were printed to the terminal. Trigger an error path (e.g. invalid `--cards` value); confirm the message appears in `runner_errors.log`. Live TUI `[runner]` tab populates as the run progresses.
+- [ ] **5. sos_57 — Mana Sculpt: oracle impl + rewritten tests (FLAGSHIP per Q10)**
+  Detail: Bug pattern — vacuous pass on `callable(getattr(card, "get_targets", None))` (general issue #8). Per Q10 (2026-05-27), this is the flagship card — first per-card commit after the workspace+harness setup commit. Xmage analog: Mana Drain (counter + delayed-trigger refund) + Arcane Epiphany (Wizard-conditional, already in repo at `cards/fdn/fdn_29/`). Implement: `mana_cost = {1}{U}{U}`, CMC 3, Instant; `get_targets(game)` returns spells on the stack (not permanents); record target's `mana_spent_on_target` at cast time; on resolve, counter target (move to owner's gy), and if controller controls a Wizard at resolution time, register a delayed trigger "beginning of controller's next main phase" adding `{C} × recorded amount`. Engine extension (oracle workspace only): delayed-trigger-at-next-main if not present. 7 rewritten tests: identity, get_targets returns stack spells (not gated on method existence), get_targets excludes permanents, counters via real cast (target's `on_resolve` not invoked), refund-with-Wizard, no-refund-without-Wizard, fizzle-when-target-removed. Delete `test_targets_only_own_permanents`. Full detail in [Prompt: SOS 10-card Test Audit (Oracle-First)](https://www.notion.so/364f165c922043409955bc65f55a2d74) § sos_57.
 
-- [ ] **Hide structurally-empty channels in live mode with rediscovery polling**
-  Detail: `LogsViewer.__init__` currently registers all channels in `CHANNEL_ORDER` when `live=True`, regardless of whether the backing file exists. After Phase 17 items 1–3 the file-existence check becomes meaningful, so any not-yet-written channel files no longer create permanently-empty tabs.
+  Files: `test_oracle_workspace/cards/sos/sos_57/card_impl.py` (new), `test_oracle_workspace/tests/audited/sos/sos_57/tests.py` (develop), `benchmarks/sos/data/tests/audited/sos/sos_57/tests.py` (copy after green).
 
-  Change `LogsViewer.__init__` to register only channels whose file currently exists. Add a `_discover_new_channels()` method called every 1s (mirroring the existing `_reload_all` cadence) that scans `run_dir` for new channel files and registers them dynamically. New tabs appear in `CHANNEL_ORDER` position with a transient "new" badge (~3s) so the user notices them.
+  Testability: 7 rewritten tests pass against oracle; rerun against agent impl produces expected diffs.
 
-  Files: `silverquillm/logs_viewer.py`.
+- [ ] **6. sos_97 — Ral Zarek, Guest Lecturer: oracle impl + rewritten tests**
+  Detail: Bug pattern — planeswalker tests probe stats only, no loyalty abilities exercised (general issue #10). Xmage analog: Ral, Storm Conduit pattern + xmage's planeswalker base class. Repo reference impls: `cards/fdn/fdn_81/` (Chandra Flameshaper), `cards/fdn/fdn_234/` (Vivien Reid), `cards/fdn/fdn_44/` (Kaito), `cards/fdn/fdn_176/` (Liliana). Implement: subclass `Planeswalker`, `starting_loyalty=3`, `get_loyalty_abilities()` returns one `LoyaltyAbility` per printed ability with **correct cost ordering**; each `effect` real (surveil, discard, gy-return, coin-flip ultimate — no stubs); `get_valid_targets_for_ability` returns correct target sets. 9 rewritten tests: identity, loyalty-ability-structure (costs in correct order), +1 effect, -1 effect, -2 effect, ultimate (seeded RNG / deterministic flip — grep canonical `engine/game_state.py` for `random`/`seed` first; if no seeded-RNG support exists, add an additive seeded-RNG helper in `test_oracle_workspace/engine/game_state.py` only, never canonical), insufficient-loyalty rejection, dies-at-zero-loyalty, one-ability-per-turn. Delete `test_resolution_returns_target`, `test_fizzle_spell_goes_to_graveyard`, `test_targets_valid_objects`, `test_spell_to_graveyard_after_resolution`. Full detail in [Prompt: SOS 10-card Test Audit (Oracle-First)](https://www.notion.so/364f165c922043409955bc65f55a2d74) § sos_97.
 
-  Testability: Start a run; immediately open `silverquillm logs --live`. Initially only `[system]` (and any other already-existing files) appear. As `runner.log`, `docker_stdout.log`, `snapshot_telemetry.jsonl` populate, new tabs appear within ~1s. At no point is an empty tab shown.
+  Files: `test_oracle_workspace/cards/sos/sos_97/card_impl.py` (new), `test_oracle_workspace/tests/audited/sos/sos_97/tests.py` (develop), `benchmarks/sos/data/tests/audited/sos/sos_97/tests.py` (copy after green).
 
-- [ ] **Emit a bootstrap line on first ****`FastTelemetry._poll_mtimes`**** pass**
-  Detail: `FastTelemetry._poll_mtimes` records baseline mtimes on its first poll but emits zero events (the diff logic requires `prev is not None`). On cycle 1 of a run, this leaves `fast_telemetry.jsonl` empty until the agent first edits a card or engine file — making the `[edit]` tab look broken for several minutes during the cycle-1 thrash.
+  Testability: 9 rewritten tests pass against oracle; rerun against agent impl produces expected diffs.
 
-  On the first poll only, emit a synthetic line `{"ts": ..., "event": "polling_started", "watched_paths": <count>, "sample_paths": [<first 3>]}` so the tab shows immediate signal. Subsequent polls behave as today.
+- [ ] **7. sos_120 — Improvisation Capstone: oracle impl + rewritten tests**
+  Detail: Bug pattern — wrong Paradigm exile premise (existing tests assert graveyard destination, penalizing correct Paradigm behavior). Xmage analogs: Bloodbraid Elf (reveal-from-library-until-condition loop) + Approach of the Second Sun (self-route-to-exile replacement) + Misthollow Griffin (cast-from-exile primitive). Implement: `{5}{R}{R}` Sorcery — Lesson, CMC 7; on resolve exile top cards until MV-sum ≥ 4, offer to cast each via `cast_spell_free`; **Paradigm** = replacement-effect routing self-resolution to exile (not graveyard) + recurring trigger registered on the exiled card "at beginning of each of controller's first main phases, may cast a copy from exile without paying its mana cost", persists until card moves zones. 7 rewritten tests: identity (no `Keyword.PARADIGM`), exile-from-library-until-threshold, does-not-target-opponent-creatures (counter to wrong-premise test), cast-chosen-exiled-cards-for-free, paradigm-exiles-self (assert exile, not graveyard), paradigm-recurring-cast across 3 turn cycles, paradigm-offer-can-be-declined. Delete `test_spell_to_graveyard_after_resolution`. Full detail in [Prompt: SOS 10-card Test Audit (Oracle-First)](https://www.notion.so/364f165c922043409955bc65f55a2d74) § sos_120.
 
-  Files: `silverquillm/telemetry.py` (`FastTelemetry._poll_mtimes`).
+  Files: `test_oracle_workspace/cards/sos/sos_120/card_impl.py` (new), `test_oracle_workspace/tests/audited/sos/sos_120/tests.py` (develop), `benchmarks/sos/data/tests/audited/sos/sos_120/tests.py` (copy after green).
 
-  Testability: Start a run; within 2 seconds, `fast_telemetry.jsonl` contains the `polling_started` line. Live TUI `[edit]` tab shows it. Edit a workspace card file; the next poll emits the standard mtime-change line.
+  Testability: 7 rewritten tests pass against oracle; rerun against agent impl produces expected diffs.
 
-- [ ] **Drop ****`progress.jsonl`**** channel and entrypoint emission**
-  Detail: Per 2026-05-24 grilling, `progress.jsonl` is removed from the design entirely — not enough use to justify the harness/agent protocol surface.
+- [ ] **8. sos_201 — Lorehold, the Historian: oracle impl + rewritten tests**
+  Detail: Bug pattern — Miracle granting effect untested entirely (general issue #10); existing impl uses `_apply_miracle_to_hand` direct-mutation anti-pattern. Xmage analog: `MiracleAbility` primitive class + Bruvac (static-grants pattern). Repo references: `cards/fdn/fdn_180/` (Phyrexian Arena, upkeep-trigger), `cards/fdn/fdn_72/` (Tinybones, discard-for-draw). Implement: `{3}{R}{W}` 5/5 Legendary Elder Dragon, Flying + Haste true keywords; static continuous effect — while Lorehold on battlefield, every instant/sorcery in controller's hand gets `miracle_cost = {2}` via the layered continuous-effects system (**not** direct mutation); miracle primitive triggers on the first card drawn each turn; opponent-upkeep may-discard-may-draw trigger. Engine extension (oracle workspace only): miracle alt-cost-on-first-draw primitive. 8 rewritten tests: identity, miracle-grant-to-instants-and-sorceries (not creatures), grant-removed-when-Lorehold-leaves, miracle-cast-on-first-draw, no-miracle-on-subsequent-draws, opponent-upkeep-discard-to-draw declined path, accepted path, no-trigger-on-controller-upkeep. Full detail in [Prompt: SOS 10-card Test Audit (Oracle-First)](https://www.notion.so/364f165c922043409955bc65f55a2d74) § sos_201.
 
-  - Remove `progress` from `CHANNEL_ORDER` in `silverquillm/logs_viewer.py`.
-  - Remove the SIGTERM-time `progress.jsonl` write in the Docker entrypoint (`docker/<image>/entrypoint.mjs`).
-  - Remove any `progress.jsonl` references in `silverquillm/cli.py` and `silverquillm/runner.py`.
-  Files: `silverquillm/logs_viewer.py`, Docker entrypoint script, `silverquillm/cli.py`, `silverquillm/runner.py`.
+  Files: `test_oracle_workspace/cards/sos/sos_201/card_impl.py` (new), `test_oracle_workspace/tests/audited/sos/sos_201/tests.py` (develop), `benchmarks/sos/data/tests/audited/sos/sos_201/tests.py` (copy after green).
 
-  Testability: `grep -rn 'progress\.jsonl' silverquillm/ docker/` returns zero matches. `silverquillm logs --run <run>` no longer lists a `[progress]` tab. End-to-end run + `--live` mode shows 7 channels not 8.
+  Testability: 8 rewritten tests pass against oracle; rerun against agent impl produces expected diffs.
+
+- [ ] **9. sos_226 — Silverquill, the Disputant: oracle impl + rewritten tests**
+  Detail: Bug pattern — wrong-premise `get_targets` test on a card that targets nothing (general issue #7). Xmage analog: `CasualtyAbility` primitive + Liesa Forgotten Archangel (creatures-you-control-have-X grant pattern) + xmage issue #14823 (casualty-granting templating). Implement: Legendary Creature Elder Dragon, Flying + Vigilance keywords, **no ****`get_targets`**** method**; static continuous effect — every instant/sorcery controller casts while Silverquill on battlefield gets a Casualty 1 additional-cost option (sacrifice creature with power ≥ 1 → spell gets a copy made), checked during cast flow. Engine extension (oracle workspace only): casualty primitive. 7 rewritten tests: identity, no-get_targets, casualty-offered-on-controller-instant, casualty-with-sac-copies-spell, no-legal-sacrifice (declined), no-casualty-on-creature-spell, removed-when-Silverquill-leaves. Delete `test_power_targeting_restriction`, `test_get_targets_finds_creatures`, `test_on_resolve_changes_state`. Full detail in [Prompt: SOS 10-card Test Audit (Oracle-First)](https://www.notion.so/364f165c922043409955bc65f55a2d74) § sos_226.
+
+  Files: `test_oracle_workspace/cards/sos/sos_226/card_impl.py` (new), `test_oracle_workspace/tests/audited/sos/sos_226/tests.py` (develop), `benchmarks/sos/data/tests/audited/sos/sos_226/tests.py` (copy after green).
+
+  Testability: 7 rewritten tests pass against oracle; rerun against agent impl produces expected diffs.
+
+- [ ] **10. sos_245 — Witherbloom, the Balancer: oracle impl + rewritten tests**
+  Detail: Bug pattern — 2026-05-26 audit comparatively well-scored this card (Sonnet 22-12: 15/15), but **existing audited tests are not perfect** and need the same Test-Oracle-Workspace + integration-style rewrite as the other 9 cards (Q12 (3) correction 2026-05-27). Treat the existing test file as a starting reference, **not** a baseline to preserve as-is. Xmage analogs: Frogmite / Myr Enforcer (`AffinityForXCardsAbility` primitive) + Silverquill (same continuous-effect-grants-static pattern). Implement: Legendary Creature, Flying + Deathtouch + Affinity (true keyword) in keywords; `cost_reduction(game)` returns count of controller's creatures; continuous effect granting Affinity-for-creatures to controller's instants/sorceries (match xmage templating). 4+ rewritten tests: existing identity + keyword tests (audit and keep), affinity-reduces-own-cost, affinity-grant-to-instants-and-sorceries, grant-removed-when-Witherbloom-leaves. Audit and rewrite the rest of the existing test file to match Phase 18 conventions (integration-style, canonical-API-only, mana-pool minimality, outcome-based observability). Full detail in [Prompt: SOS 10-card Test Audit (Oracle-First)](https://www.notion.so/364f165c922043409955bc65f55a2d74) § sos_245.
+
+  Files: `test_oracle_workspace/cards/sos/sos_245/card_impl.py` (new), `test_oracle_workspace/tests/audited/sos/sos_245/tests.py` (develop), `benchmarks/sos/data/tests/audited/sos/sos_245/tests.py` (copy after green).
+
+  Testability: 4+ rewritten tests pass against oracle; rerun against agent impl produces expected diffs (most should still pass — this card was comparatively well-covered, the rewrite is about conformance to Phase 18 conventions).
+
+- [ ] **11. sos_257 — Great Hall of the Biblioplex: oracle impl + rewritten tests**
+  Detail: Bug pattern — land tested with stack-to-graveyard path that doesn't apply to lands (general issue #3); animation misread as until-end-of-turn (the printed text has no expiry on the animation; **only** the +1/+0 boost is until-end-of-turn). Verbatim oracle text from `card_spec.json` verified 2026-05-27 — three sub-mechanics: (a) two mana abilities including a **restricted-spend** second ability, (b) **persistent animation** (no auto-cleanup) gated on "If this land isn't a creature", (c) granted **controller-only** spell-cast trigger with +1/+0 until end of turn. Xmage analogs: Mutavault / Inkmoth Nexus / Mishra's Factory (creature-land template — sos_257 deviates from until-end-of-turn animation) + Treetop Village (activated permanent type-change structural pattern — adapt by removing end-of-turn cleanup) + Cavern of Souls (restricted-spend primitive) + Mox Amber (any-color restricted mana) + Monastery Swiftspear (prowess-style spell-cast trigger structural pattern). Engine extensions (oracle workspace only): **general restricted-mana primitive** (supports any spell-type spend-restriction; sos_257's instant/sorcery-only is the first user, per Q12 (4) generality decision) + persistent-animation continuous effect (no auto-cleanup). 17 rewritten tests covering all three sub-mechanics (mana adds colorless / any color, restricted-spend legal / illegal, animation persists across turns, no-op-when-already-creature gating, animation-cleared-on-leaves-play, +1/+0 boost on instant / sorcery / opponent-cast filter, end-of-turn revert of +1/+0 only, trigger inactive when un-animated, activation cost payment, animated-can-attack). Delete `test_spell_to_graveyard_after_resolution`. Full detail in [Prompt: SOS 10-card Test Audit (Oracle-First)](https://www.notion.so/364f165c922043409955bc65f55a2d74) § sos_257.
+
+  Files: `test_oracle_workspace/cards/sos/sos_257/card_impl.py` (new), `test_oracle_workspace/tests/audited/sos/sos_257/tests.py` (develop), `benchmarks/sos/data/tests/audited/sos/sos_257/tests.py` (copy after green).
+
+  Testability: 17 rewritten tests pass against oracle; rerun against agent impl produces expected diffs — Sonnet 2026-05-27 and GPT-5.4 both flagged restricted-mana and animation-cleanup as "untestable", so existing impls are likely missing both mechanics.
+
+- [ ] **12. CI regex audit for card-specific test naming**
+  Detail: [TEST-SUITE.md](http://test-suite.md/) Decisions (behavioral testing, canonical-API-only, oracle-validation gate) + Audited Test Categories matrix landed 2026-05-26 grilling. [CONTEXT.md](http://context.md/) terms (Test Oracle Impl, Test Oracle Workspace, Keyword Ability, Ability Word) landed 2026-05-26. [ADR-010: Test Oracle Workspace Uses Independent Engine](https://www.notion.so/3517df19bf3c4b709ad6cbe40471c8b1) landed 2026-05-26. Q2 resolved: spec sheets stay as-is — tests don't read `keywords[]` per behavioral-testing rule. Remaining work for this item: add a CI regex audit per general-issue #9 that confirms each `tests/audited/sos/sos_{cn}/tests.py` references at least **two distinct** card-specific verbs/nouns extracted from the matching `card_spec.json`'s `oracle_text` and `name` (threshold of 2 prevents trivial single-token matches). Generic MTG words (`target`, `spell`, `permanent`, `creature`, `card`, `player`, `controller`, `opponent`, `graveyard`, `battlefield`, `exile`, `hand`, `library`, `stack`, `phase`, `turn`, `step`, `mana`, `color`, `cost`, etc.) are excluded via a module-level allow-list constant at the top of the test file for easy review and tuning. Catches templated test generation.
+
+  Files: `tests/test_card_specific_test_naming.py` (new CI regex check). Doc updates already shipped 2026-05-26.
+
+  Testability: CI regex audit catches a test file whose only assertions reference generic helpers without any card-specific verb/noun. Audited Test Categories matrix in [TEST-SUITE.md](http://test-suite.md/) covers behavioral compliance by construction — rule-violating tests fail against the Test Oracle Impl.
