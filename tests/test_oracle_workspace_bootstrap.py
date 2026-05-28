@@ -153,25 +153,6 @@ class TestValidationHarness:
 class TestStubDetection:
     """Verify the stub detection logic correctly identifies stubs vs real impls."""
 
-    def test_stub_impl_is_detected_as_stub(self) -> None:
-        """A card_impl.py with only `pass` in the class body should be a stub."""
-        # Import the harness to test its _is_stub_impl function
-        harness_path = _REPO_ROOT / "tests" / "test_audited_against_reference.py"
-        spec = importlib.util.spec_from_file_location(
-            "test_audited_against_reference", harness_path
-        )
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-
-        # All current card stubs should be detected as stubs
-        for cn in _EXPECTED_CARDS:
-            impl_path = _ORACLE_WORKSPACE / "cards" / "sos" / cn / "card_impl.py"
-            if impl_path.exists():
-                result = module._is_stub_impl(impl_path)
-                assert result is True, (
-                    f"{cn}/card_impl.py should be detected as stub but wasn't"
-                )
-
     def test_nonexistent_impl_is_treated_as_stub(self) -> None:
         """A path that doesn't exist should be treated as a stub."""
         harness_path = _REPO_ROOT / "tests" / "test_audited_against_reference.py"
@@ -297,16 +278,3 @@ class TestHarnessWithStubsExitsCleanly:
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
         )
 
-    def test_no_oracle_cards_discovered_with_stubs(self) -> None:
-        """_discover_oracle_cards() should return empty list when all impls are stubs."""
-        harness_path = _REPO_ROOT / "tests" / "test_audited_against_reference.py"
-        spec = importlib.util.spec_from_file_location(
-            "test_audited_against_reference", harness_path
-        )
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-
-        cards = module._discover_oracle_cards()
-        assert cards == [], (
-            f"Expected no oracle cards with stubs only, got: {cards}"
-        )

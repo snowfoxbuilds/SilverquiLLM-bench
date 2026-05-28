@@ -141,3 +141,52 @@ benchmarks/sos/data/test_oracle_workspace/engine/game_state.py — Wire Beginnin
 
 ### Implementation
 - `tests/test_card_specific_test_naming.py` — new CI regex audit checking card-specific test naming with GENERIC_MTG_WORDS exclusion set
+
+
+## Phase 18 Cleanup (2026-05-28): Spec deviation fixes + engine maturation
+
+This round addresses the spec deviations and reviewer concerns surfaced on
+PR #22 self-review. Engine extensions live in the oracle workspace only
+(ADR-010). Per-card test counts in this section are the post-cleanup counts;
+prior sections retain the original numbers as historical record.
+
+### Engine extensions (oracle workspace only)
+- `benchmarks/sos/data/test_oracle_workspace/engine/stack.py` — `StackObject` gains a `mana_spent: int` field recorded at cast time. Used by Mana Sculpt (sos_57) and any future card referencing "mana spent to cast that spell."
+- `benchmarks/sos/data/test_oracle_workspace/engine/casting.py` — `cast_spell`, `cast_spell_free`, and `cast_spell_for_cost` all populate `stack_obj.mana_spent` (effective_cost.cmc / alt_cost.cmc / 0 respectively).
+- `benchmarks/sos/data/test_oracle_workspace/engine/game_state.py` — `GameState.rng: random.Random` for deterministic randomness. Tests override with `game.rng = random.Random(seed)`.
+- `benchmarks/sos/data/test_oracle_workspace/engine/mana.py` — Public read-only `ManaPool.restricted_mana` property (returns a shallow copy of the internal restricted-mana entries).
+- `benchmarks/sos/data/test_oracle_workspace/engine/zones.py` — `move_to_zone` graceful fallback now emits `warnings.warn(...)` instead of silently rerouting cards. Surfaces zone-tracking bugs without breaking existing callers.
+
+### Per-card fixes
+
+**sos_57 (Mana Sculpt) — FLAGSHIP, 13 tests post-cleanup**
+- `cards/sos/sos_57/card_impl.py` — reads `target_stack_obj.mana_spent` instead of the printed CMC proxy; registers a one-shot `BeginningOfMainPhaseEvent` trigger for delayed refund (replaces the immediate-refund deviation). Added `setdefault("name", "Mana Sculpt")` for consistency with the other cards.
+- `tests/audited/sos/sos_57/tests.py` (and workspace copy) — replaced synthetic `_put_spell_on_stack` helper with real `engine.casting.cast_spell` calls. Refund tests advance via `_enter_main_phase_for(...)` and verify mana arrives at the controller's next main phase. Edge cases added: refund amount matches mana_spent (not CMC), fires only once, only on controller's main phase (not opponent's), locked in at resolution time (Wizard departing later doesn't suppress refund).
+
+**sos_97 (Ral Zarek) — 10 tests (unchanged count)**
+- `cards/sos/sos_97/card_impl.py` — `_minus7` now uses `game.rng` directly (no fallback to module-global `random`). Tests already seed `game.rng = random.Random(42)` so ultimate is deterministic.
+
+**sos_257 (Great Hall of the Biblioplex) — 17 tests (unchanged count)**
+- `cards/sos/sos_257/card_impl.py` — removed the Player-side `_restricted_mana` alias hack in both `_produce_any_color_restricted` and `_activate_restricted_mana`. Callers should now read `controller.mana_pool.restricted_mana` (public property on ManaPool).
+
+**sos_13 (Emeritus of Truce // STP) — 11 tests post-cleanup**
+- `cards/sos/sos_13/card_impl.py` — fixed an ordering bug in `_check_prepared_condition` (caught by new edge case test): the check ran before Emeritus itself was on the battlefield, so my_creatures undercounted by 1. Now adds +1 to account for Emeritus being placed on the BF by the engine after `on_resolve` returns.
+- `tests/audited/sos/sos_13/tests.py` (and workspace copy) — added edge cases: prepared condition with equal opponent creatures (NOT prepared), with strictly more opponent creatures (prepared), prepared flag cleared after alt cast, `get_alternative_cost()` returns {W} iff prepared, token is summoning-sick.
+
+**sos_201 (Lorehold, the Historian) — 12 tests post-cleanup**
+- `tests/audited/sos/sos_201/tests.py` (and workspace copy) — added edge cases: miracle declined (card stays in hand), multiple instants/sorceries all granted miracle_cost, creature first-draw doesn't trigger miracle, drawn-into-hand card receives miracle_cost on next continuous-effect apply.
+
+### Final test counts (all 10 cards)
+| Card     | Count |
+|----------|-------|
+| sos_1    | 20    |
+| sos_4    | 10    |
+| sos_13   | 11    |
+| sos_57   | 13    |
+| sos_97   | 10    |
+| sos_120  | 9     |
+| sos_201  | 12    |
+| sos_226  | 7     |
+| sos_245  | 14    |
+| sos_257  | 17    |
+| **Total** | **123** |
