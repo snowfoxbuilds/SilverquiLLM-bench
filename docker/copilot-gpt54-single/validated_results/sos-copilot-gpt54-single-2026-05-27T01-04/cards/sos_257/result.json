@@ -1,11 +1,8 @@
 {
-  "collector_number": "sos_257",
-  "tests_passed": 10,
-  "tests_failed": 1,
-  "tests_total": 11,
-  "pass_rate": 0.9090909090909091,
-  "errors": [
-    "FAILED ../../../../tmp/eval_sos_9ywfrtnu/tests.py::TestGreatHallOfTheBiblioplexInteractions::test_spell_to_graveyard_after_resolution"
-  ],
-  "skipped": false
+  "card_id": "sos_257",
+  "card_name": "Great Hall of the Biblioplex",
+  "tests_passed": 3,
+  "tests_failed": 14,
+  "tests_total": 17,
+  "pass_rate": 0.17647058823529413
 }

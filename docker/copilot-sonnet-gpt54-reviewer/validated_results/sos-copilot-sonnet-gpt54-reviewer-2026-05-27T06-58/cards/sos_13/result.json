@@ -1,15 +1,8 @@
 {
-  "collector_number": "sos_13",
-  "tests_passed": 10,
-  "tests_failed": 5,
-  "tests_total": 15,
-  "pass_rate": 0.6666666666666666,
-  "errors": [
-    "FAILED ../../../../tmp/eval_sos_0_eq0509/tests.py::TestEmeritusOfTruceSwordsToPlowsharesBasicProperties::test_mana_cost_cmc",
-    "FAILED ../../../../tmp/eval_sos_0_eq0509/tests.py::TestEmeritusOfTruceSwordsToPlowsharesAbilities::test_has_prepared",
-    "FAILED ../../../../tmp/eval_sos_0_eq0509/tests.py::TestEmeritusOfTruceSwordsToPlowsharesAbilities::test_etb_creates_tokens",
-    "FAILED ../../../../tmp/eval_sos_0_eq0509/tests.py::TestEmeritusOfTruceSwordsToPlowsharesEdgeCases::test_mana_cost_matches_spec",
-    "FAILED ../../../../tmp/eval_sos_0_eq0509/tests.py::TestEmeritusOfTruceSwordsToPlowsharesInteractions::test_tokens_appear_on_battlefield"
-  ],
-  "skipped": false
+  "card_id": "sos_13",
+  "card_name": "Emeritus of Truce // Swords to Plowshares",
+  "tests_passed": 2,
+  "tests_failed": 9,
+  "tests_total": 11,
+  "pass_rate": 0.18181818181818182
 }

@@ -1,15 +1,8 @@
 {
-  "collector_number": "sos_4",
-  "tests_passed": 10,
-  "tests_failed": 5,
-  "tests_total": 15,
-  "pass_rate": 0.6666666666666666,
-  "errors": [
-    "FAILED ../../../../tmp/eval_sos_ugx3gq4q/tests.py::TestTogetherAsOneAbilities::test_has_converge",
-    "FAILED ../../../../tmp/eval_sos_ugx3gq4q/tests.py::TestTogetherAsOneAbilities::test_resolution_deals_damage",
-    "FAILED ../../../../tmp/eval_sos_ugx3gq4q/tests.py::TestTogetherAsOneEdgeCases::test_fizzle_spell_goes_to_graveyard",
-    "FAILED ../../../../tmp/eval_sos_ugx3gq4q/tests.py::TestTogetherAsOneInteractions::test_targets_valid_objects",
-    "FAILED ../../../../tmp/eval_sos_ugx3gq4q/tests.py::TestTogetherAsOneInteractions::test_spell_to_graveyard_after_resolution"
-  ],
-  "skipped": false
+  "card_id": "sos_4",
+  "card_name": "Together as One",
+  "tests_passed": 6,
+  "tests_failed": 4,
+  "tests_total": 10,
+  "pass_rate": 0.6
 }

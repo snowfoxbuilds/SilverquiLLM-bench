@@ -1,13 +1,8 @@
 {
-  "collector_number": "sos_226",
-  "tests_passed": 10,
+  "card_id": "sos_226",
+  "card_name": "Silverquill, the Disputant",
+  "tests_passed": 4,
   "tests_failed": 3,
-  "tests_total": 13,
-  "pass_rate": 0.7692307692307693,
-  "errors": [
-    "FAILED ../../../../tmp/eval_sos_d_u_lxj9/tests.py::TestSilverquillTheDisputantAbilities::test_on_resolve_changes_state",
-    "FAILED ../../../../tmp/eval_sos_d_u_lxj9/tests.py::TestSilverquillTheDisputantEdgeCases::test_power_targeting_restriction",
-    "FAILED ../../../../tmp/eval_sos_d_u_lxj9/tests.py::TestSilverquillTheDisputantInteractions::test_get_targets_finds_creatures"
-  ],
-  "skipped": false
+  "tests_total": 7,
+  "pass_rate": 0.5714285714285714
 }

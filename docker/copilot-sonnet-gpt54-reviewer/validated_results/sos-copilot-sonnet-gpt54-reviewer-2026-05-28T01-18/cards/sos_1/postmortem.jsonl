@@ -1,0 +1,5 @@
+{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nz4ijuey/tests.py::TestTheDawningArchaicAttackTriggerAccept::test_accept_casts_spell_from_gy"}
+{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nz4ijuey/tests.py::TestTheDawningArchaicAttackTriggerAccept::test_accept_spell_resolves_to_exile"}
+{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nz4ijuey/tests.py::TestTheDawningArchaicExileSorcery::test_sorcery_from_gy_goes_to_exile"}
+{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nz4ijuey/tests.py::TestTheDawningArchaicScopeNotGlobal::test_other_spells_go_to_graveyard_normally"}
+{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nz4ijuey/tests.py::TestTheDawningArchaicTargeting::test_only_chosen_card_is_exiled"}

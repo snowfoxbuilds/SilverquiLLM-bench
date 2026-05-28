@@ -1,0 +1,3 @@
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_orb9n3vq/tests.py::TestTargeting::test_get_targets_returns_stack_spells"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_orb9n3vq/tests.py::TestTargeting::test_get_targets_excludes_permanents"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_orb9n3vq/tests.py::TestTargeting::test_get_targets_excludes_empty_stack"}

@@ -1,0 +1,5 @@
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wsiysm38/tests.py::TestTargeting::test_get_targets_returns_stack_spells"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wsiysm38/tests.py::TestTargeting::test_get_targets_excludes_permanents"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wsiysm38/tests.py::TestTargeting::test_get_targets_excludes_empty_stack"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wsiysm38/tests.py::TestCounter::test_fizzle_when_target_removed"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wsiysm38/tests.py::TestRefund::test_no_refund_when_fizzled"}

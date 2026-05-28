@@ -1,11 +1,8 @@
 {
-  "collector_number": "sos_57",
-  "tests_passed": 8,
-  "tests_failed": 1,
-  "tests_total": 9,
-  "pass_rate": 0.8888888888888888,
-  "errors": [
-    "FAILED ../../../../tmp/eval_sos_85gcp3a1/tests.py::TestManaSculptEdgeCases::test_targets_only_own_permanents"
-  ],
-  "skipped": false
+  "card_id": "sos_57",
+  "card_name": "Mana Sculpt",
+  "tests_passed": 10,
+  "tests_failed": 3,
+  "tests_total": 13,
+  "pass_rate": 0.7692307692307693
 }
