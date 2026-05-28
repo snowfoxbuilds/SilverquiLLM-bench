@@ -335,6 +335,7 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
         controller=player,
         targets=chosen_targets,
         on_resolve=lambda g: None,  # replaced below
+        mana_spent=effective_cost.cmc,
     )
 
     def _on_resolve(g: GameState) -> None:
@@ -560,11 +561,13 @@ def cast_spell_free(
     card.on_cast(game)
 
     # 5. Build on_resolve callback and push StackObject
+    # cast_spell_free pays no mana, so mana_spent = 0.
     stack_obj = StackObject(
         source=card,
         controller=player,
         targets=chosen_targets,
         on_resolve=lambda g: None,  # replaced below
+        mana_spent=0,
     )
 
     def _on_resolve(g: GameState) -> None:
@@ -745,6 +748,7 @@ def cast_spell_for_cost(
         controller=player,
         targets=chosen_targets,
         on_resolve=lambda g: None,  # replaced below
+        mana_spent=alt_cost.cmc,
     )
 
     def _on_resolve(g: GameState) -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from typing import Any
 
 from engine.combat import CombatState
@@ -72,6 +73,11 @@ class GameState:
         self.combat_state: CombatState = CombatState()
         self.is_game_over: bool = False
         self.winner: Player | None = None
+        # Per-game RNG. Tests can replace with `random.Random(seed)` for
+        # deterministic coin flips / random choices. Card impls should
+        # always go through `game.rng` rather than the global `random`
+        # module so seeding is honored.
+        self.rng: random.Random = random.Random()
         # ENGINE LIMITATION: Extra turns queue (FIFO of player seat indices).
         # Complex interactions ('skip your next turn', multiple extra turns
         # from different sources) are not fully handled.

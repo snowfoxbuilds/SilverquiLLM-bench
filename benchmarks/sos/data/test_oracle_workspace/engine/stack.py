@@ -21,6 +21,10 @@ class StackObject:
         targets: The chosen targets for the spell/ability.
         on_resolve: Callback invoked when this object resolves.
         is_mana_ability: Whether this is a mana ability (resolves immediately).
+        mana_spent: Amount of mana paid to cast this spell, recorded at cast
+            time. Used by effects that refer to "the amount of mana spent to
+            cast that spell" (e.g. Mana Drain). For X-cost or alternate-cost
+            spells this is the actual amount paid, not the printed CMC.
     """
 
     source: Any
@@ -28,6 +32,7 @@ class StackObject:
     targets: list[Any] = field(default_factory=list)
     on_resolve: Callable[[GameState], None] = field(default=lambda _game: None)
     is_mana_ability: bool = False
+    mana_spent: int = 0
 
 
 class Stack:

@@ -74,6 +74,16 @@ class ManaPool:
             "amount": amount,
         })
 
+    @property
+    def restricted_mana(self) -> list[dict]:
+        """Return the list of restricted-mana entries (read-only view).
+
+        Each entry is a dict with ``source``, ``restriction``, and ``amount``
+        keys. Callers should treat the returned list as read-only — use
+        :meth:`add_restricted` to add entries.
+        """
+        return list(self._restricted_mana)
+
     def empty(self) -> None:
         """Clear the pool — happens at phase/step transitions."""
         for mt in self._pool:

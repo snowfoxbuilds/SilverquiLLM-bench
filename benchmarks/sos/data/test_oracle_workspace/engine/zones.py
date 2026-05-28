@@ -249,8 +249,16 @@ def move_to_zone(
                 break
 
     if source_player is None:
-        # Card not found in the source zone — graceful fallback: place it
-        # directly into the destination zone (owner or controller).
+        # Card not found in the source zone — surface as a warning so
+        # zone-tracking bugs are visible, but keep the fallback path so we
+        # don't break callers that depend on it. Future work: make this
+        # raise in strict mode once all callers are audited.
+        import warnings
+        warnings.warn(
+            f"move_to_zone: {getattr(card, 'name', card)!r} not found in any "
+            f"player's {from_zone.name} zone; placing directly in {to_zone.name}.",
+            stacklevel=2,
+        )
         dest_player = owner if owner is not None else controller
         if dest_player is None:
             return
@@ -259,7 +267,13 @@ def move_to_zone(
 
     source_container = source_player.zones[from_zone]
     if not source_container.contains(card):
-        # Safety fallback: card not in source zone, place in destination.
+        import warnings
+        warnings.warn(
+            f"move_to_zone: {getattr(card, 'name', card)!r} not in source "
+            f"{from_zone.name} zone of expected player; placing directly in "
+            f"{to_zone.name}.",
+            stacklevel=2,
+        )
         dest_player = owner if owner is not None else source_player
         dest_player.zones[to_zone].add(card)
         return
