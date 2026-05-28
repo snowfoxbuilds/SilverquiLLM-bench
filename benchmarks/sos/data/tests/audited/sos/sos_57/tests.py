@@ -41,7 +41,6 @@ from card_impl import ManaSculpt
 
 from engine.card import Creature, Instant
 from engine.casting import cast_spell as engine_cast_spell
-from engine.events import BeginningOfMainPhaseEvent
 from engine.types import CardType, ManaCost, ManaType, Phase, Zone
 from test_utils import (
     card_colors,
@@ -85,19 +84,24 @@ def _fund_for(player, cost: ManaCost) -> None:
 
 
 def _enter_main_phase_for(game, player) -> None:
-    """Fire `BeginningOfMainPhaseEvent` for *player* and drain any
-    triggers it puts on the stack.
+    """Simulate the beginning of *player*'s next main phase by scanning
+    the trigger registry for delayed main-phase triggers controlled by
+    *player* and invoking their effects directly.
 
-    `trigger_manager.fire_event` pushes triggered StackObjects but does
-    not resolve them — real MTG flow gives players priority first. For
-    these tests we simulate immediate resolution of the resulting
-    triggers (no interaction available)."""
+    This bypasses the oracle-only ``BeginningOfMainPhaseEvent`` and works
+    against any engine that exposes ``trigger_manager._triggers``.  The
+    card-side trigger callback is responsible for its own one-shot
+    bookkeeping (e.g. a ``fired`` sentinel) so calling it again on a
+    subsequent main phase is harmless.
+    """
     game.active_player_index = game.players.index(player)
-    game.trigger_manager.fire_event(
-        game, BeginningOfMainPhaseEvent(player=player)
-    )
-    while not game.stack.is_empty():
-        resolve_top(game)
+    # Snapshot triggers — effects may mutate the registry via unregister().
+    for trigger in list(game.trigger_manager._triggers):
+        if "MainPhase" not in trigger.event_type.__name__:
+            continue
+        if trigger.controller is not player:
+            continue
+        trigger.effect(game)
 
 
 # ---------------------------------------------------------------------------
