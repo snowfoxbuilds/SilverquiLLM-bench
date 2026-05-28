@@ -1,0 +1,14 @@
+{
+  "collector_number": "sos_4",
+  "tests_passed": 6,
+  "tests_failed": 4,
+  "tests_total": 10,
+  "pass_rate": 0.6,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_xh5qa03w/tests.py::TestOneColorResolution::test_one_color_draw_damage_life",
+    "FAILED ../../../../tmp/eval_sos_xh5qa03w/tests.py::TestFiveColorResolution::test_five_color_full_effect",
+    "FAILED ../../../../tmp/eval_sos_xh5qa03w/tests.py::TestZeroColorDiscriminator::test_zero_colors_no_effect",
+    "FAILED ../../../../tmp/eval_sos_xh5qa03w/tests.py::TestFizzleKeepsLegalEffects::test_damage_target_illegal_draw_and_life_still_resolve"
+  ],
+  "skipped": false
+}

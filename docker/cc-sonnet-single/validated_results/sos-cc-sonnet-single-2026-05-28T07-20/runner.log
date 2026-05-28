@@ -1,0 +1,24 @@
+2026-05-28T07:20:01+00:00 Starting run: sos-cc-sonnet-single-2026-05-28T07-20
+2026-05-28T07:20:01+00:00 Image: silverquillm-cc-sonnet-single:latest
+2026-05-28T07:20:01+00:00 Timeout: 360000s
+2026-05-28T07:20:02+00:00 Workspace staged at: /tmp/silverquillm_run_51nohkly/workspace
+2026-05-28T07:20:02+00:00 Running container: sqm-sos-cc-sonnet-single-2026-05-28T07-20
+2026-05-28T09:07:46+00:00 Harvesting results...
+2026-05-28T09:07:46+00:00 Results saved to: /home/sean/repos/SilverquiLLM-bench/docker/cc-sonnet-single/results/sos-cc-sonnet-single-2026-05-28T07-20
+2026-05-28T09:07:46+00:00 Token usage:
+Agent        Model              Msgs   Input  Cache rd    Cache wr   Output
+-----------  -----------------  -----  -----  ----------  ---------  ------
+Implementer  claude-sonnet-4-6  605    677    20,196,226  1,117,900  16,256
+Reviewer     claude-sonnet-4-6  224    298    5,015,422   671,025    4,951 
+Tester       claude-sonnet-4-6  403    449    13,159,325  916,659    12,783
+main         claude-sonnet-4-6  157    159    7,379,084   111,247    5,921 
+-----------  -----------------  -----  -----  ----------  ---------  ------
+TOTAL                           1,389  1,583  45,750,057  2,816,831  39,911
+
+Cost (USD) by model — from final result event:
+  claude-haiku-4-5-20251001           $0.0009
+  claude-sonnet-4-6                   $22.9174
+  TOTAL                               $22.9183
+2026-05-28T09:08:28+00:00 Evaluation complete: 10 SOS cards scored
+2026-05-28T09:08:28+00:00 Run summary written to: /home/sean/repos/SilverquiLLM-bench/docker/cc-sonnet-single/results/sos-cc-sonnet-single-2026-05-28T07-20/run_summary.json
+2026-05-28T09:08:28+00:00 Run complete: sos-cc-sonnet-single-2026-05-28T07-20
