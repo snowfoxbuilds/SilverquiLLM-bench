@@ -805,7 +805,7 @@ def _eval_sos_cards(
             tmp = Path(tmp_dir)
             shutil.copy2(card_impl, tmp / "card_impl.py")
             shutil.copy2(test_file, tmp / "tests.py")
-            test_utils_src = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "test_utils.py"
+            test_utils_src = _REPO_ROOT / "benchmarks" / "sos" / "data" / "test_oracle_workspace" / "test_utils.py"
             if test_utils_src.exists():
                 shutil.copy2(test_utils_src, tmp / "test_utils.py")
 
@@ -872,7 +872,7 @@ def _eval_fdn_cards(
             tmp = Path(tmp_dir)
             shutil.copy2(ref_impl, tmp / "card_impl.py")
             shutil.copy2(test_file, tmp / "tests.py")
-            test_utils_src = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "test_utils.py"
+            test_utils_src = _REPO_ROOT / "benchmarks" / "sos" / "data" / "test_oracle_workspace" / "test_utils.py"
             if test_utils_src.exists():
                 shutil.copy2(test_utils_src, tmp / "test_utils.py")
 
