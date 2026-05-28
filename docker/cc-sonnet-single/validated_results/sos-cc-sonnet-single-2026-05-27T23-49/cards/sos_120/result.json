@@ -1,0 +1,12 @@
+{
+  "collector_number": "sos_120",
+  "tests_passed": 10,
+  "tests_failed": 2,
+  "tests_total": 12,
+  "pass_rate": 0.8333333333333334,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_rwsk2zcp/tests.py::TestImprovisationCapstoneAbilities::test_resolution_exiles_target",
+    "FAILED ../../../../tmp/eval_sos_rwsk2zcp/tests.py::TestImprovisationCapstoneInteractions::test_spell_to_graveyard_after_resolution"
+  ],
+  "skipped": false
+}

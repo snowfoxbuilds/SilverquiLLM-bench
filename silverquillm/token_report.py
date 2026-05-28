@@ -49,19 +49,30 @@ def parse_usage(log_path: Path) -> tuple[dict[tuple[str, str], dict], dict | Non
             final_result = evt
             continue
 
+        # Authoritative subagent-start marker. Carries tool_use_id + subagent_type
+        # directly, so we don't have to guess which tool name (Agent vs. Task)
+        # this Claude Code version uses for subagent dispatch.
+        if etype == "system" and evt.get("subtype") == "task_started":
+            tid = evt.get("tool_use_id")
+            subagent = evt.get("subagent_type")
+            if tid and subagent:
+                task_to_agent[tid] = subagent
+            continue
+
         if etype != "assistant":
             continue
 
         msg = evt.get("message", {}) or {}
         model = msg.get("model", "unknown")
 
-        # Index any Task tool_use blocks so we can attribute later turns.
+        # Fallback: also scan tool_use blocks named Agent/Task in case a
+        # particular Claude Code version doesn't emit task_started events.
         for block in msg.get("content", []) or []:
-            if block.get("type") == "tool_use" and block.get("name") == "Task":
+            if block.get("type") == "tool_use" and block.get("name") in ("Agent", "Task"):
                 tid = block.get("id")
                 subagent = (block.get("input") or {}).get("subagent_type", "unknown")
                 if tid:
-                    task_to_agent[tid] = subagent
+                    task_to_agent.setdefault(tid, subagent)
 
         usage = msg.get("usage")
         if not usage:
