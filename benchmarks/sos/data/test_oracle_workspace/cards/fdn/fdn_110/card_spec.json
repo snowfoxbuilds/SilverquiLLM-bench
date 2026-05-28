@@ -1,0 +1,17 @@
+{
+  "name": "Quakestrider Ceratops",
+  "mana_cost": "{3}{G}{G}{G}",
+  "type_line": "Creature — Dinosaur",
+  "oracle_text": "",
+  "power": "12",
+  "toughness": "8",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "110",
+  "complexity_tier": "simple"
+}

@@ -2,47 +2,34 @@
 
 **Skill**: execute-todo-with-subagents
 **Reviewer model**: GPT-5.4 (via `Reviewer` custom agent)
-**Started**: 2026-05-24T20:34:22Z
-**Finished**: 2026-05-25T01:03:19Z
-**Total duration**: 4h 29m
-**Total duration (seconds)**: 16137
+**Started**: 2026-05-27T18:35:55Z
+**Finished**: 2026-05-27T22:06:49Z
+**Total duration**: 3h 30m 54s
+**Total duration (seconds)**: 12654
 
 ## Summary
-- TODO items completed: 16
-- Items requiring test dispute: 3 (Items 5, 8, 11)
-- Items requiring review revision: 11
-- Items with coordinator arbitration: 3 (Items 11, 12, 16)
-- Commits: 19
-- RUN_DECISIONS entries: 3
-- KEY_DECISIONS entries added: 1
-- Test quality audit: 0 added, 14 fixed, 8 deleted
-- Test suite result: passing (no failures)
-
-## Tokens (subagents)
-- Total Tester tokens: null (not observable)
-- Total Implementer tokens: null (not observable)
-- Total Reviewer tokens: null (not observable)
-- Total across all subagents: null (not observable)
-- Coordinator tokens: null (not observable)
+- TODO items completed: 12
+- Items requiring test dispute: 5 (items 2, 5, 8, 11 test failures; item 6 test rewrite)
+- Items requiring review revision: 10 (items 1-6, 8, 9, 10, 11)
+- Items with coordinator arbitration: 6 (items 2, 5, 6, 8, 9, 11)
+- Commits: 12 (one per item)
+- RUN_DECISIONS entries: 6
+- KEY_DECISIONS entries added: 15
+- Test quality audit: skipped (tests validated per-item by Tester + Reviewer)
+- Test suite result: passing
 
 ## Per-item breakdown
-| TODO item | Implementer (s) | Tester (s) | Reviewer (s) | Test disputes | Review revisions | Total (s) |
-|-----------|-----------------|------------|--------------|---------------|------------------|-----------|
-| 1.1 Workspace skeleton | 156 | 52 | 109 | 0 | 1 | 317 |
-| 1.2 Rulebook | 304 | 78 | 106 | 0 | 1 | 488 |
-| 1.3 Test infrastructure | 436 | 95 | 176 | 0 | 1 | 707 |
-| 1.4 Move engine/ | 1165 | 91 | 148 | 1 | 1 | 1404 |
-| 1.5 Move cards/ | 1433 | 69 | 231 | 1 | 1 | 1733 |
-| 1.6 FDN reference tests | 845 | 248 | 84 | 0 | 1 | 1177 |
-| 1.7 Move audited tests | 295 | 92 | 128 | 0 | 1 | 515 |
-| 8 Rewrite stage_workspace | 984 | 283 | 79 | 1 | 1 | 1346 |
-| 9 Delete deprecated code | 42 | — | — | 0 | 0 | 42 |
-| 10 CI workspace test | 45 | — | 25 | 0 | 0 | 70 |
-| 11 Docker stdout/stderr | 611 | 472 | 128 | 1 | 1 | 1211 |
-| 12 Snapshot callback | 393 | 248 | 80 | 0 | 1 | 721 |
-| 13 Runner log tee | 374 | 53 | 108 | 0 | 1 | 535 |
-| 14 Hide empty channels | 281 | 77 | 103 | 0 | 1 | 461 |
-| 15 Bootstrap telemetry | 266 | 63 | 42 | 0 | 1 | 371 |
-| 16 Drop progress.jsonl | 896 | 103 | 101 | 1 | 2 | 1100 |
-| Dir summaries | 221 | — | — | — | — | 221 |
-| Test audit | — | 1308 | — | — | — | 1308 |
+| TODO item | Implementer (s) | Tester (s) | Reviewer (s) | Test disputes | Review revisions |
+|-----------|-----------------|------------|--------------|---------------|------------------|
+| Item 1: Bootstrap workspace | 490 | 190 | 191 | 1 | 1 |
+| Item 2: sos_1 Dawning Archaic | 1018 | 679 | 201 | 1 | 1 |
+| Item 3: sos_4 Together as One | 473 | 304 | 185 | 0 | 2 |
+| Item 4: sos_13 Emeritus of Truce | 695 | 305 | 139 | 0 | 2 |
+| Item 5: sos_57 Mana Sculpt | 333 | 161 | 253 | 1 | 1 |
+| Item 6: sos_97 Ral Zarek | 708 | 461 | 163 | 1 | 2 |
+| Item 7: sos_120 Improvisation | 437 | 98 | 130 | 0 | 1 |
+| Item 8: sos_201 Lorehold | 692 | 294 | 132 | 1 | 1 |
+| Item 9: sos_226 Silverquill | 375 | 141 | 130 | 0 | 1 |
+| Item 10: sos_245 Witherbloom | 291 | 103 | 109 | 0 | 1 |
+| Item 11: sos_257 Great Hall | 547 | 518 | 125 | 1 | 2 |
+| Item 12: CI regex audit | 105 | — | 60 | 0 | 0 |

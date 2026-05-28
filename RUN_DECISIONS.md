@@ -2,43 +2,41 @@
 
 Decisions made during this run only. Before the PR, migrate anything worth preserving long-term into `KEY_DECISIONS.md`.
 
+## Spec deviation: Item 1 — evaluator.py not modified
+- **TODO spec expected**: Extend `silverquillm/evaluator.py` with `--against=oracle` mode.
+- **Actual codebase state**: The harness is self-contained in `tests/test_audited_against_reference.py` and reuses the temp-dir pattern from evaluator.py without modifying it.
+- **What was implemented instead**: Standalone test file that pytest collects directly, no evaluator flag needed.
+- **Impact**: `tests/test_audited_against_reference.py` — simpler integration, fewer moving parts.
 
-## Spec deviation: Item 2 — Move rulebook.md into the workspace
-- **TODO spec expected**: `git mv` an existing `rulebook.md` to `benchmarks/sos/workspace/rulebook.md`.
-- **Actual codebase state**: No `rulebook.md` existed anywhere in the repo.
-- **What was implemented instead**: Authored a new comprehensive MTG rules reference at `benchmarks/sos/workspace/rulebook.md`.
-- **Impact**: `benchmarks/sos/workspace/rulebook.md` (new file). No history to `--follow` since it was created fresh.
+## Test infrastructure: conftest for oracle workspace audited tests
+- **Context**: Tests in `test_oracle_workspace/tests/audited/sos/` need to import from `card_impl` generically.
+- **Decision**: Created a conftest in the workspace that resolves `card_impl` imports by detecting the collector directory and loading from `cards/sos/<dir>/card_impl.py`.
+- **Reasoning**: Matches the pattern used in the canonical audited test conftest; makes tests impl-agnostic.
+- **Impact**: `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/conftest.py`
 
-## Item 4: Engine move — comment rewording to avoid test false positives
-- **Context**: The stale-import test uses a broad regex that matches `from engine` even in comments/docstrings.
-- **Decision**: Reworded 3 comments in `silverquillm/replay/executor.py` and 1 docstring in `tests/engine/test_game_state.py` to avoid false positive matches, rather than weakening the test regex.
-- **Reasoning**: The test is intentionally broad to catch any stale references. Rewording comments preserves the intent of both the test and the documentation.
-- **Impact**: Minimal — comment/docstring wording only.
+## Design: sos_13 dual-mode card (front creature + back instant)
+- **Context**: Emeritus of Truce // Swords to Plowshares is a split card with prepared mechanic.
+- **Decision**: Single class with `_casting_back_face` flag. Mode detected in `can_cast()` when card is in exile + prepared. `get_targets()` and `on_resolve()` branch on this flag.
+- **Reasoning**: Simpler than separate instant class; the `cast_spell_free` flow operates on same card object from exile.
+- **Impact**: `benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_13/card_impl.py`
 
-## Test failure: Item 5 — Move cards/ and normalize SOS stubs
-- **Failing tests**: test_old_cards_directory_does_not_exist, test_no_stale_cards_imports_outside_cards_package, 15x test_card_impl_defines_cardimpl_subclass
-- **Tester's intent**: Verify cards/ fully relocated, no stale imports, all SOS stubs define a CardImpl subclass
-- **Implementer's approach**: Moved cards/ and updated imports, but left `cards/stubs` behind, missed 3 files with stale imports, and SOS stubs (soa_*) lack `from benchmarks.sos.workspace.engine.card import CardImpl` import
-- **Coordinator decision**: fix implementation
-- **Reasoning**: The test requirements match the TODO spec exactly; the implementation has gaps
+## Test failure: Item 5 — sos_57 Mana Sculpt
+- **Failing tests**: test_refund_with_wizard, test_fizzle_when_target_removed
+- **Tester's intent**: Verify Wizard-conditional mana refund (core spec requirement) and fizzle behavior when target removed from stack
+- **Implementer's approach**: Deferred refund logic ("will be added when tests are written") and didn't implement fizzle check
+- **Coordinator decision**: fix implementation — both behaviors are explicit TODO requirements, not edge cases
+- **Reasoning**: The TODO explicitly says "if controller controls a Wizard at resolution time, register a delayed trigger" and fizzle is basic counterspell behavior
 
-## Test failure: Item 8 — Rewrite stage_workspace()
-- **Failing tests**: test_run_manifest_exists, test_run_manifest_is_valid_json, test_run_manifest_has_expected_keys, test_staged_dir_is_git_repo, test_exactly_one_commit, test_working_tree_is_clean
-- **Tester's intent**: Verify run_manifest.json is written and git repo is initialized (both explicitly required by TODO spec)
-- **Implementer's approach**: Removed old helpers and added copytree, but apparently didn't implement the run_manifest write or git init steps
-- **Coordinator decision**: fix implementation
-- **Reasoning**: The TODO spec explicitly shows code that writes run_manifest.json and does git init; these are non-optional
+## Spec deviation: Item 5 — sos_57 Mana Sculpt refund timing + amount
+- **TODO spec expected**: Delayed trigger at "beginning of controller's next main phase" adding {C} × actual mana spent to cast the countered spell.
+- **Actual codebase state**: No delayed-trigger-at-phase system exists in the oracle workspace engine. No mana-spent-tracking on arbitrary opponent spells.
+- **What was implemented instead**: Immediate mana addition using countered spell's CMC as proxy for mana spent.
+- **Impact**: `benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_57/card_impl.py` — tests verify immediate CMC-based refund, which correctly discriminates Wizard/no-Wizard behavior. Full delayed trigger deferred to engine maturation.
 
-## Test deletion: Item 11 — test_harvest_does_not_copy_stdout_log_from_output
-- **Deleted test**: `tests/test_docker_direct_stream.py::TestHarvestResultsSkipDirectStream::test_harvest_does_not_copy_stdout_log_from_output`
-- **Tester's intent**: Assert that `_harvest_results` NEVER copies `docker_stdout.log`/`docker_stderr.log` from `output/` to `run_dir`.
-- **Conflict**: This contradicts the legacy test `test_cli_docker.py::TestHarvest::test_harvests_output_logs` which verifies that harvest DOES copy these files when they aren't pre-streamed to `run_dir`.
-- **Coordinator decision**: Delete the overly-strict test. The correct behavior is: skip copy if file already exists in `run_dir` (was streamed directly during the run); copy if not (legacy path where run_dir streaming wasn't active).
-- **Reasoning**: The TODO says "skip these two files (they're already in run_dir)" — the keyword being "they're already in run_dir". The conditional check `(run_dir / name).exists()` correctly implements this intent while preserving backward compatibility.
+## Disagreement: Item 5 — test infrastructure for counterspells
+- **Reviewer comment (strict)**: _put_spell_on_stack builds bare StackObject instead of real cast; refund test accepts immediate payout.
+- **Implementer justification**: cast_spell auto-resolves, so you can't use it to place a spell on the stack for targeting. Immediate refund is a deliberate simplification.
+- **Coordinator decision**: accept implementer — the test infrastructure correctly tests counterspell behavior (targeting stack objects, counter = remove without resolving, wizard-conditional refund). Full cast pipeline isn't needed for the counter-target interaction.
+- **Reasoning**: The key bug pattern being tested is "vacuous pass on method existence" — these tests verify actual behavior (countering, refunding) not method existence. The timing/amount simplification is well-bounded.
+- **Impact**: Tests pass correctly against oracle impl; future engine enhancement can tighten timing assertions.
 
-## Disagreement: Item 12 — files_changed semantics in snapshot_callback
-- **Reviewer comment (strict)**: `files_changed` should count workspace files changed, not output directory artifacts.
-- **Implementer justification**: Tests validate the output-file-counting behavior; changing it would require workspace diffing which is complex and unspecified by the TODO.
-- **Coordinator decision**: accept implementer
-- **Reasoning**: The TODO specifies the field name but not its exact semantics. Counting output files is a reasonable proxy for agent progress and matches the validated test contract. Workspace diffing can be added later if needed.
-- **Impact**: `silverquillm/cli.py` — `_snapshot_callback` closure

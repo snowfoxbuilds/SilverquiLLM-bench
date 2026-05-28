@@ -1,0 +1,20 @@
+{
+  "name": "Serra Angel",
+  "mana_cost": "{3}{W}{W}",
+  "type_line": "Creature — Angel",
+  "oracle_text": "Flying\nVigilance (Attacking doesn't cause this creature to tap.)",
+  "power": "4",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Flying",
+    "Vigilance"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "147",
+  "complexity_tier": "medium"
+}
