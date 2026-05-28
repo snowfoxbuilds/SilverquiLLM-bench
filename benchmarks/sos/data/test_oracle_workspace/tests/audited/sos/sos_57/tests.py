@@ -1,18 +1,36 @@
-"""Rewritten audited tests for Mana Sculpt (sos_57).
+"""Audited tests for Mana Sculpt (sos_57) — FLAGSHIP.
 
-7 tests per spec:
-1. test_identity — name, mana_cost {1}{U}{U}, CMC 3, Instant type, Blue color
-2. test_get_targets_returns_stack_spells — cast a spell onto the stack,
-   verify Mana Sculpt's targeting can target it (NOT gated on method existence)
-3. test_get_targets_excludes_permanents — permanents on battlefield are NOT targets
-4. test_counters_via_real_cast — opponent's spell countered (moved to GY, on_resolve
-   not invoked)
-5. test_refund_with_wizard — Wizard present → colorless mana refund
-6. test_no_refund_without_wizard — no Wizard → no mana refund
-7. test_fizzle_when_target_removed — target removed before resolution → fizzle
+Oracle: {1}{U}{U} Instant.
+  Counter target spell. If you control a Wizard, add an amount of {C}
+  equal to the amount of mana spent to cast that spell at the beginning
+  of your next main phase.
 
-Bug pattern addressed: tests must verify BEHAVIOR not method existence.
-No `callable(getattr(card, "get_targets", None))` pattern allowed.
+Phase 18 doctrine: integration-style tests against canonical engine APIs.
+The target spell is placed on the stack via the real `cast_spell` pipeline
+(not a synthetic `_put_spell_on_stack` helper) so that `mana_spent` is
+recorded correctly at cast time. The refund is verified by advancing the
+game to the controller's next main phase and observing the mana pool.
+
+Tests:
+  TestIdentity
+    1. test_identity
+  TestTargeting
+    2. test_get_targets_returns_stack_spells (real cast)
+    3. test_get_targets_excludes_permanents
+    4. test_get_targets_excludes_empty_stack
+  TestCounter
+    5. test_counters_via_real_cast
+    6. test_fizzle_when_target_removed
+  TestRefund
+    7. test_refund_with_wizard_at_next_main_phase
+    8. test_refund_amount_equals_mana_spent
+    9. test_no_refund_without_wizard
+    10. test_no_refund_when_fizzled
+    11. test_no_refund_on_opponent_main_phase
+    12. test_refund_fires_only_once
+    13. test_refund_locked_in_when_wizard_leaves_before_next_main
+
+Edge case coverage requested by the user (Q1/Q2 follow-up).
 """
 
 from __future__ import annotations
@@ -22,12 +40,15 @@ import pytest
 from card_impl import ManaSculpt
 
 from engine.card import Creature, Instant
-from engine.stack import StackObject
-from engine.types import CardType, ManaCost, ManaType, Zone
+from engine.casting import cast_spell as engine_cast_spell
+from engine.events import BeginningOfMainPhaseEvent
+from engine.types import CardType, ManaCost, ManaType, Phase, Zone
 from test_utils import (
     card_colors,
     create_game,
+    resolve_top,
     set_battlefield,
+    set_hand,
     set_mana_pool,
 )
 
@@ -38,323 +59,336 @@ from test_utils import (
 
 
 def _make_wizard(name: str = "Sage of Fables") -> Creature:
-    """Create a Wizard creature for testing the Wizard-conditional refund."""
     return Creature(name=name, base_power=2, base_toughness=2, subtypes={"Wizard"})
 
 
-def _make_opponent_spell(name: str = "Lightning Bolt", owner=None) -> Instant:
-    """Create a simple opponent spell."""
-    return Instant(
-        name=name,
-        owner=owner,
-        mana_cost=ManaCost(generic=0, pips={ManaType.RED: 1}),
+def _make_target_spell(
+    name: str = "Lightning Bolt",
+    owner=None,
+    cost: ManaCost | None = None,
+) -> Instant:
+    """A simple opponent spell with no targets, so casting doesn't ask for one."""
+    if cost is None:
+        cost = ManaCost(generic=2, pips={ManaType.RED: 1})  # CMC 3
+    return Instant(name=name, owner=owner, mana_cost=cost)
+
+
+def _fund_for(player, cost: ManaCost) -> None:
+    """Add exactly enough mana to *player* to pay *cost*."""
+    mana: dict[ManaType, int] = {}
+    if cost.generic:
+        mana[ManaType.COLORLESS] = mana.get(ManaType.COLORLESS, 0) + cost.generic
+    for mana_type, amount in cost.pips.items():
+        mana[mana_type] = mana.get(mana_type, 0) + amount
+    for mana_type, amount in mana.items():
+        player.mana_pool.add(mana_type, amount)
+
+
+def _enter_main_phase_for(game, player) -> None:
+    """Fire `BeginningOfMainPhaseEvent` for *player* and drain any
+    triggers it puts on the stack.
+
+    `trigger_manager.fire_event` pushes triggered StackObjects but does
+    not resolve them — real MTG flow gives players priority first. For
+    these tests we simulate immediate resolution of the resulting
+    triggers (no interaction available)."""
+    game.active_player_index = game.players.index(player)
+    game.trigger_manager.fire_event(
+        game, BeginningOfMainPhaseEvent(player=player)
     )
-
-
-def _put_spell_on_stack(game, spell, controller) -> StackObject:
-    """Place a spell on the game stack and return the stack object."""
-    spell.owner = controller
-    spell.controller = controller
-    stack_obj = StackObject(source=spell, controller=controller)
-    game.stack.push(stack_obj)
-    controller.zones[Zone.STACK].add(spell)
-    return stack_obj
+    while not game.stack.is_empty():
+        resolve_top(game)
 
 
 # ---------------------------------------------------------------------------
-# Test 1: Identity
+# Identity
 # ---------------------------------------------------------------------------
 
 
 class TestIdentity:
-    """Verify static card properties match card_spec.json."""
-
     def test_identity(self) -> None:
-        """Mana Sculpt: name, {1}{U}{U}, CMC 3, Instant, Blue."""
-        card = ManaSculpt(name="Mana Sculpt", owner=None)
-
-        # Name
+        card = ManaSculpt(owner=None)
         assert card.name == "Mana Sculpt"
-
-        # Mana cost: {1}{U}{U}
         assert card.mana_cost.generic == 1
         assert card.mana_cost.pips.get(ManaType.BLUE) == 2
-
-        # CMC = 3
         assert card.mana_cost.cmc == 3
-
-        # Card type: Instant
         assert CardType.INSTANT in card.card_types
         assert isinstance(card, Instant)
-
-        # Color: Blue
         colors = card_colors(card)
-        assert "U" in colors
-        assert len(colors) == 1, f"Expected only Blue, got {colors}"
+        assert colors == {"U"}
 
 
 # ---------------------------------------------------------------------------
-# Test 2: get_targets returns stack spells
+# Targeting
 # ---------------------------------------------------------------------------
 
 
-class TestGetTargetsReturnsStackSpells:
-    """Verify targeting finds spells on the stack — NOT gated on method existence."""
-
+class TestTargeting:
     def test_get_targets_returns_stack_spells(self) -> None:
-        """Cast a spell onto the stack; Mana Sculpt's targets include it."""
+        """Casting a spell via the real pipeline lands it on the stack;
+        Mana Sculpt's targets include it."""
         game = create_game()
-        p1 = game.players[0]
-        p2 = game.players[1]
+        p1, p2 = game.players
 
-        # Put opponent's spell on the stack
-        enemy_spell = _make_opponent_spell("Enemy Bolt", owner=p2)
-        stack_obj = _put_spell_on_stack(game, enemy_spell, p2)
+        target = _make_target_spell(owner=p2)
+        set_hand(game, 1, [target])
+        _fund_for(p2, target.mana_cost)
+        engine_cast_spell(game, p2, target)
 
-        # Create Mana Sculpt and get targets
-        card = ManaSculpt(name="Mana Sculpt", owner=p1)
-        card.controller = p1
-        targets = card.get_targets(game)
-
-        # The opponent's spell on the stack must be a valid target
-        assert stack_obj in targets, (
-            f"Stack spell should be a valid target. Targets: {targets}"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Test 3: get_targets excludes permanents
-# ---------------------------------------------------------------------------
-
-
-class TestGetTargetsExcludesPermanents:
-    """Verify permanents on the battlefield are NOT valid targets."""
+        targets = ManaSculpt(owner=p1).get_targets(game)
+        assert len(targets) == 1
+        assert targets[0].source is target
 
     def test_get_targets_excludes_permanents(self) -> None:
-        """Creatures on the battlefield must not appear in get_targets."""
         game = create_game()
-        p1 = game.players[0]
-        p2 = game.players[1]
-
-        # Put creatures on the battlefield
+        p1, p2 = game.players
         bear = Creature(name="Bear", owner=p1, base_power=2, base_toughness=2)
         set_battlefield(game, 0, [bear])
+        enemy = Creature(name="Goblin", owner=p2, base_power=1, base_toughness=1)
+        set_battlefield(game, 1, [enemy])
 
-        enemy_creature = Creature(name="Goblin", owner=p2, base_power=1, base_toughness=1)
-        set_battlefield(game, 1, [enemy_creature])
+        targets = ManaSculpt(owner=p1).get_targets(game)
+        assert targets == []
 
-        # Mana Sculpt should have NO targets (nothing on stack)
-        card = ManaSculpt(name="Mana Sculpt", owner=p1)
-        card.controller = p1
-        targets = card.get_targets(game)
-
-        # Permanents must not be valid targets
-        assert bear not in targets, "Battlefield creature should not be a target"
-        assert enemy_creature not in targets, "Opponent's creature should not be a target"
-        assert len(targets) == 0, (
-            f"With empty stack and only permanents, targets should be empty. Got: {targets}"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Test 4: Counters via real cast (on_resolve not invoked on target)
-# ---------------------------------------------------------------------------
-
-
-class TestCountersViaRealCast:
-    """Cast opponent's spell, counter with Mana Sculpt, verify counter behavior."""
-
-    def test_counters_via_real_cast(self) -> None:
-        """Opponent's spell is countered: moved to graveyard, its on_resolve NOT called."""
+    def test_get_targets_excludes_empty_stack(self) -> None:
         game = create_game()
         p1 = game.players[0]
-        p2 = game.players[1]
+        assert ManaSculpt(owner=p1).get_targets(game) == []
 
-        # Track whether the target's on_resolve is called
-        resolve_called = []
+
+# ---------------------------------------------------------------------------
+# Counter behavior
+# ---------------------------------------------------------------------------
+
+
+class TestCounter:
+    def test_counters_via_real_cast(self) -> None:
+        """Opponent's spell is cast, then countered: moved to GY,
+        its on_resolve NOT invoked."""
+        game = create_game()
+        p1, p2 = game.players
+
+        resolve_called: list[bool] = []
 
         class TrackedSpell(Instant):
-            def on_resolve(self, game):
+            def on_resolve(self, game):  # type: ignore[override]
                 resolve_called.append(True)
 
-        target_spell = TrackedSpell(
+        target = TrackedSpell(
             name="Enemy Spell",
             owner=p2,
             mana_cost=ManaCost(generic=2, pips={ManaType.RED: 1}),
         )
-        target_spell.controller = p2
+        set_hand(game, 1, [target])
+        _fund_for(p2, target.mana_cost)
+        engine_cast_spell(game, p2, target)
+        target_stack_obj = game.stack.peek()
 
-        # Put opponent's spell on the stack
-        stack_obj = _put_spell_on_stack(game, target_spell, p2)
+        # Mana Sculpt
+        mana_sculpt = ManaSculpt(owner=p1)
+        set_hand(game, 0, [mana_sculpt])
+        _fund_for(p1, mana_sculpt.mana_cost)
+        # Script the target choice for p1
+        p1._script.appendleft(target_stack_obj)
+        engine_cast_spell(game, p1, mana_sculpt)
 
-        # Cast Mana Sculpt targeting that spell
-        mana_sculpt = ManaSculpt(name="Mana Sculpt", owner=p1)
-        mana_sculpt.controller = p1
-        mana_sculpt.chosen_targets = [stack_obj]
-        mana_sculpt.on_resolve(game)
+        # Resolve Mana Sculpt (top of stack)
+        resolve_top(game)
 
-        # Target spell must be removed from the stack
-        remaining_on_stack = list(game.stack.objects())
-        assert stack_obj not in remaining_on_stack, (
-            "Countered spell should be removed from the stack"
-        )
-
-        # Target's on_resolve must NOT have been called
-        assert len(resolve_called) == 0, (
-            "Countered spell's on_resolve should NOT be invoked"
-        )
-
-        # Target spell should be in owner's graveyard
-        gy_cards = p2.zones[Zone.GRAVEYARD].get_all()
-        assert target_spell in gy_cards, (
-            f"Countered spell should be in graveyard. GY: "
-            f"{[getattr(c, 'name', c) for c in gy_cards]}"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Test 5: Refund with Wizard
-# ---------------------------------------------------------------------------
-
-
-class TestRefundWithWizard:
-    """Controller has a Wizard → gets colorless mana equal to countered spell's cost."""
-
-    def test_refund_with_wizard(self) -> None:
-        """With a Wizard on battlefield, controller gets {C} equal to countered spell's CMC."""
-        game = create_game()
-        p1 = game.players[0]
-        p2 = game.players[1]
-
-        # Put a Wizard on p1's battlefield
-        wizard = _make_wizard("Test Wizard")
-        set_battlefield(game, 0, [wizard])
-
-        # Empty p1's mana pool to verify refund
-        set_mana_pool(game, 0, {})
-
-        # Opponent casts a 3-CMC spell
-        target_spell = Instant(
-            name="Expensive Spell",
-            owner=p2,
-            mana_cost=ManaCost(generic=2, pips={ManaType.RED: 1}),
-        )
-        target_spell.controller = p2
-        stack_obj = _put_spell_on_stack(game, target_spell, p2)
-
-        # Resolve Mana Sculpt
-        mana_sculpt = ManaSculpt(name="Mana Sculpt", owner=p1)
-        mana_sculpt.controller = p1
-        mana_sculpt.chosen_targets = [stack_obj]
-        mana_sculpt.on_resolve(game)
-
-        # Verify mana refund: controller should get colorless mana = countered spell's CMC (3)
-        # The refund happens "at the beginning of your next main phase" per oracle text,
-        # but implementations may grant it immediately or via delayed trigger.
-        # We check that p1's mana pool eventually contains the refund amount.
-        colorless_mana = p1.mana_pool.get(ManaType.COLORLESS)
-        assert colorless_mana >= 3, (
-            f"With Wizard, should refund {3} colorless mana. "
-            f"Got: {colorless_mana}"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Test 6: No refund without Wizard
-# ---------------------------------------------------------------------------
-
-
-class TestNoRefundWithoutWizard:
-    """Controller has NO Wizard → no mana refund after countering."""
-
-    def test_no_refund_without_wizard(self) -> None:
-        """Without a Wizard, no mana is refunded after countering."""
-        game = create_game()
-        p1 = game.players[0]
-        p2 = game.players[1]
-
-        # No Wizard on p1's battlefield — just a non-Wizard creature
-        bear = Creature(name="Bear", owner=p1, base_power=2, base_toughness=2,
-                        subtypes={"Beast"})
-        set_battlefield(game, 0, [bear])
-
-        # Empty p1's mana pool
-        set_mana_pool(game, 0, {})
-
-        # Opponent's spell
-        target_spell = Instant(
-            name="Expensive Spell",
-            owner=p2,
-            mana_cost=ManaCost(generic=2, pips={ManaType.RED: 1}),
-        )
-        target_spell.controller = p2
-        stack_obj = _put_spell_on_stack(game, target_spell, p2)
-
-        # Resolve Mana Sculpt
-        mana_sculpt = ManaSculpt(name="Mana Sculpt", owner=p1)
-        mana_sculpt.controller = p1
-        mana_sculpt.chosen_targets = [stack_obj]
-        mana_sculpt.on_resolve(game)
-
-        # Verify NO mana refund
-        colorless_mana = p1.mana_pool.get(ManaType.COLORLESS)
-        assert colorless_mana == 0, (
-            f"Without Wizard, should NOT refund any mana. Got: {colorless_mana}"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Test 7: Fizzle when target removed
-# ---------------------------------------------------------------------------
-
-
-class TestFizzleWhenTargetRemoved:
-    """If the target spell is removed from the stack before resolution, Mana Sculpt fizzles."""
+        # Target removed from stack, no resolution called, ended up in p2 GY
+        assert target_stack_obj not in game.stack.objects()
+        assert resolve_called == []
+        assert target in p2.zones[Zone.GRAVEYARD].get_all()
 
     def test_fizzle_when_target_removed(self) -> None:
-        """Target removed from stack before resolution → Mana Sculpt does nothing."""
+        """If the target leaves the stack before Mana Sculpt resolves,
+        Mana Sculpt does nothing."""
         game = create_game()
-        p1 = game.players[0]
-        p2 = game.players[1]
+        p1, p2 = game.players
 
-        # Put a Wizard on p1's battlefield (to verify no refund on fizzle either)
-        wizard = _make_wizard("Test Wizard")
+        # Wizard present — so we'd KNOW if refund accidentally fired
+        set_battlefield(game, 0, [_make_wizard()])
+
+        target = _make_target_spell(owner=p2)
+        set_hand(game, 1, [target])
+        _fund_for(p2, target.mana_cost)
+        engine_cast_spell(game, p2, target)
+        target_stack_obj = game.stack.peek()
+
+        mana_sculpt = ManaSculpt(owner=p1)
+        set_hand(game, 0, [mana_sculpt])
+        _fund_for(p1, mana_sculpt.mana_cost)
+        p1._script.appendleft(target_stack_obj)
+        engine_cast_spell(game, p1, mana_sculpt)
+
+        # Remove target before resolution (simulates a second counterspell)
+        game.stack._items.remove(target_stack_obj)
+
+        # Drain p1's mana pool so we can detect any refund
+        p1.mana_pool.empty()
+        resolve_top(game)
+
+        # Fizzle: no GY add by Mana Sculpt, no refund trigger registered
+        assert target not in p2.zones[Zone.GRAVEYARD].get_all()
+        # Advance to p1's next main phase — no trigger should fire
+        _enter_main_phase_for(game, p1)
+        assert p1.mana_pool.get(ManaType.COLORLESS) == 0
+
+
+# ---------------------------------------------------------------------------
+# Wizard-conditional delayed refund
+# ---------------------------------------------------------------------------
+
+
+class TestRefund:
+    def _counter_and_get_p1(self, game, target_cost: ManaCost):
+        """Helper: counter a target spell costing *target_cost*, return p1."""
+        p1, p2 = game.players
+        target = _make_target_spell(owner=p2, cost=target_cost)
+        set_hand(game, 1, [target])
+        _fund_for(p2, target_cost)
+        engine_cast_spell(game, p2, target)
+        target_stack_obj = game.stack.peek()
+
+        mana_sculpt = ManaSculpt(owner=p1)
+        set_hand(game, 0, [mana_sculpt])
+        _fund_for(p1, mana_sculpt.mana_cost)
+        p1._script.appendleft(target_stack_obj)
+        engine_cast_spell(game, p1, mana_sculpt)
+        resolve_top(game)
+        return p1
+
+    def test_refund_with_wizard_at_next_main_phase(self) -> None:
+        game = create_game()
+        p1, p2 = game.players
+        set_battlefield(game, 0, [_make_wizard()])
+
+        target_cost = ManaCost(generic=2, pips={ManaType.RED: 1})  # CMC 3
+        self._counter_and_get_p1(game, target_cost)
+        p1.mana_pool.empty()
+
+        # Refund must NOT have arrived yet (delayed trigger, not immediate)
+        assert p1.mana_pool.get(ManaType.COLORLESS) == 0
+
+        # At p1's next main phase, the delayed trigger fires
+        _enter_main_phase_for(game, p1)
+        assert p1.mana_pool.get(ManaType.COLORLESS) == 3
+
+    def test_refund_amount_equals_mana_spent(self) -> None:
+        """Refund amount tracks mana_spent at cast time, not printed CMC."""
+        game = create_game()
+        p1, p2 = game.players
+        set_battlefield(game, 0, [_make_wizard()])
+
+        # CMC 5 target
+        target_cost = ManaCost(generic=3, pips={ManaType.RED: 2})
+        self._counter_and_get_p1(game, target_cost)
+        p1.mana_pool.empty()
+
+        _enter_main_phase_for(game, p1)
+        assert p1.mana_pool.get(ManaType.COLORLESS) == 5
+
+    def test_no_refund_without_wizard(self) -> None:
+        game = create_game()
+        p1, p2 = game.players
+        # Non-Wizard creature on p1's battlefield
+        bear = Creature(
+            name="Bear", owner=p1, base_power=2, base_toughness=2,
+            subtypes={"Beast"},
+        )
+        set_battlefield(game, 0, [bear])
+
+        target_cost = ManaCost(generic=2, pips={ManaType.RED: 1})
+        self._counter_and_get_p1(game, target_cost)
+        p1.mana_pool.empty()
+
+        _enter_main_phase_for(game, p1)
+        assert p1.mana_pool.get(ManaType.COLORLESS) == 0
+
+    def test_no_refund_when_fizzled(self) -> None:
+        """Already covered behaviorally by TestCounter.test_fizzle…; this
+        is the explicit assertion that fizzle path skips refund."""
+        game = create_game()
+        p1, p2 = game.players
+        set_battlefield(game, 0, [_make_wizard()])
+
+        target = _make_target_spell(owner=p2)
+        set_hand(game, 1, [target])
+        _fund_for(p2, target.mana_cost)
+        engine_cast_spell(game, p2, target)
+        target_stack_obj = game.stack.peek()
+
+        mana_sculpt = ManaSculpt(owner=p1)
+        set_hand(game, 0, [mana_sculpt])
+        _fund_for(p1, mana_sculpt.mana_cost)
+        p1._script.appendleft(target_stack_obj)
+        engine_cast_spell(game, p1, mana_sculpt)
+
+        # Target leaves the stack before Mana Sculpt resolves
+        game.stack._items.remove(target_stack_obj)
+        p1.mana_pool.empty()
+        resolve_top(game)
+
+        # Advance to next main — no trigger fires
+        _enter_main_phase_for(game, p1)
+        assert p1.mana_pool.get(ManaType.COLORLESS) == 0
+
+    def test_no_refund_on_opponent_main_phase(self) -> None:
+        """The delayed trigger fires on YOUR next main phase, not the opponent's."""
+        game = create_game()
+        p1, p2 = game.players
+        set_battlefield(game, 0, [_make_wizard()])
+
+        target_cost = ManaCost(generic=2, pips={ManaType.RED: 1})
+        self._counter_and_get_p1(game, target_cost)
+        p1.mana_pool.empty()
+
+        # p2's main phase first — no refund
+        _enter_main_phase_for(game, p2)
+        assert p1.mana_pool.get(ManaType.COLORLESS) == 0
+
+        # Then p1's main — refund arrives
+        _enter_main_phase_for(game, p1)
+        assert p1.mana_pool.get(ManaType.COLORLESS) == 3
+
+    def test_refund_fires_only_once(self) -> None:
+        """The delayed trigger fires at the controller's NEXT main phase
+        and never again."""
+        game = create_game()
+        p1, p2 = game.players
+        set_battlefield(game, 0, [_make_wizard()])
+
+        target_cost = ManaCost(generic=2, pips={ManaType.RED: 1})
+        self._counter_and_get_p1(game, target_cost)
+        p1.mana_pool.empty()
+
+        # First main: refund fires
+        _enter_main_phase_for(game, p1)
+        assert p1.mana_pool.get(ManaType.COLORLESS) == 3
+
+        # Drain pool, fire next main phase — should NOT fire again
+        p1.mana_pool.empty()
+        _enter_main_phase_for(game, p1)
+        assert p1.mana_pool.get(ManaType.COLORLESS) == 0
+
+    def test_refund_locked_in_when_wizard_leaves_before_next_main(self) -> None:
+        """Per oracle, the 'if you control a Wizard' check is evaluated at
+        Mana Sculpt's resolution time. If the Wizard leaves before the next
+        main phase, the refund still fires (the trigger was already
+        registered).
+        """
+        game = create_game()
+        p1, p2 = game.players
+        wizard = _make_wizard()
         set_battlefield(game, 0, [wizard])
-        set_mana_pool(game, 0, {})
 
-        # Opponent's spell on stack
-        target_spell = Instant(
-            name="Vanishing Spell",
-            owner=p2,
-            mana_cost=ManaCost(generic=1, pips={ManaType.BLACK: 1}),
-        )
-        target_spell.controller = p2
-        stack_obj = _put_spell_on_stack(game, target_spell, p2)
+        target_cost = ManaCost(generic=2, pips={ManaType.RED: 1})
+        self._counter_and_get_p1(game, target_cost)
+        p1.mana_pool.empty()
 
-        # Mana Sculpt targets the spell
-        mana_sculpt = ManaSculpt(name="Mana Sculpt", owner=p1)
-        mana_sculpt.controller = p1
-        mana_sculpt.chosen_targets = [stack_obj]
+        # Remove the Wizard before next main
+        p1.zones[Zone.BATTLEFIELD].remove(wizard)
 
-        # Remove target from stack BEFORE resolution (simulating another counter)
-        game.stack._items.remove(stack_obj)
-
-        # Resolve Mana Sculpt — should fizzle (no effect)
-        mana_sculpt.on_resolve(game)
-
-        # Graveyard should NOT have the target (it was already removed elsewhere)
-        gy_cards = p2.zones[Zone.GRAVEYARD].get_all()
-        target_in_gy = any(
-            getattr(c, "name", None) == "Vanishing Spell" for c in gy_cards
-        )
-        # The spell was removed from the stack by other means — Mana Sculpt
-        # should not move it to graveyard again or have any effect
-        assert not target_in_gy, (
-            "Fizzled Mana Sculpt should not move already-removed spell to graveyard"
-        )
-
-        # No mana refund on fizzle (even with Wizard)
-        colorless_mana = p1.mana_pool.get(ManaType.COLORLESS)
-        assert colorless_mana == 0, (
-            f"Fizzled spell should not grant mana refund. Got: {colorless_mana}"
-        )
+        _enter_main_phase_for(game, p1)
+        # Refund still arrives — the trigger was locked in at resolution time
+        assert p1.mana_pool.get(ManaType.COLORLESS) == 3

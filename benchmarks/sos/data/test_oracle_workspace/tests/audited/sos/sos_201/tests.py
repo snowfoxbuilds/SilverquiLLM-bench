@@ -321,3 +321,130 @@ class TestNoTriggerOnControllerUpkeep:
         hand_cards = player.zones[Zone.HAND].get_all()
         assert hand_card in hand_cards
         assert len(hand_cards) == 1
+
+
+# ---------------------------------------------------------------------------
+# Edge cases (user requested expanded coverage 2026-05-28)
+# ---------------------------------------------------------------------------
+
+
+class TestMiracleDeclined:
+    """Player declines the miracle offer — the drawn card stays in hand."""
+
+    def test_miracle_offer_declined_card_stays_in_hand(self) -> None:
+        # Script: choose_yes_no for miracle -> False
+        game = create_game(scripts=([False], []))
+        player = game.players[0]
+
+        lorehold = LoreholdTheHistorian(owner=player)
+        bolt = Instant(
+            name="Lightning Bolt",
+            mana_cost=ManaCost(pips={ManaType.RED: 1}),
+            owner=player,
+        )
+
+        set_battlefield(game, 0, [lorehold])
+        set_library_top(game, 0, [bolt])
+        set_mana_pool(game, 0, {ManaType.COLORLESS: 2})
+        player.cards_drawn_this_turn = 0
+
+        drawn = draw_card(game, player)
+        assert drawn is bolt
+
+        if not game.stack.is_empty():
+            resolve_top(game)
+
+        # Card should remain in hand (declined miracle)
+        hand_cards = player.zones[Zone.HAND].get_all()
+        assert bolt in hand_cards
+        # Mana should not have been spent
+        assert player.mana_pool.get(ManaType.COLORLESS) == 2
+
+
+class TestMultipleInstantsGrantedMiracle:
+    """All instants/sorceries in hand simultaneously get miracle_cost."""
+
+    def test_multiple_cards_all_get_miracle_cost(self) -> None:
+        game = create_game()
+        player = game.players[0]
+        lorehold = LoreholdTheHistorian(owner=player)
+        bolt = Instant(
+            name="Lightning Bolt",
+            mana_cost=ManaCost(pips={ManaType.RED: 1}), owner=player,
+        )
+        divination = Sorcery(
+            name="Divination",
+            mana_cost=ManaCost(generic=2, pips={ManaType.BLUE: 1}), owner=player,
+        )
+        counterspell = Instant(
+            name="Counterspell",
+            mana_cost=ManaCost(pips={ManaType.BLUE: 2}), owner=player,
+        )
+
+        set_battlefield(game, 0, [lorehold])
+        set_hand(game, 0, [bolt, divination, counterspell])
+        game.effect_manager.apply_all(game)
+
+        for c in (bolt, divination, counterspell):
+            assert getattr(c, "miracle_cost", None) is not None, c.name
+            assert c.miracle_cost.cmc == 2
+
+
+class TestCreatureDrawnNoMiracle:
+    """Drawing a creature as the first card does not offer miracle (only
+    instants/sorceries are eligible)."""
+
+    def test_creature_first_draw_no_miracle_trigger(self) -> None:
+        # Empty script — any unexpected choose_yes_no would raise
+        game = create_game(scripts=([], []))
+        player = game.players[0]
+
+        lorehold = LoreholdTheHistorian(owner=player)
+        bear = Creature(
+            name="Grizzly Bears",
+            mana_cost=ManaCost(generic=1, pips={ManaType.GREEN: 1}),
+            owner=player,
+            base_power=2, base_toughness=2,
+        )
+
+        set_battlefield(game, 0, [lorehold])
+        set_library_top(game, 0, [bear])
+        player.cards_drawn_this_turn = 0
+
+        drawn = draw_card(game, player)
+        assert drawn is bear
+        # No miracle trigger should land on the stack
+        assert game.stack.is_empty()
+        # Bear stays in hand, no miracle_cost set on a creature
+        assert bear in player.zones[Zone.HAND].get_all()
+        has_miracle = getattr(bear, "miracle_cost", None) is not None
+        assert not has_miracle
+
+
+class TestMiracleGrantAfterCardDrawnIntoHand:
+    """A newly drawn instant joins the hand; on the next apply, it too
+    gets miracle_cost."""
+
+    def test_card_drawn_into_hand_gets_miracle_cost_on_next_apply(self) -> None:
+        game = create_game(scripts=([False], []))  # decline if asked
+        player = game.players[0]
+
+        lorehold = LoreholdTheHistorian(owner=player)
+        bolt = Instant(
+            name="Lightning Bolt",
+            mana_cost=ManaCost(pips={ManaType.RED: 1}),
+            owner=player,
+        )
+
+        set_battlefield(game, 0, [lorehold])
+        set_library_top(game, 0, [bolt])
+        # Force this to be the SECOND draw so miracle doesn't trigger
+        # (we want to test the static grant on a drawn card)
+        player.cards_drawn_this_turn = 1
+
+        drawn = draw_card(game, player)
+        assert drawn is bolt
+        # On next apply, the drawn card should be granted miracle_cost
+        game.effect_manager.apply_all(game)
+        assert getattr(bolt, "miracle_cost", None) is not None
+        assert bolt.miracle_cost.cmc == 2

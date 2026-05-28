@@ -109,6 +109,7 @@ class GreatHallOfTheBiblioplex(Land):
         """Produce one mana of any color, restricted to instant/sorcery spells.
 
         Uses the engine's restricted-mana primitive via ManaPool.add_restricted().
+        Read restrictions back via `controller.mana_pool.restricted_mana`.
         """
         controller = getattr(self, "controller", None)
         if controller is not None:
@@ -117,11 +118,6 @@ class GreatHallOfTheBiblioplex(Land):
                 restriction="instant_or_sorcery",
                 source=self,
             )
-            # Expose on player for backward-compatible test access
-            if not hasattr(controller, "_restricted_mana"):
-                controller._restricted_mana = controller.mana_pool._restricted_mana
-            else:
-                controller._restricted_mana = controller.mana_pool._restricted_mana
         return {"type": "any_color", "amount": 1, "restriction": "instant_or_sorcery"}
 
     # ------------------------------------------------------------------
@@ -163,17 +159,11 @@ class GreatHallOfTheBiblioplex(Land):
             return False
         self.is_tapped = True
         controller.life -= 1
-        # Use the engine's restricted-mana primitive
         controller.mana_pool.add_restricted(
             ManaType.COLORLESS, 1,
             restriction="instant_or_sorcery",
             source=self,
         )
-        # Also expose on player for backward-compatible test access
-        if not hasattr(controller, "_restricted_mana"):
-            controller._restricted_mana = controller.mana_pool._restricted_mana
-        else:
-            controller._restricted_mana = controller.mana_pool._restricted_mana
         return True
 
     def _activate_animation(self, game: Any) -> bool:

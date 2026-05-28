@@ -199,14 +199,23 @@ class EmeritusOfTruceSwordsToPlowshares(Creature):
     # ------------------------------------------------------------------
 
     def _check_prepared_condition(self, game: GameState) -> None:
-        """If an opponent controls more creatures than us, become prepared."""
+        """If an opponent controls more creatures than us, become prepared.
+
+        MTG-correctly the "Then if…" clause is part of the ETB trigger and
+        evaluates AFTER this card is already on the battlefield. Because we
+        evaluate this from `on_resolve` (the engine moves the card to BF
+        afterward), we count this card itself in the my_creatures total.
+        """
         controller = self.controller
         if controller is None:
             return
 
-        my_creatures = sum(
+        # +1 accounts for this card itself (about to be placed on the BF
+        # by the engine after on_resolve returns).
+        my_creatures = 1 + sum(
             1 for c in controller.zones[Zone.BATTLEFIELD].get_all()
-            if CardType.CREATURE in getattr(c, "card_types", set())
+            if c is not self
+            and CardType.CREATURE in getattr(c, "card_types", set())
         )
 
         for player in game.players:

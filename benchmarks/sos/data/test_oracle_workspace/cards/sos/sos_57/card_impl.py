@@ -14,6 +14,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Instant
+from engine.events import BeginningOfMainPhaseEvent
+from engine.triggers import TriggerRegistration
 from engine.types import CardType, ManaCost, ManaType, Zone
 
 if TYPE_CHECKING:
@@ -29,6 +31,7 @@ class ManaSculpt(Instant):
     """
 
     def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Mana Sculpt")
         kwargs.setdefault("mana_cost", ManaCost(generic=1, pips={ManaType.BLUE: 2}))
         super().__init__(**kwargs)
 
@@ -44,7 +47,7 @@ class ManaSculpt(Instant):
         return targets
 
     def on_resolve(self, game: "GameState") -> None:
-        """Counter target spell. Wizard-conditional mana refund."""
+        """Counter target spell. Wizard-conditional delayed mana refund."""
         chosen = getattr(self, "chosen_targets", None)
         if not chosen:
             return
@@ -55,6 +58,10 @@ class ManaSculpt(Instant):
         stack_items = game.stack._items
         if target_stack_obj not in stack_items:
             return
+
+        # Record mana_spent BEFORE removing the stack object (the engine sets
+        # this at cast time on the StackObject; see engine/casting.py).
+        mana_spent = getattr(target_stack_obj, "mana_spent", 0)
 
         # Remove target from the stack (counter it)
         stack_items.remove(target_stack_obj)
@@ -78,17 +85,58 @@ class ManaSculpt(Instant):
                 gy = owner.zones[Zone.GRAVEYARD]
                 gy.add(source_card)
 
-        # Wizard-conditional mana refund: if controller controls a Wizard,
-        # add colorless mana equal to countered spell's CMC.
+        # Wizard-conditional delayed refund: if controller controls a Wizard
+        # at resolution time, register a one-shot trigger that adds {C} ×
+        # mana_spent at the beginning of controller's next main phase.
         my_controller = getattr(self, "controller", None)
-        if my_controller is not None and source_card is not None:
-            battlefield = my_controller.zones[Zone.BATTLEFIELD]
-            if battlefield is not None:
-                has_wizard = any(
-                    "Wizard" in getattr(perm, "subtypes", set())
-                    for perm in battlefield.get_all()
-                )
-                if has_wizard:
-                    cmc = getattr(getattr(source_card, "mana_cost", None), "cmc", 0)
-                    if cmc > 0:
-                        my_controller.mana_pool.add(ManaType.COLORLESS, cmc)
+        if my_controller is None or mana_spent <= 0:
+            return
+
+        battlefield = my_controller.zones[Zone.BATTLEFIELD]
+        if battlefield is None:
+            return
+        has_wizard = any(
+            "Wizard" in getattr(perm, "subtypes", set())
+            for perm in battlefield.get_all()
+        )
+        if not has_wizard:
+            return
+
+        _register_delayed_refund(game, my_controller, mana_spent)
+
+
+def _register_delayed_refund(
+    game: "GameState",
+    refund_controller: Any,
+    amount: int,
+) -> None:
+    """Register a one-shot trigger that fires at the controller's next main phase.
+
+    On the first ``BeginningOfMainPhaseEvent`` where ``event.player`` matches
+    the refund controller, add ``amount`` colorless mana to their pool and
+    unregister the trigger (so it doesn't fire on subsequent main phases).
+    """
+    # Use a unique sentinel object as the trigger's "source" so unregistration
+    # by identity removes exactly this trigger and nothing else.
+    sentinel: object = object()
+    fired = [False]
+
+    def _condition(g: "GameState", event: BeginningOfMainPhaseEvent) -> bool:
+        if fired[0]:
+            return False
+        return getattr(event, "player", None) is refund_controller
+
+    def _effect(g: "GameState") -> None:
+        if fired[0]:
+            return
+        fired[0] = True
+        refund_controller.mana_pool.add(ManaType.COLORLESS, amount)
+        g.trigger_manager.unregister(sentinel)
+
+    game.trigger_manager.register(TriggerRegistration(
+        event_type=BeginningOfMainPhaseEvent,
+        condition=_condition,
+        effect=_effect,
+        source=sentinel,
+        controller=refund_controller,
+    ))

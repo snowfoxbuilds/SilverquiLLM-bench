@@ -261,3 +261,130 @@ class TestBackHalfCostNotInCMC:
         # Even when prepared, CMC must remain 3
         card._prepared = True
         assert card.mana_cost.cmc == 3, "CMC must not change when prepared"
+
+
+# ---------------------------------------------------------------------------
+# Edge cases (user requested expanded coverage 2026-05-28)
+# ---------------------------------------------------------------------------
+
+
+class TestPreparedConditionEdgeCases:
+    """The 'Then if an opponent controls more creatures than you' clause
+    is checked at ETB resolution and only sets prepared when the inequality
+    is strict (opponent > you)."""
+
+    def _cast_etb(self, game, player, opponent):
+        card = EmeritusOfTruceSwordsToPlowshares(owner=player)
+        card.controller = player
+        set_hand(game, 0, [card])
+        set_mana_pool(game, 0, {ManaType.WHITE: 2, ManaType.COLORLESS: 1})
+        cast_spell(
+            game, 0, "Emeritus of Truce // Swords to Plowshares",
+            targets=[opponent],
+        )
+        # The card has been moved to its battlefield slot — find the
+        # actual card instance (engine may or may not preserve identity)
+        for c in player.zones[Zone.BATTLEFIELD].get_all():
+            if getattr(c, "name", None) == \
+                    "Emeritus of Truce // Swords to Plowshares":
+                return c
+        return card
+
+    def test_prepared_not_set_when_creatures_equal(self) -> None:
+        """If opponent controls the same number of creatures, the strict
+        inequality fails and _prepared stays False."""
+        game = create_game()
+        player, opponent = game.players
+        my_creature = Creature(
+            name="My Bear", owner=player, controller=player,
+            base_power=2, base_toughness=2,
+        )
+        opp_creature = Creature(
+            name="Opp Bear", owner=opponent, controller=opponent,
+            base_power=2, base_toughness=2,
+        )
+        set_board_state(game, 0, battlefield=[my_creature])
+        set_board_state(game, 1, battlefield=[opp_creature])
+
+        card_on_bf = self._cast_etb(game, player, opponent)
+        assert card_on_bf._prepared is False
+
+    def test_prepared_set_when_opponent_has_more(self) -> None:
+        """Opponent controls strictly more creatures → _prepared becomes True."""
+        game = create_game()
+        player, opponent = game.players
+        # Opponent has 2 creatures, player has 0
+        opp_a = Creature(
+            name="Opp A", owner=opponent, controller=opponent,
+            base_power=1, base_toughness=1,
+        )
+        opp_b = Creature(
+            name="Opp B", owner=opponent, controller=opponent,
+            base_power=1, base_toughness=1,
+        )
+        set_board_state(game, 1, battlefield=[opp_a, opp_b])
+
+        card_on_bf = self._cast_etb(game, player, opponent)
+        assert card_on_bf._prepared is True
+
+
+class TestPreparedFlagLifecycle:
+    """The prepared alt-cast clears the prepared flag after resolution."""
+
+    def test_prepared_flag_cleared_after_alt_cast(self) -> None:
+        game = create_game()
+        player, opponent = game.players
+
+        target_creature = Creature(
+            name="Sacrificial Goblin", owner=opponent, controller=opponent,
+            base_power=1, base_toughness=1,
+        )
+        set_board_state(game, 1, battlefield=[target_creature])
+
+        card = EmeritusOfTruceSwordsToPlowshares(owner=player)
+        card.controller = player
+        card._prepared = True
+        player.zones[Zone.EXILE].add(card)
+        set_mana_pool(game, 0, {ManaType.WHITE: 1})
+
+        cast_spell_from_exile(
+            game, 0, "Emeritus of Truce // Swords to Plowshares",
+            targets=[target_creature],
+        )
+        # After resolution the flag is cleared (single-use prepared)
+        assert card._prepared is False
+
+
+class TestAlternativeCostExposure:
+    """`get_alternative_cost()` exposes the {W} alt cost iff prepared."""
+
+    def test_alt_cost_is_W_when_prepared(self) -> None:
+        card = EmeritusOfTruceSwordsToPlowshares(owner=None)
+        card._prepared = True
+        alt = card.get_alternative_cost()
+        assert alt is not None
+        assert alt.generic == 0
+        assert alt.pips.get(ManaType.WHITE) == 1
+        assert alt.cmc == 1
+
+
+class TestTokenSummoningSickness:
+    """Newly minted Inkling tokens are summoning-sick (no immediate attack)."""
+
+    def test_token_is_summoning_sick(self) -> None:
+        game = create_game()
+        player, opponent = game.players
+        card = EmeritusOfTruceSwordsToPlowshares(owner=player)
+        card.controller = player
+        set_hand(game, 0, [card])
+        set_mana_pool(game, 0, {ManaType.WHITE: 2, ManaType.COLORLESS: 1})
+        cast_spell(
+            game, 0, "Emeritus of Truce // Swords to Plowshares",
+            targets=[opponent],
+        )
+        tokens = [
+            c for c in opponent.zones[Zone.BATTLEFIELD].get_all()
+            if getattr(c, "is_token", False)
+        ]
+        assert tokens, "ETB should create a token"
+        assert getattr(tokens[0], "summoning_sick", False) is True

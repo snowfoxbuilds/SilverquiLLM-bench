@@ -159,8 +159,6 @@ class RalZarekGuestLecturer(Planeswalker):
             Target opponent is chosen when ability is activated. Falls back
             to first opponent if no explicit target.
             """
-            import random
-
             controller = pw.controller
             if controller is None:
                 return
@@ -176,8 +174,7 @@ class RalZarekGuestLecturer(Planeswalker):
             if target_opponent is None:
                 return
 
-            rng = getattr(game, 'rng', None) or random
-            heads = sum(rng.randint(0, 1) for _ in range(5))
+            heads = sum(game.rng.randint(0, 1) for _ in range(5))
             skip_turns = getattr(target_opponent, 'skip_turns', 0)
             target_opponent.skip_turns = skip_turns + heads
 
