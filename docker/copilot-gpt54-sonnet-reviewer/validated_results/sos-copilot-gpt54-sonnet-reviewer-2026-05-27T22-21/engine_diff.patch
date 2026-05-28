@@ -1,0 +1,1494 @@
+diff -ruN a/card.py b/card.py
+--- a/card.py	2026-05-25 16:43:11.728292087 +0000
++++ b/card.py	2026-05-28 00:39:20.440700355 +0000
+@@ -17,7 +17,7 @@
+ from dataclasses import dataclass
+ from typing import TYPE_CHECKING, Any, Callable
+ 
+-from engine.types import CardType, Keyword, ManaCost, Supertype
++from engine.types import CardType, Color, Keyword, ManaCost, ManaType, Supertype, Zone
+ 
+ if TYPE_CHECKING:
+     from engine.game_state import GameState
+@@ -101,6 +101,24 @@
+     description: str = ""
+ 
+ 
++@dataclass(frozen=True)
++class AlternateCost:
++    """Public description of an alternate way to cast a spell.
++
++    Attributes:
++        name: Short keyword for the alternate cost (for example ``"miracle"``).
++        cost: The mana cost that replaces the spell's normal mana cost.
++        source: The card or object granting the alternate cost, if any.
++        ignores_timing: Whether this alternate cost lets the spell ignore the
++            engine's normal sorcery-speed timing checks.
++    """
++
++    name: str
++    cost: ManaCost
++    source: Any = None
++    ignores_timing: bool = False
++
++
+ # ---------------------------------------------------------------------------
+ # GameObject — base class for zone-resident objects
+ # ---------------------------------------------------------------------------
+@@ -159,6 +177,7 @@
+         subtypes: set[str] | None = None,
+         supertypes: set[Supertype] | None = None,
+         keywords: Keyword | None = None,
++        colors: set[Color] | None = None,
+         rules_text: str = "",
+         owner: Player | None = None,
+         controller: Player | None = None,
+@@ -170,10 +189,19 @@
+         self.subtypes: set[str] = subtypes if subtypes is not None else set()
+         self.supertypes: set[Supertype] = supertypes if supertypes is not None else set()
+         self.keywords: Keyword = keywords if keywords is not None else Keyword(0)
++        derived_colors = _derive_colors_from_mana_cost(self.mana_cost)
++        self._has_original_colors: bool = colors is not None or bool(derived_colors)
++        if colors is not None:
++            self.colors: set[Color] = set(colors)
++        elif derived_colors:
++            self.colors = derived_colors
+         self.rules_text: str = rules_text
++        self.is_prepared: bool = False
++        self.miracle_cost: ManaCost | None = None
+         # Snapshot original characteristics for continuous-effect reset.
+         self._original_card_types: frozenset[CardType] = frozenset(self.card_types)
+         self._original_keywords: Keyword = self.keywords
++        self._original_colors: frozenset[Color] = frozenset(getattr(self, "colors", set()))
+ 
+     # ------------------------------------------------------------------
+     # Continuous-effect reset support
+@@ -187,6 +215,18 @@
+         """
+         self.card_types = set(self._original_card_types)
+         self.keywords = self._original_keywords
++        if self._has_original_colors:
++            self.colors = set(self._original_colors)
++        elif hasattr(self, "colors"):
++            delattr(self, "colors")
++
++    def prepare(self) -> None:
++        """Mark this object as prepared via the engine's public prepared API."""
++        self.is_prepared = True
++
++    def unprepare(self) -> None:
++        """Clear this object's prepared state via the engine's public API."""
++        self.is_prepared = False
+ 
+     # ------------------------------------------------------------------
+     # Hook methods — override in subclasses / card definitions
+@@ -241,6 +281,112 @@
+         """
+         return []
+ 
++    def get_intrinsic_alternate_costs(self, game: GameState) -> list[AlternateCost]:
++        """Return alternate costs printed on the card itself.
++
++        Cards may set ``self.miracle_cost`` directly or override this method
++        for richer behaviour.
++        """
++        if self.miracle_cost is None:
++            return []
++        return [
++            AlternateCost(
++                name="miracle",
++                cost=self.miracle_cost,
++                source=self,
++                ignores_timing=True,
++            )
++        ]
++
++    def get_granted_alternate_costs_for_hand_card(
++        self,
++        game: GameState,
++        card: CardImpl,
++    ) -> list[AlternateCost]:
++        """Return alternate costs this object grants to *card* while it's in hand."""
++        return []
++
++    def get_granted_casualty_values_for_spell(
++        self,
++        game: GameState,
++        card: CardImpl,
++    ) -> list[int]:
++        """Return casualty values this object grants to *card* while it's being cast."""
++        return []
++
++    def get_granted_cost_reduction_for_spell(
++        self,
++        game: GameState,
++        card: CardImpl,
++    ) -> int:
++        """Return generic mana reduction this object grants to *card* while it's cast."""
++        return 0
++
++    def get_alternate_costs(self, game: GameState) -> list[AlternateCost]:
++        """Return all public alternate-cost options currently available."""
++        alternate_costs = list(self.get_intrinsic_alternate_costs(game))
++        hand_owner = self._get_hand_owner(game)
++        if hand_owner is None:
++            return alternate_costs
++
++        battlefield = game.get_battlefield(hand_owner)
++        for permanent in battlefield.get_all():
++            grant_fn = getattr(permanent, "get_granted_alternate_costs_for_hand_card", None)
++            if grant_fn is None:
++                continue
++            try:
++                granted = grant_fn(game, self)
++            except Exception:
++                granted = []
++            if granted:
++                alternate_costs.extend(granted)
++        return alternate_costs
++
++    def get_alternate_cost(self, game: GameState, name: str) -> AlternateCost | None:
++        """Return the first alternate cost whose name matches *name*."""
++        for option in self.get_alternate_costs(game):
++            if option.name == name:
++                return option
++        return None
++
++    def get_miracle_cost(self, game: GameState) -> ManaCost | None:
++        """Return the miracle cost currently associated with this card, if any."""
++        miracle_window = getattr(game, "get_miracle_window", None)
++        if callable(miracle_window):
++            window = miracle_window(self)
++            if window is not None:
++                return window.cost
++        option = self.get_alternate_cost(game, "miracle")
++        return None if option is None else option.cost
++
++    def has_miracle(self, game: GameState) -> bool:
++        """Return ``True`` if this card currently has a public miracle cost."""
++        return self.get_miracle_cost(game) is not None
++
++    def can_cast_for_miracle(
++        self,
++        game: GameState,
++        player: Player | None = None,
++    ) -> bool:
++        """Return ``True`` if the card currently has an open miracle cast window."""
++        miracle_window = getattr(game, "get_miracle_window", None)
++        if not callable(miracle_window):
++            return False
++        window = miracle_window(self)
++        if window is None:
++            return False
++        if player is not None and window.player is not player:
++            return False
++        holder = self._get_hand_owner(game)
++        return holder is not None and holder is window.player
++
++    def _get_hand_owner(self, game: GameState) -> Player | None:
++        """Return the player whose hand currently contains this card, if any."""
++        for player in game.players:
++            if player.zones[Zone.HAND].contains(self):
++                return player
++        return None
++
+ 
+ # ---------------------------------------------------------------------------
+ # Creature
+@@ -273,6 +419,7 @@
+         subtypes: set[str] | None = None,
+         supertypes: set[Supertype] | None = None,
+         keywords: Keyword | None = None,
++        colors: set[Color] | None = None,
+         rules_text: str = "",
+         owner: Player | None = None,
+         controller: Player | None = None,
+@@ -288,6 +435,7 @@
+             subtypes=subtypes,
+             supertypes=supertypes,
+             keywords=keywords,
++            colors=colors,
+             rules_text=rules_text,
+             owner=owner,
+             controller=controller,
+@@ -499,3 +647,33 @@
+     def get_mana_abilities(self) -> list[ManaAbility]:
+         """Return the land's mana abilities."""
+         return []
++
++
++def _derive_colors_from_mana_cost(mana_cost: ManaCost | None) -> set[Color]:
++    """Derive canonical card colors from a mana cost."""
++    if mana_cost is None:
++        return set()
++
++    colors: set[Color] = set()
++    mana_to_color = {
++        ManaType.WHITE: Color.WHITE,
++        ManaType.BLUE: Color.BLUE,
++        ManaType.BLACK: Color.BLACK,
++        ManaType.RED: Color.RED,
++        ManaType.GREEN: Color.GREEN,
++    }
++
++    for mana_type in getattr(mana_cost, "pips", {}):
++        color = mana_to_color.get(mana_type)
++        if color is not None:
++            colors.add(color)
++
++    for hybrid_symbol in getattr(mana_cost, "hybrid", []):
++        color_a = mana_to_color.get(hybrid_symbol.option_a)
++        if color_a is not None:
++            colors.add(color_a)
++        color_b = mana_to_color.get(hybrid_symbol.option_b)
++        if color_b is not None:
++            colors.add(color_b)
++
++    return colors
+diff -ruN a/casting.py b/casting.py
+--- a/casting.py	2026-05-25 16:43:11.728292087 +0000
++++ b/casting.py	2026-05-28 00:55:01.641255633 +0000
+@@ -23,7 +23,8 @@
+ 
+ from typing import TYPE_CHECKING, Any
+ 
+-from engine.card import CardImpl
++from engine.card import AlternateCost, CardImpl
++from engine.events import SpellCastTriggeredEvent
+ from engine.stack import StackObject
+ from engine.types import CardType, Keyword, ManaCost, Phase, Zone
+ from engine.zones import move_zone
+@@ -100,7 +101,7 @@
+     # casting player even when the card was never explicitly assigned one.
+     prev_controller = card.controller
+     card.controller = controller
+-    raw = card.cost_reduction(game)
++    raw = card.cost_reduction(game) + _get_granted_cost_reduction(game, card, controller)
+     # Restore previous controller in case the caller doesn't want a
+     # side-effect (get_cost_reduction is a query, not a mutation).
+     card.controller = prev_controller
+@@ -119,6 +120,23 @@
+     )
+ 
+ 
++def _get_granted_cost_reduction(game: GameState, card: CardImpl, controller: Player) -> int:
++    """Return total generic reduction granted by controlled battlefield permanents."""
++    total = 0
++    battlefield = game.get_battlefield(controller)
++    for permanent in battlefield.get_all():
++        grant_fn = getattr(permanent, "get_granted_cost_reduction_for_spell", None)
++        if grant_fn is None:
++            continue
++        try:
++            reduction = int(grant_fn(game, card))
++        except Exception:
++            reduction = 0
++        if reduction > 0:
++            total += reduction
++    return total
++
++
+ # ------------------------------------------------------------------
+ # Cast spell
+ # ------------------------------------------------------------------
+@@ -147,8 +165,70 @@
+     Raises:
+         CastingError: If any legality check fails.
+     """
++    _cast_spell_from_hand(game, player, card)
++
++
++def cast_spell_with_alternate_cost(
++    game: GameState,
++    player: Player,
++    card: CardImpl,
++    alternate_cost_name: str,
++) -> None:
++    """Cast *card* from hand using one of its public alternate costs."""
++    option = _get_alternate_cost_option(game, card, alternate_cost_name)
++    if option is None:
++        raise CastingError(
++            f"Cannot cast {card.name!r} — alternate cost {alternate_cost_name!r} unavailable"
++        )
++    _cast_spell_from_hand(
++        game,
++        player,
++        card,
++        cost_override=option.cost,
++        bypass_timing=option.ignores_timing,
++        alternate_cost_name=option.name,
++    )
++
++
++def cast_spell_for_miracle(game: GameState, player: Player, card: CardImpl) -> None:
++    """Cast *card* for its currently open miracle cost."""
++    cast_spell_with_alternate_cost(game, player, card, "miracle")
++
++
++def _get_alternate_cost_option(
++    game: GameState,
++    card: CardImpl,
++    alternate_cost_name: str,
++) -> AlternateCost | None:
++    if alternate_cost_name == "miracle":
++        if not hasattr(game, "get_miracle_window"):
++            return None
++        window = game.get_miracle_window(card)
++        if window is None:
++            return None
++        return AlternateCost(
++            name="miracle",
++            cost=window.cost,
++            ignores_timing=True,
++        )
++    get_option = getattr(card, "get_alternate_cost", None)
++    if callable(get_option):
++        return get_option(game, alternate_cost_name)
++    return None
++
++
++def _cast_spell_from_hand(
++    game: GameState,
++    player: Player,
++    card: CardImpl,
++    *,
++    cost_override: ManaCost | None = None,
++    bypass_timing: bool = False,
++    alternate_cost_name: str | None = None,
++) -> None:
++    """Shared hand-casting pipeline with optional alternate-cost support."""
+     # 1. Timing
+-    if not can_cast_at_instant_speed(card) and not is_sorcery_speed(game, player):
++    if not bypass_timing and not can_cast_at_instant_speed(card) and not is_sorcery_speed(game, player):
+         raise CastingError(
+             f"Cannot cast {card.name!r} — sorcery-speed timing not met"
+         )
+@@ -177,7 +257,6 @@
+     if target_specs:
+         for spec in target_specs:
+             target = player.choose_target(target_specs, spec)
+-            # Validate against filter_fn if the spec provides one
+             filter_fn = getattr(spec, "filter_fn", None)
+             if filter_fn is not None and target is not None:
+                 if not filter_fn(target):
+@@ -189,54 +268,42 @@
+                     )
+             chosen_targets.append(target)
+ 
+-    # 5b. Protection check — reject targets that have protection from this
+-    #     spell (the T in DEBT).
+     from engine.protection import has_protection_from
+ 
+     for target in chosen_targets:
+         if has_protection_from(target, card):
+-            # Rollback: move card from stack zone back to hand
+             stack_zone.remove(card)
+             hand.add(card)
+             raise CastingError(
+                 f"Cannot cast {card.name!r} — target has protection from this spell"
+             )
+ 
+-    # Targets are stored on the StackObject (not the card) and passed
+-    # through the resolve pipeline via on_resolve(game, targets=...).
+-
+-    # 6. Mana check / payment (rollback on failure)
+-    # Ensure the card knows its controller so that cost_reduction() hooks
+-    # (e.g. Embercleave counting attacking creatures you control) see the
+-    # casting player, even for cards that were added to hand without an
+-    # explicit controller assignment.
+     if card.controller is None:
+         card.controller = player
+-    reduction = get_cost_reduction(game, card, player)
+-    effective_cost = _apply_cost_reduction(card.mana_cost, reduction) if reduction > 0 else card.mana_cost
++    if cost_override is None:
++        reduction = get_cost_reduction(game, card, player)
++        effective_cost = _apply_cost_reduction(card.mana_cost, reduction) if reduction > 0 else card.mana_cost
++    else:
++        effective_cost = cost_override
+ 
+-    if not player.mana_pool.can_pay(effective_cost):
+-        # Rollback: move card from stack zone back to hand
++    if not player.mana_pool.can_pay_for_spell(effective_cost, card):
+         stack_zone.remove(card)
+         hand.add(card)
+         raise CastingError(f"Cannot cast {card.name!r} — insufficient mana")
+ 
+-    # TODO: Phase 3 — support player choice for generic mana payment to optimize Converge color count
+-    player.mana_pool.pay(effective_cost)
+-
+-    # Store colors of mana spent on the card for mechanics like Converge
+-    # that care about the colors used to cast the spell.
++    player.mana_pool.pay_for_spell(effective_cost, card)
+     card.colors_spent = list(player.mana_pool.last_payment_colors)  # type: ignore[attr-defined]
++    card.mana_spent_to_cast = effective_cost.cmc  # type: ignore[attr-defined]
++    if alternate_cost_name is not None:
++        card.alternate_cost_paid = alternate_cost_name  # type: ignore[attr-defined]
+ 
+-    # 7. Call on_cast hook
+     card.on_cast(game)
+ 
+-    # 8. Build on_resolve callback and push StackObject
+     stack_obj = StackObject(
+         source=card,
+         controller=player,
+         targets=chosen_targets,
+-        on_resolve=lambda g: None,  # replaced below
++        on_resolve=lambda g: None,
+     )
+ 
+     def _on_resolve(g: GameState) -> None:
+@@ -244,6 +311,147 @@
+ 
+     stack_obj.on_resolve = _on_resolve
+     game.stack.push(stack_obj)
++    _apply_granted_casualty(game, player, card, stack_obj)
++    game.trigger_manager.fire_event(
++        game,
++        SpellCastTriggeredEvent(
++            spell=card,
++            player=player,
++            card=card,
++            controller=player,
++        ),
++    )
++    if hasattr(game, "close_miracle_window"):
++        game.close_miracle_window(card)
++
++
++def _apply_granted_casualty(
++    game: GameState,
++    player: Player,
++    card: CardImpl,
++    stack_obj: StackObject,
++) -> None:
++    """Apply any casualty abilities granted to *card* while it's being cast."""
++    casualty_values = _get_granted_casualty_values(game, player, card)
++    if not casualty_values:
++        return
++
++    from engine.game import sacrifice
++    from engine.stack import copy_spell
++
++    for casualty_value in casualty_values:
++        if casualty_value <= 0:
++            continue
++        candidates = _get_casualty_candidates(game, player, casualty_value)
++        if not candidates:
++            continue
++        if not player.choose_yes_no(f"Sacrifice a creature for casualty {casualty_value}?"):
++            continue
++        chosen = player.choose_card(candidates, f"Choose a creature to sacrifice for casualty {casualty_value}")
++        if chosen is None or chosen not in candidates:
++            continue
++
++        sacrifice(game, player, chosen)
++        new_targets = _choose_copy_targets(game, player, card, stack_obj)
++        game.stack.push(copy_spell(game, stack_obj, player, new_targets))
++
++
++def _get_granted_casualty_values(
++    game: GameState,
++    player: Player,
++    card: CardImpl,
++) -> list[int]:
++    """Collect all casualty values granted by permanents the player controls."""
++    casualty_values: list[int] = []
++    battlefield = game.get_battlefield(player)
++    for permanent in battlefield.get_all():
++        grant_fn = getattr(permanent, "get_granted_casualty_values_for_spell", None)
++        if not callable(grant_fn):
++            continue
++        try:
++            granted = grant_fn(game, card)
++        except Exception:
++            granted = []
++        for value in granted or []:
++            try:
++                casualty_values.append(int(value))
++            except Exception:
++                continue
++    return casualty_values
++
++
++def _get_casualty_candidates(
++    game: GameState,
++    player: Player,
++    casualty_value: int,
++) -> list[Any]:
++    """Return legal creatures the player may sacrifice for casualty."""
++    battlefield = game.get_battlefield(player)
++    candidates: list[Any] = []
++    for permanent in battlefield.get_all():
++        card_types = getattr(permanent, "card_types", set())
++        if CardType.CREATURE not in card_types:
++            continue
++        power = getattr(permanent, "power", getattr(permanent, "base_power", 0))
++        if power < casualty_value:
++            continue
++        candidates.append(permanent)
++    return candidates
++
++
++def _choose_copy_targets(
++    game: GameState,
++    player: Player,
++    card: CardImpl,
++    stack_obj: StackObject,
++) -> list[Any] | None:
++    """Choose targets for a copied spell, defaulting to the original targets."""
++    requirements = card.get_targets(game)
++    if not requirements:
++        return None
++
++    chosen_targets: list[Any] = []
++    for index, requirement in enumerate(requirements):
++        legal_targets = _get_legal_targets(game, requirement)
++        if not legal_targets:
++            if index < len(stack_obj.targets):
++                chosen_targets.append(stack_obj.targets[index])
++            continue
++        chosen = player.choose_target(legal_targets, requirement)
++        if chosen not in legal_targets:
++            if index < len(stack_obj.targets):
++                chosen = stack_obj.targets[index]
++            else:
++                continue
++        chosen_targets.append(chosen)
++    return chosen_targets
++
++
++def _get_legal_targets(game: GameState, requirement: Any) -> list[Any]:
++    """Return all currently legal targets for *requirement*."""
++    zone = getattr(requirement, "zone", None)
++    filter_fn = getattr(requirement, "filter_fn", None)
++
++    if zone == Zone.STACK:
++        candidates = list(game.stack.objects())
++    elif zone is None:
++        candidates = list(game.players)
++    else:
++        candidates = []
++        for current_player in game.players:
++            candidates.extend(current_player.zones[zone].get_all())
++
++    if filter_fn is None:
++        return candidates
++
++    legal_targets: list[Any] = []
++    for candidate in candidates:
++        try:
++            if filter_fn(candidate):
++                legal_targets.append(candidate)
++        except Exception:
++            continue
++    return legal_targets
+ 
+ 
+ # ------------------------------------------------------------------
+@@ -408,6 +616,7 @@
+     else:
+         # Instant/sorcery: move from stack to graveyard via move_to_zone.
+         move_to_zone(game, card, Zone.STACK, Zone.GRAVEYARD)
++        game.replacement_manager.unregister(card)
+ 
+ 
+ # ------------------------------------------------------------------
+diff -ruN a/combat.py b/combat.py
+--- a/combat.py	2026-05-25 16:43:11.728292087 +0000
++++ b/combat.py	2026-05-27 22:30:20.437655405 +0000
+@@ -27,6 +27,7 @@
+ from dataclasses import dataclass, field
+ from typing import TYPE_CHECKING, Any
+ 
++from engine.events import AttacksTriggeredEvent
+ from engine.types import Keyword
+ 
+ if TYPE_CHECKING:
+@@ -240,6 +241,8 @@
+     if not isinstance(chosen, list):
+         chosen = [chosen]
+ 
++    declared_attackers: list[Any] = []
++
+     # Validate and register attackers
+     for attacker in chosen:
+         if attacker not in eligible:
+@@ -256,6 +259,17 @@
+         if Keyword.VIGILANCE not in kw:
+             attacker.is_tapped = True
+ 
++        declared_attackers.append(attacker)
++
++    if declared_attackers:
++        game.attacked_this_turn = True
++        active.attacked_this_turn = True
++        for attacker in declared_attackers:
++            game.trigger_manager.fire_event(
++                game,
++                AttacksTriggeredEvent(creature=attacker, attacker=attacker),
++            )
++
+ 
+ def declare_blockers_step(game: GameState) -> None:
+     """Declare blockers step: defending player assigns blockers.
+diff -ruN a/events.py b/events.py
+--- a/events.py	2026-05-25 04:23:31.883982600 +0000
++++ b/events.py	2026-05-27 22:30:07.336523771 +0000
+@@ -141,6 +141,7 @@
+     zone move itself and the engine should skip its own move.
+     """
+ 
++    moving_card: Any = None
+     destination: str = "graveyard"
+     controller: Any = None
+     owner: Any = None
+@@ -149,7 +150,7 @@
+     @property
+     def card(self) -> Any:
+         """The object moving to the graveyard (overridden by subclasses)."""
+-        return None
++        return self.moving_card
+ 
+ 
+ @dataclass
+diff -ruN a/game.py b/game.py
+--- a/game.py	2026-05-25 16:43:11.729292098 +0000
++++ b/game.py	2026-05-28 00:09:12.975086644 +0000
+@@ -105,6 +105,7 @@
+     # 5. Active player is player1 (index 0 — already the default)
+     game.active_player_index = 0
+     game.priority_player_index = 0
++    game.reset_turn_draw_tracking()
+ 
+     return game
+ 
+@@ -118,7 +119,8 @@
+ 
+     If *target* has a ``life`` attribute (i.e. is a player), life is reduced.
+     If *target* has a ``damage_marked`` attribute (i.e. is a creature),
+-    damage is marked on it.
++    damage is marked on it. If *target* has a ``loyalty`` attribute
++    (i.e. is a planeswalker), that loyalty is reduced.
+ 
+     Fires :attr:`EventType.DEALS_DAMAGE` via the trigger manager.
+ 
+@@ -165,6 +167,13 @@
+             game,
+             DealsDamageTriggeredEvent(source=source, target=target, amount=amount),
+         )
++    elif hasattr(target, "loyalty"):
++        # Target is a planeswalker
++        target.loyalty -= amount
++        game.trigger_manager.fire_event(
++            game,
++            DealsDamageTriggeredEvent(source=source, target=target, amount=amount),
++        )
+ 
+     # Lifelink: controller of source gains life equal to damage dealt
+     source_kw = getattr(source, "keywords", Keyword(0))
+@@ -320,11 +329,18 @@
+     hand = player.zones[Zone.HAND]
+     hand.add(card)
+ 
+-    # Track cards drawn this turn
+-    if not hasattr(player, "cards_drawn_this_turn"):
+-        player.cards_drawn_this_turn = 0
++    first_card_drawn_this_turn = player.cards_drawn_this_turn == 0
+     player.cards_drawn_this_turn += 1
+ 
++    miracle_cost = None
++    if first_card_drawn_this_turn and hasattr(card, "get_miracle_cost"):
++        try:
++            miracle_cost = card.get_miracle_cost(game)
++        except Exception:
++            miracle_cost = None
++    if first_card_drawn_this_turn and miracle_cost is not None and hasattr(game, "open_miracle_window"):
++        game.open_miracle_window(player, card, miracle_cost)
++
+     # Fire trigger (only if game has a trigger_manager — may not during setup)
+     if hasattr(game, "trigger_manager"):
+         game.trigger_manager.fire_event(
+diff -ruN a/game_state.py b/game_state.py
+--- a/game_state.py	2026-05-25 16:43:11.729292098 +0000
++++ b/game_state.py	2026-05-28 00:09:12.964086524 +0000
+@@ -2,7 +2,9 @@
+ 
+ from __future__ import annotations
+ 
+-from typing import Any
++import random
++from dataclasses import dataclass
++from typing import Any, Callable
+ 
+ from engine.combat import CombatState
+ from engine.continuous_effects import EffectManager
+@@ -35,6 +37,16 @@
+ ]
+ 
+ 
++@dataclass
++class MiracleWindow:
++    """Public record of a card's currently open miracle cast window."""
++
++    player: Player
++    card: Any
++    cost: Any
++    opened_on_turn: int
++
++
+ class GameState:
+     """Central game-state object tracking all mutable game information.
+ 
+@@ -81,6 +93,14 @@
+         # normal rotation.  When extras are exhausted the game picks up
+         # from _normal_next_index.
+         self._normal_next_index: int = 1
++        # Public FIFO of seat indices whose next turns should be skipped.
++        # Each entry represents one future turn for that player.
++        self.skipped_turns: list[int] = []
++        # Public FIFO of deterministic coin-flip results for tests.
++        # True = heads, False = tails.
++        self.coin_flip_results: list[bool] = []
++        self._delayed_main_phase_actions: list[tuple[Player, Callable[[GameState], None]]] = []
++        self.miracle_windows: list[MiracleWindow] = []
+ 
+     # ------------------------------------------------------------------
+     # Player properties
+@@ -147,22 +167,142 @@
+         else:
+             # End of turn — wrap around.
+             self.turn_number += 1
+-            if self.extra_turns:
+-                # ENGINE LIMITATION: Extra turns queue (FIFO). Pop the
+-                # next player seat index; that player gets the next turn.
+-                # Normal rotation is NOT advanced — extra turns are
+-                # inserted before the normal next turn.
+-                self.active_player_index = self.extra_turns.pop(0)
+-            else:
+-                self.active_player_index = self._normal_next_index
+-                self._normal_next_index = 1 - self._normal_next_index
++            self.active_player_index = self._pop_next_turn_player_index()
++            while self._should_skip_player_turn(self.active_player_index):
++                self._consume_skipped_turn(self.active_player_index)
++                self.active_player_index = self._pop_next_turn_player_index()
+             self.priority_player_index = self.active_player_index
+             self.phase = _TURN_SEQUENCE[0][0]
+             self.step = _TURN_SEQUENCE[0][1]
++            self.reset_turn_draw_tracking()
+ 
+         self.empty_mana_pools()
++        self._process_beginning_of_main_phase_actions()
+ 
+     def empty_mana_pools(self) -> None:
+         """Empty all players' mana pools — called on each phase/step transition."""
+         for player in self.players:
+             player.mana_pool.empty()
++
++    def reset_turn_draw_tracking(self) -> None:
++        """Reset per-turn draw counters and close stale miracle windows."""
++        for player in self.players:
++            player.cards_drawn_this_turn = 0
++        self.close_miracle_window()
++
++    def open_miracle_window(self, player: Player, card: Any, cost: Any) -> MiracleWindow:
++        """Record that *card* may currently be cast for its miracle cost."""
++        self.close_miracle_window(card)
++        window = MiracleWindow(
++            player=player,
++            card=card,
++            cost=cost,
++            opened_on_turn=self.turn_number,
++        )
++        self.miracle_windows.append(window)
++        setattr(card, "miracle_available", True)
++        return window
++
++    def get_miracle_window(self, card: Any) -> MiracleWindow | None:
++        """Return the currently open miracle window for *card*, if any."""
++        for window in self.miracle_windows:
++            if window.card is card:
++                return window
++        return None
++
++    def has_miracle_window(self, card: Any) -> bool:
++        """Return ``True`` if *card* currently has an open miracle window."""
++        return self.get_miracle_window(card) is not None
++
++    def close_miracle_window(self, card: Any | None = None) -> None:
++        """Close the miracle window for *card*, or all miracle windows when omitted."""
++        if card is None:
++            closing = list(self.miracle_windows)
++            self.miracle_windows.clear()
++        else:
++            closing = [window for window in self.miracle_windows if window.card is card]
++            self.miracle_windows = [window for window in self.miracle_windows if window.card is not card]
++
++        for window in closing:
++            if hasattr(window.card, "miracle_available"):
++                window.card.miracle_available = False
++
++    def schedule_beginning_of_next_main_phase(
++        self,
++        player: Player,
++        callback: Callable[[GameState], None],
++    ) -> None:
++        """Schedule *callback* for *player*'s next main phase.
++
++        The callback runs immediately after mana pools are emptied for the
++        phase transition, so mana added this way persists in that main phase.
++        """
++        self._delayed_main_phase_actions.append((player, callback))
++
++    def _process_beginning_of_main_phase_actions(self) -> None:
++        """Run any delayed actions waiting for the active player's main phase."""
++        if self.phase not in (Phase.PRECOMBAT_MAIN, Phase.POSTCOMBAT_MAIN):
++            return
++        if not self._delayed_main_phase_actions:
++            return
++
++        pending = self._delayed_main_phase_actions
++        self._delayed_main_phase_actions = []
++        active_player = self.active_player
++
++        for scheduled_player, callback in pending:
++            if scheduled_player is active_player:
++                callback(self)
++            else:
++                self._delayed_main_phase_actions.append((scheduled_player, callback))
++
++    def queue_skipped_turns(self, player: Player | int, count: int) -> None:
++        """Queue ``count`` future turns for *player* to be skipped."""
++        if count <= 0:
++            return
++        player_index = self._coerce_player_index(player)
++        self.skipped_turns.extend([player_index] * count)
++
++    def queued_skipped_turns_for(self, player: Player | int) -> int:
++        """Return how many future turns are queued to be skipped for *player*."""
++        player_index = self._coerce_player_index(player)
++        return sum(1 for queued_index in self.skipped_turns if queued_index == player_index)
++
++    def flip_coin(self) -> bool:
++        """Flip a coin, using queued deterministic results when provided."""
++        if self.coin_flip_results:
++            return self.coin_flip_results.pop(0)
++        return random.choice((True, False))
++
++    def flip_coins(self, count: int) -> list[bool]:
++        """Flip ``count`` coins and return their results as booleans."""
++        if count <= 0:
++            return []
++        return [self.flip_coin() for _ in range(count)]
++
++    def _coerce_player_index(self, player: Player | int) -> int:
++        """Return the seat index for *player* or pass through an explicit index."""
++        if isinstance(player, int):
++            if player < 0 or player >= len(self.players):
++                raise IndexError(f"Invalid player index {player}")
++            return player
++        return self.players.index(player)
++
++    def _pop_next_turn_player_index(self) -> int:
++        """Pop the next turn from the extra-turn queue or normal rotation."""
++        if self.extra_turns:
++            return self.extra_turns.pop(0)
++        next_index = self._normal_next_index
++        self._normal_next_index = 1 - self._normal_next_index
++        return next_index
++
++    def _should_skip_player_turn(self, player_index: int) -> bool:
++        """Return ``True`` if *player_index* has a queued skipped turn."""
++        return player_index in self.skipped_turns
++
++    def _consume_skipped_turn(self, player_index: int) -> None:
++        """Consume one queued skipped turn for *player_index*."""
++        for queued_index, skipped_index in enumerate(self.skipped_turns):
++            if skipped_index == player_index:
++                del self.skipped_turns[queued_index]
++                return
+diff -ruN a/mana.py b/mana.py
+--- a/mana.py	2026-05-25 16:43:11.729292098 +0000
++++ b/mana.py	2026-05-28 00:54:55.512208288 +0000
+@@ -2,6 +2,9 @@
+ 
+ from __future__ import annotations
+ 
++from dataclasses import dataclass
++from typing import Any, Callable
++
+ from engine.types import Color, HybridManaSymbol, ManaCost, ManaType
+ 
+ # Map colored ManaTypes to their corresponding Color enum values.
+@@ -14,6 +17,42 @@
+ }
+ 
+ 
++@dataclass(frozen=True)
++class ManaEntry:
++    """A single mana unit currently in a player's pool.
++
++    Attributes:
++        mana_type: The type/color of mana.
++        restriction: Optional callable that determines whether this mana may be
++            spent in a given context.
++        description: Human-readable reminder text for the spend restriction.
++    """
++
++    mana_type: ManaType
++    restriction: Callable[..., bool] | None = None
++    description: str = ""
++
++    @property
++    def is_restricted(self) -> bool:
++        """Return ``True`` if this mana has a spend restriction."""
++        return self.restriction is not None
++
++    def can_spend(self, *, spell: Any = None, payment_context: Any = None) -> bool:
++        """Return whether this mana may be spent in the supplied context."""
++        if self.restriction is None:
++            return True
++        try:
++            return bool(self.restriction(spell=spell, payment_context=payment_context))
++        except TypeError:
++            try:
++                return bool(self.restriction(spell, payment_context))
++            except TypeError:
++                try:
++                    return bool(self.restriction(spell))
++                except TypeError:
++                    return bool(self.restriction())
++
++
+ class ManaPool:
+     """Tracks available mana for a player.
+ 
+@@ -23,27 +62,63 @@
+ 
+     def __init__(self) -> None:
+         self._pool: dict[ManaType, int] = {mt: 0 for mt in ManaType}
++        self._entries: list[ManaEntry] = []
+         self._last_payment_colors: list[Color] = []
+ 
+     # ------------------------------------------------------------------
+     # Basic operations
+     # ------------------------------------------------------------------
+ 
+-    def add(self, mana_type: ManaType, amount: int = 1) -> None:
++    def add(
++        self,
++        mana_type: ManaType,
++        amount: int = 1,
++        *,
++        restriction: Callable[..., bool] | None = None,
++        description: str = "",
++    ) -> None:
+         """Add *amount* mana of the given type to the pool.
+ 
+         Parameters:
+             mana_type: The type of mana to add.
+             amount: How many mana to add (must be non-negative).
++            restriction: Optional spend restriction for the mana being added.
++            description: Human-readable reminder text for the restriction.
+         """
+         if amount < 0:
+             raise ValueError(f"Cannot add negative mana: {amount}")
+         self._pool[mana_type] = self._pool.get(mana_type, 0) + amount
++        for _ in range(amount):
++            self._entries.append(
++                ManaEntry(
++                    mana_type=mana_type,
++                    restriction=restriction,
++                    description=description,
++                )
++            )
++
++    def add_restricted(
++        self,
++        mana_type: ManaType,
++        amount: int = 1,
++        *,
++        restriction: Callable[..., bool],
++        description: str = "",
++    ) -> None:
++        """Add restricted mana to the pool."""
++        self.add(
++            mana_type,
++            amount,
++            restriction=restriction,
++            description=description,
++        )
+ 
+     def empty(self) -> None:
+         """Clear the pool — happens at phase/step transitions."""
+         for mt in self._pool:
+             self._pool[mt] = 0
++        self._entries.clear()
++        self._last_payment_colors = []
+ 
+     def total(self) -> int:
+         """Return the total amount of mana in the pool across all types."""
+@@ -54,6 +129,20 @@
+         return self._pool.get(mana_type, 0)
+ 
+     @property
++    def mana_entries(self) -> list[ManaEntry]:
++        """Return a shallow copy of the individual mana currently in the pool."""
++        return list(self._entries)
++
++    @property
++    def restricted_entries(self) -> list[ManaEntry]:
++        """Return only the currently restricted mana entries."""
++        return [entry for entry in self._entries if entry.is_restricted]
++
++    def restricted_total(self) -> int:
++        """Return how much restricted mana is currently in the pool."""
++        return len(self.restricted_entries)
++
++    @property
+     def last_payment_colors(self) -> list[Color]:
+         """Return the distinct colors of mana spent in the last :meth:`pay` call.
+ 
+@@ -67,7 +156,13 @@
+     # Cost payment
+     # ------------------------------------------------------------------
+ 
+-    def can_pay(self, cost: ManaCost) -> bool:
++    def can_pay(
++        self,
++        cost: ManaCost,
++        *,
++        spell: Any = None,
++        payment_context: Any = None,
++    ) -> bool:
+         """Check whether the pool can satisfy *cost*.
+ 
+         Generic mana can be paid by any type.  X is treated as 0 for
+@@ -78,7 +173,7 @@
+         Returns:
+             True if the pool has enough mana to pay the cost.
+         """
+-        remaining: dict[ManaType, int] = dict(self._pool)
++        remaining = self._available_counts(spell=spell, payment_context=payment_context)
+ 
+         # Pay colored/colorless pips first.
+         for mana_type, count in cost.pips.items():
+@@ -95,7 +190,18 @@
+         # Then check generic — sum of all remaining mana must cover it.
+         return sum(remaining.values()) >= cost.generic
+ 
+-    def pay(self, cost: ManaCost, choices: dict[ManaType, int] | None = None) -> bool:
++    def can_pay_for_spell(self, cost: ManaCost, spell: Any) -> bool:
++        """Return whether *cost* can be paid to cast *spell*."""
++        return self.can_pay(cost, spell=spell)
++
++    def pay(
++        self,
++        cost: ManaCost,
++        choices: dict[ManaType, int] | None = None,
++        *,
++        spell: Any = None,
++        payment_context: Any = None,
++    ) -> bool:
+         """Deduct mana from the pool to pay *cost*.
+ 
+         Parameters:
+@@ -108,15 +214,17 @@
+         Returns:
+             True if payment succeeded, False if the pool has insufficient mana.
+         """
+-        if not self.can_pay(cost):
++        if not self.can_pay(cost, spell=spell, payment_context=payment_context):
+             return False
+ 
+-        # Work on a copy so we can roll back on failure.
+-        working: dict[ManaType, int] = dict(self._pool)
++        # Work only with spendable mana so restrictions are enforced.
++        working = self._available_counts(spell=spell, payment_context=payment_context)
++        spend_counts: dict[ManaType, int] = {mt: 0 for mt in ManaType}
+ 
+         # 1. Pay colored/colorless pips.
+         for mana_type, count in cost.pips.items():
+             working[mana_type] -= count
++            spend_counts[mana_type] += count
+ 
+         # 2. When explicit generic choices are provided, reserve that mana
+         #    *before* solving hybrids so the solver doesn't steal it.
+@@ -132,6 +240,7 @@
+                 if working.get(mana_type, 0) < amount:
+                     return False
+                 working[mana_type] -= amount
++                spend_counts[mana_type] += amount
+ 
+         # 3. Pay hybrid symbols using backtracking to find a valid assignment.
+         #    Generic choices (if any) have already been reserved above,
+@@ -145,24 +254,39 @@
+                 return False  # pragma: no cover – should not happen after can_pay
+             for mt in hybrid_assignment:
+                 working[mt] = working.get(mt, 0) - 1
++                spend_counts[mt] += 1
+ 
+         # 4. Pay generic cost (auto-pay path — choices already deducted above).
+         if generic_remaining > 0 and choices is None:
+-            generic_remaining = self._auto_pay_generic(working, generic_remaining)
++            generic_spend = self._auto_pay_generic(working, generic_remaining)
++            for mana_type, amount in generic_spend.items():
++                spend_counts[mana_type] += amount
++            generic_remaining -= sum(generic_spend.values())
+             if generic_remaining > 0:
+                 return False  # pragma: no cover – should not happen after can_pay
+ 
+         # Commit the payment.
+-        # Compute colors of mana spent by comparing old pool to new working pool.
+         colors_spent: set[Color] = set()
+-        for mt, old_amount in self._pool.items():
+-            new_amount = working.get(mt, 0)
+-            if new_amount < old_amount and mt in _MANA_TO_COLOR:
++        for mt, spent in spend_counts.items():
++            if spent > 0 and mt in _MANA_TO_COLOR:
+                 colors_spent.add(_MANA_TO_COLOR[mt])
+         self._last_payment_colors = sorted(colors_spent, key=lambda c: c.value)
+-        self._pool = working
++        self._consume_entries(
++            spend_counts,
++            spell=spell,
++            payment_context=payment_context,
++        )
+         return True
+ 
++    def pay_for_spell(
++        self,
++        cost: ManaCost,
++        spell: Any,
++        choices: dict[ManaType, int] | None = None,
++    ) -> bool:
++        """Pay *cost* to cast *spell*, enforcing spell-only restrictions."""
++        return self.pay(cost, choices=choices, spell=spell)
++
+     @staticmethod
+     def _can_pay_hybrid(
+         remaining: dict[ManaType, int],
+@@ -217,15 +341,21 @@
+         return None
+ 
+     @staticmethod
+-    def _auto_pay_generic(working: dict[ManaType, int], amount: int) -> int:
++    def _auto_pay_generic(
++        working: dict[ManaType, int],
++        amount: int,
++    ) -> dict[ManaType, int]:
+         """Deduct *amount* generic mana from *working*, preferring colorless.
+ 
+-        Returns the remaining unpaid generic amount (0 on success).
++        Returns the mana actually spent by type.
+         """
++        spent: dict[ManaType, int] = {mt: 0 for mt in ManaType}
++
+         # Pay with colorless first.
+         if working.get(ManaType.COLORLESS, 0) > 0:
+             take = min(working[ManaType.COLORLESS], amount)
+             working[ManaType.COLORLESS] -= take
++            spent[ManaType.COLORLESS] += take
+             amount -= take
+ 
+         # Then pay with each colored type in enum order.
+@@ -237,9 +367,49 @@
+             if working.get(mt, 0) > 0:
+                 take = min(working[mt], amount)
+                 working[mt] -= take
++                spent[mt] += take
+                 amount -= take
+ 
+-        return amount
++        return {mt: count for mt, count in spent.items() if count > 0}
++
++    def _available_counts(
++        self,
++        *,
++        spell: Any = None,
++        payment_context: Any = None,
++    ) -> dict[ManaType, int]:
++        """Return spendable mana counts for the supplied payment context."""
++        counts: dict[ManaType, int] = {mt: 0 for mt in ManaType}
++        for entry in self._entries:
++            if entry.can_spend(spell=spell, payment_context=payment_context):
++                counts[entry.mana_type] += 1
++        return counts
++
++    def _consume_entries(
++        self,
++        spend_counts: dict[ManaType, int],
++        *,
++        spell: Any = None,
++        payment_context: Any = None,
++    ) -> None:
++        """Remove the spent mana entries and update aggregate pool counts."""
++        for mana_type, amount in spend_counts.items():
++            if amount <= 0:
++                continue
++            matching_indices = [
++                index
++                for index, entry in enumerate(self._entries)
++                if entry.mana_type == mana_type
++                and entry.can_spend(spell=spell, payment_context=payment_context)
++            ]
++            matching_indices.sort(
++                key=lambda index: 0 if self._entries[index].is_restricted else 1
++            )
++            if len(matching_indices) < amount:
++                raise ValueError(f"Insufficient spendable {mana_type.name} mana to consume")
++            for index in reversed(matching_indices[:amount]):
++                del self._entries[index]
++            self._pool[mana_type] -= amount
+ 
+     # ------------------------------------------------------------------
+     # Dunder helpers
+@@ -247,4 +417,7 @@
+ 
+     def __repr__(self) -> str:
+         non_zero = {mt.name: v for mt, v in self._pool.items() if v > 0}
++        restricted = len(self.restricted_entries)
++        if restricted > 0:
++            return f"ManaPool({non_zero}, restricted={restricted})"
+         return f"ManaPool({non_zero})"
+diff -ruN a/player.py b/player.py
+--- a/player.py	2026-05-25 16:43:11.729292098 +0000
++++ b/player.py	2026-05-28 00:09:12.909085926 +0000
+@@ -35,6 +35,7 @@
+         self.has_lost: bool = False
+         self.land_plays_remaining: int = 1
+         self.drawn_from_empty_library: bool = False
++        self.cards_drawn_this_turn: int = 0
+ 
+     @abstractmethod
+     def choose_target(self, options: Any, requirement: Any) -> Any:
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/abilities.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/abilities.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/abilities.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/abilities.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/basic_lands.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/basic_lands.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/card.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/card.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/card.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/card.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/casting.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/casting.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/casting.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/casting.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/combat.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/combat.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/combat.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/combat.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/continuous_effects.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/continuous_effects.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/continuous_effects.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/continuous_effects.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/creatures.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/creatures.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/creatures.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/creatures.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/events.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/events.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/events.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/events.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/game.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/game.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game_state.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/game_state.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game_state.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/game_state.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/__init__.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/__init__.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/__init__.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/__init__.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/mana.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/mana.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/mana.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/mana.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/player.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/player.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/player.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/player.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/protection.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/protection.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/protection.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/protection.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/replacement_effects.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/replacement_effects.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/replacement_effects.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/replacement_effects.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/stack.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/stack.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/stack.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/stack.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/state_based_actions.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/state_based_actions.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/state_based_actions.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/state_based_actions.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/triggers.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/triggers.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/triggers.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/triggers.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/turn.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/turn.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/turn.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/turn.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/types.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/types.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/types.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/types.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/zones.cpython-311.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/zones.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/zones.cpython-312.pyc and /tmp/silverquillm_run_ed4z06px/workspace/engine/__pycache__/zones.cpython-312.pyc differ
+diff -ruN a/stack.py b/stack.py
+--- a/stack.py	2026-05-25 16:43:11.729292098 +0000
++++ b/stack.py	2026-05-27 23:18:09.291375749 +0000
+@@ -52,6 +52,18 @@
+         """
+         return self._items.pop()
+ 
++    def remove(self, obj: StackObject) -> None:
++        """Remove *obj* from the stack by identity.
++
++        Raises:
++            ValueError: If *obj* is not currently on the stack.
++        """
++        for i, item in enumerate(self._items):
++            if item is obj:
++                del self._items[i]
++                return
++        raise ValueError(f"{obj!r} not on stack")
++
+     def peek(self) -> StackObject | None:
+         """Return the top object without removing it, or ``None`` if empty."""
+         return self._items[-1] if self._items else None
+diff -ruN a/triggers.py b/triggers.py
+--- a/triggers.py	2026-05-25 16:43:11.729292098 +0000
++++ b/triggers.py	2026-05-27 23:09:19.557206582 +0000
+@@ -17,6 +17,7 @@
+ 
+ from engine.events import TriggeredEvent
+ from engine.stack import StackObject
++from engine.types import Zone
+ 
+ if TYPE_CHECKING:
+     from engine.game_state import GameState
+@@ -46,6 +47,7 @@
+     effect: Callable[..., None]
+     source: Any
+     controller: Player
++    target_requirements: Callable[..., list[Any]] | None = None
+ 
+ 
+ class TriggerManager:
+@@ -116,10 +118,64 @@
+         ordered = active_triggers + non_active_triggers
+ 
+         for trigger in ordered:
++            chosen_targets: list[Any] = []
++            if trigger.target_requirements is not None:
++                requirements = trigger.target_requirements(game, event)
++                if not requirements:
++                    continue
++
++                targeting_failed = False
++                for requirement in requirements:
++                    legal_targets = self._get_legal_targets(game, requirement)
++                    if not legal_targets:
++                        targeting_failed = True
++                        break
++                    try:
++                        chosen = trigger.controller.choose_target(legal_targets, requirement)
++                    except Exception:
++                        chosen = None
++                    if chosen is None or chosen not in legal_targets:
++                        targeting_failed = True
++                        break
++                    chosen_targets.append(chosen)
++
++                if targeting_failed:
++                    continue
++
++            def _resolve(
++                g: GameState,
++                *,
++                trigger: TriggerRegistration = trigger,
++                event: TriggeredEvent = event,
++                chosen_targets: list[Any] = chosen_targets,
++            ) -> None:
++                source = trigger.source
++
++                had_targets_attr = hasattr(source, "chosen_targets")
++                previous_targets = getattr(source, "chosen_targets", None)
++                had_event_attr = hasattr(source, "trigger_event")
++                previous_event = getattr(source, "trigger_event", None)
++
++                source.chosen_targets = list(chosen_targets)  # type: ignore[attr-defined]
++                source.trigger_event = event  # type: ignore[attr-defined]
++                try:
++                    trigger.effect(g)
++                finally:
++                    if had_targets_attr:
++                        source.chosen_targets = previous_targets  # type: ignore[attr-defined]
++                    elif hasattr(source, "chosen_targets"):
++                        delattr(source, "chosen_targets")
++
++                    if had_event_attr:
++                        source.trigger_event = previous_event  # type: ignore[attr-defined]
++                    elif hasattr(source, "trigger_event"):
++                        delattr(source, "trigger_event")
++
+             stack_obj = StackObject(
+                 source=trigger.source,
+                 controller=trigger.controller,
+-                on_resolve=trigger.effect,
++                targets=list(chosen_targets),
++                on_resolve=_resolve,
+             )
+             game.stack.push(stack_obj)
+ 
+@@ -134,3 +190,28 @@
+     def clear(self) -> None:
+         """Remove all registered triggers."""
+         self._triggers.clear()
++
++    def _get_legal_targets(self, game: GameState, requirement: Any) -> list[Any]:
++        """Return all currently legal targets for *requirement*."""
++        zone = getattr(requirement, "zone", None)
++        filter_fn = getattr(requirement, "filter_fn", None)
++
++        candidates: list[Any] = []
++        if zone == Zone.STACK:
++            candidates = [obj.source for obj in game.stack.objects()]
++        elif zone is not None:
++            for player in game.players:
++                candidates.extend(player.zones[zone].get_all())
++        else:
++            candidates = list(game.players)
++
++        if filter_fn is None:
++            return candidates
++        legal_targets: list[Any] = []
++        for candidate in candidates:
++            try:
++                if filter_fn(candidate):
++                    legal_targets.append(candidate)
++            except Exception:
++                continue
++        return legal_targets
+diff -ruN a/types.py b/types.py
+--- a/types.py	2026-05-25 04:23:31.883982600 +0000
++++ b/types.py	2026-05-27 22:59:21.607585742 +0000
+@@ -245,9 +245,11 @@
+             object's properties at call time (lazy) rather than capturing
+             a snapshot of legal targets when the filter is created.
+         description: Human-readable description of what this targets.
+-        zone: The zone in which legal targets must reside.
++        zone: The zone in which legal targets must reside. ``None`` means
++            the requirement is not tied to a public zone (for example,
++            ``target player``).
+     """
+ 
+     filter_fn: Callable[..., Any]
+     description: str
+-    zone: Zone
++    zone: Zone | None
+diff -ruN a/zones.py b/zones.py
+--- a/zones.py	2026-05-25 16:43:11.729292098 +0000
++++ b/zones.py	2026-05-28 00:09:12.992086828 +0000
+@@ -223,6 +223,7 @@
+         CreatureDiesTriggeredEvent,
+         EntersBattlefieldTriggeredEvent,
+         LeavesBattlefieldTriggeredEvent,
++        MoveToGraveyardReplacementEvent,
+     )
+ 
+     controller = getattr(card, "controller", None)
+@@ -260,7 +261,15 @@
+ 
+     # --- Replacement effects (zone-change redirection) ---
+     dest_zone = to_zone
+-    if replacement_event is not None and leaving_battlefield:
++    if replacement_event is None and to_zone == Zone.GRAVEYARD:
++        replacement_event = MoveToGraveyardReplacementEvent(
++            moving_card=card,
++            destination="graveyard",
++            controller=controller,
++            owner=owner,
++        )
++
++    if replacement_event is not None:
+         replacement_event = game.replacement_manager.apply(game, replacement_event)
+         if getattr(replacement_event, "prevented", False):
+             return
+@@ -269,6 +278,8 @@
+ 
+     # --- Perform the zone move ---
+     source_container.remove(card)
++    if from_zone == Zone.HAND and hasattr(game, "close_miracle_window"):
++        game.close_miracle_window(card)
+ 
+     # Determine the destination player (always the owner for graveyard/exile/hand/library).
+     if entering_battlefield:

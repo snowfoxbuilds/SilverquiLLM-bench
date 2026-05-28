@@ -1,0 +1,11 @@
+{
+  "collector_number": "sos_257",
+  "tests_passed": 10,
+  "tests_failed": 1,
+  "tests_total": 11,
+  "pass_rate": 0.9090909090909091,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_3241avnc/tests.py::TestGreatHallOfTheBiblioplexInteractions::test_spell_to_graveyard_after_resolution"
+  ],
+  "skipped": false
+}
