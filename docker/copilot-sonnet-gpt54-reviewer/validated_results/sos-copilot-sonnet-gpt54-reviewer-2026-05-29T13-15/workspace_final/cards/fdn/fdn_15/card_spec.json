@@ -1,0 +1,17 @@
+{
+  "name": "Bigfin Bouncer",
+  "mana_cost": "{3}{U}",
+  "type_line": "Creature — Merfolk Rogue",
+  "oracle_text": "When this creature enters, return target creature an opponent controls to its owner's hand.",
+  "power": "3",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "15",
+  "complexity_tier": "low"
+}

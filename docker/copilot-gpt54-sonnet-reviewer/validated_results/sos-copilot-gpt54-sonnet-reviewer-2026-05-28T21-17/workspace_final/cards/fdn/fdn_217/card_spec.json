@@ -1,0 +1,19 @@
+{
+  "name": "Dwynen, Gilt-Leaf Daen",
+  "mana_cost": "{2}{G}{G}",
+  "type_line": "Legendary Creature — Elf Warrior",
+  "oracle_text": "Reach (This creature can block creatures with flying.)\nOther Elf creatures you control get +1/+1.\nWhenever Dwynen attacks, you gain 1 life for each attacking Elf you control.",
+  "power": "3",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Reach"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "217",
+  "complexity_tier": "medium"
+}

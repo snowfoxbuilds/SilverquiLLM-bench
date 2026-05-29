@@ -1,0 +1,15 @@
+{
+  "collector_number": "sos_120",
+  "tests_passed": 4,
+  "tests_failed": 5,
+  "tests_total": 9,
+  "pass_rate": 0.4444444444444444,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_tmtcub3k/tests.py::TestExileFromLibraryUntilThreshold::test_exile_until_mv_sum_ge_4",
+    "FAILED ../../../../tmp/eval_sos_tmtcub3k/tests.py::TestCastChosenExiledCardsForFree::test_cast_exiled_card_free",
+    "FAILED ../../../../tmp/eval_sos_tmtcub3k/tests.py::TestParadigmExilesSelf::test_paradigm_exiles_self_on_resolution",
+    "FAILED ../../../../tmp/eval_sos_tmtcub3k/tests.py::TestParadigmRecurringCast::test_recurring_cast_across_3_turns",
+    "FAILED ../../../../tmp/eval_sos_tmtcub3k/tests.py::TestParadigmOfferCanBeDeclined::test_paradigm_offer_declined"
+  ],
+  "skipped": false
+}

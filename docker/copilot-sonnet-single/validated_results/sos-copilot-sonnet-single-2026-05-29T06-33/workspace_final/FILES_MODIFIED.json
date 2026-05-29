@@ -1,0 +1,174 @@
+{
+  "cards": [
+    {
+      "card": "sos_1",
+      "tests": [
+        {
+          "path": "cards/sos/sos_1/tests.py",
+          "summary": "tests for sos_1 The Dawning Archaic: static properties, reach blocking, cost reduction, attack trigger registration and resolution (graveyard cast via cast_spell_free + exile replacement)"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_1/card_impl.py",
+          "summary": "TheDawningArchaic: use cast_spell_free + immediate on_resolve call + exile after resolution to properly execute spell effects while exiling instead of graveyard"
+        }
+      ]
+    },
+    {
+      "card": "sos_120",
+      "tests": [
+        {
+          "path": "cards/sos/sos_120/tests.py",
+          "summary": "tests for sos_120 Improvisation Capstone: static properties, exile-until-MV4 mechanic, free-cast tracking, Paradigm go-to-exile flag, BeginningOfMainPhaseTriggeredEvent trigger registration"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_120/card_impl.py",
+          "summary": "ImprovisationCapstone sorcery: exile top-of-library until total MV>=4, track exiled_for_free_cast, set go_to_exile=True for Paradigm, register main-phase trigger"
+        },
+        {
+          "path": "engine/casting.py",
+          "summary": "Added go_to_exile check in _resolve_spell to route spell to exile instead of graveyard when card.go_to_exile is True"
+        }
+      ]
+    },
+    {
+      "card": "sos_13",
+      "tests": [
+        {
+          "path": "cards/sos/sos_13/tests.py",
+          "summary": "tests for sos_13 Emeritus of Truce: static props, ETB trigger registration, Inkling token creation, prepared condition, STP exile+life-gain+unprepare effects"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_13/card_impl.py",
+          "summary": "EmeritusOfTruceSwordsToPlowshares: ETB creates 1/1 Inkling token, prepared check, STP activated ability when prepared"
+        },
+        {
+          "path": "engine/triggers.py",
+          "summary": "TriggerManager.fire_event: wrap effects to forward chosen_targets from StackObject to source card before resolution"
+        }
+      ]
+    },
+    {
+      "card": "sos_201",
+      "tests": [
+        {
+          "path": "cards/sos/sos_201/tests.py",
+          "summary": "tests for sos_201 Lorehold, the Historian: static props, flying/haste, miracle grant to instants/sorceries, first-draw miracle marking, opponent upkeep discard-draw trigger"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_201/card_impl.py",
+          "summary": "LoreholdTheHistorian: fixed _upkeep_condition to check bf.contains(source) and fixed _apply_miracle_grant to clear miracle_cost before conditionally re-granting"
+        }
+      ]
+    },
+    {
+      "card": "sos_226",
+      "tests": [
+        {
+          "path": "cards/sos/sos_226/tests.py",
+          "summary": "tests for sos_226 Silverquill, the Disputant: static props, flying/vigilance, casualty 1 grant to instants/sorceries in hand, idempotency, opponent exclusion, register_triggers adds continuous effect"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_226/card_impl.py",
+          "summary": "SilverquillTheDisputant: continuous effect grants casualty=1 to instants/sorceries in controller hand; clears on leave-battlefield"
+        }
+      ]
+    },
+    {
+      "card": "sos_245",
+      "tests": [
+        {
+          "path": "cards/sos/sos_245/tests.py",
+          "summary": "tests for sos_245 Witherbloom, the Balancer: static properties, keywords, self-affinity cost reduction, continuous effect granting affinity for creatures to instants/sorceries in hand"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_245/card_impl.py",
+          "summary": "Witherbloom, the Balancer: 5/5 Flying+Deathtouch Elder Dragon, affinity for creatures self-cost-reduction, continuous effect grants affinity_for_creatures to instants/sorceries in hand"
+        }
+      ]
+    },
+    {
+      "card": "sos_257",
+      "tests": [
+        {
+          "path": "cards/sos/sos_257/tests.py",
+          "summary": "tests for sos_257 Great Hall of the Biblioplex mana abilities, transformation, and pump trigger"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_257/card_impl.py",
+          "summary": "Great Hall of the Biblioplex: fixed pump trigger condition to check event.player is controller"
+        }
+      ]
+    },
+    {
+      "card": "sos_4",
+      "tests": [
+        {
+          "path": "cards/sos/sos_4/tests.py",
+          "summary": "tests for sos_4 Together as One converge sorcery: properties, targeting, draw/damage/life effects"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_4/card_impl.py",
+          "summary": "Implements TogetherAsOne sorcery with Converge mechanic (draw X, deal X damage, gain X life)"
+        }
+      ]
+    },
+    {
+      "card": "sos_57",
+      "tests": [
+        {
+          "path": "cards/sos/sos_57/tests.py",
+          "summary": "tests for sos_57 Mana Sculpt: counter target spell, Wizard-conditional CMC mana generation at beginning of next main phase"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_57/card_impl.py",
+          "summary": "ManaSculpt instant: counter target spell, add colorless mana equal to CMC at beginning of next main phase if controller has Wizard"
+        },
+        {
+          "path": "engine/events.py",
+          "summary": "Added active_player field to BeginningOfMainPhaseTriggeredEvent"
+        },
+        {
+          "path": "engine/turn.py",
+          "summary": "Fire BeginningOfMainPhaseTriggeredEvent at start of PRECOMBAT_MAIN and POSTCOMBAT_MAIN phases"
+        }
+      ]
+    },
+    {
+      "card": "sos_97",
+      "tests": [
+        {
+          "path": "cards/sos/sos_97/tests.py",
+          "summary": "tests for sos_97 Ral Zarek Guest Lecturer: static properties, 4 loyalty abilities (+1 surveil 2, -1 any-number discard, -2 reanimate creature MV<=3 from own graveyard, -7 flip 5 coins skip turns)"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_97/card_impl.py",
+          "summary": "RalZarekGuestLecturer Planeswalker: surveil 2 via choose_yes_no, targeted discard via choose_card, reanimate from own graveyard, coin-flip turn-skip"
+        },
+        {
+          "path": "engine/player.py",
+          "summary": "Added turns_to_skip: int = 0 field to Player.__init__ for turn-skipping support"
+        }
+      ]
+    }
+  ]
+}

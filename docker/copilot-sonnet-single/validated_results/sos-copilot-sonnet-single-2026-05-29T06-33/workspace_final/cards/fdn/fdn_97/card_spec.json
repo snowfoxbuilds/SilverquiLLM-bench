@@ -1,0 +1,19 @@
+{
+  "name": "Twinflame Tyrant",
+  "mana_cost": "{3}{R}{R}",
+  "type_line": "Creature — Dragon",
+  "oracle_text": "Flying\nIf a source you control would deal damage to an opponent or a permanent an opponent controls, it deals double that damage instead.",
+  "power": "3",
+  "toughness": "5",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Flying"
+  ],
+  "rarity": "mythic",
+  "set_code": "fdn",
+  "collector_number": "97",
+  "complexity_tier": "medium"
+}

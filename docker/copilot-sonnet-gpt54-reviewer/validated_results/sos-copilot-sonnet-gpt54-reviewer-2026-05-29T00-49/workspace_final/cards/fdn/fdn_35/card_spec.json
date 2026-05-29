@@ -1,0 +1,20 @@
+{
+  "name": "Drake Hatcher",
+  "mana_cost": "{1}{U}",
+  "type_line": "Creature — Human Wizard",
+  "oracle_text": "Vigilance, prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)\nWhenever this creature deals combat damage to a player, put that many incubation counters on it.\nRemove three incubation counters from this creature: Create a 2/2 blue Drake creature token with flying.",
+  "power": "1",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Prowess",
+    "Vigilance"
+  ],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "35",
+  "complexity_tier": "complex"
+}

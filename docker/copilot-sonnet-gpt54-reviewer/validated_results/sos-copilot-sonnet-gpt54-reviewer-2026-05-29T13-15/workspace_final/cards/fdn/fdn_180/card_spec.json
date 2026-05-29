@@ -1,0 +1,17 @@
+{
+  "name": "Phyrexian Arena",
+  "mana_cost": "{1}{B}{B}",
+  "type_line": "Enchantment",
+  "oracle_text": "At the beginning of your upkeep, you draw a card and you lose 1 life.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "180",
+  "complexity_tier": "medium"
+}

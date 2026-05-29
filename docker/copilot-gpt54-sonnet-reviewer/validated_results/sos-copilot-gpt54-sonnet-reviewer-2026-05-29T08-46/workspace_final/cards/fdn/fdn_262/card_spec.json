@@ -1,0 +1,15 @@
+{
+  "name": "Evolving Wilds",
+  "mana_cost": "",
+  "type_line": "Land",
+  "oracle_text": "{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "262",
+  "complexity_tier": "medium"
+}

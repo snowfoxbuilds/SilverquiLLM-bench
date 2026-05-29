@@ -1,0 +1,9 @@
+{
+  "cards": [
+    {
+      "card": "sos_1",
+      "tests": [{"path": "cards/sos/sos_1/tests.py", "summary": "Tests for The Dawning Archaic"}],
+      "implementation": [{"path": "cards/sos/sos_1/card_impl.py", "summary": "The Dawning Archaic implementation"}]
+    }
+  ]
+}

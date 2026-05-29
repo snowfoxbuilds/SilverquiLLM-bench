@@ -1,0 +1,10 @@
+2026-05-28T21:17:58+00:00 Starting run: sos-copilot-gpt54-sonnet-reviewer-2026-05-28T21-17
+2026-05-28T21:17:58+00:00 Image: silverquillm-copilot-gpt54-sonnet-reviewer:latest
+2026-05-28T21:17:58+00:00 Timeout: 360000s
+2026-05-28T21:17:58+00:00 Workspace staged at: /tmp/silverquillm_run_6jooxcqt/workspace
+2026-05-28T21:17:58+00:00 Running container: sqm-sos-copilot-gpt54-sonnet-reviewer-2026-05-28T21-17
+2026-05-29T00:48:23+00:00 Harvesting results...
+2026-05-29T00:48:23+00:00 Results saved to: /home/sean/repos/SilverquiLLM-bench/docker/copilot-gpt54-sonnet-reviewer/results/sos-copilot-gpt54-sonnet-reviewer-2026-05-28T21-17
+2026-05-29T00:49:17+00:00 Evaluation complete: 10 SOS cards scored
+2026-05-29T00:49:17+00:00 Run summary written to: /home/sean/repos/SilverquiLLM-bench/docker/copilot-gpt54-sonnet-reviewer/results/sos-copilot-gpt54-sonnet-reviewer-2026-05-28T21-17/run_summary.json
+2026-05-29T00:49:17+00:00 Run complete: sos-copilot-gpt54-sonnet-reviewer-2026-05-28T21-17

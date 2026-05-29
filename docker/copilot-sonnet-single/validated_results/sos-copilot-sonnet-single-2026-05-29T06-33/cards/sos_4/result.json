@@ -1,0 +1,11 @@
+{
+  "collector_number": "sos_4",
+  "tests_passed": 9,
+  "tests_failed": 1,
+  "tests_total": 10,
+  "pass_rate": 0.9,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_o2tz5qnn/tests.py::TestFizzleKeepsLegalEffects::test_damage_target_illegal_draw_and_life_still_resolve"
+  ],
+  "skipped": false
+}

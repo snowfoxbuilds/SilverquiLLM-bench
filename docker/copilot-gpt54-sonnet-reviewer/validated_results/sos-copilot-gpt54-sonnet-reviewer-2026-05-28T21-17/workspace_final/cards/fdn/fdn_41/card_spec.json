@@ -1,0 +1,17 @@
+{
+  "name": "Homunculus Horde",
+  "mana_cost": "{3}{U}",
+  "type_line": "Creature — Homunculus",
+  "oracle_text": "Whenever you draw your second card each turn, create a token that's a copy of this creature.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "41",
+  "complexity_tier": "medium"
+}

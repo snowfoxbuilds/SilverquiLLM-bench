@@ -1,0 +1,250 @@
+{
+  "cards": [
+    {
+      "card": "sos_1",
+      "tests": [
+        {
+          "path": "cards/sos/sos_1/tests.py",
+          "summary": "tests for sos_1 The Dawning Archaic cost reduction and attack-trigger graveyard casting"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_1/card_impl.py",
+          "summary": "implements The Dawning Archaic stats, cost reduction, and attack trigger"
+        },
+        {
+          "path": "engine/casting.py",
+          "summary": "adds resolving-spell graveyard destination override support for exile-on-resolution effects"
+        }
+      ]
+    },
+    {
+      "card": "sos_120",
+      "tests": [
+        {
+          "path": "cards/sos/sos_120/tests.py",
+          "summary": "tests for sos_120 Improvisation Capstone resolution, free casts, exile rider, and recurring Paradigm copies"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_120/card_impl.py",
+          "summary": "implements Improvisation Capstone resolution, free casting, exile rider, and Paradigm copy casting"
+        },
+        {
+          "path": "engine/events.py",
+          "summary": "adds a beginning-of-first-main-phase trigger event for Paradigm timing"
+        },
+        {
+          "path": "engine/game_state.py",
+          "summary": "fires first-main-phase trigger events when players enter precombat main"
+        }
+      ]
+    },
+    {
+      "card": "sos_13",
+      "tests": [
+        {
+          "path": "cards/sos/sos_13/tests.py",
+          "summary": "tests for sos_13 Emeritus of Truce creature-side ETB token creation and prepared-state updates"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_13/card_impl.py",
+          "summary": "implements Emeritus of Truce ETB token creation and assigns Prepared to a real keyword bit"
+        }
+      ]
+    },
+    {
+      "card": "sos_201",
+      "tests": [
+        {
+          "path": "cards/sos/sos_201/tests.py",
+          "summary": "updated tests for sos_201 Lorehold properties, upkeep discard-draw trigger, and miracle timing/cost behavior"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "engine/casting.py",
+          "summary": "allows miracle-enabled spells to bypass sorcery-speed timing and removes stray unreachable miracle helper code"
+        }
+      ]
+    },
+    {
+      "card": "sos_226",
+      "tests": [
+        {
+          "path": "cards/sos/sos_226/tests.py",
+          "summary": "tests for sos_226 Silverquill properties and controller-scoped casualty copying"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_226/card_impl.py",
+          "summary": "implements Silverquill, the Disputant stats, keywords, and casualty grant"
+        },
+        {
+          "path": "engine/card.py",
+          "summary": "adds an additive permanent hook for granting casualty values to spells"
+        },
+        {
+          "path": "engine/casting.py",
+          "summary": "adds casualty payment, self-sacrifice eligibility, spell-copy support, and deterministic prompt fallback"
+        }
+      ]
+    },
+    {
+      "card": "sos_245",
+      "tests": [
+        {
+          "path": "cards/sos/sos_245/tests.py",
+          "summary": "tests for sos_245 Witherbloom properties, self-affinity, and granted affinity for instants and sorceries"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_245/card_impl.py",
+          "summary": "implements Witherbloom stats, own affinity for creatures, and granted affinity-style reduction"
+        },
+        {
+          "path": "engine/card.py",
+          "summary": "adds an additive permanent hook for granting generic cost reduction to spells"
+        },
+        {
+          "path": "engine/casting.py",
+          "summary": "sums battlefield-granted cost reductions with a spell's own cost reduction during casting queries"
+        },
+        {
+          "path": "engine/types.py",
+          "summary": "reserves a Keyword.AFFINITY flag bit without changing the historical enum member count"
+        }
+      ]
+    },
+    {
+      "card": "sos_257",
+      "tests": [
+        {
+          "path": "cards/sos/sos_257/tests.py",
+          "summary": "tests for sos_257 Great Hall of the Biblioplex land abilities, animation, and instant-or-sorcery cast trigger"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_257/card_impl.py",
+          "summary": "implements Great Hall's restricted colored mana production for instant and sorcery spells"
+        },
+        {
+          "path": "engine/casting.py",
+          "summary": "checks spell payments against mana spending restrictions during casting"
+        },
+        {
+          "path": "engine/mana.py",
+          "summary": "tracks restricted mana entries and filters them by spend context during payment"
+        }
+      ]
+    },
+    {
+      "card": "sos_4",
+      "tests": [
+        {
+          "path": "cards/sos/sos_4/tests.py",
+          "summary": "tests for sos_4 Together as One targeting and converge-based draw, damage, and life gain"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/fdn/fdn_192/card_impl.py",
+          "summary": "broadens Burst Lightning any-target filtering to include planeswalkers"
+        },
+        {
+          "path": "cards/fdn/fdn_205/card_impl.py",
+          "summary": "normalizes converge color-count handling for colors_spent metadata"
+        },
+        {
+          "path": "cards/sos/sos_4/card_impl.py",
+          "summary": "implements Together as One targets and converge resolution"
+        },
+        {
+          "path": "engine/casting.py",
+          "summary": "adds generic payment_choices support and records converge color counts during casting"
+        },
+        {
+          "path": "engine/game.py",
+          "summary": "adds planeswalker damage handling through loyalty reduction"
+        },
+        {
+          "path": "engine/state_based_actions.py",
+          "summary": "adds zero-loyalty planeswalker cleanup as a state-based action"
+        },
+        {
+          "path": "engine/zones.py",
+          "summary": "clears detailed mana-color casting metadata on zone changes"
+        },
+        {
+          "path": "test_utils.py",
+          "summary": "exposes payment_choices through test spell casting helpers"
+        }
+      ]
+    },
+    {
+      "card": "sos_57",
+      "tests": [
+        {
+          "path": "cards/sos/sos_57/tests.py",
+          "summary": "tests for sos_57 Mana Sculpt targeting, countering, and next-main-phase Wizard mana rider"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_57/card_impl.py",
+          "summary": "implements Mana Sculpt targeting, countering, Wizard check, and delayed mana effect"
+        },
+        {
+          "path": "engine/casting.py",
+          "summary": "records actual mana spent during casting and zero for free casts"
+        },
+        {
+          "path": "engine/game_state.py",
+          "summary": "adds next-main-phase delayed callback scheduling and preserves extra-turn turn order"
+        },
+        {
+          "path": "engine/zones.py",
+          "summary": "clears actual mana spent metadata on zone changes"
+        }
+      ]
+    },
+    {
+      "card": "sos_97",
+      "tests": [
+        {
+          "path": "cards/sos/sos_97/tests.py",
+          "summary": "tests for sos_97 Ral Zarek, Guest Lecturer properties, loyalty abilities, surveil, discard, reanimation, and skip-turn coin flips"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_97/card_impl.py",
+          "summary": "implements Ral Zarek, Guest Lecturer with surveil, discard, reanimation, and coin-flip ultimate abilities"
+        },
+        {
+          "path": "engine/card.py",
+          "summary": "adds public planeswalker loyalty-target declaration methods for testable loyalty targeting contracts"
+        },
+        {
+          "path": "engine/game.py",
+          "summary": "adds deterministic surveil handling with optional scripted keep-order choices"
+        },
+        {
+          "path": "engine/game_state.py",
+          "summary": "adds deterministic coin flips and public next-turn skip scheduling support"
+        },
+        {
+          "path": "engine/types.py",
+          "summary": "extends TargetRequirement with min/max target-count metadata for variable-target declarations"
+        }
+      ]
+    }
+  ]
+}

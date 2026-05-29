@@ -1,0 +1,15 @@
+{
+  "name": "Solemn Simulacrum",
+  "mana_cost": "{4}",
+  "type_line": "Artifact Creature — Golem",
+  "oracle_text": "When this creature enters, you may search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.\nWhen this creature dies, you may draw a card.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "257",
+  "complexity_tier": "medium"
+}

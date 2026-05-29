@@ -1,0 +1,20 @@
+{
+  "name": "Twinblade Blessing",
+  "mana_cost": "{1}{W}{W}",
+  "type_line": "Enchantment — Aura",
+  "oracle_text": "Flash (You may cast this spell any time you could cast an instant.)\nEnchant creature\nEnchanted creature has double strike. (It deals both first-strike and regular combat damage.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Enchant",
+    "Flash"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "26",
+  "complexity_tier": "medium"
+}

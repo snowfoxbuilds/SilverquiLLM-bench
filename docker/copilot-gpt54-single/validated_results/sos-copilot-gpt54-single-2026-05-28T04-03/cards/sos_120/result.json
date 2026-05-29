@@ -1,0 +1,17 @@
+{
+  "collector_number": "sos_120",
+  "tests_passed": 2,
+  "tests_failed": 7,
+  "tests_total": 9,
+  "pass_rate": 0.2222222222222222,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_2iatjsy8/tests.py::TestExileFromLibraryUntilThreshold::test_exile_until_mv_sum_ge_4",
+    "FAILED ../../../../tmp/eval_sos_2iatjsy8/tests.py::TestDoesNotTargetOpponentCreatures::test_resolution_does_not_affect_opponent_board",
+    "FAILED ../../../../tmp/eval_sos_2iatjsy8/tests.py::TestCastChosenExiledCardsForFree::test_cast_exiled_card_free",
+    "FAILED ../../../../tmp/eval_sos_2iatjsy8/tests.py::TestCastChosenExiledCardsForFree::test_decline_cast_exiled_card",
+    "FAILED ../../../../tmp/eval_sos_2iatjsy8/tests.py::TestParadigmExilesSelf::test_paradigm_exiles_self_on_resolution",
+    "FAILED ../../../../tmp/eval_sos_2iatjsy8/tests.py::TestParadigmRecurringCast::test_recurring_cast_across_3_turns",
+    "FAILED ../../../../tmp/eval_sos_2iatjsy8/tests.py::TestParadigmOfferCanBeDeclined::test_paradigm_offer_declined"
+  ],
+  "skipped": false
+}

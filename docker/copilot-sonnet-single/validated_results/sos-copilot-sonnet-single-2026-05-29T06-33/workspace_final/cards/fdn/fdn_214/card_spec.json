@@ -1,0 +1,17 @@
+{
+  "name": "Broken Wings",
+  "mana_cost": "{2}{G}",
+  "type_line": "Instant",
+  "oracle_text": "Destroy target artifact, enchantment, or creature with flying.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "214",
+  "complexity_tier": "medium"
+}

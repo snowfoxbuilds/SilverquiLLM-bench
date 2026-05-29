@@ -1,0 +1,15 @@
+{
+  "collector_number": "sos_201",
+  "tests_passed": 7,
+  "tests_failed": 5,
+  "tests_total": 12,
+  "pass_rate": 0.5833333333333334,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_97vq6i6c/tests.py::TestMiracleGrantToInstantsAndSorceries::test_miracle_granted_to_instants_and_sorceries_not_creatures",
+    "FAILED ../../../../tmp/eval_sos_97vq6i6c/tests.py::TestGrantRemovedWhenLoreholdLeaves::test_miracle_grant_removed_on_leave",
+    "FAILED ../../../../tmp/eval_sos_97vq6i6c/tests.py::TestMiracleCastOnFirstDraw::test_miracle_cast_on_first_draw",
+    "FAILED ../../../../tmp/eval_sos_97vq6i6c/tests.py::TestMultipleInstantsGrantedMiracle::test_multiple_cards_all_get_miracle_cost",
+    "FAILED ../../../../tmp/eval_sos_97vq6i6c/tests.py::TestMiracleGrantAfterCardDrawnIntoHand::test_card_drawn_into_hand_gets_miracle_cost_on_next_apply"
+  ],
+  "skipped": false
+}

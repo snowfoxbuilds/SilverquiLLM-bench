@@ -1,0 +1,15 @@
+{
+  "name": "Campus Guide",
+  "mana_cost": "{2}",
+  "type_line": "Artifact Creature — Golem",
+  "oracle_text": "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top.",
+  "power": "2",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "251",
+  "complexity_tier": "medium"
+}

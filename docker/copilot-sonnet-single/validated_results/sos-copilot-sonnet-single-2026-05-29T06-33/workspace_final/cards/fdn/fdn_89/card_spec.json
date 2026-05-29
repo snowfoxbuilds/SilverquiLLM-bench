@@ -1,0 +1,19 @@
+{
+  "name": "Gorehorn Raider",
+  "mana_cost": "{4}{R}",
+  "type_line": "Creature — Minotaur Pirate",
+  "oracle_text": "Raid — When this creature enters, if you attacked this turn, this creature deals 2 damage to any target.",
+  "power": "4",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Raid"
+  ],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "89",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Rite of the Dragoncaller",
+  "mana_cost": "{4}{R}{R}",
+  "type_line": "Enchantment",
+  "oracle_text": "Whenever you cast an instant or sorcery spell, create a 5/5 red Dragon creature token with flying.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "mythic",
+  "set_code": "fdn",
+  "collector_number": "92",
+  "complexity_tier": "medium"
+}

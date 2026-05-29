@@ -1,0 +1,17 @@
+{
+  "name": "Macabre Waltz",
+  "mana_cost": "{1}{B}",
+  "type_line": "Sorcery",
+  "oracle_text": "Return up to two target creature cards from your graveyard to your hand, then discard a card.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "177",
+  "complexity_tier": "medium"
+}

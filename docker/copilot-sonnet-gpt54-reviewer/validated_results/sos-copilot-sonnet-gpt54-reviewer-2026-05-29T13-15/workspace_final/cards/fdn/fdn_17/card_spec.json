@@ -1,0 +1,20 @@
+{
+  "name": "Herald of Eternal Dawn",
+  "mana_cost": "{4}{W}{W}{W}",
+  "type_line": "Creature — Angel",
+  "oracle_text": "Flash (You may cast this spell any time you could cast an instant.)\nFlying\nYou can't lose the game and your opponents can't win the game.",
+  "power": "6",
+  "toughness": "6",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Flying",
+    "Flash"
+  ],
+  "rarity": "mythic",
+  "set_code": "fdn",
+  "collector_number": "17",
+  "complexity_tier": "medium"
+}

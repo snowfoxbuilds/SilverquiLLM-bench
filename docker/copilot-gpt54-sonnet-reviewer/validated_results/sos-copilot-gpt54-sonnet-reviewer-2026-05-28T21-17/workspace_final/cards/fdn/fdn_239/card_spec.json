@@ -1,0 +1,20 @@
+{
+  "name": "Empyrean Eagle",
+  "mana_cost": "{1}{W}{U}",
+  "type_line": "Creature — Bird Spirit",
+  "oracle_text": "Flying\nOther creatures you control with flying get +1/+1.",
+  "power": "2",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "U",
+    "W"
+  ],
+  "keywords": [
+    "Flying"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "239",
+  "complexity_tier": "simple"
+}

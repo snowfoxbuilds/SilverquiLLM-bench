@@ -1,0 +1,17 @@
+{
+  "name": "Condemn",
+  "mana_cost": "{W}",
+  "type_line": "Instant",
+  "oracle_text": "Put target attacking creature on the bottom of its owner's library. Its controller gains life equal to its toughness.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "mythic",
+  "set_code": "spg",
+  "collector_number": "74",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Arcane Epiphany",
+  "mana_cost": "{3}{U}{U}",
+  "type_line": "Instant",
+  "oracle_text": "This spell costs {1} less to cast if you control a Wizard.\nDraw three cards.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "29",
+  "complexity_tier": "medium"
+}

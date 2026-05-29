@@ -1,0 +1,19 @@
+{
+  "name": "Emeritus of Truce // Swords to Plowshares",
+  "mana_cost": "{1}{W}{W} // {W}",
+  "type_line": "Creature — Cat Cleric // Instant",
+  "oracle_text": "When this creature enters, target player creates a 1/1 white and black Inkling creature token with flying. Then if an opponent controls more creatures than you, this creature becomes prepared. (While it's prepared, you may cast a copy of its spell. Doing so unprepares it.)",
+  "power": "3",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Prepared"
+  ],
+  "rarity": "mythic",
+  "set_code": "sos",
+  "collector_number": "13",
+  "complexity_tier": "complex"
+}

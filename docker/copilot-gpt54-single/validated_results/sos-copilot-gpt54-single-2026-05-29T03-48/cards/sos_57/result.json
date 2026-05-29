@@ -1,0 +1,18 @@
+{
+  "collector_number": "sos_57",
+  "tests_passed": 5,
+  "tests_failed": 8,
+  "tests_total": 13,
+  "pass_rate": 0.38461538461538464,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_xt4qnq8b/tests.py::TestTargeting::test_get_targets_returns_stack_spells",
+    "FAILED ../../../../tmp/eval_sos_xt4qnq8b/tests.py::TestTargeting::test_get_targets_excludes_permanents",
+    "FAILED ../../../../tmp/eval_sos_xt4qnq8b/tests.py::TestTargeting::test_get_targets_excludes_empty_stack",
+    "FAILED ../../../../tmp/eval_sos_xt4qnq8b/tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase",
+    "FAILED ../../../../tmp/eval_sos_xt4qnq8b/tests.py::TestRefund::test_refund_amount_equals_mana_spent",
+    "FAILED ../../../../tmp/eval_sos_xt4qnq8b/tests.py::TestRefund::test_no_refund_on_opponent_main_phase",
+    "FAILED ../../../../tmp/eval_sos_xt4qnq8b/tests.py::TestRefund::test_refund_fires_only_once",
+    "FAILED ../../../../tmp/eval_sos_xt4qnq8b/tests.py::TestRefund::test_refund_locked_in_when_wizard_leaves_before_next_main"
+  ],
+  "skipped": false
+}

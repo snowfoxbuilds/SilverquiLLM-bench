@@ -1,0 +1,17 @@
+{
+  "name": "Crackling Cyclops",
+  "mana_cost": "{2}{R}",
+  "type_line": "Creature — Cyclops Wizard",
+  "oracle_text": "Whenever you cast a noncreature spell, this creature gets +3/+0 until end of turn.",
+  "power": "0",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "83",
+  "complexity_tier": "medium"
+}

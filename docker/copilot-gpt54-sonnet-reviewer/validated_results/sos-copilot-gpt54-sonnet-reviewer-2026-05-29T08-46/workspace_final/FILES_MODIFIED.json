@@ -1,0 +1,274 @@
+{
+  "cards": [
+    {
+      "card": "sos_1",
+      "tests": [
+        {
+          "path": "cards/sos/sos_1/tests.py",
+          "summary": "expanded tests for sos_1 The Dawning Archaic properties, cost reduction, and targeted graveyard cast/exile behavior"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/fdn/fdn_48/card_impl.py",
+          "summary": "switched Refute countering to the shared replacement aware engine helper"
+        },
+        {
+          "path": "cards/fdn/fdn_153/card_impl.py",
+          "summary": "switched Essence Scatter countering to the shared replacement aware engine helper"
+        },
+        {
+          "path": "cards/fdn/fdn_160/card_impl.py",
+          "summary": "switched An Offer You Cannot Refuse countering to the shared replacement aware engine helper"
+        },
+        {
+          "path": "cards/sos/sos_1/card_impl.py",
+          "summary": "implemented The Dawning Archaic stats, cost reduction, and targeted graveyard cast trigger"
+        },
+        {
+          "path": "engine/casting.py",
+          "summary": "added replacement aware stack to graveyard resolution and a shared counter helper"
+        },
+        {
+          "path": "engine/events.py",
+          "summary": "added generic moving card support for move to graveyard replacement events"
+        },
+        {
+          "path": "engine/stack.py",
+          "summary": "distinguished spell stack objects from non spell abilities with an is_spell flag"
+        },
+        {
+          "path": "engine/triggers.py",
+          "summary": "added target selection and target locking support for triggered abilities"
+        },
+        {
+          "path": "engine/zones.py",
+          "summary": "enabled graveyard replacement handling for stack origin moves and cleaned up stack linked effects"
+        }
+      ]
+    },
+    {
+      "card": "sos_120",
+      "tests": [
+        {
+          "path": "cards/sos/sos_120/tests.py",
+          "summary": "tests for sos_120 Improvisation Capstone properties, exile-and-free-cast resolution, and recurring Paradigm copy timing"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_120/card_impl.py",
+          "summary": "implemented Improvisation Capstone exile-until-four resolution, free spell casting, and recurring Paradigm copy windows"
+        }
+      ]
+    },
+    {
+      "card": "sos_13",
+      "tests": [
+        {
+          "path": "cards/sos/sos_13/tests.py",
+          "summary": "tests for sos_13 creature identity, targeted Inkling token creation, token colors, and prepared-state sequencing"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_13/card_impl.py",
+          "summary": "implemented Emeritus of Truce with a registered ETB trigger, targeted Inkling creation, prepared-state tracking, and the required UNVERIFIED marker"
+        },
+        {
+          "path": "engine/card.py",
+          "summary": "added a supported colors surface with mana-cost derivation and reset support for cards and tokens"
+        },
+        {
+          "path": "engine/protection.py",
+          "summary": "preserved legacy color fallback behavior when tracked colors are empty"
+        }
+      ]
+    },
+    {
+      "card": "sos_201",
+      "tests": [
+        {
+          "path": "cards/sos/sos_201/tests.py",
+          "summary": "expanded tests for sos_201 Lorehold, the Historian properties, opponent-upkeep discard/draw, granted miracle metadata, and first-draw miracle casting windows"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_201/card_impl.py",
+          "summary": "implemented Lorehold, the Historian stats, miracle grant, and opponent-upkeep discard-then-draw trigger"
+        },
+        {
+          "path": "engine/card.py",
+          "summary": "added public miracle metadata accessors and a grant hook on cards"
+        },
+        {
+          "path": "engine/casting.py",
+          "summary": "added alternate-cost hand casting support and a miracle casting helper"
+        },
+        {
+          "path": "engine/game.py",
+          "summary": "tracked miracle windows on card draw and reset opening draw counts after setup"
+        },
+        {
+          "path": "engine/game_state.py",
+          "summary": "added shared miracle window storage and per-turn draw-count resets"
+        },
+        {
+          "path": "engine/miracle.py",
+          "summary": "added shared miracle metadata lookup plus reveal-window tracking helpers"
+        },
+        {
+          "path": "engine/zones.py",
+          "summary": "cleared pending miracle windows when cards leave hand through the zone pipeline"
+        }
+      ]
+    },
+    {
+      "card": "sos_226",
+      "tests": [
+        {
+          "path": "cards/sos/sos_226/tests.py",
+          "summary": "tests for sos_226 Silverquill, the Disputant properties and battlefield-granted casualty copying for your instants and sorceries"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_226/card_impl.py",
+          "summary": "implemented Silverquill, the Disputant as a legendary Elder Dragon that grants casualty 1 to your instants and sorceries"
+        },
+        {
+          "path": "engine/casting.py",
+          "summary": "added shared casting-time support for battlefield-granted casualty sacrifices, copy creation, and optional retargeting"
+        }
+      ]
+    },
+    {
+      "card": "sos_245",
+      "tests": [
+        {
+          "path": "cards/sos/sos_245/tests.py",
+          "summary": "tests for sos_245 Witherbloom, the Balancer properties, self-affinity, and battlefield-granted affinity for your instants and sorceries"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_245/card_impl.py",
+          "summary": "implemented Witherbloom, the Balancer with self-affinity for creatures and a battlefield grant for your instants and sorceries"
+        },
+        {
+          "path": "engine/card.py",
+          "summary": "added a shared default get_granted_cost_reduction hook for battlefield-granted casting discounts"
+        },
+        {
+          "path": "engine/casting.py",
+          "summary": "added shared casting-time aggregation of battlefield-granted generic cost reduction"
+        }
+      ]
+    },
+    {
+      "card": "sos_257",
+      "tests": [
+        {
+          "path": "cards/sos/sos_257/tests.py",
+          "summary": "tests for sos_257 Great Hall of the Biblioplex properties, restricted mana spending, animation, and instant-or-sorcery trigger behavior"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_257/card_impl.py",
+          "summary": "implemented Great Hall of the Biblioplex mana abilities, animation, and spell-cast pump trigger"
+        },
+        {
+          "path": "engine/casting.py",
+          "summary": "taught spell casting to consult shared restricted-mana payment helpers"
+        },
+        {
+          "path": "engine/mana.py",
+          "summary": "added shared restricted-mana tracking and payment support for spend-limited mana"
+        }
+      ]
+    },
+    {
+      "card": "sos_4",
+      "tests": [
+        {
+          "path": "cards/sos/sos_4/tests.py",
+          "summary": "tests for sos_4 Together as One targeting, converge color counting, and shared draw-damage-life resolution"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_4/card_impl.py",
+          "summary": "implemented Together as One targeting and converge-based draw, damage, and life gain resolution"
+        },
+        {
+          "path": "engine/game.py",
+          "summary": "extended deal_damage so damage can remove loyalty from planeswalkers"
+        },
+        {
+          "path": "engine/state_based_actions.py",
+          "summary": "added the planeswalker zero-loyalty state-based action to move them off the battlefield"
+        }
+      ]
+    },
+    {
+      "card": "sos_57",
+      "tests": [
+        {
+          "path": "cards/sos/sos_57/tests.py",
+          "summary": "tests for sos_57 Mana Sculpt properties, stack-spell targeting, countering, and Wizard-gated delayed mana based on actual mana spent"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_57/card_impl.py",
+          "summary": "implemented Mana Sculpt targeting, counterspell resolution, and Wizard-gated delayed mana production"
+        },
+        {
+          "path": "engine/casting.py",
+          "summary": "recorded total mana actually spent on cast spells and initialized free-cast spell payment metadata"
+        },
+        {
+          "path": "engine/game_state.py",
+          "summary": "added a simple one-shot delayed action queue processed after phase transitions"
+        },
+        {
+          "path": "engine/mana.py",
+          "summary": "tracked the total mana spent by the most recent payment alongside colors spent"
+        },
+        {
+          "path": "engine/zones.py",
+          "summary": "cleared total mana spent casting metadata when cards change zones"
+        }
+      ]
+    },
+    {
+      "card": "sos_97",
+      "tests": [
+        {
+          "path": "cards/sos/sos_97/tests.py",
+          "summary": "expanded tests for sos_97 planeswalker properties, loyalty targeting metadata, surveil, discard, reanimation, coin flips, and skipped-turn behavior"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_97/card_impl.py",
+          "summary": "implemented Ral Zarek, Guest Lecturer with surveil, discard, reanimation, and coin-flip ultimate behavior"
+        },
+        {
+          "path": "engine/card.py",
+          "summary": "added public loyalty-ability targeting metadata and legal-target helpers"
+        },
+        {
+          "path": "engine/game.py",
+          "summary": "added shared coin-flip and skip-next-turn helper functions"
+        },
+        {
+          "path": "engine/game_state.py",
+          "summary": "added shared coin-flip history plus skipped-turn tracking and application during turn rotation"
+        }
+      ]
+    }
+  ]
+}

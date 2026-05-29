@@ -1,0 +1,18 @@
+{
+  "name": "Goldvein Pick",
+  "mana_cost": "{2}",
+  "type_line": "Artifact — Equipment",
+  "oracle_text": "Equipped creature gets +1/+1.\nWhenever equipped creature deals combat damage to a player, create a Treasure token. (It's an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")\nEquip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [],
+  "keywords": [
+    "Treasure",
+    "Equip"
+  ],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "253",
+  "complexity_tier": "medium"
+}

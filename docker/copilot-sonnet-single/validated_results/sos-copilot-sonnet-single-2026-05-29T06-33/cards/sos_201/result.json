@@ -1,0 +1,11 @@
+{
+  "collector_number": "sos_201",
+  "tests_passed": 11,
+  "tests_failed": 1,
+  "tests_total": 12,
+  "pass_rate": 0.9166666666666666,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_wg09a54j/tests.py::TestMiracleCastOnFirstDraw::test_miracle_cast_on_first_draw"
+  ],
+  "skipped": false
+}

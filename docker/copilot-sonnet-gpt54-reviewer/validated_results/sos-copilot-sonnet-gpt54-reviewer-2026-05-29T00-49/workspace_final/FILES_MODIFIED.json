@@ -1,0 +1,174 @@
+{
+  "cards": [
+    {
+      "card": "sos_1",
+      "tests": [
+        {
+          "path": "cards/sos/sos_1/tests.py",
+          "summary": "tests for sos_1 The Dawning Archaic: properties, cost reduction, attack trigger graveyard-cast, exile replacement"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_1/card_impl.py",
+          "summary": "Use cast_spell_free in trigger; floating exile replacement; simplified replacement function"
+        },
+        {
+          "path": "engine/zones.py",
+          "summary": "Remove leaving_battlefield restriction on replacement event consultation in move_to_zone"
+        },
+        {
+          "path": "engine/casting.py",
+          "summary": "Pass MoveToGraveyardReplacementEvent in _resolve_spell for non-permanent spells going to graveyard"
+        }
+      ]
+    },
+    {
+      "card": "sos_120",
+      "tests": [
+        {
+          "path": "cards/sos/sos_120/tests.py",
+          "summary": "tests for sos_120 Improvisation Capstone exile-from-library effect, free-cast tracking, and Paradigm mechanic"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_120/card_impl.py",
+          "summary": "ImprovisationCapstone Sorcery/Lesson: library exile loop with all_cards[0] convention, exiled_cards/exiled_by_capstone tracking, Paradigm self-exile in on_resolve, replacement effect with card_obj fix, BeginningOfPrecombatMainTriggeredEvent trigger"
+        },
+        {
+          "path": "engine/events.py",
+          "summary": "Added BeginningOfPrecombatMainTriggeredEvent dataclass for Paradigm main-phase trigger"
+        }
+      ]
+    },
+    {
+      "card": "sos_13",
+      "tests": [
+        {
+          "path": "cards/sos/sos_13/tests.py",
+          "summary": "tests for sos_13 Emeritus of Truce // Swords to Plowshares: ETB token creation, prepared state, STP copy exile+life gain"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_13/card_impl.py",
+          "summary": "Emeritus of Truce: 3/3 Cat Cleric with ETB Inkling token (white+black, flying), prepared mechanic, on_resolve_swords_to_plowshares using gain_life() helper and power property"
+        }
+      ]
+    },
+    {
+      "card": "sos_201",
+      "tests": [
+        {
+          "path": "cards/sos/sos_201/tests.py",
+          "summary": "tests for sos_201 Lorehold the Historian: static props, flying/haste, miracle grant, opponent upkeep trigger"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_201/card_impl.py",
+          "summary": "Lorehold the Historian: 5/5 legendary elder dragon with flying+haste, miracle {2} grant, ETB lifecycle hook, optional discard-draw opponent upkeep trigger"
+        }
+      ]
+    },
+    {
+      "card": "sos_226",
+      "tests": [
+        {
+          "path": "cards/sos/sos_226/tests.py",
+          "summary": "tests for sos_226 Silverquill the Disputant: static props, flying+vigilance, casualty 1 grant to instants/sorceries in hand"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_226/card_impl.py",
+          "summary": "SilverquillTheDisputant: 4/4 legendary elder dragon, flying+vigilance, apply_casualty_grant annotates controller hand instants/sorceries with casualty_threshold=1"
+        }
+      ]
+    },
+    {
+      "card": "sos_245",
+      "tests": [
+        {
+          "path": "cards/sos/sos_245/tests.py",
+          "summary": "tests for sos_245 Witherbloom the Balancer \u2014 properties, affinity cost reduction, granted affinity to instants/sorceries"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_245/card_impl.py",
+          "summary": "WitherbloomTheBalancer Creature with affinity for creatures, flying+deathtouch, and battlefield-checked global cost reducer for instants/sorceries"
+        }
+      ]
+    },
+    {
+      "card": "sos_257",
+      "tests": [
+        {
+          "path": "cards/sos/sos_257/tests.py",
+          "summary": "tests for sos_257 Great Hall of the Biblioplex: properties, mana abilities, {5} creature activation, spell-cast trigger"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_257/card_impl.py",
+          "summary": "GreatHallOfTheBiblioplex: Land with colorless mana ability, life-cost colored mana ability, {5} become-creature activation, and spell-cast +1/+0 trigger"
+        }
+      ]
+    },
+    {
+      "card": "sos_4",
+      "tests": [
+        {
+          "path": "cards/sos/sos_4/tests.py",
+          "summary": "tests for sos_4 Together as One: properties, targets, converge X=0/1/5, damage to creature/player, draw by target player, life gain by caster, colorless mana exclusion"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_4/card_impl.py",
+          "summary": "Implements TogetherAsOne Sorcery with Converge: X=distinct colors, target player draws X, deals X damage with creature target revalidation, caster gains X life via gain_life()"
+        },
+        {
+          "path": "engine/game.py",
+          "summary": "Added gain_life() helper that fires GainsLifeTriggeredEvent when a player gains life"
+        }
+      ]
+    },
+    {
+      "card": "sos_57",
+      "tests": [
+        {
+          "path": "cards/sos/sos_57/tests.py",
+          "summary": "tests for sos_57 Mana Sculpt counterspell with conditional deferred colorless mana"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_57/card_impl.py",
+          "summary": "ManaSculpt Instant: counters target spell, defers CMC-worth of {C} to main phase if controller has a Wizard"
+        }
+      ]
+    },
+    {
+      "card": "sos_97",
+      "tests": [
+        {
+          "path": "cards/sos/sos_97/tests.py",
+          "summary": "tests for sos_97 Ral Zarek Guest Lecturer static props, surveil, discard, reanimate, coin flip turn skip"
+        }
+      ],
+      "implementation": [
+        {
+          "path": "cards/sos/sos_97/card_impl.py",
+          "summary": "Ral Zarek implementation using move_to_zone for surveil/reanimate, engine discard helper for -1"
+        },
+        {
+          "path": "engine/turn.py",
+          "summary": "Added turns_to_skip check at start of run_turn to skip player turns when field is set"
+        }
+      ]
+    }
+  ]
+}

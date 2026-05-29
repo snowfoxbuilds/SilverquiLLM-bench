@@ -1,0 +1,19 @@
+{
+  "name": "Revenge of the Rats",
+  "mana_cost": "{2}{B}{B}",
+  "type_line": "Sorcery",
+  "oracle_text": "Create a tapped 1/1 black Rat creature token for each creature card in your graveyard.\nFlashback {2}{B}{B} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Flashback"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "67",
+  "complexity_tier": "medium"
+}

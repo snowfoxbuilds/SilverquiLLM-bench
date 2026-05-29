@@ -1,0 +1,20 @@
+{
+  "name": "Elementalist Adept",
+  "mana_cost": "{1}{U}",
+  "type_line": "Creature — Human Wizard",
+  "oracle_text": "Flash (You may cast this spell any time you could cast an instant.)\nProwess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)",
+  "power": "2",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Prowess",
+    "Flash"
+  ],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "36",
+  "complexity_tier": "medium"
+}

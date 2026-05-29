@@ -1,0 +1,17 @@
+{
+  "name": "Battlesong Berserker",
+  "mana_cost": "{3}{R}",
+  "type_line": "Creature — Human Berserker",
+  "oracle_text": "Whenever you attack, target creature you control gets +1/+0 and gains menace until end of turn. (It can't be blocked except by two or more creatures.)",
+  "power": "3",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "78",
+  "complexity_tier": "medium"
+}

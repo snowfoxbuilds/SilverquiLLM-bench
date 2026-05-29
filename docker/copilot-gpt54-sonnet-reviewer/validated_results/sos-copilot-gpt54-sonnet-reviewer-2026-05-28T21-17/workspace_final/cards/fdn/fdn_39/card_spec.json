@@ -1,0 +1,19 @@
+{
+  "name": "Grappling Kraken",
+  "mana_cost": "{4}{U}{U}",
+  "type_line": "Creature — Kraken",
+  "oracle_text": "Landfall — Whenever a land you control enters, tap target creature an opponent controls and put a stun counter on it. (If a permanent with a stun counter would become untapped, remove one from it instead.)",
+  "power": "5",
+  "toughness": "6",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Landfall"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "39",
+  "complexity_tier": "medium"
+}

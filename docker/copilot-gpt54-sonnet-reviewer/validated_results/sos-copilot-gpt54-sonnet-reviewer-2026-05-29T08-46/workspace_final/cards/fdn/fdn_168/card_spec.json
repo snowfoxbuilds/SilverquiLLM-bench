@@ -1,0 +1,19 @@
+{
+  "name": "Witness Protection",
+  "mana_cost": "{U}",
+  "type_line": "Enchantment — Aura",
+  "oracle_text": "Enchant creature\nEnchanted creature loses all abilities and is a green and white Citizen creature with base power and toughness 1/1 named Legitimate Businessperson. (It loses all other colors, card types, creature types, and names.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Enchant"
+  ],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "168",
+  "complexity_tier": "medium"
+}

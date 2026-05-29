@@ -1,0 +1,15 @@
+{
+  "name": "Island",
+  "mana_cost": "",
+  "type_line": "Basic Land — Island",
+  "oracle_text": "({T}: Add {U}.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "274",
+  "complexity_tier": "simple"
+}

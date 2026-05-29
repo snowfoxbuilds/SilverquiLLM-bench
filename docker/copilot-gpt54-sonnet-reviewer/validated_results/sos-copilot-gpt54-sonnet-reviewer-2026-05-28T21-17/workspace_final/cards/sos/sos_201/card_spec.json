@@ -1,0 +1,21 @@
+{
+  "name": "Lorehold, the Historian",
+  "mana_cost": "{3}{R}{W}",
+  "type_line": "Legendary Creature — Elder Dragon",
+  "oracle_text": "Flying, haste\nEach instant and sorcery card in your hand has miracle {2}. (You may cast a card for its miracle cost when you draw it if it's the first card you drew this turn.)\nAt the beginning of each opponent's upkeep, you may discard a card. If you do, draw a card.",
+  "power": "5",
+  "toughness": "5",
+  "loyalty": null,
+  "colors": [
+    "R",
+    "W"
+  ],
+  "keywords": [
+    "Flying",
+    "Haste"
+  ],
+  "rarity": "mythic",
+  "set_code": "sos",
+  "collector_number": "201",
+  "complexity_tier": "expert"
+}

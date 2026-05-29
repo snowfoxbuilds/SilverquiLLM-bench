@@ -1,0 +1,21 @@
+{
+  "name": "Billowing Shriekmass",
+  "mana_cost": "{3}{B}",
+  "type_line": "Creature — Spirit",
+  "oracle_text": "Flying\nWhen this creature enters, mill three cards. (Put the top three cards of your library into your graveyard.)\nThreshold — This creature gets +2/+1 as long as there are seven or more cards in your graveyard.",
+  "power": "2",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Flying",
+    "Threshold",
+    "Mill"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "56",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Erudite Wizard",
+  "mana_cost": "{2}{U}",
+  "type_line": "Creature — Human Wizard",
+  "oracle_text": "Whenever you draw your second card each turn, put a +1/+1 counter on this creature.",
+  "power": "2",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "37",
+  "complexity_tier": "medium"
+}

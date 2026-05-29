@@ -1,0 +1,14 @@
+{
+  "collector_number": "sos_97",
+  "tests_passed": 6,
+  "tests_failed": 4,
+  "tests_total": 10,
+  "pass_rate": 0.6,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_9j2k6vct/tests.py::TestRalZarekGuestLecturer::test_plus_one_effect_one_on_top",
+    "FAILED ../../../../tmp/eval_sos_9j2k6vct/tests.py::TestRalZarekGuestLecturer::test_minus_one_effect",
+    "FAILED ../../../../tmp/eval_sos_9j2k6vct/tests.py::TestRalZarekGuestLecturer::test_minus_two_effect",
+    "FAILED ../../../../tmp/eval_sos_9j2k6vct/tests.py::TestRalZarekGuestLecturer::test_ultimate_effect"
+  ],
+  "skipped": false
+}

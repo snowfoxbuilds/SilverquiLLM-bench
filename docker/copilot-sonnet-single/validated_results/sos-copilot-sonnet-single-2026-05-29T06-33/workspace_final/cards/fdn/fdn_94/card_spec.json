@@ -1,0 +1,19 @@
+{
+  "name": "Slumbering Cerberus",
+  "mana_cost": "{1}{R}",
+  "type_line": "Creature — Dog",
+  "oracle_text": "This creature doesn't untap during your untap step.\nMorbid — At the beginning of each end step, if a creature died this turn, untap this creature.",
+  "power": "4",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Morbid"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "94",
+  "complexity_tier": "medium"
+}
