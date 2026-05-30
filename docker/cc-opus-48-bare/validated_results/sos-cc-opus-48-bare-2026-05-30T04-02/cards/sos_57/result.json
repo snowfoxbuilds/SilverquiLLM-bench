@@ -1,0 +1,13 @@
+{
+  "collector_number": "sos_57",
+  "tests_passed": 10,
+  "tests_failed": 3,
+  "tests_total": 13,
+  "pass_rate": 0.7692307692307693,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_cn4pj_4o/tests.py::TestTargeting::test_get_targets_returns_stack_spells",
+    "FAILED ../../../../tmp/eval_sos_cn4pj_4o/tests.py::TestCounter::test_fizzle_when_target_removed",
+    "FAILED ../../../../tmp/eval_sos_cn4pj_4o/tests.py::TestRefund::test_no_refund_when_fizzled"
+  ],
+  "skipped": false
+}
