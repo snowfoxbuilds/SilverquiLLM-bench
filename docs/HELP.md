@@ -33,6 +33,7 @@ docker build -t silverquillm-copilot-opus-single:latest docker/copilot-opus-sing
 
 docker build -t silverquillm-cc-sonnet-single:latest docker/cc-sonnet-single/
 docker build -t silverquillm-cc-opus-single:latest docker/cc-opus-single/
+docker build -t silverquillm-cc-opus-48-bare:latest docker/cc-opus-48-bare/
 
 # Smoke
 silverquillm smoke --image silverquillm-local-pi-blind:latest
@@ -49,15 +50,23 @@ silverquillm run --image silverquillm-copilot-claude-opus-4.6:latest --timeout 3
 silverquillm run --image silverquillm-copilot-claude-sonnet-4.6:latest --timeout 360000
 
 silverquillm run --image silverquillm-copilot-sonnet-single:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
+silverquillm run --image silverquillm-copilot-sonnet-single:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
 silverquillm run --image silverquillm-copilot-gpt54-sonnet-reviewer:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
 silverquillm run --image silverquillm-copilot-sonnet-gpt54-reviewer:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
-silverquillm run --image silverquillm-copilot-gpt54-single:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;
+silverquillm run --image silverquillm-copilot-gpt54-single:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
+silverquillm run --image silverquillm-copilot-sonnet-single:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
+silverquillm run --image silverquillm-copilot-sonnet-single:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
+silverquillm run --image silverquillm-copilot-gpt54-sonnet-reviewer:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
+silverquillm run --image silverquillm-copilot-sonnet-gpt54-reviewer:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
+silverquillm run --image silverquillm-copilot-gpt54-single:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000
 
 silverquillm run --image silverquillm-copilot-opus-single:latest --cards 1,4,13,52,57,80,97,107,113,120,125,201,212,214,218,226,236,245,246,257  --timeout 360000
 
 silverquillm run --image silverquillm-cc-sonnet-single:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
 silverquillm run --image silverquillm-cc-opus-single:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
 silverquillm run --image silverquillm-cc-opus-single:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
+
+silverquillm run --image silverquillm-cc-opus-48-bare:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
 
 
 silverquillm run \
