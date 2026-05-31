@@ -170,10 +170,12 @@ Agent Container
 | `benchmarks/sos/data/` | Active | SOS raw data + audited tests | sos.json, rules, tests/audited/ |
 | `data/` | Active | Runtime data cache + replay data | Scryfall cache, replay files |
 | `data/replays/` | Active | Replay card ID maps and samples | Used by replay validation |
-| `scripts/` | Active | Utility scripts | Card ID maps, card spec generation, migration scripts |
+| `scripts/` | Active | Utility scripts | Card ID maps, card spec generation, migration scripts; Phase 19 harvest pipeline (`harvest_validated_results.py` — discovery + row emission, including legacy branch for pre-items-1/2 `result.json`); Phase 19 promotion gate (`check_promotion_candidate.py` — tier + canonical-API + oracle checks; completes the harvest → investigation → miner → promotion-gate pipeline) |
+| `benchmarks/sos/analysis/` | Active | Phase 19 harvest output directory | Created by `scripts/harvest_validated_results.py`; default output location for `harvested_results.jsonl` |
 | `tests/` | Active | Test root | Runner, card, replay, integration, and host-side validation tests |
 | `tests/integration/` | Active | Integration tests | Workspace staging integration tests |
 | `docs/` | Active | Specs and generated docs | Export target for Notion specs |
+| `.claude/skills/test-investigation/` | Active | Host-side Claude Code skill — test-investigation | Combined Investigation + Discovery workflow for triaging failing benchmark tests; reads `harvested_results.jsonl`, refuses on Released tier, outputs human-reviewable report only. Distinct from `docker/<image>/skills/` (agent-container skills). |
 
 ## Key Specs
 

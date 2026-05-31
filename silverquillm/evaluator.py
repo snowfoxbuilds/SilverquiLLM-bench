@@ -31,6 +31,7 @@ Public API:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -78,6 +79,8 @@ class CardResult:
     pass_rate: float = 0.0
     errors: list[str] = field(default_factory=list)
     skipped: bool = False
+    test_nodes: list[dict] = field(default_factory=list)
+    tests_hash: str = ""
 
 
 @dataclass
@@ -692,19 +695,151 @@ def _prepare_engine_work(
     return engine_dir, None
 
 
+def _generate_report_conftest(report_jsonl_path: str) -> str:
+    """Return Python source for a conftest.py that records test outcomes to JSONL.
+
+    The generated conftest uses the ``pytest_runtest_logreport`` hook to capture
+    per-test outcomes.  Only ``when == "call"`` reports are recorded for
+    pass/fail.  ``when == "setup"`` failures (including collection errors) are
+    also captured since those tests never reach ``call``.
+
+    The JSONL file path is baked into the source as a literal string so no
+    env-var plumbing is needed.
+    """
+    # Escape backslashes and quotes in the path for embedding in Python source
+    safe_path = report_jsonl_path.replace("\\", "\\\\").replace('"', '\\"')
+    return f'''
+import json as _json
+
+_REPORT_PATH = "{safe_path}"
+_seen_nodes = set()
+
+def pytest_runtest_logreport(report):
+    """Record each test node outcome to a JSONL file."""
+    nodeid = report.nodeid
+    if report.when == "call":
+        # Skip xfail/xpass outcomes — they appear as skipped=True in the call phase.
+        # Intentionally omit them; only genuine pass/fail outcomes are recorded.
+        if report.skipped or hasattr(report, "wasxfail"):
+            return
+        outcome = "pass" if report.passed else "fail"
+        _seen_nodes.add(nodeid)
+        with open(_REPORT_PATH, "a") as f:
+            f.write(_json.dumps({{"nodeid": nodeid, "when": "call", "outcome": outcome}}) + "\\n")
+    elif report.when == "setup" and report.failed:
+        # Setup failure — test never reaches "call"
+        if nodeid not in _seen_nodes:
+            _seen_nodes.add(nodeid)
+            with open(_REPORT_PATH, "a") as f:
+                f.write(_json.dumps({{"nodeid": nodeid, "when": "setup", "outcome": "fail"}}) + "\\n")
+
+def pytest_collectreport(report):
+    """Record collection errors."""
+    if report.failed:
+        nodeid = report.nodeid or "<collection-error>"
+        with open(_REPORT_PATH, "a") as f:
+            f.write(_json.dumps({{"nodeid": nodeid, "when": "collect", "outcome": "fail"}}) + "\\n")
+'''
+
+
+def _normalize_nodeid(nodeid: str) -> str:
+    """Normalize a pytest node ID to the ``tests.py::test_x`` form.
+
+    Strips any directory prefix so only the filename and test remain.
+    For example ``/tmp/eval_sos_abc123/tests.py::test_foo`` becomes
+    ``tests.py::test_foo``.
+    """
+    # Handle path separators — keep only the filename portion
+    if "/" in nodeid:
+        # Find the last path component before ::
+        if "::" in nodeid:
+            path_part, rest = nodeid.split("::", 1)
+            filename = path_part.rsplit("/", 1)[-1]
+            return f"{filename}::{rest}"
+        else:
+            return nodeid.rsplit("/", 1)[-1]
+    return nodeid
+
+
+def _parse_report_jsonl(report_path: Path) -> list[dict]:
+    """Parse the JSONL report file into a list of ``{"test_node": ..., "outcome": ...}`` dicts.
+
+    Deduplicates by nodeid (first occurrence wins).  Normalizes nodeids to
+    ``tests.py::test_x`` form.  Collection errors without a real nodeid get
+    a synthetic ``tests.py::<collection-error>`` id.
+    """
+    if not report_path.exists():
+        return []
+
+    seen: set[str] = set()
+    nodes: list[dict] = []
+
+    for line in report_path.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        raw_nodeid = entry.get("nodeid", "")
+        outcome = entry.get("outcome")
+
+        # Only accept the explicit values the conftest writes ('pass' / 'fail').
+        # Any other or missing outcome is ignored — must not be silently coerced.
+        if outcome not in ("pass", "fail"):
+            continue
+
+        # Normalize the nodeid
+        if raw_nodeid and raw_nodeid != "<collection-error>":
+            normalized = _normalize_nodeid(raw_nodeid)
+        else:
+            normalized = "tests.py::<collection-error>"
+
+        if normalized not in seen:
+            seen.add(normalized)
+            nodes.append({
+                "test_node": normalized,
+                "outcome": outcome,
+            })
+
+    return nodes
+
+
+def _restore_conftest(
+    conftest_path: Path | None,
+    original_content: str | None,
+) -> None:
+    """Restore or remove the conftest.py after report capture."""
+    if conftest_path is None:
+        return
+    if original_content is not None:
+        conftest_path.write_text(original_content)
+    elif conftest_path.exists():
+        conftest_path.unlink()
+
+
 def _run_pytest_with_pythonpath(
     test_path: Path,
     pythonpath_parts: list[str],
     timeout: int = 60,
-) -> tuple[int, int, int, list[str]]:
+    capture_test_nodes: bool = False,
+) -> tuple[int, int, int, list[str]] | tuple[int, int, int, list[str], list[dict]]:
     """Run pytest on *test_path* with a custom PYTHONPATH.
 
-    Returns ``(passed, failed, total, errors)``.
+    Returns ``(passed, failed, total, errors)``.  When *capture_test_nodes*
+    is ``True``, returns a 5-tuple with an additional list of per-node
+    outcome dicts: ``[{"test_node": "tests.py::test_x", "outcome": "pass"|"fail"}, ...]``.
     """
     env = dict(os.environ)
     existing = env.get("PYTHONPATH", "")
     parts = pythonpath_parts + ([existing] if existing else [])
     env["PYTHONPATH"] = ":".join(parts)
+
+    report_jsonl_path = None
+    existing_conftest_backup = None
+    conftest_in_test_dir = None
 
     cmd = [
         sys.executable,
@@ -715,19 +850,63 @@ def _run_pytest_with_pythonpath(
         "-q",
         "--no-header",
     ]
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=env,
-        )
-        combined = result.stdout + "\n" + result.stderr
-    except subprocess.TimeoutExpired:
-        return 0, 0, 0, [f"Timeout after {timeout}s"]
 
-    return _parse_pytest_output(combined)
+    if capture_test_nodes:
+        # Write a report JSONL to a temp file; inject conftest into the test's
+        # parent directory so pytest picks it up automatically.
+        report_jsonl_dir = tempfile.mkdtemp(prefix="eval_report_")
+        report_jsonl_path = Path(report_jsonl_dir) / "report.jsonl"
+        test_dir = test_path.parent
+        conftest_in_test_dir = test_dir / "conftest.py"
+
+        # Back up any existing conftest.py (e.g. from audited tests)
+        if conftest_in_test_dir.exists():
+            existing_conftest_backup = conftest_in_test_dir.read_text()
+            # Prepend report hooks to existing conftest
+            report_hooks = _generate_report_conftest(str(report_jsonl_path))
+            conftest_in_test_dir.write_text(
+                report_hooks + "\n" + existing_conftest_backup
+            )
+        else:
+            conftest_in_test_dir.write_text(
+                _generate_report_conftest(str(report_jsonl_path))
+            )
+
+    try:
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env=env,
+            )
+            combined = result.stdout + "\n" + result.stderr
+        except subprocess.TimeoutExpired:
+            if capture_test_nodes:
+                return 0, 0, 0, [f"Timeout after {timeout}s"], []
+            return 0, 0, 0, [f"Timeout after {timeout}s"]
+
+        parsed = _parse_pytest_output(combined)
+
+        if capture_test_nodes:
+            # test_nodes enumerates only executed pass/fail nodes.  Skipped and
+            # xfail tests are intentionally omitted, so len(test_nodes) may be
+            # less than tests_total when skips exist.  The authoritative counts
+            # (tests_passed, tests_failed, tests_total) come from
+            # _parse_pytest_output and are unaffected.
+            test_nodes = _parse_report_jsonl(report_jsonl_path) if report_jsonl_path else []
+            return parsed[0], parsed[1], parsed[2], parsed[3], test_nodes
+
+        return parsed
+    finally:
+        # Always restore conftest and clean up the report temp dir, regardless
+        # of how the body exits (normal return, TimeoutExpired, or any other
+        # exception such as OSError/PermissionError).
+        if capture_test_nodes:
+            _restore_conftest(conftest_in_test_dir, existing_conftest_backup)
+            if report_jsonl_path:
+                shutil.rmtree(report_jsonl_path.parent, ignore_errors=True)
 
 
 def _make_card_result(
@@ -815,10 +994,19 @@ def _eval_sos_cards(
                 pp.append(str(engine_work.parent))
             pp.append(str(_REPO_ROOT))
 
-            passed, failed, total, errors = _run_pytest_with_pythonpath(
+            passed, failed, total, errors, test_nodes = _run_pytest_with_pythonpath(
                 tmp / "tests.py", pp, timeout=timeout,
+                capture_test_nodes=True,
             )
             cr = _make_card_result(cn, passed, failed, total, errors)
+            cr.test_nodes = test_nodes
+
+            # Stamp tests_hash — SHA-256 of the audited test file bytes
+            try:
+                cr.tests_hash = hashlib.sha256(test_file.read_bytes()).hexdigest()
+            except OSError:
+                cr.tests_hash = ""
+
             results[cn] = cr
 
             # Write result.json

@@ -2,41 +2,22 @@
 
 Decisions made during this run only. Before the PR, migrate anything worth preserving long-term into `KEY_DECISIONS.md`.
 
-## Spec deviation: Item 1 — evaluator.py not modified
-- **TODO spec expected**: Extend `silverquillm/evaluator.py` with `--against=oracle` mode.
-- **Actual codebase state**: The harness is self-contained in `tests/test_audited_against_reference.py` and reuses the temp-dir pattern from evaluator.py without modifying it.
-- **What was implemented instead**: Standalone test file that pytest collects directly, no evaluator flag needed.
-- **Impact**: `tests/test_audited_against_reference.py` — simpler integration, fewer moving parts.
+## Spec deviation: Item 2 — per-node outcome capture mechanism
+- **TODO spec expected**: Add `--report-log=<tmp>/report.jsonl` to the pytest invocation (described as "pytest's built-in machine-readable JSONL") and parse the `TestReport` entries.
+- **Actual codebase state**: `--report-log` is provided by the `pytest-reportlog` plugin, which is NOT installed in this environment. Using it would require adding a new third-party dependency.
+- **What was implemented instead**: An inline `conftest.py` is written into the test file's parent dir (already a temp dir in the SOS eval path) before pytest runs. It uses `pytest_runtest_logreport` (`when=="call"` for pass/fail, `when=="setup"`+`failed` for setup errors) and `pytest_collectreport` (`failed` for collection errors) to write a JSONL of `{"test_node","outcome"}` rows, then parses it into `CardResult.test_nodes`. If an audited-tests `conftest.py` already exists, the hooks are prepended and the original restored afterward. A `capture_test_nodes=False` optional param on `_run_pytest_with_pythonpath` keeps the existing 4-tuple return for all other callers (`_eval_fdn_cards`, `_eval_engine`); only `_eval_sos_cards` opts into the 5-tuple. Counts/`errors` still come from the unchanged `_parse_pytest_output`.
+- **Impact**: `silverquillm/evaluator.py`. Establishes the per-node capture convention (no new dependency). Candidate for KEY_DECISIONS.
 
-## Test infrastructure: conftest for oracle workspace audited tests
-- **Context**: Tests in `test_oracle_workspace/tests/audited/sos/` need to import from `card_impl` generically.
-- **Decision**: Created a conftest in the workspace that resolves `card_impl` imports by detecting the collector directory and loading from `cards/sos/<dir>/card_impl.py`.
-- **Reasoning**: Matches the pattern used in the canonical audited test conftest; makes tests impl-agnostic.
-- **Impact**: `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/conftest.py`
+## Arbitration: Item 5 — keep `build_rows_for_run` returning `list[dict]`; legacy notice in `harvest()`
+- **Context**: The Item 5 Implementer changed `build_rows_for_run`'s return type from `list[dict]` (the contract Item 4 established and Item 6 depends on) to `tuple[list[dict], bool]` to surface a per-run "is legacy" flag, and edited the Item 4 Tester's `tests/test_harvest_rows.py` to match — both outside its mandate (the Implementer must not modify Tester tests or break a committed public API without need).
+- **Coordinator decision**: Revert. `build_rows_for_run` stays `-> list[dict]`. Per-run legacy detection moves into `harvest()`, which inspects each run's emitted rows for a rollup row (`row["test_node"] == "__rollup__"`) and prints the one-per-run `[legacy] <image>/<run>: ...` notice. The Implementer restores `tests/test_harvest_rows.py` to its committed state and touches only `scripts/harvest_validated_results.py`. The two Item-4 `TestMissingTestNodes` tests that encode the temporary "skip legacy cards" placeholder are then updated by the **Tester** (which owns test files) to the new skip→rollup behavior, alongside the new Item-5 legacy tests.
+- **Reasoning**: Smaller blast radius, preserves the Item 4/6 API, and keeps the Implementer/Tester separation the skill mandates. Rollup rows are a reliable legacy marker, so no signature change is needed.
+- **Impact**: `scripts/harvest_validated_results.py`, `tests/test_harvest_rows.py`.
+- **Rollup row contract** (worth keeping): legacy cards emit one `test_node="__rollup__"` row with `outcome="rollup"` (a sentinel that is neither `pass` nor `fail`, so Item 6 breadth does not miscount it) carrying `passed`/`failed`/`total`; fail rows are derived from `errors` node ids; `tests_hash` is `null` for legacy cards.
 
-## Design: sos_13 dual-mode card (front creature + back instant)
-- **Context**: Emeritus of Truce // Swords to Plowshares is a split card with prepared mechanic.
-- **Decision**: Single class with `_casting_back_face` flag. Mode detected in `can_cast()` when card is in exile + prepared. `get_targets()` and `on_resolve()` branch on this flag.
-- **Reasoning**: Simpler than separate instant class; the `cast_spell_free` flow operates on same card object from exile.
-- **Impact**: `benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_13/card_impl.py`
-
-## Test failure: Item 5 — sos_57 Mana Sculpt
-- **Failing tests**: test_refund_with_wizard, test_fizzle_when_target_removed
-- **Tester's intent**: Verify Wizard-conditional mana refund (core spec requirement) and fizzle behavior when target removed from stack
-- **Implementer's approach**: Deferred refund logic ("will be added when tests are written") and didn't implement fizzle check
-- **Coordinator decision**: fix implementation — both behaviors are explicit TODO requirements, not edge cases
-- **Reasoning**: The TODO explicitly says "if controller controls a Wizard at resolution time, register a delayed trigger" and fizzle is basic counterspell behavior
-
-## Spec deviation: Item 5 — sos_57 Mana Sculpt refund timing + amount
-- **TODO spec expected**: Delayed trigger at "beginning of controller's next main phase" adding {C} × actual mana spent to cast the countered spell.
-- **Actual codebase state**: No delayed-trigger-at-phase system exists in the oracle workspace engine. No mana-spent-tracking on arbitrary opponent spells.
-- **What was implemented instead**: Immediate mana addition using countered spell's CMC as proxy for mana spent.
-- **Impact**: `benchmarks/sos/data/test_oracle_workspace/cards/sos/sos_57/card_impl.py` — tests verify immediate CMC-based refund, which correctly discriminates Wizard/no-Wizard behavior. Full delayed trigger deferred to engine maturation.
-
-## Disagreement: Item 5 — test infrastructure for counterspells
-- **Reviewer comment (strict)**: _put_spell_on_stack builds bare StackObject instead of real cast; refund test accepts immediate payout.
-- **Implementer justification**: cast_spell auto-resolves, so you can't use it to place a spell on the stack for targeting. Immediate refund is a deliberate simplification.
-- **Coordinator decision**: accept implementer — the test infrastructure correctly tests counterspell behavior (targeting stack objects, counter = remove without resolving, wizard-conditional refund). Full cast pipeline isn't needed for the counter-target interaction.
-- **Reasoning**: The key bug pattern being tested is "vacuous pass on method existence" — these tests verify actual behavior (countering, refunding) not method existence. The timing/amount simplification is well-bounded.
-- **Impact**: Tests pass correctly against oracle impl; future engine enhancement can tighten timing assertions.
+## Supporting addition: Item 9 — created `benchmarks/sos/config.json`
+- **Context**: Items 7 (skill) and 9 (promotion gate) both read the Benchmark Tier from `benchmarks/<bench>/config.json` `tier`, but the file did not exist in the repo. The gate's tier check needs it to operate on real data; without it the gate fails-closed (refuses).
+- **Decision**: Item 9 creates `benchmarks/sos/config.json`. It was first added as a one-key `{"tier": "benchmarking"}` stub (the only field the gate consumes); during PR #23 review it was upgraded to the full schema documented in `docs/specs/BENCHMARK-RUNNER.md` (`schema_version`, `id`, `display_name`, `draft_set`, `tier`, `cards`, `leaderboard`) so the committed config matches the spec rather than diverging from it. CONTEXT.md states SOS is currently in Benchmarking, so `tier: benchmarking` is the correct value (and makes promotions legal per the workflow).
+- **Reasoning**: The TODO assumes the file exists ("Read `benchmarks/<bench>/config.json` `tier`") but no item lists creating it; adding it makes the pipeline functional and is clearly correct given CONTEXT.md. Not listed in item 9's Files, so recorded here as a necessary supporting addition. Writing the full documented schema (vs. the stub) removes the divergence a reviewer would otherwise flag; only `tier` is read today (CI + `check_tier`).
+- **Impact**: `benchmarks/sos/config.json` (new). The gate fails-closed if the file or `tier` key is ever missing.
 

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Benchmark data and artifacts for the **Shadows over Sonnenthal (SOS)** Draft Set — 346 cards (271 SOS base + 65 SOA Mystical Archives + 10 SPG Special Guests) fetched from Scryfall. Contains raw card data, classified tiers (with both `tier` and `complexity_tier` keys), per-card specs, comprehensive rules, prototype card selections, and result output directories.
+Benchmark data and artifacts for the **Secrets of Strixhaven (SOS)** Draft Set — 346 cards (271 SOS base + 65 SOA Mystical Archives + 10 SPG Special Guests) fetched from Scryfall. Contains raw card data, classified tiers (with both `tier` and `complexity_tier` keys), per-card specs, comprehensive rules, prototype card selections, and result output directories.
 
 ## Key Files
 
@@ -10,6 +10,7 @@ Benchmark data and artifacts for the **Shadows over Sonnenthal (SOS)** Draft Set
 |------|---------------|
 | `__init__.py` | Package init for SOS benchmark set. |
 | `fetch_data.py` | SOS data fetcher — downloads SOS base (cn 1-271), SOA (cn 1-65), and SPG (cn 149-158) from Scryfall. `SOS_BASE_MAX_COLLECTOR_NUMBER=271` cutoff. Stale cache invalidation, merge into sos.json, set breakdown logging. |
+| `config.json` | Benchmark config (schema per `docs/specs/BENCHMARK-RUNNER.md`): `schema_version`, `id`, `display_name`, `draft_set`, `tier` (`benchmarking`), `cards` (the 10 audited collector numbers), `leaderboard`. CI and `scripts/check_promotion_candidate.py` read only `tier` (ADR-011 tier lock) to permit promotion checks. |
 | `prototype_cards.json` | 5 prototype cards (one per complexity tier) with both `tier` and `complexity_tier` fields. |
 | `prototype_gaps.md` | Engine gap analysis — documents missing engine features for prototype cards. |
 
@@ -21,6 +22,7 @@ Benchmark data and artifacts for the **Shadows over Sonnenthal (SOS)** Draft Set
 | `data/` | Raw and processed data files, plus `tests/audited/` (FDN/SOS audited test suites). |
 | `cards/` | Per-card directories (`1/`–`271/` for SOS, `soa_1/`–`soa_65/` for SOA, `spg_149/`–`spg_158/` for SPG), each containing `card_spec.json`. |
 | `results/` | **Deprecated.** Benchmark results are now stored under `docker/<image_dir>/results/`. |
+| `analysis/` | Output directory for Phase 19 harvest pipeline. Created by `scripts/harvest_validated_results.py`. Default output: `analysis/harvested_results.jsonl`. Currently contains `.gitkeep` only; JSONL row emission added in item 4. |
 
 ## Data Files (`data/`)
 
