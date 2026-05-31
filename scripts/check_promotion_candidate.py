@@ -111,25 +111,119 @@ def check_tier(repo_root: Path, bench: str = "sos") -> tuple[bool, str]:
 # ---------------------------------------------------------------------------
 
 
+def _is_public(name: str) -> bool:
+    """A name is part of the public surface if it does not start with ``_``."""
+    return bool(name) and not name.startswith("_")
+
+
+def _plain_target_names(target: ast.expr) -> list[str]:
+    """Return bare ``Name`` ids from an assignment target (recursing tuples/lists)."""
+    if isinstance(target, ast.Name):
+        return [target.id]
+    if isinstance(target, (ast.Tuple, ast.List)):
+        names: list[str] = []
+        for elt in target.elts:
+            names.extend(_plain_target_names(elt))
+        return names
+    return []
+
+
+def _add_class_attr_names(stmt: ast.stmt, symbols: set[str]) -> None:
+    """Add public class-body attribute names from a class-level Assign/AnnAssign.
+
+    Catches class variables and dataclass fields such as
+    ``StackObject.mana_spent`` (``mana_spent: int = 0``).
+    """
+    if isinstance(stmt, ast.AnnAssign):
+        targets: list[ast.expr] = [stmt.target]
+    elif isinstance(stmt, ast.Assign):
+        targets = list(stmt.targets)
+    else:
+        return
+    for target in targets:
+        for name in _plain_target_names(target):
+            if _is_public(name):
+                symbols.add(name)
+
+
+def _add_self_attr_names(node: ast.Assign | ast.AnnAssign, symbols: set[str]) -> None:
+    """Add public attribute names assigned via ``self.<name>``/``cls.<name>``.
+
+    Catches instance attributes such as ``game.rng`` (``self.rng = ...``).
+    """
+    if isinstance(node, ast.AnnAssign):
+        targets: list[ast.expr] = [node.target]
+    else:
+        targets = list(node.targets)
+    for target in targets:
+        if isinstance(target, ast.Attribute):
+            value = target.value
+            if (
+                isinstance(value, ast.Name)
+                and value.id in {"self", "cls"}
+                and _is_public(target.attr)
+            ):
+                symbols.add(target.attr)
+
+
+def _collect_module_symbols(tree: ast.AST, symbols: set[str]) -> None:
+    """Walk an engine module AST and add its public symbol names to ``symbols``.
+
+    See :func:`_collect_public_symbols` for the categories collected.
+    """
+    for node in ast.walk(tree):
+        # def / class / method / property / nested-class names
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if _is_public(node.name):
+                symbols.add(node.name)
+
+        # Class-body attributes (class vars, dataclass fields)
+        if isinstance(node, ast.ClassDef):
+            for stmt in node.body:
+                _add_class_attr_names(stmt, symbols)
+
+        # Instance/class attributes assigned via self.<name> / cls.<name>
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            _add_self_attr_names(node, symbols)
+
+
 def _collect_public_symbols(engine_dir: Path) -> set[str]:
-    """Scan ``engine_dir/*.py`` for top-level public ``def`` and ``class`` names,
-    plus module names (stem of each ``.py`` file, excluding ``__init__``).
+    """Collect the public symbol surface of an engine directory.
 
-    Collected symbols:
-    - Module names: the stem of each ``.py`` file in the engine directory
-      (excluding ``__init__.py`` and files starting with ``_``).
-    - Top-level ``def`` names that do not start with ``_``.
-    - Top-level ``class`` names that do not start with ``_``.
+    Recurses ``engine_dir`` (``rglob("*.py")`` — so engine subpackages are
+    covered) and, for each module, collects the public names a candidate test
+    could legitimately reference as an engine API:
 
-    This is intentionally conservative — we only collect names that are
-    clearly part of the engine's public surface.
+    - **Module names** — the stem of each ``.py`` file (excluding ``__init__``
+      and modules starting with ``_``).
+    - **``def`` / ``class`` names** at any nesting level — functions, classes,
+      and methods/properties (e.g. the ``ManaPool.restricted_mana`` property).
+    - **Class-body attributes** — ``Assign`` / ``AnnAssign`` targets defined
+      directly in a class body, e.g. the dataclass field
+      ``StackObject.mana_spent``.
+    - **Instance/class attributes** — names assigned via ``self.<name>`` or
+      ``cls.<name>`` anywhere in the module, e.g. ``game.rng``.
+
+    Names beginning with ``_`` are treated as private and skipped.
+
+    Collecting attribute/method/property names — not just module/class/function
+    names — is what lets :func:`check_canonical_api` see oracle-only primitives
+    that live *inside* a class.  Those are exactly the symbols the Phase 18
+    cleanup added only to the oracle engine (``mana_spent``, ``restricted_mana``,
+    ``rng``); a coarser top-level-only scan would let a candidate depending on
+    them slip through both this check and the oracle gate.
+
+    Heuristic limits (acceptable for a name-based gate): attributes created
+    dynamically (``setattr``, ``__dict__`` writes, metaclass injection) are not
+    visible, and matching is on bare names rather than fully-qualified owners.
+    The oracle gate plus human review remain the backstop.
     """
     symbols: set[str] = set()
 
     if not engine_dir.is_dir():
         return symbols
 
-    for py_file in sorted(engine_dir.glob("*.py")):
+    for py_file in sorted(engine_dir.rglob("*.py")):
         stem = py_file.stem
         # Module names (excluding __init__ and private modules)
         if not stem.startswith("_"):
@@ -141,13 +235,7 @@ def _collect_public_symbols(engine_dir: Path) -> set[str]:
         except (SyntaxError, OSError):
             continue
 
-        for node in ast.iter_child_nodes(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if not node.name.startswith("_"):
-                    symbols.add(node.name)
-            elif isinstance(node, ast.ClassDef):
-                if not node.name.startswith("_"):
-                    symbols.add(node.name)
+        _collect_module_symbols(tree, symbols)
 
     return symbols
 

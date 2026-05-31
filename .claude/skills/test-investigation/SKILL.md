@@ -105,9 +105,17 @@ by agents during Tested Mode runs that could be promoted into the audited suite.
    identify candidates worth reviewing.
 
 2. **Gate each candidate.**  Before presenting a candidate for human review, run
-   `scripts/check_promotion_candidate.py` (item 9) to verify it passes the
-   matching Test Oracle Impl gate (ADR-010).  A candidate that does not pass
-   this gate MUST NOT be surfaced.
+   `scripts/check_promotion_candidate.py` (item 9).  The gate runs three checks
+   and a candidate MUST NOT be surfaced unless all pass:
+   - **Tier lock** (ADR-011) — only Beta/Benchmarking tiers permit promotion.
+   - **Canonical-API check** — rejects a candidate that references an engine
+     symbol present only in the Test Oracle Workspace engine.  This covers not
+     just module/class/function names but also class attributes, methods,
+     properties, and `self.<attr>` instance attributes (e.g. `mana_spent`,
+     `restricted_mana`, `rng`), so a test coupling to an oracle-only primitive
+     that lives *inside* a class is caught — not silently passed.
+   - **Test Oracle Impl gate** (ADR-010) — the candidate must pass against the
+     matching oracle `card_impl.py`.
 
 3. **Present for human review.**  List each passing candidate with:
    - The card and test node(s) it covers.

@@ -448,6 +448,160 @@ class TestCheckCanonicalApi:
 
 
 # ---------------------------------------------------------------------------
+# 5b. Canonical-API check — attribute/method/property granularity
+#     (regression guard for the oracle-only-primitive blind spot)
+# ---------------------------------------------------------------------------
+
+
+class TestCanonicalApiAttributeGranularity:
+    """The canonical-API check must catch oracle-only symbols that live *inside*
+    a class — dataclass fields, properties/methods, and instance attributes —
+    not just module/class/function names. These are the exact primitives the
+    Phase 18 cleanup added only to the oracle engine (mana_spent,
+    restricted_mana, rng)."""
+
+    def test_oracle_only_dataclass_field_rejected(self, tmp_path: Path) -> None:
+        """A class-body field present only in the oracle engine → rejected.
+
+        Mirrors ``StackObject.mana_spent`` (``mana_spent: int = 0``).
+        """
+        _build_engine(
+            tmp_path / "benchmarks" / "sos" / "workspace" / "engine",
+            {"stack": "class StackObject:\n    pass\n"},
+        )
+        _build_engine(
+            tmp_path / "benchmarks" / "sos" / "data" / "test_oracle_workspace" / "engine",
+            {"stack": "class StackObject:\n    mana_spent: int = 0\n"},
+        )
+
+        candidate = _write_candidate(
+            tmp_path,
+            "def test_it():\n    obj = StackObject()\n    assert obj.mana_spent == 0\n",
+        )
+
+        ok, reason = check_canonical_api(candidate, tmp_path, bench="sos")
+        assert ok is False
+        assert "mana_spent" in reason
+
+    def test_oracle_only_property_rejected(self, tmp_path: Path) -> None:
+        """A property/method present only in the oracle engine → rejected.
+
+        Mirrors ``ManaPool.restricted_mana`` (an ``@property``).
+        """
+        _build_engine(
+            tmp_path / "benchmarks" / "sos" / "workspace" / "engine",
+            {"mana": "class ManaPool:\n    pass\n"},
+        )
+        _build_engine(
+            tmp_path / "benchmarks" / "sos" / "data" / "test_oracle_workspace" / "engine",
+            {
+                "mana": (
+                    "class ManaPool:\n"
+                    "    @property\n"
+                    "    def restricted_mana(self):\n"
+                    "        return []\n"
+                )
+            },
+        )
+
+        candidate = _write_candidate(
+            tmp_path,
+            "def test_it():\n    p = ManaPool()\n    assert p.restricted_mana == []\n",
+        )
+
+        ok, reason = check_canonical_api(candidate, tmp_path, bench="sos")
+        assert ok is False
+        assert "restricted_mana" in reason
+
+    def test_oracle_only_instance_attribute_rejected(self, tmp_path: Path) -> None:
+        """An instance attribute (``self.x = ...``) only in the oracle engine → rejected.
+
+        Mirrors ``game.rng`` (``self.rng = random.Random()``).
+        """
+        _build_engine(
+            tmp_path / "benchmarks" / "sos" / "workspace" / "engine",
+            {
+                "game_state": (
+                    "class GameState:\n"
+                    "    def __init__(self):\n"
+                    "        self.seed = 0\n"
+                )
+            },
+        )
+        _build_engine(
+            tmp_path / "benchmarks" / "sos" / "data" / "test_oracle_workspace" / "engine",
+            {
+                "game_state": (
+                    "import random\n"
+                    "class GameState:\n"
+                    "    def __init__(self):\n"
+                    "        self.seed = 0\n"
+                    "        self.rng = random.Random()\n"
+                )
+            },
+        )
+
+        candidate = _write_candidate(
+            tmp_path,
+            "def test_it():\n    g = GameState()\n    g.rng.random()\n",
+        )
+
+        ok, reason = check_canonical_api(candidate, tmp_path, bench="sos")
+        assert ok is False
+        assert "rng" in reason
+
+    def test_shared_attribute_passes(self, tmp_path: Path) -> None:
+        """An attribute present in BOTH engines must NOT be a false positive."""
+        shared = "class StackObject:\n    mana_spent: int = 0\n"
+        _build_engine(
+            tmp_path / "benchmarks" / "sos" / "workspace" / "engine",
+            {"stack": shared},
+        )
+        _build_engine(
+            tmp_path / "benchmarks" / "sos" / "data" / "test_oracle_workspace" / "engine",
+            {"stack": shared},
+        )
+
+        candidate = _write_candidate(
+            tmp_path,
+            "def test_it():\n    obj = StackObject()\n    assert obj.mana_spent == 0\n",
+        )
+
+        ok, reason = check_canonical_api(candidate, tmp_path, bench="sos")
+        assert ok is True
+
+    def test_oracle_only_symbol_in_subpackage_rejected(self, tmp_path: Path) -> None:
+        """rglob: an oracle-only symbol in an engine SUBPACKAGE is still seen.
+
+        With the old non-recursive ``glob("*.py")`` this symbol would be invisible
+        and the candidate would wrongly pass.
+        """
+        # Canonical engine: flat, no subpackage
+        _build_engine(
+            tmp_path / "benchmarks" / "sos" / "workspace" / "engine",
+            {"game": "def create_game(): pass\n"},
+        )
+        # Oracle engine: defines deep_helper inside a subpackage
+        oracle_engine = (
+            tmp_path / "benchmarks" / "sos" / "data" / "test_oracle_workspace" / "engine"
+        )
+        _build_engine(oracle_engine, {"game": "def create_game(): pass\n"})
+        sub = oracle_engine / "sub"
+        sub.mkdir(parents=True)
+        (sub / "__init__.py").write_text("")
+        (sub / "extra.py").write_text("def deep_helper(): pass\n")
+
+        candidate = _write_candidate(
+            tmp_path,
+            "def test_it():\n    deep_helper()\n",
+        )
+
+        ok, reason = check_canonical_api(candidate, tmp_path, bench="sos")
+        assert ok is False
+        assert "deep_helper" in reason
+
+
+# ---------------------------------------------------------------------------
 # 6. Fail-closed oracle gate
 # ---------------------------------------------------------------------------
 
