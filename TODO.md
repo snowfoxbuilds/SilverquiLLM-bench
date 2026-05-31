@@ -29,7 +29,7 @@ Sequencing: items 1–2 (evaluator schema) gate the harvest, because the harvest
 
   Testability: unit test against a temp fixture tree of `docker/<img>/validated_results/<run>/` directories asserts discovery returns the expected `(image, run)` pairs and that `--image`/`--run`/`--card` filters narrow the set.
 
-- [ ] **4. Emit long-format ****`harvested_results.jsonl`**** rows (one per ****`(image, run, card, test_node)`****)**
+- [x] **4. Emit long-format ****`harvested_results.jsonl`**** rows (one per ****`(image, run, card, test_node)`****)**
   Detail: For each discovered run, read each `cards/<card>/result.json` and emit one JSONL row per entry in `test_nodes` (from item 2). Row fields exactly per [TEST-IMPROVEMENT-WORKFLOW.md](http://test-improvement-workflow.md/) §1: `image`, `run`, `card` (the `cards/<card>/` dir name, e.g. `sos_57`), `test_node` (e.g. `tests.py::test_mana_sculpt_refund`), `outcome` (`pass`|`fail`), `tests_hash` (from result.json), `passed`/`failed`/`total` (per-card rollup counts copied onto every row), `complexity_tier` (optional — resolve from the card's `card_spec.json` `complexity_tier` key when available, else null), and `harvested_at` (ISO-8601 timestamp of this harvest run). Append rows in run order to the `--output` path. Keep the format fully denormalized — cross-impl breadth (item 6) is a query-time view over these rows.
 
   Files: `scripts/harvest_validated_results.py` (row builder + JSONL writer).

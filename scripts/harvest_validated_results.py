@@ -25,7 +25,9 @@ CLI flags:
 from __future__ import annotations
 
 import argparse
+import json
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -130,6 +132,162 @@ def discover_validated_runs(
 
 
 # ---------------------------------------------------------------------------
+# Row builder
+# ---------------------------------------------------------------------------
+
+
+def build_rows_for_run(
+    vr: ValidatedRun,
+    *,
+    harvested_at: str,
+) -> list[dict]:
+    """Build one JSONL row per ``(card, test_node)`` for a validated run.
+
+    Parameters
+    ----------
+    vr:
+        A discovered :class:`ValidatedRun`.
+    harvested_at:
+        ISO-8601 timestamp shared across all rows of one harvest invocation.
+
+    Returns
+    -------
+    list[dict]
+        Rows with keys: ``image, run, card, test_node, outcome, tests_hash,
+        passed, failed, total, complexity_tier, harvested_at``.
+    """
+    rows: list[dict] = []
+
+    for card_dir in vr.card_dirs:
+        result_path = card_dir / "result.json"
+        try:
+            result_data = json.loads(result_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            # Unreadable result.json — skip gracefully (item 5 may revisit).
+            continue
+
+        card_name = card_dir.name
+
+        # Rollup counts — map result.json field names to row field names.
+        passed = result_data.get("tests_passed", 0)
+        failed = result_data.get("tests_failed", 0)
+        total = result_data.get("tests_total", 0)
+        tests_hash = result_data.get("tests_hash", None)
+
+        # Modern schema: test_nodes present.
+        test_nodes = result_data.get("test_nodes")
+        if test_nodes is None:
+            # TODO: item 5 fills legacy fallback for result.json lacking
+            # test_nodes / tests_hash.
+            continue
+
+        # Complexity tier from card_spec.json (if available).
+        complexity_tier = _read_complexity_tier(card_dir)
+
+        for node in test_nodes:
+            rows.append({
+                "image": vr.image,
+                "run": vr.run,
+                "card": card_name,
+                "test_node": node.get("test_node", ""),
+                "outcome": node.get("outcome", ""),
+                "tests_hash": tests_hash,
+                "passed": passed,
+                "failed": failed,
+                "total": total,
+                "complexity_tier": complexity_tier,
+                "harvested_at": harvested_at,
+            })
+
+    return rows
+
+
+def _read_complexity_tier(card_dir: Path) -> Optional[str]:
+    """Read ``complexity_tier`` from ``card_spec.json`` in *card_dir*.
+
+    Returns ``None`` when the file or key is absent or unreadable.
+    """
+    spec_path = card_dir / "card_spec.json"
+    try:
+        spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        return spec.get("complexity_tier", None)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Harvest orchestrator
+# ---------------------------------------------------------------------------
+
+
+def harvest(
+    repo_root: Path,
+    *,
+    bench: str = "sos",
+    output: Optional[str] = None,
+    image: Optional[str] = None,
+    run: Optional[str] = None,
+    card: Optional[str] = None,
+    harvested_at: Optional[str] = None,
+) -> int:
+    """Run the full harvest pipeline and write JSONL rows.
+
+    Parameters
+    ----------
+    repo_root:
+        Repository root directory.
+    bench:
+        Benchmark name (used only for the default output path).
+    output:
+        Explicit output JSONL path.  When *None*, defaults to
+        ``benchmarks/<bench>/analysis/harvested_results.jsonl`` under
+        *repo_root*.
+    image, run, card:
+        Optional filters forwarded to :func:`discover_validated_runs`.
+    harvested_at:
+        ISO-8601 timestamp for all rows.  Computed automatically when *None*.
+
+    Returns
+    -------
+    int
+        Number of rows written.
+    """
+    if harvested_at is None:
+        harvested_at = datetime.now(timezone.utc).isoformat()
+
+    # Resolve output path.
+    if output is not None:
+        output_path = Path(output)
+    else:
+        output_path = (
+            repo_root / "benchmarks" / bench / "analysis"
+            / "harvested_results.jsonl"
+        )
+
+    # Ensure parent directory exists.
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Discover runs.
+    runs = discover_validated_runs(
+        repo_root,
+        image=image,
+        run=run,
+        card=card,
+    )
+
+    # Build and write rows (truncate-then-write for idempotency).
+    row_count = 0
+    with open(output_path, "w", encoding="utf-8") as fh:
+        for vr in runs:
+            rows = build_rows_for_run(vr, harvested_at=harvested_at)
+            for row in rows:
+                fh.write(json.dumps(row) + "\n")
+                row_count += 1
+
+    return row_count
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -184,7 +342,17 @@ def main(*, repo_root: Optional[Path] = None) -> None:
     parser = _build_parser()
     args = parser.parse_args()
 
-    # Resolve output path
+    # Delegate to harvest() so tests can drive the pipeline directly.
+    row_count = harvest(
+        repo_root,
+        bench=args.bench,
+        output=args.output,
+        image=args.image,
+        run=args.run,
+        card=args.card,
+    )
+
+    # Resolve output path for summary message (mirrors harvest() logic).
     if args.output is not None:
         output_path = Path(args.output)
     else:
@@ -193,23 +361,18 @@ def main(*, repo_root: Optional[Path] = None) -> None:
             / "harvested_results.jsonl"
         )
 
-    # Ensure output directory exists
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Run discovery
+    # Print summary
     runs = discover_validated_runs(
         repo_root,
         image=args.image,
         run=args.run,
         card=args.card,
     )
-
-    # Print summary
     print(f"Discovered {len(runs)} validated run(s):")
     for vr in runs:
         n_cards = len(vr.card_dirs)
         print(f"  {vr.image} / {vr.run}  ({n_cards} card(s))")
-    print(f"\nOutput would be written to: {output_path}")
+    print(f"\nWrote {row_count} row(s) to: {output_path}")
 
 
 if __name__ == "__main__":

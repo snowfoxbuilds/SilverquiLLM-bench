@@ -26,3 +26,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Tests
 - `tests/test_harvest_validated_results.py` — 29 test cases validating discovery of (image, run) pairs from fixture tree, --image/--run/--card filters and composition, results/ working dir exclusion, CLI analysis-dir creation, empty/missing docker/ edge cases, and parser defaults
+
+## Item 4: Emit long-format harvested_results.jsonl rows
+
+### Implementation
+- `scripts/harvest_validated_results.py` — Added build_rows_for_run() row builder, _read_complexity_tier() helper, harvest() orchestrator (discovers runs, writes JSONL, returns row count), and refactored main() to delegate to harvest()
+
+### Tests
+- `tests/test_harvest_rows.py` — 18 test cases validating JSONL row emission: integration test with two-card mixed pass/fail fixture, return value, harvested_at determinism, complexity_tier present/absent, denormalized rollup counts, idempotency (truncate mode), row ordering by (image, run, card), and legacy/missing test_nodes skipping
