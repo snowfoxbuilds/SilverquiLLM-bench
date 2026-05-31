@@ -170,7 +170,8 @@ Agent Container
 | `benchmarks/sos/data/` | Active | SOS raw data + audited tests | sos.json, rules, tests/audited/ |
 | `data/` | Active | Runtime data cache + replay data | Scryfall cache, replay files |
 | `data/replays/` | Active | Replay card ID maps and samples | Used by replay validation |
-| `scripts/` | Active | Utility scripts | Card ID maps, card spec generation, migration scripts |
+| `scripts/` | Active | Utility scripts | Card ID maps, card spec generation, migration scripts; Phase 19 harvest pipeline (`harvest_validated_results.py` — discovery layer) |
+| `benchmarks/sos/analysis/` | Active | Phase 19 harvest output directory | Created by `scripts/harvest_validated_results.py`; default output location for `harvested_results.jsonl` |
 | `tests/` | Active | Test root | Runner, card, replay, integration, and host-side validation tests |
 | `tests/integration/` | Active | Integration tests | Workspace staging integration tests |
 | `docs/` | Active | Specs and generated docs | Export target for Notion specs |

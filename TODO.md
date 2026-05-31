@@ -22,7 +22,7 @@ Sequencing: items 1–2 (evaluator schema) gate the harvest, because the harvest
 
   Testability: unit test on a synthetic card with one passing and one failing test asserts `result.json.test_nodes` lists both with correct outcomes and that `tests_passed`/`tests_failed`/`tests_total` still match the existing parser.
 
-- [ ] **3. Scaffold ****`scripts/harvest_validated_results.py`**** (discovery + CLI + output path)**
+- [x] **3. Scaffold ****`scripts/harvest_validated_results.py`**** (discovery + CLI + output path)**
   Detail: New utility script following the existing `scripts/` pattern (argparse CLI, `if __name__ == "__main__": main()`). Discover all Validated Results by globbing `docker/*/validated_results/*/` from the repo root; derive `image` from the `docker/<image>/` directory name and `run` from the `<run-name>` directory name (e.g. `sos-2026-05-16T19-49`). Read the source corpus from `docker/<image>/validated_results/<run>/` only — never the `results/` working dir (Validated Results are runs manually promoted out of `results/` after completing cleanly, per the 2026-05-30 decision). CLI flags: `--bench` (default `sos`), `--output` (default `benchmarks/<bench>/analysis/harvested_results.jsonl`), and optional `--image` / `--run` / `--card` filters. Create `benchmarks/<bench>/analysis/` if missing. This item establishes discovery + CLI wiring + output path only; row emission lands in item 4.
 
   Files: `scripts/harvest_validated_results.py` (new); creates `benchmarks/sos/analysis/`.

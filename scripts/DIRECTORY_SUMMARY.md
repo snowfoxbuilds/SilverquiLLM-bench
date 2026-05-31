@@ -10,16 +10,18 @@ Standalone utility scripts for data pipeline tasks. Not part of the main package
 |------|-------|---------------|
 | `build_card_id_map.py` | 230 | Fetches card data from Scryfall API and builds `data/replays/card_id_map.json`. Creates `grpId_to_card_name` forward map and `card_name_to_grpIds` reverse map (list-valued for duplicate-name disambiguation). Adds synthetic entries for SPG #74–83 (grpIds 94700–94709) flagged with `"synthetic": true`. Includes error handling for curl/Scryfall API failures. |
 | `generate_audited_stubs.py` | ~200 | Reads `benchmarks/sos/data/sos.json` and generates `cards/stubs/sos_stubs.py` containing one stub class per card with colors, hybrid mana, planeswalker loyalty, Vehicle P/T, and `register_sos_stubs(registry)`. |
+| `harvest_validated_results.py` | ~217 | **Phase 19 harvest pipeline — discovery layer.** Discovers validated results by globbing `docker/*/validated_results/*/`. Exposes `discover_validated_runs(repo_root, *, image, run, card) -> list[ValidatedRun]` (sorted, filtered) and an argparse `main()` with `--bench/--output/--image/--run/--card`. Creates `benchmarks/<bench>/analysis/` on first run. Row emission (JSONL write) is handled in item 4. |
 
 ## Dependencies
 
 - **External**: `requests` (HTTP), Scryfall API
-- **Downstream**: `data/replays/card_id_map.json` consumed by `silverquillm/replay/parser.py` and `silverquillm/replay/executor.py`. `cards/stubs/sos_stubs.py` consumed by `tests/audited/sos/conftest.py`.
+- **Downstream**: `data/replays/card_id_map.json` consumed by `silverquillm/replay/parser.py` and `silverquillm/replay/executor.py`. `cards/stubs/sos_stubs.py` consumed by `tests/audited/sos/conftest.py`. `harvest_validated_results.py` writes to `benchmarks/<bench>/analysis/harvested_results.jsonl`.
 
 ## Directory Structure
 
 ```
 scripts/
-├── build_card_id_map.py        — Scryfall → card_id_map.json builder
-└── generate_audited_stubs.py   — sos.json → sos_stubs.py generator
+├── build_card_id_map.py           — Scryfall → card_id_map.json builder
+├── generate_audited_stubs.py      — sos.json → sos_stubs.py generator
+└── harvest_validated_results.py   — Phase 19 harvest pipeline: discovery + CLI
 ```

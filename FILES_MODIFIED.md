@@ -17,3 +17,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Tests
 - `tests/test_test_nodes.py` — 29 test cases verifying per-node capture (real pytest), nodeid normalization, count consistency, collection/setup error handling, JSON persistence round-trip, back-compat 4-tuple return, and _parse_report_jsonl unit tests
+
+## Item 3: Scaffold scripts/harvest_validated_results.py (discovery + CLI)
+
+### Implementation
+- `scripts/harvest_validated_results.py` — New utility script with discover_validated_runs() function, ValidatedRun dataclass, argparse CLI (--bench/--output/--image/--run/--card), and discovery summary output
+- `benchmarks/sos/analysis/.gitkeep` — Created analysis output directory for harvested results
+
+### Tests
+- `tests/test_harvest_validated_results.py` — 29 test cases validating discovery of (image, run) pairs from fixture tree, --image/--run/--card filters and composition, results/ working dir exclusion, CLI analysis-dir creation, empty/missing docker/ edge cases, and parser defaults
