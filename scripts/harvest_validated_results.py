@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -132,6 +133,69 @@ def discover_validated_runs(
 
 
 # ---------------------------------------------------------------------------
+# Legacy helpers
+# ---------------------------------------------------------------------------
+
+# Regex matching FAILED/ERROR lines produced by _parse_pytest_output in
+# silverquillm/evaluator.py.  Examples:
+#   "FAILED tests.py::test_x - AssertionError"
+#   "ERROR tests.py::test_y"
+#   "FAILED /tmp/eval_sos_abc123/tests.py::test_z - reason"
+_FAILED_RE = re.compile(
+    r"^(?:FAILED|ERROR)\s+"       # keyword
+    r"(\S+?)"                     # node-id (non-greedy, no spaces)
+    r"(?:\s+-\s+.*)?$"            # optional " - reason" suffix
+)
+
+
+def _normalize_nodeid(nodeid: str) -> str:
+    """Normalize a pytest node ID to ``tests.py::test_x`` form.
+
+    Strips any directory prefix so only the filename and test remain.
+    Mirrors the normalizer in ``silverquillm/evaluator.py``.
+    """
+    if "/" in nodeid:
+        if "::" in nodeid:
+            path_part, rest = nodeid.split("::", 1)
+            filename = path_part.rsplit("/", 1)[-1]
+            return f"{filename}::{rest}"
+        else:
+            return nodeid.rsplit("/", 1)[-1]
+    return nodeid
+
+
+def _extract_fail_nodes_from_errors(errors: list[str]) -> list[str]:
+    """Extract de-duplicated, normalized pytest node IDs from error lines.
+
+    Lines that do not contain a parseable ``file::test`` node ID (e.g.
+    collection errors without a node) are represented by a synthetic
+    ``tests.py::<collection-error>`` entry so the failure remains visible.
+
+    Returns a list of unique node IDs in encounter order.
+    """
+    seen: set[str] = set()
+    result: list[str] = []
+
+    for line in errors:
+        m = _FAILED_RE.match(line.strip())
+        if m:
+            raw = m.group(1)
+            normalized = _normalize_nodeid(raw)
+            # If the "node id" has no :: separator it's not a real test node
+            if "::" not in normalized:
+                normalized = "tests.py::<collection-error>"
+        else:
+            # Unparseable error line — still record as collection error
+            normalized = "tests.py::<collection-error>"
+
+        if normalized not in seen:
+            seen.add(normalized)
+            result.append(normalized)
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Row builder
 # ---------------------------------------------------------------------------
 
@@ -153,8 +217,13 @@ def build_rows_for_run(
     Returns
     -------
     list[dict]
-        Rows with keys: ``image, run, card, test_node, outcome, tests_hash,
+        Rows with keys ``image, run, card, test_node, outcome, tests_hash,
         passed, failed, total, complexity_tier, harvested_at``.
+
+        For legacy cards (``test_nodes`` key absent from result.json), fail
+        rows are derived from ``errors`` and a single ``__rollup__`` row with
+        ``outcome="rollup"`` is emitted.  ``tests_hash`` is ``None`` for all
+        legacy rows.
     """
     rows: list[dict] = []
 
@@ -163,7 +232,7 @@ def build_rows_for_run(
         try:
             result_data = json.loads(result_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
-            # Unreadable result.json — skip gracefully (item 5 may revisit).
+            # Unreadable result.json — skip gracefully.
             continue
 
         card_name = card_dir.name
@@ -172,17 +241,43 @@ def build_rows_for_run(
         passed = result_data.get("tests_passed", 0)
         failed = result_data.get("tests_failed", 0)
         total = result_data.get("tests_total", 0)
-        tests_hash = result_data.get("tests_hash", None)
-
-        # Modern schema: test_nodes present.
-        test_nodes = result_data.get("test_nodes")
-        if test_nodes is None:
-            # TODO: item 5 fills legacy fallback for result.json lacking
-            # test_nodes / tests_hash.
-            continue
 
         # Complexity tier from card_spec.json (if available).
         complexity_tier = _read_complexity_tier(card_dir)
+
+        # Legacy detection: key *absent* from the dict triggers legacy path.
+        # A modern card with an empty test_nodes list is NOT legacy.
+        if "test_nodes" not in result_data:
+            # ---- Legacy path (item 5) ----
+            tests_hash = None  # always null for legacy
+
+            # Derive fail rows from errors list.
+            errors = result_data.get("errors") or []
+            fail_nodes = _extract_fail_nodes_from_errors(errors)
+
+            base = {
+                "image": vr.image,
+                "run": vr.run,
+                "card": card_name,
+                "tests_hash": tests_hash,
+                "passed": passed,
+                "failed": failed,
+                "total": total,
+                "complexity_tier": complexity_tier,
+                "harvested_at": harvested_at,
+            }
+
+            for nodeid in fail_nodes:
+                rows.append({**base, "test_node": nodeid, "outcome": "fail"})
+
+            # Rollup row — outcome is "rollup" (neither "pass" nor "fail") so
+            # downstream breadth metrics do not miscount it as a failing node.
+            rows.append({**base, "test_node": "__rollup__", "outcome": "rollup"})
+            continue
+
+        # ---- Modern path (item 4) ----
+        tests_hash = result_data.get("tests_hash", None)
+        test_nodes = result_data["test_nodes"]
 
         for node in test_nodes:
             rows.append({
@@ -283,6 +378,12 @@ def harvest(
             for row in rows:
                 fh.write(json.dumps(row) + "\n")
                 row_count += 1
+            # Detect legacy-ness by checking for __rollup__ rows.
+            if any(r.get("test_node") == "__rollup__" for r in rows):
+                print(
+                    f"[legacy] {vr.image}/{vr.run}: contributed "
+                    f"fail-node + rollup rows only (no per-node pass data)"
+                )
 
     return row_count
 

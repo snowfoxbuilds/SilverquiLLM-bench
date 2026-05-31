@@ -397,26 +397,34 @@ class TestOrdering:
 
 
 class TestMissingTestNodes:
-    """Cards whose result.json lacks test_nodes contribute zero rows."""
+    """Cards whose result.json lacks test_nodes emit legacy rollup rows."""
 
-    def test_no_test_nodes_key_skipped(self, tmp_path: Path) -> None:
+    def test_no_test_nodes_key_emits_rollup(self, tmp_path: Path) -> None:
+        """A card with no test_nodes key emits exactly one __rollup__ row."""
         cd = _card_dir(tmp_path, "imgE", "runE", "sos_60")
         _write_result_json(cd, {
             "tests_passed": 3,
             "tests_failed": 1,
             "tests_total": 4,
-            "tests_hash": "legacy",
-            # no test_nodes key
+            # no test_nodes key — legacy card
         })
 
         out = tmp_path / "out.jsonl"
         count = harvest(tmp_path, output=str(out), harvested_at=FIXED_TS)
         rows = _read_jsonl(out)
-        assert count == 0
-        assert len(rows) == 0
+        assert count == 1
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["test_node"] == "__rollup__"
+        assert row["outcome"] == "rollup"
+        assert row["tests_hash"] is None
+        assert row["passed"] == 3
+        assert row["failed"] == 1
+        assert row["total"] == 4
 
     def test_mixed_modern_and_legacy_cards(self, tmp_path: Path) -> None:
-        """A run with one modern card and one legacy card: only modern emits rows."""
+        """A run with one modern card and one legacy card: modern emits per-node
+        rows and legacy emits its rollup row."""
         # Modern card
         cd_modern = _card_dir(tmp_path, "imgF", "runF", "sos_70")
         _write_result_json(cd_modern, {
@@ -438,9 +446,25 @@ class TestMissingTestNodes:
         out = tmp_path / "out.jsonl"
         count = harvest(tmp_path, output=str(out), harvested_at=FIXED_TS)
         rows = _read_jsonl(out)
-        assert count == 1
-        assert len(rows) == 1
-        assert rows[0]["card"] == "sos_70"
+        # 1 modern node row + 1 legacy rollup row = 2
+        assert count == 2
+        assert len(rows) == 2
+
+        modern_rows = [r for r in rows if r["card"] == "sos_70"]
+        legacy_rows = [r for r in rows if r["card"] == "sos_71"]
+
+        assert len(modern_rows) == 1
+        assert modern_rows[0]["test_node"] == "tests.py::test_m"
+        assert modern_rows[0]["outcome"] == "pass"
+        assert modern_rows[0]["tests_hash"] == "modern_h"
+
+        assert len(legacy_rows) == 1
+        assert legacy_rows[0]["test_node"] == "__rollup__"
+        assert legacy_rows[0]["outcome"] == "rollup"
+        assert legacy_rows[0]["tests_hash"] is None
+        assert legacy_rows[0]["passed"] == 2
+        assert legacy_rows[0]["failed"] == 1
+        assert legacy_rows[0]["total"] == 3
 
     def test_unreadable_result_json_skipped(self, tmp_path: Path) -> None:
         """A card dir with no result.json at all does not crash."""

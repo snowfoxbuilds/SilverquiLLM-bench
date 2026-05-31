@@ -15,10 +15,15 @@
 - `harvest()` — --card filter narrows emitted rows to matching card only (`test_harvest_rows_gaps.py`)
 - `build_rows_for_run()` — malformed/invalid JSON result.json skipped without crashing; sibling cards still emit (`test_harvest_rows_gaps.py`)
 - `harvest()` — JSONL output is valid one-object-per-line; each line independently json-loads as dict (`test_harvest_rows_gaps.py`)
+- `build_rows_for_run()` / `harvest()` — legacy back-compat: fail rows from errors, __rollup__ row, tests_hash=null, dedup, unparseable errors, missing fields, rollup outcome sentinel, stray tests_hash, node-id normalization (`test_harvest_legacy.py`)
+- `harvest()` — per-run [legacy] notice printed once per legacy run, not for modern runs (`test_harvest_legacy.py`)
+- `harvest()` — mixed legacy+modern run in same image/run: [legacy] notice printed once AND modern per-node rows plus legacy fail+rollup rows all emitted correctly (`test_harvest_legacy_gaps.py`)
+- `_extract_fail_nodes_from_errors()` — FAILED line with '::' in reason text produces exactly one fail row with correct test_node, no bogus extra nodes (`test_harvest_legacy_gaps.py`)
+- `harvest()` — image= filter on all-legacy image yields only rollup/fail rows, no modern pass rows, no crash (`test_harvest_legacy_gaps.py`)
 
 ## 2. Gaps (Not Yet Covered)
 
-None — all identified gaps for item 4 are now covered.
+None — all identified gaps for items 4 and 5 are now covered.
 
 ## 3. Edge Cases & Integration Gaps
 
@@ -34,3 +39,6 @@ None — all identified gaps for item 4 are now covered.
 - [x] --image filter narrows harvest output
 - [x] --card filter narrows harvest output
 - [x] Malformed (invalid JSON) result.json skipped gracefully
+- [x] Mixed legacy+modern run: [legacy] notice once, both row types emitted
+- [x] FAILED reason text containing '::' does not produce extra nodes
+- [x] image= filter on all-legacy image: only rollup/fail rows, no crash

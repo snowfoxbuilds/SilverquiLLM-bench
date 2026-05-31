@@ -34,3 +34,12 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Tests
 - `tests/test_harvest_rows.py` — 18 test cases validating JSONL row emission: integration test with two-card mixed pass/fail fixture, return value, harvested_at determinism, complexity_tier present/absent, denormalized rollup counts, idempotency (truncate mode), row ordering by (image, run, card), and legacy/missing test_nodes skipping
+
+## Item 5: Back-compat harvest for legacy Validated Results
+
+### Implementation
+- `scripts/harvest_validated_results.py` — Added legacy path in build_rows_for_run: _FAILED_RE regex, _normalize_nodeid, _extract_fail_nodes_from_errors helpers; legacy detection on test_nodes key absence; fail-row derivation from errors; __rollup__ row with outcome="rollup"; tests_hash=None for legacy; per-run legacy notice in harvest() via __rollup__ row detection; build_rows_for_run returns list[dict] (not tuple)
+
+### Tests
+- `tests/test_harvest_rows.py` — Updated 2 stale Item-4 placeholder tests (TestMissingTestNodes) to assert new legacy rollup behavior instead of 0-row skipping
+- `tests/test_harvest_legacy.py` — 20 new test cases: core spec (fail rows from errors, rollup row, tests_hash=None, no pass rows), de-duplication, unparseable/collection errors, missing errors/counts fields, rollup outcome validation, per-run legacy notice via capsys, stray tests_hash ignored, node-ID normalization

@@ -36,7 +36,7 @@ Sequencing: items 1–2 (evaluator schema) gate the harvest, because the harvest
 
   Testability: integration test over a fixture run dir with two cards (mixed pass/fail) asserts the exact emitted rows: one row per node with correct `outcome`, propagated `tests_hash`, and rollup counts copied onto each row.
 
-- [ ] **5. Back-compat harvest for legacy Validated Results lacking per-node data**
+- [x] **5. Back-compat harvest for legacy Validated Results lacking per-node data**
   Detail: Validated Results produced before items 1–2 have `result.json` with `errors` + counts but no `test_nodes` and no `tests_hash`. Handle them without crashing: when `test_nodes` is absent, derive `fail` rows by extracting pytest node IDs from the `errors` strings (lines like `FAILED tests.py::test_x - ...` / `ERROR ...`), and emit a single per-card rollup row (e.g. `test_node = "__rollup__"`) carrying the pass/fail/total counts so coverage stays queryable; passed-node identities cannot be reconstructed for legacy runs, so they are intentionally not enumerated. When `tests_hash` is absent, set it to null and continue. Log a per-run notice that the run contributed legacy (fail-node + rollup) rows only.
 
   Files: `scripts/harvest_validated_results.py` (legacy-detection branch in the row builder).
