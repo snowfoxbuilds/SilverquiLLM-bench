@@ -1,6 +1,6 @@
 Status: DRAFT (rewritten for container architecture)
 
-Last updated: 2026-05-24
+Last updated: 2026-05-30
 
 # Benchmark Runner
 
@@ -45,6 +45,41 @@ python -m silverquillm run \
 
 The workspace source directory is a repo-relative constant (`./benchmarks/sos/workspace/`); it is not configurable via CLI flags.
 
+## Benchmark Config (`config.json`)
+
+Each benchmark declares its identity and lifecycle in `benchmarks/<bench>/config.json`. The runner reads it at stage time; CI reads only `tier` (from the base branch) to enforce locks (ADR-011).
+
+```json
+{
+  "schema_version": 1,
+  "id": "sos",
+  "display_name": "Secrets of Strixhaven",
+  "draft_set": {
+    "primary_set_code": "SOS",
+    "collector_range": "001-271",
+    "extra_set_codes": []
+  },
+  "tier": "benchmarking",
+  "cards": ["001", "004", "013", "057", "097", "120", "201", "226", "245", "257"],
+  "leaderboard": {
+    "requires_full_set": true,
+    "requires_unfiltered": true
+  }
+}
+```
+
+Fields:
+
+- `schema_version` (int) — config schema version, for forward migration.
+- `id` (string) — benchmark identity; also the run-name prefix and results-dir scope.
+- `display_name` (string) — human-readable set name.
+- `draft_set` — the card pool: `primary_set_code`, `collector_range`, and any `extra_set_codes` (a Draft Set may span multiple Scryfall codes).
+- `tier` — `beta` | `benchmarking` | `released`. The only field CI reads; expands to locked path-globs per ADR-011. The benchmark `tier`, never the card-level `complexity_tier`.
+- `cards` (array) — the benchmark's canonical scored card set (collector numbers). For v1 this is the 10 audited SOS cards (`001`, `004`, `013`, `057`, `097`, `120`, `201`, `226`, `245`, `257`), and the v1 "full set" is exactly these — a leaderboard-valid run must stage all of them. Named `cards` to avoid collision with the run-level `card_filter` in `run_summary.json` (the per-run `--cards` selection, `null` when unfiltered).
+- `leaderboard.requires_full_set` (bool) — a leaderboard-valid run must stage every card in `cards`.
+- `leaderboard.requires_unfiltered` (bool) — a leaderboard-valid run must run with no narrower `--cards` filter (run-level `card_filter = null`).
+Not in config: workspace/test paths (resolved from the `_REPO_ROOT` / `_BENCHMARK_SET_ROOT` constants) and complexity weights (v1 scoring is unweighted pass/total).
+
 ## Workspace Staging
 
 The runner builds a workspace directory that the container sees as `/workspace/`. See [AGENT-CONTAINERS.md](https://www.notion.so/07182a53c93641b7831fe9d240403de3) for the full workspace layout.
@@ -76,7 +111,7 @@ Differences from `run`:
 - Runner appends a Resume Preamble to the User Prompt informing the agent that this is a resume. Conditional additional lines disclose snapshot fallback (if used) and image change (if applicable).
 - Refuses resumes when prior `run_status` is `no_viable_output_produced` or when `workspace_final/` is missing. A future `--from-snapshots` flag may be added for borderline cases.
 - Accepts resumes from runs that used snapshot fallback; the Resume Preamble discloses the rollback so the agent knows its inherited state is not where the prior agent stopped.
-Leaderboard validity for Resume Legs is deferred — see [RUN-ARTIFACTS-AND-TELEMETRY.md](https://www.notion.so/1ffe911b65564fa6860b2a91dcc94fb5) → Run summary.
+Resume Legs are never leaderboard-valid — any run with `resumed_from` set has `leaderboard_valid = false`. See [RUN-ARTIFACTS-AND-TELEMETRY.md](https://www.notion.so/1ffe911b65564fa6860b2a91dcc94fb5) → Run summary.
 
 ### Locating the prior run
 
@@ -147,7 +182,7 @@ The official evaluation Workspace is either:
 
 - the final harvested Workspace, if its engine is viable, or
 - the latest viable whole-Workspace snapshot selected by snapshot fallback.
-Derived convenience artifacts may also be written, but evaluation reads from `workspace_final/`, not from legacy per-card copies.
+Derived convenience artifacts may also be written, but evaluation always reads from `workspace_final/`. The earlier per-card `cards/{card_id}/result.json` results layout is superseded — see [Historical Context](https://www.notion.so/3706a7adc8ed80baafd3e93e28bb6d33).
 
 The runner also collects telemetry and debugging artifacts:
 
@@ -240,6 +275,17 @@ Status values:
 - `partial` — `card_impl.py` differs from template but the run timed out before a completion signal. Partial cards may still be evaluated if importable.
 - `no_output` — template unchanged in a non-timeout run.
 - `timeout_no_output` — template unchanged when the run timed out.
+### Run status values
+
+`run_summary.json.run_status` is the run-level terminal status (distinct from the per-card status values above):
+
+- `completed` — container exited cleanly; a viable Workspace was evaluated.
+- `timeout` — a Hard or Hang Timeout stopped the container; partial results were harvested and evaluated. The companion `timeout_reason` records which fired (`hard_timeout` | `hang_timeout`).
+- `crashed` — container exited non-zero before finishing; whatever was written is harvested.
+- `launch_failed` — container never started; no results produced.
+- `no_viable_output_produced` — engine unusable and no snapshot passed Engine Regression; SOS/FDN correctness skipped. Run-level only — no per-card statuses are assigned.
+The model is **terminal status + reason**: `run_status` is always exactly one of the above, and `timeout_reason` (plus the captured exit code for `crashed`) carries the detail.
+
 ## Output Artifacts
 
 ```javascript
@@ -319,18 +365,7 @@ The runner tracks per-run metrics (not per-card, since the agent manages its own
 - **Two benchmark modes**: Blind (impl only) and tested (impl + tests). Baked into separate Docker images. Compare modes across separate runs. [UPDATED]
 - **Run Manifest is advisory**: The runner writes `/workspace/run_manifest.json` immediately before container launch with only `timeout_seconds` and `deadline_utc`. The runner remains the hard timeout authority. Containers may use the manifest for pacing, but it is not agent configuration. [SETTLED]
 - **Progress Log is optional**: `progress.jsonl` is recommended for live monitoring and status refinement, but entrypoints are not required to produce it. Missing or malformed progress logs must not break harvest or evaluation. [SETTLED]
-- **Runner-owned Output Snapshots**: The runner captures periodic Workspace-only snapshots during execution, approximately once per minute, as host-side Git commits outside the container. Snapshots measure concrete progress, drive telemetry about modified cards, and provide fallback if final engine state is corrupted. [SETTLED]
-- **Snapshot fallback uses entire Workspace**: If final engine state is corrupted, the runner may select an earlier snapshot commit as the official evaluation Workspace. The fallback uses the entire snapshot Workspace, not just `engine/`, to preserve a coherent agent-produced state. [SETTLED]
-- **Snapshot fallback viability uses Engine Regression only**: When walking backward through snapshot commits, the runner selects the latest whole-Workspace snapshot whose engine is runnable and passes `engine_tests/`. FDN Card Regression and SOS Card Correctness are not fallback selection gates. [SETTLED]
-- **Snapshot cadence is fixed interval**: For v1, the runner captures Output Snapshots every 60 seconds. The runner does not use file-watch-triggered snapshots, because Docker volume filesystem events can be noisy and bursty. [SETTLED]
-- **Snapshots commit the full Workspace tree**: Each 60-second snapshot copies the full live Workspace into the host-side snapshot Git repo and relies on Git deduplication for unchanged files. Empty commits are skipped, but telemetry still emits every interval. [SETTLED]
-- **Snapshot telemetry is console and JSONL**: After each 60-second snapshot interval, the runner emits a human-readable console summary and appends a machine-readable event to `snapshot_telemetry.jsonl`. [SETTLED]
-- **Snapshot telemetry includes deltas and totals**: Each `snapshot_telemetry.jsonl` event records changes since the previous snapshot and cumulative totals since run start for changed card implementations, card tests, and engine files. [SETTLED]
-- **Snapshot telemetry distinguishes activity from coverage**: `changed_card_impls` means changed since the previous snapshot. `completed_like_card_impls` means the implementation differs from the original template. Track both so telemetry can show minute-by-minute activity and rough implementation coverage. [SETTLED]
-- **Snapshot telemetry does not parse code**: Telemetry is filesystem-based only. `completed_like_card_impls` counts non-template implementations even if they contain syntax, import, or logic errors. Correctness belongs to evaluation, not telemetry. [SETTLED]
-- **Engine telemetry includes capped paths and counts**: Snapshot telemetry records changed engine file paths plus counts. Path lists are capped (for example, first 50 paths) with a truncation flag so telemetry remains lightweight even if an agent rewrites many files. [SETTLED]
-- **`snapshot_telemetry.jsonl`**** uses card IDs only**: The high-cadence snapshot telemetry file records card directory IDs, not card names, to keep events lean. Slow-cadence per-card artifacts (`progress.jsonl`, `status.json`, `result.json`) include `card_name` alongside `card_id` for human-readable triage. The live `[snapshot]` terminal channel resolves names from `card_spec.json` at print time. [SETTLED]
-- **Test telemetry is tracked separately**: Snapshot telemetry records changed card test files separately from changed card implementations, using card IDs only. This shows whether Tested Mode agents are actually writing tests while staying lightweight. [SETTLED]
+- **Snapshot mechanics & telemetry decisions archived**: The detailed Output Snapshot cadence, whole-Workspace fallback, and snapshot/telemetry-granularity decisions were moved to [Historical Context](https://www.notion.so/3706a7adc8ed80baafd3e93e28bb6d33) on 2026-05-30 to slim this spec. They remain in force; the behavior contract is in Result Harvesting and Snapshot Fallback above. [SETTLED]
 - **Snapshot fallback triggers on failed or hung engine tests**: Final engine viability fallback runs when `engine_tests/` fails, errors on import, times out, hangs, or cannot start due to corrupted files. Snapshot selection walks backward until `engine_tests/` completes and passes within the normal engine-test timeout. [SETTLED]
 - **No viable snapshot means no viable output**: If final engine state is unusable and no prior snapshot passes Engine Regression, mark the run `no_viable_output_produced`. This means the agent broke the engine before producing a viable snapshot, so SOS and FDN correctness are not evaluated. [SETTLED]
 - **No viable output is run-level**: `no_viable_output_produced` is a run-level status only. Do not assign per-card statuses in this case; SOS Card Correctness and FDN Card Regression are skipped because there is no coherent evaluatable Workspace. [SETTLED]
@@ -357,26 +392,9 @@ The runner tracks per-run metrics (not per-card, since the agent manages its own
 - **Card class location is the hard contract**: Helpers are allowed, including shared `cards/{set}/utils.py` files, but each card's implementation class must live in that card's expected `cards/{set}/{card_id}/card_impl.py` file. Evaluation assumes the canonical class is importable from the expected file/folder. [SETTLED]
 - **Prompt enforces card location, not helper policy**: The agent prompt should explicitly say each card's implementation class must remain in its assigned `cards/sos/{card_id}/card_impl.py` file and that card directories must not be moved or renamed. The prompt does not need to mention shared helper files. [SETTLED]
 - **Card restructuring is usually card-level failure**: If a single card's expected `card_impl.py` is missing or moved, that card is marked no output or fails evaluation. Multiple moved cards fail individually. Only broad Workspace destruction, such as a missing `cards/sos/` tree, becomes run-level structural failure. Missing or unusable `engine/` follows engine viability and snapshot fallback flow. [SETTLED]
-- **Legacy Foundations layout is not staged after FDN migration**: After FDN cards are migrated into `cards/fdn/{card_id}/`, the agent Workspace should not include old monolithic `cards/foundations/` files. Duplicate FDN implementations create ambiguity and undermine the FDN/SOS shared structure. [SETTLED]
-- **Repository may keep legacy Foundations during migration**: The repo may temporarily keep `cards/foundations/` while implementations are copied into `cards/fdn/{card_id}/card_impl.py`, registry/tests are updated, and imports are verified. The agent Workspace should still stop staging `cards/foundations/` once per-card FDN examples are ready. Delete the legacy layout after tests pass and no imports remain. [SETTLED]
 - **Results stored under image directory**: Run results live at `docker/<image-dir>/results/<run_name>/`. The image directory is derived from `--image` by stripping the `silverquillm-` prefix and `:tag` suffix. The run name format is `<set_code>-<timestamp>` (e.g., `sos-2026-05-16T19-49`). This keeps results organized by the agent image that produced them. [SETTLED]
-- **Filtered runs are not leaderboard-valid**: The `--cards` filter is for development, debugging, and Pipeline Validation Runs only. It filters SOS targets; FDN examples remain staged in full. Evaluation runs only on staged SOS targets, and `run_summary.json` records the filter. Leaderboards exclude filtered runs by default; leaderboard-valid runs require `card_filter = null` and the full SOS Draft Set staged. [SETTLED]
+- **Filtered runs are not leaderboard-valid**: The `--cards` filter is for development, debugging, and Pipeline Validation Runs only. It filters SOS targets; FDN examples remain staged in full. Evaluation runs only on staged SOS targets, and `run_summary.json` records the filter. Leaderboards exclude filtered runs by default; leaderboard-valid runs require run-level `card_filter = null` and every card in the benchmark's `config.json` `cards` set staged (for v1, the 10 audited SOS cards). [UPDATED]
 - **`_REPO_ROOT`**** constant for repo-relative paths**: Host-side modules that need to resolve repo-relative paths (`cli.py`, `workspace.py`) define `_REPO_ROOT = Path(__file__).resolve().parent.parent` as a module-level constant; all repo-relative path resolution flows through it. No `--cards-dir` / `--engine-dir` style flags. [NEW]
 - **`_BENCHMARK_SET_ROOT`**** derives from a module-level set name**: `silverquillm/workspace.py` defines `_BENCHMARK_SET_NAME = "sos"` and `_BENCHMARK_SET_ROOT = _REPO_ROOT / "benchmarks" / _BENCHMARK_SET_NAME` as module-level constants. All bench-side, set-scoped paths flow through `_BENCHMARK_SET_ROOT` (workspace source = `_BENCHMARK_SET_ROOT / "workspace"`, audited tests = `_BENCHMARK_SET_ROOT / "data" / "tests" / "audited"`). When a second target set ships (Foundations 2 etc.), promote `_BENCHMARK_SET_NAME` to a CLI flag (`--set`) with `sos` as default; no other path call sites need to change. The runner stays benchmark-agnostic by funneling all set-scoped paths through one constant. [NEW]
 - **Collector number normalization**: `--cards` accepts zero-padded collector numbers (e.g., `001`, `042`). CLI parsing normalizes via `str(int(x))` and preserves non-numeric values as-is. Card directory names use the normalized form.
-- **Resume is a CLI subcommand**: `silverquillm resume <prior-run-id>` creates a fresh Benchmark Run that stages from the prior run's `workspace_final/`. Each Resume Leg is an independent Benchmark Run — own `run_name`, results directory, Hard Timeout, snapshots, and evaluation. Legs are linked via `resumed_from`; the sequence is a Resume Chain. Mutating the prior run dir in place was considered and rejected for audit-trail integrity. See ADR-008. [NEW]
-- **Resume staging skips ****`git init`**: Resume staging copies the prior `workspace_final/` wholesale into the per-run tmp directory and overwrites only `prompt.md` and `run_manifest.json`. No `git init`, no initial commit — the prior `.git` history (host snapshots and any agent commits) is preserved as-is so the resumed agent can inspect what prior work happened. [NEW]
-- **Resume ****`--image`**** defaults to prior, override allowed**: If `--image` is omitted, the runner reads prior `run_summary.json.docker_image` and uses it. Explicit override is allowed; the runner records `resumed_image_changed: true` and adds an extra Resume Preamble line warning the new agent that workspace tracking files may follow the prior agent's conventions. Cross-image resume is mechanically supported but expected to be leaderboard-invalid once leaderboard policy lands. [NEW]
-- **Resume source must be a viable ****`workspace_final/`**: Refuse resumes when prior `run_status` is `no_viable_output_produced` or when `workspace_final/` is missing. Accept resumes from runs that used snapshot fallback; the Resume Preamble discloses the fallback so the agent knows its inherited state was rolled back from where the prior agent stopped. A future `--from-snapshots` opt-in flag may be added to recover from non-viable runs by selecting the latest viable snapshot. [NEW]
-- **Runner appends a Resume Preamble to the User Prompt**: Extends "User Prompt is runner-written". On resume runs, the runner appends a short preamble informing the agent that this is a resume of `<prior-run-id>`, that prior tests/implementations may exist, and that the `.git` history records prior commits. Additional conditional lines disclose snapshot fallback (when prior run used it) and image change (when `--image` differs). The preamble is image-agnostic — agents with no internal coordinator/cycle structure benefit equally. [NEW]
-- **Leaderboard validity of Resume Legs is deferred**: Resume Legs ship without specific leaderboard policy. The existing `leaderboard_valid` field in `run_summary.json` is the eventual control surface; the default value for Resume Legs is left unspecified until leaderboard policy is formalized. [NEW]
-- **Resume accepts path or run-id, with unique-match glob**: The `resume` and `chain` subcommands accept either a full results path or a bare `run-id`. Path mode uses the literal path. ID mode globs `docker/*/results/<arg>/` and requires exactly one match (0 or 2+ errors loudly). Image is cross-checked across `<image-dir>`, `run_manifest.json`, and `run_summary.json`; any disagreement aborts. [NEW]
-- **Resume ****`--timeout`**** is required, never defaulted**: `--timeout` is required on every `silverquillm resume`, mirroring `silverquillm run` — each Resume Leg's budget is an independent deliberate choice. When omitted, the error message reads the prior leg's manifest and summary to suggest `--timeout` and wall-clock-used as starting points. Defaulting to the prior leg's timeout or to leftover-from-prior was rejected because it hides a budget choice with downstream scoring implications. [NEW]
-- **Snapshot fallback detection reads the ledger, not ****`run_summary.json`**: The Resume Preamble's snapshot-fallback disclosure (and the cited `snapshot_utc`) come from reading the prior run's snapshot ledger, not from `run_summary.json`. The ledger is written during the run and survives harvester failure; the summary is a post-hoc artifact. Reading the ledger ensures the disclosure is accurate even when the prior harvester partially or completely failed. See ADR-009. [NEW]
-- **Missing prior ****`run_summary.json`**** requires explicit opt-in**: If prior `run_manifest.json` is missing, resume is refused outright (corrupted run dir). If only `run_summary.json` is missing, resume requires `--force-missing-summary` — with that flag, the `no_viable_output_produced` refusal check is skipped, the wall-clock-used error-message hint is dropped, and the Resume Preamble gains a line disclosing harvester failure. Cousin to a future `--from-snapshots` flag. [NEW]
-- **Resume Chains have a minimal reader from day one**: `silverquillm chain <run-id>` walks `resumed_from` pointers and prints a one-screen table of legs (`run_name`, `docker_image`, `--timeout`, wall-clock-used, `run_status`, `resumed_from`). Cycle detection errors loudly. The reader exists so `resumed_from` always has at least one consumer — telemetry fields without readers drift. Per-leg `git log --oneline` rendering and chain-level aggregation are out of scope for v1. [NEW]
-- **Resume Chains have no maximum depth**: Resuming a Resume Leg is identical to resuming a fresh run. The chain reader walks ancestry through any number of `resumed_from` links. Direct consequence of ADR-008. [NEW]
-- **Resume Chains are trees; forks are allowed silently**: The same prior run may be resumed multiple times, producing sibling legs with the same `resumed_from`. `resumed_from` stays scalar; there is no merge semantic. The v1 chain reader walks ancestry only; forward-walking from a root to find descendants is v2 scope. Refusing forks by default was rejected because the typo case is low-cost and intentional A/B forking is a legitimate workflow. [NEW]
-- **Cross-image resume emits stderr warning, never blocks**: When `--image` differs from prior, the runner prints a stderr warning at staging time including both image names, the prior leg's `run_status`, and wall-clock-used as breadcrumbs. The operator already passed `--image` explicitly; an additional `--allow-image-change` flag would be redundant friction, but a visible diff prevents the typo case. [NEW]
-- **Resume ****`--cards`**** is per-leg, no inheritance**: `--cards` on resume defaults to none (full set), like `silverquillm run`, with no inheritance from the prior leg's `card_filter`. Mirrors the `--timeout` policy and the "Resume Legs are independent Benchmark Runs" framing from ADR-008. When this leg's filter differs from prior, the Resume Preamble discloses inherited-but-out-of-scope state. [NEW]
-- **Resume Preamble is placed at the top of ****`prompt.md`**** under a ****`## Resume context`**** heading**: Followed by a `---` separator and the original User Prompt body. Top placement gives the agent context-before-task; the heading makes the Preamble grep-able and audit-friendly across legs. Bottom placement (recency) and inline marker placement were rejected as less natural for context-vs-task separation. [NEW]
+- **Resume design decisions live in ADR-008/009**: The detailed Resume Leg, Resume Chain, and resume read-source decisions were consolidated into [ADR-008: Resume Legs Are Independent Benchmark Runs](https://www.notion.so/753f2250932244438470dac675fa4439) (resume design) and [ADR-009: Resume Reads Prefer Run-Time Artifacts Over Harvest-Time Artifacts](https://www.notion.so/e38eba155d824deb876cdee9717e96d4) (read-source preference) on 2026-05-30. The resume behavior contract remains in the Resume section above. [UPDATED]

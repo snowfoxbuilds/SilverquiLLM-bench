@@ -1,3 +1,19 @@
+## Completed 2026-05-30
+
+Phase 18: SOS 10-card Test Audit (oracle-first) (12 items). Rewrote the audited tests for the 10-card SOS subset (sos_1, 4, 13, 57, 97, 120, 201, 226, 245, 257) to be both correct (validated against xmage-derived Test Oracle Impls in an independent Test Oracle Workspace) and generic (Implementation-Agnostic — no method-name probes, no stack bypasses, no ability-words-as-keywords). Bootstrapped the Test Oracle Workspace + validation harness (ADR-010), authored per-card oracle impls + rewritten tests (flagship sos_57 first), and added a CI regex audit for card-specific test naming. Codified the rules in [TEST-SUITE.md](http://test-suite.md/). Driven by the 2026-05-26 audit that surfaced 10 recurring bug patterns.
+
+- [x] **1. Bootstrap Test Oracle Workspace + validation harness**
+- [x] **2. sos_1 — The Dawning Archaic: oracle impl + rewritten tests**
+- [x] **3. sos_4 — Together as One: oracle impl + rewritten tests**
+- [x] **4. sos_13 — Emeritus of Truce // Swords to Plowshares: oracle impl + rewritten tests**
+- [x] **5. sos_57 — Mana Sculpt: oracle impl + rewritten tests (FLAGSHIP per Q10)**
+- [x] **6. sos_97 — Ral Zarek, Guest Lecturer: oracle impl + rewritten tests**
+- [x] **7. sos_120 — Improvisation Capstone: oracle impl + rewritten tests**
+- [x] **8. sos_201 — Lorehold, the Historian: oracle impl + rewritten tests**
+- [x] **9. sos_226 — Silverquill, the Disputant: oracle impl + rewritten tests**
+- [x] **10. sos_245 — Witherbloom, the Balancer: oracle impl + rewritten tests**
+- [x] **11. sos_257 — Great Hall of the Biblioplex: oracle impl + rewritten tests**
+- [x] **12. CI regex audit for card-specific test naming**
 ## Completed 2026-05-26
 
 Phase 16: Workspace as Pre-Built Directory (10 items). Restructured the staged workspace from per-file assembly into a real pre-built directory at `benchmarks/sos/workspace/` copied wholesale at stage time. Driven by ADR-007. Major moves landed atomically (`engine/`, `cards/`, audited tests, workspace test infra); `stage_workspace()` reduced to a 4-step `cp -r` + per-run writes + `git init` flow; per-file staging code and the `_REFERENCE_DOCS`/`_RULEBOOK_SRC` constants deleted; CI-time workspace structure test added.

@@ -188,7 +188,7 @@ v1 ships a `silverquillm logs --run` tabbed log viewer over the per-channel file
 - `resumed_image_changed` (Resume Leg only — true when `--image` differs from prior leg's `docker_image`)
 - three evaluation dimensions
 - telemetry/log artifact paths
-Resume Legs (Benchmark Runs with `resumed_from` set) are linked into a Resume Chain via `resumed_from`. Chain traversal is by repeated lookup; the runner does not aggregate results across legs. Leaderboard validity policy for Resume Legs is deferred — `leaderboard_valid` default for legs is unspecified until leaderboard policy is formalized.
+Resume Legs (Benchmark Runs with `resumed_from` set) are linked into a Resume Chain via `resumed_from`. Chain traversal is by repeated lookup; the runner does not aggregate results across legs. Resume Legs are never leaderboard-valid: any run with `resumed_from` set has `leaderboard_valid = false`.
 
 ### Filtered runs
 
@@ -201,7 +201,7 @@ Rules:
 - Evaluation runs only on staged SOS targets.
 - `run_summary.json` records the filter.
 - Leaderboards exclude filtered runs by default.
-- Leaderboard-valid runs require `card_filter = null` and the full SOS Draft Set staged.
+- Leaderboard-valid runs require `card_filter = null` and every card in `config.json` `cards` staged (for v1, the 10 audited SOS cards).
 ### Smoke runs
 
 `silverquillm smoke` is container-validation only, not benchmark evaluation.

@@ -137,19 +137,6 @@ score regardless of card-implementation quality.
 
 The prompt does not need to mention shared helper files.
 
-### Legacy Foundations layout
-
-After FDN migration, legacy monolithic `cards/foundations/` files should not be staged into the agent Workspace. Agents should see only the per-card FDN structure and any approved set-level helpers.
-
-The repository may keep `cards/foundations/` temporarily during migration as source material while:
-
-1. `cards/fdn/{card_id}/card_impl.py` files are populated.
-2. Registry and tests are updated.
-3. Imports are verified.
-4. Tests pass.
-5. No `cards.foundations` imports remain.
-Then delete the legacy layout.
-
 ## Decisions
 
 - **Workspace is a pre-built directory copied wholesale**: The workspace source lives at `benchmarks/sos/workspace/` in the bench repo. Staging is `cp -r` + per-run writes (`prompt.md`, `run_manifest.json`) + `git init`, not per-file assembly. This keeps the workspace inspectable, dev-testable (`cd benchmarks/sos/workspace && pytest`), and removes drift between staging code and spec.
@@ -159,7 +146,6 @@ Then delete the legacy layout.
 - **Card class location is hard contract**: Each card's canonical implementation class must be importable from `cards/{set}/{card_id}/card_impl.py`.
 - **FDN and SOS share structure**: FDN examples and SOS targets use the same card directory shape.
 - **Card restructuring is card-level by default**: Individual misplaced card files fail those cards; broad Workspace destruction can become run-level failure.
-- **Legacy Foundations not staged**: After FDN migration, do not include monolithic `cards/foundations/` in the agent Workspace.
 - **Engine tests are staged into the workspace**: Per ADR-006, the workspace includes `workspace/engine_tests/` so agents have a local regression-check loop for engine modifications. Grading uses host-repo copies; agents are prompt-instructed not to modify staged tests.
 - **FDN reference tests are colocated with cards**: Illustrative FDN tests live at `workspace/cards/fdn/{collector_number}/tests.py` rather than under `workspace/tests/cards/fdn/`. Colocation makes them obvious learning material attached to the card they demonstrate, and removes the directory-name collision with the host-side FDN Card Regression suite. Audited SOS grader tests remain host-side only; there is no `workspace/tests/cards/` directory. Audited FDN tests at `benchmarks/sos/data/tests/audited/fdn/{collector_number}/tests.py` exist as bench-author regression coverage — they catch engine regressions that break the canonical FDN implementations and run in bench-side CI. They are not part of agent grading (the agent is graded on SOS audited tests only) and may freely overlap in assertion content with workspace FDN tests; there is no contamination concern because the agent is not graded against either FDN suite.
 - **Workspace integrity is enforced at two points, not per-file**: `stage_workspace()` performs a cheap pre-flight assertion that `benchmarks/sos/workspace/` exists and is non-empty before `copytree`. A host-side test `tests/test_workspace_structure.py` verifies the expected top-level entries (`engine/`, `cards/fdn/`, `cards/sos/`, `engine_tests/`, `conftest.py`, `test_utils.py`, `AGENTS.md`, `PROJECT_MAP.md`, `rulebook.txt`, `pytest.ini`, `.gitignore`) and fails at CI time if any are missing. This replaces the previous per-file hard-error enumeration in staging code; the canonical workspace directory is now the source of truth, and any missing file means the repo itself is broken (caught at PR-review time, not after burning agent hours).

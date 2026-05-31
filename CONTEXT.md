@@ -38,7 +38,7 @@ JSON file (`card_spec.json`) containing a card's name, mana cost, type line, and
 
 **Complexity Tier**
 
-Classification of card difficulty: trivial (1×), simple (2×), medium (3×), complex (4×), expert (5×). Assigned via automated heuristics. Used for weighted scoring. Canonical key name in code and JSON is `complexity_tier` (not `tier`).
+Classification of card difficulty: trivial (1×), simple (2×), medium (3×), complex (4×), expert (5×). Assigned via automated heuristics. Recorded per card, but v1 leaderboard scoring is unweighted (raw pass/total) — complexity weighting is not applied in v1. Canonical key name in code and JSON is `complexity_tier` (not `tier`).
 
 *Avoid*: "difficulty level", "tier" (as a standalone key name)
 
@@ -54,11 +54,11 @@ When an LLM has seen target card implementations in its training data, invalidat
 
 *Avoid*: "data leakage" (too generic)
 
-**Cross-Eval** *(deferred — v2)*
+**Test Harvester** *(manual v1 / automated v2)*
 
-Future evaluation layer: each agent's code tested against every other agent's tests, producing an N×N matrix. Requires a test harvester to collect and validate agent-written tests. Not part of v1 scoring.
+The mechanism for improving audited tests from harvested run results. **Manual v1**: the on-demand harvest script + combined investigation/discovery skill in [TEST-IMPROVEMENT-WORKFLOW.md](http://test-improvement-workflow.md/) — a human reviews suspect tests (ranked by cross-impl failure breadth) and promotion candidates. **Automated v2** *(future)*: a pass that harvests Validated Results and scores audited test quality (cross-impl breadth, discrimination, convention-coupling) to surface suspect tests and promotion candidates with less human triage. Replaces the retired self-eval / N×N cross-eval framing; not run after Release.
 
-*Avoid*: "cross-validation" (overloaded ML term)
+*Avoid*: "cross-eval" / "self-eval" (retired N×N framing), "cross-validation" (overloaded ML term)
 
 **Draft Set**
 
@@ -98,7 +98,7 @@ Sequence of Benchmark Runs linked via `resumed_from`, where each run after the f
 
 **Resume Leg**
 
-A Benchmark Run with `resumed_from` set — any run in a Resume Chain other than the first. Resume Legs are independent Benchmark Runs in every other respect (own results dir, own snapshots, own evaluation, own `run_summary.json`). Leaderboard validity policy for Resume Legs is TBD — the existing `leaderboard_valid` field in `run_summary.json` is the eventual control surface; default for legs is unspecified until policy is formalized.
+A Benchmark Run with `resumed_from` set — any run in a Resume Chain other than the first. Resume Legs are independent Benchmark Runs in every other respect (own results dir, own snapshots, own evaluation, own `run_summary.json`). Resume Legs are never leaderboard-valid: any run with `resumed_from` set has `leaderboard_valid = false` — they inherit prior-leg workspace state, so they are not head-to-head comparable with fresh full-set runs.
 
 *Avoid*: "resumed session", "continuation run"
 
@@ -113,12 +113,6 @@ Extra lines the runner appends to the User Prompt when staging a Resume Leg. Alw
 Minimal runtime facts written by the runner to `/workspace/run_manifest.json` immediately before container launch. Contains only `timeout_seconds` and `deadline_utc`; it is advisory to the Agent Container and does not configure agent behavior.
 
 *Avoid*: "config.json" (implies agent configuration), "agent config"
-
-**Self-Eval** *(deferred — v2)*
-
-Future evaluation layer: each agent's code tested against its own tests. Requires test harvester. Not part of v1 scoring.
-
-*Avoid*: "self-test"
 
 **Tested Mode**
 
@@ -216,6 +210,30 @@ Host-side pre-built workspace at `benchmarks/sos/data/test_oracle_workspace/` th
 
 *Avoid*: "reference workspace" (reference is overloaded), "oracle" alone (ambiguous)
 
+**Benchmark Tier**
+
+Lifecycle state of a benchmark controlling what may change, recorded in its benchmark config (`benchmarks/sos/config.json`). Three tiers with increasing lock scope: **Beta** (everything editable — `workspace/`, oracle impls/engine, audited tests), **Benchmarking** (`workspace/` locked; oracle impls/engine and audited tests still editable), **Released** (all three locked). Enforced by a CI check against the base branch's tier. Transitions are forward-only and non-reversible except for grave, documented reasons (Benchmarking→Beta invalidates all existing benchmarks; Released→Benchmarking retracts all published scores). SOS is currently in Benchmarking. Distinct from Complexity Tier — the config key here is `tier` scoped to the benchmark config, never the card-level `complexity_tier`. See ADR-011.
+
+*Avoid*: "tier" alone (ambiguous with Complexity Tier — say "Benchmark Tier"), "benchmark state"
+
+**Validated Results**
+
+Per-run result artifacts committed under `docker/<image>/validated_results/<run-name>/`. Each run directory holds `eval_result.json` (aggregate pass/fail/total per card), a `cards/<card_id>/` subtree (`card_impl.py`, the exact `tests.py` used, and `result.json` with per-test failure node IDs and counts), plus logs, telemetry, `engine_diff.patch`, and manifests. The source corpus the harvest script reads.
+
+*Avoid*: "results" alone (ambiguous with `results/{run_name}/` run output), "validated runs"
+
+**Harvested Results**
+
+The consolidated dataset produced by the harvest script from all Validated Results in the repo. Long-format JSONL — one row per `(image, run, card, test-node, pass/fail)`, fully denormalized, written in run-append order and grouped at query time (e.g. by `test_node`). Each row carries the `tests.py` content hash so audited-test changes across runs are detectable. Powers the combined investigation/discovery skill (the manual v1 Test Harvester).
+
+*Avoid*: "harvest" alone, "test dump"
+
+**Implementation-Agnostic Testing**
+
+The core audited-test philosophy: a test asserts *what a card does* (observable game-state behavior) and must pass against *any* correct implementation — never coupling to one implementation's naming, internal structure, method names, or conventions. It discriminates correctness, not style: independent correct impls all pass, only genuinely wrong behavior fails. Operationalized by the behavioral/outcome-based, canonical-engine-API-only, `DeterministicPlayer`-scripted audited tests (see [TEST-SUITE.md](http://test-suite.md/)), and is the principle every test-improvement decision serves. The formalized, strengthened restatement of the Phase 18 behavioral-testing direction.
+
+*Avoid*: "black-box testing" (narrower — only says don't read internals), "convention testing" / "naming-coupled tests" (the anti-pattern this rejects)
+
 ## Relationships
 
 - A Benchmark Run evaluates one Agent Container (one agent + one model) against one Draft Set.
@@ -226,7 +244,7 @@ Host-side pre-built workspace at `benchmarks/sos/data/test_oracle_workspace/` th
 - All evaluation is post-run. After the container exits, the evaluator runs tests against harvested implementations and the final engine state.
 - FDN Card Regression: evaluator runs `tests/audited/fdn/` against pre-filled FDN card impls + agent's final Writable Engine. Detects broken card behavior.
 - Engine Regression: evaluator runs `tests/engine/` against agent's final Writable Engine. Detects broken rules mechanics.
-- Cross-Eval and Self-Eval deferred to v2 (requires test harvester).
+- Self-eval / N×N cross-eval are retired; the Test Harvester (manual v1, automated v2) improves audited tests instead. Automated v2 test-quality scoring is future work.
 - The Base Set forms the reference codebase agents can browse. No Expanded Pool — agents implement new mechanics from scratch.
 - A Draft Set may span multiple Scryfall set codes (e.g., FDN + SPG).
 - Draft Set defines the card pool for Replay Validation (17lands replays are draft games).

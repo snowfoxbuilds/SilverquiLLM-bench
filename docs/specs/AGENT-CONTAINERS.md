@@ -8,17 +8,6 @@ See also:
 
 - [WORKSPACE-CONTRACT.md](https://www.notion.so/ad4d407fda954387adf7eb4ba8674371) for the canonical Workspace layout and card/engine edit contract.
 - [RUN-ARTIFACTS-AND-TELEMETRY.md](https://www.notion.so/1ffe911b65564fa6860b2a91dcc94fb5) for snapshots, telemetry, fallback, and log artifacts.
-## Motivation
-
-The current adapter-based architecture suffers from structural isolation problems:
-
-- **Workspace contamination** — The agent runs inside the repo tree and can read reference implementations, test suites, and harness code (Issues #5, #16).
-- **False-positive violations** — Tool caches (`.pytest_cache`, `__pycache__`) trigger contamination detection (Issues #6, #17).
-- **Fragile cleanup** — Stale workspace state, orphan processes, and incomplete file harvesting on violations (Issues #9, #15, #22).
-- **Adapter complexity** — Each agent requires a Python adapter class (`opencode.py`, etc.) that manages subprocess lifecycle, config generation, streaming, and timeout enforcement. The `ThreadPoolExecutor` timeout hack breaks output streaming (Issue #18).
-- **Artificial task scoping** — The per-card, per-prompt model doesn't test long-running agent capabilities: task planning, knowledge accumulation across cards, self-pacing, and context endurance.
-The container model eliminates these problems by making isolation a property of the execution environment and giving the agent a realistic, project-scale workload.
-
 ## Architecture
 
 ```mermaid
@@ -43,6 +32,8 @@ flowchart TB
 ```
 
 ## Workspace Layout
+
+> **Canonical layout lives in **[WORKSPACE-CONTRACT.md](https://www.notion.so/ad4d407fda954387adf7eb4ba8674371)** → Workspace layout.** The `/workspace/` tree shown below is a superseded pre-contract draft — it predates `rulebook.txt`, `AGENTS.md`/`PROJECT_MAP.md`, `engine_tests/`, and the `fdn_`/`sos_`-prefixed card directories — kept only for narrative context and archived in Historical Context.
 
 The runner stages a workspace that resembles a real codebase. Every card directory — FDN (examples) and SOS (targets) — has the same structure: `card_spec.json` and `card_impl.py`. The only difference is that FDN implementations are filled in and SOS implementations are empty templates.
 
@@ -362,15 +353,6 @@ Card activity telemetry uses card directory IDs only, not card names. Keep telem
 
 Test file activity is tracked separately from implementation activity. `changed_card_tests` contains card IDs whose `tests.py` changed since the previous snapshot. This is especially useful for Tested Mode; Blind Mode should usually leave the field empty.
 
-## Code Eliminated
-
-The following modules and logic are replaced by the container system:
-
-- `silverquillm/adapters/` — Entire directory ([opencode.py](http://opencode.py/), [base.py](http://base.py/), etc.)
-- `silverquillm/agent_session.py` — `setup_workspace()`, `_check_violations()`, `_snapshot_mtimes()`, `_is_allowed_path()`, `_IGNORED_DIRS`, `harvest_results()`, `cleanup()`
-- `silverquillm/strategies.py` — `ThreadPoolExecutor` timeout logic, `BlindStrategy`/`ImplTestStrategy` adapter orchestration
-- `silverquillm/preflight.py` — `_check_workspace_isolation()` canary test (isolation is structural)
-- `silverquillm/prompts.py` — Per-card prompt rendering (replaced by single workspace-level prompt)
 ## Image Naming Convention
 
 ```javascript

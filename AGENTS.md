@@ -46,6 +46,7 @@ Agent-written tests are harvested as artifacts but not scored in v1. Cross-eval 
 | `RUN-ARTIFACTS-AND-TELEMETRY.md` | workspace_final, Git snapshots, fallback, telemetry, Docker logs, filtered runs, smoke runs |
 | `TESTING-CONVENTIONS.md` | Test naming, fixtures, assertions, and conventions for audited tests |
 | `17LANDS-REPLAY-SCHEMA.md` | GRE JSON replay format for engine correctness validation |
+| `TEST-IMPROVEMENT-WORKFLOW.md` | Harvest script + combined investigation/discovery skill (manual v1 Test Harvester); harvest format, fault-attribution triage, promotion bar, cadence, tier gating |
 
 ## ADRs
 
@@ -61,6 +62,7 @@ Architectural decisions are documented under the ADRs page:
 | `ADR-008` | Resume Legs are independent Benchmark Runs — `silverquillm resume <prior-run-id>` stages from prior `workspace_final/`; legs linked via `resumed_from`; prompt-layer owns resume detection |
 | `ADR-009` | Resume reads prefer run-time artifacts over harvest-time artifacts — manifest + snapshot ledger over `run_summary.json`; resilient to partial harvester failure; ledger format now load-bearing |
 | `ADR-010` | Test Oracle Workspace uses independent engine — agent-visible engine and `test_utils.py` frozen for Phase 18; oracle workspace's `engine/` may diverge with mechanic-specific extensions (miracle, casualty, paradigm primitives); audited tests use only canonical-engine APIs |
+| `ADR-011` | Three-Tier Benchmark Locking — Beta/Benchmarking/Released lock scopes; forward-only non-reversible transitions; CI enforces base-branch tier (config.json never a locked path) |
 
 ## Harness Structure
 

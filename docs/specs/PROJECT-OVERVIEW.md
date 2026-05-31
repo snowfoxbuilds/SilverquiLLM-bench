@@ -1,6 +1,6 @@
 Status: SETTLED
 
-Last updated: 2026-04-28
+Last updated: 2026-05-30
 
 # Project Overview
 
@@ -39,21 +39,23 @@ Ported XMage rules engine to Python. Implemented ~65 Foundations cards (basic la
 
 Built benchmark runner harness, test utilities, agent prompts, CLI scaffold, scoring system. Prototyped with SOS cards to validate pipeline. Wired CLI commands, contamination controls, and integration tests.
 
-**Phase 3 — Base Set Completion & Pipeline Validation** (CURRENT)
+**Phase 3 — Base Set Completion & Pipeline Validation** (COMPLETE)
 
 Implement all FDN cards 001–291 (limited format pool). Validate engine via Replay Validation against 17lands MTGA data. Run Pipeline Validation Runs to verify end-to-end orchestration.
 
-**Phase 4 — Scored Benchmark Runs**
+**Phase 4 — Scored Benchmark Runs** (CURRENT)
 
 Curate audited gold-standard tests for SOS cards. Run all agents across full SOS set. Cross-eval consolidation. Produce scored leaderboards.
 
 ### Evaluation Architecture
 
-Three-layer evaluation:
+Evaluation runs human-curated **audited tests** against every agent's implementation. There is no self-eval or N×N cross-eval — the current paradigm is audited tests plus cherry-picking (harvesting validated results and promoting strong cases into the audited suite). Three audited dimensions:
 
-1. **Self-eval** — Agent's code against its own tests
-2. **Cross-eval** — Agent's code against every other agent's tests (N×N matrix)
-3. **Audited eval** — All agents' code against human-curated gold-standard tests
+1. **SOS Card Correctness** — audited SOS tests vs. each agent's `card_impl.py`
+2. **FDN Card Regression** — audited FDN tests vs. the agent's engine
+3. **Engine Regression** — core engine tests vs. the agent's engine
+The audited SOS suite is continuously improved by cherry-picking — see [TEST-IMPROVEMENT-WORKFLOW.md](https://www.notion.so/b99a10aff98e4794856ce259e4916163) and [TEST-SUITE.md](https://www.notion.so/a50ff4a1782e4badbc4419b6cbaface9).
+
 ### Related Work
 
 - **mage-bench** — XMage + MCP bridge for LLMs playing MTG (not implementing cards)
@@ -64,9 +66,9 @@ Three-layer evaluation:
 - **Python over Java**: Most common LLM coding language; broadest model support. [SETTLED]
 - **XMage port over custom engine**: Preserves battle-tested rules logic; Python is more LLM-friendly. [SETTLED]
 - **MTG Foundations as base set**: Classic reprints covering all card types; gives agents working examples. [SETTLED]
-- **Secrets of Strixhaven as target**: Released 2026-04-24 (set code SOS); new mechanics (Prepared, Converge, Miracle, Opus) won't be in training data. [SETTLED]
+- **Secrets of Strixhaven as target**: Released 2026-04-24 (set code SOS); too new to appear in training data. [SETTLED]
 - **Harness-first development**: Build runner prototype before porting remaining Foundations cards; validate pipeline early with real Strixhaven cards. [SETTLED]
 - **Multi-agent support**: Docker container images per agent. Each agent ships as a self-contained image with its own entrypoint. Contamination controlled structurally via container isolation. [UPDATED]
 - **New set + no web for contamination**: Simple and effective for v1; avoids complex sandboxing. [SETTLED]
 - **Full set scope**: Captures full difficulty distribution; enables per-complexity-tier analysis. [SETTLED]
-- **Three evaluation dimensions**: SOS card correctness (audited tests vs. agent impls), FDN card regression (audited FDN tests vs. agent's engine), engine regression (core engine tests vs. agent's engine). Cross-eval and test quality scoring deferred to v2. [UPDATED]
+- **Audited-only evaluation**: SOS card correctness (audited tests vs. agent impls), FDN card regression (audited FDN tests vs. agent's engine), engine regression (core engine tests vs. agent's engine). Self-eval and N×N cross-eval were dropped in favor of audited tests refined by cherry-picking; automated cross-eval / test-quality scoring remains a possible v2 Test Harvester. [UPDATED]

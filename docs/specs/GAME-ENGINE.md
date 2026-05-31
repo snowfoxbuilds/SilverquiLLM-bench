@@ -56,7 +56,7 @@ The Foundations card pool is the primary reference set that agents can browse du
 1. Engine validation — all Foundations tests passing = core mechanics correct
 2. Agent reference — agents browse these as working examples during benchmarking
 3. Regression suite — catches engine regressions
-~~**Expanded pool**~~ *(dropped — see Decisions)*: Originally planned to add reference cards for mechanics absent from Foundations. Dropped because agents are expected to implement new mechanics from scratch using oracle text and comprehensive rules. This is a better benchmark signal — it tests whether agents can handle novel mechanics, not just pattern-match.
+*(The originally planned Expanded Pool of extra reference cards was dropped; see Decisions and Historical Context.)*
 
 ### Game State API (Draft)
 
@@ -146,6 +146,36 @@ During benchmark runs, the engine is **writable** — agents may add new mechani
 
 Multiplayer, sideboard/best-of-three, companion/partner, dungeons/Ring, day/night, voting, ante. Architecture supports these via XMage; just not ported for v1.
 
+## Oracle Workspace Engine Extensions (ADR-010)
+
+Engine primitives and mechanic implementations added to the **Test Oracle Workspace** engine (`benchmarks/sos/data/test_oracle_workspace/engine/`) to support SOS Test Oracle Impls. Per ADR-010 these are additive extensions to the oracle's 1:1 mirror of the canonical engine; they document how specific SOS mechanics are modeled for reference. *(Drained from ****`KEY_DECISIONS.md`****, 2026-05-30.)*
+
+### Resolution & the stack
+
+- **Spell→graveyard replacement effect**: `_resolve_spell` in `engine/casting.py` fires a `_SpellToGraveyardReplacementEvent` and consults the `ReplacementManager` before moving an instant/sorcery to the graveyard; the replacement's `destination` decides the actual zone. Enables exile-on-resolution cards (sos_1).
+- **All-targets-illegal = countered on resolution (CR 608.2b)**: if every target is illegal at resolution the spell is countered and no effects happen — including untargeted bonus effects (e.g. life gain). Untargeted effects resolve only if at least one target remains legal.
+- **Spell copies cease to exist (CR 707.2)**: Casualty copies use `copy.copy(card)`; the copy's `on_resolve` runs the effect but performs no zone movement — copies are not cards and vanish after resolving (`_handle_casualty()`).
+### Casting pipeline
+
+- **`cast_spell_for_cost`**** mirrors the full pipeline**: target selection, `on_cast()`, stack push with the proper `on_resolve` closure, and passing `stack_obj` to `_resolve_spell` — substituting only the mana cost (miracle). Skipping any step breaks spells with targets or cast-time hooks.
+- **Casualty hook wired into all casting entry points**: `_handle_casualty()` runs after the stack push in `cast_spell()`, `cast_spell_for_cost()`, and `cast_spell_free()`, so any instant/sorcery cast offers casualty while a granter is on the battlefield.
+- **Restricted mana primitive**: `ManaPool.add_restricted(amount, color, restriction)` + `_check_restricted_mana()` validate at cast time — if unrestricted mana can't cover the cost, restricted mana must be used and the spell must match the restriction (else `CastingError`). General primitive; first user sos_257 (instant/sorcery-only mana).
+- **Affinity**: `Keyword.AFFINITY` added for inspection only; reduction logic stays in `cost_reduction(game)` via the battlefield-scan grant pattern. Multiple affinity granters stack — `get_cost_reduction()` multiplies creature count by granter count.
+### Triggers & timing
+
+- **Attack-trigger targeting locks in via the condition callback** (closest hook to "ability goes on stack"); single-target triggers auto-select to avoid consuming a script entry.
+- **Miracle trigger tracks ****`event.card`**: a closure variable (`_miracle_drawn_card`) shared between the condition and effect captures the drawn card, so the correct card is offered even if the hand changes (sos_201).
+- **`cards_drawn_this_turn`**** resets at turn start**: `advance_phase()` zeroes `active_player.cards_drawn_this_turn` at the new-turn wrap-around (needed for "first card drawn each turn").
+### Permanents & state-based actions
+
+- **Planeswalker damage removes loyalty**: `deal_damage()` in `engine/game.py` detects planeswalkers via `hasattr(target, "loyalty")`; check order is player → planeswalker → creature.
+- **Planeswalker 0-loyalty SBA (CR 704.5i)**: `check_state_based_actions()` puts a 0-loyalty planeswalker into its owner's graveyard.
+- **Persistent animation survives cleanup**: cards with persistent animation override `_reset_characteristics()` to re-apply the creature type after the base reset when `_is_animated` is true; only the temporary P/T boost reverts at end of turn.
+- **Lifecycle hooks wired globally**: `move_to_zone()` calls `on_leave_battlefield(game)` when a card leaves the battlefield; `_do_cleanup_step()` calls `end_of_turn_cleanup()` on all battlefield permanents.
+### Mechanics
+
+- **Surveil uses scripted choices**: surveil N consults the player's scripted choices to decide keep-on-top vs to-graveyard per card, rather than always milling.
+- **Paradigm = self-exile replacement + recurring cast trigger**: self-exile reuses the `ReplacementManager` / `_SpellToGraveyardReplacementEvent` mechanism; a recurring "may cast from exile" trigger fires from `BeginningOfMainPhaseEvent` wired into `advance_phase()`, casting via `cast_spell_free` (sos_120).
 ## Decisions
 
 - **Port XMage, not build from scratch**: XMage's rules logic is the ground truth. [SETTLED]
