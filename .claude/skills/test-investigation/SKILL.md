@@ -25,7 +25,7 @@ Use this skill to triage failing audited tests and to surface promotion
 candidates from agent-written tests.  All outputs are human-reviewable reports
 — **no committed test edits**.
 
-Refer to [TEST-SUITE.md](../../docs/specs/TEST-SUITE.md) for the audited-test
+Refer to [TEST-SUITE.md](../../../docs/specs/TEST-SUITE.md) for the audited-test
 standard that governs the tests this skill examines.
 
 ## Inputs
@@ -80,7 +80,7 @@ agent implementations.
 
 4. **Never auto-edit audited tests.**  The audited test suite lives at
    `benchmarks/sos/data/tests/audited/<set>/<card>/tests.py` and is governed by
-   [TEST-SUITE.md](../../docs/specs/TEST-SUITE.md).  This skill produces
+   [TEST-SUITE.md](../../../docs/specs/TEST-SUITE.md).  This skill produces
    hypotheses only — **the human makes the final fault call**.
 
 ### Hard constraints (Investigation)
@@ -150,7 +150,7 @@ All of these apply in both Investigation and Discovery modes:
 ## Vocabulary
 
 This skill uses the capitalized terms defined in
-[CONTEXT.md](../../CONTEXT.md):
+[CONTEXT.md](../../../CONTEXT.md):
 
 - **Harvested Results** — the consolidated JSONL dataset from all Validated
   Results.

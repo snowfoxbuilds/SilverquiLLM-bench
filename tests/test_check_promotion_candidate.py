@@ -775,6 +775,44 @@ class TestRealConfig:
         ok, reason = check_tier(REPO_ROOT, bench="sos")
         assert ok is True
 
+    def test_config_json_conforms_to_documented_schema(self) -> None:
+        """config.json carries the full schema documented in BENCHMARK-RUNNER.md.
+
+        Guards against the committed config silently drifting back to a partial
+        stub. Mirrors docs/specs/BENCHMARK-RUNNER.md -> 'Benchmark Config'.
+        """
+        config_path = REPO_ROOT / "benchmarks" / "sos" / "config.json"
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+
+        # All documented top-level keys are present.
+        expected_keys = {
+            "schema_version",
+            "id",
+            "display_name",
+            "draft_set",
+            "tier",
+            "cards",
+            "leaderboard",
+        }
+        assert expected_keys <= set(data), (
+            f"config.json missing documented keys: {sorted(expected_keys - set(data))}"
+        )
+
+        assert data["schema_version"] == 1
+        assert data["id"] == "sos"
+        assert data["tier"].lower() == "benchmarking"
+
+        # draft_set sub-shape
+        assert set(data["draft_set"]) >= {"primary_set_code", "collector_range", "extra_set_codes"}
+        assert data["draft_set"]["primary_set_code"] == "SOS"
+
+        # cards: the canonical v1 10-card audited set.
+        assert data["cards"] == ["001", "004", "013", "057", "097", "120", "201", "226", "245", "257"]
+
+        # leaderboard sub-shape
+        assert data["leaderboard"]["requires_full_set"] is True
+        assert data["leaderboard"]["requires_unfiltered"] is True
+
 
 # ---------------------------------------------------------------------------
 # Additional: PromotionResult and CheckResult dataclass structure
