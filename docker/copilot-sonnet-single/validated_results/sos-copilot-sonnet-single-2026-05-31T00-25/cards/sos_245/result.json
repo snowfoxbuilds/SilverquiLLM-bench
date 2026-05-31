@@ -1,0 +1,13 @@
+{
+  "collector_number": "sos_245",
+  "tests_passed": 11,
+  "tests_failed": 3,
+  "tests_total": 14,
+  "pass_rate": 0.7857142857142857,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_o1v575lm/tests.py::TestAffinityGrantToInstantsAndSorceries::test_instant_gets_reduction",
+    "FAILED ../../../../tmp/eval_sos_o1v575lm/tests.py::TestAffinityGrantToInstantsAndSorceries::test_sorcery_gets_reduction",
+    "FAILED ../../../../tmp/eval_sos_o1v575lm/tests.py::TestGrantRemovedWhenWitherbloomLeaves::test_removal_ends_grant"
+  ],
+  "skipped": false
+}

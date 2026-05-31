@@ -1,0 +1,20 @@
+{
+  "collector_number": "sos_13",
+  "tests_passed": 1,
+  "tests_failed": 10,
+  "tests_total": 11,
+  "pass_rate": 0.09090909090909091,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_5epn64_a/tests.py::TestIdentity::test_identity",
+    "FAILED ../../../../tmp/eval_sos_5epn64_a/tests.py::TestETBTokenCreation::test_etb_token_creation",
+    "FAILED ../../../../tmp/eval_sos_5epn64_a/tests.py::TestTokenCharacteristics::test_token_characteristics",
+    "FAILED ../../../../tmp/eval_sos_5epn64_a/tests.py::TestPreparedCastFromExile::test_prepared_cast_from_exile",
+    "FAILED ../../../../tmp/eval_sos_5epn64_a/tests.py::TestPreparedRejectedWithoutFlag::test_prepared_rejected_without_flag",
+    "FAILED ../../../../tmp/eval_sos_5epn64_a/tests.py::TestPreparedConditionEdgeCases::test_prepared_not_set_when_creatures_equal",
+    "FAILED ../../../../tmp/eval_sos_5epn64_a/tests.py::TestPreparedConditionEdgeCases::test_prepared_set_when_opponent_has_more",
+    "FAILED ../../../../tmp/eval_sos_5epn64_a/tests.py::TestPreparedFlagLifecycle::test_prepared_flag_cleared_after_alt_cast",
+    "FAILED ../../../../tmp/eval_sos_5epn64_a/tests.py::TestAlternativeCostExposure::test_alt_cost_is_W_when_prepared",
+    "FAILED ../../../../tmp/eval_sos_5epn64_a/tests.py::TestTokenSummoningSickness::test_token_is_summoning_sick"
+  ],
+  "skipped": false
+}

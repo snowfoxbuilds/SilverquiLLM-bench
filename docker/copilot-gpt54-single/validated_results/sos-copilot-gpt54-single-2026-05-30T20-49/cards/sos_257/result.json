@@ -1,0 +1,23 @@
+{
+  "collector_number": "sos_257",
+  "tests_passed": 4,
+  "tests_failed": 13,
+  "tests_total": 17,
+  "pass_rate": 0.23529411764705882,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_z0wqseu0/tests.py::TestManaAbilities::test_mana_adds_colorless",
+    "FAILED ../../../../tmp/eval_sos_z0wqseu0/tests.py::TestManaAbilities::test_mana_adds_any_color",
+    "FAILED ../../../../tmp/eval_sos_z0wqseu0/tests.py::TestPersistentAnimation::test_animation_persists_across_turns",
+    "FAILED ../../../../tmp/eval_sos_z0wqseu0/tests.py::TestPersistentAnimation::test_no_op_when_already_creature",
+    "FAILED ../../../../tmp/eval_sos_z0wqseu0/tests.py::TestPersistentAnimation::test_animation_cleared_on_leaves_play",
+    "FAILED ../../../../tmp/eval_sos_z0wqseu0/tests.py::TestPersistentAnimation::test_activation_cost_payment",
+    "FAILED ../../../../tmp/eval_sos_z0wqseu0/tests.py::TestPersistentAnimation::test_animated_can_attack",
+    "FAILED ../../../../tmp/eval_sos_z0wqseu0/tests.py::TestPersistentAnimation::test_animation_gives_creature_type",
+    "FAILED ../../../../tmp/eval_sos_z0wqseu0/tests.py::TestSpellCastTrigger::test_boost_on_instant",
+    "FAILED ../../../../tmp/eval_sos_z0wqseu0/tests.py::TestSpellCastTrigger::test_boost_on_sorcery",
+    "FAILED ../../../../tmp/eval_sos_z0wqseu0/tests.py::TestSpellCastTrigger::test_opponent_cast_filter",
+    "FAILED ../../../../tmp/eval_sos_z0wqseu0/tests.py::TestSpellCastTrigger::test_end_of_turn_revert",
+    "FAILED ../../../../tmp/eval_sos_z0wqseu0/tests.py::TestSpellCastTrigger::test_multiple_triggers_stack"
+  ],
+  "skipped": false
+}

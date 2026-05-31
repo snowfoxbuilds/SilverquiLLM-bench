@@ -1,0 +1,13 @@
+{
+  "collector_number": "sos_226",
+  "tests_passed": 4,
+  "tests_failed": 3,
+  "tests_total": 7,
+  "pass_rate": 0.5714285714285714,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_17bp4piy/tests.py::TestCasualtyOfferedOnControllerInstant::test_casualty_offered_on_instant",
+    "FAILED ../../../../tmp/eval_sos_17bp4piy/tests.py::TestCasualtyWithSacCopiesSpell::test_casualty_sac_copies_spell",
+    "FAILED ../../../../tmp/eval_sos_17bp4piy/tests.py::TestNoLegalSacrificeDeclined::test_no_legal_sacrifice"
+  ],
+  "skipped": false
+}
