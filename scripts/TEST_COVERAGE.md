@@ -33,9 +33,20 @@
 - `main(--summary)` — loads JSONL, writes harvested_summary.json sibling, prints ranked report, missing JSONL → non-zero exit + stderr (`test_harvest_summary.py`)
 - `main(--summary)` — JSONL of only rollup rows → all groups breadth 0 in written JSON (`test_harvest_summary_gaps.py`)
 
+- `mine_candidates()` — novel behavior surfaced, name-match suppressed, API-overlap rule (both conditions), missing audited file, card filter, SyntaxError robustness, provenance (`test_mine_promotion_candidates.py`)
+- `mine_candidates()` — empty agent tests.py (no test fns) yields zero candidates without crashing (`test_mine_promotion_candidates_gaps.py`)
+- `mine_candidates()` — empty engine API Jaccard edge: _jaccard({},{})=0.0, no ZeroDivisionError, Rule 2 does not wrongly suppress (`test_mine_promotion_candidates_gaps.py`)
+- `mine_candidates()` — class-based test methods inside `class TestX:` detected end-to-end, and suppressed by name match (`test_mine_promotion_candidates_gaps.py`)
+- `mine_candidates()` — audited-only tests (not written by agent) produce no spurious candidates; agent subset fully covered by audited → zero candidates (`test_mine_promotion_candidates_gaps.py`)
+- `format_candidates_json()` — output is valid JSON with ALL Candidate dataclass fields present and correct values; direct `format_candidates_json` call and CLI `--format json` path (`test_mine_promotion_candidates_gaps.py`)
+- `is_behavior_covered()` — unit: name match, no-match, empty audited, empty-API both sides (`test_mine_promotion_candidates.py`, `test_mine_promotion_candidates_gaps.py`)
+- `extract_test_behaviors()` — async, class methods, non-test functions ignored, engine API extraction, class-based integration (`test_mine_promotion_candidates.py`, `test_mine_promotion_candidates_gaps.py`)
+- `_normalize_test_name()` — prefix strip, suffix strip, lowercase (`test_mine_promotion_candidates.py`)
+- `main()` — text output, JSON output, never-promotes, no-candidates text (`test_mine_promotion_candidates.py`)
+
 ## 2. Gaps (Not Yet Covered)
 
-None — all identified gaps for items 4, 5, and 6 are now covered.
+None — all identified gaps for items 4, 5, 6, and 8 are now covered.
 
 ## 3. Edge Cases & Integration Gaps
 

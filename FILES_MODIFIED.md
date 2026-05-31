@@ -59,3 +59,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Tests
 - `tests/test_test_investigation_skill.py` — 21 structural tests verifying SKILL.md frontmatter (name, description, allowed-tools), dataset path reference, Released-tier refusal rule, both Investigation/Discovery modes documented, human-reviewable output constraints, and audited tests path references
+
+## Item 8: Discovery-candidate miner (scripts/mine_promotion_candidates.py)
+
+### Implementation
+- `scripts/mine_promotion_candidates.py` — New script that scans agent-written tests in validated results and surfaces novel behaviors not covered by the canonical audited suite, using AST-based heuristic (name match + API-overlap fallback)
+
+### Tests
+- `tests/test_mine_promotion_candidates.py` — 30 test cases: novel behavior surfacing, name-match suppression (Rule 1), API-overlap + docstring keyword suppression (Rule 2 both-conditions-required), missing audited file note, --card filter, SyntaxError robustness, per-run provenance, CLI text/json output and never-promotes invariant, normalize-name and extract-behaviors unit tests

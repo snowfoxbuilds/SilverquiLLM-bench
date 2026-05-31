@@ -57,7 +57,7 @@ Sequencing: items 1–2 (evaluator schema) gate the harvest, because the harvest
 
   Testability: no runtime logic to unit-test; verify the [SKILL.md](http://skill.md/) has valid frontmatter (`name`/`description`/tools), points to the correct dataset path, states the Released-tier refusal rule, and documents both modes. A lightweight markdown/frontmatter structural check is sufficient.
 
-- [ ] **8. Add the discovery-candidate miner used by the skill**
+- [x] **8. Add the discovery-candidate miner used by the skill**
   Detail: Implement a helper — `scripts/mine_promotion_candidates.py` (or a `--discover` mode on the harvest script) — that scans the agent-written `tests.py` stored in each Validated Results `cards/<card>/` subtree and surfaces behaviors not represented in the canonical audited suite at `benchmarks/<bench>/data/tests/audited/<set>/<card>/tests.py`. Use a transparent heuristic (test function names, docstrings, asserted public engine APIs) to flag candidate behaviors; output a human-reviewable list of promotion candidates (card, source image/run, candidate behavior summary, source test snippet). This is Discovery-mode input for the skill (item 7) — it never promotes anything automatically. Respect `--bench`/`--card` filters for consistency with the harvest script.
 
   Files: `scripts/mine_promotion_candidates.py` (new) or a `--discover` mode in `scripts/harvest_validated_results.py`.

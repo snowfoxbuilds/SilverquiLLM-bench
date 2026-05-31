@@ -17,11 +17,14 @@ Standalone utility scripts for data pipeline tasks. Not part of the main package
 - **External**: `requests` (HTTP), Scryfall API
 - **Downstream**: `data/replays/card_id_map.json` consumed by `silverquillm/replay/parser.py` and `silverquillm/replay/executor.py`. `cards/stubs/sos_stubs.py` consumed by `tests/audited/sos/conftest.py`. `harvest_validated_results.py` writes to `benchmarks/<bench>/analysis/harvested_results.jsonl` (harvest mode) and `benchmarks/<bench>/analysis/harvested_summary.json` (summary mode).
 
+| `mine_promotion_candidates.py` | ~530 | **Discovery-candidate miner.** AST-scans agent-written `tests.py` files in each Validated Results `cards/<card>/` subtree and surfaces behaviors not represented in the canonical audited suite (`benchmarks/<bench>/data/tests/audited/<bench>/<card>/tests.py`). Exposes `mine_candidates(repo_root, *, bench, card, image, run) -> list[Candidate]` and `main()` with `--bench/--card/--image/--run/--format` CLI flags. Loads `discover_validated_runs` from `harvest_validated_results` via `importlib`. **Heuristic**: for each agent test function, extracts a `TestBehavior` (normalized name, docstring, `frozenset` of engine API names via `ast.walk`). A behavior is covered if any audited function matches by (1) normalized name equality or (2) engine-API Jaccard ≥ 0.8 AND ≥1 shared docstring keyword (length > 3). Uncovered behaviors are emitted as `Candidate` dataclass instances; cards with no audited file produce candidates with `note="no audited baseline"`. **Never promotes anything.** Output formats: human-readable `text` (default) or `json`. |
+
 ## Directory Structure
 
 ```
 scripts/
 ├── build_card_id_map.py           — Scryfall → card_id_map.json builder
 ├── generate_audited_stubs.py      — sos.json → sos_stubs.py generator
-└── harvest_validated_results.py   — Phase 19 harvest pipeline: discovery + row emission + CLI
+├── harvest_validated_results.py   — Phase 19 harvest pipeline: discovery + row emission + CLI
+└── mine_promotion_candidates.py   — Discovery-candidate miner: AST-scans agent tests vs audited suite
 ```
