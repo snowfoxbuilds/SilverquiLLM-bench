@@ -17,7 +17,7 @@ Core Python package for the SilverquiLLM benchmark runner. Provides CLI entry po
 | `card_loader.py` | 352 | **Card loading** — Loads card specs from JSON, filters by collector number or prototype list, sorts by complexity tier. Template detection. | `load_all_card_specs`, `load_card_spec`, `load_card_impl`, `is_template`, `filter_by_collectors` |
 | `card_spec.py` | 239 | **Card spec generation** — Converts Scryfall card data to card specs with class name derivation, base class determination, and metadata extraction. | `generate_card_spec`, `generate_all_specs`, `card_name_to_class_name` |
 | `card_names.py` | ~50 | **Card name utilities** — Helpers for card name resolution and mapping. | — |
-| `evaluator.py` | 952 | **Test evaluation** — Runs pytest against agent card implementations, parses results, supports self-eval, cross-eval, audited eval, and full evaluation with engine extension checks. Audited tests at `benchmarks/sos/data/tests/audited/`. | `evaluate`, `run_self_eval`, `run_audited_eval`, `EvalResult`, `FullEvalResult` |
+| `evaluator.py` | ~960 | **Test evaluation** — Runs pytest against agent card implementations, parses results, supports self-eval, cross-eval, audited eval, and full evaluation with engine extension checks. Audited tests at `benchmarks/sos/data/tests/audited/`. `CardResult` now includes `tests_hash: str` (SHA-256 of the audited test file, computed in `_eval_sos_cards` before result.json write; empty string if file missing). | `evaluate`, `run_self_eval`, `run_audited_eval`, `EvalResult`, `FullEvalResult`, `CardResult` |
 | `results.py` | 359 | **Result aggregation** — Generates run summaries with pass/fail counts, engine churn metrics, and natural-sorted card results. | `generate_run_summary` |
 
 ## Subdirectories

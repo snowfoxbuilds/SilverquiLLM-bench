@@ -31,6 +31,7 @@ Public API:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -78,6 +79,7 @@ class CardResult:
     pass_rate: float = 0.0
     errors: list[str] = field(default_factory=list)
     skipped: bool = False
+    tests_hash: str = ""
 
 
 @dataclass
@@ -819,6 +821,13 @@ def _eval_sos_cards(
                 tmp / "tests.py", pp, timeout=timeout,
             )
             cr = _make_card_result(cn, passed, failed, total, errors)
+
+            # Stamp tests_hash — SHA-256 of the audited test file bytes
+            try:
+                cr.tests_hash = hashlib.sha256(test_file.read_bytes()).hexdigest()
+            except OSError:
+                cr.tests_hash = ""
+
             results[cn] = cr
 
             # Write result.json

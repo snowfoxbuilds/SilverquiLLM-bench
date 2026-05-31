@@ -8,7 +8,7 @@ Sequencing: items 1–2 (evaluator schema) gate the harvest, because the harvest
 
 ---
 
-- [ ] **1. Stamp ****`tests_hash`**** into per-card SOS ****`result.json`**** at eval time**
+- [x] **1. Stamp ****`tests_hash`**** into per-card SOS ****`result.json`**** at eval time**
   Detail: In `silverquillm/evaluator.py`, add a `tests_hash: str = ""` field to the `CardResult` dataclass. In `_eval_sos_cards`, before running pytest, compute the SHA-256 hex digest of the audited test file bytes (`test_file = audited_dir / cn / "tests.py"`) and set it on the `CardResult` before the `result.json` write — the existing `json.dumps(asdict(cr))` dump then carries it. This makes audited-test changes across runs detectable per the Harvested Results schema. Additive change only; leave all other `CardResult` fields and the counts/`errors` behavior untouched.
 
   Files: `silverquillm/evaluator.py` (`CardResult` dataclass + `_eval_sos_cards` hashing + result.json write).
