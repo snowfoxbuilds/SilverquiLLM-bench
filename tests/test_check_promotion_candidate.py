@@ -800,6 +800,9 @@ class TestRealConfig:
 
         assert data["schema_version"] == 1
         assert data["id"] == "sos"
+        # Canonical set name (matches README, specs, and sos.json set_name); guards
+        # against drift back to the "Shadows over Sonnenthal" alias.
+        assert data["display_name"] == "Secrets of Strixhaven"
         assert data["tier"].lower() == "benchmarking"
 
         # draft_set sub-shape

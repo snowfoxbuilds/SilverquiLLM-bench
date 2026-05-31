@@ -72,7 +72,7 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Implementation
 - `scripts/check_promotion_candidate.py` — New promotion bar gate script with check_tier, check_canonical_api, check_oracle_gate, and check_promotion_candidate orchestrator
-- `benchmarks/sos/config.json` — Created with tier=benchmarking (required by tier check and item 7 skill)
+- `benchmarks/sos/config.json` — Created with the full documented config schema per `docs/specs/BENCHMARK-RUNNER.md` (`schema_version`, `id`, `display_name`, `draft_set`, `tier`=benchmarking, `cards`, `leaderboard`). Only `tier` is consumed today (tier check + item 7 skill); the other keys match the spec to avoid divergence.
 
 ### Tests
 - `tests/test_check_promotion_candidate.py` — 31 test cases: allowed path (all checks pass + exit 0), oracle reject (fail + exit non-zero), released-tier refusal with short-circuit (oracle never called), check_tier unit tests (beta/benchmarking/released/missing/invalid), check_canonical_api real AST tests (canonical-only ok, oracle-only rejected with symbol named, stdlib-only ok), fail-closed oracle gate (missing card, subprocess error), never-promotes invariant (no audited files modified), real config.json validation, dataclass structure
