@@ -43,7 +43,7 @@ Sequencing: items 1–2 (evaluator schema) gate the harvest, because the harvest
 
   Testability: unit test on a legacy-shaped `result.json` (errors + counts, no `test_nodes`/`tests_hash`) asserts fail rows are derived from `errors`, a `__rollup__` row is emitted, `tests_hash` is null, and no exception is raised on missing fields.
 
-- [ ] **6. Add cross-impl breadth summary view (****`--summary`****)**
+- [x] **6. Add cross-impl breadth summary view (****`--summary`****)**
   Detail: Add a `--summary` mode (and a reusable function) that loads `harvested_results.jsonl`, groups by `(card, test_node, tests_hash)`, and computes cross-impl breadth = the count of distinct `image` values with `outcome == "fail"`. Emit a ranked report (highest breadth first — the tests the most independent implementations fail, i.e. the prime test-fault suspects) to stdout and a `benchmarks/<bench>/analysis/harvested_summary.json` sibling. Use stdlib/pandas grouping with no hard DuckDB dependency; note in a comment that loading into DuckDB or emitting a Parquet sibling is an optional future optimization. This breadth ranking is the triage signal the investigation skill (item 7) consumes — a prioritization heuristic, not a verdict.
 
   Files: `scripts/harvest_validated_results.py` (`--summary` flag + grouping/ranking + summary writer).

@@ -21,9 +21,21 @@
 - `_extract_fail_nodes_from_errors()` — FAILED line with '::' in reason text produces exactly one fail row with correct test_node, no bogus extra nodes (`test_harvest_legacy_gaps.py`)
 - `harvest()` — image= filter on all-legacy image yields only rollup/fail rows, no modern pass rows, no crash (`test_harvest_legacy_gaps.py`)
 
+- `summarize_breadth()` — breadth = distinct failing images; pass/rollup don't count; duplicate failing image counted once; sorted failing_images; separate groups per tests_hash (`test_harvest_summary.py`)
+- `summarize_breadth()` — tests_hash=None is a distinct group from string hashes; None sorts last in tiebreak (`test_harvest_summary.py`)
+- `summarize_breadth()` — ranking descending by breadth with deterministic tiebreak on (card, test_node, tests_hash) (`test_harvest_summary.py`)
+- `summarize_breadth()` — rollup-only group has breadth 0 and is included (`test_harvest_summary.py`)
+- `summarize_breadth()` — empty rows list returns [] without crash (`test_harvest_summary_gaps.py`)
+- `summarize_breadth()` — row missing 'outcome' key tolerated (not counted as fail) (`test_harvest_summary_gaps.py`)
+- `summarize_breadth()` — failing_images sorted lexicographically regardless of input arrival order (`test_harvest_summary_gaps.py`)
+- `load_rows()` — round-trip JSONL with and without blank lines; empty file returns [] (`test_harvest_summary.py`)
+- `write_summary()` — creates parent dirs, writes pretty-printed JSON, file round-trips, newline-terminated, empty list valid (`test_harvest_summary.py`, `test_harvest_summary_gaps.py`)
+- `main(--summary)` — loads JSONL, writes harvested_summary.json sibling, prints ranked report, missing JSONL → non-zero exit + stderr (`test_harvest_summary.py`)
+- `main(--summary)` — JSONL of only rollup rows → all groups breadth 0 in written JSON (`test_harvest_summary_gaps.py`)
+
 ## 2. Gaps (Not Yet Covered)
 
-None — all identified gaps for items 4 and 5 are now covered.
+None — all identified gaps for items 4, 5, and 6 are now covered.
 
 ## 3. Edge Cases & Integration Gaps
 
@@ -42,3 +54,8 @@ None — all identified gaps for items 4 and 5 are now covered.
 - [x] Mixed legacy+modern run: [legacy] notice once, both row types emitted
 - [x] FAILED reason text containing '::' does not produce extra nodes
 - [x] image= filter on all-legacy image: only rollup/fail rows, no crash
+- [x] summarize_breadth([]) → [] (no crash)
+- [x] Row with missing 'outcome' key tolerated, not counted as fail
+- [x] failing_images sorted lexicographically (not in input order)
+- [x] write_summary output is newline-terminated valid JSON
+- [x] --summary over rollup-only JSONL → all breadth-0 groups

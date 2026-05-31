@@ -27,6 +27,8 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -389,6 +391,130 @@ def harvest(
 
 
 # ---------------------------------------------------------------------------
+# Breadth summary (item 6)
+# ---------------------------------------------------------------------------
+# NOTE: Grouping uses stdlib only (collections.defaultdict + set).
+# Loading into DuckDB or emitting a Parquet sibling is an optional future
+# optimization — see TODO item 6 spec.
+
+
+def load_rows(jsonl_path: Path) -> list[dict]:
+    """Load rows from a JSONL file, tolerating blank lines.
+
+    Parameters
+    ----------
+    jsonl_path:
+        Path to a ``harvested_results.jsonl`` file.
+
+    Returns
+    -------
+    list[dict]
+        Parsed rows.
+    """
+    rows: list[dict] = []
+    with open(jsonl_path, "r", encoding="utf-8") as fh:
+        for line in fh:
+            stripped = line.strip()
+            if stripped:
+                rows.append(json.loads(stripped))
+    return rows
+
+
+def summarize_breadth(rows: list[dict]) -> list[dict]:
+    """Compute cross-implementation breadth per ``(card, test_node, tests_hash)``.
+
+    Breadth is the count of distinct ``image`` values with ``outcome == "fail"``
+    within each group.  Rows with outcome ``"pass"`` or ``"rollup"`` do NOT
+    contribute to breadth.
+
+    Parameters
+    ----------
+    rows:
+        Harvested result rows (as produced by :func:`harvest` / :func:`load_rows`).
+
+    Returns
+    -------
+    list[dict]
+        One dict per group with keys ``card``, ``test_node``, ``tests_hash``,
+        ``breadth``, ``failing_images`` (sorted list of distinct failing images).
+        Ranked descending by ``breadth``; ties broken by
+        ``(card, test_node, tests_hash)`` with ``None`` sorting last.
+    """
+    # Group: (card, test_node, tests_hash) → set of failing images
+    groups: dict[tuple, set[str]] = defaultdict(set)
+    # Track all groups (including pass-only ones)
+    all_groups: set[tuple] = set()
+
+    for row in rows:
+        key = (row.get("card", ""), row.get("test_node", ""), row.get("tests_hash"))
+        all_groups.add(key)
+        if row.get("outcome") == "fail":
+            groups[key].add(row.get("image", ""))
+
+    # Build result list
+    result: list[dict] = []
+    for key in all_groups:
+        card, test_node, tests_hash = key
+        failing = groups.get(key, set())
+        result.append({
+            "card": card,
+            "test_node": test_node,
+            "tests_hash": tests_hash,
+            "breadth": len(failing),
+            "failing_images": sorted(failing),
+        })
+
+    # Sort: descending by breadth, then ascending by (card, test_node,
+    # tests_hash) with None sorting after all strings for stability.
+    def _sort_key(entry: dict) -> tuple:
+        # Negate breadth for descending order
+        th = entry["tests_hash"]
+        # None sorts last: use (1, "") so it comes after (0, any_string)
+        th_sort = (1, "") if th is None else (0, th)
+        return (-entry["breadth"], entry["card"], entry["test_node"], th_sort)
+
+    result.sort(key=_sort_key)
+    return result
+
+
+def write_summary(summary: list[dict], path: Path) -> None:
+    """Write a breadth summary to ``harvested_summary.json``.
+
+    Parameters
+    ----------
+    summary:
+        Output of :func:`summarize_breadth`.
+    path:
+        Target file path (typically ``harvested_summary.json`` in the
+        analysis directory).
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(summary, fh, indent=2)
+        fh.write("\n")
+
+
+def _print_breadth_report(summary: list[dict]) -> None:
+    """Print a human-readable ranked breadth report to stdout."""
+    print("Cross-implementation breadth report")
+    print("=" * 72)
+    print(f"{'Breadth':>7}  {'Card':<20}  {'Test Node':<30}  Hash")
+    print("-" * 72)
+    for entry in summary:
+        th = entry["tests_hash"]
+        th_short = (th[:8] + "...") if (th and len(th) > 8) else (th or "None")
+        print(
+            f"{entry['breadth']:>7}  "
+            f"{entry['card']:<20}  "
+            f"{entry['test_node']:<30}  "
+            f"{th_short}"
+        )
+    print("-" * 72)
+    n_failing = sum(1 for e in summary if e["breadth"] > 0)
+    print(f"Total groups: {len(summary)}  |  Groups with failures: {n_failing}")
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -425,6 +551,16 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Filter to runs/cards containing a matching card directory.",
     )
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        default=False,
+        help=(
+            "Summary mode: load existing harvested_results.jsonl, compute "
+            "cross-impl breadth ranking, write harvested_summary.json, and "
+            "print a ranked report. Does NOT re-harvest."
+        ),
+    )
     return parser
 
 
@@ -443,7 +579,36 @@ def main(*, repo_root: Optional[Path] = None) -> None:
     parser = _build_parser()
     args = parser.parse_args()
 
-    # Delegate to harvest() so tests can drive the pipeline directly.
+    # Resolve output path (mirrors harvest() logic).
+    if args.output is not None:
+        output_path = Path(args.output)
+    else:
+        output_path = (
+            repo_root / "benchmarks" / args.bench / "analysis"
+            / "harvested_results.jsonl"
+        )
+
+    # --summary mode: load existing JSONL, compute breadth, write summary.
+    if args.summary:
+        if not output_path.is_file():
+            print(
+                f"Nothing to summarize: {output_path} does not exist. "
+                "Run without --summary first to harvest results.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        rows = load_rows(output_path)
+        summary = summarize_breadth(rows)
+
+        summary_path = output_path.parent / "harvested_summary.json"
+        write_summary(summary, summary_path)
+
+        _print_breadth_report(summary)
+        print(f"\nSummary written to: {summary_path}")
+        return
+
+    # Normal harvest mode.
     row_count = harvest(
         repo_root,
         bench=args.bench,
@@ -453,16 +618,7 @@ def main(*, repo_root: Optional[Path] = None) -> None:
         card=args.card,
     )
 
-    # Resolve output path for summary message (mirrors harvest() logic).
-    if args.output is not None:
-        output_path = Path(args.output)
-    else:
-        output_path = (
-            repo_root / "benchmarks" / args.bench / "analysis"
-            / "harvested_results.jsonl"
-        )
-
-    # Print summary
+    # Print harvest summary
     runs = discover_validated_runs(
         repo_root,
         image=args.image,

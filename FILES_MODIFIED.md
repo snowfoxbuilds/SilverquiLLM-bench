@@ -43,3 +43,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 ### Tests
 - `tests/test_harvest_rows.py` — Updated 2 stale Item-4 placeholder tests (TestMissingTestNodes) to assert new legacy rollup behavior instead of 0-row skipping
 - `tests/test_harvest_legacy.py` — 20 new test cases: core spec (fail rows from errors, rollup row, tests_hash=None, no pass rows), de-duplication, unparseable/collection errors, missing errors/counts fields, rollup outcome validation, per-run legacy notice via capsys, stray tests_hash ignored, node-ID normalization
+
+## Item 6: Cross-impl breadth summary view (--summary)
+
+### Implementation
+- `scripts/harvest_validated_results.py` — Added load_rows(), summarize_breadth(), write_summary(), _print_breadth_report() functions and --summary CLI flag with summary-mode logic in main()
+
+### Tests
+- `tests/test_harvest_summary.py` — 24 test cases: breadth = distinct failing images (dedup, pass exclusion), different tests_hash = separate groups, None vs real hash separation, descending ranking with tie-break determinism (card/test_node/None-last), rollup exclusion from breadth, pass-only groups included at breadth 0, load_rows round-trip with blank lines, CLI --summary integration (JSON sibling creation, ranked content, stdout report), missing JSONL non-zero exit, write_summary round-trip
