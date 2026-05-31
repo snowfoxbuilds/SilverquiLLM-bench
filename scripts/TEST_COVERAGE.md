@@ -44,9 +44,20 @@
 - `_normalize_test_name()` — prefix strip, suffix strip, lowercase (`test_mine_promotion_candidates.py`)
 - `main()` — text output, JSON output, never-promotes, no-candidates text (`test_mine_promotion_candidates.py`)
 
+- `check_canonical_api()` — unparseable candidate (SyntaxError) returns fail-closed with reason mentioning parse failure and file path (`test_check_promotion_candidate_gaps.py`)
+- `check_canonical_api()` — both engine dirs missing: no oracle-only symbols, candidate passes (`test_check_promotion_candidate_gaps.py`)
+- `check_canonical_api()` — canonical dir missing, oracle has symbols: oracle-only symbols exist, candidate referencing them is rejected (`test_check_promotion_candidate_gaps.py`)
+- `check_canonical_api()` — oracle dir missing, canonical has symbols: no oracle-only symbols, candidate passes (`test_check_promotion_candidate_gaps.py`)
+- `check_promotion_candidate()` — canonical-API fail + oracle pass → `allowed=False`; all three checks still run and present in result (`test_check_promotion_candidate_gaps.py`)
+- `main()` — ADR-011 maintainer note printed to stderr regardless of outcome (`test_check_promotion_candidate_gaps.py`)
+- `main()` — failing check name, FAIL label, and reason symbol appear in stdout (`test_check_promotion_candidate_gaps.py`)
+- `main()` — REJECTED verdict printed to stdout when any check fails (`test_check_promotion_candidate_gaps.py`)
+- `main()` — exit code == 1 (non-zero) when only canonical-API check fails (tier=pass, oracle=pass) (`test_check_promotion_candidate_gaps.py`)
+- `main()` — exit code == 1 (non-zero) when only oracle check fails (tier=pass, canonical=pass) (`test_check_promotion_candidate_gaps.py`)
+
 ## 2. Gaps (Not Yet Covered)
 
-None — all identified gaps for items 4, 5, 6, and 8 are now covered.
+None — all identified gaps for items 4, 5, 6, 8, and 9 are now covered.
 
 ## 3. Edge Cases & Integration Gaps
 

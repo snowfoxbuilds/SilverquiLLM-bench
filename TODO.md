@@ -64,7 +64,7 @@ Sequencing: items 1–2 (evaluator schema) gate the harvest, because the harvest
 
   Testability: unit test on fixtures where an agent `tests.py` exercises a behavior absent from the audited file asserts it is surfaced as a candidate, and that behaviors already covered by the audited file are not.
 
-- [ ] **9. Implement the discovery→promotion bar gate**
+- [x] **9. Implement the discovery→promotion bar gate**
   Detail: Implement `scripts/check_promotion_candidate.py` enforcing the promotion bar from [TEST-IMPROVEMENT-WORKFLOW.md](http://test-improvement-workflow.md/) §3 on a single rewritten candidate test before a human merges it: (1) run the candidate against the matching Test Oracle Impl via the Phase 18 validation harness in the Test Oracle Workspace (`benchmarks/sos/data/test_oracle_workspace/` + `tests/test_audited_against_reference.py`) — the ADR-010 oracle gate; must pass. (2) Run the canonical-engine-API-only check (reject if the test depends on engine primitives present only in the Test Oracle Workspace engine and absent from canonical `benchmarks/sos/workspace/engine/`). (3) Read `benchmarks/<bench>/config.json` `tier` and refuse promotion unless it is `beta` or `benchmarking` (Released locks audited tests, per ADR-011). Exit non-zero with a clear reason on any failure; this is an operational gate a human runs, never an auto-commit. Note: this gates one candidate — repo-wide Benchmark Tier lock enforcement (the ADR-011 CI check on the base branch) is a separate concern; flag it to the maintainer if that CI check does not yet exist rather than building it here.
 
   Files: `scripts/check_promotion_candidate.py` (new).

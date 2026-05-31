@@ -18,13 +18,15 @@ Standalone utility scripts for data pipeline tasks. Not part of the main package
 - **Downstream**: `data/replays/card_id_map.json` consumed by `silverquillm/replay/parser.py` and `silverquillm/replay/executor.py`. `cards/stubs/sos_stubs.py` consumed by `tests/audited/sos/conftest.py`. `harvest_validated_results.py` writes to `benchmarks/<bench>/analysis/harvested_results.jsonl` (harvest mode) and `benchmarks/<bench>/analysis/harvested_summary.json` (summary mode).
 
 | `mine_promotion_candidates.py` | ~530 | **Discovery-candidate miner.** AST-scans agent-written `tests.py` files in each Validated Results `cards/<card>/` subtree and surfaces behaviors not represented in the canonical audited suite (`benchmarks/<bench>/data/tests/audited/<bench>/<card>/tests.py`). Exposes `mine_candidates(repo_root, *, bench, card, image, run) -> list[Candidate]` and `main()` with `--bench/--card/--image/--run/--format` CLI flags. Loads `discover_validated_runs` from `harvest_validated_results` via `importlib`. **Heuristic**: for each agent test function, extracts a `TestBehavior` (normalized name, docstring, `frozenset` of engine API names via `ast.walk`). A behavior is covered if any audited function matches by (1) normalized name equality or (2) engine-API Jaccard ≥ 0.8 AND ≥1 shared docstring keyword (length > 3). Uncovered behaviors are emitted as `Candidate` dataclass instances; cards with no audited file produce candidates with `note="no audited baseline"`. **Never promotes anything.** Output formats: human-readable `text` (default) or `json`. |
+| `check_promotion_candidate.py` | ~446 | **Discovery→promotion bar gate.** Runs three checks on a single candidate test file before a human merges it into the audited suite. **`check_tier(repo_root, bench)`**: reads `benchmarks/<bench>/config.json` and rejects if `tier` is not `beta` or `benchmarking` — fail-closed (missing config/key → reject). **`check_canonical_api(candidate_path, repo_root, bench)`**: AST-scans candidate symbols and rejects if any reference oracle-only engine symbols absent from the canonical engine. **`check_oracle_gate(candidate_path, card, repo_root, bench)`**: copies oracle `card_impl.py` + candidate into a temp dir, sets PYTHONPATH to oracle workspace engine, runs pytest — fail-closed on subprocess error or timeout. **`check_promotion_candidate(candidate_path, card, repo_root, bench) -> PromotionResult`**: orchestrator; tier check short-circuits on failure (skips remaining expensive checks); returns `PromotionResult(allowed, checks=[CheckResult(name, ok, reason), ...])`. CLI: `python scripts/check_promotion_candidate.py <candidate> --card <card> [--bench sos]`; exits 0 on ALLOWED, 1 on REJECTED. **Never edits, commits, or promotes anything.** |
 
 ## Directory Structure
 
 ```
 scripts/
-├── build_card_id_map.py           — Scryfall → card_id_map.json builder
-├── generate_audited_stubs.py      — sos.json → sos_stubs.py generator
-├── harvest_validated_results.py   — Phase 19 harvest pipeline: discovery + row emission + CLI
-└── mine_promotion_candidates.py   — Discovery-candidate miner: AST-scans agent tests vs audited suite
+├── build_card_id_map.py             — Scryfall → card_id_map.json builder
+├── generate_audited_stubs.py        — sos.json → sos_stubs.py generator
+├── harvest_validated_results.py     — Phase 19 harvest pipeline: discovery + row emission + CLI
+├── mine_promotion_candidates.py     — Discovery-candidate miner: AST-scans agent tests vs audited suite
+└── check_promotion_candidate.py     — Promotion bar gate: tier + canonical-API + oracle checks; never promotes
 ```

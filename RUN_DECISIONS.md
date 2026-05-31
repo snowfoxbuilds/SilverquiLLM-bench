@@ -15,3 +15,9 @@ Decisions made during this run only. Before the PR, migrate anything worth prese
 - **Impact**: `scripts/harvest_validated_results.py`, `tests/test_harvest_rows.py`.
 - **Rollup row contract** (worth keeping): legacy cards emit one `test_node="__rollup__"` row with `outcome="rollup"` (a sentinel that is neither `pass` nor `fail`, so Item 6 breadth does not miscount it) carrying `passed`/`failed`/`total`; fail rows are derived from `errors` node ids; `tests_hash` is `null` for legacy cards.
 
+## Supporting addition: Item 9 — created `benchmarks/sos/config.json`
+- **Context**: Items 7 (skill) and 9 (promotion gate) both read the Benchmark Tier from `benchmarks/<bench>/config.json` `tier`, but the file did not exist in the repo. The gate's tier check needs it to operate on real data; without it the gate fails-closed (refuses).
+- **Decision**: Item 9 creates `benchmarks/sos/config.json` with `{"tier": "benchmarking"}` (lowercase), the minimal schema the spec references. CONTEXT.md states SOS is currently in Benchmarking, so `benchmarking` is the correct value (and makes promotions legal per the workflow).
+- **Reasoning**: The TODO assumes the file exists ("Read `benchmarks/<bench>/config.json` `tier`") but no item lists creating it; adding the minimal file makes the pipeline functional and is clearly correct given CONTEXT.md. Not listed in item 9's Files, so recorded here as a necessary supporting addition.
+- **Impact**: `benchmarks/sos/config.json` (new). The gate fails-closed if the file or `tier` key is ever missing.
+
