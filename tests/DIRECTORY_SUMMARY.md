@@ -38,6 +38,7 @@ Test root directory for the SilverquiLLM-bench project. Contains top-level test 
 | `test_engine_extensibility_prompts.py` | **Engine extensibility prompt tests** — Extensibility instructions in prompts. |
 | `test_evaluator.py` | **Evaluator tests** — Subprocess test execution, eval scenarios. |
 | `test_tests_hash.py` | **tests_hash field tests** — 13 tests verifying SHA-256 correctness of `CardResult.tests_hash`: hash match, determinism, change-on-edit, missing-file edge case (empty string), and additive-only preservation of existing `CardResult` fields. |
+| `test_test_nodes.py` | **test_nodes field tests** — 29 tests verifying per-node pass/fail capture (real pytest runs), nodeid normalization, count consistency with `tests_passed`/`tests_failed`, collection/setup error handling, JSON persistence round-trip of `test_nodes` in `result.json`, backward-compat 4-tuple return from `_run_pytest_with_pythonpath`, and `_parse_report_jsonl` unit tests. |
 | `test_eval_result_v2.py` | **EvalResultV2 tests** — Mode-aware v2 eval schema, v1→v2 normalization, result persistence. |
 | `test_scorer.py` | **Scorer tests** — 4-category metrics, leaderboard generation. |
 | `test_cat4_scoring.py` | **Category 4 scoring tests** — Engine extension quality scoring. |

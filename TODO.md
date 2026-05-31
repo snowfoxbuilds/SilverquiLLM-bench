@@ -15,7 +15,7 @@ Sequencing: items 1–2 (evaluator schema) gate the harvest, because the harvest
 
   Testability: unit test that `result.json` contains a `tests_hash` equal to `hashlib.sha256(tests_py_bytes).hexdigest()`, that it is deterministic, and that editing `tests.py` changes the hash.
 
-- [ ] **2. Record per-test-node pass/fail outcomes in per-card SOS ****`result.json`**
+- [x] **2. Record per-test-node pass/fail outcomes in per-card SOS ****`result.json`**
   Detail: Today `_run_pytest_with_pythonpath` + `_parse_pytest_output` capture only summary counts and `FAILED`/`ERROR` lines, so passed node IDs are never recorded and the per-`(card, test_node, outcome)` rows the harvest needs cannot be built. Extend the SOS eval path to capture every node's outcome: add `--report-log=<tmp>/report.jsonl` to the pytest invocation in `_run_pytest_with_pythonpath` (pytest's built-in machine-readable JSONL), then parse the `TestReport` entries with `when == "call"` (plus `setup`/collection errors) into a list of `{"test_node": <nodeid>, "outcome": "pass"|"fail"}`. Normalize nodeids to the `tests.py::test_x` form. Add `test_nodes: list[dict] = field(default_factory=list)` to `CardResult`, populate it in `_eval_sos_cards`, and let the existing `asdict(cr)` write persist it. Keep `errors`/counts intact for back-compat. Map collection/setup errors to an `outcome: "fail"` row (use a synthetic node id if pytest provides none). Implements the resolved 2026-05-30 decision to extend the evaluator for per-node reporting.
 
   Files: `silverquillm/evaluator.py` (`_run_pytest_with_pythonpath` report-log capture + parser, `CardResult.test_nodes`, `_eval_sos_cards`).

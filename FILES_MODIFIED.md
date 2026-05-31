@@ -9,3 +9,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Tests
 - `tests/test_tests_hash.py` — 13 test cases verifying tests_hash correctness (SHA-256 match), determinism, change-on-edit, missing-file edge case, and additive-only preservation of existing CardResult fields
+
+## Item 2: Record per-test-node pass/fail outcomes in result.json
+
+### Implementation
+- `silverquillm/evaluator.py` — Added `test_nodes` field to `CardResult`, inline conftest-based report capture in `_run_pytest_with_pythonpath`, JSONL parser, nodeid normalization, and population in `_eval_sos_cards`
+
+### Tests
+- `tests/test_test_nodes.py` — 29 test cases verifying per-node capture (real pytest), nodeid normalization, count consistency, collection/setup error handling, JSON persistence round-trip, back-compat 4-tuple return, and _parse_report_jsonl unit tests

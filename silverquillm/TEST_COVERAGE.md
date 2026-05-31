@@ -1,4 +1,4 @@
-# Test Coverage — silverquillm/evaluator.py (Item 1 scope)
+# Test Coverage — silverquillm/evaluator.py (Items 1 & 2 scope)
 
 ## 1. Covered
 
@@ -27,9 +27,32 @@
 - **FDN path does not stamp `tests_hash`** — `test_tests_hash_gaps.py::TestTestsHashNotStampedForFDN`
   - FDN `CardResult` objects always have `tests_hash=""` (feature scoped to SOS only).
 
+- **`test_nodes` per-node capture** — `test_test_nodes.py` (29 tests)
+  - Real pass/fail capture via subprocess pytest, nodeid normalization, count consistency,
+    collection/setup error handling, JSON persistence, 4-tuple back-compat.
+
+- **Skipped/xfail NOT enumerated** — `test_test_nodes_gaps.py::TestSkippedXfailNotEnumerated`
+  - `@pytest.mark.skip` tests absent from `test_nodes`; do not inflate fail count.
+  - `@pytest.mark.xfail` tests absent from `test_nodes`; do not inflate fail count.
+  - Only the passing test appears when a file mixes pass + skip.
+
+- **`_parse_report_jsonl` unknown/non-pass-fail outcomes ignored** — `test_test_nodes_gaps.py::TestParseReportJsonlUnknownOutcomes`
+  - `skipped`, `xfail`, `xpass`, missing outcome, unknown strings all silently ignored.
+  - Malformed JSON lines silently skipped.
+
+- **`_normalize_nodeid` path-without-separator branch** — `test_test_nodes_gaps.py::TestNormalizeNodeidEdgeCases`
+  - Path-only string (no `::`) with `/` returns basename.
+  - Already-normalized IDs returned unchanged.
+  - Deep nested path + `::` correctly stripped.
+
+- **Guaranteed cleanup** — `test_test_nodes_gaps.py::TestCleanupAfterCapture`
+  - No leftover `conftest.py` after successful run.
+  - No leftover `conftest.py` after test failure.
+  - Pre-existing `conftest.py` restored to original content after capture.
+
 ## 2. Gaps (Not Yet Covered)
 
-None identified for the Item 1 feature scope.
+None identified for the Items 1 & 2 feature scope.
 
 ## 3. Edge Cases & Integration Gaps
 
@@ -41,3 +64,10 @@ None identified for the Item 1 feature scope.
 - [x] FDN path excluded from stamping
 - [x] `asdict` serialization round-trip
 - [x] Field presence and default
+- [x] Skipped tests not enumerated in `test_nodes`
+- [x] xfail tests not enumerated in `test_nodes`
+- [x] Unknown outcome values ignored by `_parse_report_jsonl`
+- [x] Malformed JSON lines ignored by `_parse_report_jsonl`
+- [x] `_normalize_nodeid` path-without-`::` branch
+- [x] Cleanup of injected conftest after success and failure
+- [x] Restore of pre-existing conftest after capture
