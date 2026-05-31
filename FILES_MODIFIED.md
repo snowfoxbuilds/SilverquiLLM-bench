@@ -51,3 +51,11 @@ Appended by each Implementer invocation after it writes its diff. One section pe
 
 ### Tests
 - `tests/test_harvest_summary.py` — 24 test cases: breadth = distinct failing images (dedup, pass exclusion), different tests_hash = separate groups, None vs real hash separation, descending ranking with tie-break determinism (card/test_node/None-last), rollup exclusion from breadth, pass-only groups included at breadth 0, load_rows round-trip with blank lines, CLI --summary integration (JSON sibling creation, ranked content, stdout report), missing JSONL non-zero exit, write_summary round-trip
+
+## Item 7: Author .claude/skills/test-investigation/SKILL.md
+
+### Implementation
+- `.claude/skills/test-investigation/SKILL.md` — New Claude Code native skill documenting combined investigation/discovery modes for the manual v1 Test Harvester
+
+### Tests
+- `tests/test_test_investigation_skill.py` — 21 structural tests verifying SKILL.md frontmatter (name, description, allowed-tools), dataset path reference, Released-tier refusal rule, both Investigation/Discovery modes documented, human-reviewable output constraints, and audited tests path references

@@ -102,6 +102,7 @@ Test root directory for the SilverquiLLM-bench project. Contains top-level test 
 | `test_smoke_lifecycle.py` | **Integration smoke test** — Container lifecycle smoke test using PID-tagged alpine image with teardown cleanup (skipped by default, requires `--run-integration`). |
 | `test_pytest_infra.py` | **Pytest infrastructure tests** — Integration marker registration, pytest-timeout configuration. |
 | `test_workspace.py` | **Workspace staging tests** — `stage_workspace` signature, workspace structure, card filtering, prompt generation. |
+| `test_test_investigation_skill.py` | **test-investigation skill structural tests** — Validates `.claude/skills/test-investigation/SKILL.md`: frontmatter keys (`name`, `description`, `allowed-tools`), both Investigation and Discovery mode headings, Released-tier refusal rule, `harvested_results.jsonl` dataset path, `benchmarks/sos/data/tests/audited/` reference, `TEST-SUITE.md` reference, and human-reviewable-report / no-auto-edit constraints. |
 
 ## Subdirectories
 

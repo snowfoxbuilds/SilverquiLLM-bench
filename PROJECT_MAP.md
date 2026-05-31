@@ -175,6 +175,7 @@ Agent Container
 | `tests/` | Active | Test root | Runner, card, replay, integration, and host-side validation tests |
 | `tests/integration/` | Active | Integration tests | Workspace staging integration tests |
 | `docs/` | Active | Specs and generated docs | Export target for Notion specs |
+| `.claude/skills/test-investigation/` | Active | Host-side Claude Code skill — test-investigation | Combined Investigation + Discovery workflow for triaging failing benchmark tests; reads `harvested_results.jsonl`, refuses on Released tier, outputs human-reviewable report only. Distinct from `docker/<image>/skills/` (agent-container skills). |
 
 ## Key Specs
 
