@@ -31,6 +31,11 @@ import pytest
 
 from card_impl import GreatHallOfTheBiblioplex
 
+from engine.abilities import (
+    AbilityError,
+    ActivatedAbilityInstance,
+    activate_ability,
+)
 from engine.card import Instant, Land, Sorcery, Creature
 from engine.events import SpellCastTriggeredEvent
 from engine.turn import _do_cleanup_step
@@ -69,12 +74,24 @@ def _make_hall_on_battlefield(mana_amount: int = 0):
     return game, hall, player
 
 
+def _animation_instance(hall, player):
+    """Build a canonical ActivatedAbilityInstance for the {5} animation ability."""
+    ab = hall.get_activated_abilities()[0]
+    return ActivatedAbilityInstance(
+        source=hall,
+        controller=player,
+        cost=ab.cost,
+        effect=ab.effect,
+        description=ab.description,
+    )
+
+
 def _animate_hall(game, hall, player):
-    """Give player enough mana and activate animation (ability_index=2)."""
+    """Give player enough mana and activate the {5} animation ability."""
     set_mana_pool(game, 0, {ManaType.COLORLESS: 5})
-    result = hall.activate(game, ability_index=2)
-    assert result is True, "Animation activation should succeed"
-    return result
+    activate_ability(game, player, _animation_instance(hall, player))
+    resolve_top(game)
+    assert CardType.CREATURE in hall.card_types, "Animation activation should succeed"
 
 
 def _fire_spell_cast_trigger(game, caster, spell):
@@ -123,8 +140,9 @@ class TestManaAbilities:
         game, hall, player = _make_hall_on_battlefield()
 
         assert player.mana_pool.total() == 0
-        result = hall.activate(game, ability_index=0)
-        assert result is True
+        ab = hall.get_mana_abilities()[0]
+        assert ab.cost(game, hall) is True
+        ab.mana_produced(game)
         assert hall.is_tapped is True
         assert player.mana_pool.get(ManaType.COLORLESS) >= 1
 
@@ -133,8 +151,9 @@ class TestManaAbilities:
         game, hall, player = _make_hall_on_battlefield()
         initial_life = player.life
 
-        result = hall.activate(game, ability_index=1)
-        assert result is True
+        ab = hall.get_mana_abilities()[1]
+        assert ab.cost(game, hall) is True
+        ab.mana_produced(game)
         assert hall.is_tapped is True
         assert player.life == initial_life - 1
         # Mana was added to the pool
@@ -228,10 +247,15 @@ class TestPersistentAnimation:
         _animate_hall(game, hall, player)
 
         assert CardType.CREATURE in hall.card_types
-        # Try to animate again with fresh mana
+        # Re-activating with fresh mana is a no-op: the {5} ability's effect is
+        # gated on "if this land isn't a creature", so nothing changes.
         set_mana_pool(game, 0, {ManaType.COLORLESS: 5})
-        result = hall.activate(game, ability_index=2)
-        assert result is False, "Should be no-op when already a creature"
+        activate_ability(game, player, _animation_instance(hall, player))
+        resolve_top(game)
+        # Still a single 2/4 creature — the re-animation did nothing.
+        assert CardType.CREATURE in hall.card_types
+        assert hall.power == 2
+        assert hall.toughness == 4
 
     def test_animation_cleared_on_leaves_play(self) -> None:
         """Animation state resets when card leaves the battlefield via move_to_zone.
@@ -255,10 +279,10 @@ class TestPersistentAnimation:
     def test_activation_cost_payment(self) -> None:
         """Animation requires 5 mana — fails with insufficient mana."""
         game, hall, player = _make_hall_on_battlefield()
-        # Only 4 mana available
+        # Only 4 mana available — cannot pay {5}, so activation is illegal.
         set_mana_pool(game, 0, {ManaType.COLORLESS: 4})
-        result = hall.activate(game, ability_index=2)
-        assert result is False
+        with pytest.raises(AbilityError):
+            activate_ability(game, player, _animation_instance(hall, player))
         assert CardType.CREATURE not in hall.card_types
 
     def test_animated_can_attack(self) -> None:

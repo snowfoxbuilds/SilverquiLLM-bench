@@ -78,14 +78,14 @@ class GreatHallOfTheBiblioplex(Land):
             ),
         ]
 
-    def _tap_cost(self, game: Any = None) -> bool:
+    def _tap_cost(self, game: Any = None, source: Any = None) -> bool:
         """Check/pay tap cost."""
         if self.is_tapped:
             return False
         self.is_tapped = True
         return True
 
-    def _tap_and_life_cost(self, game: Any = None) -> bool:
+    def _tap_and_life_cost(self, game: Any = None, source: Any = None) -> bool:
         """Check/pay tap + 1 life cost."""
         if self.is_tapped:
             return False
@@ -124,73 +124,39 @@ class GreatHallOfTheBiblioplex(Land):
     # (b) Persistent animation
     # ------------------------------------------------------------------
 
-    def activate(self, game: Any, ability_index: int = 0) -> bool:
-        """Activate one of the card's abilities.
+    def get_activated_abilities(self) -> list[ActivatedAbility]:
+        """Return the {5} animation ability.
 
-        ability_index:
-          0 — Mana ability: {T}: Add {C}
-          1 — Mana ability: {T}, Pay 1 life: Add any color (restricted)
-          2 — Animation: {5}: Become 2/4 Wizard creature
+        {5}: If this land isn't a creature, it becomes a 2/4 Wizard creature
+        with the prowess-like trigger.  It's still a land.  Persistent (no
+        end-of-turn cleanup); the effect is a no-op if the land is already a
+        creature.
         """
-        if ability_index == 0:
-            return self._activate_colorless_mana(game)
-        elif ability_index == 1:
-            return self._activate_restricted_mana(game)
-        elif ability_index == 2:
-            return self._activate_animation(game)
-        return False
 
-    def _activate_colorless_mana(self, game: Any) -> bool:
-        """Activate: {T}: Add {C}."""
-        if self.is_tapped:
-            return False
-        self.is_tapped = True
-        controller = getattr(self, "controller", None)
-        if controller is not None:
-            controller.mana_pool.add(ManaType.COLORLESS, 1)
-        return True
+        def _cost(game: Any, source: Any = None) -> bool:
+            controller = getattr(self, "controller", None)
+            if controller is None or controller.mana_pool.total() < 5:
+                return False
+            return bool(controller.mana_pool.pay(ManaCost(generic=5)))
 
-    def _activate_restricted_mana(self, game: Any) -> bool:
-        """Activate: {T}, Pay 1 life: Add one mana of any color (restricted)."""
-        if self.is_tapped:
-            return False
-        controller = getattr(self, "controller", None)
-        if controller is None or controller.life < 1:
-            return False
-        self.is_tapped = True
-        controller.life -= 1
-        controller.mana_pool.add_restricted(
-            ManaType.COLORLESS, 1,
-            restriction="instant_or_sorcery",
-            source=self,
-        )
-        return True
+        def _effect(game: Any) -> None:
+            # Gate: no-op if already a creature.
+            if CardType.CREATURE in self.card_types:
+                return
+            self._animate(game)
 
-    def _activate_animation(self, game: Any) -> bool:
-        """Activate: {5}: If not a creature, become 2/4 Wizard creature.
-
-        Persistent — no end-of-turn cleanup.
-        Gated — no-op if already a creature.
-        """
-        # Gate: no-op if already a creature
-        if CardType.CREATURE in self.card_types:
-            return False
-
-        # Pay {5} — check controller has 5 mana
-        controller = getattr(self, "controller", None)
-        if controller is None:
-            return False
-        if controller.mana_pool.total() < 5:
-            return False
-
-        # Pay 5 generic mana
-        paid = controller.mana_pool.pay(ManaCost(generic=5))
-        if not paid:
-            return False
-
-        # Animate
-        self._animate(game)
-        return True
+        return [
+            ActivatedAbility(
+                cost=_cost,
+                effect=_effect,
+                description=(
+                    "{5}: If this land isn't a creature, it becomes a 2/4 "
+                    "Wizard creature with \"Whenever you cast an instant or "
+                    "sorcery spell, this creature gets +1/+0 until end of "
+                    "turn.\" It's still a land."
+                ),
+            )
+        ]
 
     def _animate(self, game: Any) -> None:
         """Apply persistent animation — become 2/4 Wizard creature."""

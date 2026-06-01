@@ -37,9 +37,6 @@ class EmeritusOfTruceSwordsToPlowshares(Creature):
     creature, its controller gains life equal to its power.
     """
 
-    # The back-face cost — metadata for the alt-cost ability, not part of CMC.
-    _prepared_alt_cost: ManaCost = ManaCost(pips={ManaType.WHITE: 1})
-
     def __init__(self, **kwargs: Any) -> None:
         kwargs.setdefault("name", "Emeritus of Truce // Swords to Plowshares")
         # Front face mana cost: {1}{W}{W} → CMC 3
@@ -97,18 +94,26 @@ class EmeritusOfTruceSwordsToPlowshares(Creature):
     # ------------------------------------------------------------------
 
     def can_cast(self, game: GameState) -> bool:
-        """Override to allow casting; detect back-face mode from exile.
+        """Gate casting and detect front-face vs back-face mode.
 
-        When the card is in exile with prepared flag, this is a back-face
-        cast (Swords to Plowshares). Sets _casting_back_face so that
-        get_targets() returns creature targets instead of player targets.
+        From hand this is a normal front-face creature cast.  From exile the
+        card is castable *only* as the prepared back face (Swords to
+        Plowshares); a non-prepared card in exile cannot be cast at all.
+        Sets ``_casting_back_face`` so ``get_targets`` returns the right
+        target requirement.
         """
-        if self._prepared:
-            controller = self.controller or self.owner
-            if controller is not None:
-                exile = controller.zones[Zone.EXILE]
-                if exile.contains(self):
-                    self._casting_back_face = True
+        controller = self.controller or self.owner
+        in_exile = (
+            controller is not None
+            and controller.zones[Zone.EXILE].contains(self)
+        )
+        if in_exile:
+            if not self._prepared:
+                self._casting_back_face = False
+                return False
+            self._casting_back_face = True
+            return True
+        self._casting_back_face = False
         return True
 
     # ------------------------------------------------------------------
@@ -228,23 +233,3 @@ class EmeritusOfTruceSwordsToPlowshares(Creature):
             if opp_creatures > my_creatures:
                 self._prepared = True
                 return
-
-    # ------------------------------------------------------------------
-    # Prepared alternative cost from exile — casts back face
-    # ------------------------------------------------------------------
-
-    def can_cast_from_exile(self, game: GameState) -> bool:
-        """Return True if prepared and in exile — back face castable for {W}."""
-        if not self._prepared:
-            return False
-        controller = self.controller or self.owner
-        if controller is None:
-            return False
-        exile = controller.zones[Zone.EXILE]
-        return exile.contains(self)
-
-    def get_alternative_cost(self) -> ManaCost | None:
-        """Return the prepared alt cost ({W}) for back face, else None."""
-        if self._prepared:
-            return self._prepared_alt_cost
-        return None

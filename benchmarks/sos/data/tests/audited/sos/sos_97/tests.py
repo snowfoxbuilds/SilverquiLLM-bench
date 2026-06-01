@@ -190,8 +190,8 @@ class TestRalZarekGuestLecturer:
         )
         set_board_state(game, 1, hand=[discard_target])
 
-        # Explicitly set the target players for the -1 ability
-        ral._resolve_targets = [opponent]
+        # Canonical targets live on the source card's chosen_targets list.
+        ral.chosen_targets = [opponent]
 
         ability = _make_loyalty_instance(ral, player, 1)
         activate_ability(game, player, ability)
@@ -220,8 +220,8 @@ class TestRalZarekGuestLecturer:
         zombie.mana_cost = ManaCost.parse("{1}{B}")  # CMC 2
         set_graveyard(game, 0, [zombie])
 
-        # Explicitly set the target for the -2 ability
-        ral._resolve_target = zombie
+        # Canonical targets live on the source card's chosen_targets list.
+        ral.chosen_targets = [zombie]
 
         ability = _make_loyalty_instance(ral, player, 2)
         activate_ability(game, player, ability)
@@ -253,8 +253,8 @@ class TestRalZarekGuestLecturer:
         # Ensure opponent has skip_turns attribute
         opponent.skip_turns = 0
 
-        # Explicitly set the target opponent for the -7 ability
-        ral._resolve_target = opponent
+        # Canonical targets live on the source card's chosen_targets list.
+        ral.chosen_targets = [opponent]
 
         ability = _make_loyalty_instance(ral, player, 3)
         activate_ability(game, player, ability)
@@ -292,7 +292,7 @@ class TestRalZarekGuestLecturer:
         """
         game, ral, player, _opp = _setup_pw_on_battlefield(starting_loyalty=1)
 
-        ral._resolve_targets = []  # no targets needed for this test path
+        ral.chosen_targets = []  # no targets needed for this test path
         ability = _make_loyalty_instance(ral, player, 1)
         activate_ability(game, player, ability)
         resolve_top(game)

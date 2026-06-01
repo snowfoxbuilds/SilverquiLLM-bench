@@ -84,24 +84,38 @@ def _fund_for(player, cost: ManaCost) -> None:
 
 
 def _enter_main_phase_for(game, player) -> None:
-    """Simulate the beginning of *player*'s next main phase by scanning
-    the trigger registry for delayed main-phase triggers controlled by
-    *player* and invoking their effects directly.
+    """Simulate the beginning of *player*'s next main phase.
 
-    This bypasses the oracle-only ``BeginningOfMainPhaseEvent`` and works
-    against any engine that exposes ``trigger_manager._triggers``.  The
-    card-side trigger callback is responsible for its own one-shot
-    bookkeeping (e.g. a ``fired`` sentinel) so calling it again on a
-    subsequent main phase is harmless.
+    Fires each registered beginning-of-main-phase event — read from the
+    public trigger registry, so no engine-internal event class is named —
+    through the canonical dispatch path, then resolves the resulting stack.
+    The card-side trigger is responsible for its own one-shot bookkeeping.
     """
     game.active_player_index = game.players.index(player)
-    # Snapshot triggers — effects may mutate the registry via unregister().
-    for trigger in list(game.trigger_manager._triggers):
-        if "MainPhase" not in trigger.event_type.__name__:
-            continue
-        if trigger.controller is not player:
-            continue
-        trigger.effect(game)
+    event_types = {
+        t.event_type
+        for t in game.trigger_manager.get_triggers()
+        if "MainPhase" in t.event_type.__name__ and t.controller is player
+    }
+    for event_type in event_types:
+        game.trigger_manager.fire_event(game, event_type(player=player))
+    while not game.stack.is_empty():
+        resolve_top(game)
+
+
+def _remove_from_stack(game, obj) -> None:
+    """Remove a specific object from the stack using only public stack
+    operations (simulates the object being countered/removed before it
+    resolves): lift everything above it off, drop it, restore the rest.
+    """
+    above = []
+    while not game.stack.is_empty():
+        top = game.stack.pop()
+        if top is obj:
+            break
+        above.append(top)
+    for o in reversed(above):
+        game.stack.push(o)
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +240,7 @@ class TestCounter:
         engine_cast_spell(game, p1, mana_sculpt)
 
         # Remove target before resolution (simulates a second counterspell)
-        game.stack._items.remove(target_stack_obj)
+        _remove_from_stack(game, target_stack_obj)
 
         # Drain p1's mana pool so we can detect any refund
         p1.mana_pool.empty()
@@ -329,7 +343,7 @@ class TestRefund:
         engine_cast_spell(game, p1, mana_sculpt)
 
         # Target leaves the stack before Mana Sculpt resolves
-        game.stack._items.remove(target_stack_obj)
+        _remove_from_stack(game, target_stack_obj)
         p1.mana_pool.empty()
         resolve_top(game)
 

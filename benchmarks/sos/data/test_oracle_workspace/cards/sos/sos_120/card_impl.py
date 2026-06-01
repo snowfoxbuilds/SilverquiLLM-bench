@@ -135,10 +135,10 @@ class ImprovisationCapstone(Sorcery):
     # Paradigm — recurring trigger from exile
     # ------------------------------------------------------------------
 
-    def register_paradigm_trigger(self, game: GameState) -> None:
-        """Register the recurring trigger: at beginning of controller's first
-        main phase, may cast a copy from exile without paying mana cost.
-        Persists until this card moves zones (leaves exile).
+    def register_triggers(self, game: GameState) -> None:
+        """Register the recurring Paradigm trigger: at the beginning of the
+        controller's first main phase, may cast a copy from exile without
+        paying its mana cost. Persists until this card leaves exile.
         """
         controller = self.controller
 

@@ -100,8 +100,9 @@ class RalZarekGuestLecturer(Planeswalker):
             if controller is None:
                 return
 
-            # Retrieve targets stored on the source during activation
-            targets = getattr(pw, '_resolve_targets', None) or []
+            # Targets chosen during activation live on the source's
+            # canonical ``chosen_targets`` list.
+            targets = list(getattr(pw, 'chosen_targets', None) or [])
             if not targets:
                 # Fallback: target all opponents
                 for p in game.players:
@@ -132,8 +133,10 @@ class RalZarekGuestLecturer(Planeswalker):
             if controller is None:
                 return
 
-            # Retrieve target stored on the source during activation
-            target = getattr(pw, '_resolve_target', None)
+            # Target chosen during activation lives on the source's
+            # canonical ``chosen_targets`` list.
+            chosen = getattr(pw, 'chosen_targets', None) or []
+            target = chosen[0] if chosen else None
             if target is None:
                 # Fallback: pick first valid target from graveyard
                 gy = controller.zones[Zone.GRAVEYARD]
@@ -163,8 +166,10 @@ class RalZarekGuestLecturer(Planeswalker):
             if controller is None:
                 return
 
-            # Retrieve target stored on the source during activation
-            target_opponent = getattr(pw, '_resolve_target', None)
+            # Target chosen during activation lives on the source's
+            # canonical ``chosen_targets`` list.
+            chosen = getattr(pw, 'chosen_targets', None) or []
+            target_opponent = chosen[0] if chosen else None
             if target_opponent is None:
                 # Fallback: first opponent
                 for p in game.players:

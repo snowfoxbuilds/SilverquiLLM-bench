@@ -21,6 +21,7 @@ from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Zone
 from test_utils import (
     card_colors,
     create_game,
+    resolve_top,
     set_library_top,
     set_board_state,
     advance_to_phase,
@@ -327,32 +328,28 @@ class TestParadigmRecurringCast:
         else:
             player.zones[Zone.GRAVEYARD].add(card)
 
-        # Register paradigm recurring trigger (done by card after exiling)
-        card.register_paradigm_trigger(game)
+        # Register the recurring Paradigm trigger via the canonical hook.
+        card.register_triggers(game)
 
-        # Simulate 3 turn cycles of first main phase by scanning the
-        # trigger registry for paradigm triggers controlled by *player*
-        # and invoking their effect directly. This avoids depending on
-        # the oracle-only BeginningOfMainPhaseEvent class.
-        cast_count = 0
+        # Drive three of the controller's first main phases. We fire whichever
+        # event the card's own trigger listens for — read from the public
+        # trigger registration — so the test never names an engine-internal
+        # event class, then resolve the stack normally.
+        registered = game.trigger_manager.get_triggers_for_source(card)
+        assert registered, "Paradigm should register a recurring trigger from exile"
+        main_phase_event = registered[0].event_type
+
         for _turn in range(3):
-            for trigger in list(game.trigger_manager._triggers):
-                if trigger.source is not card:
-                    continue
-                if trigger.controller is not player:
-                    continue
-                # Filter to "main phase"-style triggers if event_type advertises it.
-                evt_name = trigger.event_type.__name__
-                if "MainPhase" not in evt_name and "Phase" not in evt_name:
-                    continue
-                trigger.effect(game)
-                cast_count += 1
+            game.trigger_manager.fire_event(game, main_phase_event(player=player))
+            while not game.stack.is_empty():
+                resolve_top(game)
 
-        assert cast_count == 3, f"Expected 3 recurring casts, got {cast_count}"
-
-        # Card should still be in exile (copies are cast, not the original)
-        exile = player.zones[Zone.EXILE].get_all()
-        assert card in exile
+        # Observable outcome: three free copies were cast and resolved into the
+        # graveyard, while the original spell stays in exile.
+        gy = player.zones[Zone.GRAVEYARD].get_all()
+        copies = [c for c in gy if getattr(c, "name", None) == "Improvisation Capstone"]
+        assert len(copies) == 3, f"Expected 3 recurring copies cast, got {len(copies)}"
+        assert card in player.zones[Zone.EXILE].get_all()
 
 
 class TestParadigmOfferCanBeDeclined:
@@ -409,23 +406,21 @@ class TestParadigmOfferCanBeDeclined:
         else:
             player.zones[Zone.GRAVEYARD].add(card)
 
-        card.register_paradigm_trigger(game)
+        card.register_triggers(game)
 
-        # Invoke the paradigm trigger effect directly (player declines via
-        # scripted False). No assertion on stack — the trigger may push or
-        # not push depending on impl; what matters is that nothing got cast.
-        for trigger in list(game.trigger_manager._triggers):
-            if trigger.source is not card:
-                continue
-            if trigger.controller is not player:
-                continue
-            trigger.effect(game)
+        # Fire the controller's first main phase (event type read from the
+        # card's own trigger registration). The player declines the recurring
+        # cast (scripted False), so no copy is created.
+        registered = game.trigger_manager.get_triggers_for_source(card)
+        assert registered, "Paradigm should register a recurring trigger from exile"
+        main_phase_event = registered[0].event_type
+        game.trigger_manager.fire_event(game, main_phase_event(player=player))
+        while not game.stack.is_empty():
+            resolve_top(game)
 
-        # Card-side observable: the original capstone is still in exile
-        # and no copy of it ended up on the battlefield (decline path).
-        exile = player.zones[Zone.EXILE].get_all()
-        assert card in exile
-        bf = player.zones[Zone.BATTLEFIELD].get_all()
-        assert not any(
-            getattr(c, "name", None) == "Improvisation Capstone" for c in bf
-        )
+        # Observable: the original stays in exile and no copy was cast — neither
+        # to the battlefield nor (for a resolved sorcery copy) the graveyard.
+        assert card in player.zones[Zone.EXILE].get_all()
+        for zone in (Zone.BATTLEFIELD, Zone.GRAVEYARD):
+            names = [getattr(c, "name", None) for c in player.zones[zone].get_all()]
+            assert "Improvisation Capstone" not in names
