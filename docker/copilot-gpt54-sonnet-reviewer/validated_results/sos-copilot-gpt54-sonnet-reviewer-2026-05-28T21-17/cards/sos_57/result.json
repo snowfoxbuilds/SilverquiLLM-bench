@@ -4,5 +4,16 @@
   "tests_passed": 0,
   "tests_failed": 1,
   "tests_total": 1,
-  "pass_rate": 0.0
+  "pass_rate": 0.0,
+  "errors": [
+    "ERROR ../../../../tmp/eval_sos_5p7cvrqy/tests.py - ValueError: <flag 'Keyword..."
+  ],
+  "skipped": false,
+  "test_nodes": [
+    {
+      "test_node": "tests.py",
+      "outcome": "fail"
+    }
+  ],
+  "tests_hash": "4d413364affaa9f9e3268263d1bab6f7c85a002dfe1f00fa9931f11bd772a3e5"
 }

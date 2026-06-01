@@ -1,7 +1,7 @@
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dxkxcti1/tests.py::TestTargeting::test_get_targets_returns_stack_spells"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dxkxcti1/tests.py::TestCounter::test_counters_via_real_cast"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dxkxcti1/tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dxkxcti1/tests.py::TestRefund::test_refund_amount_equals_mana_spent"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dxkxcti1/tests.py::TestRefund::test_no_refund_on_opponent_main_phase"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dxkxcti1/tests.py::TestRefund::test_refund_fires_only_once"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dxkxcti1/tests.py::TestRefund::test_refund_locked_in_when_wizard_leaves_before_next_main"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9sojf2th/tests.py::TestTargeting::test_get_targets_returns_stack_spells"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9sojf2th/tests.py::TestCounter::test_counters_via_real_cast"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9sojf2th/tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9sojf2th/tests.py::TestRefund::test_refund_amount_equals_mana_spent"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9sojf2th/tests.py::TestRefund::test_no_refund_on_opponent_main_phase"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9sojf2th/tests.py::TestRefund::test_refund_fires_only_once"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9sojf2th/tests.py::TestRefund::test_refund_locked_in_when_wizard_leaves_before_next_main"}

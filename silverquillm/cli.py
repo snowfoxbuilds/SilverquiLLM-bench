@@ -469,7 +469,19 @@ def _evaluate_results(run_dir: Path, card_filter: list[str] | None = None) -> No
             "tests_failed": card_result.tests_failed,
             "tests_total": card_result.tests_total,
             "pass_rate": card_result.pass_rate,
+            "errors": card_result.errors,
+            "skipped": card_result.skipped,
         }
+        # Emit the modern per-node schema only when the card actually executed
+        # tests. Skipped / pre-pytest-error cards have no nodes; omitting
+        # test_nodes routes them through the harvester's legacy path, which
+        # still yields a visible rollup (plus a <collection-error> row derived
+        # from `errors`). Always-writing an empty test_nodes would instead make
+        # the harvester's modern path emit ZERO rows — the card would silently
+        # vanish from the harvest.
+        if card_result.test_nodes:
+            result_data["test_nodes"] = card_result.test_nodes
+            result_data["tests_hash"] = card_result.tests_hash
         (card_dir / "result.json").write_text(
             json.dumps(result_data, indent=2) + "\n", encoding="utf-8"
         )

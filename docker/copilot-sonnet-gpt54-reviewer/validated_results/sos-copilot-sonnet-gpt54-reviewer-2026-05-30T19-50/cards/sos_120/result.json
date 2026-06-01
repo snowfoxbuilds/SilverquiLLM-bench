@@ -4,5 +4,51 @@
   "tests_passed": 5,
   "tests_failed": 4,
   "tests_total": 9,
-  "pass_rate": 0.5555555555555556
+  "pass_rate": 0.5555555555555556,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_97sskqt1/tests.py::TestCastChosenExiledCardsForFree::test_cast_exiled_card_free",
+    "FAILED ../../../../tmp/eval_sos_97sskqt1/tests.py::TestParadigmExilesSelf::test_paradigm_exiles_self_on_resolution",
+    "FAILED ../../../../tmp/eval_sos_97sskqt1/tests.py::TestParadigmRecurringCast::test_recurring_cast_across_3_turns",
+    "FAILED ../../../../tmp/eval_sos_97sskqt1/tests.py::TestParadigmOfferCanBeDeclined::test_paradigm_offer_declined"
+  ],
+  "skipped": false,
+  "test_nodes": [
+    {
+      "test_node": "tests.py::TestIdentity::test_identity",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestExileFromLibraryUntilThreshold::test_exile_until_mv_sum_ge_4",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestDoesNotTargetOpponentCreatures::test_no_targets",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestDoesNotTargetOpponentCreatures::test_resolution_does_not_affect_opponent_board",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCastChosenExiledCardsForFree::test_cast_exiled_card_free",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestCastChosenExiledCardsForFree::test_decline_cast_exiled_card",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestParadigmExilesSelf::test_paradigm_exiles_self_on_resolution",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestParadigmRecurringCast::test_recurring_cast_across_3_turns",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestParadigmOfferCanBeDeclined::test_paradigm_offer_declined",
+      "outcome": "fail"
+    }
+  ],
+  "tests_hash": "bde8803648b674d76c2c2c228446dc4737ea32d69600d06fa565edbf716590a9"
 }

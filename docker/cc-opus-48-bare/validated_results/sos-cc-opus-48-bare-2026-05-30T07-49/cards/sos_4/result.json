@@ -4,5 +4,52 @@
   "tests_passed": 9,
   "tests_failed": 1,
   "tests_total": 10,
-  "pass_rate": 0.9
+  "pass_rate": 0.9,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_0ug4o1o1/tests.py::TestFizzleKeepsLegalEffects::test_damage_target_illegal_draw_and_life_still_resolve"
+  ],
+  "skipped": false,
+  "test_nodes": [
+    {
+      "test_node": "tests.py::TestIdentity::test_is_sorcery_subclass",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestIdentity::test_card_type_sorcery",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestIdentity::test_mana_cost_cmc_6",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestIdentity::test_colorless_identity",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestIdentity::test_name",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestIdentity::test_no_converge_keyword",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestOneColorResolution::test_one_color_draw_damage_life",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestFiveColorResolution::test_five_color_full_effect",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestZeroColorDiscriminator::test_zero_colors_no_effect",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestFizzleKeepsLegalEffects::test_damage_target_illegal_draw_and_life_still_resolve",
+      "outcome": "fail"
+    }
+  ],
+  "tests_hash": "741d0e84fa90a1e742662aafe554fd5c0c18914b40da45fb3b9922f151758400"
 }

@@ -1,4 +1,4 @@
-{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ynu475nz/tests.py::TestExileFromLibraryUntilThreshold::test_exile_until_mv_sum_ge_4"}
-{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ynu475nz/tests.py::TestCastChosenExiledCardsForFree::test_cast_exiled_card_free"}
-{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ynu475nz/tests.py::TestParadigmRecurringCast::test_recurring_cast_across_3_turns"}
-{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ynu475nz/tests.py::TestParadigmOfferCanBeDeclined::test_paradigm_offer_declined"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7k9nb71e/tests.py::TestExileFromLibraryUntilThreshold::test_exile_until_mv_sum_ge_4"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7k9nb71e/tests.py::TestCastChosenExiledCardsForFree::test_cast_exiled_card_free"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7k9nb71e/tests.py::TestParadigmRecurringCast::test_recurring_cast_across_3_turns"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7k9nb71e/tests.py::TestParadigmOfferCanBeDeclined::test_paradigm_offer_declined"}

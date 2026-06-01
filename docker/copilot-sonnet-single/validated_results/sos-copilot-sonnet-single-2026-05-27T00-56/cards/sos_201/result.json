@@ -4,5 +4,64 @@
   "tests_passed": 7,
   "tests_failed": 5,
   "tests_total": 12,
-  "pass_rate": 0.5833333333333334
+  "pass_rate": 0.5833333333333334,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_hcfolkix/tests.py::TestMiracleGrantToInstantsAndSorceries::test_miracle_granted_to_instants_and_sorceries_not_creatures",
+    "FAILED ../../../../tmp/eval_sos_hcfolkix/tests.py::TestGrantRemovedWhenLoreholdLeaves::test_miracle_grant_removed_on_leave",
+    "FAILED ../../../../tmp/eval_sos_hcfolkix/tests.py::TestMiracleCastOnFirstDraw::test_miracle_cast_on_first_draw",
+    "FAILED ../../../../tmp/eval_sos_hcfolkix/tests.py::TestMultipleInstantsGrantedMiracle::test_multiple_cards_all_get_miracle_cost",
+    "FAILED ../../../../tmp/eval_sos_hcfolkix/tests.py::TestMiracleGrantAfterCardDrawnIntoHand::test_card_drawn_into_hand_gets_miracle_cost_on_next_apply"
+  ],
+  "skipped": false,
+  "test_nodes": [
+    {
+      "test_node": "tests.py::TestIdentity::test_identity",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestMiracleGrantToInstantsAndSorceries::test_miracle_granted_to_instants_and_sorceries_not_creatures",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestGrantRemovedWhenLoreholdLeaves::test_miracle_grant_removed_on_leave",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestMiracleCastOnFirstDraw::test_miracle_cast_on_first_draw",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestNoMiracleOnSubsequentDraws::test_no_miracle_on_second_draw",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestOpponentUpkeepDiscardDeclined::test_discard_to_draw_declined",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestOpponentUpkeepDiscardAccepted::test_discard_to_draw_accepted",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestNoTriggerOnControllerUpkeep::test_no_trigger_on_own_upkeep",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestMiracleDeclined::test_miracle_offer_declined_card_stays_in_hand",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestMultipleInstantsGrantedMiracle::test_multiple_cards_all_get_miracle_cost",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestCreatureDrawnNoMiracle::test_creature_first_draw_no_miracle_trigger",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestMiracleGrantAfterCardDrawnIntoHand::test_card_drawn_into_hand_gets_miracle_cost_on_next_apply",
+      "outcome": "fail"
+    }
+  ],
+  "tests_hash": "d9f2ee477267a6d6a1466ae68c9c2acb0d3c712c01dd1674b21e6f0161778bea"
 }

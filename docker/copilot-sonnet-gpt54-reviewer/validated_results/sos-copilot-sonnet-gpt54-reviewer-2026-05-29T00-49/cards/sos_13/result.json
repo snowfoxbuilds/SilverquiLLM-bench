@@ -4,5 +4,60 @@
   "tests_passed": 1,
   "tests_failed": 9,
   "tests_total": 10,
-  "pass_rate": 0.1
+  "pass_rate": 0.1,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_xjgply32/tests.py::TestIdentity::test_identity",
+    "FAILED ../../../../tmp/eval_sos_xjgply32/tests.py::TestETBTokenCreation::test_etb_token_creation",
+    "FAILED ../../../../tmp/eval_sos_xjgply32/tests.py::TestTokenCharacteristics::test_token_characteristics",
+    "FAILED ../../../../tmp/eval_sos_xjgply32/tests.py::TestPreparedCastFromExile::test_prepared_cast_from_exile",
+    "FAILED ../../../../tmp/eval_sos_xjgply32/tests.py::TestPreparedRejectedWithoutFlag::test_prepared_rejected_without_flag",
+    "FAILED ../../../../tmp/eval_sos_xjgply32/tests.py::TestPreparedConditionEdgeCases::test_not_prepared_when_creatures_equal",
+    "FAILED ../../../../tmp/eval_sos_xjgply32/tests.py::TestPreparedConditionEdgeCases::test_prepared_when_opponent_has_more",
+    "FAILED ../../../../tmp/eval_sos_xjgply32/tests.py::TestPreparedFlagLifecycle::test_prepared_consumed_after_alt_cast",
+    "FAILED ../../../../tmp/eval_sos_xjgply32/tests.py::TestTokenSummoningSickness::test_token_is_summoning_sick"
+  ],
+  "skipped": false,
+  "test_nodes": [
+    {
+      "test_node": "tests.py::TestIdentity::test_identity",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestETBTokenCreation::test_etb_token_creation",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestTokenCharacteristics::test_token_characteristics",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestPreparedCastFromExile::test_prepared_cast_from_exile",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestPreparedRejectedWithoutFlag::test_prepared_rejected_without_flag",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestBackHalfCostNotInCMC::test_back_half_cost_not_in_cmc",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestPreparedConditionEdgeCases::test_not_prepared_when_creatures_equal",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestPreparedConditionEdgeCases::test_prepared_when_opponent_has_more",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestPreparedFlagLifecycle::test_prepared_consumed_after_alt_cast",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestTokenSummoningSickness::test_token_is_summoning_sick",
+      "outcome": "fail"
+    }
+  ],
+  "tests_hash": "041089b2ed20945cb3a0b5128a6bffbcac858cc3454797ea0d54551f47af699a"
 }

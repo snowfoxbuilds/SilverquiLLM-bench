@@ -4,5 +4,60 @@
   "tests_passed": 1,
   "tests_failed": 9,
   "tests_total": 10,
-  "pass_rate": 0.1
+  "pass_rate": 0.1,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_v0qysle3/tests.py::TestRalZarekGuestLecturer::test_loyalty_ability_structure",
+    "FAILED ../../../../tmp/eval_sos_v0qysle3/tests.py::TestRalZarekGuestLecturer::test_plus_one_effect_both_to_graveyard",
+    "FAILED ../../../../tmp/eval_sos_v0qysle3/tests.py::TestRalZarekGuestLecturer::test_plus_one_effect_one_on_top",
+    "FAILED ../../../../tmp/eval_sos_v0qysle3/tests.py::TestRalZarekGuestLecturer::test_minus_one_effect",
+    "FAILED ../../../../tmp/eval_sos_v0qysle3/tests.py::TestRalZarekGuestLecturer::test_minus_two_effect",
+    "FAILED ../../../../tmp/eval_sos_v0qysle3/tests.py::TestRalZarekGuestLecturer::test_ultimate_effect",
+    "FAILED ../../../../tmp/eval_sos_v0qysle3/tests.py::TestRalZarekGuestLecturer::test_insufficient_loyalty_rejection",
+    "FAILED ../../../../tmp/eval_sos_v0qysle3/tests.py::TestRalZarekGuestLecturer::test_dies_at_zero_loyalty",
+    "FAILED ../../../../tmp/eval_sos_v0qysle3/tests.py::TestRalZarekGuestLecturer::test_one_ability_per_turn"
+  ],
+  "skipped": false,
+  "test_nodes": [
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_identity",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_loyalty_ability_structure",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_plus_one_effect_both_to_graveyard",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_plus_one_effect_one_on_top",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_minus_one_effect",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_minus_two_effect",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_ultimate_effect",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_insufficient_loyalty_rejection",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_dies_at_zero_loyalty",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_one_ability_per_turn",
+      "outcome": "fail"
+    }
+  ],
+  "tests_hash": "50b39f075ddd5a03758c3be0ef6907d0b5e4f3751a58a0e7fe373219b4cdfbb4"
 }

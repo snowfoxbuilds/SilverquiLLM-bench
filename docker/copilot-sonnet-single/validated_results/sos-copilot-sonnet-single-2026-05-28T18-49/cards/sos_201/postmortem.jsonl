@@ -1,6 +1,6 @@
-{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7w4a0uy2/tests.py::TestMiracleGrantToInstantsAndSorceries::test_miracle_granted_to_instants_and_sorceries_not_creatures"}
-{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7w4a0uy2/tests.py::TestGrantRemovedWhenLoreholdLeaves::test_miracle_grant_removed_on_leave"}
-{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7w4a0uy2/tests.py::TestNoMiracleOnSubsequentDraws::test_no_miracle_on_second_draw"}
-{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7w4a0uy2/tests.py::TestMultipleInstantsGrantedMiracle::test_multiple_cards_all_get_miracle_cost"}
-{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7w4a0uy2/tests.py::TestCreatureDrawnNoMiracle::test_creature_first_draw_no_miracle_trigger"}
-{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7w4a0uy2/tests.py::TestMiracleGrantAfterCardDrawnIntoHand::test_card_drawn_into_hand_gets_miracle_cost_on_next_apply"}
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0h9yz0vo/tests.py::TestMiracleGrantToInstantsAndSorceries::test_miracle_granted_to_instants_and_sorceries_not_creatures"}
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0h9yz0vo/tests.py::TestGrantRemovedWhenLoreholdLeaves::test_miracle_grant_removed_on_leave"}
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0h9yz0vo/tests.py::TestNoMiracleOnSubsequentDraws::test_no_miracle_on_second_draw"}
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0h9yz0vo/tests.py::TestMultipleInstantsGrantedMiracle::test_multiple_cards_all_get_miracle_cost"}
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0h9yz0vo/tests.py::TestCreatureDrawnNoMiracle::test_creature_first_draw_no_miracle_trigger"}
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0h9yz0vo/tests.py::TestMiracleGrantAfterCardDrawnIntoHand::test_card_drawn_into_hand_gets_miracle_cost_on_next_apply"}

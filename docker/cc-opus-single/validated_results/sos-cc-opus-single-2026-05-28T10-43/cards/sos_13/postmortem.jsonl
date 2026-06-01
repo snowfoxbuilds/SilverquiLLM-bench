@@ -1,4 +1,4 @@
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zwexzpln/tests.py::TestTokenCharacteristics::test_token_characteristics"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zwexzpln/tests.py::TestPreparedCastFromExile::test_prepared_cast_from_exile"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zwexzpln/tests.py::TestPreparedConditionEdgeCases::test_prepared_when_opponent_has_more"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zwexzpln/tests.py::TestPreparedFlagLifecycle::test_prepared_consumed_after_alt_cast"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ct7s5vha/tests.py::TestTokenCharacteristics::test_token_characteristics"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ct7s5vha/tests.py::TestPreparedCastFromExile::test_prepared_cast_from_exile"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ct7s5vha/tests.py::TestPreparedConditionEdgeCases::test_prepared_when_opponent_has_more"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ct7s5vha/tests.py::TestPreparedFlagLifecycle::test_prepared_consumed_after_alt_cast"}

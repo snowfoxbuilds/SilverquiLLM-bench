@@ -1,8 +1,8 @@
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f0c8gcfw/tests.py::TestETBTokenCreation::test_etb_token_creation"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f0c8gcfw/tests.py::TestTokenCharacteristics::test_token_characteristics"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f0c8gcfw/tests.py::TestPreparedCastFromExile::test_prepared_cast_from_exile"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f0c8gcfw/tests.py::TestPreparedRejectedWithoutFlag::test_prepared_rejected_without_flag"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f0c8gcfw/tests.py::TestPreparedConditionEdgeCases::test_not_prepared_when_creatures_equal"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f0c8gcfw/tests.py::TestPreparedConditionEdgeCases::test_prepared_when_opponent_has_more"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f0c8gcfw/tests.py::TestPreparedFlagLifecycle::test_prepared_consumed_after_alt_cast"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f0c8gcfw/tests.py::TestTokenSummoningSickness::test_token_is_summoning_sick"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_la0koy0w/tests.py::TestETBTokenCreation::test_etb_token_creation"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_la0koy0w/tests.py::TestTokenCharacteristics::test_token_characteristics"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_la0koy0w/tests.py::TestPreparedCastFromExile::test_prepared_cast_from_exile"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_la0koy0w/tests.py::TestPreparedRejectedWithoutFlag::test_prepared_rejected_without_flag"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_la0koy0w/tests.py::TestPreparedConditionEdgeCases::test_not_prepared_when_creatures_equal"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_la0koy0w/tests.py::TestPreparedConditionEdgeCases::test_prepared_when_opponent_has_more"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_la0koy0w/tests.py::TestPreparedFlagLifecycle::test_prepared_consumed_after_alt_cast"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_la0koy0w/tests.py::TestTokenSummoningSickness::test_token_is_summoning_sick"}

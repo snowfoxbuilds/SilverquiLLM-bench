@@ -4,5 +4,73 @@
   "tests_passed": 3,
   "tests_failed": 10,
   "tests_total": 13,
-  "pass_rate": 0.23076923076923078
+  "pass_rate": 0.23076923076923078,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_3nnfvncx/tests.py::TestTargeting::test_get_targets_returns_stack_spells",
+    "FAILED ../../../../tmp/eval_sos_3nnfvncx/tests.py::TestTargeting::test_get_targets_excludes_permanents",
+    "FAILED ../../../../tmp/eval_sos_3nnfvncx/tests.py::TestTargeting::test_get_targets_excludes_empty_stack",
+    "FAILED ../../../../tmp/eval_sos_3nnfvncx/tests.py::TestCounter::test_fizzle_when_target_removed",
+    "FAILED ../../../../tmp/eval_sos_3nnfvncx/tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase",
+    "FAILED ../../../../tmp/eval_sos_3nnfvncx/tests.py::TestRefund::test_refund_amount_equals_mana_spent",
+    "FAILED ../../../../tmp/eval_sos_3nnfvncx/tests.py::TestRefund::test_no_refund_when_fizzled",
+    "FAILED ../../../../tmp/eval_sos_3nnfvncx/tests.py::TestRefund::test_no_refund_on_opponent_main_phase",
+    "FAILED ../../../../tmp/eval_sos_3nnfvncx/tests.py::TestRefund::test_refund_fires_only_once",
+    "FAILED ../../../../tmp/eval_sos_3nnfvncx/tests.py::TestRefund::test_refund_locked_in_when_wizard_leaves_before_next_main"
+  ],
+  "skipped": false,
+  "test_nodes": [
+    {
+      "test_node": "tests.py::TestIdentity::test_identity",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestTargeting::test_get_targets_returns_stack_spells",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestTargeting::test_get_targets_excludes_permanents",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestTargeting::test_get_targets_excludes_empty_stack",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestCounter::test_counters_via_real_cast",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCounter::test_fizzle_when_target_removed",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRefund::test_refund_amount_equals_mana_spent",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRefund::test_no_refund_without_wizard",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestRefund::test_no_refund_when_fizzled",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRefund::test_no_refund_on_opponent_main_phase",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRefund::test_refund_fires_only_once",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRefund::test_refund_locked_in_when_wizard_leaves_before_next_main",
+      "outcome": "fail"
+    }
+  ],
+  "tests_hash": "4d413364affaa9f9e3268263d1bab6f7c85a002dfe1f00fa9931f11bd772a3e5"
 }

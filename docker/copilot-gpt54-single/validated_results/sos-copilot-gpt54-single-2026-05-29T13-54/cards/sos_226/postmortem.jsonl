@@ -1,3 +1,3 @@
-{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6020s49r/tests.py::TestCasualtyOfferedOnControllerInstant::test_casualty_offered_on_instant"}
-{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6020s49r/tests.py::TestCasualtyWithSacCopiesSpell::test_casualty_sac_copies_spell"}
-{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6020s49r/tests.py::TestNoLegalSacrificeDeclined::test_no_legal_sacrifice"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__97gs942/tests.py::TestCasualtyOfferedOnControllerInstant::test_casualty_offered_on_instant"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__97gs942/tests.py::TestCasualtyWithSacCopiesSpell::test_casualty_sac_copies_spell"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__97gs942/tests.py::TestNoLegalSacrificeDeclined::test_no_legal_sacrifice"}

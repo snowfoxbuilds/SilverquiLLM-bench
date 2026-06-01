@@ -1,3 +1,3 @@
-{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yid7kknn/tests.py::TestManaAbilities::test_mana_adds_any_color"}
-{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yid7kknn/tests.py::TestPersistentAnimation::test_animation_cleared_on_leaves_play"}
-{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yid7kknn/tests.py::TestSpellCastTrigger::test_trigger_inactive_when_unanimated"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_amqtfayb/tests.py::TestManaAbilities::test_mana_adds_any_color"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_amqtfayb/tests.py::TestPersistentAnimation::test_animation_cleared_on_leaves_play"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_amqtfayb/tests.py::TestSpellCastTrigger::test_trigger_inactive_when_unanimated"}

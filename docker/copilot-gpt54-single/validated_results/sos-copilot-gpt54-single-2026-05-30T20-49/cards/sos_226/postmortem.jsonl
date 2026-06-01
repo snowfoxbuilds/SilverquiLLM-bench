@@ -1,2 +1,2 @@
-{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_r0kc0ixv/tests.py::TestCasualtyOfferedOnControllerInstant::test_casualty_offered_on_instant"}
-{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_r0kc0ixv/tests.py::TestCasualtyWithSacCopiesSpell::test_casualty_sac_copies_spell"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h35h3vko/tests.py::TestCasualtyOfferedOnControllerInstant::test_casualty_offered_on_instant"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h35h3vko/tests.py::TestCasualtyWithSacCopiesSpell::test_casualty_sac_copies_spell"}

@@ -4,5 +4,64 @@
   "tests_passed": 12,
   "tests_failed": 1,
   "tests_total": 13,
-  "pass_rate": 0.9230769230769231
+  "pass_rate": 0.9230769230769231,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_jxza9xxy/tests.py::TestTargeting::test_get_targets_returns_stack_spells"
+  ],
+  "skipped": false,
+  "test_nodes": [
+    {
+      "test_node": "tests.py::TestIdentity::test_identity",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestTargeting::test_get_targets_returns_stack_spells",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestTargeting::test_get_targets_excludes_permanents",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestTargeting::test_get_targets_excludes_empty_stack",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCounter::test_counters_via_real_cast",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCounter::test_fizzle_when_target_removed",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestRefund::test_refund_amount_equals_mana_spent",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestRefund::test_no_refund_without_wizard",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestRefund::test_no_refund_when_fizzled",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestRefund::test_no_refund_on_opponent_main_phase",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestRefund::test_refund_fires_only_once",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestRefund::test_refund_locked_in_when_wizard_leaves_before_next_main",
+      "outcome": "pass"
+    }
+  ],
+  "tests_hash": "4d413364affaa9f9e3268263d1bab6f7c85a002dfe1f00fa9931f11bd772a3e5"
 }

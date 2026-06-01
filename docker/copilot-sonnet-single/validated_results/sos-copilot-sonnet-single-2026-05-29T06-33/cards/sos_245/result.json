@@ -4,5 +4,70 @@
   "tests_passed": 11,
   "tests_failed": 3,
   "tests_total": 14,
-  "pass_rate": 0.7857142857142857
+  "pass_rate": 0.7857142857142857,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_1z6yjf47/tests.py::TestAffinityGrantToInstantsAndSorceries::test_instant_gets_reduction",
+    "FAILED ../../../../tmp/eval_sos_1z6yjf47/tests.py::TestAffinityGrantToInstantsAndSorceries::test_sorcery_gets_reduction",
+    "FAILED ../../../../tmp/eval_sos_1z6yjf47/tests.py::TestGrantRemovedWhenWitherbloomLeaves::test_removal_ends_grant"
+  ],
+  "skipped": false,
+  "test_nodes": [
+    {
+      "test_node": "tests.py::TestIdentity::test_name_and_mana_cost",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestIdentity::test_power_toughness",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestIdentity::test_types_and_supertypes",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestIdentity::test_colors",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestKeywords::test_has_flying",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestKeywords::test_has_deathtouch",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestAffinityReducesOwnCost::test_reduction_equals_creature_count",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestAffinityReducesOwnCost::test_no_creatures_no_reduction",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestAffinityReducesOwnCost::test_reduction_clamped_to_generic",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestAffinityGrantToInstantsAndSorceries::test_instant_gets_reduction",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestAffinityGrantToInstantsAndSorceries::test_sorcery_gets_reduction",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestNoGrantToCreatureSpells::test_creature_spell_no_grant",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestNoGrantToOpponent::test_opponent_instant_no_reduction",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestGrantRemovedWhenWitherbloomLeaves::test_removal_ends_grant",
+      "outcome": "fail"
+    }
+  ],
+  "tests_hash": "c9332f3f6000685a6b05032d94fab62998be8d54923485ee63ca71a29da4e210"
 }

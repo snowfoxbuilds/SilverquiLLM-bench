@@ -1,3 +1,3 @@
-{"collector_number": "sos_245", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jky_z_4w/tests.py::TestAffinityGrantToInstantsAndSorceries::test_instant_gets_reduction"}
-{"collector_number": "sos_245", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jky_z_4w/tests.py::TestAffinityGrantToInstantsAndSorceries::test_sorcery_gets_reduction"}
-{"collector_number": "sos_245", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jky_z_4w/tests.py::TestGrantRemovedWhenWitherbloomLeaves::test_removal_ends_grant"}
+{"collector_number": "sos_245", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_1z6yjf47/tests.py::TestAffinityGrantToInstantsAndSorceries::test_instant_gets_reduction"}
+{"collector_number": "sos_245", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_1z6yjf47/tests.py::TestAffinityGrantToInstantsAndSorceries::test_sorcery_gets_reduction"}
+{"collector_number": "sos_245", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_1z6yjf47/tests.py::TestGrantRemovedWhenWitherbloomLeaves::test_removal_ends_grant"}

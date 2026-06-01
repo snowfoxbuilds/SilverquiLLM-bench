@@ -384,6 +384,65 @@ class TestEvaluateResults:
         assert data["tests_total"] == 4
         assert data["pass_rate"] == 0.75
 
+    def test_result_json_carries_per_node_modern_schema(self, tmp_path):
+        """When the CardResult has test_nodes, result.json must carry them
+        plus tests_hash and errors so the harvester's modern path can compute
+        per-node breadth."""
+        from silverquillm.evaluator import CardResult, EngineResult, FullEvalResult
+
+        run_dir = tmp_path / "run"
+        (run_dir / "cards").mkdir(parents=True)
+
+        cr = CardResult(
+            collector_number="1", tests_passed=1, tests_failed=1, tests_total=2,
+            pass_rate=0.5,
+            errors=["FAILED tests.py::TestX::test_b"],
+            test_nodes=[
+                {"test_node": "tests.py::TestX::test_a", "outcome": "pass"},
+                {"test_node": "tests.py::TestX::test_b", "outcome": "fail"},
+            ],
+            tests_hash="a" * 64,
+        )
+        mock_full_result = FullEvalResult(
+            sos_results={"1": cr}, fdn_results={}, engine_result=EngineResult(),
+        )
+
+        with patch("silverquillm.evaluator.evaluate", return_value=mock_full_result):
+            _evaluate_results(run_dir, card_filter=["1"])
+
+        data = json.loads((run_dir / "cards" / "1" / "result.json").read_text())
+        assert data["test_nodes"] == cr.test_nodes
+        assert data["tests_hash"] == "a" * 64
+        assert len(data["tests_hash"]) == 64
+        assert data["errors"] == ["FAILED tests.py::TestX::test_b"]
+        assert data["skipped"] is False
+
+    def test_result_json_omits_test_nodes_when_none_captured(self, tmp_path):
+        """A skipped / pre-pytest-error card (no captured nodes) must omit
+        test_nodes so the harvester stays on its legacy (rollup) path rather
+        than emitting zero rows and silently dropping the card."""
+        from silverquillm.evaluator import CardResult, EngineResult, FullEvalResult
+
+        run_dir = tmp_path / "run"
+        (run_dir / "cards").mkdir(parents=True)
+
+        cr = CardResult(
+            collector_number="1", skipped=True,
+            errors=["No audited tests at .../tests.py"],
+        )
+        mock_full_result = FullEvalResult(
+            sos_results={"1": cr}, fdn_results={}, engine_result=EngineResult(),
+        )
+
+        with patch("silverquillm.evaluator.evaluate", return_value=mock_full_result):
+            _evaluate_results(run_dir, card_filter=["1"])
+
+        data = json.loads((run_dir / "cards" / "1" / "result.json").read_text())
+        assert "test_nodes" not in data
+        assert "tests_hash" not in data
+        assert data["skipped"] is True
+        assert data["errors"] == ["No audited tests at .../tests.py"]
+
     def test_produces_per_card_postmortem_jsonl(self, tmp_path):
         """After evaluation, each card dir should have postmortem.jsonl."""
         from silverquillm.evaluator import CardResult, EngineResult, FullEvalResult

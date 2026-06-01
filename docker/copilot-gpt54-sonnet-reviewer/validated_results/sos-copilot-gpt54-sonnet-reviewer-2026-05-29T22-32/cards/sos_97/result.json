@@ -4,5 +4,55 @@
   "tests_passed": 6,
   "tests_failed": 4,
   "tests_total": 10,
-  "pass_rate": 0.6
+  "pass_rate": 0.6,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_k3nx9u27/tests.py::TestRalZarekGuestLecturer::test_plus_one_effect_one_on_top",
+    "FAILED ../../../../tmp/eval_sos_k3nx9u27/tests.py::TestRalZarekGuestLecturer::test_minus_one_effect",
+    "FAILED ../../../../tmp/eval_sos_k3nx9u27/tests.py::TestRalZarekGuestLecturer::test_minus_two_effect",
+    "FAILED ../../../../tmp/eval_sos_k3nx9u27/tests.py::TestRalZarekGuestLecturer::test_ultimate_effect"
+  ],
+  "skipped": false,
+  "test_nodes": [
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_identity",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_loyalty_ability_structure",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_plus_one_effect_both_to_graveyard",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_plus_one_effect_one_on_top",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_minus_one_effect",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_minus_two_effect",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_ultimate_effect",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_insufficient_loyalty_rejection",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_dies_at_zero_loyalty",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestRalZarekGuestLecturer::test_one_ability_per_turn",
+      "outcome": "pass"
+    }
+  ],
+  "tests_hash": "50b39f075ddd5a03758c3be0ef6907d0b5e4f3751a58a0e7fe373219b4cdfbb4"
 }

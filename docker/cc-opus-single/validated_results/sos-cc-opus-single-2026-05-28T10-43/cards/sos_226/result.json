@@ -4,5 +4,40 @@
   "tests_passed": 6,
   "tests_failed": 1,
   "tests_total": 7,
-  "pass_rate": 0.8571428571428571
+  "pass_rate": 0.8571428571428571,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_maxus4qz/tests.py::TestCasualtyWithSacCopiesSpell::test_casualty_sac_copies_spell"
+  ],
+  "skipped": false,
+  "test_nodes": [
+    {
+      "test_node": "tests.py::TestIdentity::test_identity",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestNoGetTargets::test_no_get_targets",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCasualtyOfferedOnControllerInstant::test_casualty_offered_on_instant",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCasualtyWithSacCopiesSpell::test_casualty_sac_copies_spell",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestNoLegalSacrificeDeclined::test_no_legal_sacrifice",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestNoCasualtyOnCreatureSpell::test_no_casualty_on_creature",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestRemovedWhenSilverquillLeaves::test_no_casualty_after_silverquill_leaves",
+      "outcome": "pass"
+    }
+  ],
+  "tests_hash": "0eedd5314fa4eb758510f7a44013aa637dc9930c8e94d1ebd8e8b4fe98e8314d"
 }
