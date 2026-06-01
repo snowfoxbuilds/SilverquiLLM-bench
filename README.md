@@ -1,232 +1,67 @@
 # SilverquiLLM-bench
 
-A benchmark for evaluating LLM coding agents by tasking them with implementing **Magic: The Gathering** cards as Python classes in a custom game engine.
+A benchmark for evaluating LLM coding agents by tasking them with implementing **Magic: The Gathering** cards as Python classes inside a custom game engine.
 
-SilverquiLLM-bench uses cards from a newly released MTG set to reduce training-data contamination and measure genuine code-generation ability: reading specs, understanding rules text, extending an engine, and producing working implementations.
+Each task is a small but real software-engineering job: read a spec, understand natural-language rules text, extend an existing codebase, and produce a working, tested implementation. Cards are drawn from a recently released MTG set to minimize training-data contamination and measure genuine code-generation ability rather than recall.
+
+---
+
+## What This Benchmark Measures
+
+SilverquiLLM-bench is designed to evaluate coding agents the way you'd evaluate a software contributor — by the quality of the code they ship, not by multiple-choice answers.
+
+- **Agent- and model-independent.** Agents run as black-box Docker containers. The image *is* the entire agent configuration — CLI, model, prompt, and strategy. The harness only supplies a workspace, API keys, and a timeout, so any agent that can edit files in a container can be benchmarked on equal footing: Claude Code, Copilot, custom harnesses, multi-pass reviewers, and more.
+- **Full isolation.** Every run gets a fresh workspace in its own container. There is no shared state between runs, no network dependence on the grader, and no cross-agent leakage.
+- **Low contamination risk.** Targets come from a newly released MTG set that did not exist at training time, and the hidden test suite is never mounted into the container. Agents are scored on code they actually wrote against tasks they could not have memorized.
+- **Mimics a full engineering workflow.** Agents don't emit a single answer — they explore a real codebase, study reference implementations, extend a shared engine, and (optionally) write their own tests. Success requires reusable design and not breaking existing behavior, exactly like contributing to a live project.
 
 ---
 
 ## Why MTG Cards?
 
-Magic cards are useful coding benchmark tasks because they:
+Magic cards make good coding-benchmark tasks because they:
 
-- **Span a wide difficulty range** — from vanilla creatures to complex cards with multiple interacting abilities
-- **Translate natural language into code** — rules text must become executable behavior
-- **Test architecture** — agents often need reusable engine extensions, not one-off hacks
-- **Have clear correctness signals** — card behavior is testable with deterministic game states
-- **Resist memorization** — new sets introduce new mechanics and fresh card text
+- **Span a wide difficulty range** — from vanilla creatures to cards with many interacting abilities.
+- **Translate natural language into code** — rules text must become executable behavior.
+- **Reward good architecture** — agents often need reusable engine extensions, not one-off hacks.
+- **Have clear correctness signals** — card behavior is testable with deterministic game states.
+- **Resist memorization** — new sets introduce new mechanics and fresh card text.
 
 ---
 
-## Current Benchmark Set
+## Benchmark Set
 
-**Secrets of Strixhaven (SOS)** — released 2026-04-24
+The current target set is **Secrets of Strixhaven (SOS)**, a recently released MTG set. The **Foundations (FDN)** set is fully implemented and ships alongside the targets as in-context **reference examples**, so agents can learn the engine's idioms before implementing new cards.
 
-| Subset | Cards |
-| --- | --- |
-| SOS Base Set | 271 |
-| SOA Mystical Archives | 65 |
-| SPG Special Guests | 10 |
-| **Total** | **346** |
-
-Cards are classified into five complexity tiers:
-
-```
-trivial → simple → medium → complex → expert
-```
-
-Complexity is based on rules text, keyword count, ability count, card type, target requirements, and zone interactions.
+> **The exact cards used for benchmarking are subject to change.** The benchmark currently runs against a small subset (**10 SOS cards**) while the suite is tuned; this selection — and its size — will evolve over time. Treat the active card set as a moving target, not a fixed contract.
 
 ---
 
 ## How It Works
 
 ```
-Stage Workspace → Run Agent Container → Snapshot Progress → Harvest workspace_final → Evaluate
+Stage Workspace → Run Agent Container → Snapshot progress → Harvest final state → Evaluate
 ```
 
-1. **Stage Workspace**
-    - The runner creates a codebase-shaped Workspace with:
-        - FDN reference examples
-        - SOS target templates
-        - editable engine source
-        - rulebook and API docs
-        - prompt and run manifest
-2. **Run Agent Container**
-    - The Docker image is the full agent configuration.
-    - The runner launches one container for the whole run.
-    - The agent edits `/workspace/engine/` and `cards/sos/{card_id}/card_impl.py` in place.
-3. **Snapshot Progress**
-    - Every 60 seconds, the runner commits the full Workspace to a host-side Git snapshot repo.
-    - Snapshots support progress telemetry and recovery from corrupted final engine state.
-4. **Harvest Final Workspace**
-    - The official evaluation state is materialized as:
-
-```
-docker/<image_dir>/results/<run_name>/workspace_final/
-```
-
-> **`<image_dir>` derivation**: Derived from the `--image` flag by stripping the `silverquillm-` prefix and `:tag` suffix. For example, `silverquillm-local-pi-blind:latest` → `local-pi-blind`.
-
-1. **Evaluate**
-    - Evaluation is post-run and reads only from `workspace_final/`.
+1. **Stage** — the harness builds a fresh workspace containing the engine source, reference cards, target templates, a rulebook, and the task prompt.
+2. **Run** — it launches a single agent container, which edits the engine and target card implementations in place.
+3. **Snapshot** — the full workspace is periodically committed to a host-side snapshot history for progress telemetry and recovery from a corrupted final state.
+4. **Harvest** — the final workspace is materialized as the official, immutable evaluation state.
+5. **Evaluate** — scoring runs post-hoc against the harvested workspace using a hidden, audited test suite.
 
 ---
 
 ## Evaluation Dimensions
 
-SilverquiLLM-bench reports three independent evaluation dimensions.
+Three independent dimensions are scored against the agent's harvested engine:
 
 | Dimension | What it measures |
 | --- | --- |
-| **SOS Card Correctness** | Whether target SOS card implementations pass audited SOS tests |
-| **FDN Card Regression** | Whether the agent's engine changes broke filled FDN reference cards |
+| **Card Correctness** | Whether the agent's target card implementations pass audited tests |
+| **Reference Regression** | Whether the agent's engine changes broke the pre-filled reference cards |
 | **Engine Regression** | Whether the agent's engine changes broke core game mechanics |
 
-Agent-written tests are harvested as artifacts but are not scored in v1. Self-eval, cross-eval, and test-quality scoring are deferred to a future test harvester.
-
----
-
-## Workspace Contract
-
-The Workspace is the only evaluatable state an Agent Container can produce.
-
-Canonical layout:
-
-```
-/workspace/
-  prompt.md
-  run_manifest.json
-  RULEBOOK.txt
-  engine_api.md
-  base_classes.py
-  test_utils.md
-  engine/
-  cards/
-    fdn/
-      {card_id}/
-        card_spec.json
-        card_impl.py
-    sos/
-      {card_id}/
-        card_spec.json
-        card_impl.py
-        tests.py        # optional, agent-written in Tested Mode
-```
-
-Hard rules:
-
-- Each card's canonical implementation class must be importable from:
-
-```
-cards/{set}/{card_id}/card_impl.py
-```
-
-- Agents must not move or rename card directories.
-- FDN examples and SOS targets use the same card directory shape.
-- Agents edit `/workspace/engine/` in place.
-- There is no separate `engine_work/`.
-- `/output/` is telemetry-only and never required for evaluation.
-
-### Run Manifest
-
-Immediately before container launch, the runner writes:
-
-```json
-{
-  "timeout_seconds": 7200,
-  "deadline_utc": "2026-05-13T22:22:00Z"
-}
-```
-
-This is advisory runtime context only. It is not agent configuration.
-
----
-
-## Project Structure
-
-```
-engine/                         Core MTG rules engine
-  game.py                       Game helpers and orchestration
-  turn.py                       Turn, phase, and step progression
-  card.py                       CardImpl base classes
-  casting.py                    Casting, targets, costs, resolution
-  combat.py                     Combat phases and damage
-  stack.py                      Spell/ability stack
-  mana.py                       Mana costs and payment
-  zones.py                      Zone containers and movement
-  continuous_effects.py         Layer system
-  replacement_effects.py        Replacement effects
-  state_based_actions.py        State-based actions
-  protection.py                 Protection checks
-
-cards/
-  registry.py                   Card registry and metadata
-  scryfall.py                   Scryfall helpers/cache
-  fdn/                          FDN reference examples
-    {card_id}/
-      card_spec.json
-      card_impl.py
-  sos/                          SOS benchmark targets
-    {card_id}/
-      card_spec.json
-      card_impl.py
-
-silverquillm/                   Benchmark runner package
-  cli.py                        CLI entry point
-  workspace.py                  Workspace staging
-  evaluator.py                  Post-run evaluation
-  results.py                    run_summary.json generation
-  card_loader.py                Card spec loading
-  replay/                       17lands replay validation
-
-docker/                         Agent container images
-  pi-blind/
-  pi-tested/
-  opencode-blind/
-  opencode-tested/
-
-tests/
-  engine/                       Core engine regression tests
-  audited/fdn/                  FDN audited regression tests
-  audited/sos/                  SOS audited correctness tests
-
-docs/                           Specs, generated docs, references
-```
-
----
-
-## Runner Artifacts
-
-Each run writes a self-contained results directory.
-
-```
-docker/<image_dir>/results/<run_name>/
-  workspace_final/              Official evaluation Workspace
-  snapshots/                    Host-side Git Workspace snapshots
-  snapshot_telemetry.jsonl      Filesystem-based progress telemetry
-  docker_stdout.log             Docker stdout captured by runner
-  docker_stderr.log             Docker stderr captured by runner
-  engine_diff.patch             Diff vs. host baseline engine
-  run_summary.json              Canonical machine-readable report
-  cards/                        Optional derived convenience artifacts
-```
-
-### Snapshot fallback
-
-If final engine state is unusable, the runner may walk snapshots backward and select the latest whole-Workspace snapshot whose engine passes:
-
-```
-tests/engine/
-```
-
-Fallback uses the entire selected Workspace snapshot. The runner does not combine final card implementations with an earlier engine snapshot.
-
-If no snapshot is viable, the run is marked:
-
-```
-no_viable_output_produced
-```
+Audited tests are never visible to the agent. Agent-written tests are harvested as artifacts but are not scored.
 
 ---
 
@@ -236,11 +71,7 @@ no_viable_output_produced
 
 - Python ≥ 3.12
 - Docker
-- An agent image, such as:
-    - `silverquillm-pi-blind:latest`
-    - `silverquillm-pi-tested:latest`
-    - `silverquillm-opencode-blind:latest`
-    - `silverquillm-opencode-tested:latest`
+- An agent image (see [Agent Images](#agent-images))
 
 ### Install
 
@@ -250,187 +81,71 @@ cd SilverquiLLM-bench
 pip install -e ".[dev]"
 ```
 
-### Build an agent image
+This installs the `silverquillm` CLI (also aliased as `benchmark`). API keys are read from the environment or a repo-root `.env` and passed through to the container.
+
+### Build and smoke-test an image
 
 ```bash
-docker build -t silverquillm-pi-blind:latest docker/pi-blind/
-docker build -t silverquillm-pi-tested:latest docker/pi-tested/
+docker build -t my-agent:latest docker/my-agent/
+silverquillm smoke --image my-agent:latest
 ```
 
-### Smoke test an image
-
-```bash
-silverquillm smoke --image silverquillm-pi-blind:latest
-```
-
-Smoke runs are container-validation only. They use a tiny synthetic Workspace and do not enter benchmark summaries or leaderboards.
+Smoke runs validate that a container starts and produces output — they use a tiny synthetic task and never enter benchmark results.
 
 ### Run a benchmark
 
 ```bash
-silverquillm run \
-  --image silverquillm-pi-blind:latest \
-  --timeout 7200
+silverquillm run --image my-agent:latest --timeout 7200
 ```
-
-### Run a development subset
-
-```bash
-silverquillm run \
-  --image silverquillm-pi-blind:latest \
-  --cards 001,042,105 \
-  --timeout 3600
-```
-
-Filtered runs are for development and pipeline validation only. They are not leaderboard-valid.
 
 ---
 
-## Scoring and Leaderboards
+## CLI Commands
 
-Leaderboard-valid runs require:
+| Command | Purpose |
+| --- | --- |
+| `silverquillm run --image … --timeout …` | Launch a benchmark run. |
+| `silverquillm smoke --image …` | Validate that an image starts and produces output. |
+| `silverquillm resume <run_id> --timeout …` | Continue from a prior run's final state as an independent leg. |
+| `silverquillm chain <run_id>` | Print the chain of resume legs leading to a run. |
+| `silverquillm rescore <run_id>` | Re-run audited tests against an existing run and rewrite its scores. |
+| `silverquillm logs --run <run_name>` | Tabbed, per-channel log viewer (live or archived). |
 
-- full SOS Draft Set staged
-- `card_filter = null`
-- successful evaluatable `workspace_final/`
+A `--cards` filter is available for development and pipeline validation, but filtered runs are **not** leaderboard-valid.
 
-Filtered runs, smoke runs, and `no_viable_output_produced` runs are excluded from leaderboards by default.
+---
 
-SOS Card Correctness can be complexity-weighted. FDN Card Regression and Engine Regression are reported separately rather than folded into a single composite score.
+## Scoring & Leaderboards
+
+A leaderboard-valid run requires the full target set, an unfiltered run, and a successful, evaluatable final state. Smoke runs, filtered runs, and runs that produced no viable output are excluded. The regression dimensions are reported separately rather than folded into a single composite score.
+
+---
+
+## Agent Images
+
+The Docker image bakes in the agent CLI, mode, strategy, model, and prompt — the harness supplies only volumes, API keys, and a timeout. To add an agent, create a new image directory following the existing entrypoint pattern (output capture and SIGTERM handling). Any image that can read the staged workspace and edit files in place can be benchmarked.
 
 ---
 
 ## Game Engine
 
-The engine implements core MTG rules for two-player games:
-
-- turn structure
-- stack and priority
-- spell casting and resolution
-- combat
-- mana payment
-- zones
-- card types and subtypes
-- triggered abilities
-- replacement effects
-- continuous effects and layers
-- state-based actions
-- protection
-- extra turns
-
-Card implementations subclass `CardImpl` or type-specific classes such as `Creature`, `Instant`, `Sorcery`, `Artifact`, `Enchantment`, `Planeswalker`, and `Land`.
+A Python engine inspired by [XMage](https://github.com/magefree/mage), implementing core MTG rules for two-player games: turn structure, stack and priority, casting and resolution, combat, mana payment, zones, card types/subtypes, triggered abilities, replacement effects, continuous effects (layer system), state-based actions, protection, and extra turns. Card implementations subclass `CardImpl` or type-specific classes such as `Creature`, `Instant`, `Sorcery`, `Artifact`, `Enchantment`, `Planeswalker`, and `Land`.
 
 ---
 
 ## Replay Validation
 
-The replay validation pipeline parses 17lands GRE replay data and validates engine behavior against reconstructed MTG Arena game state streams.
-
-Key ideas:
-
-- 17lands replay JSON contains full and diff GRE game state messages.
-- Seat 1 is fully validated.
-- Seat 2 uses oracle-injected public actions where hidden information is unavailable.
-- The engine is compared against reconstructed game state at GRE message boundaries.
-
-Replay Validation is for validating the FDN base engine before scored benchmark runs.
+The engine's correctness is independently validated against real game data by parsing 17lands GRE replays and comparing the engine's reconstructed game state against the recorded MTG Arena state stream at message boundaries. This is used to validate the base engine before scored benchmark runs.
 
 ---
 
 ## Contamination Controls
 
-- **New target set** — SOS released 2026-04-24.
-- **Container isolation** — agents see only the staged Workspace.
-- **Audited tests excluded** — audited tests are never mounted into the agent container.
-- **No cross-agent leakage** — each run gets its own fresh Workspace and container.
-- **Workspace snapshots are host-side** — `.git` snapshot history is not mounted into the container.
-- **FDN examples are intentional** — FDN implementations are reference examples, not contamination.
-
----
-
-## Logs and Telemetry
-
-`/output/` is optional telemetry only. It may contain:
-
-```
-/output/
-  progress.jsonl
-  system.log
-  agent_stdout.log
-  agent_stderr.log
-  exit_code
-```
-
-The runner must tolerate `/output/` being empty.
-
-The runner independently captures Docker stdout/stderr:
-
-```
-docker/<image_dir>/results/<run_name>/docker_stdout.log
-docker/<image_dir>/results/<run_name>/docker_stderr.log
-```
-
-Live terminal logs are labeled and colorized by type when running in an interactive terminal. Use:
-
-```bash
---color auto
---color always
---color never
-```
-
----
-
-## Running Tests
-
-```bash
-# All tests
-pytest
-
-# Engine tests
-pytest tests/engine/
-
-# FDN audited regression tests
-pytest tests/audited/fdn/
-
-# SOS audited correctness tests
-pytest tests/audited/sos/
-
-# Integration tests
-pytest -m integration
-```
-
-Testing conventions:
-
-- no real `os.kill*()` or signal calls in unit tests
-- explicit fake PIDs for mocks
-- no infinite loops or long sleeps
-- no open-ended `game.run()` in unit tests
-- mock subprocesses in unit tests
-- use `pytest-timeout` safety limits
-
----
-
-## Documentation
-
-Important specs:
-
-- `PROJECT-OVERVIEW.md`
-- `GAME-ENGINE.md`
-- `CARD-INTERFACE.md`
-- `TEST-SUITE.md`
-- `BENCHMARK-RUNNER.md`
-- `AGENT-CONTAINERS.md`
-- `WORKSPACE-CONTRACT.md`
-- `RUN-ARTIFACTS-AND-TELEMETRY.md`
-- `SCORING.md`
-- `TESTING-CONVENTIONS.md`
-- `17LANDS-REPLAY-SCHEMA.md`
-
-Important ADRs:
-
-- ADR-003 — Replay Validation over differential testing
-- ADR-004 — Docker Agent Containers replace Python adapters
-- ADR-005 — In-place Workspace engine with snapshot fallback
+- **New target set** — targets did not exist at training time.
+- **Container isolation** — agents see only the staged workspace.
+- **Hidden tests** — audited tests are never mounted into the container.
+- **No cross-run leakage** — each run gets a fresh workspace and container.
+- **Reference examples are intentional** — filled reference cards are teaching material, not contamination.
 
 ---
 
