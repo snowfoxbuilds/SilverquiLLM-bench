@@ -23,3 +23,5 @@ venv/
 .DS_Store
 
 docker/*/results/
+
+aggregated_results.csv

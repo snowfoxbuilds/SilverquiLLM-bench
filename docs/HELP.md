@@ -110,6 +110,9 @@ git add -f docker/local-pi-blind/results/sos-2026-05-12T01-59/
 
 rm -rf docker/*/validated_results/*/workspace_final/.git
 
+# Aggregate results
+python3 scripts/validated_results_to_csv.py   --output aggregated_results.csv
+
 # Rerun results
 silverquillm rescore docker/copilot-sonnet-single/results/sos-copilot-sonnet-single-2026-05-26T19-33
 
