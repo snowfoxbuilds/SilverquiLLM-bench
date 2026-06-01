@@ -1,17 +1,8 @@
 {
-  "collector_number": "sos_57",
+  "card_id": "sos_57",
+  "card_name": "Mana Sculpt",
   "tests_passed": 6,
   "tests_failed": 7,
   "tests_total": 13,
-  "pass_rate": 0.46153846153846156,
-  "errors": [
-    "FAILED ../../../../tmp/eval_sos_ofay_whn/tests.py::TestTargeting::test_get_targets_returns_stack_spells",
-    "FAILED ../../../../tmp/eval_sos_ofay_whn/tests.py::TestCounter::test_counters_via_real_cast",
-    "FAILED ../../../../tmp/eval_sos_ofay_whn/tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase",
-    "FAILED ../../../../tmp/eval_sos_ofay_whn/tests.py::TestRefund::test_refund_amount_equals_mana_spent",
-    "FAILED ../../../../tmp/eval_sos_ofay_whn/tests.py::TestRefund::test_no_refund_on_opponent_main_phase",
-    "FAILED ../../../../tmp/eval_sos_ofay_whn/tests.py::TestRefund::test_refund_fires_only_once",
-    "FAILED ../../../../tmp/eval_sos_ofay_whn/tests.py::TestRefund::test_refund_locked_in_when_wizard_leaves_before_next_main"
-  ],
-  "skipped": false
+  "pass_rate": 0.46153846153846156
 }

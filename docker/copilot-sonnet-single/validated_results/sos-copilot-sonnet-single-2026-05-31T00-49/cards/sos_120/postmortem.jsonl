@@ -1,0 +1,3 @@
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g2zct_01/tests.py::TestParadigmExilesSelf::test_paradigm_exiles_self_on_resolution"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g2zct_01/tests.py::TestParadigmRecurringCast::test_recurring_cast_across_3_turns"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g2zct_01/tests.py::TestParadigmOfferCanBeDeclined::test_paradigm_offer_declined"}

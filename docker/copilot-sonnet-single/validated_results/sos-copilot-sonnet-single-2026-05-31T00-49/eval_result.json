@@ -12,8 +12,8 @@
     },
     "sos_13": {
       "tests_passed": 1,
-      "tests_failed": 10,
-      "tests_total": 11
+      "tests_failed": 9,
+      "tests_total": 10
     },
     "sos_201": {
       "tests_passed": 6,
@@ -46,8 +46,8 @@
       "tests_total": 13
     },
     "sos_97": {
-      "tests_passed": 8,
-      "tests_failed": 2,
+      "tests_passed": 9,
+      "tests_failed": 1,
       "tests_total": 10
     }
   },

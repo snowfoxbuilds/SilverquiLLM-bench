@@ -1,11 +1,8 @@
 {
-  "collector_number": "sos_201",
+  "card_id": "sos_201",
+  "card_name": "Lorehold, the Historian",
   "tests_passed": 0,
   "tests_failed": 1,
   "tests_total": 1,
-  "pass_rate": 0.0,
-  "errors": [
-    "ERROR ../../../../tmp/eval_sos_b9s71j_3/tests.py - ValueError: <flag 'Keyword..."
-  ],
-  "skipped": false
+  "pass_rate": 0.0
 }

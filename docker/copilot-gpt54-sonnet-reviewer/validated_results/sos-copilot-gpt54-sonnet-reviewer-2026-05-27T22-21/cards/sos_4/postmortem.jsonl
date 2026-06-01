@@ -1,1 +1,1 @@
-{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kfiab9rh/tests.py::TestFizzleKeepsLegalEffects::test_damage_target_illegal_draw_and_life_still_resolve"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_b2riuims/tests.py::TestFizzleKeepsLegalEffects::test_damage_target_illegal_draw_and_life_still_resolve"}

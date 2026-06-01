@@ -1,0 +1,6 @@
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ggpu_96q/tests.py::TestManaAbilities::test_mana_adds_any_color"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ggpu_96q/tests.py::TestPersistentAnimation::test_animation_cleared_on_leaves_play"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ggpu_96q/tests.py::TestSpellCastTrigger::test_boost_on_instant"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ggpu_96q/tests.py::TestSpellCastTrigger::test_boost_on_sorcery"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ggpu_96q/tests.py::TestSpellCastTrigger::test_end_of_turn_revert"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ggpu_96q/tests.py::TestSpellCastTrigger::test_multiple_triggers_stack"}

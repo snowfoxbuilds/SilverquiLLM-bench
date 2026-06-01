@@ -1,0 +1,4 @@
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mnz_ya8p/tests.py::TestManaAbilities::test_restricted_spend_legal"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mnz_ya8p/tests.py::TestManaAbilities::test_restricted_spend_illegal"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mnz_ya8p/tests.py::TestPersistentAnimation::test_animation_cleared_on_leaves_play"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mnz_ya8p/tests.py::TestSpellCastTrigger::test_end_of_turn_revert"}

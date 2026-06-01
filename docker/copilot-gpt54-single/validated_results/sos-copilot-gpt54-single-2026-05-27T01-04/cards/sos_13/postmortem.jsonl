@@ -1,7 +1,6 @@
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_lr6r1g8y/tests.py::TestTokenCharacteristics::test_token_characteristics"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_lr6r1g8y/tests.py::TestPreparedCastFromExile::test_prepared_cast_from_exile"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_lr6r1g8y/tests.py::TestPreparedRejectedWithoutFlag::test_prepared_rejected_without_flag"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_lr6r1g8y/tests.py::TestPreparedConditionEdgeCases::test_prepared_not_set_when_creatures_equal"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_lr6r1g8y/tests.py::TestPreparedConditionEdgeCases::test_prepared_set_when_opponent_has_more"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_lr6r1g8y/tests.py::TestPreparedFlagLifecycle::test_prepared_flag_cleared_after_alt_cast"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_lr6r1g8y/tests.py::TestAlternativeCostExposure::test_alt_cost_is_W_when_prepared"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rk19eg8h/tests.py::TestTokenCharacteristics::test_token_characteristics"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rk19eg8h/tests.py::TestPreparedCastFromExile::test_prepared_cast_from_exile"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rk19eg8h/tests.py::TestPreparedRejectedWithoutFlag::test_prepared_rejected_without_flag"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rk19eg8h/tests.py::TestPreparedConditionEdgeCases::test_not_prepared_when_creatures_equal"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rk19eg8h/tests.py::TestPreparedConditionEdgeCases::test_prepared_when_opponent_has_more"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rk19eg8h/tests.py::TestPreparedFlagLifecycle::test_prepared_consumed_after_alt_cast"}

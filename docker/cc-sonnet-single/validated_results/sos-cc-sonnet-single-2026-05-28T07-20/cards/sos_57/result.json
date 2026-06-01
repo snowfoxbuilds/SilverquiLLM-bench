@@ -1,16 +1,8 @@
 {
-  "collector_number": "sos_57",
-  "tests_passed": 7,
-  "tests_failed": 6,
+  "card_id": "sos_57",
+  "card_name": "Mana Sculpt",
+  "tests_passed": 2,
+  "tests_failed": 11,
   "tests_total": 13,
-  "pass_rate": 0.5384615384615384,
-  "errors": [
-    "FAILED ../../../../tmp/eval_sos_ji7gepfw/tests.py::TestTargeting::test_get_targets_returns_stack_spells",
-    "FAILED ../../../../tmp/eval_sos_ji7gepfw/tests.py::TestTargeting::test_get_targets_excludes_permanents",
-    "FAILED ../../../../tmp/eval_sos_ji7gepfw/tests.py::TestTargeting::test_get_targets_excludes_empty_stack",
-    "FAILED ../../../../tmp/eval_sos_ji7gepfw/tests.py::TestCounter::test_counters_via_real_cast",
-    "FAILED ../../../../tmp/eval_sos_ji7gepfw/tests.py::TestCounter::test_fizzle_when_target_removed",
-    "FAILED ../../../../tmp/eval_sos_ji7gepfw/tests.py::TestRefund::test_no_refund_when_fizzled"
-  ],
-  "skipped": false
+  "pass_rate": 0.15384615384615385
 }

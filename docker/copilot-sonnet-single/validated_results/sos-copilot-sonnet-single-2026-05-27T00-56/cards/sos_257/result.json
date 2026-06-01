@@ -1,8 +1,8 @@
 {
   "card_id": "sos_257",
   "card_name": "Great Hall of the Biblioplex",
-  "tests_passed": 3,
-  "tests_failed": 14,
+  "tests_passed": 7,
+  "tests_failed": 10,
   "tests_total": 17,
-  "pass_rate": 0.17647058823529413
+  "pass_rate": 0.4117647058823529
 }

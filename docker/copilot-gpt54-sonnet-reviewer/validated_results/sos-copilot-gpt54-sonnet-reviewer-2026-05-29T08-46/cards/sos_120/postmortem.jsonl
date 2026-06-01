@@ -1,0 +1,3 @@
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h06ijeez/tests.py::TestCastChosenExiledCardsForFree::test_cast_exiled_card_free"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h06ijeez/tests.py::TestParadigmRecurringCast::test_recurring_cast_across_3_turns"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h06ijeez/tests.py::TestParadigmOfferCanBeDeclined::test_paradigm_offer_declined"}

@@ -1,0 +1,1 @@
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7pbz1_9p/tests.py::TestTargeting::test_get_targets_returns_stack_spells"}

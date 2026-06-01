@@ -1,0 +1,8 @@
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kjgxfgmq/tests.py::TestManaAbilities::test_restricted_spend_legal"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kjgxfgmq/tests.py::TestManaAbilities::test_restricted_spend_illegal"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kjgxfgmq/tests.py::TestPersistentAnimation::test_no_op_when_already_creature"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kjgxfgmq/tests.py::TestPersistentAnimation::test_animation_cleared_on_leaves_play"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kjgxfgmq/tests.py::TestSpellCastTrigger::test_boost_on_instant"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kjgxfgmq/tests.py::TestSpellCastTrigger::test_boost_on_sorcery"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kjgxfgmq/tests.py::TestSpellCastTrigger::test_end_of_turn_revert"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kjgxfgmq/tests.py::TestSpellCastTrigger::test_multiple_triggers_stack"}

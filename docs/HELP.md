@@ -113,6 +113,10 @@ rm -rf docker/*/validated_results/*/workspace_final/.git
 # Rerun results
 silverquillm rescore docker/copilot-sonnet-single/results/sos-copilot-sonnet-single-2026-05-26T19-33
 
+ls -d docker/*/validated_results/*/ \
+  | xargs -P 12 -I {} sh -c \
+    'silverquillm rescore "{}" >"{}/rescore.log" 2>&1 || echo "FAILED: {}"'
+
 
 # Test Validation
 # Full harvest → benchmarks/sos/analysis/harvested_results.jsonl

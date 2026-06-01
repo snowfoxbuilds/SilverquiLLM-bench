@@ -1,9 +1,8 @@
 {
-  "collector_number": "sos_245",
+  "card_id": "sos_245",
+  "card_name": "Witherbloom, the Balancer",
   "tests_passed": 14,
   "tests_failed": 0,
   "tests_total": 14,
-  "pass_rate": 1.0,
-  "errors": [],
-  "skipped": false
+  "pass_rate": 1.0
 }

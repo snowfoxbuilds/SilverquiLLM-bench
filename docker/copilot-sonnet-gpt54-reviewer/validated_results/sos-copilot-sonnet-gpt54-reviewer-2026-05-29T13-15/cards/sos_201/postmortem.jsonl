@@ -1,0 +1,4 @@
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nlkotxqo/tests.py::TestMiracleGrantToInstantsAndSorceries::test_miracle_granted_to_instants_and_sorceries_not_creatures"}
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nlkotxqo/tests.py::TestGrantRemovedWhenLoreholdLeaves::test_miracle_grant_removed_on_leave"}
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nlkotxqo/tests.py::TestMultipleInstantsGrantedMiracle::test_multiple_cards_all_get_miracle_cost"}
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nlkotxqo/tests.py::TestMiracleGrantAfterCardDrawnIntoHand::test_card_drawn_into_hand_gets_miracle_cost_on_next_apply"}

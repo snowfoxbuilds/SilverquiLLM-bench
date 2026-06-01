@@ -5,10 +5,10 @@
     "timestamp": "2026-05-30T05:30:39Z",
     "card_count": 10,
     "timeout_seconds": 7200,
-    "harness_version": "067e65aa332bbbe0fa4d34e647de2ad8b28a259f"
+    "harness_version": "0b67decf8c48a75fd633b329617470d518e6f815"
   },
   "sos_card_correctness": {
-    "audited_pass_rate": 0.6423,
+    "audited_pass_rate": 0.7377,
     "card_pass_rate": 0.2,
     "cards_completed": 10,
     "cards_no_output": 0,
@@ -42,7 +42,7 @@
       "card_name": "",
       "status": "completed",
       "audited_passed": 2,
-      "audited_total": 11
+      "audited_total": 10
     },
     {
       "collector_number": "sos_201",
@@ -69,7 +69,7 @@
       "collector_number": "sos_257",
       "card_name": "",
       "status": "completed",
-      "audited_passed": 3,
+      "audited_passed": 14,
       "audited_total": 17
     },
     {
@@ -96,16 +96,5 @@
   ],
   "run_status": "completed",
   "wall_clock_seconds": 5218.543,
-  "card_filter": [
-    "1",
-    "4",
-    "13",
-    "57",
-    "97",
-    "120",
-    "201",
-    "226",
-    "245",
-    "257"
-  ]
+  "card_filter": null
 }

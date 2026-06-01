@@ -1,5 +1,3 @@
-{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_062fqcdi/tests.py::TestRalZarekGuestLecturer::test_plus_one_effect_both_to_graveyard"}
-{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_062fqcdi/tests.py::TestRalZarekGuestLecturer::test_plus_one_effect_one_on_top"}
-{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_062fqcdi/tests.py::TestRalZarekGuestLecturer::test_minus_one_effect"}
-{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_062fqcdi/tests.py::TestRalZarekGuestLecturer::test_minus_two_effect"}
-{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_062fqcdi/tests.py::TestRalZarekGuestLecturer::test_ultimate_effect"}
+{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_d9lfhvi7/tests.py::TestRalZarekGuestLecturer::test_plus_one_effect_both_to_graveyard"}
+{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_d9lfhvi7/tests.py::TestRalZarekGuestLecturer::test_plus_one_effect_one_on_top"}
+{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_d9lfhvi7/tests.py::TestRalZarekGuestLecturer::test_ultimate_effect"}

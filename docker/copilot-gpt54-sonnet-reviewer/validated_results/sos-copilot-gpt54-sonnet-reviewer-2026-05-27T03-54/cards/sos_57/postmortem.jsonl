@@ -1,3 +1,3 @@
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g5hz69od/tests.py::TestTargeting::test_get_targets_returns_stack_spells"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g5hz69od/tests.py::TestTargeting::test_get_targets_excludes_permanents"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g5hz69od/tests.py::TestTargeting::test_get_targets_excludes_empty_stack"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_owb7vyfe/tests.py::TestTargeting::test_get_targets_returns_stack_spells"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_owb7vyfe/tests.py::TestTargeting::test_get_targets_excludes_permanents"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_owb7vyfe/tests.py::TestTargeting::test_get_targets_excludes_empty_stack"}

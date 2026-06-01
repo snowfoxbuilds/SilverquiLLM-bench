@@ -1,19 +1,8 @@
 {
-  "collector_number": "sos_13",
+  "card_id": "sos_13",
+  "card_name": "Emeritus of Truce // Swords to Plowshares",
   "tests_passed": 2,
-  "tests_failed": 9,
-  "tests_total": 11,
-  "pass_rate": 0.18181818181818182,
-  "errors": [
-    "FAILED ../../../../tmp/eval_sos_vj4e1s9q/tests.py::TestETBTokenCreation::test_etb_token_creation",
-    "FAILED ../../../../tmp/eval_sos_vj4e1s9q/tests.py::TestTokenCharacteristics::test_token_characteristics",
-    "FAILED ../../../../tmp/eval_sos_vj4e1s9q/tests.py::TestPreparedCastFromExile::test_prepared_cast_from_exile",
-    "FAILED ../../../../tmp/eval_sos_vj4e1s9q/tests.py::TestPreparedRejectedWithoutFlag::test_prepared_rejected_without_flag",
-    "FAILED ../../../../tmp/eval_sos_vj4e1s9q/tests.py::TestPreparedConditionEdgeCases::test_prepared_not_set_when_creatures_equal",
-    "FAILED ../../../../tmp/eval_sos_vj4e1s9q/tests.py::TestPreparedConditionEdgeCases::test_prepared_set_when_opponent_has_more",
-    "FAILED ../../../../tmp/eval_sos_vj4e1s9q/tests.py::TestPreparedFlagLifecycle::test_prepared_flag_cleared_after_alt_cast",
-    "FAILED ../../../../tmp/eval_sos_vj4e1s9q/tests.py::TestAlternativeCostExposure::test_alt_cost_is_W_when_prepared",
-    "FAILED ../../../../tmp/eval_sos_vj4e1s9q/tests.py::TestTokenSummoningSickness::test_token_is_summoning_sick"
-  ],
-  "skipped": false
+  "tests_failed": 8,
+  "tests_total": 10,
+  "pass_rate": 0.2
 }

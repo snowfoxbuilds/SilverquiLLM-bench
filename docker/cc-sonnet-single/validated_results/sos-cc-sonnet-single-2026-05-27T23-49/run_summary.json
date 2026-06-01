@@ -5,11 +5,11 @@
     "timestamp": "2026-05-28T01:52:30Z",
     "card_count": 10,
     "timeout_seconds": 7200,
-    "harness_version": "ce49e9e4823a2f120b91fe4e0ec30abd1ed7a159"
+    "harness_version": "0b67decf8c48a75fd633b329617470d518e6f815"
   },
   "sos_card_correctness": {
-    "audited_pass_rate": 0.8333,
-    "card_pass_rate": 0.2,
+    "audited_pass_rate": 0.6721,
+    "card_pass_rate": 0.1,
     "cards_completed": 10,
     "cards_no_output": 0,
     "cards_timed_out": 0
@@ -27,85 +27,74 @@
       "collector_number": "sos_1",
       "card_name": "",
       "status": "completed",
-      "audited_passed": 14,
-      "audited_total": 16
+      "audited_passed": 15,
+      "audited_total": 20
     },
     {
       "collector_number": "sos_120",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 5,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_13",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_201",
       "card_name": "",
       "status": "completed",
       "audited_passed": 10,
       "audited_total": 12
     },
     {
-      "collector_number": "sos_13",
+      "collector_number": "sos_226",
       "card_name": "",
       "status": "completed",
-      "audited_passed": 10,
-      "audited_total": 15
+      "audited_passed": 6,
+      "audited_total": 7
     },
     {
-      "collector_number": "sos_201",
+      "collector_number": "sos_245",
       "card_name": "",
       "status": "completed",
       "audited_passed": 14,
       "audited_total": 14
     },
     {
-      "collector_number": "sos_226",
-      "card_name": "",
-      "status": "completed",
-      "audited_passed": 10,
-      "audited_total": 13
-    },
-    {
-      "collector_number": "sos_245",
-      "card_name": "",
-      "status": "completed",
-      "audited_passed": 15,
-      "audited_total": 15
-    },
-    {
       "collector_number": "sos_257",
       "card_name": "",
       "status": "completed",
-      "audited_passed": 10,
-      "audited_total": 11
+      "audited_passed": 5,
+      "audited_total": 17
     },
     {
       "collector_number": "sos_4",
       "card_name": "",
       "status": "completed",
-      "audited_passed": 11,
-      "audited_total": 15
+      "audited_passed": 6,
+      "audited_total": 10
     },
     {
       "collector_number": "sos_57",
       "card_name": "",
       "status": "completed",
       "audited_passed": 8,
-      "audited_total": 9
+      "audited_total": 13
     },
     {
       "collector_number": "sos_97",
       "card_name": "",
       "status": "completed",
-      "audited_passed": 8,
-      "audited_total": 12
+      "audited_passed": 7,
+      "audited_total": 10
     }
   ],
   "run_status": "completed",
   "wall_clock_seconds": 7330.209,
-  "card_filter": [
-    "1",
-    "4",
-    "13",
-    "57",
-    "97",
-    "120",
-    "201",
-    "226",
-    "245",
-    "257"
-  ]
+  "card_filter": null
 }

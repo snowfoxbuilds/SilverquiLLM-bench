@@ -1,11 +1,8 @@
 {
-  "collector_number": "sos_97",
+  "card_id": "sos_97",
+  "card_name": "Ral Zarek, Guest Lecturer",
   "tests_passed": 0,
   "tests_failed": 1,
   "tests_total": 1,
-  "pass_rate": 0.0,
-  "errors": [
-    "ERROR ../../../../tmp/eval_sos_ym7f_raq/tests.py - ValueError: <flag 'Keyword..."
-  ],
-  "skipped": false
+  "pass_rate": 0.0
 }

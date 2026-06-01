@@ -12,8 +12,8 @@
     },
     "sos_13": {
       "tests_passed": 1,
-      "tests_failed": 10,
-      "tests_total": 11
+      "tests_failed": 9,
+      "tests_total": 10
     },
     "sos_201": {
       "tests_passed": 8,
@@ -31,8 +31,8 @@
       "tests_total": 14
     },
     "sos_257": {
-      "tests_passed": 4,
-      "tests_failed": 13,
+      "tests_passed": 6,
+      "tests_failed": 11,
       "tests_total": 17
     },
     "sos_4": {
@@ -46,8 +46,8 @@
       "tests_total": 13
     },
     "sos_97": {
-      "tests_passed": 6,
-      "tests_failed": 4,
+      "tests_passed": 7,
+      "tests_failed": 3,
       "tests_total": 10
     }
   },

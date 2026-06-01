@@ -1,0 +1,7 @@
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6vgx5ojw/tests.py::TestExileFromLibraryUntilThreshold::test_exile_until_mv_sum_ge_4"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6vgx5ojw/tests.py::TestDoesNotTargetOpponentCreatures::test_resolution_does_not_affect_opponent_board"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6vgx5ojw/tests.py::TestCastChosenExiledCardsForFree::test_cast_exiled_card_free"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6vgx5ojw/tests.py::TestCastChosenExiledCardsForFree::test_decline_cast_exiled_card"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6vgx5ojw/tests.py::TestParadigmExilesSelf::test_paradigm_exiles_self_on_resolution"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6vgx5ojw/tests.py::TestParadigmRecurringCast::test_recurring_cast_across_3_turns"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6vgx5ojw/tests.py::TestParadigmOfferCanBeDeclined::test_paradigm_offer_declined"}

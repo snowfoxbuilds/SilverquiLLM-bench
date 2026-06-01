@@ -1,14 +1,8 @@
 {
-  "collector_number": "sos_120",
+  "card_id": "sos_120",
+  "card_name": "Improvisation Capstone",
   "tests_passed": 5,
   "tests_failed": 4,
   "tests_total": 9,
-  "pass_rate": 0.5555555555555556,
-  "errors": [
-    "FAILED ../../../../tmp/eval_sos_2wj0a3gk/tests.py::TestCastChosenExiledCardsForFree::test_cast_exiled_card_free",
-    "FAILED ../../../../tmp/eval_sos_2wj0a3gk/tests.py::TestParadigmExilesSelf::test_paradigm_exiles_self_on_resolution",
-    "FAILED ../../../../tmp/eval_sos_2wj0a3gk/tests.py::TestParadigmRecurringCast::test_recurring_cast_across_3_turns",
-    "FAILED ../../../../tmp/eval_sos_2wj0a3gk/tests.py::TestParadigmOfferCanBeDeclined::test_paradigm_offer_declined"
-  ],
-  "skipped": false
+  "pass_rate": 0.5555555555555556
 }

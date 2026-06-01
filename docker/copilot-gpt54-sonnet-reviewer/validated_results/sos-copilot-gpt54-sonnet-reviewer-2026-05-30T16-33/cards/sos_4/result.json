@@ -1,11 +1,8 @@
 {
-  "collector_number": "sos_4",
+  "card_id": "sos_4",
+  "card_name": "Together as One",
   "tests_passed": 9,
   "tests_failed": 1,
   "tests_total": 10,
-  "pass_rate": 0.9,
-  "errors": [
-    "FAILED ../../../../tmp/eval_sos_mmc5g0jn/tests.py::TestFizzleKeepsLegalEffects::test_damage_target_illegal_draw_and_life_still_resolve"
-  ],
-  "skipped": false
+  "pass_rate": 0.9
 }

@@ -1,15 +1,8 @@
 {
-  "collector_number": "sos_97",
+  "card_id": "sos_97",
+  "card_name": "Ral Zarek, Guest Lecturer",
   "tests_passed": 5,
   "tests_failed": 5,
   "tests_total": 10,
-  "pass_rate": 0.5,
-  "errors": [
-    "FAILED ../../../../tmp/eval_sos_3i5xlxba/tests.py::TestRalZarekGuestLecturer::test_plus_one_effect_one_on_top",
-    "FAILED ../../../../tmp/eval_sos_3i5xlxba/tests.py::TestRalZarekGuestLecturer::test_minus_one_effect",
-    "FAILED ../../../../tmp/eval_sos_3i5xlxba/tests.py::TestRalZarekGuestLecturer::test_minus_two_effect",
-    "FAILED ../../../../tmp/eval_sos_3i5xlxba/tests.py::TestRalZarekGuestLecturer::test_ultimate_effect",
-    "FAILED ../../../../tmp/eval_sos_3i5xlxba/tests.py::TestRalZarekGuestLecturer::test_dies_at_zero_loyalty"
-  ],
-  "skipped": false
+  "pass_rate": 0.5
 }

@@ -1,12 +1,8 @@
 {
-  "collector_number": "sos_201",
+  "card_id": "sos_201",
+  "card_name": "Lorehold, the Historian",
   "tests_passed": 10,
   "tests_failed": 2,
   "tests_total": 12,
-  "pass_rate": 0.8333333333333334,
-  "errors": [
-    "FAILED ../../../../tmp/eval_sos_3lp9g0xw/tests.py::TestGrantRemovedWhenLoreholdLeaves::test_miracle_grant_removed_on_leave",
-    "FAILED ../../../../tmp/eval_sos_3lp9g0xw/tests.py::TestMiracleCastOnFirstDraw::test_miracle_cast_on_first_draw"
-  ],
-  "skipped": false
+  "pass_rate": 0.8333333333333334
 }

@@ -1,8 +1,8 @@
 {
   "card_id": "sos_13",
   "card_name": "Emeritus of Truce // Swords to Plowshares",
-  "tests_passed": 4,
-  "tests_failed": 7,
-  "tests_total": 11,
-  "pass_rate": 0.36363636363636365
+  "tests_passed": 6,
+  "tests_failed": 4,
+  "tests_total": 10,
+  "pass_rate": 0.6
 }
