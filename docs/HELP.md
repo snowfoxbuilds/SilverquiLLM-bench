@@ -23,6 +23,12 @@ docker build -t silverquillm-cc-opus-single:latest docker/cc-opus-single/docker 
 docker build -t silverquillm-cc-opus-48-bare:latest docker/cc-opus-48-bare/
 docker build -t silverquillm-cc-opus-46-bare-high:latest docker/cc-opus-46-bare-high/
 
+docker build -t silverquillm-cc-opus-48-bare-xhigh:latest docker/cc-opus-48-bare-xhigh/
+docker build -t silverquillm-cc-opus-48-single-xhigh:latest docker/cc-opus-48-single-xhigh/
+docker build -t silverquillm-cc-opus-48-xhigh-cheap-impl:latest docker/cc-opus-48-xhigh-cheap-impl/
+docker build -t silverquillm-cc-opus-48-xhigh-cheap-review:latest docker/cc-opus-48-xhigh-cheap-review/
+
+
 # Smoke
 silverquillm smoke --image silverquillm-local-pi-blind:latest
 silverquillm smoke --image silverquillm-copilot-gpt-4.1:latest
@@ -43,6 +49,12 @@ silverquillm run --image silverquillm-cc-opus-46-bare-high:latest --cards 1,4,13
 silverquillm run --image silverquillm-cc-opus-46-bare-high:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
 silverquillm run --image silverquillm-cc-opus-48-single:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
 silverquillm run --image silverquillm-cc-opus-48-single:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
+
+
+silverquillm run --image silverquillm-cc-opus-48-bare-xhigh:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
+silverquillm run --image silverquillm-cc-opus-48-single-xhigh:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
+silverquillm run --image silverquillm-cc-opus-48-xhigh-cheap-impl:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
+silverquillm run --image silverquillm-cc-opus-48-xhigh-cheap-review:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
 
 
 silverquillm run \
