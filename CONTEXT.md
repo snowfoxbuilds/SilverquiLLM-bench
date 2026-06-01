@@ -56,7 +56,7 @@ When an LLM has seen target card implementations in its training data, invalidat
 
 **Test Harvester** *(manual v1 / automated v2)*
 
-The mechanism for improving audited tests from harvested run results. **Manual v1**: the on-demand harvest script + combined investigation/discovery skill in [TEST-IMPROVEMENT-WORKFLOW.md](http://test-improvement-workflow.md/) — a human reviews suspect tests (ranked by cross-impl failure breadth) and promotion candidates. **Automated v2** *(future)*: a pass that harvests Validated Results and scores audited test quality (cross-impl breadth, discrimination, convention-coupling) to surface suspect tests and promotion candidates with less human triage. Replaces the retired self-eval / N×N cross-eval framing; not run after Release.
+The mechanism for improving audited tests from harvested run results. **Manual v1**: the on-demand harvest script + combined investigation/discovery skill in [AUDITED-TEST-IMPROVEMENT-WORKFLOW.md](http://audited-test-improvement-workflow.md/) — a human reviews suspect tests (ranked by cross-impl failure breadth) and promotion candidates. **Automated v2** *(future)*: a pass that harvests Validated Results and scores audited test quality (cross-impl breadth, discrimination, convention-coupling) to surface suspect tests and promotion candidates with less human triage. Replaces the retired self-eval / N×N cross-eval framing; not run after Release.
 
 *Avoid*: "cross-eval" / "self-eval" (retired N×N framing), "cross-validation" (overloaded ML term)
 
@@ -230,9 +230,33 @@ The consolidated dataset produced by the harvest script from all Validated Resul
 
 **Implementation-Agnostic Testing**
 
-The core audited-test philosophy: a test asserts *what a card does* (observable game-state behavior) and must pass against *any* correct implementation — never coupling to one implementation's naming, internal structure, method names, or conventions. It discriminates correctness, not style: independent correct impls all pass, only genuinely wrong behavior fails. Operationalized by the behavioral/outcome-based, canonical-engine-API-only, `DeterministicPlayer`-scripted audited tests (see [TEST-SUITE.md](http://test-suite.md/)), and is the principle every test-improvement decision serves. The formalized, strengthened restatement of the Phase 18 behavioral-testing direction.
+The core audited-test philosophy: a test asserts *what a card does* (observable game-state behavior) and must pass against *any* correct implementation — never coupling to one implementation's naming, internal structure, method names, or conventions. It discriminates correctness, not style: independent correct impls all pass, only genuinely wrong behavior fails. Operationalized by the behavioral/outcome-based, canonical-engine-API-only, `DeterministicPlayer`-scripted audited tests (see [AUDITED-TEST-SUITE.md](http://audited-test-suite.md/)), and is the principle every test-improvement decision serves. The formalized, strengthened restatement of the Phase 18 behavioral-testing direction.
 
 *Avoid*: "black-box testing" (narrower — only says don't read internals), "convention testing" / "naming-coupled tests" (the anti-pattern this rejects)
+
+**Platform Tests**
+
+Maintainer-authored tests for the SilverquiLLM repository's own tooling — runner, harvester, evaluator, telemetry, and `scripts/` — living under `tests/` (excluding `tests/audited/` and `tests/engine/`). They verify that the benchmark *software* works; they do not grade agent output. E.g. `tests/test_harvest_rows.py`, `tests/test_check_promotion_candidate.py`, `tests/test_evaluator.py`. Distinct from Audited Tests, Engine Tests, and Agent Tests.
+
+*Avoid*: "repository tests" (ambiguous — Audited Tests and Engine Tests also live in the repo), "unit tests" alone (some are integration-level), "harness tests" (collides with the audited validation harness)
+
+**Audited Tests**
+
+The curated, human-reviewed grading suite at `tests/audited/{set_code}/{collector_number}/tests.py`, used by Audited Eval to score agent output. Behavioral / outcome-based, canonical-engine-API-only, `DeterministicPlayer`-scripted (Implementation-Agnostic Testing). Maintainer-authored; each test must pass against the matching Test Oracle Impl before commit. Covers the SOS Card Correctness and FDN Card Regression dimensions. Distinct from Engine Tests, Agent Tests, and FDN Reference Tests.
+
+*Avoid*: "gold tests", "grader tests" (informal — say "Audited Tests"), "benchmark tests"
+
+**Engine Tests**
+
+Maintainer-authored core MTG-engine mechanics tests at `tests/engine/` — the input to the Engine Regression evaluation dimension (mana, stack, combat, state-based actions, etc.), run against the agent's final Writable Engine post-run. Staged into `workspace/tests/engine/` per ADR-006 so agents can self-verify Engine Extensions, but grading uses the host-repo copy. A separate bucket from Audited Tests (which grade card behavior) and Platform Tests (which test the tooling).
+
+*Avoid*: "engine test" alone (ambiguous — say "Engine Tests" / "Engine Regression"), folding under "audited tests"
+
+**Agent Tests**
+
+The `tests.py` files a coding agent writes during a Tested Mode run — one per card, alongside its `card_impl.py`. Harvested as artifacts in Validated Results but never used for v1 scoring (Audited Tests are the grader). The raw source the Test Harvester mines for promotion candidates. Distinct from Audited Tests (the grading suite) and FDN Reference Tests (agent-visible learning material).
+
+*Avoid*: "benchmark tests" (ambiguous — "benchmark" already names Run/Tier/Mode, and Audited Tests also serve the benchmark), "candidate tests" (reserve for promotion candidates mined from Agent Tests), "harvested tests" (Harvested Results is the post-harvest dataset; pre-harvest these are Agent Tests)
 
 ## Relationships
 

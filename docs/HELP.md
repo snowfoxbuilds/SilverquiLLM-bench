@@ -112,3 +112,10 @@ rm -rf docker/*/validated_results/*/workspace_final/.git
 
 # Rerun results
 silverquillm rescore docker/copilot-sonnet-single/results/sos-copilot-sonnet-single-2026-05-26T19-33
+
+
+# Test Validation
+# Full harvest → benchmarks/sos/analysis/harvested_results.jsonl
+python scripts/harvest_validated_results.py --bench sos
+# Cross-impl breadth summary → benchmarks/sos/analysis/harvested_summary.json
+python scripts/harvest_validated_results.py --bench sos --summary

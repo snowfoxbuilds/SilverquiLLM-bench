@@ -1,8 +1,8 @@
-Testing conventions for **bench-authored reference tests** in the SilverquiLLM-bench repository.
+Testing conventions for **bench-authored tests** in the SilverquiLLM-bench repository — i.e. Platform tests, Audited tests, Engine tests, and FDN Reference Tests (everything maintainers write), but not Agent tests.
 
 Scope: tests we write — host-side suites under `tests/`, FDN reference tests staged into the workspace at `benchmarks/sos/workspace/cards/fdn/{collector_number}/tests.py`, and audited SOS grader tests at `benchmarks/sos/data/tests/audited/sos/{collector_number}/tests.py`.
 
-Out of scope: agent-written tests inside the workspace (e.g., `engine_tests/test_*.py` authored during a run). The grader is the source of truth for scoring, not agent test hygiene, so we deliberately do not bind the agent to these rules and we do not stage this document into the workspace. The workspace `pytest.ini` carries the `timeout = 30` safety net regardless (see [WORKSPACE-CONTRACT.md](http://workspace-contract.md/)).
+Out of scope: **Agent tests** inside the workspace (e.g., `engine_tests/test_*.py` authored during a run). The grader is the source of truth for scoring, not agent test hygiene, so we deliberately do not bind the agent to these rules and we do not stage this document into the workspace. The workspace `pytest.ini` carries the `timeout = 30` safety net regardless (see [WORKSPACE-CONTRACT.md](http://workspace-contract.md/)).
 
 These rules exist to prevent tests from hanging, killing processes, or otherwise disrupting the development environment.
 
@@ -201,4 +201,4 @@ Before committing any bench-authored test file (host-side or staged reference), 
 
 1. **`pytest-timeout = 30s`** — global hard limit in `pyproject.toml`
 2. **CI gate** — `pytest` runs on every PR; any timeout or hang fails the build
-3. **Author scope** — These rules govern bench-authored tests only. Agent-written tests inside the workspace are not bound by this doc and are not graded; only the audited host-side grader tests determine the score. The workspace `pytest.ini` `timeout = 30` setting is the only safety net that follows tests into the container.
+3. **Author scope** — These rules govern bench-authored tests only. Agent tests inside the workspace are not bound by this doc and are not graded; only the Audited tests (host-side grader) determine the score. The workspace `pytest.ini` `timeout = 30` setting is the only safety net that follows tests into the container.

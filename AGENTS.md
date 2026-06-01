@@ -38,7 +38,7 @@ Agent-written tests are harvested as artifacts but not scored in v1. Cross-eval 
 | `PROJECT-OVERVIEW.md` | Project purpose, scope, development phases, and key decisions |
 | `GAME-ENGINE.md` | Python port of XMage rules engine, core systems, and game state API |
 | `CARD-INTERFACE.md` | Card class hierarchy, hook methods, and supporting types |
-| `TEST-SUITE.md` | Test structure, test utilities API, audited test path, test harvester (v2) |
+| `AUDITED-TEST-SUITE.md` | Test structure, test utilities API, audited test path, test harvester (v2) |
 | `BENCHMARK-RUNNER.md` | Host-side orchestrator: workspace staging, container launch, result harvesting, evaluation |
 | `SCORING.md` | Three evaluation dimensions, complexity weighting, leaderboard format |
 | `AGENT-CONTAINERS.md` | Docker black-box architecture, file-based contract, entrypoint design, isolation guarantees |
@@ -46,7 +46,7 @@ Agent-written tests are harvested as artifacts but not scored in v1. Cross-eval 
 | `RUN-ARTIFACTS-AND-TELEMETRY.md` | workspace_final, Git snapshots, fallback, telemetry, Docker logs, filtered runs, smoke runs |
 | `TESTING-CONVENTIONS.md` | Test naming, fixtures, assertions, and conventions for audited tests |
 | `17LANDS-REPLAY-SCHEMA.md` | GRE JSON replay format for engine correctness validation |
-| `TEST-IMPROVEMENT-WORKFLOW.md` | Harvest script + combined investigation/discovery skill (manual v1 Test Harvester); harvest format, fault-attribution triage, promotion bar, cadence, tier gating |
+| `AUDITED-TEST-IMPROVEMENT-WORKFLOW.md` | Harvest script + combined investigation/discovery skill (manual v1 Test Harvester); harvest format, fault-attribution triage, promotion bar, cadence, tier gating |
 
 ## ADRs
 

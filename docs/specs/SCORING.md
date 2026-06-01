@@ -8,7 +8,7 @@ Three evaluation dimensions. No composite score.
 
 ## Context
 
-The evaluator runs audited tests against the agent's output after the container exits. The agent's own tests (if any) are harvested as artifacts but not used for scoring in v1. Blind vs. tested mode comparisons are made across separate runs (different images), not as separate scoring categories.
+The evaluator runs audited tests against the agent's output after the container exits. Agent tests are harvested as artifacts but not used for scoring in v1. Blind vs. tested mode comparisons are made across separate runs (different images), not as separate scoring categories.
 
 ## Design
 
@@ -24,7 +24,7 @@ Measures how well the agent implemented the target cards.
 
 ### Dimension 2: FDN Card Regression
 
-Measures whether the agent's engine extensions broke existing card behavior. FDN audited tests (`tests/audited/fdn/`) are run against the pre-filled FDN `card_impl.py` files using the agent's `engine_work/`.
+Measures whether the agent's engine extensions broke existing card behavior. FDN audited tests (`tests/audited/fdn/`) are run against the pre-filled FDN `card_impl.py` files using the agent's final engine.
 
 | Metric | Definition |
 | --- | --- |
@@ -33,7 +33,7 @@ Measures whether the agent's engine extensions broke existing card behavior. FDN
 
 ### Dimension 3: Engine Regression
 
-Measures whether the agent's engine extensions broke fundamental game mechanics. Core engine tests (`engine_tests/`) are run against the agent's `engine_work/`.
+Measures whether the agent's engine extensions broke fundamental game mechanics. Engine tests are run against the agent's final engine.
 
 | Metric | Definition |
 | --- | --- |
@@ -101,7 +101,7 @@ Regression Summary
 ## Decisions
 
 - **Three evaluation dimensions**: SOS card correctness, FDN card regression, engine regression. Each measured independently. [SETTLED]
-- **Audited tests only for v1**: Agent-written tests are harvested as artifacts but not used for scoring. Cross-eval and self-eval deferred to future test harvester. [SETTLED]
+- **Audited tests only for v1**: Agent tests are harvested as artifacts but not used for scoring. Cross-eval and self-eval deferred to future test harvester. [SETTLED]
 - **No blind vs. tested scoring categories**: Mode is baked into the image. Compare modes by running different images and comparing Dimension 1 results. [SETTLED]
 - **Complexity weighting on Dimension 1 only**: FDN and engine regression are pass/fail — no weighting needed. [SETTLED]
 - **Raw scores only**: No statistical significance tests or confidence intervals. [SETTLED]

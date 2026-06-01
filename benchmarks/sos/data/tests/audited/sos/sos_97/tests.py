@@ -244,9 +244,11 @@ class TestRalZarekGuestLecturer:
         """-7: Flip 5 coins, target opponent skips X turns. Force all heads via monkeypatch."""
         game, ral, player, opponent = _setup_pw_on_battlefield(starting_loyalty=10)
 
-        # Force every coin flip to "heads" regardless of how card_impl imports random.
-        import random as _random
-        monkeypatch.setattr(_random, "randint", lambda a, b: b)
+        # Force every coin flip to "heads". The engine convention is that
+        # gameplay randomness goes through ``game.rng`` (a dedicated
+        # random.Random instance), not the global ``random`` module, so patch
+        # the RNG the impl actually uses.
+        monkeypatch.setattr(game.rng, "randint", lambda a, b: b)
 
         # Ensure opponent has skip_turns attribute
         opponent.skip_turns = 0

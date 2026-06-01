@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from silverquillm.cli import main, _make_run_name, _image_dir, _image_results_dir, _api_key_env_args, _harvest_results, _rewrite_diff_headers
+from silverquillm.cli import main, _make_run_name, _image_dir, _image_results_dir, _api_key_env_args, _harvest_results, _rewrite_diff_headers, _API_KEY_ENV_VARS
 from silverquillm.runner import LifecycleResult
 
 
@@ -207,7 +207,10 @@ class TestAPIKeyPassthrough:
         assert not any("OPENROUTER" in a for a in args)
 
     def test_no_keys_returns_empty(self, monkeypatch):
-        for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "COPILOT_GITHUB_TOKEN"):
+        # Clear every key the function reads, driven from the source-of-truth
+        # tuple so this test can't drift when a new key is added (e.g.
+        # CLAUDE_CODE_OAUTH_TOKEN, which the Claude Code runtime exports).
+        for key in _API_KEY_ENV_VARS:
             monkeypatch.delenv(key, raising=False)
         assert _api_key_env_args() == []
 

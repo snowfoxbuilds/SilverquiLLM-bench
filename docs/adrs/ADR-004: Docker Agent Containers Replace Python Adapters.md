@@ -20,7 +20,7 @@ The file-based contract is:
 - Output directory mounted at `/output/`
 - API credentials passed as environment variables
 - Agent implementations harvested from `/workspace/cards/sos/*/card_impl.py`
-- Agent-written tests harvested from `/workspace/cards/sos/*/tests.py`
+- Agent tests harvested from `/workspace/cards/sos/*/tests.py`
 - Agent engine modifications harvested from `/workspace/engine_work/`
 - Progress and logs harvested from `/output/`
 Python adapters, per-card workspaces, strategy classes, harness-managed rounds, and application-level contamination checking are legacy implementation details to remove or migrate away from. Agent-internal iteration belongs inside the container entrypoint or the agent itself, not the host runner.
@@ -36,7 +36,7 @@ Python adapters, per-card workspaces, strategy classes, harness-managed rounds, 
 - **Negative**: Per-card timeout and rollback semantics are weaker; partial results are harvested after whole-container timeout.
 - **Negative**: Debugging agent behavior depends on progress logs, stdout, stderr, and harvested files rather than adapter-level structured callbacks.
 - **Neutral**: Docker image naming becomes part of the benchmark identity, for example `silverquillm-pi-blind:latest`.
-- **Neutral**: Agent-written tests remain artifacts in v1. Scoring uses audited tests only.
+- **Neutral**: Agent tests remain artifacts in v1. Scoring uses audited tests only.
 ## Alternatives Considered
 
 - **Keep Python adapters**: Rejected because adapter configuration, subprocess lifecycle, streaming, and contamination checking were fragile and agent-specific.

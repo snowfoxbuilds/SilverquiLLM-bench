@@ -4,7 +4,7 @@ Date: 2026-05-08
 
 ## Context
 
-The engine is a Python port of XMage (Java). The original [TEST-SUITE.md](http://test-suite.md/) spec planned **Differential Testing** as the primary engine correctness check: convert tests to engine-agnostic JSON, execute in both Python and XMage via a Java adapter, and compare final states.
+The engine is a Python port of XMage (Java). The original [AUDITED-TEST-SUITE.md](http://audited-test-suite.md/) spec planned **Differential Testing** as the primary engine correctness check: convert tests to engine-agnostic JSON, execute in both Python and XMage via a Java adapter, and compare final states.
 
 ## Decision
 
@@ -64,7 +64,7 @@ This validates the engine's **rules processing** (state transitions, triggered a
 - **MTGA API integration**: Query MTGA directly for rule adjudication. Not feasible — MTGA has no public rules API.
 ## Consequences
 
-- Differential Testing section in [TEST-SUITE.md](http://test-suite.md/) replaced with Replay Validation section
+- Differential Testing section in [AUDITED-TEST-SUITE.md](http://audited-test-suite.md/) replaced with Replay Validation section
 - Replay Validation pipeline is a Future Work item, blocked on FDN 001–291 + SPG 74–83 completion
 - 17lands GRE JSON data provided — schema documented in [17lands Replay Data Schema](https://www.notion.so/35b6a7adc8ed80978dccdf724213b6f8)
 - First benchmark runs proceed as Pipeline Validation Runs (no Replay Validation yet)
