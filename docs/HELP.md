@@ -31,6 +31,7 @@ docker build -t silverquillm-cc-opus-48-xhigh-cheap-review:latest docker/cc-opus
 
 docker build -t silverquillm-cc-opus-48-skill-xhigh:latest docker/cc-opus-48-skill-xhigh/
 docker build -t silverquillm-cc-opus-48-coord-fixed-xhigh:latest docker/cc-opus-48-coord-fixed-xhigh/
+docker build -t silverquillm-cc-opus-48-plan-tdd-xhigh:latest docker/cc-opus-48-plan-tdd-xhigh/
 
 # Smoke
 silverquillm smoke --image silverquillm-local-pi-blind:latest
@@ -61,7 +62,8 @@ silverquillm run --image silverquillm-cc-opus-48-xhigh-cheap-review:latest --car
 
 
 silverquillm run --image silverquillm-cc-opus-48-skill-xhigh:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
-silverquillm run --image silverquillm-cc-opus-48-coord-fixed-xhigh:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000
+silverquillm run --image silverquillm-cc-opus-48-coord-fixed-xhigh:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
+silverquillm run --image silverquillm-cc-opus-48-plan-tdd-xhigh:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000
 
 silverquillm run \
   --image silverquillm-local-pi-blind:latest \
