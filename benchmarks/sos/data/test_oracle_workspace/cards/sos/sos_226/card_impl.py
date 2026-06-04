@@ -61,7 +61,13 @@ class SilverquillTheDisputant(Creature):
             base_toughness=base_toughness,
             **kwargs,
         )
-        # The casualty_grant attribute is checked by the casting pipeline.
-        # When this creature is on the battlefield, the pipeline sees it
-        # and offers casualty 1 to the controller when casting instants/sorceries.
-        self.casualty_grant: int = 1
+
+    # The casualty_grant attribute is checked by the casting pipeline.
+    # When this creature is on the battlefield, the pipeline sees it
+    # and offers casualty 1 to the controller when casting instants/sorceries.
+    # Expressed as a read-only property: it is the card's static ability,
+    # not per-instance mutable state.
+    @property
+    def casualty_grant(self) -> int:
+        """Static ability: each instant/sorcery you cast has casualty 1."""
+        return 1

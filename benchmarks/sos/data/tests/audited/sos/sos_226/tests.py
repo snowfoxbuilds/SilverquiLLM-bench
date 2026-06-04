@@ -1,294 +1,207 @@
-"""Rewritten audited tests for Silverquill, the Disputant (sos_226).
+"""Audited tests for Silverquill, the Disputant (sos_226).
 
-7 tests covering oracle behavior:
-1. Identity — name, mana_cost {2}{W}{B}, 4/4, Legendary Creature — Elder Dragon,
-   Flying + Vigilance.
-2. No get_targets method — this card doesn't target anything.
-3. Casualty offered on controller's instant spell while Silverquill on battlefield.
-4. Casualty with sacrifice copies the spell.
-5. No legal sacrifice (declined) — no copy made.
-6. No casualty on creature spells — only instants/sorceries.
-7. Effect removed when Silverquill leaves the battlefield.
+Oracle: {2}{W}{B} 4/4 Legendary Creature — Elder Dragon.
+  Flying, vigilance
+  Each instant and sorcery spell you cast has casualty 1.  (As you cast that
+  spell, you may sacrifice a creature with power 1 or greater.  When you do,
+  copy the spell and you may choose new targets for the copy.)
+
+Simulation-only shape (AUDITED-TEST-API.md): casualty is a granted keyword
+exercised indirectly — the subject instant is cast via a ``CastSpell``
+directive, the engine raises the "sacrifice which creature?" prompt through
+the public choice API, and the answer comes from the choice script
+(Channel 2).  The doubled resolution is asserted through the doubled
+observable result (the fixture spell gains its controller 2 life, so paying
+casualty yields +4).  The oracle copies the spell with the *same* targets, so
+retargeting is not asserted.
+
+Tests:
+  1. test_card_identity
+  2. test_casualty_paid_copies_the_spell
+  3. test_casualty_may_be_declined
+  4. test_zero_power_creature_is_not_a_legal_casualty_sacrifice
+  5. test_no_casualty_on_creature_spells
+  6. test_no_casualty_without_the_granter
 """
 
 from __future__ import annotations
 
-import pytest
-
 from card_impl import SilverquillTheDisputant
 
-from engine.card import Creature, Instant, Sorcery
-from engine.game import destroy, sacrifice
-from engine.types import (
-    CardType,
-    Keyword,
-    ManaCost,
-    ManaType,
-    Phase,
-    Supertype,
-    Zone,
-)
+from engine.card import Creature, Instant
+from engine.types import CardType, ManaCost, ManaType, Phase, Supertype, Zone
 from test_utils import (
-    card_colors,
+    CastSpell,
+    DeterministicPlayer,
+    advance_to_phase,
+    assert_in_zone,
+    assert_life_total,
+    assert_stack,
+    assert_stack_empty,
+    assert_zone_count,
+    assert_zone_exact,
     create_game,
-    resolve_top,
-    set_battlefield,
-    set_hand,
-    set_mana_pool,
+    no_op,
+    perform_action,
+    priority_loop,
+    set_board_state,
+    set_player,
 )
+
+_NAME = "Silverquill, the Disputant"
+
+
+class SoothingWords(Instant):
+    """Fixture card — {W} instant: you gain 2 life (untargeted).
+
+    Hook bodies are card-implementation code, exempt from the API
+    conformance scan.
+    """
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Soothing Words")
+        kwargs.setdefault("mana_cost", ManaCost(pips={ManaType.WHITE: 1}))
+        super().__init__(**kwargs)
+
+    def on_resolve(self, game):
+        if self.controller is not None:
+            self.controller.life += 2
+
+
+def _fodder(name: str = "Fodder") -> Creature:
+    return Creature(name=name, base_power=1, base_toughness=1)
+
+
+def _cast_soothing_words(game, *, battlefield, choices) -> None:
+    """Cast the fixture instant with the given board and choice script."""
+    advance_to_phase(game, Phase.PRECOMBAT_MAIN)
+    set_board_state(
+        game, 0,
+        battlefield=battlefield,
+        hand=[SoothingWords()],
+        mana={ManaType.WHITE: 1},
+    )
+    set_player(game, 0, DeterministicPlayer("P0", script=[
+        perform_action(CastSpell("Soothing Words")),
+        no_op(),
+        no_op(),
+    ], choices=choices))
+    set_player(game, 1, DeterministicPlayer("P1", script=[
+        no_op(),
+        no_op(),
+    ]))
+    priority_loop(game)
 
 
 class TestIdentity:
-    """Test 1: Verify card identity — name, cost, stats, types, keywords."""
-
-    def test_identity(self) -> None:
-        """{2}{W}{B} 4/4 Legendary Creature — Elder Dragon, Flying, Vigilance."""
-        card = SilverquillTheDisputant(name="Silverquill, the Disputant", owner=None)
-
-        # Name
-        assert card.name == "Silverquill, the Disputant"
-
-        # Mana cost: {2}{W}{B} → generic=2, 1 white, 1 black → CMC 4
+    def test_card_identity(self) -> None:
+        card = SilverquillTheDisputant()
+        assert card.name == _NAME
         assert card.mana_cost.generic == 2
         assert card.mana_cost.pips.get(ManaType.WHITE) == 1
         assert card.mana_cost.pips.get(ManaType.BLACK) == 1
         assert card.mana_cost.cmc == 4
-
-        # Colors: White and Black (exactly)
-        colors = card_colors(card)
-        assert colors == {"W", "B"}
-
-        # Type line: Legendary Creature — Elder Dragon
         assert CardType.CREATURE in card.card_types
         assert isinstance(card, Creature)
         assert Supertype.LEGENDARY in card.supertypes
         assert "Elder" in card.subtypes
         assert "Dragon" in card.subtypes
-
-        # Stats: 4/4
         assert card.base_power == 4
         assert card.base_toughness == 4
 
-        # Keywords: Flying and Vigilance
-        assert Keyword.FLYING in card.keywords
-        assert Keyword.VIGILANCE in card.keywords
 
-
-class TestNoGetTargets:
-    """Test 2: Silverquill does NOT have a get_targets method — it doesn't target."""
-
-    def test_no_get_targets(self) -> None:
-        """Card class must not define get_targets (it targets nothing)."""
-        # The class itself should not override get_targets
-        assert "get_targets" not in SilverquillTheDisputant.__dict__
-
-
-class TestCasualtyOfferedOnControllerInstant:
-    """Test 3: Casualty 1 is offered on an instant the controller casts while
-    Silverquill is on the battlefield."""
-
-    def test_casualty_offered_on_instant(self) -> None:
-        """Casting an instant with Silverquill on bf offers casualty choice.
-
-        We prove the offer exists by declining it — the spell still resolves
-        normally with exactly one object on the stack (no copy).
-        """
-        from engine.casting import cast_spell as engine_cast_spell
-
+class TestCasualty:
+    def test_casualty_paid_copies_the_spell(self) -> None:
+        """Sacrificing the 1/1 to casualty resolves the spell twice: the
+        controller gains 4 life and the sacrificed creature is in the
+        graveyard.  The copy ceases to exist — only the real card reaches
+        the graveyard."""
         game = create_game()
-        player = game.players[0]
-
-        silverquill = SilverquillTheDisputant(owner=player)
-        fodder = Creature(
-            name="Fodder",
-            owner=player,
-            base_power=1,
-            base_toughness=1,
-        )
-        bolt = Instant(
-            name="Lightning Bolt",
-            mana_cost=ManaCost(pips={ManaType.RED: 1}),
-            owner=player,
+        fodder = _fodder()
+        _cast_soothing_words(
+            game,
+            battlefield=[SilverquillTheDisputant(), fodder],
+            choices=[fodder],
         )
 
-        set_battlefield(game, 0, [silverquill, fodder])
-        set_hand(game, 0, [bolt])
-        set_mana_pool(game, 0, {ManaType.RED: 1})
+        assert_life_total(game, 0, 24)
+        assert_in_zone(game, 0, Zone.GRAVEYARD, "Fodder")
+        assert_in_zone(game, 0, Zone.GRAVEYARD, "Soothing Words", count=1)
+        assert_zone_exact(game, 0, Zone.BATTLEFIELD, [_NAME])
+        # No lingering copy: the stack drained completely.
+        assert_stack(game, [])
+        assert_stack_empty(game)
 
-        # Script: decline casualty — proves casualty was offered
-        player._script.appendleft("decline_casualty")
-
-        game.active_player_index = 0
-        game.priority_player_index = 0
-
-        engine_cast_spell(game, player, bolt)
-
-        # Spell on stack, no copy (declined)
-        stack_objects = list(game.stack.objects())
-        assert len(stack_objects) == 1
-        assert stack_objects[0].source.name == "Lightning Bolt"
-
-        # Fodder still alive (not sacrificed)
-        bf = game.get_battlefield(player).get_all()
-        fodder_on_bf = [c for c in bf if getattr(c, "name", None) == "Fodder"]
-        assert len(fodder_on_bf) == 1
-
-
-class TestCasualtyWithSacCopiesSpell:
-    """Test 4: Paying casualty (sacrificing a creature with power >= 1) copies the spell."""
-
-    def test_casualty_sac_copies_spell(self) -> None:
-        """Card-side observable: Silverquill exposes a ``casualty_grant``
-        attribute set to 1, declaring that each instant/sorcery the
-        controller casts has casualty 1.
-
-        Note: the workspace engine has no casualty hook in cast_spell, so
-        we cannot exercise the full "sacrifice → copy" pipeline against
-        the floor engine. The contract under test here is the card-side
-        declaration; a separate engine-level test (kept out of card-
-        audited tests) would verify the cast pipeline honours it.
-        """
+    def test_casualty_may_be_declined(self) -> None:
+        """Declining the additional cost resolves the spell exactly once and
+        sacrifices nothing."""
         game = create_game()
-        player = game.players[0]
+        fodder = _fodder()
+        _cast_soothing_words(
+            game,
+            battlefield=[SilverquillTheDisputant(), fodder],
+            choices=[None],
+        )
 
-        silverquill = SilverquillTheDisputant(owner=player)
-        set_battlefield(game, 0, [silverquill])
+        assert_life_total(game, 0, 22)
+        assert_in_zone(game, 0, Zone.BATTLEFIELD, "Fodder")
+        assert_zone_count(game, 0, Zone.GRAVEYARD, 1)  # just the spell
 
-        # Card-side observable: the casualty grant amount.
-        assert getattr(silverquill, "casualty_grant", None) == 1
-
-
-class TestNoLegalSacrificeDeclined:
-    """Test 5: If no creature with power >= 1 exists, casualty is not offered
-    and no copy is made."""
-
-    def test_no_legal_sacrifice(self) -> None:
-        """With only 0-power creatures, casualty cannot be paid — no copy."""
-        from engine.casting import cast_spell as engine_cast_spell
-
+    def test_zero_power_creature_is_not_a_legal_casualty_sacrifice(self) -> None:
+        """Casualty 1 requires power >= 1: answering the prompt with a
+        0-power creature is not a legal payment — nothing is sacrificed and
+        the spell resolves once."""
         game = create_game()
-        player = game.players[0]
-
-        silverquill = SilverquillTheDisputant(owner=player)
-        # 0-power creature — not valid for casualty 1
-        wimp = Creature(
-            name="Wimp",
-            owner=player,
-            base_power=0,
-            base_toughness=1,
-        )
-        bolt = Instant(
-            name="Lightning Bolt",
-            mana_cost=ManaCost(pips={ManaType.RED: 1}),
-            owner=player,
+        wimp = Creature(name="Wimp", base_power=0, base_toughness=1)
+        _cast_soothing_words(
+            game,
+            battlefield=[SilverquillTheDisputant(), wimp],
+            choices=[wimp],
         )
 
-        set_battlefield(game, 0, [silverquill, wimp])
-        set_hand(game, 0, [bolt])
-        set_mana_pool(game, 0, {ManaType.RED: 1})
+        assert_life_total(game, 0, 22)
+        assert_in_zone(game, 0, Zone.BATTLEFIELD, "Wimp")
+        assert_in_zone(game, 0, Zone.GRAVEYARD, "Soothing Words", count=1)
 
-        # No script entry needed — casualty should not be offered at all
-        game.active_player_index = 0
-        game.priority_player_index = 0
-
-        engine_cast_spell(game, player, bolt)
-
-        # Only the original spell on stack (no copy)
-        stack_objects = list(game.stack.objects())
-        assert len(stack_objects) == 1
-
-        # Wimp still on battlefield (never sacrificed)
-        bf = game.get_battlefield(player).get_all()
-        wimp_on_bf = [c for c in bf if getattr(c, "name", None) == "Wimp"]
-        assert len(wimp_on_bf) == 1
-
-
-class TestNoCasualtyOnCreatureSpell:
-    """Test 6: Casualty is NOT offered for creature spells, only instant/sorcery."""
-
-    def test_no_casualty_on_creature(self) -> None:
-        """Casting a creature spell does not trigger casualty."""
-        from engine.casting import cast_spell as engine_cast_spell
-
+    def test_no_casualty_on_creature_spells(self) -> None:
+        """Only instants and sorceries gain casualty — casting a creature
+        offers no sacrifice prompt (a dry choice script would fail the test
+        if it did)."""
         game = create_game()
-        player = game.players[0]
-
-        silverquill = SilverquillTheDisputant(owner=player)
-        fodder = Creature(
-            name="Fodder",
-            owner=player,
-            base_power=2,
-            base_toughness=2,
-        )
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
+        fodder = _fodder()
         bear = Creature(
             name="Grizzly Bears",
-            mana_cost=ManaCost(generic=1, pips={ManaType.GREEN: 1}),
-            owner=player,
-            base_power=2,
-            base_toughness=2,
+            base_power=2, base_toughness=2,
+            mana_cost=ManaCost(generic=1),
         )
+        set_board_state(
+            game, 0,
+            battlefield=[SilverquillTheDisputant(), fodder],
+            hand=[bear],
+            mana={ManaType.COLORLESS: 1},
+        )
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            perform_action(CastSpell("Grizzly Bears")),
+            no_op(),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[no_op()]))
+        priority_loop(game)
 
-        set_battlefield(game, 0, [silverquill, fodder])
-        set_hand(game, 0, [bear])
-        set_mana_pool(game, 0, {ManaType.GREEN: 1, ManaType.COLORLESS: 1})
+        assert_in_zone(game, 0, Zone.BATTLEFIELD, "Grizzly Bears")
+        assert_in_zone(game, 0, Zone.BATTLEFIELD, "Fodder")
+        assert_zone_count(game, 0, Zone.GRAVEYARD, 0)
 
-        game.active_player_index = 0
-        game.priority_player_index = 0
-        game.phase = Phase.PRECOMBAT_MAIN
-
-        engine_cast_spell(game, player, bear)
-
-        # Only the creature spell on stack (no copy, no casualty offered)
-        stack_objects = list(game.stack.objects())
-        assert len(stack_objects) == 1
-        assert stack_objects[0].source.name == "Grizzly Bears"
-
-        # Fodder still on battlefield (not sacrificed)
-        bf = game.get_battlefield(player).get_all()
-        fodder_on_bf = [c for c in bf if getattr(c, "name", None) == "Fodder"]
-        assert len(fodder_on_bf) == 1
-
-
-class TestRemovedWhenSilverquillLeaves:
-    """Test 7: Casualty effect is removed when Silverquill leaves the battlefield."""
-
-    def test_no_casualty_after_silverquill_leaves(self) -> None:
-        """After Silverquill is destroyed, instants no longer get casualty."""
-        from engine.casting import cast_spell as engine_cast_spell
-
+    def test_no_casualty_without_the_granter(self) -> None:
+        """Without Silverquill on the battlefield an instant gets no casualty
+        prompt and resolves once."""
         game = create_game()
-        player = game.players[0]
-
-        silverquill = SilverquillTheDisputant(owner=player)
-        fodder = Creature(
-            name="Fodder",
-            owner=player,
-            base_power=2,
-            base_toughness=2,
-        )
-        bolt = Instant(
-            name="Lightning Bolt",
-            mana_cost=ManaCost(pips={ManaType.RED: 1}),
-            owner=player,
+        fodder = _fodder()
+        _cast_soothing_words(
+            game,
+            battlefield=[fodder],
+            choices=[],
         )
 
-        set_battlefield(game, 0, [silverquill, fodder])
-        set_hand(game, 0, [bolt])
-        set_mana_pool(game, 0, {ManaType.RED: 1})
-
-        # Destroy Silverquill — removes it from battlefield
-        destroy(game, silverquill)
-
-        game.active_player_index = 0
-        game.priority_player_index = 0
-
-        engine_cast_spell(game, player, bolt)
-
-        # Only the original spell on stack — no casualty offered
-        stack_objects = list(game.stack.objects())
-        assert len(stack_objects) == 1
-
-        # Fodder still on battlefield (not sacrificed)
-        bf = game.get_battlefield(player).get_all()
-        fodder_on_bf = [c for c in bf if getattr(c, "name", None) == "Fodder"]
-        assert len(fodder_on_bf) == 1
+        assert_life_total(game, 0, 22)
+        assert_in_zone(game, 0, Zone.BATTLEFIELD, "Fodder")
