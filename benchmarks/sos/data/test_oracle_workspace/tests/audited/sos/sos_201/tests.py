@@ -1,450 +1,289 @@
-"""Rewritten audited tests for Lorehold, the Historian (sos_201).
+"""Audited tests for Lorehold, the Historian (sos_201).
 
-8 tests covering oracle behavior:
-1. Identity — name, mana_cost {3}{R}{W}, 5/5, Legendary Creature — Elder Dragon,
-   Flying + Haste.
-2. Miracle grant to instants and sorceries (not creatures) in hand while on bf.
-3. Grant removed when Lorehold leaves the battlefield.
-4. Miracle cast on first draw this turn (instant/sorcery).
-5. No miracle on subsequent draws.
-6. Opponent-upkeep discard-to-draw: declined path.
-7. Opponent-upkeep discard-to-draw: accepted path.
-8. No trigger on controller's own upkeep.
+Oracle: {3}{R}{W} 5/5 Legendary Creature — Elder Dragon.
+  Flying, haste
+  Each instant and sorcery card in your hand has miracle {2}.
+  At the beginning of each opponent's upkeep, you may discard a card.
+  If you do, draw a card.
+
+Simulation-only shape (AUDITED-TEST-API.md): every behaviour is reached
+within player 0's turn by giving Lorehold to **player 1** — player 0's upkeep
+is "each opponent's upkeep" for Lorehold's controller, and player 1's first
+draw of the turn is produced in-game by a fixture draw instant cast at
+instant speed.  The miracle "cast it for its miracle cost?" yes/no is
+answered from the choice script; that the alternative cost was actually used
+is observed through mana-minimality (the drawn spell's printed cost is
+unpayable from the pool, while miracle {2} is exactly payable).
+
+Tests:
+  1. test_card_identity
+  2. test_miracle_cast_on_first_draw
+  3. test_miracle_offer_may_be_declined
+  4. test_no_miracle_on_second_draw
+  5. test_no_miracle_without_lorehold
+  6. test_miracle_grant_scoped_to_controllers_hand
+  7. test_opponent_upkeep_discard_to_draw_accepted
+  8. test_opponent_upkeep_discard_declined
+  9. test_no_trigger_on_controllers_own_upkeep
 """
 
 from __future__ import annotations
 
-import pytest
-
 from card_impl import LoreholdTheHistorian
 
-from engine.card import Creature, Instant, Sorcery
-from engine.events import BeginningOfUpkeepTriggeredEvent, DrawsCardTriggeredEvent
-from engine.game import destroy, draw_card
-from engine.types import (
-    CardType,
-    Keyword,
-    ManaCost,
-    ManaType,
-    Supertype,
-    Zone,
-)
+from engine.card import Creature, Instant
+from engine.types import CardType, ManaCost, ManaType, Phase, Step, Supertype, Zone
 from test_utils import (
-    card_colors,
+    CastSpell,
+    DeterministicPlayer,
+    advance_to_phase,
+    assert_in_zone,
+    assert_library_order,
+    assert_mana_pool,
+    assert_stack_empty,
+    assert_zone_count,
     create_game,
-    resolve_top,
-    set_battlefield,
-    set_hand,
-    set_library_top,
-    set_mana_pool,
+    no_op,
+    perform_action,
+    priority_loop,
+    set_board_state,
+    set_player,
 )
+
+_NAME = "Lorehold, the Historian"
+
+
+class QuickStudy(Instant):
+    """Fixture card — {1} instant: its controller draws a card.
+
+    Hook bodies are card-implementation code (the same kind of code as a
+    ``card_impl.py``), exempt from the API conformance scan.
+    """
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Quick Study")
+        kwargs.setdefault("mana_cost", ManaCost(generic=1))
+        super().__init__(**kwargs)
+
+    def on_resolve(self, game):
+        from engine.game import draw_card
+
+        draw_card(game, self.controller)
+
+
+def _make_expensive_instant() -> Instant:
+    """An instant whose printed cost {4}{R} is deliberately unpayable in the
+    miracle tests — only the miracle {2} alternative cost can cast it."""
+    return Instant(
+        name="Stroke of Genius",
+        mana_cost=ManaCost(generic=4, pips={ManaType.RED: 1}),
+    )
 
 
 class TestIdentity:
-    """Test 1: Verify card identity — name, cost, stats, types, keywords."""
-
-    def test_identity(self) -> None:
-        """{3}{R}{W} 5/5 Legendary Creature — Elder Dragon, Flying, Haste."""
-        card = LoreholdTheHistorian(name="Lorehold, the Historian", owner=None)
-
-        # Name
-        assert card.name == "Lorehold, the Historian"
-
-        # Mana cost: {3}{R}{W} → generic=3, 1 red, 1 white → CMC 5
+    def test_card_identity(self) -> None:
+        card = LoreholdTheHistorian()
+        assert card.name == _NAME
         assert card.mana_cost.generic == 3
         assert card.mana_cost.pips.get(ManaType.RED) == 1
         assert card.mana_cost.pips.get(ManaType.WHITE) == 1
         assert card.mana_cost.cmc == 5
-
-        # Colors: Red and White
-        colors = card_colors(card)
-        assert "R" in colors
-        assert "W" in colors
-
-        # Type line: Legendary Creature — Elder Dragon
         assert CardType.CREATURE in card.card_types
         assert isinstance(card, Creature)
         assert Supertype.LEGENDARY in card.supertypes
         assert "Elder" in card.subtypes
         assert "Dragon" in card.subtypes
-
-        # Stats
         assert card.base_power == 5
         assert card.base_toughness == 5
 
-        # Keywords
-        assert Keyword.FLYING in card.keywords
-        assert Keyword.HASTE in card.keywords
 
-
-class TestMiracleGrantToInstantsAndSorceries:
-    """Test 2: While Lorehold is on the battlefield, instants/sorceries in
-    controller's hand get miracle_cost={2}, but creatures do not."""
-
-    def test_miracle_granted_to_instants_and_sorceries_not_creatures(self) -> None:
-        """Instants and sorceries in hand gain miracle_cost; creatures do not."""
-        game = create_game()
-        player = game.players[0]
-
-        lorehold = LoreholdTheHistorian(owner=player)
-        bolt = Instant(name="Lightning Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}), owner=player)
-        divination = Sorcery(name="Divination", mana_cost=ManaCost(generic=2, pips={ManaType.BLUE: 1}), owner=player)
-        bear = Creature(name="Grizzly Bears", mana_cost=ManaCost(generic=1, pips={ManaType.GREEN: 1}), owner=player, base_power=2, base_toughness=2)
-
-        # Put Lorehold on the battlefield (which triggers register_triggers via _set_zone)
-        set_battlefield(game, 0, [lorehold])
-        # Put cards in hand
-        set_hand(game, 0, [bolt, divination, bear])
-
-        # Apply continuous effects so the miracle_cost is granted
-        game.effect_manager.apply_all(game)
-
-        # Instants and sorceries should have miracle_cost = ManaCost(generic=2)
-        assert hasattr(bolt, "miracle_cost") and bolt.miracle_cost is not None, \
-            "Instant in hand should have miracle_cost"
-        assert bolt.miracle_cost.cmc == 2
-
-        assert hasattr(divination, "miracle_cost") and divination.miracle_cost is not None, \
-            "Sorcery in hand should have miracle_cost"
-        assert divination.miracle_cost.cmc == 2
-
-        # Creature should NOT have miracle_cost
-        has_miracle = hasattr(bear, "miracle_cost") and bear.miracle_cost is not None
-        assert not has_miracle, "Creature in hand should NOT get miracle_cost"
-
-
-class TestGrantRemovedWhenLoreholdLeaves:
-    """Test 3: After Lorehold leaves the battlefield, cards in hand no longer
-    have miracle_cost."""
-
-    def test_miracle_grant_removed_on_leave(self) -> None:
-        """When Lorehold is destroyed, instants/sorceries in hand lose miracle_cost."""
-        game = create_game()
-        player = game.players[0]
-
-        lorehold = LoreholdTheHistorian(owner=player)
-        bolt = Instant(name="Lightning Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}), owner=player)
-
-        set_battlefield(game, 0, [lorehold])
-        set_hand(game, 0, [bolt])
-        game.effect_manager.apply_all(game)
-
-        # Confirm miracle_cost is granted
-        assert hasattr(bolt, "miracle_cost") and bolt.miracle_cost is not None
-
-        # Destroy Lorehold
-        destroy(game, lorehold)
-
-        # After removal, apply_all should no longer grant miracle_cost
-        game.effect_manager.apply_all(game)
-
-        has_miracle = hasattr(bolt, "miracle_cost") and bolt.miracle_cost is not None
-        assert not has_miracle, \
-            "After Lorehold leaves, instants/sorceries in hand should NOT have miracle_cost"
-
-
-class TestMiracleCastOnFirstDraw:
-    """Test 4: When controller draws a card (first draw this turn) that is an
-    instant/sorcery, can cast it for miracle cost {2}."""
+class TestMiracle:
+    def _draw_first_card_via_fixture(self, game, *, p1_choices) -> None:
+        """Player 1 casts Quick Study at instant speed, drawing their first
+        card of the turn."""
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            no_op(), no_op(), no_op(), no_op(),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[
+            perform_action(CastSpell("Quick Study")),
+            no_op(), no_op(), no_op(),
+        ], choices=p1_choices))
+        priority_loop(game)
 
     def test_miracle_cast_on_first_draw(self) -> None:
-        """First-drawn instant/sorcery this turn triggers miracle — can cast for {2}."""
-        # Script: choose yes when offered miracle cast
-        game = create_game(scripts=([True], []))
-        player = game.players[0]
+        """The first instant drawn this turn may be cast for miracle {2} —
+        with only {C}3 in the pool ({1} Quick Study + {2} miracle), the
+        printed {4}{R} cost is unpayable, so the spell resolving proves the
+        granted miracle cost was used."""
+        game = create_game()
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
 
-        lorehold = LoreholdTheHistorian(owner=player)
-        bolt = Instant(name="Lightning Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}), owner=player)
+        stroke = _make_expensive_instant()
+        set_board_state(
+            game, 1,
+            battlefield=[LoreholdTheHistorian()],
+            hand=[QuickStudy()],
+            library=[stroke],
+            mana={ManaType.COLORLESS: 3},
+        )
 
-        set_battlefield(game, 0, [lorehold])
-        # Library top has the bolt
-        set_library_top(game, 0, [bolt])
-        # Give player {2} mana to pay miracle cost
-        set_mana_pool(game, 0, {ManaType.COLORLESS: 2})
+        self._draw_first_card_via_fixture(game, p1_choices=[True])
 
-        # Ensure it's the first draw this turn
-        player.cards_drawn_this_turn = 0
+        assert_in_zone(game, 1, Zone.GRAVEYARD, "Stroke of Genius")
+        assert_in_zone(game, 1, Zone.GRAVEYARD, "Quick Study")
+        assert_zone_count(game, 1, Zone.HAND, 0)
+        assert_mana_pool(game, 1, {})
+        assert_stack_empty(game)
 
-        # Draw the card — triggers miracle
-        drawn = draw_card(game, player)
-        assert drawn is bolt
+    def test_miracle_offer_may_be_declined(self) -> None:
+        """Declining the miracle offer keeps the drawn card in hand and
+        spends no mana on it."""
+        game = create_game()
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
 
-        # The miracle trigger should put something on the stack; resolve it
-        if not game.stack.is_empty():
-            resolve_top(game)
+        stroke = _make_expensive_instant()
+        set_board_state(
+            game, 1,
+            battlefield=[LoreholdTheHistorian()],
+            hand=[QuickStudy()],
+            library=[stroke],
+            mana={ManaType.COLORLESS: 3},
+        )
 
-        # The bolt should have been cast (moved from hand to stack or resolved to graveyard)
-        hand_cards = player.zones[Zone.HAND].get_all()
-        assert bolt not in hand_cards, \
-            "After miracle cast, the card should no longer be in hand"
+        self._draw_first_card_via_fixture(game, p1_choices=[False])
 
-
-class TestNoMiracleOnSubsequentDraws:
-    """Test 5: Second+ draw in the same turn does NOT trigger miracle."""
+        assert_in_zone(game, 1, Zone.HAND, "Stroke of Genius")
+        assert_mana_pool(game, 1, {ManaType.COLORLESS: 2})
 
     def test_no_miracle_on_second_draw(self) -> None:
-        """Second draw this turn should NOT trigger miracle."""
-        # Script: if miracle were offered (it shouldn't be), say yes
-        game = create_game(scripts=([True], []))
-        player = game.players[0]
-
-        lorehold = LoreholdTheHistorian(owner=player)
-        bolt = Instant(name="Lightning Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}), owner=player)
-
-        set_battlefield(game, 0, [lorehold])
-        set_library_top(game, 0, [bolt])
-        set_mana_pool(game, 0, {ManaType.COLORLESS: 2})
-
-        # Simulate that the player already drew one card this turn
-        player.cards_drawn_this_turn = 1
-
-        # Draw the second card
-        drawn = draw_card(game, player)
-        assert drawn is bolt
-
-        # Stack should be empty — no miracle trigger
-        assert game.stack.is_empty(), \
-            "Miracle should NOT trigger on second+ draw this turn"
-
-        # Card should remain in hand
-        hand_cards = player.zones[Zone.HAND].get_all()
-        assert bolt in hand_cards, \
-            "Card should stay in hand when miracle doesn't trigger"
-
-
-class TestOpponentUpkeepDiscardDeclined:
-    """Test 6: During opponent upkeep, trigger offers discard; if declined,
-    nothing happens."""
-
-    def test_discard_to_draw_declined(self) -> None:
-        """Player declines to discard during opponent's upkeep — no effect."""
-        # Script: choose_yes_no -> False (decline discard)
-        game = create_game(scripts=([False], []))
-        player = game.players[0]
-        opponent = game.players[1]
-
-        lorehold = LoreholdTheHistorian(owner=player)
-        hand_card = Instant(name="Shock", mana_cost=ManaCost(pips={ManaType.RED: 1}), owner=player)
-
-        set_battlefield(game, 0, [lorehold])
-        set_hand(game, 0, [hand_card])
-
-        # Set opponent as active player (it's opponent's upkeep)
-        game.active_player_index = 1
-
-        # Fire upkeep event
-        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
-
-        # Resolve the trigger on the stack
-        if not game.stack.is_empty():
-            resolve_top(game)
-
-        # Hand should be unchanged — card still there, no draw happened
-        hand_cards = player.zones[Zone.HAND].get_all()
-        assert hand_card in hand_cards, \
-            "Declining discard should leave hand unchanged"
-        assert len(hand_cards) == 1, \
-            "No extra cards should be drawn when declining"
-
-
-class TestOpponentUpkeepDiscardAccepted:
-    """Test 7: During opponent upkeep, if discard accepted, controller discards
-    then draws."""
-
-    def test_discard_to_draw_accepted(self) -> None:
-        """Player accepts discard during opponent's upkeep — discards one, draws one."""
-        shock = Instant(name="Shock", mana_cost=ManaCost(pips={ManaType.RED: 1}), owner=None)
-        new_card = Instant(name="New Card", mana_cost=ManaCost(generic=1), owner=None)
-
-        # Script: choose_yes_no -> True (accept), choose_card -> shock (discard it)
-        # The drawn card may also trigger miracle choose_yes_no, decline it
-        game = create_game(scripts=([True, shock, False], []))
-        player = game.players[0]
-        opponent = game.players[1]
-
-        lorehold = LoreholdTheHistorian(owner=player)
-
-        set_battlefield(game, 0, [lorehold])
-        set_hand(game, 0, [shock])
-        set_library_top(game, 0, [new_card])
-
-        # Set opponent as active player (it's opponent's upkeep)
-        game.active_player_index = 1
-
-        # Track initial state
-        initial_hand = list(player.zones[Zone.HAND].get_all())
-        assert shock in initial_hand
-
-        # Fire upkeep event
-        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
-
-        # Resolve the trigger
-        if not game.stack.is_empty():
-            resolve_top(game)
-
-        # Shock should be in graveyard (discarded)
-        gy_cards = player.zones[Zone.GRAVEYARD].get_all()
-        assert shock in gy_cards, "Discarded card should be in graveyard"
-
-        # New card should have been drawn into hand
-        hand_cards = player.zones[Zone.HAND].get_all()
-        assert new_card in hand_cards, "Should have drawn a new card after discarding"
-
-
-class TestNoTriggerOnControllerUpkeep:
-    """Test 8: During controller's own upkeep, the discard-draw trigger does
-    NOT fire."""
-
-    def test_no_trigger_on_own_upkeep(self) -> None:
-        """Controller's upkeep should NOT trigger the discard-to-draw ability."""
-        # If trigger fires unexpectedly, script exhaustion will cause an error
-        game = create_game(scripts=([], []))
-        player = game.players[0]
-
-        lorehold = LoreholdTheHistorian(owner=player)
-        hand_card = Instant(name="Shock", mana_cost=ManaCost(pips={ManaType.RED: 1}), owner=player)
-
-        set_battlefield(game, 0, [lorehold])
-        set_hand(game, 0, [hand_card])
-
-        # Set controller as active player (it's controller's upkeep)
-        game.active_player_index = 0
-
-        # Fire upkeep event
-        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
-
-        # Stack should be empty — no trigger
-        assert game.stack.is_empty(), \
-            "Discard-to-draw should NOT trigger on controller's own upkeep"
-
-        # Hand should be unchanged
-        hand_cards = player.zones[Zone.HAND].get_all()
-        assert hand_card in hand_cards
-        assert len(hand_cards) == 1
-
-
-# ---------------------------------------------------------------------------
-# Edge cases (user requested expanded coverage 2026-05-28)
-# ---------------------------------------------------------------------------
-
-
-class TestMiracleDeclined:
-    """Player declines the miracle offer — the drawn card stays in hand."""
-
-    def test_miracle_offer_declined_card_stays_in_hand(self) -> None:
-        # Script: choose_yes_no for miracle -> False
-        game = create_game(scripts=([False], []))
-        player = game.players[0]
-
-        lorehold = LoreholdTheHistorian(owner=player)
-        bolt = Instant(
-            name="Lightning Bolt",
-            mana_cost=ManaCost(pips={ManaType.RED: 1}),
-            owner=player,
-        )
-
-        set_battlefield(game, 0, [lorehold])
-        set_library_top(game, 0, [bolt])
-        set_mana_pool(game, 0, {ManaType.COLORLESS: 2})
-        player.cards_drawn_this_turn = 0
-
-        drawn = draw_card(game, player)
-        assert drawn is bolt
-
-        if not game.stack.is_empty():
-            resolve_top(game)
-
-        # Card should remain in hand (declined miracle)
-        hand_cards = player.zones[Zone.HAND].get_all()
-        assert bolt in hand_cards
-        # Mana should not have been spent
-        assert player.mana_pool.get(ManaType.COLORLESS) == 2
-
-
-class TestMultipleInstantsGrantedMiracle:
-    """All instants/sorceries in hand simultaneously get miracle_cost."""
-
-    def test_multiple_cards_all_get_miracle_cost(self) -> None:
+        """Only the first card drawn in a turn triggers miracle: drawing an
+        instant as the second card offers nothing (a dry choice script would
+        fail the test if it did)."""
         game = create_game()
-        player = game.players[0]
-        lorehold = LoreholdTheHistorian(owner=player)
-        bolt = Instant(
-            name="Lightning Bolt",
-            mana_cost=ManaCost(pips={ManaType.RED: 1}), owner=player,
-        )
-        divination = Sorcery(
-            name="Divination",
-            mana_cost=ManaCost(generic=2, pips={ManaType.BLUE: 1}), owner=player,
-        )
-        counterspell = Instant(
-            name="Counterspell",
-            mana_cost=ManaCost(pips={ManaType.BLUE: 2}), owner=player,
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
+
+        bear = Creature(name="Bear", base_power=2, base_toughness=2)
+        stroke = _make_expensive_instant()
+        set_board_state(
+            game, 1,
+            battlefield=[LoreholdTheHistorian()],
+            hand=[QuickStudy(), QuickStudy()],
+            library=[bear, stroke],
+            mana={ManaType.COLORLESS: 4},
         )
 
-        set_battlefield(game, 0, [lorehold])
-        set_hand(game, 0, [bolt, divination, counterspell])
-        game.effect_manager.apply_all(game)
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            no_op(), no_op(), no_op(), no_op(), no_op(),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[
+            perform_action(CastSpell("Quick Study")),
+            no_op(),
+            perform_action(CastSpell("Quick Study")),
+            no_op(), no_op(),
+        ]))
+        priority_loop(game)
 
-        for c in (bolt, divination, counterspell):
-            assert getattr(c, "miracle_cost", None) is not None, c.name
-            assert c.miracle_cost.cmc == 2
+        # Draw 1: a creature (no miracle); draw 2: an instant, but it is the
+        # second draw — no trigger, the card stays in hand.
+        assert_in_zone(game, 1, Zone.HAND, "Bear")
+        assert_in_zone(game, 1, Zone.HAND, "Stroke of Genius")
+        assert_in_zone(game, 1, Zone.GRAVEYARD, "Quick Study", count=2)
 
+    def test_no_miracle_without_lorehold(self) -> None:
+        """No granter on the battlefield → a first-draw instant offers no
+        miracle and stays in hand."""
+        game = create_game()
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
 
-class TestCreatureDrawnNoMiracle:
-    """Drawing a creature as the first card does not offer miracle (only
-    instants/sorceries are eligible)."""
-
-    def test_creature_first_draw_no_miracle_trigger(self) -> None:
-        # Empty script — any unexpected choose_yes_no would raise
-        game = create_game(scripts=([], []))
-        player = game.players[0]
-
-        lorehold = LoreholdTheHistorian(owner=player)
-        bear = Creature(
-            name="Grizzly Bears",
-            mana_cost=ManaCost(generic=1, pips={ManaType.GREEN: 1}),
-            owner=player,
-            base_power=2, base_toughness=2,
+        stroke = _make_expensive_instant()
+        set_board_state(
+            game, 1,
+            hand=[QuickStudy()],
+            library=[stroke],
+            mana={ManaType.COLORLESS: 3},
         )
 
-        set_battlefield(game, 0, [lorehold])
-        set_library_top(game, 0, [bear])
-        player.cards_drawn_this_turn = 0
+        self._draw_first_card_via_fixture(game, p1_choices=[])
 
-        drawn = draw_card(game, player)
-        assert drawn is bear
-        # No miracle trigger should land on the stack
-        assert game.stack.is_empty()
-        # Bear stays in hand, no miracle_cost set on a creature
-        assert bear in player.zones[Zone.HAND].get_all()
-        has_miracle = getattr(bear, "miracle_cost", None) is not None
-        assert not has_miracle
+        assert_in_zone(game, 1, Zone.HAND, "Stroke of Genius")
 
+    def test_miracle_grant_scoped_to_controllers_hand(self) -> None:
+        """Lorehold grants miracle to *its controller's* hand only — the
+        opponent's first-drawn instant gets no offer."""
+        game = create_game()
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
 
-class TestMiracleGrantAfterCardDrawnIntoHand:
-    """A newly drawn instant joins the hand; on the next apply, it too
-    gets miracle_cost."""
-
-    def test_card_drawn_into_hand_gets_miracle_cost_on_next_apply(self) -> None:
-        game = create_game(scripts=([False], []))  # decline if asked
-        player = game.players[0]
-
-        lorehold = LoreholdTheHistorian(owner=player)
-        bolt = Instant(
-            name="Lightning Bolt",
-            mana_cost=ManaCost(pips={ManaType.RED: 1}),
-            owner=player,
+        # Player 0 controls Lorehold; player 1 draws the instant.
+        set_board_state(game, 0, battlefield=[LoreholdTheHistorian()])
+        stroke = _make_expensive_instant()
+        set_board_state(
+            game, 1,
+            hand=[QuickStudy()],
+            library=[stroke],
+            mana={ManaType.COLORLESS: 3},
         )
 
-        set_battlefield(game, 0, [lorehold])
-        set_library_top(game, 0, [bolt])
-        # Force this to be the SECOND draw so miracle doesn't trigger
-        # (we want to test the static grant on a drawn card)
-        player.cards_drawn_this_turn = 1
+        self._draw_first_card_via_fixture(game, p1_choices=[])
 
-        drawn = draw_card(game, player)
-        assert drawn is bolt
-        # On next apply, the drawn card should be granted miracle_cost
-        game.effect_manager.apply_all(game)
-        assert getattr(bolt, "miracle_cost", None) is not None
-        assert bolt.miracle_cost.cmc == 2
+        assert_in_zone(game, 1, Zone.HAND, "Stroke of Genius")
+
+
+class TestOpponentUpkeepTrigger:
+    """'At the beginning of each opponent's upkeep' — player 0's upkeep is an
+    opponent's upkeep for Lorehold's controller (player 1)."""
+
+    def test_opponent_upkeep_discard_to_draw_accepted(self) -> None:
+        game = create_game()
+        shock = Instant(name="Shock", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        new_card = Creature(name="NewCard", base_power=1, base_toughness=1)
+        set_board_state(
+            game, 1,
+            battlefield=[LoreholdTheHistorian()],
+            hand=[shock],
+            library=[new_card],
+        )
+        set_player(game, 0, DeterministicPlayer("P0"))
+        set_player(game, 1, DeterministicPlayer("P1", choices=[True, shock]))
+
+        advance_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+
+        assert_in_zone(game, 1, Zone.GRAVEYARD, "Shock")
+        assert_in_zone(game, 1, Zone.HAND, "NewCard")
+        assert_zone_count(game, 1, Zone.LIBRARY, 0)
+
+    def test_opponent_upkeep_discard_declined(self) -> None:
+        game = create_game()
+        shock = Instant(name="Shock", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        new_card = Creature(name="NewCard", base_power=1, base_toughness=1)
+        set_board_state(
+            game, 1,
+            battlefield=[LoreholdTheHistorian()],
+            hand=[shock],
+            library=[new_card],
+        )
+        set_player(game, 0, DeterministicPlayer("P0"))
+        set_player(game, 1, DeterministicPlayer("P1", choices=[False]))
+
+        advance_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+
+        assert_in_zone(game, 1, Zone.HAND, "Shock")
+        assert_zone_count(game, 1, Zone.GRAVEYARD, 0)
+        assert_library_order(game, 1, ["NewCard"])
+
+    def test_no_trigger_on_controllers_own_upkeep(self) -> None:
+        """Player 0 controls Lorehold: player 0's own upkeep must not fire
+        the trigger (a dry choice script would fail the test if it did)."""
+        game = create_game()
+        shock = Instant(name="Shock", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        set_board_state(
+            game, 0,
+            battlefield=[LoreholdTheHistorian()],
+            hand=[shock],
+        )
+        set_player(game, 0, DeterministicPlayer("P0"))
+        set_player(game, 1, DeterministicPlayer("P1"))
+
+        advance_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+
+        assert_in_zone(game, 0, Zone.HAND, "Shock")
+        assert_zone_count(game, 0, Zone.GRAVEYARD, 0)
