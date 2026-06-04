@@ -112,6 +112,29 @@ class TestBasicSummaryGeneration:
 
         assert result["run_metadata"]["card_count"] == 2
 
+    def test_timeout_seconds_read_from_manifest(self, tmp_path):
+        """timeout_seconds must come from run_manifest.json, not the default."""
+        _make_status(tmp_path, {"1": "completed"})
+        _make_card_dir(tmp_path, "1", passed=1, failed=0)
+        (tmp_path / "run_manifest.json").write_text(
+            json.dumps({"timeout_seconds": 360000}), encoding="utf-8"
+        )
+
+        with patch("silverquillm.results._get_harness_version", return_value="abc123"):
+            result = generate_run_summary(tmp_path, "test-image")
+
+        assert result["run_metadata"]["timeout_seconds"] == 360000
+
+    def test_timeout_seconds_defaults_when_manifest_missing(self, tmp_path):
+        """Falls back to 7200 when run_manifest.json is absent."""
+        _make_status(tmp_path, {"1": "completed"})
+        _make_card_dir(tmp_path, "1", passed=1, failed=0)
+
+        with patch("silverquillm.results._get_harness_version", return_value="abc123"):
+            result = generate_run_summary(tmp_path, "test-image")
+
+        assert result["run_metadata"]["timeout_seconds"] == 7200
+
 
 # ---------------------------------------------------------------------------
 # Test: Aggregation math

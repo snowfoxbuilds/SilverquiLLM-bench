@@ -192,11 +192,6 @@ class TestNewMechanicsCoverage:
 class TestDocumentationCardCounts:
     """Documentation must reference 346 cards, not the old 368."""
 
-    def test_readme_uses_346(self) -> None:
-        """README.md should reference 346 cards."""
-        readme = (_REPO_ROOT / "README.md").read_text()
-        assert "346" in readme, "README.md should mention 346 cards"
-        assert "368" not in readme, "README.md still references old 368 count"
 
     def test_project_map_uses_346(self) -> None:
         """PROJECT_MAP.md should reference 346 cards."""

@@ -326,8 +326,9 @@ def generate_run_summary(
     if total_card_count == 0:
         total_card_count = len(per_card)
 
-    # ---- Build timeout_seconds from status or default ----
-    timeout_seconds = 7200  # default
+    # ---- Read timeout_seconds from run manifest, else default ----
+    manifest = _load_json(run_dir / "run_manifest.json") or {}
+    timeout_seconds = manifest.get("timeout_seconds", 7200)
 
     summary: dict = {
         "docker_image": image_name,
