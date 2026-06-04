@@ -1,322 +1,267 @@
-"""Rewritten audited tests for Ral Zarek, Guest Lecturer (sos_97).
+"""Audited tests for Ral Zarek, Guest Lecturer (sos_97).
 
-9 tests per ADR-010 oracle spec:
-  1. test_identity
-  2. test_loyalty_ability_structure
-  3. test_plus_one_effect (surveil with scripted choices)
-  4. test_minus_one_effect (explicit target players)
-  5. test_minus_two_effect (explicit target creature in graveyard)
-  6. test_ultimate_effect (explicit target opponent)
-  7. test_insufficient_loyalty_rejection
-  8. test_dies_at_zero_loyalty
-  9. test_one_ability_per_turn
+Oracle: {1}{B}{B} Legendary Planeswalker — Ral, loyalty 3.
+  +1: Surveil 2.
+  −1: Any number of target players each discard a card.
+  −2: Return target creature card with mana value 3 or less from your
+      graveyard to the battlefield.
+  −7: Flip five coins.  Target opponent skips their next X turns, where X is
+      the number of coins that came up heads.
+
+Simulation-only shape (AUDITED-TEST-API.md): loyalty abilities are activated
+by printed-order index via ``ActivateAbility`` directives inside
+``priority_loop`` (sorcery speed → the tests first ``advance_to_phase`` into
+the main phase).  Randomness is controlled by seed-replacement:
+``create_game(seed=...)`` seeds ``game.rng`` and the expected value is
+re-derived from an identically-seeded ``random.Random``.  Exception-signalled
+illegality (insufficient loyalty, the once-per-turn re-activation) is
+asserted with ``perform_illegal_action``.
+
+Tests:
+  1. test_card_identity
+  2. test_plus_one_surveil_both_to_graveyard
+  3. test_plus_one_surveil_keep_one_on_top
+  4. test_minus_one_targeted_player_discards
+  5. test_minus_two_returns_creature_from_graveyard
+  6. test_ultimate_skips_turns_per_seeded_coin_flips
+  7. test_insufficient_loyalty_rejected
+  8. test_planeswalker_dies_at_zero_loyalty
+  9. test_second_loyalty_activation_same_turn_rejected
 """
 
 from __future__ import annotations
 
 import random
 
-import pytest
-
 from card_impl import RalZarekGuestLecturer
 
-from engine.abilities import (
-    AbilityError,
-    LoyaltyAbilityInstance,
-    activate_ability,
-    clear_loyalty_tracking,
-)
 from engine.card import Creature, Planeswalker
-from engine.state_based_actions import resolve_state_based_actions
-from engine.types import CardType, Phase, Zone
-
+from engine.types import CardType, ManaCost, ManaType, Phase, Zone
 from test_utils import (
-    card_colors,
+    ActivateAbility,
+    DeterministicPlayer,
+    PermanentSpec,
+    advance_to_phase,
+    assert_counters,
+    assert_in_zone,
+    assert_library_order,
+    assert_zone_count,
     create_game,
-    resolve_top,
+    no_op,
+    perform_action,
+    perform_illegal_action,
+    priority_loop,
     set_board_state,
-    set_graveyard,
-    set_library_top,
+    set_player,
 )
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+_NAME = "Ral Zarek, Guest Lecturer"
 
 
-def _setup_pw_on_battlefield(starting_loyalty: int = 3):
-    """Create a game with Ral on player 0's battlefield, ready to activate.
-
-    Returns (game, ral, player, opponent).
-    """
-    game = create_game()
-    player = game.players[0]
-    opponent = game.players[1]
-
-    ral = RalZarekGuestLecturer(owner=player)
-    ral.controller = player
-    ral.loyalty = starting_loyalty
-
-    set_board_state(game, 0, battlefield=[ral])
-
-    # Ensure sorcery-speed conditions for loyalty activation
-    game.active_player_index = 0
-    game.priority_player_index = 0
-    game.phase = Phase.PRECOMBAT_MAIN
-    game.step = None
-
-    clear_loyalty_tracking()
-    return game, ral, player, opponent
-
-
-def _make_loyalty_instance(ral, player, ability_index: int) -> LoyaltyAbilityInstance:
-    """Build a LoyaltyAbilityInstance for the given ability index."""
-    abilities = ral.get_loyalty_abilities()
-    ab = abilities[ability_index]
-    return LoyaltyAbilityInstance(
-        source=ral,
-        controller=player,
-        loyalty_cost=ab.loyalty_cost,
-        effect=ab.effect,
-        description=ab.description,
+def _setup(game, *, loyalty: int = 3):
+    """Place Ral on player 0's battlefield in the main phase; return him."""
+    advance_to_phase(game, Phase.PRECOMBAT_MAIN)
+    ral = RalZarekGuestLecturer()
+    set_board_state(
+        game, 0, battlefield=[PermanentSpec(ral, counters={"loyalty": loyalty})],
     )
+    return ral
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
+def _activate(game, directive, *, p0_choices=(), p1_choices=()) -> None:
+    """Run one loyalty activation (plus a resolution round) to completion."""
+    set_player(game, 0, DeterministicPlayer("P0", script=[
+        directive,
+        no_op(),
+        no_op(),
+    ], choices=list(p0_choices)))
+    set_player(game, 1, DeterministicPlayer("P1", script=[
+        no_op(),
+        no_op(),
+    ], choices=list(p1_choices)))
+    priority_loop(game)
 
 
-class TestRalZarekGuestLecturer:
-    """Rewritten oracle tests for Ral Zarek, Guest Lecturer."""
-
-    # 1. Identity -----------------------------------------------------------
-
-    def test_identity(self) -> None:
-        """Verify name, mana cost, CMC, types, subtypes, colors, starting loyalty."""
-        card = RalZarekGuestLecturer(owner=None)
-
-        assert card.name == "Ral Zarek, Guest Lecturer"
+class TestIdentity:
+    def test_card_identity(self) -> None:
+        card = RalZarekGuestLecturer()
+        assert card.name == _NAME
+        assert card.mana_cost.generic == 1
+        assert card.mana_cost.pips.get(ManaType.BLACK) == 2
         assert card.mana_cost.cmc == 3
         assert CardType.PLANESWALKER in card.card_types
         assert isinstance(card, Planeswalker)
         assert "Ral" in card.subtypes
-        assert "B" in card_colors(card)
         assert card.starting_loyalty == 3
-        assert card.loyalty == 3
 
-    # 2. Loyalty ability structure ------------------------------------------
 
-    def test_loyalty_ability_structure(self) -> None:
-        """get_loyalty_abilities() returns 4 abilities with costs +1, -1, -2, -7."""
-        card = RalZarekGuestLecturer(owner=None)
-        abilities = card.get_loyalty_abilities()
+class TestPlusOne:
+    def test_plus_one_surveil_both_to_graveyard(self) -> None:
+        """+1: Surveil 2 — both surveiled cards may go to the graveyard;
+        loyalty goes from 3 to 4."""
+        game = create_game()
+        ral = _setup(game)
 
-        assert len(abilities) == 4
-        assert abilities[0].loyalty_cost == +1
-        assert abilities[1].loyalty_cost == -1
-        assert abilities[2].loyalty_cost == -2
-        assert abilities[3].loyalty_cost == -7
+        card_a = Creature(name="CardA", base_power=1, base_toughness=1)
+        card_b = Creature(name="CardB", base_power=1, base_toughness=1)
+        set_board_state(game, 0, library=[card_a, card_b])
 
-    # 3. +1 effect: Surveil 2 with scripted choices -------------------------
-
-    def test_plus_one_effect_both_to_graveyard(self) -> None:
-        """+1: Surveil 2 — controller chooses to put both cards in graveyard."""
-        game, ral, player, _opp = _setup_pw_on_battlefield()
-
-        # Put known cards on top of library
-        card_a = Creature(name="CardA", owner=player, base_power=1, base_toughness=1)
-        card_b = Creature(name="CardB", owner=player, base_power=1, base_toughness=1)
-        set_library_top(game, 0, [card_a, card_b])
-
-        # Script the surveil choices: put both cards into graveyard
-        # The surveil mechanic should ask which cards to put in gy vs keep on top.
-        # We script the choice to send both to graveyard.
-        player._script.extend([card_a, card_b])  # choose both for graveyard
-
-        ability = _make_loyalty_instance(ral, player, 0)
-        activate_ability(game, player, ability)
-        resolve_top(game)
-
-        # Loyalty went from 3 to 4
-        assert ral.loyalty == 4
-
-        # Both cards should be in graveyard
-        gy_cards = player.zones[Zone.GRAVEYARD].get_all()
-        gy_names = [getattr(c, "name", None) for c in gy_cards]
-        assert "CardA" in gy_names
-        assert "CardB" in gy_names
-
-        # Neither card should remain in library (top)
-        lib_cards = player.zones[Zone.LIBRARY].get_all()
-        assert card_a not in lib_cards
-        assert card_b not in lib_cards
-
-    def test_plus_one_effect_one_on_top(self) -> None:
-        """+1: Surveil 2 — controller keeps one card on top of library."""
-        game, ral, player, _opp = _setup_pw_on_battlefield()
-
-        card_a = Creature(name="CardA", owner=player, base_power=1, base_toughness=1)
-        card_b = Creature(name="CardB", owner=player, base_power=1, base_toughness=1)
-        set_library_top(game, 0, [card_a, card_b])
-
-        # Script: put only card_a in graveyard, keep card_b on top
-        player._script.extend([card_a])  # only card_a goes to graveyard
-
-        ability = _make_loyalty_instance(ral, player, 0)
-        activate_ability(game, player, ability)
-        resolve_top(game)
-
-        assert ral.loyalty == 4
-
-        # card_a in graveyard
-        gy_cards = player.zones[Zone.GRAVEYARD].get_all()
-        assert card_a in gy_cards
-
-        # card_b remains on top of library
-        lib_cards = player.zones[Zone.LIBRARY].get_all()
-        assert card_b in lib_cards
-
-    # 4. -1 effect: Target players discard ----------------------------------
-
-    def test_minus_one_effect(self) -> None:
-        """-1: Target opponent discards a card (explicit target)."""
-        game, ral, player, opponent = _setup_pw_on_battlefield()
-
-        # Give opponent a card in hand
-        discard_target = Creature(
-            name="VictimCard", owner=opponent, base_power=2, base_toughness=2
+        _activate(
+            game,
+            perform_action(ActivateAbility(ral, 0)),
+            p0_choices=[card_a, card_b],
         )
-        set_board_state(game, 1, hand=[discard_target])
 
-        # Canonical targets live on the source card's chosen_targets list.
-        ral.chosen_targets = [opponent]
+        assert_counters(game, ral, {"loyalty": 4})
+        assert_in_zone(game, 0, Zone.GRAVEYARD, "CardA")
+        assert_in_zone(game, 0, Zone.GRAVEYARD, "CardB")
+        assert_zone_count(game, 0, Zone.LIBRARY, 0)
 
-        ability = _make_loyalty_instance(ral, player, 1)
-        activate_ability(game, player, ability)
-        resolve_top(game)
+    def test_plus_one_surveil_keep_one_on_top(self) -> None:
+        """+1: Surveil 2 — declining the second pick keeps that card on top."""
+        game = create_game()
+        ral = _setup(game)
 
-        # Loyalty: 3 - 1 = 2
-        assert ral.loyalty == 2
+        card_a = Creature(name="CardA", base_power=1, base_toughness=1)
+        card_b = Creature(name="CardB", base_power=1, base_toughness=1)
+        set_board_state(game, 0, library=[card_a, card_b])
 
-        # Opponent's hand should be empty, card in graveyard
-        opp_hand = opponent.zones[Zone.HAND].get_all()
-        assert discard_target not in opp_hand
-        opp_gy = opponent.zones[Zone.GRAVEYARD].get_all()
-        assert discard_target in opp_gy
+        _activate(
+            game,
+            perform_action(ActivateAbility(ral, 0)),
+            p0_choices=[card_a, None],
+        )
 
-    # 5. -2 effect: Return creature from graveyard (explicit target) --------
+        assert_counters(game, ral, {"loyalty": 4})
+        assert_in_zone(game, 0, Zone.GRAVEYARD, "CardA")
+        assert_library_order(game, 0, ["CardB"])
 
-    def test_minus_two_effect(self) -> None:
-        """-2: Return target creature card with MV<=3 from graveyard to battlefield."""
-        game, ral, player, _opp = _setup_pw_on_battlefield()
 
-        # Put a creature in player's graveyard
-        zombie = Creature(name="Zombie", owner=player, base_power=2, base_toughness=2)
-        zombie.card_types = {CardType.CREATURE}
-        from engine.types import ManaCost
+class TestMinusOne:
+    def test_minus_one_targeted_player_discards(self) -> None:
+        """−1: the targeted player discards a card of their choice."""
+        game = create_game()
+        ral = _setup(game)
 
-        zombie.mana_cost = ManaCost.parse("{1}{B}")  # CMC 2
-        set_graveyard(game, 0, [zombie])
+        victim = Creature(name="VictimCard", base_power=2, base_toughness=2)
+        set_board_state(game, 1, hand=[victim])
 
-        # Canonical targets live on the source card's chosen_targets list.
-        ral.chosen_targets = [zombie]
+        _activate(
+            game,
+            perform_action(ActivateAbility(ral, 1, targets=[game.players[1]])),
+            p1_choices=[victim],
+        )
 
-        ability = _make_loyalty_instance(ral, player, 2)
-        activate_ability(game, player, ability)
-        resolve_top(game)
+        assert_counters(game, ral, {"loyalty": 2})
+        assert_in_zone(game, 1, Zone.GRAVEYARD, "VictimCard")
+        assert_zone_count(game, 1, Zone.HAND, 0)
 
-        # Loyalty: 3 - 2 = 1
-        assert ral.loyalty == 1
 
-        # Zombie should be on battlefield now
-        bf_cards = player.zones[Zone.BATTLEFIELD].get_all()
-        assert zombie in bf_cards
+class TestMinusTwo:
+    def test_minus_two_returns_creature_from_graveyard(self) -> None:
+        """−2: a creature card with mana value ≤ 3 returns from the graveyard
+        to the battlefield."""
+        game = create_game()
+        ral = _setup(game)
 
-        # And not in graveyard
-        gy_cards = player.zones[Zone.GRAVEYARD].get_all()
-        assert zombie not in gy_cards
+        zombie = Creature(
+            name="Zombie",
+            base_power=2,
+            base_toughness=2,
+            mana_cost=ManaCost(generic=1, pips={ManaType.BLACK: 1}),  # CMC 2
+        )
+        set_board_state(game, 0, graveyard=[zombie])
 
-    # 6. Ultimate: Flip five coins (explicit target opponent) ---------------
+        _activate(
+            game,
+            perform_action(ActivateAbility(ral, 2, targets=[zombie])),
+        )
 
-    def test_ultimate_effect(self, monkeypatch) -> None:
-        """-7: Flip 5 coins, target opponent skips X turns. Force all heads via monkeypatch."""
-        game, ral, player, opponent = _setup_pw_on_battlefield(starting_loyalty=10)
+        assert_counters(game, ral, {"loyalty": 1})
+        assert_in_zone(game, 0, Zone.BATTLEFIELD, "Zombie")
+        assert_zone_count(game, 0, Zone.GRAVEYARD, 0)
 
-        # Force every coin flip to "heads". The engine convention is that
-        # gameplay randomness goes through ``game.rng`` (a dedicated
-        # random.Random instance), not the global ``random`` module, so patch
-        # the RNG the impl actually uses.
-        monkeypatch.setattr(game.rng, "randint", lambda a, b: b)
 
-        # Ensure opponent has skip_turns attribute
-        opponent.skip_turns = 0
+class TestUltimate:
+    def test_ultimate_skips_turns_per_seeded_coin_flips(self) -> None:
+        """−7: with a seeded RNG, the opponent is set to skip exactly as many
+        turns as an identically-seeded RNG produces heads in five flips.
 
-        # Canonical targets live on the source card's chosen_targets list.
-        ral.chosen_targets = [opponent]
-
-        ability = _make_loyalty_instance(ral, player, 3)
-        activate_ability(game, player, ability)
-        resolve_top(game)
-
-        # Loyalty: 10 - 7 = 3
-        assert ral.loyalty == 3
-
-        # All 5 coins land heads → opponent skips 5 turns
-        assert opponent.skip_turns == 5
-
-    # 7. Insufficient loyalty rejection -------------------------------------
-
-    def test_insufficient_loyalty_rejection(self) -> None:
-        """Cannot activate ability whose cost exceeds current loyalty."""
-        game, ral, player, _opp = _setup_pw_on_battlefield(starting_loyalty=1)
-
-        # -2 ability costs 2 loyalty but we only have 1
-        ability = _make_loyalty_instance(ral, player, 2)
-
-        with pytest.raises(AbilityError):
-            activate_ability(game, player, ability)
-
-        # Loyalty unchanged
-        assert ral.loyalty == 1
-
-    # 8. Dies at zero loyalty -----------------------------------------------
-
-    def test_dies_at_zero_loyalty(self) -> None:
-        """Card-side: activating a -1 ability when loyalty=1 leaves loyalty at 0.
-
-        The "loyalty=0 → graveyard" routing is a planeswalker SBA that lives in
-        the engine, not the card. This test asserts only what the card is
-        responsible for: the loyalty cost was paid.
+        The engine has no turn-skip machinery yet (multi-player turn control
+        is deferred), so the recorded skip count on the targeted opponent is
+        the observable outcome of this ability.
         """
-        game, ral, player, _opp = _setup_pw_on_battlefield(starting_loyalty=1)
+        seed = 1337
+        game = create_game(seed=seed)
+        ral = _setup(game, loyalty=10)
 
-        ral.chosen_targets = []  # no targets needed for this test path
-        ability = _make_loyalty_instance(ral, player, 1)
-        activate_ability(game, player, ability)
-        resolve_top(game)
+        reference_rng = random.Random(seed)
+        expected_heads = sum(reference_rng.randint(0, 1) for _ in range(5))
 
-        assert ral.loyalty == 0
+        _activate(
+            game,
+            perform_action(ActivateAbility(ral, 3, targets=[game.players[1]])),
+        )
 
-    # 9. One ability per turn -----------------------------------------------
+        assert_counters(game, ral, {"loyalty": 3})
+        assert getattr(game.players[1], "skip_turns", 0) == expected_heads
 
-    def test_one_ability_per_turn(self) -> None:
-        """Cannot activate a second loyalty ability on the same turn."""
-        game, ral, player, _opp = _setup_pw_on_battlefield(starting_loyalty=5)
 
-        # Activate +1 (first activation this turn)
-        ability1 = _make_loyalty_instance(ral, player, 0)
-        activate_ability(game, player, ability1)
-        resolve_top(game)
+class TestLoyaltyLegality:
+    def test_insufficient_loyalty_rejected(self) -> None:
+        """−2 with only 1 loyalty is illegal; loyalty is unchanged."""
+        game = create_game()
+        ral = _setup(game, loyalty=1)
 
-        assert ral.loyalty == 6  # 5 + 1
+        zombie = Creature(
+            name="Zombie",
+            base_power=2,
+            base_toughness=2,
+            mana_cost=ManaCost(generic=1, pips={ManaType.BLACK: 1}),
+        )
+        set_board_state(game, 0, graveyard=[zombie])
 
-        # Try to activate -1 (second activation same turn) — should be rejected
-        ability2 = _make_loyalty_instance(ral, player, 1)
+        _activate(
+            game,
+            perform_illegal_action(ActivateAbility(ral, 2, targets=[zombie])),
+        )
 
-        with pytest.raises(AbilityError):
-            activate_ability(game, player, ability2)
+        assert_counters(game, ral, {"loyalty": 1})
+        assert_in_zone(game, 0, Zone.GRAVEYARD, "Zombie")
 
-        # Loyalty unchanged from second attempt
-        assert ral.loyalty == 6
+    def test_planeswalker_dies_at_zero_loyalty(self) -> None:
+        """Activating −1 at 1 loyalty leaves 0 — state-based actions put the
+        planeswalker into its owner's graveyard."""
+        game = create_game()
+        ral = _setup(game, loyalty=1)
+
+        # Opponent's hand is empty, so the −1 resolves with no discard.
+        _activate(
+            game,
+            perform_action(ActivateAbility(ral, 1, targets=[game.players[1]])),
+        )
+
+        assert_in_zone(game, 0, Zone.GRAVEYARD, _NAME)
+        assert_zone_count(game, 0, Zone.BATTLEFIELD, 0)
+
+    def test_second_loyalty_activation_same_turn_rejected(self) -> None:
+        """Loyalty abilities are once per turn: the second activation is
+        exception-signalled illegal and changes nothing."""
+        game = create_game()
+        ral = _setup(game, loyalty=5)
+        # Empty library → the +1 surveil resolves without choices.
+
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            perform_action(ActivateAbility(ral, 0)),
+            no_op(),
+            perform_illegal_action(ActivateAbility(ral, 1, targets=[game.players[1]])),
+            no_op(),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[
+            no_op(),
+            no_op(),
+        ]))
+        priority_loop(game)
+
+        # +1 applied; the rejected −1 did not.
+        assert_counters(game, ral, {"loyalty": 6})
