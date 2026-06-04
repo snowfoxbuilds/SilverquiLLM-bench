@@ -410,11 +410,13 @@ def _handle_casualty(
     candidates = []
     for perm in bf.get_all():
         if CardType.CREATURE in getattr(perm, "card_types", set()):
-            power = getattr(perm, "base_power", 0)
-            # Use modified_power if available (for P/T effects)
-            power = getattr(perm, "modified_power", power)
-            # Prefer the current power (includes +1/+1 / -1/-1 counters).
-            power = getattr(perm, "power", power)
+            # Current power (counters-aware), falling back through
+            # modified/base power for duck-typed objects without the
+            # canonical ``power`` property.
+            power = getattr(
+                perm, "power",
+                getattr(perm, "modified_power", getattr(perm, "base_power", 0)),
+            )
             if power >= casualty_n:
                 candidates.append(perm)
 

@@ -262,9 +262,13 @@ class TestFizzle:
         set_player(game, 0, DeterministicPlayer("P0", script=[
             no_op(),
             perform_action(CastSpell("Mana Sculpt", targets=["Enemy Spell"])),
-            # While the first Mana Sculpt is on the stack, the cast pipeline
-            # prompts once per spell currently on the stack (two prompts);
-            # both answers name the enemy spell.
+            # ORACLE-ENGINE QUIRK, not the spec: the oracle impl's
+            # get_targets() returns the target *pool* (every spell on the
+            # stack), and the canonical cast pipeline prompts once per
+            # returned entry — so with two spells on the stack this cast
+            # answers two prompts even though a counterspell takes a single
+            # target.  Both answers name the enemy spell; the impl uses
+            # chosen_targets[0].  Do not treat this shape as normative.
             perform_action(CastSpell(
                 "Mana Sculpt", targets=["Enemy Spell", "Enemy Spell"],
             )),

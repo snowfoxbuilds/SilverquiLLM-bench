@@ -16,7 +16,10 @@ Flagged as violations (AST-based, consistent with the harness's
 * Private-attribute poking — any attribute access with a leading underscore
   (``_script``, ``_resolve_targets``, ``_pop``, ``_omniscience_active``, ...).
 * Any engine-touching call whose name is not in the AUDITED-TEST-API.md
-  allow-list (curated ban list below).
+  allow-list (curated ban list below).  Method names that also exist on plain
+  Python collections (``pop``, ``add``, ``remove``, ...) are flagged only
+  when the receiver expression looks engine-derived, so test-local
+  ``seen.add(x)`` / ``items.pop()`` are not false positives.
 
 NOT flagged: imports (the import-boundary decision permits importing the
 engine under test for value types/enums — the rule constrains the API surface
@@ -29,6 +32,7 @@ code (calls *to* those hooks from test code are still flagged).
 from __future__ import annotations
 
 import ast
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -94,10 +98,6 @@ _BANNED_CALLS: dict[str, str] = {
     "apply_all": "effect-manager internals",
     "remove_expired": "effect-manager internals",
     "push": "direct stack mutation",
-    "pop": "direct stack mutation",
-    "peek": "direct stack inspection — use assert_stack/assert_on_stack",
-    "popleft": "direct script-queue mutation",
-    "appendleft": "direct script-queue mutation",
     "move_to_zone": "direct zone mutation — reach states via setup or gameplay",
     "move_zone": "direct zone mutation — reach states via setup or gameplay",
     "destroy": "direct state mutation",
@@ -113,10 +113,6 @@ _BANNED_CALLS: dict[str, str] = {
     "deal_damage": "direct state mutation",
     "resolve_state_based_actions": "SBAs run inside the sanctioned advancers",
     "check_state_based_actions": "SBAs run inside the sanctioned advancers",
-    "add": "direct zone/pool mutation — use set_board_state",
-    "remove": "direct zone/pool mutation — use set_board_state",
-    "shuffle": "direct zone mutation",
-    "empty": "direct pool mutation",
     "pay": "direct pool mutation — payment happens inside the cast pipeline",
     "can_pay": "payment legality is asserted via perform_illegal_action",
     "add_restricted": "direct pool mutation",
@@ -147,6 +143,49 @@ _BANNED_CALLS: dict[str, str] = {
     "assert_casting_error": "outside the allow-list — use perform_illegal_action",
     "card_colors": "outside the allow-list — assert mana_cost identity directly",
 }
+
+# Method names that are *also* common on plain Python collections
+# (list/set/dict/deque).  Flagging them by bare name would false-positive on
+# test-local data structures (``seen.add(x)``, ``items.pop()``), so these are
+# flagged only when the receiver expression looks engine-derived (its
+# identifier tokens include an engine marker such as ``game``, ``stack``,
+# ``zones`` or ``mana_pool``).
+_BANNED_ENGINE_METHODS: dict[str, str] = {
+    "pop": "direct stack/zone mutation",
+    "peek": "direct stack inspection — use assert_stack/assert_on_stack",
+    "popleft": "direct script-queue mutation",
+    "appendleft": "direct script-queue mutation",
+    "add": "direct zone/pool mutation — use set_board_state",
+    "remove": "direct zone/pool mutation — use set_board_state",
+    "shuffle": "direct zone mutation",
+    "empty": "direct pool mutation",
+}
+
+# Identifier tokens that mark a receiver expression as engine-derived.
+_ENGINE_RECEIVER_TOKENS = frozenset({
+    "game", "stack", "zone", "zones", "pool", "mana_pool",
+    "player", "players", "active_player", "non_active_player", "opponent",
+    "battlefield", "graveyard", "library", "hand", "exile", "bf", "gy",
+    "trigger_manager", "effect_manager", "replacement_manager",
+    "combat_state", "controller", "owner",
+})
+
+_IDENTIFIER_SPLIT = re.compile(r"[^A-Za-z0-9_]+")
+
+
+def _receiver_looks_engine_derived(node: ast.Call) -> bool:
+    """Heuristic: does the call receiver reference an engine object?
+
+    Splits the unparsed receiver expression into identifier tokens and checks
+    them against the engine markers — ``game.stack.pop()`` and
+    ``player.mana_pool.add(...)`` match; ``seen.add(x)`` / ``items.pop()`` on
+    test-local collections do not.
+    """
+    if not isinstance(node.func, ast.Attribute):
+        return False
+    receiver = ast.unparse(node.func.value)
+    tokens = {t.lower() for t in _IDENTIFIER_SPLIT.split(receiver) if t}
+    return bool(tokens & _ENGINE_RECEIVER_TOKENS)
 
 # Canonical card hooks: when *defined* on a fixture card class inside the test
 # file, their bodies are card-implementation code and are exempt from the
@@ -256,6 +295,19 @@ def check_file(path: Path) -> list[Violation]:
                         reason=_BANNED_CALLS[name],
                     )
                 )
+            elif (
+                name is not None
+                and name in _BANNED_ENGINE_METHODS
+                and _receiver_looks_engine_derived(node)
+            ):
+                violations.append(
+                    Violation(
+                        file=path,
+                        line=node.lineno,
+                        symbol=name,
+                        reason=_BANNED_ENGINE_METHODS[name],
+                    )
+                )
 
     return violations
 
@@ -318,6 +370,7 @@ def test_bad() -> None:
     resolve_top(game)                         # old step helper
     game.players[0]._script.appendleft(1)     # private poke (+ appendleft)
     card.on_resolve(game)                     # card-internal probe
+    game.stack.pop()                          # engine-receiver mutation
 '''
 
 _CLEAN_FIXTURE = '''\
@@ -353,6 +406,15 @@ def test_good() -> None:
     priority_loop(game)
     assert_in_zone(game, 0, Zone.GRAVEYARD, "Bolt")
     assert_stack_empty(game)
+
+    # Plain Python collections in test code are NOT engine objects — generic
+    # method names on them must not be flagged.
+    seen = set()
+    seen.add("Bolt")
+    items = ["a", "b"]
+    items.pop()
+    names = ["x"]
+    names.remove("x")
 '''
 
 
@@ -362,7 +424,10 @@ def test_checker_catches_planted_violations(tmp_path: Path) -> None:
     bad.write_text(_PLANTED_VIOLATION_FIXTURE)
     violations = check_file(bad)
     symbols = {v.symbol for v in violations}
-    for expected in ("run", "cast_spell", "resolve_top", "_script", "appendleft", "on_resolve"):
+    for expected in (
+        "run", "cast_spell", "resolve_top", "_script", "appendleft",
+        "on_resolve", "pop",
+    ):
         assert expected in symbols, (
             f"Planted violation {expected!r} was NOT caught; "
             f"caught only: {sorted(symbols)}"

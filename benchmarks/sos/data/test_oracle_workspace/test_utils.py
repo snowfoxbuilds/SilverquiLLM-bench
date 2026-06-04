@@ -1150,7 +1150,13 @@ def assert_power_toughness(
 
 
 def assert_stack(game: GameState, names: list[Any]) -> None:
-    """Assert ordered stack contents (index 0 = top of stack)."""
+    """Assert ordered stack contents (index 0 = top of stack).
+
+    Note: ``priority_loop`` only terminates with a fully drained stack and
+    ``advance_to_phase`` drains as it goes, so after a sanctioned advancer
+    this is in practice an ordered-emptiness assertion — mid-stack states
+    are not observable under the audited driver.
+    """
     expected = [_name_of(n) for n in names]
     actual = [_display_name(obj) for obj in game.stack.objects()]
     if expected != actual:
@@ -1162,7 +1168,10 @@ def assert_stack(game: GameState, names: list[Any]) -> None:
 def assert_on_stack(game: GameState, card_name: str, count: int | None = None) -> None:
     """Assert that a card/spell with the given name is on the stack.
 
-    With ``count``, assert exactly that many copies (e.g. casualty copies).
+    With ``count``, assert exactly that many copies (``count=0`` asserts
+    absence).  Note: the sanctioned advancers always drain the stack, so
+    after them only absence/zero-count assertions carry signal; doubled
+    resolutions (casualty) are asserted via the doubled observable result.
     """
     stack_names = [_display_name(obj) for obj in game.stack.objects()]
     actual = sum(1 for n in stack_names if n == card_name)
