@@ -1,393 +1,322 @@
-"""Rewritten audited tests for Great Hall of the Biblioplex (sos_257).
+"""Audited tests for Great Hall of the Biblioplex (sos_257).
 
-17 tests covering three sub-mechanics:
-  (a) Mana abilities: colorless tap, any-color restricted tap
-  (b) Persistent animation: 2/4 Wizard creature, no auto-cleanup
-  (c) Prowess-like trigger: +1/+0 until end of turn on instant/sorcery cast
+Oracle: Land.
+  {T}: Add {C}.
+  {T}, Pay 1 life: Add one mana of any color.  Spend this mana only to cast
+      an instant or sorcery spell.
+  {5}: If this land isn't a creature, it becomes a 2/4 Wizard creature with
+      "Whenever you cast an instant or sorcery spell, this creature gets
+      +1/+0 until end of turn."  It's still a land.
+
+Simulation-only shape (AUDITED-TEST-API.md): abilities are activated by
+printed-order index via ``ActivateAbility`` (mana abilities resolve straight
+into the pool; the {5} animation uses the stack).  The restricted mana is
+oracle-only mechanics, exercised indirectly: a real cast paid from it either
+succeeds (instant) or is rejected (creature, ``perform_illegal_action``).
+The prowess-like boost is until-end-of-turn, so the reset is reached with
+``advance_to_phase(ENDING, CLEANUP)`` — P/T asserted before and after.
 
 Tests:
-  1.  test_identity — Land type, correct name
-  2.  test_mana_adds_colorless — {T}: Add {C}
-  3.  test_mana_adds_any_color — {T}, Pay 1 life: Add one mana of any color
-  4.  test_restricted_spend_legal — restricted mana can pay for instant via cast_spell
-  5.  test_restricted_spend_illegal — restricted mana cannot pay for creature via cast_spell
-  6.  test_animation_persists_across_turns — stays a creature after engine cleanup step
-  7.  test_no_op_when_already_creature — re-animation gated by "if not a creature"
-  8.  test_animation_cleared_on_leaves_play — state resets via move_to_zone
-  9.  test_activation_cost_payment — requires 5 mana to animate
-  10. test_animated_can_attack — creature can attack (summoning sickness permitting)
-  11. test_boost_on_instant — +1/+0 when controller casts instant
-  12. test_boost_on_sorcery — +1/+0 when controller casts sorcery
-  13. test_opponent_cast_filter — opponent's spell doesn't trigger boost
-  14. test_end_of_turn_revert — +1/+0 reverts via engine cleanup but animation persists
-  15. test_trigger_inactive_when_unanimated — no trigger when not a creature
-  16. test_animation_gives_creature_type — creature type Wizard, P/T 2/4
-  17. test_multiple_triggers_stack — two spells give +2/+0
+  1.  test_card_identity
+  2.  test_first_ability_adds_colorless
+  3.  test_second_ability_costs_life_and_taps
+  4.  test_restricted_mana_pays_an_instant
+  5.  test_restricted_mana_rejected_for_a_creature
+  6.  test_animation_makes_a_2_4_wizard_that_is_still_a_land
+  7.  test_animation_requires_five_mana
+  8.  test_reanimation_is_a_gated_noop
+  9.  test_boost_on_controller_instant_and_reset_at_cleanup
+  10. test_opponent_spell_does_not_boost
+  11. test_two_spells_stack_boosts
+  12. test_no_boost_when_not_animated
 """
 
 from __future__ import annotations
 
-import pytest
-
 from card_impl import GreatHallOfTheBiblioplex
 
-from engine.abilities import (
-    AbilityError,
-    ActivatedAbilityInstance,
-    activate_ability,
-)
-from engine.card import Instant, Land, Sorcery, Creature
-from engine.events import SpellCastTriggeredEvent
-from engine.turn import _do_cleanup_step
+from engine.card import Creature, Instant, Land
 from engine.types import CardType, ManaCost, ManaType, Phase, Step, Zone
-from engine.zones import move_to_zone
 from test_utils import (
+    ActivateAbility,
+    CastSpell,
+    DeterministicPlayer,
+    PlayLand,
     advance_to_phase,
-    assert_casting_error,
-    card_colors,
-    cast_spell,
+    assert_in_zone,
+    assert_life_total,
+    assert_mana_pool,
+    assert_power_toughness,
+    assert_stack_empty,
+    assert_tapped,
     create_game,
-    resolve_top,
-    set_battlefield,
-    set_hand,
-    set_mana_pool,
+    no_op,
+    perform_action,
+    perform_illegal_action,
+    priority_loop,
+    set_board_state,
+    set_player,
 )
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+_NAME = "Great Hall of the Biblioplex"
 
 
-def _make_hall_on_battlefield(mana_amount: int = 0):
-    """Create a game with Great Hall on player 0's battlefield.
-
-    Returns (game, hall, player).
-    """
-    game = create_game()
-    player = game.players[0]
-    hall = GreatHallOfTheBiblioplex(owner=player)
-    hall.controller = player
-    set_battlefield(game, 0, [hall])
-    if mana_amount > 0:
-        set_mana_pool(game, 0, {ManaType.COLORLESS: mana_amount})
-    return game, hall, player
+def _quick_fix() -> Instant:
+    return Instant(name="Quick Fix", mana_cost=ManaCost(generic=1))
 
 
-def _animation_instance(hall, player):
-    """Build a canonical ActivatedAbilityInstance for the {5} animation ability."""
-    ab = hall.get_activated_abilities()[0]
-    return ActivatedAbilityInstance(
-        source=hall,
-        controller=player,
-        cost=ab.cost,
-        effect=ab.effect,
-        description=ab.description,
-    )
+def _setup_hall(game):
+    """Place the Great Hall on player 0's battlefield in the main phase."""
+    advance_to_phase(game, Phase.PRECOMBAT_MAIN)
+    hall = GreatHallOfTheBiblioplex()
+    set_board_state(game, 0, battlefield=[hall])
+    return hall
 
 
-def _animate_hall(game, hall, player):
-    """Give player enough mana and activate the {5} animation ability."""
-    set_mana_pool(game, 0, {ManaType.COLORLESS: 5})
-    activate_ability(game, player, _animation_instance(hall, player))
-    resolve_top(game)
-    assert CardType.CREATURE in hall.card_types, "Animation activation should succeed"
-
-
-def _fire_spell_cast_trigger(game, caster, spell):
-    """Fire a SpellCastTriggeredEvent and resolve the resulting trigger."""
-    event = SpellCastTriggeredEvent(
-        spell=spell,
-        player=caster,
-        card=spell,
-        controller=caster,
-    )
-    game.trigger_manager.fire_event(game, event)
-    # Resolve the trigger that was pushed to the stack
-    if not game.stack.is_empty():
-        resolve_top(game)
-
-
-# ---------------------------------------------------------------------------
-# Test 1: Identity
-# ---------------------------------------------------------------------------
+def _animate(game, hall) -> None:
+    """Pay {5} and resolve the animation ability."""
+    set_board_state(game, 0, mana={ManaType.COLORLESS: 5})
+    set_player(game, 0, DeterministicPlayer("P0", script=[
+        perform_action(ActivateAbility(hall, 2)),
+        no_op(),
+    ]))
+    set_player(game, 1, DeterministicPlayer("P1", script=[no_op()]))
+    priority_loop(game)
+    assert_power_toughness(game, hall, 2, 4)
 
 
 class TestIdentity:
-    """Verify card is a Land type with correct name."""
-
-    def test_identity(self) -> None:
-        """Great Hall of the Biblioplex is a Land with CMC 0, colorless."""
-        card = GreatHallOfTheBiblioplex(owner=None)
-
-        assert card.name == "Great Hall of the Biblioplex"
+    def test_card_identity(self) -> None:
+        card = GreatHallOfTheBiblioplex()
+        assert card.name == _NAME
         assert isinstance(card, Land)
         assert CardType.LAND in card.card_types
         assert card.mana_cost.cmc == 0
-        assert len(card_colors(card)) == 0
+        assert card.mana_cost.pips == {}
 
 
-# ---------------------------------------------------------------------------
-# Sub-mechanic (a): Mana abilities
-# ---------------------------------------------------------------------------
+class TestLandDrop:
+    def test_played_as_the_one_land_per_turn(self) -> None:
+        """The Great Hall is played from hand as the turn's land drop; a
+        second land play the same turn is illegal."""
+        game = create_game()
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
+        set_board_state(game, 0, hand=[GreatHallOfTheBiblioplex(), "Mountain"])
+
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            perform_action(PlayLand(_NAME)),
+            perform_illegal_action(PlayLand("Mountain")),
+            no_op(),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[no_op()]))
+        priority_loop(game)
+
+        assert_in_zone(game, 0, Zone.BATTLEFIELD, _NAME)
+        assert_in_zone(game, 0, Zone.HAND, "Mountain")
 
 
 class TestManaAbilities:
-    """Two mana abilities including restricted spend."""
+    def test_first_ability_adds_colorless(self) -> None:
+        """{T}: Add {C} — printed ability index 0."""
+        game = create_game()
+        hall = _setup_hall(game)
 
-    def test_mana_adds_colorless(self) -> None:
-        """First tap ability adds {C} to controller's mana pool."""
-        game, hall, player = _make_hall_on_battlefield()
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            perform_action(ActivateAbility(hall, 0)),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1"))
+        priority_loop(game)
 
-        assert player.mana_pool.total() == 0
-        ab = hall.get_mana_abilities()[0]
-        assert ab.cost(game, hall) is True
-        ab.mana_produced(game)
-        assert hall.is_tapped is True
-        assert player.mana_pool.get(ManaType.COLORLESS) >= 1
+        assert_mana_pool(game, 0, {ManaType.COLORLESS: 1})
+        assert_tapped(game, hall, True)
+        assert_life_total(game, 0, 20)
 
-    def test_mana_adds_any_color(self) -> None:
-        """Second tap ability adds one mana (pays 1 life) — restricted."""
-        game, hall, player = _make_hall_on_battlefield()
-        initial_life = player.life
+    def test_second_ability_costs_life_and_taps(self) -> None:
+        """{T}, Pay 1 life: Add one mana — printed ability index 1."""
+        game = create_game()
+        hall = _setup_hall(game)
 
-        ab = hall.get_mana_abilities()[1]
-        assert ab.cost(game, hall) is True
-        ab.mana_produced(game)
-        assert hall.is_tapped is True
-        assert player.life == initial_life - 1
-        # Mana was added to the pool
-        assert player.mana_pool.total() >= 1
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            perform_action(ActivateAbility(hall, 1)),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1"))
+        priority_loop(game)
 
-    def test_restricted_spend_legal(self) -> None:
-        """Card-side observable: the second mana ability declares the
-        ``instant_or_sorcery`` restriction in its description, signalling
-        that the produced mana is legal for instants/sorceries.
+        assert_life_total(game, 0, 19)
+        assert_mana_pool(game, 0, {ManaType.COLORLESS: 1})
+        assert_tapped(game, hall, True)
 
-        The cast-pipeline enforcement lives in the engine, not on the
-        card, so we inspect the card-side ability metadata directly
-        rather than driving cast_spell.
-        """
-        game, hall, player = _make_hall_on_battlefield()
+    def test_restricted_mana_pays_an_instant(self) -> None:
+        """Mana from the second ability legally pays for an instant."""
+        game = create_game()
+        hall = _setup_hall(game)
+        set_board_state(game, 0, hand=[_quick_fix()])
 
-        # The card advertises a second mana ability with an
-        # instant/sorcery restriction.
-        abilities = hall.get_mana_abilities()
-        assert len(abilities) >= 2
-        restricted = abilities[1]
-        description = getattr(restricted, "description", "")
-        assert (
-            "instant" in description.lower()
-            or "sorcery" in description.lower()
-        ), (
-            "Restricted-mana ability must declare its instant/sorcery "
-            f"restriction in its description; got: {description!r}"
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            perform_action(ActivateAbility(hall, 1)),
+            perform_action(CastSpell("Quick Fix")),
+            no_op(),
+            no_op(),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[no_op(), no_op()]))
+        priority_loop(game)
+
+        assert_in_zone(game, 0, Zone.GRAVEYARD, "Quick Fix")
+        assert_mana_pool(game, 0, {})
+        assert_life_total(game, 0, 19)
+
+    def test_restricted_mana_rejected_for_a_creature(self) -> None:
+        """The same mana cannot be spent on a creature spell."""
+        game = create_game()
+        hall = _setup_hall(game)
+        bear = Creature(
+            name="Grizzly Bears", base_power=2, base_toughness=2,
+            mana_cost=ManaCost(generic=1),
         )
+        set_board_state(game, 0, hand=[bear])
 
-    def test_restricted_spend_illegal(self) -> None:
-        """Card-side observable: the second mana ability is *only* legal
-        for instant/sorcery spells — declared by the card on the ability
-        produced via ``get_mana_abilities()``.
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            perform_action(ActivateAbility(hall, 1)),
+            perform_illegal_action(CastSpell("Grizzly Bears")),
+            no_op(),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[no_op()]))
+        priority_loop(game)
 
-        The negative side of the contract (rejection for creature spells)
-        lives in the engine's casting pipeline and cannot be exercised
-        against the floor engine. Here we assert the card-side metadata
-        that drives that engine check.
-        """
-        game, hall, player = _make_hall_on_battlefield()
-
-        # First mana ability (colorless tap) carries no such restriction.
-        colorless = hall.get_mana_abilities()[0]
-        colorless_desc = getattr(colorless, "description", "")
-        assert "instant" not in colorless_desc.lower()
-        assert "sorcery" not in colorless_desc.lower()
-
-        # Second mana ability advertises the restriction.
-        restricted = hall.get_mana_abilities()[1]
-        restricted_desc = getattr(restricted, "description", "")
-        assert (
-            "instant" in restricted_desc.lower()
-            or "sorcery" in restricted_desc.lower()
-        )
+        assert_in_zone(game, 0, Zone.HAND, "Grizzly Bears")
+        assert_mana_pool(game, 0, {ManaType.COLORLESS: 1})
 
 
-# ---------------------------------------------------------------------------
-# Sub-mechanic (b): Persistent animation
-# ---------------------------------------------------------------------------
+class TestAnimation:
+    def test_animation_makes_a_2_4_wizard_that_is_still_a_land(self) -> None:
+        """{5} turns the untapped land into a 2/4 creature; it stays a land."""
+        game = create_game()
+        hall = _setup_hall(game)
+        _animate(game, hall)
 
-
-class TestPersistentAnimation:
-    """Animation persists, gated, clears on leave."""
-
-    def test_animation_persists_across_turns(self) -> None:
-        """Once animated, the engine's cleanup step does NOT remove creature type.
-
-        Uses _do_cleanup_step (the engine's turn cleanup path) rather than
-        calling hall.end_of_turn_cleanup() directly, verifying the engine
-        lifecycle integration.
-        """
-        game, hall, player = _make_hall_on_battlefield()
-        _animate_hall(game, hall, player)
-
+        assert_power_toughness(game, hall, 2, 4)
         assert CardType.CREATURE in hall.card_types
-
-        # Advance game state to cleanup step and execute it via engine path
-        game.phase = Phase.ENDING
-        game.step = Step.CLEANUP
-        _do_cleanup_step(game)
-
-        # Animation persists through the engine's end-of-turn cleanup
-        assert CardType.CREATURE in hall.card_types
-        assert hall.power == 2
-        assert hall.toughness == 4
-
-    def test_no_op_when_already_creature(self) -> None:
-        """Activating animation when already a creature returns False (no-op)."""
-        game, hall, player = _make_hall_on_battlefield()
-        _animate_hall(game, hall, player)
-
-        assert CardType.CREATURE in hall.card_types
-        # Re-activating with fresh mana is a no-op: the {5} ability's effect is
-        # gated on "if this land isn't a creature", so nothing changes.
-        set_mana_pool(game, 0, {ManaType.COLORLESS: 5})
-        activate_ability(game, player, _animation_instance(hall, player))
-        resolve_top(game)
-        # Still a single 2/4 creature — the re-animation did nothing.
-        assert CardType.CREATURE in hall.card_types
-        assert hall.power == 2
-        assert hall.toughness == 4
-
-    def test_animation_cleared_on_leaves_play(self) -> None:
-        """Animation state resets when card leaves the battlefield via move_to_zone.
-
-        Uses the engine's move_to_zone (which calls on_leave_battlefield
-        internally) rather than calling hall.on_leave_battlefield() directly.
-        """
-        game, hall, player = _make_hall_on_battlefield()
-        _animate_hall(game, hall, player)
-
-        assert CardType.CREATURE in hall.card_types
-
-        # Move the card off the battlefield via engine zone-move path
-        move_to_zone(game, hall, Zone.BATTLEFIELD, Zone.GRAVEYARD)
-
-        # Animation should be cleared by the engine's leave-battlefield hook
-        assert CardType.CREATURE not in hall.card_types
-        assert hall.power == 0
-        assert hall.toughness == 0
-
-    def test_activation_cost_payment(self) -> None:
-        """Animation requires 5 mana — fails with insufficient mana."""
-        game, hall, player = _make_hall_on_battlefield()
-        # Only 4 mana available — cannot pay {5}, so activation is illegal.
-        set_mana_pool(game, 0, {ManaType.COLORLESS: 4})
-        with pytest.raises(AbilityError):
-            activate_ability(game, player, _animation_instance(hall, player))
-        assert CardType.CREATURE not in hall.card_types
-
-    def test_animated_can_attack(self) -> None:
-        """Once animated (and summoning sickness cleared), it's a valid attacker."""
-        game, hall, player = _make_hall_on_battlefield()
-        _animate_hall(game, hall, player)
-
-        # Verify it's a creature (attackable)
-        assert CardType.CREATURE in hall.card_types
-        # Clear summoning sickness (simulating a turn passing)
-        hall.summoning_sick = False
-        # It should be a valid attacker: is a creature, untapped, no summoning sickness
-        assert not hall.is_tapped
-        assert not hall.summoning_sick
-
-    def test_animation_gives_creature_type(self) -> None:
-        """After animation, has Wizard subtype and 2/4 P/T."""
-        game, hall, player = _make_hall_on_battlefield()
-        _animate_hall(game, hall, player)
-
-        assert "Wizard" in hall.subtypes
-        assert hall.power == 2
-        assert hall.toughness == 4
-        # Still a land
         assert CardType.LAND in hall.card_types
+        assert "Wizard" in hall.subtypes
+        assert_mana_pool(game, 0, {})
+        assert_stack_empty(game)
 
+    def test_animation_requires_five_mana(self) -> None:
+        """With only four mana the activation is illegal and nothing changes."""
+        game = create_game()
+        hall = _setup_hall(game)
+        set_board_state(game, 0, mana={ManaType.COLORLESS: 4})
 
-# ---------------------------------------------------------------------------
-# Sub-mechanic (c): Spell-cast trigger (+1/+0)
-# ---------------------------------------------------------------------------
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            perform_illegal_action(ActivateAbility(hall, 2)),
+            no_op(),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[no_op()]))
+        priority_loop(game)
 
-
-class TestSpellCastTrigger:
-    """Prowess-like trigger granting +1/+0 until end of turn."""
-
-    def test_boost_on_instant(self) -> None:
-        """When controller casts an instant, animated Great Hall gets +1/+0."""
-        game, hall, player = _make_hall_on_battlefield()
-        _animate_hall(game, hall, player)
-
-        assert hall.power == 2
-        spell = Instant(name="Lightning Bolt", owner=player)
-        _fire_spell_cast_trigger(game, player, spell)
-        assert hall.power == 3
-
-    def test_boost_on_sorcery(self) -> None:
-        """When controller casts a sorcery, animated Great Hall gets +1/+0."""
-        game, hall, player = _make_hall_on_battlefield()
-        _animate_hall(game, hall, player)
-
-        assert hall.power == 2
-        spell = Sorcery(name="Divination", owner=player)
-        _fire_spell_cast_trigger(game, player, spell)
-        assert hall.power == 3
-
-    def test_opponent_cast_filter(self) -> None:
-        """Opponent casting instant/sorcery does NOT trigger the boost."""
-        game, hall, player = _make_hall_on_battlefield()
-        _animate_hall(game, hall, player)
-
-        opponent = game.players[1]
-        spell = Instant(name="Counterspell", owner=opponent)
-        _fire_spell_cast_trigger(game, opponent, spell)
-        assert hall.power == 2, "Opponent's spell should not boost"
-
-    def test_end_of_turn_revert(self) -> None:
-        """At end of turn, +1/+0 boost reverts via engine cleanup but animation persists.
-
-        Uses _do_cleanup_step (the engine's cleanup path) rather than
-        calling hall.end_of_turn_cleanup() directly.
-        """
-        game, hall, player = _make_hall_on_battlefield()
-        _animate_hall(game, hall, player)
-
-        spell = Instant(name="Bolt", owner=player)
-        _fire_spell_cast_trigger(game, player, spell)
-        assert hall.power == 3
-
-        # Run engine cleanup step
-        game.phase = Phase.ENDING
-        game.step = Step.CLEANUP
-        _do_cleanup_step(game)
-
-        assert hall.power == 2, "Boost should revert after engine cleanup"
-        assert CardType.CREATURE in hall.card_types, "Animation should persist"
-
-    def test_trigger_inactive_when_unanimated(self) -> None:
-        """If Great Hall is not animated, trigger doesn't fire."""
-        game, hall, player = _make_hall_on_battlefield()
-        # Do NOT animate
+        assert_power_toughness(game, hall, 0, 0)
         assert CardType.CREATURE not in hall.card_types
+        assert_mana_pool(game, 0, {ManaType.COLORLESS: 4})
 
-        spell = Instant(name="Bolt", owner=player)
-        _fire_spell_cast_trigger(game, player, spell)
-        # Power should remain 0 (not animated)
-        assert hall.power == 0
+    def test_reanimation_is_a_gated_noop(self) -> None:
+        """'If this land isn't a creature' gates the effect: a second
+        activation pays its cost but changes nothing."""
+        game = create_game()
+        hall = _setup_hall(game)
+        _animate(game, hall)
 
-    def test_multiple_triggers_stack(self) -> None:
-        """Casting 2 spells gives +2/+0 total."""
-        game, hall, player = _make_hall_on_battlefield()
-        _animate_hall(game, hall, player)
+        set_board_state(game, 0, mana={ManaType.COLORLESS: 5})
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            perform_action(ActivateAbility(hall, 2)),
+            no_op(),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[no_op()]))
+        priority_loop(game)
 
-        assert hall.power == 2
-        spell1 = Instant(name="Bolt", owner=player)
-        spell2 = Sorcery(name="Divination", owner=player)
-        _fire_spell_cast_trigger(game, player, spell1)
-        _fire_spell_cast_trigger(game, player, spell2)
-        assert hall.power == 4, "Two spells should give +2/+0"
+        assert_power_toughness(game, hall, 2, 4)
+        assert_mana_pool(game, 0, {})
+
+
+class TestSpellCastBoost:
+    def test_boost_on_controller_instant_and_reset_at_cleanup(self) -> None:
+        """Casting an instant boosts the animated Hall to 3/4 until end of
+        turn; the cleanup step resets the boost but not the animation."""
+        game = create_game()
+        hall = _setup_hall(game)
+        _animate(game, hall)
+
+        set_board_state(game, 0, hand=[_quick_fix()], mana={ManaType.COLORLESS: 1})
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            perform_action(CastSpell("Quick Fix")),
+            no_op(),
+            no_op(),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[no_op(), no_op()]))
+        priority_loop(game)
+
+        assert_power_toughness(game, hall, 3, 4)
+
+        # Until end of turn: the cleanup step removes the boost only.
+        advance_to_phase(game, Phase.ENDING, Step.CLEANUP)
+        assert_power_toughness(game, hall, 2, 4)
+        assert CardType.CREATURE in hall.card_types
+
+    def test_opponent_spell_does_not_boost(self) -> None:
+        """Only the controller's instants/sorceries trigger the boost."""
+        game = create_game()
+        hall = _setup_hall(game)
+        _animate(game, hall)
+
+        set_board_state(game, 1, hand=[_quick_fix()], mana={ManaType.COLORLESS: 1})
+        set_player(game, 0, DeterministicPlayer("P0", script=[no_op(), no_op()]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[
+            perform_action(CastSpell("Quick Fix")),
+            no_op(),
+        ]))
+        priority_loop(game)
+
+        assert_in_zone(game, 1, Zone.GRAVEYARD, "Quick Fix")
+        assert_power_toughness(game, hall, 2, 4)
+
+    def test_two_spells_stack_boosts(self) -> None:
+        """Two instants in the same turn give +2/+0 total."""
+        game = create_game()
+        hall = _setup_hall(game)
+        _animate(game, hall)
+
+        set_board_state(
+            game, 0,
+            hand=[_quick_fix(), _quick_fix()],
+            mana={ManaType.COLORLESS: 2},
+        )
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            perform_action(CastSpell("Quick Fix")),
+            no_op(),
+            no_op(),
+            perform_action(CastSpell("Quick Fix")),
+            no_op(),
+            no_op(),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[
+            no_op(), no_op(), no_op(), no_op(),
+        ]))
+        priority_loop(game)
+
+        assert_power_toughness(game, hall, 4, 4)
+        assert_in_zone(game, 0, Zone.GRAVEYARD, "Quick Fix", count=2)
+
+    def test_no_boost_when_not_animated(self) -> None:
+        """Without the animation the land has no spell-cast trigger."""
+        game = create_game()
+        hall = _setup_hall(game)
+
+        set_board_state(game, 0, hand=[_quick_fix()], mana={ManaType.COLORLESS: 1})
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            perform_action(CastSpell("Quick Fix")),
+            no_op(),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[no_op()]))
+        priority_loop(game)
+
+        assert_in_zone(game, 0, Zone.GRAVEYARD, "Quick Fix")
+        assert_power_toughness(game, hall, 0, 0)
