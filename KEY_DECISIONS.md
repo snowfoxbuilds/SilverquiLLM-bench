@@ -2,6 +2,55 @@
 
 Persistent architectural and convention decisions across runs. Periodically drained into specs/ADRs
 
+## Two-channel `DeterministicPlayer` lives in the oracle `test_utils`, not the oracle engine (AUDITED-TEST-API implementation)
+- **Context**: AUDITED-TEST-API.md specifies `DeterministicPlayer(name, script=[], choices=[], life=20)`; the mission notes suggested adding the `choices` channel to the oracle engine's `engine/player.py`.
+- **Decision**: The two-channel player is a **`test_utils` subclass** of the engine's canonical `DeterministicPlayer`. Its constructor uses only the canonical signature (`super().__init__(name, list(choices), life)`), mapping the choice script onto the canonical answer deque (`_script`) — exactly "Channel 2 reuses the canonical answer deque". The directive queue (`script`) is a subclass-only attribute polled by the host-side driver; engine code never sees it.
+- **Reasoning**: At eval time the evaluator copies the **oracle `test_utils.py`** into the temp dir but puts the **candidate engine** on `PYTHONPATH`. A candidate `engine/player.py` (forked from frozen canonical) is single-channel — an engine-side `choices=` kwarg would `TypeError` against every candidate and break the benchmark. Subclassing over the canonical constructor keeps the API functioning against any engine, per the API's canonical-only rule.
+- **Impact**: No oracle `engine/player.py` change was needed; `priority_loop` in the test layer is a pure host-side driver and `engine/stack.py` is untouched.
+
+## Directive-carried targets ride a `_pending_targets` queue, not the choice deque
+- **Decision**: `CastSpell(..., targets=[...])` / `ActivateAbility(..., targets=[...])` deliver targets by (a) for casts: a subclass-side pending-targets queue consumed by `choose_target` *before* falling back to the choice script, and (b) for ability activations: setting the canonical `chosen_targets` convention on the source (mirroring what `_resolve_spell` does for spells, since `activate_ability` has no targeting step).
+- **Reasoning**: Prepending to the choices deque would entangle the two channels; a separate queue keeps "directive-carried targets" and "engine-prompted choices" ordered independently, and leftovers after a cast are a loud `TestSetupError`. This replaces the old `_script.appendleft` poke.
+
+## Oracle-engine additive change: cast pipeline fires `SpellCastTriggeredEvent`
+- **Context**: sos_257's prowess-like trigger listens for `SpellCastTriggeredEvent`, but no engine path ever fired it — old tests hand-fired the event (now banned). Simulation-only tests need the real cast to fire it.
+- **Decision**: `cast_spell`, `cast_spell_free`, and `cast_spell_for_cost` in the **oracle** engine now fire `SpellCastTriggeredEvent(spell, player, card, controller)` after pushing the spell (and after the casualty offer). Spell *copies* are put on the stack without being cast and fire nothing.
+- **Reasoning**: Additive per ADR-010 — the event class existed (canonical and oracle) but was dead code; several FDN impls already register triggers for it. Canonical workspace untouched: candidates must implement "whenever you cast" semantics themselves, which is exactly what the audited test grades.
+
+## Oracle-engine fix: creature SBAs (704.5f–h) skip permanents that declare non-creature types
+- **Context**: `_sba_creature_zero_toughness` / `_sba_creature_lethal_damage` duck-typed "creature" as "has a `toughness` attribute". The unanimated Great Hall (sos_257) exposes `toughness == 0` while being only a Land — the first SBA pass of the new driver killed the land. Old tests never ran SBAs over that state, so it went unnoticed.
+- **Decision**: Both SBAs skip objects whose `card_types` is present and lacks `CardType.CREATURE`. Objects with **no** `card_types` attribute stay duck-typed as creatures (preserves the oracle engine_tests' `SimpleNamespace` mocks).
+- **Reasoning**: Rules-correctness fix scoped to the oracle engine; behavior-preserving for everything that was previously reachable (full repo suite green before/after).
+
+## `_handle_casualty` prompts via public `choose()`; candidate power read is counters-aware
+- **Decision**: The owed oracle change landed: the `isinstance(player, DeterministicPlayer)`/`_pop()` special case (and its exhausted-script auto-decline) is replaced by an unconditional public `player.choose(candidates, ...)` — `"decline_casualty"`/`None` declines; an unscripted prompt is now a hard `ScriptExhaustedError`, per the two-channel dry-queue rule. While there, the candidate filter prefers the canonical `power` property (counters-aware) over raw `modified_power`, so the "power >= N" threshold is testable behaviorally (sos_226 answers the prompt with a 0-power creature and asserts no sacrifice).
+- **Impact**: All three cast paths (`cast_spell`, `cast_spell_free`, `cast_spell_for_cost`) share the fix; tests become portable across candidate engines that raise the choice through the public API.
+
+## sos_120 oracle impl registers Paradigm hooks in `on_cast`
+- **Context**: Sorceries never enter the battlefield, so `register_replacement_effects`/`register_triggers` were never invoked by the real cast pipeline — old tests called them by hand (now banned). A real cast sent the spell to the graveyard instead of exile.
+- **Decision**: `ImprovisationCapstone.on_cast` registers the self-exile replacement and the recurring trigger (card-side change, no engine change). Paradigm copies are flagged `_is_paradigm_copy` and get no hooks (copies cease to exist; they resolve to the graveyard). `set_board_state(exile=[...])` also registers triggers for exile-placed cards so the recurrence is reachable from setup.
+
+## sos_226 oracle impl: `casualty_grant` as a read-only property
+- **Decision**: The grant attribute became a `@property` returning 1. Semantics identical (`getattr` unchanged), but the class now defines a non-dunder member so the harness's `_is_stub_impl` AST check recognizes it as a real impl — sos_226 was previously **silently skipped** by `tests/test_audited_against_reference.py`. All 10 audited cards now actually run in the harness.
+
+## `advance_to_phase` processes each step entered, within the current turn only
+- **Decision**: The sanctioned fast-forward processes turn-based actions (untap/upkeep-event/draw/combat steps/cleanup, duplicated host-side from the canonical turn loop — never via the banned `run_turn`), drains triggers one object at a time, and opens no priority windows. The *arrival* step's action runs too (advancing to `DECLARE_ATTACKERS` performs the declaration from the choice script). Targets at-or-before the current position raise `TestSetupError` (turn crossing = deferred multi-player turn control). The legacy `declare_attackers`/`declare_blockers` helpers keep the old raw phase-jump via an internal `_jump_to_phase` so pre-Phase-18 suites are unaffected.
+- **Consequence**: Fast-forwarding through combat with an eligible attacker *requires* a scripted attacker list (empty list = attack with nothing); a dry choice script fails the test, per spec. Two oracle `engine_tests` were updated to the new semantics.
+
+## Conformance checker scope: curated AST ban-list + structural underscore rule, fixture-card hook bodies exempt
+- **Decision**: `test_api_conformance.py` flags (1) calls whose simple name is on a curated ban list (advancers, step helpers, card hooks, engine machinery/mutators, old non-allow-list helpers, choice methods, machinery constructors), and (2) any leading-underscore attribute access (except `__init__`, and except attributes on `self` — a Test class's own helpers aren't engine objects). Imports are never flagged (import-boundary decision). Bodies of canonical card hooks (`on_resolve`, `register_triggers`, ...) defined on fixture card classes (non-`Test*`, with bases) inside a test file are exempt: fixture cards are card-impl code, the same kind of code as `card_impl.py`; *calls* to those hooks from test code are still flagged. The scan covers every `sos_*/tests.py` under the oracle workspace's audited tree plus the canonical copies of the same collector dirs, so the two copies can't drift in conformance. A repo-side wrapper (`tests/test_audited_api_conformance.py`) loads the same module by path so the check gates in CI (`testpaths = ["tests"]` doesn't collect the oracle workspace).
+- **Known limitation**: a curated list can rot as the engine grows; the planted-violation fixture test guards the checker itself.
+
+## Coverage consciously dropped/reshaped in the migration (deferred-capability scoping)
+- **sos_57**: "no refund on opponent's main phase" and "refund fires only once" need a second `BeginningOfMainPhaseEvent`, which this engine fires only on *precombat* main entry — reaching another one crosses a turn (deferred). "Wizard leaves before next main" needs a removal effect mid-test (no sanctioned path). New free-cast test (counter a `CastSpellFree` spell → refund 0) recovers mana-spent-tracking coverage.
+- **sos_120**: the 3-turn recurrence loop is replaced by a single-recurrence test reached via `set_board_state(exile=...)` + `advance_to_phase(PRECOMBAT_MAIN)` (turn crossing deferred).
+- **sos_4**: the multi-effect fizzle test (damage target leaves the stack window) needs a removal fixture acting mid-stack; no sanctioned path — dropped, replaced by an insufficient-mana `perform_illegal_action` negative.
+- **sos_97**: the −7 outcome is asserted via the opponent's recorded `skip_turns` attribute — the engine has no turn-skip machinery, so this is the only observable; noted in the test as a known compromise.
+- **Keyword presence asserts** (Reach on sos_1, Flying/Vigilance on sos_226/sos_201 etc.) are dropped per the behavioral doctrine; sos_245 covers Flying/Deathtouch behaviorally through combat outcomes.
+
+## `priority_loop` stack-observation consequence
+- The driver terminates only when the stack is empty and all directive queues are exhausted (dry queue + non-empty stack = `ScriptExhaustedError`), so a migrated test can never observe a mid-stack state. `assert_stack`/`assert_on_stack` are therefore exercised as ordered-emptiness and absence/count-zero assertions (e.g. the countered spell is no longer on the stack); doubled casualty resolution is asserted via the doubled observable result, the spec's sanctioned alternative.
+
 ## Per-card SOS `result.json` schema for the Harvest workflow (Phase 19, items 1–2)
 - **Context**: The test-improvement harvest (items 3–6) needs per-test-node outcomes and a way to detect audited-test changes across runs.
 - **Decision**: `CardResult` (in `silverquillm/evaluator.py`), serialized via `asdict` into each `cards/<card>/result.json`, now carries two ADDITIVE fields:
