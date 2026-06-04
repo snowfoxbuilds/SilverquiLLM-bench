@@ -1,0 +1,40 @@
+{
+  "card_id": "sos_226",
+  "card_name": "Silverquill, the Disputant",
+  "tests_passed": 4,
+  "tests_failed": 2,
+  "tests_total": 6,
+  "pass_rate": 0.6666666666666666,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_sncoi6v8/tests.py::TestCasualty::test_casualty_paid_copies_the_spell",
+    "FAILED ../../../../tmp/eval_sos_sncoi6v8/tests.py::TestCasualty::test_zero_power_creature_is_not_a_legal_casualty_sacrifice"
+  ],
+  "skipped": false,
+  "test_nodes": [
+    {
+      "test_node": "tests.py::TestIdentity::test_card_identity",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCasualty::test_casualty_paid_copies_the_spell",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestCasualty::test_casualty_may_be_declined",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCasualty::test_zero_power_creature_is_not_a_legal_casualty_sacrifice",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestCasualty::test_no_casualty_on_creature_spells",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCasualty::test_no_casualty_without_the_granter",
+      "outcome": "pass"
+    }
+  ],
+  "tests_hash": "15a392cad56286171f7c01f40ade57df0eb45e3a6649c97a42e9273d5dc2436e"
+}

@@ -6,7 +6,7 @@
   "tests_total": 1,
   "pass_rate": 0.0,
   "errors": [
-    "ERROR ../../../../tmp/eval_sos_ee977bvy/tests.py - ValueError: <flag 'Keyword..."
+    "ERROR ../../../../tmp/eval_sos_pv9q5wim/tests.py - ValueError: <flag 'Keyword..."
   ],
   "skipped": false,
   "test_nodes": [

@@ -1,0 +1,24 @@
+2026-06-01T10:26:00+00:00 Starting run: sos-cc-opus-48-single-2026-06-01T10-26
+2026-06-01T10:26:00+00:00 Image: silverquillm-cc-opus-48-single:latest
+2026-06-01T10:26:00+00:00 Timeout: 360000s
+2026-06-01T10:26:00+00:00 Workspace staged at: /tmp/silverquillm_run_6zedv4rg/workspace
+2026-06-01T10:26:00+00:00 Running container: sqm-sos-cc-opus-48-single-2026-06-01T10-26
+2026-06-01T12:22:56+00:00 Harvesting results...
+2026-06-01T12:22:56+00:00 Results saved to: /home/sean/repos/SilverquiLLM-bench/docker/cc-opus-48-single/results/sos-cc-opus-48-single-2026-06-01T10-26
+2026-06-01T12:22:56+00:00 Token usage:
+Agent        Model            Msgs   Input   Cache rd    Cache wr   Output
+-----------  ---------------  -----  ------  ----------  ---------  ------
+Implementer  claude-opus-4-8  469    938     23,556,292  1,779,369  6,384 
+Reviewer     claude-opus-4-8  195    390     4,758,522   685,007    1,411 
+Tester       claude-opus-4-8  556    21,752  23,906,864  1,896,455  8,984 
+main         claude-opus-4-8  231    458     19,316,055  331,226    8,468 
+-----------  ---------------  -----  ------  ----------  ---------  ------
+TOTAL                         1,451  23,538  71,537,733  4,692,057  25,247
+
+Cost (USD) by model — from final result event:
+  claude-haiku-4-5-20251001           $0.0008
+  claude-opus-4-8                     $32.3974
+  TOTAL                               $32.3982
+2026-06-01T12:23:37+00:00 Evaluation complete: 10 SOS cards scored
+2026-06-01T12:23:37+00:00 Run summary written to: /home/sean/repos/SilverquiLLM-bench/docker/cc-opus-48-single/results/sos-cc-opus-48-single-2026-06-01T10-26/run_summary.json
+2026-06-01T12:23:37+00:00 Run complete: sos-cc-opus-48-single-2026-06-01T10-26

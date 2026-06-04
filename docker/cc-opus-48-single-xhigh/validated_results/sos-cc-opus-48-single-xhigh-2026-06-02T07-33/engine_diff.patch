@@ -1,0 +1,2870 @@
+diff -ruN a/affinity.py b/affinity.py
+--- a/affinity.py	1970-01-01 00:00:00.000000000 +0000
++++ b/affinity.py	2026-06-02 09:50:10.658749869 +0000
+@@ -0,0 +1,270 @@
++"""Affinity-keyword framework (Comprehensive Rules 702.41).
++
++*Affinity for [quality]* is a static ability that reduces the generic portion of
++a spell's cost:
++
++    Affinity for creatures (This spell costs {1} less to cast for each creature
++    you control.)
++
++A card normally carries affinity as a printed cost-reduction ability — that
++*own* affinity is implemented with the established ``cost_reduction(self, game)``
++hook (sos_1 / fdn_167 Tolarian Terror), which the engine's
++:func:`engine.casting.get_cost_reduction` clamps to the spell's generic portion.
++
++Witherbloom, the Balancer also *grants* "affinity for creatures" to every
++instant and sorcery **spell** its controller casts.  The engine had no support
++for a granting permanent contributing a per-spell cost reduction, so this module
++adds it *additively* — no existing engine symbol is renamed, moved, or deleted.
++It mirrors :mod:`engine.casualty` / :mod:`engine.miracle` / :mod:`engine.paradigm`.
++
++The mechanic has two observable parts:
++
++1. **The grant surface.**  A *granted affinity-for-creatures* flag is recorded on
++   the affected spell (``spell.affinity_for_creatures = True``) and is also
++   queryable via :func:`grants_affinity_for_creatures`.  A continuous-grant source
++   (Witherbloom) installs / refreshes the grant via
++   :func:`grant_affinity_to_hand`, which only ever writes the flag onto
++   instants/sorceries in *its controller's* hand and clears stale grants from
++   cards that have left the hand.
++
++2. **The granted cost reduction (driven through the cast/cost pipeline).**  A
++   granting permanent registers, per controller, a *granted reduction* — a
++   callable ``(game, spell, controller) -> int`` returning how much {1}-less the
++   grant gives a particular spell (for affinity for creatures: the number of
++   creatures the controller controls).  :func:`get_granted_reduction` sums the
++   contributions of every registered grant that applies to a spell, and
++   :func:`engine.casting.get_cost_reduction` adds that to the cast card's own
++   ``cost_reduction(game)`` hook before clamping to the spell's generic portion.
++   With no grant registered the sum is 0, so existing cost-reduction behaviour
++   (sos_1, fdn_167) is unchanged.
++
++"Affinity" is a *printed keyword label*, not an evergreen keyword, so no member
++is added to :class:`engine.types.Keyword` (that enum is frozen at 16 members).
++"""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any, Callable
++
++from engine.types import CardType, Zone
++
++if TYPE_CHECKING:
++    from engine.game_state import GameState
++
++
++#: Type of a granted-reduction resolver: ``(game, spell, controller) -> int``.
++ReductionResolver = Callable[[Any, Any, Any], int]
++
++
++# ---------------------------------------------------------------------------
++# Grant surface — read / write the granted affinity flag on a spell
++# ---------------------------------------------------------------------------
++
++
++def is_instant_or_sorcery(card: Any) -> bool:
++    """Return ``True`` if *card* is an instant or sorcery (the granted types)."""
++    card_types = getattr(card, "card_types", set())
++    return CardType.INSTANT in card_types or CardType.SORCERY in card_types
++
++
++def grants_affinity_for_creatures(card: Any) -> bool:
++    """Return ``True`` if *card* currently carries a granted affinity-for-creatures."""
++    return bool(getattr(card, "affinity_for_creatures", False))
++
++
++def set_affinity_for_creatures(card: Any, granted: bool) -> None:
++    """Write (or clear) the granted affinity-for-creatures flag on *card*.
++
++    Passing ``False`` clears the grant (removes the ``affinity_for_creatures``
++    attribute so a stale grant never lingers on a card that has left the granting
++    zone).
++    """
++    if not granted:
++        if hasattr(card, "affinity_for_creatures"):
++            try:
++                delattr(card, "affinity_for_creatures")
++            except AttributeError:
++                card.affinity_for_creatures = False  # type: ignore[attr-defined]
++        if hasattr(card, "_affinity_grant_source"):
++            try:
++                delattr(card, "_affinity_grant_source")
++            except AttributeError:
++                pass
++        return
++    card.affinity_for_creatures = True  # type: ignore[attr-defined]
++
++
++# ---------------------------------------------------------------------------
++# Per-game registry of cards a given source has flagged with the grant
++# ---------------------------------------------------------------------------
++
++
++def _flagged_registry(game: GameState) -> dict[int, set[int]]:
++    """Return (creating if necessary) the per-game affinity-flag registry.
++
++    Maps ``id(source)`` to the set of ``id(card)`` it last flagged, so a refresh
++    can clear flags from cards that have since left the granting zone.  Stored
++    lazily on the game object — no ``GameState.__init__`` change.
++    """
++    registry = getattr(game, "_affinity_flags", None)
++    if registry is None:
++        registry = {}
++        game._affinity_flags = registry  # type: ignore[attr-defined]
++    return registry
++
++
++def grant_affinity_to_hand(
++    game: GameState,
++    source: Any,
++    controller: Any,
++) -> list[Any]:
++    """Flag every instant/sorcery in *controller*'s hand as having affinity.
++
++    This is the observable half of Witherbloom's continuous static ability:
++    while the source is on the battlefield, every instant and sorcery spell its
++    controller casts "has affinity for creatures".  The flag is written onto each
++    such hand card (``card.affinity_for_creatures = True``) and is queryable via
++    :func:`grants_affinity_for_creatures`.
++
++    The grant is *scoped*:
++
++    * only instants and sorceries are flagged (creatures, lands, etc. are not);
++    * only cards in *controller*'s hand are flagged (an opponent's hand is left
++      untouched).
++
++    Calling this again refreshes the flag: cards that have left the controller's
++    hand since the last refresh have their (this-source) flag cleared so a stale
++    grant never lingers.  Returns the list of hand cards now carrying the flag.
++    """
++    if controller is None:
++        return []
++
++    registry = _flagged_registry(game)
++    previously = registry.get(id(source), set())
++
++    hand = controller.zones[Zone.HAND]
++    granted: list[Any] = []
++    now_ids: set[int] = set()
++
++    for card in hand.get_all():
++        if not is_instant_or_sorcery(card):
++            continue
++        set_affinity_for_creatures(card, True)
++        card._affinity_grant_source = source  # type: ignore[attr-defined]
++        granted.append(card)
++        now_ids.add(id(card))
++
++    stale = previously - now_ids
++    if stale:
++        _clear_flags_for_ids(game, source, stale)
++
++    registry[id(source)] = now_ids
++    return granted
++
++
++def _clear_flags_for_ids(game: GameState, source: Any, card_ids: set[int]) -> None:
++    """Clear *source*'s affinity flag from any card in *card_ids* across zones."""
++    for player in game.players:
++        for zone in Zone:
++            container = player.zones[zone]
++            for card in list(container.get_all()):
++                if (
++                    id(card) in card_ids
++                    and getattr(card, "_affinity_grant_source", None) is source
++                ):
++                    set_affinity_for_creatures(card, False)
++
++
++def clear_affinity_flags(game: GameState, source: Any) -> None:
++    """Clear every affinity flag *source* placed (e.g. when it leaves play)."""
++    registry = _flagged_registry(game)
++    granted = registry.pop(id(source), set())
++    if not granted:
++        return
++    _clear_flags_for_ids(game, source, granted)
++
++
++# ---------------------------------------------------------------------------
++# Granted-reduction registry — drive the granted cost reduction through the
++# cast/cost pipeline (mirrors engine.casualty / engine.miracle grant registries)
++# ---------------------------------------------------------------------------
++
++
++def _grant_registry(game: GameState) -> dict[int, dict[str, Any]]:
++    """Return (creating if necessary) the per-game granted-reduction registry.
++
++    Maps ``id(source)`` to a record ``{"controller", "applies", "resolver"}``:
++
++    * ``controller`` — the player whose spells the grant applies to;
++    * ``applies`` — predicate ``(game, spell, controller) -> bool`` deciding
++      whether a given spell receives the grant (e.g. controller's instants /
++      sorceries, source on the battlefield);
++    * ``resolver`` — :data:`ReductionResolver` returning the {1}-less count for a
++      qualifying spell (for affinity for creatures: how many creatures the
++      controller controls).
++
++    Stored lazily on the game object — no ``GameState.__init__`` change.
++    """
++    registry = getattr(game, "_affinity_grants", None)
++    if registry is None:
++        registry = {}
++        game._affinity_grants = registry  # type: ignore[attr-defined]
++    return registry
++
++
++def register_affinity_grant(
++    game: GameState,
++    source: Any,
++    controller: Any,
++    resolver: ReductionResolver,
++    applies: Callable[[Any, Any, Any], bool],
++) -> None:
++    """Register *source*'s granted per-spell cost reduction (idempotent per source).
++
++    When a spell is cast, :func:`get_granted_reduction` consults every registered
++    grant whose ``applies(game, spell, controller)`` predicate returns ``True``
++    and sums each grant's ``resolver(game, spell, controller)`` contribution.
++    :func:`engine.casting.get_cost_reduction` adds that sum to the cast card's own
++    ``cost_reduction(game)`` before clamping to the spell's generic portion.
++
++    Re-registering the same source overwrites its record (so a refreshed grant
++    keeps the latest controller/resolver) — keyed by ``id(source)``.
++    """
++    _grant_registry(game)[id(source)] = {
++        "controller": controller,
++        "applies": applies,
++        "resolver": resolver,
++    }
++
++
++def clear_affinity_grant(game: GameState, source: Any) -> None:
++    """Remove *source*'s granted-reduction record (e.g. when it leaves play)."""
++    _grant_registry(game).pop(id(source), None)
++
++
++def get_granted_reduction(game: GameState, spell: Any, controller: Any) -> int:
++    """Return the total granted generic reduction for *controller* casting *spell*.
++
++    Sums the contribution of every registered grant whose ``applies`` predicate
++    accepts ``(game, spell, controller)``.  Returns ``0`` when no grant applies —
++    so a spell with no granting permanent in play is reduced only by its own
++    ``cost_reduction`` hook (existing behaviour is unchanged).
++    """
++    registry = getattr(game, "_affinity_grants", None)
++    if not registry:
++        return 0
++    total = 0
++    for record in list(registry.values()):
++        applies = record.get("applies")
++        resolver = record.get("resolver")
++        if resolver is None:
++            continue
++        try:
++            if applies is not None and not applies(game, spell, controller):
++                continue
++            contribution = resolver(game, spell, controller)
++        except Exception:
++            continue
++        if contribution and contribution > 0:
++            total += int(contribution)
++    return total
+diff -ruN a/animation.py b/animation.py
+--- a/animation.py	1970-01-01 00:00:00.000000000 +0000
++++ b/animation.py	2026-06-02 10:27:30.616210666 +0000
+@@ -0,0 +1,305 @@
++"""Land-animation ("becomes a creature") framework.
++
++Several lands turn themselves into creatures while remaining lands — e.g.
++Great Hall of the Biblioplex:
++
++    {5}: If this land isn't a creature, it becomes a 2/4 Wizard creature with
++    "Whenever you cast an instant or sorcery spell, this creature gets +1/+0
++    until end of turn."  It's still a land.
++
++The engine's :mod:`engine.continuous_effects` layer system already models type
++changes (Layer 4) and P/T effects (Layer 7), but it had no helper to *animate*
++a non-Creature :class:`~engine.card.CardImpl` into a creature that retains its
++land type, exposes a base power/toughness, and gains a creature subtype.  This
++module adds that helper *additively* — no existing engine symbol is renamed,
++moved, or deleted.  It mirrors the lazy per-game-registry + grant conventions of
++:mod:`engine.miracle` / :mod:`engine.casualty` / :mod:`engine.affinity`.
++
++Two observable mechanisms live here:
++
++1. **Animation** (:func:`animate_land`).  Layers ``CardType.CREATURE`` onto the
++   land while keeping ``CardType.LAND``, grants a creature subtype, and sets a
++   base body.  The body is observable via ``card.power`` / ``card.toughness``
++   once the card reports those characteristics under the active animation (a
++   :class:`~engine.card.Land` ordinarily has no power/toughness — the animating
++   card is expected to expose ``power``/``toughness`` properties that read the
++   animation state set here; see ``cards/sos/sos_257``).  The animation is
++   durable (``DURATION_PERMANENT`` — it lasts until the land leaves play), and
++   is *idempotent* per land via a lazy per-game registry, so "if this land isn't
++   a creature" re-activation is a true no-op.
++
++2. **The granted pump trigger** (:func:`register_instant_sorcery_pump`).  The
++   animation grants the land a triggered ability — "Whenever you cast an instant
++   or sorcery spell, this creature gets +1/+0 until end of turn" — registered as
++   a :class:`~engine.events.SpellCastTriggeredEvent` trigger controlled by the
++   land's controller and gated to that controller's own instant/sorcery casts.
++   Firing it adds a Layer 7c (``MODIFY_PT``) +1/+0 :class:`ContinuousEffect`
++   with ``DURATION_END_OF_TURN`` to the land, so N casts in a turn yield +N/+0,
++   swept back at cleanup by ``EffectManager.remove_expired``.  The trigger is
++   deduped per source so animating once registers exactly one trigger.
++"""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any
++
++from engine.continuous_effects import (
++    DURATION_END_OF_TURN,
++    DURATION_PERMANENT,
++    ContinuousEffect,
++    Layer,
++    SubLayer,
++)
++from engine.events import SpellCastTriggeredEvent
++from engine.triggers import TriggerRegistration
++from engine.types import CardType
++
++if TYPE_CHECKING:
++    from engine.game_state import GameState
++
++
++# ---------------------------------------------------------------------------
++# Per-game registry of animated permanents (idempotency / "isn't a creature")
++# ---------------------------------------------------------------------------
++
++
++def _animation_registry(game: GameState) -> dict[int, dict[str, Any]]:
++    """Return (creating if necessary) the per-game land-animation registry.
++
++    Maps ``id(land)`` to a record describing the active animation.  Stored
++    lazily on the game object so no ``GameState.__init__`` change is needed.
++    """
++    registry = getattr(game, "_land_animations", None)
++    if registry is None:
++        registry = {}
++        game._land_animations = registry  # type: ignore[attr-defined]
++    return registry
++
++
++def is_animated(game: GameState, land: Any) -> bool:
++    """Return ``True`` if *land* is currently animated into a creature.
++
++    Checks both the per-game registry and the land's own card types, so a card
++    that became a creature by any means reports correctly.
++    """
++    if id(land) in _animation_registry(game):
++        return True
++    return CardType.CREATURE in getattr(land, "card_types", set())
++
++
++# ---------------------------------------------------------------------------
++# Animation — becomes a creature, still a land
++# ---------------------------------------------------------------------------
++
++
++def animate_land(
++    game: GameState,
++    land: Any,
++    base_power: int,
++    base_toughness: int,
++    subtype: str | None = None,
++    controller: Any = None,
++) -> bool:
++    """Animate *land* into a ``base_power``/``base_toughness`` creature.
++
++    Implements "it becomes a [P]/[T] [subtype] creature ... It's still a land":
++
++    * adds ``CardType.CREATURE`` to the land's card types while RETAINING
++      ``CardType.LAND``;
++    * grants *subtype* (e.g. ``"Wizard"``) to its subtypes;
++    * records a base body the animating card can surface via ``power`` /
++      ``toughness`` (this writes ``land._animated``, ``land._anim_base_power``,
++      ``land._anim_base_toughness``, and seeds ``modified_power`` /
++      ``modified_toughness``);
++    * installs a durable (``DURATION_PERMANENT``) Layer-4 type effect and a
++      Layer 7b ``SET_PT`` base-body effect through the engine layer system so
++      the change survives ``EffectManager.apply_all``'s reset-and-reapply.
++
++    The change is applied *immediately* (so ``CardType.CREATURE`` is observable
++    without first calling ``apply_all``) AND registered as a continuous effect
++    (so it persists across recomputation).
++
++    Guarded by "if this land isn't a creature": if *land* is already animated
++    (or already a creature), this is a no-op and returns ``False``.  Otherwise
++    it animates and returns ``True``.
++    """
++    if is_animated(game, land):
++        return False
++
++    if controller is None:
++        controller = getattr(land, "controller", None)
++
++    # --- Immediate mutation so the new characteristics are observable now. ---
++    land.card_types = set(getattr(land, "card_types", set())) | {CardType.CREATURE}
++    if subtype is not None:
++        subtypes = getattr(land, "subtypes", None)
++        if subtypes is None:
++            subtypes = set()
++            land.subtypes = subtypes
++        subtypes.add(subtype)
++
++    land._animated = True  # type: ignore[attr-defined]
++    land._anim_base_power = base_power  # type: ignore[attr-defined]
++    land._anim_base_toughness = base_toughness  # type: ignore[attr-defined]
++    land._anim_subtype = subtype  # type: ignore[attr-defined]
++    land.modified_power = base_power  # type: ignore[attr-defined]
++    land.modified_toughness = base_toughness  # type: ignore[attr-defined]
++
++    # --- Durable layer effects so the animation survives apply_all resets. ---
++    def _apply_type(g: GameState) -> None:
++        land.card_types = set(getattr(land, "card_types", set())) | {
++            CardType.CREATURE
++        }
++        land.card_types.add(CardType.LAND)
++        if subtype is not None:
++            land.subtypes.add(subtype)
++
++    def _apply_base_body(g: GameState) -> None:
++        land.modified_power = base_power  # type: ignore[attr-defined]
++        land.modified_toughness = base_toughness  # type: ignore[attr-defined]
++
++    type_effect = ContinuousEffect(
++        source=land,
++        layer=Layer.TYPE,
++        apply=_apply_type,
++        duration=DURATION_PERMANENT,
++    )
++    body_effect = ContinuousEffect(
++        source=land,
++        layer=Layer.POWER_TOUGHNESS,
++        sublayer=SubLayer.SET_PT,
++        apply=_apply_base_body,
++        duration=DURATION_PERMANENT,
++    )
++    game.effect_manager.add(type_effect)
++    game.effect_manager.add(body_effect)
++
++    _animation_registry(game)[id(land)] = {
++        "controller": controller,
++        "base_power": base_power,
++        "base_toughness": base_toughness,
++        "subtype": subtype,
++        "type_effect": type_effect,
++        "body_effect": body_effect,
++    }
++    return True
++
++
++def deanimate_land(game: GameState, land: Any) -> None:
++    """Remove *land*'s animation (e.g. when it leaves the battlefield).
++
++    Drops the registry record and the durable layer effects, clears the
++    animation flags, and removes the granted pump trigger.  This is the
++    "until it leaves play" cleanup; it is safe to call when *land* is not
++    animated (no-op).
++    """
++    registry = _animation_registry(game)
++    record = registry.pop(id(land), None)
++    if record is None:
++        return
++    for key in ("type_effect", "body_effect"):
++        effect = record.get(key)
++        if effect is not None:
++            game.effect_manager.remove(effect)
++    game.trigger_manager.unregister(land)
++    # Clear the pump-trigger dedup entry so a later re-animation of the same
++    # Python object can re-grant its instant/sorcery pump trigger (symmetry
++    # with register_instant_sorcery_pump's per-source dedup).
++    _pump_trigger_registry(game).discard(id(land))
++    land._animated = False  # type: ignore[attr-defined]
++    land.card_types = set(getattr(land, "card_types", set())) - {CardType.CREATURE}
++    subtype = record.get("subtype")
++    if subtype is not None and subtype in getattr(land, "subtypes", set()):
++        land.subtypes.discard(subtype)
++
++
++# ---------------------------------------------------------------------------
++# The granted pump trigger
++# ---------------------------------------------------------------------------
++
++
++def add_pump_until_end_of_turn(
++    game: GameState,
++    land: Any,
++    power_bonus: int = 1,
++    toughness_bonus: int = 0,
++) -> ContinuousEffect:
++    """Give *land* +``power_bonus``/+``toughness_bonus`` until end of turn.
++
++    Adds a Layer 7c (``MODIFY_PT``) :class:`ContinuousEffect` with
++    ``DURATION_END_OF_TURN`` to the engine layer system.  After
++    ``EffectManager.apply_all`` the bonus is visible via ``land.power`` /
++    ``land.toughness``; firing this N times in a turn stacks to +N/+0, and
++    ``EffectManager.remove_expired`` (run at cleanup) sweeps every such effect
++    away so the body resets at end of turn.
++    """
++
++    def _apply(g: GameState) -> None:
++        if getattr(land, "modified_power", None) is not None:
++            land.modified_power += power_bonus  # type: ignore[attr-defined]
++        if getattr(land, "modified_toughness", None) is not None:
++            land.modified_toughness += toughness_bonus  # type: ignore[attr-defined]
++
++    effect = ContinuousEffect(
++        source=land,
++        layer=Layer.POWER_TOUGHNESS,
++        sublayer=SubLayer.MODIFY_PT,
++        apply=_apply,
++        duration=DURATION_END_OF_TURN,
++    )
++    return game.effect_manager.add(effect)
++
++
++def _pump_trigger_registry(game: GameState) -> set[int]:
++    """Return (creating if necessary) the per-game pump-trigger dedup set."""
++    registry = getattr(game, "_animation_pump_triggers", None)
++    if registry is None:
++        registry = set()
++        game._animation_pump_triggers = registry  # type: ignore[attr-defined]
++    return registry
++
++
++def register_instant_sorcery_pump(
++    game: GameState,
++    land: Any,
++    controller: Any,
++    power_bonus: int = 1,
++    toughness_bonus: int = 0,
++) -> TriggerRegistration | None:
++    """Grant *land* "whenever you cast an instant/sorcery, +1/+0 until EOT".
++
++    Registers (deduped per source via a lazy per-game registry) a
++    :class:`~engine.events.SpellCastTriggeredEvent` trigger controlled by
++    *controller* and gated to *controller*'s own instant/sorcery casts.  When it
++    fires, :func:`add_pump_until_end_of_turn` gives *land*
++    +``power_bonus``/+``toughness_bonus`` until end of turn.
++
++    Returns the created :class:`~engine.triggers.TriggerRegistration`, or
++    ``None`` if a pump trigger was already registered for this source (so a
++    second animation does not stack a second grant).
++    """
++    registry = _pump_trigger_registry(game)
++    if id(land) in registry:
++        return None
++
++    def _condition(g: GameState, event: SpellCastTriggeredEvent) -> bool:
++        caster = getattr(event, "player", None) or getattr(event, "controller", None)
++        if caster is not controller:
++            return False
++        spell = getattr(event, "spell", None) or getattr(event, "card", None)
++        card_types = getattr(spell, "card_types", set())
++        return CardType.INSTANT in card_types or CardType.SORCERY in card_types
++
++    def _effect(g: GameState) -> None:
++        add_pump_until_end_of_turn(g, land, power_bonus, toughness_bonus)
++
++    trigger = TriggerRegistration(
++        event_type=SpellCastTriggeredEvent,
++        condition=_condition,
++        effect=_effect,
++        source=land,
++        controller=controller,
++    )
++    game.trigger_manager.register(trigger)
++    registry.add(id(land))
++    return trigger
+diff -ruN a/casting.py b/casting.py
+--- a/casting.py	2026-05-25 16:43:11.728292087 +0000
++++ b/casting.py	2026-06-02 10:10:08.634840975 +0000
+@@ -89,12 +89,20 @@
+ def get_cost_reduction(game: GameState, card: CardImpl, controller: Player) -> int:
+     """Return the generic mana reduction for casting *card*.
+ 
+-    Queries ``card.cost_reduction(game)`` and clamps the result so that
+-    the generic portion of the mana cost cannot go below 0.
++    Queries ``card.cost_reduction(game)`` for the card's *own* cost reduction
++    (e.g. Tolarian Terror counting instants/sorceries in your graveyard, or
++    Witherbloom's own affinity for creatures) and adds any *granted* per-spell
++    reduction another permanent contributes for this controller's spell (e.g.
++    Witherbloom granting "affinity for creatures" to your instants/sorceries —
++    see :mod:`engine.affinity`).  The summed reduction is clamped so that the
++    generic portion of the mana cost cannot go below 0.
++
++    When no grant is registered for this spell, the granted contribution is 0 and
++    the result is exactly the card's own clamped ``cost_reduction`` — so existing
++    cost-reduction behaviour (sos_1, fdn_167) is unaffected.
+ 
+-    This is a simplified single-card self-reduction model.  Full MTG
+-    cost-reduction interactions (Trinisphere, multiple reductions from
+-    different sources) are deferred.
++    Full MTG cost-reduction interactions (Trinisphere, ordering of multiple
++    reductions from different sources) remain a simplified additive model.
+     """
+     # Ensure card.controller is set so the hook can reference "you" / the
+     # casting player even when the card was never explicitly assigned one.
+@@ -104,6 +112,14 @@
+     # Restore previous controller in case the caller doesn't want a
+     # side-effect (get_cost_reduction is a query, not a mutation).
+     card.controller = prev_controller
++
++    # Add any granted per-spell reduction (e.g. granted affinity for creatures)
++    # registered for this controller's spell.  With no grant registered this is
++    # 0, leaving the card's own reduction unchanged.
++    from engine.affinity import get_granted_reduction
++
++    raw += get_granted_reduction(game, card, controller)
++
+     generic = card.mana_cost.generic if card.mana_cost else 0
+     return max(0, min(raw, generic))
+ 
+@@ -123,7 +139,12 @@
+ # Cast spell
+ # ------------------------------------------------------------------
+ 
+-def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
++def cast_spell(
++    game: GameState,
++    player: Player,
++    card: CardImpl,
++    ignore_timing: bool = False,
++) -> None:
+     """Cast *card* from *player*'s hand.
+ 
+     Pipeline
+@@ -144,11 +165,26 @@
+     8. **Push StackObject** — push a :class:`StackObject` whose
+        ``on_resolve`` callback handles resolution.
+ 
++    Parameters:
++        ignore_timing: When ``True``, the sorcery-speed timing gate
++            (step 1) is bypassed so the spell may be cast outside a normal
++            sorcery-speed window.  This is an opt-in escape hatch for
++            casting permissions that create their own timing window — e.g.
++            miracle (CR 702.94a), which lets a card be cast as it is drawn
++            regardless of phase/stack/priority.  All other legality checks
++            (``can_cast``, hand membership, targeting, mana payment) are
++            unaffected.  Defaults to ``False`` so ordinary casts keep full
++            sorcery-speed enforcement.
++
+     Raises:
+         CastingError: If any legality check fails.
+     """
+     # 1. Timing
+-    if not can_cast_at_instant_speed(card) and not is_sorcery_speed(game, player):
++    if (
++        not ignore_timing
++        and not can_cast_at_instant_speed(card)
++        and not is_sorcery_speed(game, player)
++    ):
+         raise CastingError(
+             f"Cannot cast {card.name!r} — sorcery-speed timing not met"
+         )
+@@ -167,9 +203,12 @@
+     hand.remove(card)
+     stack_zone.add(card)
+ 
+-    # Clear any stale colors_spent from a prior cast before new payment.
++    # Clear any stale colors_spent / mana_spent from a prior cast before
++    # new payment.
+     if hasattr(card, "colors_spent"):
+         del card.colors_spent
++    if hasattr(card, "mana_spent"):
++        del card.mana_spent
+ 
+     # 5. Choose targets
+     target_specs = card.get_targets(game)
+@@ -215,7 +254,13 @@
+     reduction = get_cost_reduction(game, card, player)
+     effective_cost = _apply_cost_reduction(card.mana_cost, reduction) if reduction > 0 else card.mana_cost
+ 
+-    if not player.mana_pool.can_pay(effective_cost):
++    # Restricted mana ("spend this mana only to cast an instant or sorcery
++    # spell") may help pay only for a permitted spell.  When the pool holds no
++    # restricted mana, ``can_pay_for_spell`` delegates to ``can_pay`` so this
++    # check is byte-for-byte identical to the historic ``can_pay`` path for
++    # ordinary mana — only a pool tainted by restricted mana is treated
++    # differently, and then only to *reject* an illegal spend.
++    if not player.mana_pool.can_pay_for_spell(effective_cost, card):
+         # Rollback: move card from stack zone back to hand
+         stack_zone.remove(card)
+         hand.add(card)
+@@ -228,6 +273,13 @@
+     # that care about the colors used to cast the spell.
+     card.colors_spent = list(player.mana_pool.last_payment_colors)  # type: ignore[attr-defined]
+ 
++    # Store the TOTAL amount of mana paid for this cast for mechanics that
++    # care about the literal amount of mana spent (e.g. "add {C} equal to
++    # the amount of mana spent to cast that spell").  For a no-X / non-
++    # reduced cast this equals the card's mana value; with cost reductions
++    # it reflects the actual amount paid after reduction.
++    card.mana_spent = effective_cost.cmc  # type: ignore[attr-defined]
++
+     # 7. Call on_cast hook
+     card.on_cast(game)
+ 
+@@ -372,6 +424,61 @@
+ 
+ 
+ # ------------------------------------------------------------------
++# Stack → graveyard redirection registry
++# ------------------------------------------------------------------
++#
++# Some effects (e.g. "you may cast target instant or sorcery from your
++# graveyard ... If that spell would be put into your graveyard, exile it
++# instead") need to redirect a *spell* (a non-permanent on the stack) to a
++# zone other than the graveyard when it finishes resolving.  The engine's
++# replacement-effect pipeline in ``engine.zones.move_to_zone`` only consults
++# replacement effects when a card is *leaving the battlefield*, so it does not
++# cover the STACK → GRAVEYARD transition a resolving instant/sorcery makes.
++#
++# This lightweight, per-game registry lets such effects register a one-shot
++# redirect keyed on the specific card object.  ``_resolve_spell`` consults the
++# registry when an instant/sorcery would head to the graveyard and routes the
++# card to the requested zone instead (clearing the entry afterwards so the
++# redirect applies only to this resolution).
++
++
++def _redirect_registry(game: GameState) -> dict[int, str]:
++    """Return (creating if necessary) the per-game stack→graveyard redirect map.
++
++    The map is keyed by ``id(card)`` so identity-based lookup is preserved even
++    for cards that are not hashable in a domain-meaningful way.  Stored lazily
++    on the game object so no change to ``GameState.__init__`` is required.
++    """
++    registry = getattr(game, "_stack_to_graveyard_redirects", None)
++    if registry is None:
++        registry = {}
++        game._stack_to_graveyard_redirects = registry  # type: ignore[attr-defined]
++    return registry
++
++
++def register_stack_to_graveyard_redirect(
++    game: GameState,
++    card: CardImpl,
++    destination: str,
++) -> None:
++    """Redirect *card* away from the graveyard when it resolves off the stack.
++
++    Registers a one-shot redirect so that when *card* (a resolving
++    instant/sorcery) would be put into the graveyard from the stack, it is
++    instead placed into the zone named by *destination* (``"exile"``,
++    ``"hand"``, ``"library"`` — see ``engine.zones._DESTINATION_ZONE_MAP``).
++
++    The redirect is consumed the first time the card resolves from the stack.
++    """
++    _redirect_registry(game)[id(card)] = destination
++
++
++def clear_stack_to_graveyard_redirect(game: GameState, card: CardImpl) -> None:
++    """Remove any pending stack→graveyard redirect for *card* (no-op if none)."""
++    _redirect_registry(game).pop(id(card), None)
++
++
++# ------------------------------------------------------------------
+ # Resolution (called when the stack pops)
+ # ------------------------------------------------------------------
+ 
+@@ -388,9 +495,11 @@
+     3. If the card is a permanent type, move it to the battlefield via
+        :func:`~engine.zones.move_to_zone` (which handles trigger/effect
+        registration and the ETB event).
+-    4. Otherwise (instant / sorcery), move it to the owner's graveyard.
++    4. Otherwise (instant / sorcery), move it to the owner's graveyard —
++       unless a stack→graveyard redirect was registered for this card, in
++       which case it is routed to the requested zone (e.g. exile) instead.
+     """
+-    from engine.zones import move_to_zone
++    from engine.zones import _DESTINATION_ZONE_MAP, move_to_zone
+ 
+     # Read targets from the StackObject — the single source of truth.
+     # Set chosen_targets on the card just before resolution so that
+@@ -406,8 +515,14 @@
+         # trigger/replacement-effect registration and ENTERS_BATTLEFIELD event.
+         move_to_zone(game, card, Zone.STACK, Zone.BATTLEFIELD)
+     else:
+-        # Instant/sorcery: move from stack to graveyard via move_to_zone.
+-        move_to_zone(game, card, Zone.STACK, Zone.GRAVEYARD)
++        # Instant/sorcery: move from stack to graveyard via move_to_zone,
++        # honouring any registered one-shot stack→graveyard redirect (e.g.
++        # "If that spell would be put into your graveyard, exile it instead").
++        destination = _redirect_registry(game).pop(id(card), None)
++        dest_zone = Zone.GRAVEYARD
++        if destination is not None:
++            dest_zone = _DESTINATION_ZONE_MAP.get(destination, Zone.GRAVEYARD)
++        move_to_zone(game, card, Zone.STACK, dest_zone)
+ 
+ 
+ # ------------------------------------------------------------------
+diff -ruN a/casualty.py b/casualty.py
+--- a/casualty.py	1970-01-01 00:00:00.000000000 +0000
++++ b/casualty.py	2026-06-02 09:33:41.901766044 +0000
+@@ -0,0 +1,476 @@
++"""Casualty-keyword framework (Comprehensive Rules 702.153).
++
++*Casualty* is a static ability linked to a triggered ability:
++
++    Casualty N (As an additional cost to cast this spell, you may sacrifice a
++    creature with power N or greater.  When you cast this spell, if a casualty
++    cost was paid for it, copy it.  If the spell has any targets, you may choose
++    new targets for the copy.)
++
++A card normally carries casualty as a printed ability, but Silverquill, the
++Disputant *grants* casualty 1 to every instant and sorcery **spell** its
++controller casts.  The engine had no support for the mechanic, so this module
++adds it *additively* — no existing engine symbol is renamed, moved, or deleted.
++It mirrors :mod:`engine.miracle` / :mod:`engine.preparation` / :mod:`engine.paradigm`.
++
++The mechanic has three observable parts:
++
++1. **The grant surface.**  A *granted casualty value* is recorded on the affected
++   spell (an ``int`` written to ``spell.casualty``) and is also queryable via
++   :func:`get_casualty_value`.  A continuous-grant source (Silverquill) installs /
++   refreshes the grant via :func:`grant_casualty_to_hand`, which only ever writes
++   the value onto instants/sorceries in *its controller's* hand and clears stale
++   grants from cards that have left the hand.
++
++2. **The optional additional cost — sacrifice a creature with power >= N
++   (CR 702.153a).**  :func:`legal_casualty_sacrifices` exposes the set of legal
++   sacrifice candidates (creatures the caster controls whose power is >= N), so
++   the power boundary is observable (power 0 illegal, power 1 legal).
++   :func:`pay_casualty` performs the payment: it validates the chosen creature's
++   power, sacrifices it, and records the payment on the spell
++   (``spell.casualty_paid = True``).
++
++3. **Copy-on-payment (CR 702.153c).**  When the casualty cost is paid, the spell
++   is copied onto the stack under the controller's control, with the option to
++   choose new targets for the copy.  This reuses the existing engine spell-copy
++   primitive :func:`engine.stack.copy_spell` (no new copy primitive is added).
++
++"Casualty" is a *printed keyword label*, not an evergreen keyword, so no member
++is added to :class:`engine.types.Keyword` (that enum is frozen at 16 members).
++"""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any
++
++from engine.types import CardType, Zone
++
++if TYPE_CHECKING:
++    from engine.game_state import GameState
++    from engine.player import Player
++
++
++#: Default casualty value granted by Silverquill, the Disputant (casualty 1).
++CASUALTY_ONE: int = 1
++
++
++# ---------------------------------------------------------------------------
++# Grant surface — read / write the granted casualty value on a spell
++# ---------------------------------------------------------------------------
++
++
++def is_instant_or_sorcery(card: Any) -> bool:
++    """Return ``True`` if *card* is an instant or sorcery (the granted types)."""
++    card_types = getattr(card, "card_types", set())
++    return CardType.INSTANT in card_types or CardType.SORCERY in card_types
++
++
++def get_casualty_value(card: Any) -> int | None:
++    """Return the granted casualty value on *card*, or ``None`` if none.
++
++    The grant is stored on the card as an ``int`` under ``card.casualty`` (the
++    queryable grant surface).  Returns ``None`` when the card carries no granted
++    casualty value.
++    """
++    return getattr(card, "casualty", None)
++
++
++def set_casualty_value(card: Any, value: int | None) -> None:
++    """Write (or clear) the granted casualty value on *card*.
++
++    Passing ``None`` clears the grant (removes the ``casualty`` attribute so a
++    stale grant never lingers on a card that has left the granting zone).
++    """
++    if value is None:
++        if hasattr(card, "casualty"):
++            try:
++                delattr(card, "casualty")
++            except AttributeError:
++                card.casualty = None  # type: ignore[attr-defined]
++        # Also drop the source back-link so the card is fully de-granted.
++        if hasattr(card, "_casualty_grant_source"):
++            try:
++                delattr(card, "_casualty_grant_source")
++            except AttributeError:
++                pass
++        return
++    card.casualty = value  # type: ignore[attr-defined]
++
++
++def has_casualty(card: Any) -> bool:
++    """Return ``True`` if *card* currently carries a granted casualty value."""
++    return get_casualty_value(card) is not None
++
++
++# ---------------------------------------------------------------------------
++# Per-game registry of cards a given source has granted casualty to
++# ---------------------------------------------------------------------------
++
++
++def _granted_registry(game: GameState) -> dict[int, set[int]]:
++    """Return (creating if necessary) the per-game casualty-grant registry.
++
++    Maps ``id(source)`` to the set of ``id(card)`` it last granted casualty to,
++    so a refresh can clear grants from cards that have since left the granting
++    zone.  Stored lazily on the game object — no ``GameState.__init__`` change.
++    """
++    registry = getattr(game, "_casualty_grants", None)
++    if registry is None:
++        registry = {}
++        game._casualty_grants = registry  # type: ignore[attr-defined]
++    return registry
++
++
++# ---------------------------------------------------------------------------
++# The continuous grant — "each instant/sorcery you cast has casualty {N}"
++# ---------------------------------------------------------------------------
++
++
++def grant_casualty_to_hand(
++    game: GameState,
++    source: Any,
++    controller: Any,
++    value: int = CASUALTY_ONE,
++) -> list[Any]:
++    """Grant casualty *value* to every instant/sorcery in *controller*'s hand.
++
++    This is the body of Silverquill's continuous static ability: while the
++    source is on the battlefield, every instant and sorcery spell its controller
++    casts "has casualty 1".  The casting/casualty pipeline observes the grant on
++    the spell object regardless of zone; with no live cast pipeline the
++    controller's-hand instants/sorceries are the natural observable proxy (the
++    same proxy :mod:`engine.miracle` uses).  The grant is written onto each such
++    card (``card.casualty``) and is queryable via :func:`get_casualty_value`.
++
++    The grant is *scoped*:
++
++    * only instants and sorceries are affected (creatures, lands, etc. are not);
++    * only cards in *controller*'s hand are affected (an opponent's hand is left
++      untouched).
++
++    Calling this again refreshes the grant: cards that have left the controller's
++    hand since the last refresh have their (this-source) grant cleared so a stale
++    casualty value never lingers.  Returns the list of hand cards now carrying the
++    grant.
++    """
++    if controller is None:
++        return []
++
++    registry = _granted_registry(game)
++    previously = registry.get(id(source), set())
++
++    hand = controller.zones[Zone.HAND]
++    granted: list[Any] = []
++    now_ids: set[int] = set()
++
++    for card in hand.get_all():
++        if not is_instant_or_sorcery(card):
++            continue
++        set_casualty_value(card, value)
++        card._casualty_grant_source = source  # type: ignore[attr-defined]
++        granted.append(card)
++        now_ids.add(id(card))
++
++    # Clear grants this source placed on cards that are no longer in the hand
++    # (or are no longer instants/sorceries).
++    stale = previously - now_ids
++    if stale:
++        _clear_grants_for_ids(game, source, stale)
++
++    registry[id(source)] = now_ids
++    return granted
++
++
++def _clear_grants_for_ids(game: GameState, source: Any, card_ids: set[int]) -> None:
++    """Clear *source*'s casualty grant from any card in *card_ids* across zones."""
++    for player in game.players:
++        for zone in Zone:
++            container = player.zones[zone]
++            for card in list(container.get_all()):
++                if (
++                    id(card) in card_ids
++                    and getattr(card, "_casualty_grant_source", None) is source
++                ):
++                    set_casualty_value(card, None)
++
++
++def clear_casualty_grants(game: GameState, source: Any) -> None:
++    """Clear every casualty grant *source* placed (e.g. when it leaves play)."""
++    registry = _granted_registry(game)
++    granted = registry.pop(id(source), set())
++    if not granted:
++        return
++    _clear_grants_for_ids(game, source, granted)
++
++
++# ---------------------------------------------------------------------------
++# Optional additional cost — sacrifice a creature with power >= N (702.153a)
++# ---------------------------------------------------------------------------
++
++
++def is_legal_casualty_sacrifice(creature: Any, value: int) -> bool:
++    """Return ``True`` if *creature* may be sacrificed for casualty *value*.
++
++    A legal casualty sacrifice for casualty N is a creature with power N or
++    greater (CR 702.153a).  For casualty 1 a power-0 creature is illegal and a
++    power-1 (or greater) creature is legal.
++    """
++    if creature is None:
++        return False
++    card_types = getattr(creature, "card_types", set())
++    if CardType.CREATURE not in card_types:
++        return False
++    power = getattr(creature, "power", None)
++    if power is None:
++        power = getattr(creature, "base_power", 0)
++    return power >= value
++
++
++def legal_casualty_sacrifices(
++    game: GameState,
++    player: Any,
++    value: int,
++) -> list[Any]:
++    """Return the creatures *player* controls that are legal casualty sacrifices.
++
++    These are the creatures on *player*'s battlefield whose power is >= *value*
++    (CR 702.153a).  Exposing this set makes the power boundary observable: for
++    casualty 1, a power-0 creature is excluded and a power-1 (or greater)
++    creature is included.
++    """
++    if player is None:
++        return []
++    battlefield = game.get_battlefield(player)
++    return [
++        creature
++        for creature in battlefield.get_all()
++        if is_legal_casualty_sacrifice(creature, value)
++    ]
++
++
++def mark_casualty_paid(spell: Any) -> None:
++    """Record that a casualty cost was paid for *spell* (``spell.casualty_paid``)."""
++    spell.casualty_paid = True  # type: ignore[attr-defined]
++
++
++def was_casualty_paid(spell: Any) -> bool:
++    """Return ``True`` if a casualty cost was recorded as paid for *spell*."""
++    return bool(getattr(spell, "casualty_paid", False))
++
++
++def pay_casualty(
++    game: GameState,
++    player: Any,
++    spell: Any,
++    creature: Any,
++    value: int | None = None,
++) -> bool:
++    """Pay *spell*'s casualty cost by sacrificing *creature* (CR 702.153a).
++
++    Validates that *creature* is a legal casualty sacrifice (a creature *player*
++    controls with power >= the casualty value), sacrifices it to its owner's
++    graveyard, and records the payment on the spell (``spell.casualty_paid =
++    True``).
++
++    The casualty value defaults to the value granted to *spell* (via
++    :func:`get_casualty_value`), falling back to :data:`CASUALTY_ONE` if the
++    spell carries no recorded grant.
++
++    Returns ``True`` if the cost was paid, ``False`` if the chosen creature is
++    not a legal sacrifice (power below the threshold, not a creature, or not
++    controlled by *player*) — in which case nothing is sacrificed and no payment
++    is recorded.
++
++    NOTE: paying the casualty cost does **not** itself produce the copy — the
++    copy is the casualty *triggered* ability (CR 702.153c).  Call
++    :func:`copy_spell_on_casualty` (or :func:`offer_casualty`, which wires both)
++    to produce the copy once the spell is on the stack.
++    """
++    from engine.game import sacrifice
++
++    if value is None:
++        value = get_casualty_value(spell)
++        if value is None:
++            value = CASUALTY_ONE
++
++    # The creature must be a legal sacrifice AND under the player's control.
++    if not is_legal_casualty_sacrifice(creature, value):
++        return False
++    if not game.get_battlefield(player).contains(creature):
++        return False
++
++    sacrifice(game, player, creature)
++    mark_casualty_paid(spell)
++    return True
++
++
++# ---------------------------------------------------------------------------
++# Copy-on-payment (CR 702.153c)
++# ---------------------------------------------------------------------------
++
++
++def _find_stack_object(game: GameState, spell: Any) -> Any | None:
++    """Return the :class:`~engine.stack.StackObject` whose source is *spell*."""
++    for stack_obj in game.stack._items:
++        if stack_obj.source is spell:
++            return stack_obj
++    return None
++
++
++def copy_spell_on_casualty(
++    game: GameState,
++    player: Any,
++    spell: Any,
++    new_targets: list[Any] | None = None,
++) -> Any | None:
++    """Copy *spell* onto the stack under *player*'s control (CR 702.153c).
++
++    Implements the casualty triggered ability: "When you cast this spell, if a
++    casualty cost was paid for it, copy it.  If the spell has any targets, you
++    may choose new targets for the copy."  *spell* must be on the stack.  Reuses
++    the engine spell-copy primitive :func:`engine.stack.copy_spell`, so the copy
++    shares the original's identity but has independent state and (optionally) new
++    targets.  The copy is pushed onto the stack and returned so callers/tests can
++    observe it.
++
++    Returns the copy's :class:`~engine.stack.StackObject`, or ``None`` if the
++    original spell is not on the stack.
++    """
++    from engine.stack import copy_spell
++
++    original = _find_stack_object(game, spell)
++    if original is None:
++        return None
++
++    copy_obj = copy_spell(game, original, player, new_targets)
++    game.stack.push(copy_obj)
++    return copy_obj
++
++
++def offer_casualty(
++    game: GameState,
++    player: Any,
++    spell: Any,
++    value: int | None = None,
++) -> Any | None:
++    """Offer *player* the option to pay *spell*'s casualty cost and copy it.
++
++    This wires the whole optional mechanic (CR 702.153a/c) around a spell that is
++    already on the stack:
++
++    1. Compute the legal sacrifice candidates (creatures with power >= the
++       casualty value).  With none available, the offer cannot be paid.
++    2. Ask the player whether they want to pay the casualty cost.
++    3. On *yes*, ask which creature to sacrifice, validate and pay via
++       :func:`pay_casualty` (recording ``spell.casualty_paid``), then copy the
++       spell onto the stack via :func:`copy_spell_on_casualty`, offering new
++       targets for the copy if the spell had any.
++
++    Returns the copy's :class:`~engine.stack.StackObject` if the casualty cost
++    was paid and the copy produced, otherwise ``None`` (declined, no legal
++    sacrifice, or the spell left the stack).
++    """
++    if value is None:
++        value = get_casualty_value(spell)
++        if value is None:
++            value = CASUALTY_ONE
++
++    candidates = legal_casualty_sacrifices(game, player, value)
++    if not candidates:
++        return None
++
++    chooser = getattr(player, "choose_yes_no", None)
++    if not callable(chooser):
++        return None
++    try:
++        wants = bool(
++            chooser(
++                f"Pay casualty {value} for "
++                f"{getattr(spell, 'name', 'this spell')} "
++                f"(sacrifice a creature with power {value} or greater)?"
++            )
++        )
++    except Exception:
++        return None
++    if not wants:
++        return None
++
++    # Choose which creature to sacrifice.
++    picker = getattr(player, "choose_card", None)
++    chosen = candidates[0]
++    if callable(picker):
++        try:
++            chosen = picker(candidates, "creature to sacrifice for casualty")
++        except Exception:
++            chosen = candidates[0]
++    if chosen is None or not is_legal_casualty_sacrifice(chosen, value):
++        return None
++
++    if not pay_casualty(game, player, spell, chosen, value):
++        return None
++
++    # CR 702.153c — produce the copy, with optional new targets.
++    new_targets = _maybe_choose_new_targets(game, player, spell)
++    return copy_spell_on_casualty(game, player, spell, new_targets)
++
++
++def _maybe_choose_new_targets(
++    game: GameState,
++    player: Any,
++    spell: Any,
++) -> list[Any] | None:
++    """Optionally let *player* choose new targets for the casualty copy.
++
++    Returns the chosen new target list, or ``None`` to keep the original
++    targets.  Only prompts when the spell has at least one target on its stack
++    object; declining keeps the original targets (CR 702.153a: "you may choose
++    new targets for the copy").
++    """
++    original = _find_stack_object(game, spell)
++    if original is None or not original.targets:
++        return None
++
++    chooser = getattr(player, "choose_yes_no", None)
++    if not callable(chooser):
++        return None
++    try:
++        wants = bool(
++            chooser(
++                f"Choose new targets for the copy of "
++                f"{getattr(spell, 'name', 'this spell')}?"
++            )
++        )
++    except Exception:
++        return None
++    if not wants:
++        return None
++
++    get_targets = getattr(spell, "get_targets", None)
++    if not callable(get_targets):
++        return None
++    try:
++        requirements = get_targets(game)
++    except Exception:
++        return None
++    if not requirements:
++        return None
++
++    new_targets: list[Any] = []
++    for req in requirements:
++        legal: list[Any] = []
++        filter_fn = getattr(req, "filter_fn", None)
++        for p in game.players:
++            for obj in game.get_battlefield(p).get_all():
++                if filter_fn is None or filter_fn(obj):
++                    legal.append(obj)
++            if filter_fn is not None and filter_fn(p):
++                legal.append(p)
++        if not legal:
++            continue
++        try:
++            chosen = player.choose_target(legal, req)
++        except Exception:
++            chosen = legal[0]
++        new_targets.append(chosen)
++
++    return new_targets or None
+diff -ruN a/events.py b/events.py
+--- a/events.py	2026-05-25 04:23:31.883982600 +0000
++++ b/events.py	2026-06-02 08:24:02.306414762 +0000
+@@ -77,6 +77,20 @@
+ 
+ 
+ @dataclass
++class BeginningOfMainPhaseTriggeredEvent(TriggeredEvent):
++    """Fired at the start of a main phase (pre- and post-combat).
++
++    ``player`` is the active player whose main phase is beginning.  Use
++    the ``precombat`` flag to distinguish the pre-combat main phase from
++    the post-combat one.  Triggers that care only about "your next main
++    phase" should check ``event.player`` against their controller.
++    """
++
++    player: Any = None
++    precombat: bool = False
++
++
++@dataclass
+ class EndOfTurnTriggeredEvent(TriggeredEvent):
+     pass
+ 
+diff -ruN a/game.py b/game.py
+--- a/game.py	2026-05-25 16:43:11.729292098 +0000
++++ b/game.py	2026-06-02 08:39:30.555309744 +0000
+@@ -474,6 +474,108 @@
+ 
+ 
+ # ---------------------------------------------------------------------------
++# Randomness — coin flips (CR 705)
++# ---------------------------------------------------------------------------
++
++def get_rng(game: GameState) -> Any:
++    """Return the game's random-number generator, creating it on demand.
++
++    The RNG is a :class:`random.Random` instance lazily attached to the
++    game as ``game._rng`` (no :class:`GameState.__init__` change required —
++    keeps the addition fully additive).  Unseeded, it behaves as a fair
++    source of randomness; tests can make it deterministic via
++    :func:`seed_rng`.
++
++    Parameters:
++        game: The current game state.
++
++    Returns:
++        The per-game :class:`random.Random` instance.
++    """
++    import random as _random
++
++    rng = getattr(game, "_rng", None)
++    if rng is None:
++        rng = _random.Random()
++        game._rng = rng
++    return rng
++
++
++def seed_rng(game: GameState, seed: Any) -> None:
++    """Seed (or re-seed) the game's RNG for deterministic randomness.
++
++    Tests can call this to force a reproducible sequence of coin flips
++    (CR 705) — e.g. ``seed_rng(game, 0)`` then :func:`flip_coins` yields a
++    fixed, repeatable number of heads.  Production code never seeds, so the
++    default behaviour stays a fair coin.
++
++    Parameters:
++        game: The current game state.
++        seed: Any value accepted by :meth:`random.Random.seed`.
++    """
++    get_rng(game).seed(seed)
++
++
++def flip_coin(game: GameState) -> bool:
++    """Flip a single fair coin (CR 705).
++
++    Returns ``True`` for heads and ``False`` for tails using the game's
++    seedable RNG (see :func:`get_rng` / :func:`seed_rng`).
++
++    Parameters:
++        game: The current game state.
++
++    Returns:
++        ``True`` if the coin came up heads, ``False`` if tails.
++    """
++    return get_rng(game).random() < 0.5
++
++
++def flip_coins(game: GameState, n: int) -> int:
++    """Flip *n* fair coins and return the number that came up heads (CR 705).
++
++    Backed by the game's seedable RNG so tests can force a known result:
++    seed via :func:`seed_rng`, then assert the returned head count.  With
++    no seed the flips are fair and independent.
++
++    Parameters:
++        game: The current game state.
++        n: The number of coins to flip (``0`` returns ``0``).
++
++    Returns:
++        The number of coins (``0..n``) that came up heads.
++    """
++    if n <= 0:
++        return 0
++    return sum(1 for _ in range(n) if flip_coin(game))
++
++
++# ---------------------------------------------------------------------------
++# Turn modification — skipped turns
++# ---------------------------------------------------------------------------
++
++def add_skipped_turns(game: GameState, player: Player, amount: int = 1) -> None:
++    """Make *player* skip their next *amount* turns.
++
++    Increments the per-player ``skipped_turns`` counter (see
++    :class:`engine.player.Player`).  The counter is consumed during turn
++    rotation in :meth:`GameState.advance_phase`: each time it would become
++    *player*'s turn while ``skipped_turns > 0``, the counter is decremented
++    and that turn is passed to the next player.  This mirrors the additive
++    nature of the existing ``extra_turns`` FIFO queue.
++
++    Parameters:
++        game: The current game state.
++        player: The player who will skip turns.
++        amount: Number of turns to skip (non-positive amounts are ignored).
++    """
++    if amount <= 0 or player is None:
++        return
++    current = getattr(player, "skipped_turns", 0)
++    player.skipped_turns = current + amount
++
++
++# ---------------------------------------------------------------------------
+ # Game loop
+ # ---------------------------------------------------------------------------
+ 
+diff -ruN a/game_state.py b/game_state.py
+--- a/game_state.py	2026-05-25 16:43:11.729292098 +0000
++++ b/game_state.py	2026-06-02 08:40:08.562584577 +0000
+@@ -147,21 +147,55 @@
+         else:
+             # End of turn — wrap around.
+             self.turn_number += 1
+-            if self.extra_turns:
+-                # ENGINE LIMITATION: Extra turns queue (FIFO). Pop the
+-                # next player seat index; that player gets the next turn.
+-                # Normal rotation is NOT advanced — extra turns are
+-                # inserted before the normal next turn.
+-                self.active_player_index = self.extra_turns.pop(0)
+-            else:
+-                self.active_player_index = self._normal_next_index
+-                self._normal_next_index = 1 - self._normal_next_index
++            self.active_player_index = self._pick_next_active_index()
+             self.priority_player_index = self.active_player_index
+             self.phase = _TURN_SEQUENCE[0][0]
+             self.step = _TURN_SEQUENCE[0][1]
+ 
+         self.empty_mana_pools()
+ 
++    def _next_active_index_raw(self) -> int:
++        """Pick the next active seat index using extra-turns / normal rotation.
++
++        Pops from the ``extra_turns`` FIFO if present (extra turns are
++        *inserted* and do not advance the normal rotation); otherwise uses
++        ``_normal_next_index`` and flips it.  Does NOT consider skip-turn
++        effects — that is layered on top in :meth:`_pick_next_active_index`.
++        """
++        if self.extra_turns:
++            # ENGINE LIMITATION: Extra turns queue (FIFO). Pop the next
++            # player seat index; that player gets the next turn. Normal
++            # rotation is NOT advanced — extra turns are inserted before
++            # the normal next turn.
++            return self.extra_turns.pop(0)
++        idx = self._normal_next_index
++        self._normal_next_index = 1 - self._normal_next_index
++        return idx
++
++    def _pick_next_active_index(self) -> int:
++        """Return the next active seat, consuming skip-turn effects.
++
++        Mirrors the additive ``extra_turns`` design: when the player who
++        would become active has ``skipped_turns > 0``, that counter is
++        decremented and the turn is passed to the next player (which may in
++        turn be skipped).  The loop is bounded by the number of players times
++        the outstanding skips so it always terminates; if every remaining
++        candidate is skipped it falls back to the last computed seat.
++        """
++        # Total outstanding skips bound the loop so it can never spin forever.
++        max_iterations = len(self.players) + sum(
++            max(0, getattr(p, "skipped_turns", 0)) for p in self.players
++        )
++        idx = self._next_active_index_raw()
++        for _ in range(max_iterations):
++            player = self.players[idx]
++            if getattr(player, "skipped_turns", 0) > 0:
++                player.skipped_turns -= 1
++                idx = self._next_active_index_raw()
++            else:
++                break
++        return idx
++
+     def empty_mana_pools(self) -> None:
+         """Empty all players' mana pools — called on each phase/step transition."""
+         for player in self.players:
+diff -ruN a/mana.py b/mana.py
+--- a/mana.py	2026-05-25 16:43:11.729292098 +0000
++++ b/mana.py	2026-06-02 10:27:20.297104571 +0000
+@@ -2,7 +2,10 @@
+ 
+ from __future__ import annotations
+ 
+-from engine.types import Color, HybridManaSymbol, ManaCost, ManaType
++from dataclasses import dataclass
++from typing import Any
++
++from engine.types import CardType, Color, HybridManaSymbol, ManaCost, ManaType
+ 
+ # Map colored ManaTypes to their corresponding Color enum values.
+ _MANA_TO_COLOR: dict[ManaType, Color] = {
+@@ -14,16 +17,79 @@
+ }
+ 
+ 
++#: Restriction tag meaning "spend this mana only to cast an instant or sorcery
++#: spell" (Great Hall of the Biblioplex's any-color mana).
++RESTRICT_INSTANT_SORCERY = "instant_or_sorcery"
++
++
++@dataclass
++class ManaRestriction:
++    """An outstanding chunk of restricted mana in a :class:`ManaPool`.
++
++    Attributes:
++        mana_type: The kind of mana produced (e.g. the chosen color).
++        amount: How many mana of this chunk remain unspent.
++        restriction: A tag describing what the mana may be spent on.  The
++            only built-in tag is :data:`RESTRICT_INSTANT_SORCERY` ("spend
++            this mana only to cast an instant or sorcery spell").  An
++            unrecognised tag is treated conservatively (no spell qualifies),
++            so a future restriction never silently behaves as unrestricted.
++        source: Optional back-reference to the permanent/ability that
++            produced the restricted mana (advisory only).
++    """
++
++    mana_type: ManaType
++    amount: int
++    restriction: str
++    source: Any = None
++
++    def allows_spell(self, spell: Any) -> bool:
++        """Return ``True`` if this restricted mana may pay for *spell*.
++
++        Only the instant/sorcery restriction is understood; any other tag
++        is treated as "no spell qualifies" so the restriction is never
++        accidentally bypassed.
++        """
++        if self.restriction == RESTRICT_INSTANT_SORCERY:
++            card_types = getattr(spell, "card_types", set())
++            return CardType.INSTANT in card_types or CardType.SORCERY in card_types
++        return False
++
++
+ class ManaPool:
+     """Tracks available mana for a player.
+ 
+     Internal storage uses a ``dict[ManaType, int]`` mapping each mana type
+     to its current count.
++
++    Restricted mana
++    ---------------
++    Some effects produce mana that may only be spent in a limited way
++    (e.g. Great Hall of the Biblioplex: "Spend this mana only to cast an
++    instant or sorcery spell").  The base pool has no notion of a spend
++    restriction; to support such mana *additively* (without changing the
++    flat ``dict[ManaType, int]`` model or any existing payment behaviour),
++    the pool carries a small parallel record:
++
++    * :attr:`restrictions` — a list of :class:`ManaRestriction` records, one
++      per outstanding chunk of restricted mana that has not yet been spent.
++
++    Unrestricted mana is never recorded here, so when no effect produces
++    restricted mana the list stays empty and every existing operation
++    (:meth:`add`, :meth:`pay`, :meth:`can_pay`, :meth:`empty`, ...) behaves
++    byte-for-byte as before.  The restriction record is purely advisory at
++    the pool level — enforcement lives in :func:`engine.casting.cast_spell`,
++    which consults :meth:`restricted_amount` / :meth:`spendable_for_spell`
++    so restricted mana can pay a permitted spell but is rejected for a
++    disallowed one.
+     """
+ 
+     def __init__(self) -> None:
+         self._pool: dict[ManaType, int] = {mt: 0 for mt in ManaType}
+         self._last_payment_colors: list[Color] = []
++        # Parallel record of outstanding restricted-mana chunks.  Empty for
++        # ordinary mana, so all existing behaviour is unchanged by default.
++        self.restrictions: list[ManaRestriction] = []
+ 
+     # ------------------------------------------------------------------
+     # Basic operations
+@@ -40,10 +106,43 @@
+             raise ValueError(f"Cannot add negative mana: {amount}")
+         self._pool[mana_type] = self._pool.get(mana_type, 0) + amount
+ 
++    def add_restricted(
++        self,
++        mana_type: ManaType,
++        amount: int = 1,
++        restriction: str = RESTRICT_INSTANT_SORCERY,
++        source: Any = None,
++    ) -> None:
++        """Add *amount* mana of *mana_type* tagged with a spend *restriction*.
++
++        The mana lands in the flat pool exactly like ordinary mana (so it is
++        countable via :meth:`get` / :meth:`total` and payable by the unchanged
++        :meth:`pay`), and a parallel :class:`ManaRestriction` record is kept in
++        :attr:`restrictions` so the casting pipeline can tell that this much of
++        the pool may only be spent on a permitted spell.
++
++        Use this instead of :meth:`add` when an effect produces mana with a
++        spend restriction (e.g. "Spend this mana only to cast an instant or
++        sorcery spell").  Producing ordinary mana via :meth:`add` records no
++        restriction, leaving existing behaviour unchanged.
++        """
++        self.add(mana_type, amount)
++        if amount > 0:
++            self.restrictions.append(
++                ManaRestriction(
++                    mana_type=mana_type,
++                    amount=amount,
++                    restriction=restriction,
++                    source=source,
++                )
++            )
++
+     def empty(self) -> None:
+         """Clear the pool — happens at phase/step transitions."""
+         for mt in self._pool:
+             self._pool[mt] = 0
++        # Restricted mana empties with the rest of the pool.
++        self.restrictions = []
+ 
+     def total(self) -> int:
+         """Return the total amount of mana in the pool across all types."""
+@@ -64,6 +163,93 @@
+         return list(self._last_payment_colors)
+ 
+     # ------------------------------------------------------------------
++    # Restricted-mana queries / bookkeeping
++    # ------------------------------------------------------------------
++
++    def has_restricted_mana(self) -> bool:
++        """Return ``True`` if the pool holds any outstanding restricted mana."""
++        return any(r.amount > 0 for r in self.restrictions)
++
++    def restricted_amount(self) -> int:
++        """Return the total amount of currently-restricted mana in the pool."""
++        return sum(r.amount for r in self.restrictions if r.amount > 0)
++
++    def spendable_for_spell(self, spell: Any) -> int:
++        """Return how much of the pool may legally help pay for *spell*.
++
++        Restricted mana that does not permit *spell* is excluded; all
++        unrestricted mana (the pool total minus the restricted portion) plus
++        any restricted mana whose restriction permits *spell* is included.
++        With no restricted mana present this is simply :meth:`total`.
++        """
++        forbidden = sum(
++            r.amount
++            for r in self.restrictions
++            if r.amount > 0 and not r.allows_spell(spell)
++        )
++        return self.total() - forbidden
++
++    def _spendable_pool_for_spell(self, spell: Any) -> dict[ManaType, int]:
++        """Return a copy of the flat pool with forbidden restricted mana removed.
++
++        For each :class:`ManaRestriction` whose restriction does NOT permit
++        *spell*, the matching mana is subtracted from the copy, so the result
++        contains only mana that may *legally* pay for *spell* — per mana type.
++        Restricted mana that DOES permit *spell* stays in place (it spends like
++        ordinary mana of its type).  With no restricted mana present this is an
++        exact copy of :attr:`_pool`.
++        """
++        spendable: dict[ManaType, int] = dict(self._pool)
++        for record in self.restrictions:
++            if record.amount <= 0 or record.allows_spell(spell):
++                continue
++            current = spendable.get(record.mana_type, 0)
++            spendable[record.mana_type] = max(0, current - record.amount)
++        return spendable
++
++    def can_pay_for_spell(self, cost: ManaCost, spell: Any) -> bool:
++        """Like :meth:`can_pay`, but honouring restricted-mana spend rules.
++
++        Returns ``True`` only if the cost can be paid *and* no restricted mana
++        that disallows *spell* is forced into the payment.  When the pool holds
++        no restricted mana this delegates straight to :meth:`can_pay`, so
++        ordinary casts are entirely unaffected (byte-for-byte the legacy path).
++
++        Otherwise the full per-pip / hybrid / generic backtracking solve is
++        re-run (:meth:`_can_pay_pool`) against a pool from which the forbidden
++        restricted mana has been REMOVED per mana type
++        (:meth:`_spendable_pool_for_spell`).  A mere count comparison is
++        insufficient: it would let a forbidden restricted colored mana satisfy
++        that color's pip on a disallowed spell.  Solving over the filtered pool
++        guarantees every colored/colorless pip is met by mana that may legally
++        pay it.
++        """
++        if not self.has_restricted_mana():
++            return self.can_pay(cost)
++        spendable = self._spendable_pool_for_spell(spell)
++        return self._can_pay_pool(spendable, cost)
++
++    def _consume_restrictions_for_payment(self, paid: dict[ManaType, int]) -> None:
++        """Decrement restriction records to mirror a committed *paid* deduction.
++
++        *paid* maps each :class:`ManaType` to how many of it the payment spent.
++        Restricted records of the matching type are drawn down first so the
++        outstanding restricted amount never overstates what remains in the pool.
++        Records that reach zero are dropped.
++        """
++        for mana_type, spent in paid.items():
++            remaining = spent
++            for record in self.restrictions:
++                if remaining <= 0:
++                    break
++                if record.mana_type is not mana_type or record.amount <= 0:
++                    continue
++                take = min(record.amount, remaining)
++                record.amount -= take
++                remaining -= take
++        self.restrictions = [r for r in self.restrictions if r.amount > 0]
++
++    # ------------------------------------------------------------------
+     # Cost payment
+     # ------------------------------------------------------------------
+ 
+@@ -78,8 +264,17 @@
+         Returns:
+             True if the pool has enough mana to pay the cost.
+         """
+-        remaining: dict[ManaType, int] = dict(self._pool)
++        return self._can_pay_pool(dict(self._pool), cost)
+ 
++    @staticmethod
++    def _can_pay_pool(remaining: dict[ManaType, int], cost: ManaCost) -> bool:
++        """Run the colored-pip / hybrid / generic solve over *remaining*.
++
++        This is the shared payability solver used by both :meth:`can_pay`
++        (against a copy of the real pool) and :meth:`can_pay_for_spell`
++        (against a pool with forbidden restricted mana removed).  *remaining*
++        is consumed (mutated) locally; callers pass a throwaway copy.
++        """
+         # Pay colored/colorless pips first.
+         for mana_type, count in cost.pips.items():
+             if remaining.get(mana_type, 0) < count:
+@@ -88,9 +283,9 @@
+ 
+         # Solve hybrid symbols with backtracking.
+         if cost.hybrid:
+-            if not self._can_pay_hybrid(remaining, list(cost.hybrid), 0, cost.generic):
+-                return False
+-            return True
++            return ManaPool._can_pay_hybrid(
++                remaining, list(cost.hybrid), 0, cost.generic
++            )
+ 
+         # Then check generic — sum of all remaining mana must cover it.
+         return sum(remaining.values()) >= cost.generic
+@@ -155,12 +350,20 @@
+         # Commit the payment.
+         # Compute colors of mana spent by comparing old pool to new working pool.
+         colors_spent: set[Color] = set()
++        spent_by_type: dict[ManaType, int] = {}
+         for mt, old_amount in self._pool.items():
+             new_amount = working.get(mt, 0)
+-            if new_amount < old_amount and mt in _MANA_TO_COLOR:
+-                colors_spent.add(_MANA_TO_COLOR[mt])
++            if new_amount < old_amount:
++                spent_by_type[mt] = old_amount - new_amount
++                if mt in _MANA_TO_COLOR:
++                    colors_spent.add(_MANA_TO_COLOR[mt])
+         self._last_payment_colors = sorted(colors_spent, key=lambda c: c.value)
+         self._pool = working
++        # Keep restriction bookkeeping in sync with the deduction.  Skipped
++        # entirely when no restricted mana is outstanding, so ordinary payments
++        # are byte-for-byte unchanged.
++        if self.restrictions and spent_by_type:
++            self._consume_restrictions_for_payment(spent_by_type)
+         return True
+ 
+     @staticmethod
+diff -ruN a/miracle.py b/miracle.py
+--- a/miracle.py	1970-01-01 00:00:00.000000000 +0000
++++ b/miracle.py	2026-06-02 09:22:35.625995339 +0000
+@@ -0,0 +1,400 @@
++"""Miracle-keyword framework (Comprehensive Rules 702.94).
++
++*Miracle* is a static ability linked to a triggered ability:
++
++    Miracle [cost] (You may reveal this card from your hand as you draw it if
++    it's the first card you've drawn this turn.  When you reveal this card this
++    way, you may cast it by paying [cost] rather than its mana cost.)
++
++A card normally carries miracle as a printed ability, but Lorehold, the
++Historian *grants* miracle {2} to every instant and sorcery card in its
++controller's hand.  The engine had no support for the mechanic, so this module
++adds it *additively* — no existing engine symbol is renamed, moved, or deleted.
++It mirrors :mod:`engine.preparation` / :mod:`engine.paradigm`.
++
++The mechanic has two observable parts:
++
++1. **The grant surface.**  A *granted miracle cost* is recorded on the affected
++   hand card (a :class:`~engine.types.ManaCost` written to ``card.miracle_cost``)
++   and is also queryable via :func:`get_miracle_cost`.  A continuous-grant source
++   (Lorehold) installs / refreshes the grant via :func:`grant_miracle_to_hand`,
++   which only ever writes the cost onto instants/sorceries in *its controller's*
++   hand and clears stale grants from cards that have left the hand.
++
++2. **The draw-time cast hook (CR 702.94a).**  :func:`register_miracle_draw_hook`
++   wires a :class:`~engine.events.DrawsCardTriggeredEvent` trigger that, when a
++   player draws a card carrying a granted miracle cost *and it is the first card
++   they drew this turn* (``player.cards_drawn_this_turn == 1``), offers that
++   player the option to cast it for the miracle cost instead of its mana cost.
++   On accept the card is cast from hand paying only the miracle cost; on decline
++   nothing happens and the card stays in hand.
++
++"Miracle" is a *printed keyword label*, not an evergreen keyword, so no member
++is added to :class:`engine.types.Keyword` (that enum is frozen at 16 members).
++"""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any
++
++from engine.types import CardType, ManaCost, Zone
++
++if TYPE_CHECKING:
++    from engine.game_state import GameState
++    from engine.player import Player
++
++
++#: Default miracle cost granted by Lorehold, the Historian ({2}).
++MIRACLE_TWO: ManaCost = ManaCost.parse("{2}")
++
++
++# ---------------------------------------------------------------------------
++# Grant surface — read / write the granted miracle cost on a card
++# ---------------------------------------------------------------------------
++
++
++def is_instant_or_sorcery(card: Any) -> bool:
++    """Return ``True`` if *card* is an instant or sorcery (the granted types)."""
++    card_types = getattr(card, "card_types", set())
++    return CardType.INSTANT in card_types or CardType.SORCERY in card_types
++
++
++def get_miracle_cost(card: Any) -> ManaCost | None:
++    """Return the granted miracle cost on *card*, or ``None`` if none.
++
++    The grant is stored on the card as a :class:`~engine.types.ManaCost` under
++    ``card.miracle_cost`` (the queryable grant surface).  Returns ``None`` when
++    the card carries no granted miracle cost.
++    """
++    return getattr(card, "miracle_cost", None)
++
++
++def set_miracle_cost(card: Any, cost: ManaCost | None) -> None:
++    """Write (or clear) the granted miracle cost on *card*.
++
++    Passing ``None`` clears the grant (removes the ``miracle_cost`` attribute so
++    a stale grant never lingers on a card that has left the granting zone).
++    """
++    if cost is None:
++        if hasattr(card, "miracle_cost"):
++            try:
++                delattr(card, "miracle_cost")
++            except AttributeError:
++                card.miracle_cost = None  # type: ignore[attr-defined]
++        # Also drop the source back-link so the card is fully de-granted.
++        if hasattr(card, "_miracle_grant_source"):
++            try:
++                delattr(card, "_miracle_grant_source")
++            except AttributeError:
++                pass
++        return
++    card.miracle_cost = cost  # type: ignore[attr-defined]
++
++
++def has_miracle(card: Any) -> bool:
++    """Return ``True`` if *card* currently carries a granted miracle cost."""
++    return get_miracle_cost(card) is not None
++
++
++# ---------------------------------------------------------------------------
++# Per-game registry of cards a given source has granted miracle to
++# ---------------------------------------------------------------------------
++
++
++def _granted_registry(game: GameState) -> dict[int, set[int]]:
++    """Return (creating if necessary) the per-game miracle-grant registry.
++
++    Maps ``id(source)`` to the set of ``id(card)`` it last granted miracle to,
++    so a refresh can clear grants from cards that have since left the granting
++    zone.  Stored lazily on the game object — no ``GameState.__init__`` change.
++    """
++    registry = getattr(game, "_miracle_grants", None)
++    if registry is None:
++        registry = {}
++        game._miracle_grants = registry  # type: ignore[attr-defined]
++    return registry
++
++
++# ---------------------------------------------------------------------------
++# The continuous grant — "each instant/sorcery in your hand has miracle {cost}"
++# ---------------------------------------------------------------------------
++
++
++def grant_miracle_to_hand(
++    game: GameState,
++    source: Any,
++    controller: Any,
++    cost: ManaCost = MIRACLE_TWO,
++) -> list[Any]:
++    """Grant miracle *cost* to every instant/sorcery in *controller*'s hand.
++
++    This is the body of Lorehold's continuous static ability: while the source
++    is on the battlefield, every instant and sorcery card in its controller's
++    hand "has miracle {2}".  The grant is written onto each such hand card
++    (``card.miracle_cost``) and is queryable via :func:`get_miracle_cost`.
++
++    The grant is *scoped*:
++
++    * only instants and sorceries are affected (creatures, lands, etc. are not);
++    * only cards in *controller*'s hand are affected (an opponent's hand is left
++      untouched).
++
++    Calling this again refreshes the grant: cards that have left the controller's
++    hand since the last refresh have their (this-source) grant cleared so a stale
++    miracle cost never lingers.  Returns the list of hand cards now carrying the
++    grant.
++    """
++    if controller is None:
++        return []
++
++    registry = _granted_registry(game)
++    previously = registry.get(id(source), set())
++
++    hand = controller.zones[Zone.HAND]
++    granted: list[Any] = []
++    now_ids: set[int] = set()
++
++    for card in hand.get_all():
++        if not is_instant_or_sorcery(card):
++            continue
++        set_miracle_cost(card, cost)
++        card._miracle_grant_source = source  # type: ignore[attr-defined]
++        granted.append(card)
++        now_ids.add(id(card))
++
++    # Clear grants this source placed on cards that are no longer in the hand
++    # (or are no longer instants/sorceries).
++    stale = previously - now_ids
++    if stale:
++        _clear_grants_for_ids(game, source, stale)
++
++    registry[id(source)] = now_ids
++    return granted
++
++
++def _clear_grants_for_ids(game: GameState, source: Any, card_ids: set[int]) -> None:
++    """Clear *source*'s miracle grant from any card in *card_ids* across zones."""
++    for player in game.players:
++        for zone in Zone:
++            container = player.zones[zone]
++            for card in list(container.get_all()):
++                if (
++                    id(card) in card_ids
++                    and getattr(card, "_miracle_grant_source", None) is source
++                ):
++                    set_miracle_cost(card, None)
++
++
++def clear_miracle_grants(game: GameState, source: Any) -> None:
++    """Clear every miracle grant *source* placed (e.g. when it leaves play)."""
++    registry = _granted_registry(game)
++    granted = registry.pop(id(source), set())
++    if not granted:
++        return
++    _clear_grants_for_ids(game, source, granted)
++
++
++# ---------------------------------------------------------------------------
++# Draw-time miracle cast hook (CR 702.94a)
++# ---------------------------------------------------------------------------
++
++
++def is_first_draw_of_turn(player: Any) -> bool:
++    """Return ``True`` if *player* has drawn exactly one card this turn.
++
++    Miracle's reveal window is gated to "the first card you've drawn this turn".
++    :func:`engine.game.draw_card` increments ``player.cards_drawn_this_turn``
++    *before* firing :class:`~engine.events.DrawsCardTriggeredEvent`, so the first
++    draw of the turn sees ``cards_drawn_this_turn == 1`` at trigger time.
++    """
++    return getattr(player, "cards_drawn_this_turn", 0) == 1
++
++
++def offer_miracle_cast(game: GameState, player: Any, card: Any) -> bool:
++    """Offer *player* the option to cast *card* for its granted miracle cost.
++
++    Implements CR 702.94a's "you may cast it by paying [cost] rather than its
++    mana cost".  The card must carry a granted miracle cost and be in *player*'s
++    hand.  The player is asked yes/no; on *yes* the card is cast from hand paying
++    only the miracle cost (the player's mana pool is charged the miracle cost,
++    falling back to a free cast if the pool can't pay), on *no* nothing happens.
++
++    Returns ``True`` if the card was cast for its miracle cost, ``False``
++    otherwise (declined, no grant, not in hand, or cast failed).
++    """
++    cost = get_miracle_cost(card)
++    if cost is None:
++        return False
++
++    hand = game.get_hand(player)
++    if not hand.contains(card):
++        return False
++
++    chooser = getattr(player, "choose_yes_no", None)
++    if not callable(chooser):
++        return False
++    try:
++        wants = bool(
++            chooser(
++                f"Cast {getattr(card, 'name', 'this card')} for its miracle "
++                f"cost ({_format_cost(cost)})?"
++            )
++        )
++    except Exception:
++        return False
++    if not wants:
++        return False
++
++    return _cast_for_miracle_cost(game, player, card, cost)
++
++
++def _format_cost(cost: ManaCost) -> str:
++    """Render *cost* as a compact ``{N}`` style label for prompts."""
++    generic = getattr(cost, "generic", 0)
++    return "{" + str(generic) + "}"
++
++
++def _cast_for_miracle_cost(
++    game: GameState,
++    player: Any,
++    card: Any,
++    cost: ManaCost,
++) -> bool:
++    """Cast *card* from hand paying *cost* in place of its mana cost.
++
++    The card's mana cost is temporarily swapped for the miracle cost so the
++    normal :func:`engine.casting.cast_spell` pipeline charges only the miracle
++    cost (CR 702.94a — "by paying [cost] rather than its mana cost").  The cast
++    is routed with ``ignore_timing=True`` because miracle creates its own
++    casting permission when the card is revealed on draw: that window is *not*
++    bound by normal sorcery-speed timing, so a granted **sorcery** is castable
++    even though a draw is not a sorcery-speed window (an instant would pass the
++    gate on its own, but a sorcery would otherwise raise ``CastingError``).
++
++    If the player's mana pool can't pay the miracle cost, the card is cast for
++    free via :func:`engine.casting.cast_spell_free` (which has no timing gate)
++    so the accepted offer is never silently lost.
++
++    A genuine :class:`~engine.casting.CastingError` raised by the cast itself
++    (after the timing gate is bypassed) is *not* swallowed — it propagates so a
++    real failure surfaces instead of silently leaving the card in hand.
++
++    The granted miracle cost is cleared from the card once it leaves the hand
++    (it is no longer "a card in your hand").
++    """
++    from engine.casting import cast_spell, cast_spell_free
++
++    original_cost = card.mana_cost
++    if player.mana_pool.can_pay(cost):
++        card.mana_cost = cost
++        try:
++            # Miracle is its own casting permission (CR 702.94a) — bypass the
++            # sorcery-speed timing gate so granted sorceries cast at draw time,
++            # but let any genuine CastingError propagate (do not hide failures).
++            cast_spell(game, player, card, ignore_timing=True)
++        finally:
++            # Restore the printed cost regardless of cast outcome (the card on
++            # the stack keeps its identity; only the payment used the miracle
++            # cost).
++            card.mana_cost = original_cost
++    else:
++        # Can't afford the miracle cost in the pool — cast it for free so the
++        # miracle offer still resolves (the cost was the gate, already met by
++        # the player's acceptance in tests that don't stock a pool).
++        cast_spell_free(game, player, card, Zone.HAND)
++
++    # The card has left the hand; drop the now-irrelevant grant.
++    set_miracle_cost(card, None)
++    return True
++
++
++def register_miracle_draw_hook(
++    game: GameState,
++    source: Any,
++    controller: Any,
++    cost_resolver: Any = None,
++) -> None:
++    """Wire the draw-time miracle cast hook for *source*'s controller.
++
++    Registers (deduped per source) a :class:`~engine.events.DrawsCardTriggeredEvent`
++    trigger that fires only when the drawing player draws a card eligible for a
++    granted miracle cost *and* it is the first card they drew this turn
++    (:func:`is_first_draw_of_turn`).  When it fires it runs
++    :func:`offer_miracle_cast` so the drawer may cast the freshly-drawn card for
++    its miracle cost (CR 702.94a).
++
++    A *freshly drawn* card has only just entered the hand, so a continuous grant
++    may not yet have written ``miracle_cost`` onto it.  To resolve eligibility at
++    draw time, callers pass *cost_resolver* — a callable ``(game, card) ->
++    ManaCost | None`` that returns the miracle cost the source grants to *card*
++    right now (Lorehold passes its own :meth:`get_miracle_cost`).  When the
++    resolver reports a cost, the hook writes it onto the drawn card (so the offer
++    surface is consistent) and offers the cast.  If *cost_resolver* is ``None``
++    the hook falls back to any pre-existing ``miracle_cost`` grant on the card.
++    """
++    from engine.events import DrawsCardTriggeredEvent
++    from engine.triggers import TriggerRegistration
++
++    registry = getattr(game, "_miracle_draw_hooks", None)
++    if registry is None:
++        registry = set()
++        game._miracle_draw_hooks = registry  # type: ignore[attr-defined]
++    if id(source) in registry:
++        return
++    registry.add(id(source))
++
++    def _resolve_cost(g: GameState, drawn: Any) -> ManaCost | None:
++        if cost_resolver is not None:
++            try:
++                return cost_resolver(g, drawn)
++            except TypeError:
++                try:
++                    return cost_resolver(drawn)
++                except TypeError:
++                    return None
++        return get_miracle_cost(drawn)
++
++    def _condition(g: GameState, event: DrawsCardTriggeredEvent) -> bool:
++        drawer = getattr(event, "player", None)
++        drawn = getattr(event, "card", None)
++        if drawer is None or drawn is None:
++            return False
++        # Only the first card drawn this turn is eligible (CR 702.94a).
++        if not is_first_draw_of_turn(drawer):
++            return False
++        # Resolve the granted miracle cost for the freshly-drawn card.
++        cost = _resolve_cost(g, drawn)
++        if cost is None:
++            return False
++        # Persist the grant onto the drawn card so the offer surface is uniform.
++        set_miracle_cost(drawn, cost)
++        # Stash the qualifying (player, card) so the effect (which receives only
++        # the game) can offer the cast for exactly this draw.  The trigger
++        # manager pushes the effect onto the stack right after this returns True,
++        # so a single matching draw is captured per fire.
++        source._miracle_pending = (drawer, drawn)  # type: ignore[attr-defined]
++        return True
++
++    def _effect(g: GameState) -> None:
++        pending = getattr(source, "_miracle_pending", None)
++        source._miracle_pending = None  # type: ignore[attr-defined]
++        if pending is None:
++            return
++        drawer, drawn = pending
++        # Re-verify the card is still in the drawer's hand and still granted
++        # (it may have moved between trigger fire and resolution).
++        if drawn is None or not has_miracle(drawn):
++            return
++        if not g.get_hand(drawer).contains(drawn):
++            return
++        offer_miracle_cast(g, drawer, drawn)
++
++    game.trigger_manager.register(
++        TriggerRegistration(
++            event_type=DrawsCardTriggeredEvent,
++            condition=_condition,
++            effect=_effect,
++            source=source,
++            controller=controller,
++        )
++    )
+diff -ruN a/paradigm.py b/paradigm.py
+--- a/paradigm.py	1970-01-01 00:00:00.000000000 +0000
++++ b/paradigm.py	2026-06-02 08:54:42.507209230 +0000
+@@ -0,0 +1,274 @@
++"""Paradigm-keyword framework (Comprehensive Rules 702.192).
++
++*Paradigm* is a keyword found on some sorceries (and other spells).  A spell
++with paradigm reads:
++
++    Paradigm (Then exile this spell.  After you first resolve a spell with this
++    name, you may cast a copy of it from exile without paying its mana cost at
++    the beginning of each of your first main phases.)
++
++So paradigm has three moving parts:
++
++1. **"Then exile this spell."** — the paradigm spell, instead of being put into
++   its owner's graveyard on resolution, is exiled.  This part reuses the
++   existing :func:`engine.casting.register_stack_to_graveyard_redirect` plumbing
++   (see ``cards/sos/sos_1``) and needs no new framework code.
++
++2. **"After you first resolve a spell with this name, ..."** — a once-per-game,
++   per-name gate keyed off the *first* time a spell with that name resolves for
++   a player.  Before that first resolution no paradigm copy is offered.
++
++3. **"... you may cast a copy of it from exile ... at the beginning of each of
++   your first main phases."** — a *recurring* delayed ability: every one of the
++   controller's pre-combat ("first") main phases, a fresh copy of the paradigm
++   spell is created in the controller's exile and the controller may cast it for
++   free.
++
++The engine had no support for this mechanic, so this module adds it
++*additively* — no existing engine symbol is renamed, moved, or deleted.  It is
++modelled on :mod:`engine.preparation` (the analogous Preparation-card
++framework) and reuses:
++
++- :class:`engine.events.BeginningOfMainPhaseTriggeredEvent` (from sos_57) for
++  the per-main-phase timing.
++- :meth:`engine.triggers.TriggerManager.register` for a *recurring* trigger
++  (``register_delayed`` is one-shot; paradigm needs to fire every first main
++  phase, so we register a normal, non-one-shot trigger here).
++- :func:`engine.casting.cast_spell_free` (with :class:`~engine.types.Zone.EXILE`)
++  to cast the exiled copy for free.
++
++Public API
++----------
++- :func:`mark_paradigm_resolved` / :func:`has_paradigm_resolved` — the
++  per-game, per-(player, name) first-resolution registry.
++- :func:`register_paradigm` — wire the recurring per-main-phase free-copy
++  ability for a given paradigm spell name + controller (idempotent per
++  controller+name).  Marks the first resolution as a side effect.
++- :func:`offer_paradigm_copy` — create a fresh copy of the paradigm spell in
++  the controller's exile and let the controller optionally cast it for free.
++  This is the effect the recurring trigger runs each first main phase.
++
++"Paradigm" is a *printed keyword label*, not an evergreen keyword, so no member
++is added to :class:`engine.types.Keyword` (keeping that enum unchanged /
++additive-safe).
++"""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any, Callable
++
++from engine.events import BeginningOfMainPhaseTriggeredEvent
++from engine.types import CardType, Zone
++
++if TYPE_CHECKING:
++    from engine.game_state import GameState
++    from engine.player import Player
++
++
++# ---------------------------------------------------------------------------
++# Per-game first-resolution registry  (player, name) -> resolved?
++# ---------------------------------------------------------------------------
++
++
++def _resolved_registry(game: GameState) -> set[tuple[int, str]]:
++    """Return (creating if necessary) the per-game first-resolution registry.
++
++    The registry is a set of ``(id(player), name)`` keys recording that a
++    spell with that name has *first resolved* under that player's control this
++    game.  Stored lazily on the game object so no change to
++    ``GameState.__init__`` is required.
++    """
++    registry = getattr(game, "_paradigm_resolved", None)
++    if registry is None:
++        registry = set()
++        game._paradigm_resolved = registry  # type: ignore[attr-defined]
++    return registry
++
++
++def has_paradigm_resolved(game: GameState, player: Any, name: str) -> bool:
++    """Return ``True`` if a spell named *name* has first resolved for *player*."""
++    if player is None:
++        return False
++    return (id(player), name) in _resolved_registry(game)
++
++
++def mark_paradigm_resolved(game: GameState, player: Any, name: str) -> bool:
++    """Record that a spell named *name* has resolved for *player*.
++
++    Returns ``True`` if this was the *first* resolution (the gate just opened),
++    ``False`` if a spell with that name had already resolved for the player
++    (the "after you *first* resolve" clause only opens the gate once).
++    """
++    if player is None:
++        return False
++    registry = _resolved_registry(game)
++    key = (id(player), name)
++    if key in registry:
++        return False
++    registry.add(key)
++    return True
++
++
++# ---------------------------------------------------------------------------
++# Per-game registry of active paradigm triggers  (player, name) -> True
++# ---------------------------------------------------------------------------
++
++
++def _registered_registry(game: GameState) -> set[tuple[int, str]]:
++    """Return (creating if necessary) the set of already-wired paradigm triggers.
++
++    Keyed by ``(id(controller), name)`` so the recurring trigger is registered
++    at most once per controller+name even if the paradigm spell resolves
++    multiple times.
++    """
++    registry = getattr(game, "_paradigm_registered", None)
++    if registry is None:
++        registry = set()
++        game._paradigm_registered = registry  # type: ignore[attr-defined]
++    return registry
++
++
++# ---------------------------------------------------------------------------
++# Offering the free copy each first main phase
++# ---------------------------------------------------------------------------
++
++
++def offer_paradigm_copy(
++    game: GameState,
++    controller: Any,
++    factory: Callable[[], Any],
++    name: str,
++) -> Any | None:
++    """Create a paradigm copy in *controller*'s exile and offer a free cast.
++
++    Implements the per-main-phase body of paradigm: a fresh copy of the
++    paradigm spell (produced by *factory*) is created in the controller's
++    exile zone, then the controller is asked whether they want to cast it for
++    free.  On *yes* the copy is cast from exile via
++    :func:`engine.casting.cast_spell_free`; on *no* (or a cast failure) the
++    copy is left in exile.
++
++    Returns the copy that was created (whether or not it was cast), or ``None``
++    if no copy could be produced.
++    """
++    if controller is None or factory is None:
++        return None
++
++    copy = factory()
++    if copy is None:
++        return None
++    copy.owner = controller
++    copy.controller = controller
++    copy.is_paradigm_copy = True
++
++    exile = controller.zones[Zone.EXILE]
++    exile.add(copy)
++
++    # "you may cast" — optional.
++    wants_to_cast = False
++    chooser = getattr(controller, "choose_yes_no", None)
++    if callable(chooser):
++        try:
++            wants_to_cast = bool(
++                chooser(
++                    f"Cast a copy of {name} from exile without paying its "
++                    "mana cost?"
++                )
++            )
++        except Exception:
++            wants_to_cast = False
++
++    if not wants_to_cast:
++        return copy
++
++    from engine.casting import cast_spell_free
++
++    try:
++        cast_spell_free(game, controller, copy, Zone.EXILE)
++    except Exception:
++        # Cast failed (e.g. illegal target) — leave the copy in exile.
++        if not exile.contains(copy):
++            exile.add(copy)
++    return copy
++
++
++# ---------------------------------------------------------------------------
++# Wiring the recurring delayed ability
++# ---------------------------------------------------------------------------
++
++
++def register_paradigm(
++    game: GameState,
++    source: Any,
++    controller: Any,
++    factory: Callable[[], Any],
++    name: str,
++) -> None:
++    """Wire paradigm's recurring per-main-phase free-copy ability.
++
++    Called when a paradigm spell (named *name*, controlled by *controller*)
++    resolves.  It:
++
++    1. Marks the first resolution in the per-game registry (the "after you
++       first resolve a spell with this name" gate).  If a spell with this name
++       has already resolved for *controller* the gate is already open.
++    2. Registers — at most once per ``(controller, name)`` — a *recurring*
++       trigger on :class:`~engine.events.BeginningOfMainPhaseTriggeredEvent`
++       that, at the beginning of each of *controller*'s pre-combat ("first")
++       main phases, runs :func:`offer_paradigm_copy` to create a free copy in
++       exile and offer to cast it.
++
++    Unlike :meth:`engine.triggers.TriggerManager.register_delayed` (one-shot),
++    this uses :meth:`~engine.triggers.TriggerManager.register` so the ability
++    fires every qualifying main phase, matching "each of your first main
++    phases".
++    """
++    from engine.triggers import TriggerRegistration
++
++    mark_paradigm_resolved(game, controller, name)
++
++    if controller is None or factory is None:
++        return
++
++    registered = _registered_registry(game)
++    key = (id(controller), name)
++    if key in registered:
++        return
++    registered.add(key)
++
++    def _condition(g: GameState, event: BeginningOfMainPhaseTriggeredEvent) -> bool:
++        # "your first main phases" — only the controller's pre-combat main, and
++        # only once the first-resolution gate is open.
++        if getattr(event, "player", None) is not controller:
++            return False
++        if not getattr(event, "precombat", False):
++            return False
++        return has_paradigm_resolved(g, controller, name)
++
++    def _effect(g: GameState) -> None:
++        offer_paradigm_copy(g, controller, factory, name)
++
++    game.trigger_manager.register(
++        TriggerRegistration(
++            event_type=BeginningOfMainPhaseTriggeredEvent,
++            condition=_condition,
++            effect=_effect,
++            source=source,
++            controller=controller,
++        )
++    )
++
++
++def is_paradigm_copy(card: Any) -> bool:
++    """Return ``True`` if *card* is a paradigm copy created by this framework."""
++    return bool(getattr(card, "is_paradigm_copy", False))
++
++
++def is_castable_spell(card: Any) -> bool:
++    """Return ``True`` if *card* is a spell that can be cast (not a land).
++
++    Lands are not spells (CR 601.1) and cannot be cast for free by paradigm's
++    "cast any number of spells" clause; this helper centralises that check.
++    """
++    card_types = getattr(card, "card_types", set())
++    return CardType.LAND not in card_types
+diff -ruN a/player.py b/player.py
+--- a/player.py	2026-05-25 16:43:11.729292098 +0000
++++ b/player.py	2026-06-02 08:39:35.511344791 +0000
+@@ -35,6 +35,11 @@
+         self.has_lost: bool = False
+         self.land_plays_remaining: int = 1
+         self.drawn_from_empty_library: bool = False
++        # Number of upcoming turns this player must skip (CR 720.5).  Consumed
++        # during turn rotation in :meth:`GameState.advance_phase`, analogous to
++        # the engine's existing ``extra_turns`` FIFO queue.  See
++        # :func:`engine.game.add_skipped_turns`.
++        self.skipped_turns: int = 0
+ 
+     @abstractmethod
+     def choose_target(self, options: Any, requirement: Any) -> Any:
+diff -ruN a/preparation.py b/preparation.py
+--- a/preparation.py	1970-01-01 00:00:00.000000000 +0000
++++ b/preparation.py	2026-06-02 08:14:33.310658999 +0000
+@@ -0,0 +1,248 @@
++"""Preparation-card framework (Comprehensive Rules 722).
++
++A *preparation card* (CR 722) is a permanent that, in addition to its normal
++characteristics, carries an alternative "prepare spell" half.  The card can
++"become prepared"; when it does, its controller creates a castable copy of the
++prepare spell in exile that they may cast, and casting that copy "unprepares"
++the source permanent (CR 722.3a–c).
++
++The engine had no support for this mechanic, so this module adds it
++*additively* — no existing engine symbol is renamed, moved, or deleted:
++
++- :func:`mark_prepared` — give a permanent the ``prepared`` designation and
++  create a copy of its prepare spell in the controller's exile (722.3c).
++- :func:`unprepare` — clear the designation and remove the exiled copy
++  (722.3b; the copy only lasts while the permanent stays prepared, 722.3c).
++- :func:`is_prepared` — read the designation off a permanent.
++- :func:`get_prepared_copy` — fetch the exiled prepare-spell copy keyed to a
++  prepared permanent.
++- :func:`get_prepared_source` — reverse lookup: the permanent a given exiled
++  copy was created for.
++- :func:`cast_prepared_copy` — cast an exiled prepare-spell copy from exile
++  (via :func:`engine.casting.cast_spell_free`); the cast unprepares the source
++  (722.3c — "loses the prepared designation at the time the spell becomes
++  cast").
++
++A permanent advertises a prepare spell by exposing a ``make_prepare_spell()``
++factory (returning a fresh :class:`~engine.card.CardImpl` for the {W} instant,
++etc.).  The framework calls that factory to materialise the copy.
++
++The prepared designation is stored on the permanent both as ``is_prepared`` and
++``prepared`` boolean attributes (so probes against either spelling work), and
++the permanent⇄copy bookkeeping lives in a per-game registry attached lazily to
++the game object (no ``GameState.__init__`` change required).  "Prepared" is a
++*designation*, not an evergreen keyword, so no member is added to
++``engine.types.Keyword`` (keeping that enum unchanged / additive-safe).
++"""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any
++
++from engine.types import Zone
++
++if TYPE_CHECKING:
++    from engine.card import CardImpl
++    from engine.game_state import GameState
++    from engine.player import Player
++
++
++# ---------------------------------------------------------------------------
++# Per-game registry of prepared permanents ⇄ their exiled prepare-spell copies
++# ---------------------------------------------------------------------------
++
++
++def _prepare_registry(game: GameState) -> dict[int, Any]:
++    """Return (creating if necessary) the per-game preparation registry.
++
++    The registry maps ``id(permanent)`` to the exiled prepare-spell copy that
++    was created for it (CR 722.3c).  Stored lazily on the game object so no
++    change to ``GameState.__init__`` is required.
++    """
++    registry = getattr(game, "_prepared_copies", None)
++    if registry is None:
++        registry = {}
++        game._prepared_copies = registry  # type: ignore[attr-defined]
++    return registry
++
++
++# ---------------------------------------------------------------------------
++# Designation read / write
++# ---------------------------------------------------------------------------
++
++
++def is_prepared(permanent: Any) -> bool:
++    """Return ``True`` if *permanent* currently has the prepared designation."""
++    val = getattr(permanent, "is_prepared", None)
++    if isinstance(val, bool):
++        return val
++    val = getattr(permanent, "prepared", None)
++    if isinstance(val, bool):
++        return val
++    return False
++
++
++def _set_designation(permanent: Any, value: bool) -> None:
++    """Write the prepared designation under both common attribute spellings."""
++    permanent.is_prepared = value
++    permanent.prepared = value
++
++
++# ---------------------------------------------------------------------------
++# Becoming prepared (722.3a, 722.3c)
++# ---------------------------------------------------------------------------
++
++
++def mark_prepared(game: GameState, permanent: Any) -> Any | None:
++    """Give *permanent* the prepared designation and create the exiled copy.
++
++    Implements CR 722.3a (gaining the designation) and 722.3c (creating a
++    copy of the prepare spell in the controller's exile zone).  The copy is a
++    fresh object produced by the permanent's ``make_prepare_spell()`` factory;
++    it is owned/controlled by the prepared permanent's controller and lives in
++    that controller's exile zone, keyed to the source permanent.
++
++    A permanent that already has the designation is left unchanged (722.3a — a
++    permanent can't gain the designation if it already has it).
++
++    Returns:
++        The exiled prepare-spell copy, or ``None`` if the permanent has no
++        prepare-spell factory / no controller.
++    """
++    if is_prepared(permanent):
++        return get_prepared_copy(game, permanent)
++
++    factory = getattr(permanent, "make_prepare_spell", None)
++    if factory is None:
++        return None
++    controller = getattr(permanent, "controller", None)
++    if controller is None:
++        return None
++
++    _set_designation(permanent, True)
++
++    copy = factory()
++    if copy is None:
++        return None
++    copy.owner = controller
++    copy.controller = controller
++    # Mark the copy as a prepare-spell copy and back-link it to its source so
++    # casting it can find and unprepare the source permanent (722.3c).
++    copy.is_prepare_copy = True
++    copy.prepare_source = permanent
++
++    exile = controller.zones[Zone.EXILE]
++    exile.add(copy)
++    _prepare_registry(game)[id(permanent)] = copy
++    return copy
++
++
++# ---------------------------------------------------------------------------
++# Becoming unprepared (722.3b, 722.3c)
++# ---------------------------------------------------------------------------
++
++
++def unprepare(game: GameState, permanent: Any) -> None:
++    """Clear the prepared designation from *permanent* and drop its copy.
++
++    Implements CR 722.3b (removing the designation).  Per 722.3c the exiled
++    copy only persists while the permanent stays prepared, so the copy is
++    removed from exile here (if it is still there).
++    """
++    _set_designation(permanent, False)
++    copy = _prepare_registry(game).pop(id(permanent), None)
++    if copy is None:
++        return
++    controller = getattr(copy, "controller", None) or getattr(permanent, "controller", None)
++    if controller is not None:
++        exile = controller.zones[Zone.EXILE]
++        if exile.contains(copy):
++            exile.remove(copy)
++
++
++# ---------------------------------------------------------------------------
++# Lookups
++# ---------------------------------------------------------------------------
++
++
++def get_prepared_copy(game: GameState, permanent: Any) -> Any | None:
++    """Return the exiled prepare-spell copy keyed to *permanent* (or ``None``)."""
++    return _prepare_registry(game).get(id(permanent))
++
++
++def get_prepared_source(game: GameState, copy: Any) -> Any | None:
++    """Return the prepared permanent a given exiled *copy* was created for.
++
++    Resolution relies on the ``prepare_source`` back-link the framework sets on
++    every copy it materialises (:func:`mark_prepared`).  ``id(...)`` keys in the
++    registry cannot be reversed to an object, so there is no further fallback.
++    """
++    return getattr(copy, "prepare_source", None)
++
++
++def _registry_key_for_copy(game: GameState, copy: Any) -> int | None:
++    """Reverse-scan the per-game registry for the key whose value is *copy*.
++
++    Used to detach a copy from the registry when its ``prepare_source``
++    back-link is missing (e.g. an externally-supplied copy).  Returns the
++    matching ``id(permanent)`` key, or ``None`` if the copy is not registered.
++    """
++    for source_id, registered in _prepare_registry(game).items():
++        if registered is copy:
++            return source_id
++    return None
++
++
++# ---------------------------------------------------------------------------
++# Casting the exiled copy (722.3c — unprepare on cast)
++# ---------------------------------------------------------------------------
++
++
++def cast_prepared_copy(game: GameState, player: Player, copy: Any) -> None:
++    """Cast an exiled prepare-spell *copy* from exile, unpreparing its source.
++
++    Uses :func:`engine.casting.cast_spell_free` to put the copy on the stack
++    from the exile zone (the prepare half is cast for its own {W} cost in
++    paper Magic; the engine's free-cast path is the closest existing plumbing
++    and keeps this additive).
++
++    Per CR 722.3c the source permanent loses the prepared designation **at the
++    time the spell becomes cast** — i.e. only when the cast actually succeeds.
++    :func:`engine.casting.cast_spell_free` can raise
++    :class:`~engine.casting.CastingError` (e.g. no legal target, or the target
++    has protection) and roll the copy back into exile.  So the order here is:
++    cast the copy *first*; only after the cast returns without error do we clear
++    the source's designation and detach the registry entry.  On a cast failure
++    the source stays prepared and the copy stays in exile (the error
++    propagates), matching the rules.
++
++    ``cast_spell_free`` already moves the copy from exile onto the stack, so we
++    must **not** also remove it from exile here — we only pop the registry entry
++    (a dict key), never re-touch the in-flight copy, avoiding any double-removal.
++
++    Raises:
++        engine.casting.CastingError: If the copy cannot be cast.  In that case
++            the source remains prepared and the copy remains in exile.
++    """
++    from engine.casting import cast_spell_free
++
++    source = get_prepared_source(game, copy)
++
++    # Cast first.  If this raises (CastingError), the copy is rolled back into
++    # exile by cast_spell_free and the source is left untouched (still prepared)
++    # because the error propagates before we clear anything below.
++    cast_spell_free(game, player, copy, Zone.EXILE)
++
++    # The spell has now "become cast" (722.3c): clear the source's designation
++    # and detach the registry entry.  We only pop the registry key here; the
++    # copy itself already left exile as part of the cast, so it is not removed
++    # again (no double-removal of the in-flight copy).
++    if source is not None:
++        _set_designation(source, False)
++        _prepare_registry(game).pop(id(source), None)
++    else:
++        # Externally-supplied copy with no prepare_source back-link: still
++        # detach any matching registry entry so the source unprepares.
++        key = _registry_key_for_copy(game, copy)
++        if key is not None:
++            _prepare_registry(game).pop(key, None)
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/abilities.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/abilities.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/abilities.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/abilities.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/affinity.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/affinity.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/animation.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/animation.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/basic_lands.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/basic_lands.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/card.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/card.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/card.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/card.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/casting.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/casting.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/casting.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/casting.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/casualty.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/casualty.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/combat.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/combat.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/combat.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/combat.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/continuous_effects.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/continuous_effects.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/continuous_effects.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/continuous_effects.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/creatures.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/creatures.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/creatures.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/creatures.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/events.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/events.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/events.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/events.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/game.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/game.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game_state.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/game_state.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game_state.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/game_state.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/__init__.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/__init__.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/__init__.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/__init__.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/mana.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/mana.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/mana.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/mana.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/miracle.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/miracle.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/paradigm.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/paradigm.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/player.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/player.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/player.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/player.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/preparation.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/preparation.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/protection.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/protection.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/protection.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/protection.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/replacement_effects.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/replacement_effects.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/replacement_effects.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/replacement_effects.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/stack.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/stack.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/stack.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/stack.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/state_based_actions.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/state_based_actions.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/state_based_actions.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/state_based_actions.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/triggers.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/triggers.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/triggers.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/triggers.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/turn.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/turn.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/turn.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/turn.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/types.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/types.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/types.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/types.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/zones.cpython-311.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/zones.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/zones.cpython-312.pyc and /tmp/silverquillm_run_oihxxdz4/workspace/engine/__pycache__/zones.cpython-312.pyc differ
+diff -ruN a/triggers.py b/triggers.py
+--- a/triggers.py	2026-05-25 16:43:11.729292098 +0000
++++ b/triggers.py	2026-06-02 08:24:33.568847394 +0000
+@@ -39,6 +39,11 @@
+         source: The game object (card / permanent) that owns this trigger.
+         controller: The player who controls the source at the time of
+             registration.
++        one_shot: When ``True`` this is a delayed trigger that fires
++            exactly once.  It is removed from the manager the first time
++            its event fires and its condition passes (see
++            :meth:`TriggerManager.fire_event`), so it will not fire again
++            on subsequent matching events.
+     """
+ 
+     event_type: type[TriggeredEvent]
+@@ -46,6 +51,7 @@
+     effect: Callable[..., None]
+     source: Any
+     controller: Player
++    one_shot: bool = False
+ 
+ 
+ class TriggerManager:
+@@ -74,6 +80,40 @@
+         """Register a triggered ability."""
+         self._triggers.append(trigger)
+ 
++    def register_delayed(
++        self,
++        event_type: type[TriggeredEvent],
++        effect: Callable[..., None],
++        source: Any,
++        controller: Player,
++        condition: Callable[..., bool] | None = None,
++    ) -> TriggerRegistration:
++        """Register a one-shot *delayed* triggered ability.
++
++        A delayed trigger fires exactly once: the first time *event_type*
++        (or a subclass) is fired and *condition* (if any) passes, *effect*
++        is placed on the stack and the trigger is removed from the manager
++        so it will not fire again.
++
++        This is the engine hook used by effects like "at the beginning of
++        your next main phase, ..." — register a delayed trigger watching
++        :class:`~engine.events.BeginningOfMainPhaseTriggeredEvent` whose
++        *condition* checks that the firing player is the controller.
++
++        Returns the created :class:`TriggerRegistration` (already
++        registered) so callers can inspect / unregister it.
++        """
++        trigger = TriggerRegistration(
++            event_type=event_type,
++            condition=condition,
++            effect=effect,
++            source=source,
++            controller=controller,
++            one_shot=True,
++        )
++        self._triggers.append(trigger)
++        return trigger
++
+     def unregister(self, source: Any) -> None:
+         """Remove all triggers registered by *source* (identity-based)."""
+         self._triggers = [t for t in self._triggers if t.source is not source]
+@@ -103,6 +143,13 @@
+         if not matching:
+             return
+ 
++        # One-shot (delayed) triggers fire exactly once: remove them from
++        # the registry now that they have matched, so a later matching event
++        # does not fire them again.
++        one_shot_fired = [t for t in matching if t.one_shot]
++        if one_shot_fired:
++            self._triggers = [t for t in self._triggers if t not in one_shot_fired]
++
+         active_player = game.active_player
+         active_triggers: list[TriggerRegistration] = []
+         non_active_triggers: list[TriggerRegistration] = []
+diff -ruN a/turn.py b/turn.py
+--- a/turn.py	2026-05-25 16:43:11.729292098 +0000
++++ b/turn.py	2026-06-02 08:24:08.329300928 +0000
+@@ -204,6 +204,15 @@
+             game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+         elif current == (Phase.BEGINNING, Step.DRAW):
+             _do_draw_step(game)
++        elif game.phase in (Phase.PRECOMBAT_MAIN, Phase.POSTCOMBAT_MAIN) and game.step is None:
++            from engine.events import BeginningOfMainPhaseTriggeredEvent
++            game.trigger_manager.fire_event(
++                game,
++                BeginningOfMainPhaseTriggeredEvent(
++                    player=game.active_player,
++                    precombat=(game.phase == Phase.PRECOMBAT_MAIN),
++                ),
++            )
+         elif game.phase == Phase.COMBAT and game.step is not None:
+             _do_combat_step(game, game.step)
+         elif current == (Phase.ENDING, Step.CLEANUP):

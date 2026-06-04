@@ -1,0 +1,18 @@
+{
+  "timeout_seconds": 360000,
+  "deadline_utc": "2026-06-05T14:26:00Z",
+  "docker_image": "silverquillm-cc-opus-48-single:latest",
+  "card_filter": [
+    "1",
+    "4",
+    "13",
+    "57",
+    "97",
+    "120",
+    "201",
+    "226",
+    "245",
+    "257"
+  ],
+  "benchmark_set": "sos"
+}

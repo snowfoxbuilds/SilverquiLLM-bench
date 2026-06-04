@@ -6,8 +6,8 @@
   "tests_total": 6,
   "pass_rate": 0.6666666666666666,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_smfidzdr/tests.py::TestCastBehaviour::test_exiled_card_may_be_cast_for_free",
-    "FAILED ../../../../tmp/eval_sos_smfidzdr/tests.py::TestParadigmRecurrence::test_paradigm_recurrence_casts_copy_from_exile"
+    "FAILED ../../../../tmp/eval_sos_cl8534jz/tests.py::TestCastBehaviour::test_exiled_card_may_be_cast_for_free",
+    "FAILED ../../../../tmp/eval_sos_cl8534jz/tests.py::TestParadigmRecurrence::test_paradigm_recurrence_casts_copy_from_exile"
   ],
   "skipped": false,
   "test_nodes": [

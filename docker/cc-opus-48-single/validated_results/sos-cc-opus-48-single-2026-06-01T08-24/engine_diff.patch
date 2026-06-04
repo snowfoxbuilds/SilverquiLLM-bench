@@ -1,0 +1,535 @@
+diff -ruN a/casting.py b/casting.py
+--- a/casting.py	2026-05-25 16:43:11.728292087 +0000
++++ b/casting.py	2026-06-01 10:00:01.830385461 +0000
+@@ -101,6 +101,18 @@
+     prev_controller = card.controller
+     card.controller = controller
+     raw = card.cost_reduction(game)
++    # Add any external game-level reducers (e.g. a permanent granting
++    # "affinity for creatures" to the controller's other instant/sorcery
++    # spells). Strict no-op when the registry is empty, so existing
++    # cost-reduction tests are unaffected.
++    external = 0
++    reducer_hook = getattr(game, "spell_cost_reduction_from_reducers", None)
++    if reducer_hook is not None:
++        try:
++            external = int(reducer_hook(card, controller))
++        except Exception:
++            external = 0
++    raw += external
+     # Restore previous controller in case the caller doesn't want a
+     # side-effect (get_cost_reduction is a query, not a mutation).
+     card.controller = prev_controller
+@@ -228,6 +240,11 @@
+     # that care about the colors used to cast the spell.
+     card.colors_spent = list(player.mana_pool.last_payment_colors)  # type: ignore[attr-defined]
+ 
++    # Record the total quantity of mana paid to cast this spell, for
++    # mechanics like Mana Sculpt that add {C} equal to the mana spent.
++    # X is included via its contribution to the effective cost's mana value.
++    card.mana_spent = effective_cost.cmc  # type: ignore[attr-defined]
++
+     # 7. Call on_cast hook
+     card.on_cast(game)
+ 
+@@ -360,6 +377,126 @@
+     stack_obj = StackObject(
+         source=card,
+         controller=player,
++        targets=chosen_targets,
++        on_resolve=lambda g: None,  # replaced below
++    )
++
++    def _on_resolve(g: GameState) -> None:
++        _resolve_spell(g, card, player, stack_obj)
++
++    stack_obj.on_resolve = _on_resolve
++    game.stack.push(stack_obj)
++
++
++# ------------------------------------------------------------------
++# Cast spell for a specified alternative cost (e.g. miracle)
++# ------------------------------------------------------------------
++
++
++def cast_spell_alternative(
++    game: GameState,
++    player: Player,
++    card: CardImpl,
++    from_zone: Zone,
++    alternative_cost: ManaCost,
++) -> None:
++    """Cast *card* by paying *alternative_cost* instead of its mana cost.
++
++    This is the entry point for alternative-cost casts such as miracle, where a
++    card is cast "by paying [cost] rather than its mana cost" (rule 702.94a).
++    It mirrors :func:`cast_spell` (legality, target choice, mana payment, the
++    ``on_cast`` hook, and pushing a :class:`StackObject`) but:
++
++    * the card may come from any *from_zone* (not just the hand), and
++    * mana payment uses *alternative_cost* rather than ``card.mana_cost``.
++
++    No timing or sorcery-speed check is performed here — the caller (a miracle
++    window, etc.) is responsible for invoking this only at a legal time. The
++    spell is placed on the stack and can be responded to normally.
++
++    Raises:
++        CastingError: If legality fails or the player cannot pay
++            *alternative_cost* (the card is rolled back to *from_zone*).
++    """
++    # Ensure controller/owner are set.
++    card.controller = player
++    if card.owner is None:
++        card.owner = player
++
++    # 1. can_cast legality.
++    if not card.can_cast(game):
++        raise CastingError(f"Cannot cast {card.name!r} — can_cast returned False")
++
++    # 2. Locate the card in its source zone.
++    source_zone_container = player.zones[from_zone]
++    if not source_zone_container.contains(card):
++        source_zone_container = None
++        for p in game.players:
++            z = p.zones[from_zone]
++            if z.contains(card):
++                source_zone_container = z
++                break
++    if source_zone_container is None or not source_zone_container.contains(card):
++        raise CastingError(
++            f"Cannot cast {card.name!r} — card not found in {from_zone.name}"
++        )
++
++    # Move card from source zone to the stack zone.
++    stack_zone = player.zones[Zone.STACK]
++    source_zone_container.remove(card)
++    stack_zone.add(card)
++
++    # Clear stale colors_spent before new payment.
++    if hasattr(card, "colors_spent"):
++        del card.colors_spent
++
++    # 3. Choose targets (with rollback on failure).
++    try:
++        target_specs = card.get_targets(game)
++        chosen_targets: list[Any] = []
++        if target_specs:
++            for spec in target_specs:
++                target = player.choose_target(target_specs, spec)
++                filter_fn = getattr(spec, "filter_fn", None)
++                if filter_fn is not None and target is not None:
++                    if not filter_fn(target):
++                        raise CastingError(
++                            f"Cannot cast {card.name!r} — chosen target does not "
++                            f"satisfy filter: {getattr(spec, 'description', '')}"
++                        )
++                chosen_targets.append(target)
++
++        from engine.protection import has_protection_from
++
++        for target in chosen_targets:
++            if has_protection_from(target, card):
++                raise CastingError(
++                    f"Cannot cast {card.name!r} — target has protection from this spell"
++                )
++    except Exception as exc:
++        stack_zone.remove(card)
++        source_zone_container.add(card)
++        raise CastingError(str(exc)) from exc
++
++    # 4. Mana check / payment against the alternative cost (rollback on failure).
++    if not player.mana_pool.can_pay(alternative_cost):
++        stack_zone.remove(card)
++        source_zone_container.add(card)
++        raise CastingError(
++            f"Cannot cast {card.name!r} — insufficient mana for alternative cost"
++        )
++
++    player.mana_pool.pay(alternative_cost)
++    card.colors_spent = list(player.mana_pool.last_payment_colors)  # type: ignore[attr-defined]
++    card.mana_spent = alternative_cost.cmc  # type: ignore[attr-defined]
++
++    # 5. Call on_cast hook.
++    card.on_cast(game)
++
++    # 6. Push StackObject.
++    stack_obj = StackObject(
++        source=card,
++        controller=player,
+         targets=chosen_targets,
+         on_resolve=lambda g: None,  # replaced below
+     )
+diff -ruN a/events.py b/events.py
+--- a/events.py	2026-05-25 04:23:31.883982600 +0000
++++ b/events.py	2026-06-01 08:59:48.365470521 +0000
+@@ -77,6 +77,20 @@
+ 
+ 
+ @dataclass
++class BeginningOfMainPhaseTriggeredEvent(TriggeredEvent):
++    """Fired at the start of each main phase (precombat or postcombat).
++
++    ``player`` is the active player whose main phase is beginning.  ``phase``
++    is the :class:`~engine.types.Phase` value of the main phase that started,
++    so a delayed "at the beginning of your next main phase" trigger can match
++    either precombat or postcombat.
++    """
++
++    player: Any = None
++    phase: Any = None
++
++
++@dataclass
+ class EndOfTurnTriggeredEvent(TriggeredEvent):
+     pass
+ 
+diff -ruN a/game.py b/game.py
+--- a/game.py	2026-05-25 16:43:11.729292098 +0000
++++ b/game.py	2026-06-01 09:41:01.894366297 +0000
+@@ -324,6 +324,7 @@
+     if not hasattr(player, "cards_drawn_this_turn"):
+         player.cards_drawn_this_turn = 0
+     player.cards_drawn_this_turn += 1
++    is_first_draw_this_turn = player.cards_drawn_this_turn == 1
+ 
+     # Fire trigger (only if game has a trigger_manager — may not during setup)
+     if hasattr(game, "trigger_manager"):
+@@ -332,6 +333,15 @@
+             DrawsCardTriggeredEvent(player=player, card=card),
+         )
+ 
++    # Miracle window (rule 702.94): if this is the first card the player has
++    # drawn this turn, offer a miracle cast for it. This is a strict no-op when
++    # no miracle grant is registered (the default), so normal draws are
++    # unaffected.
++    if is_first_draw_this_turn:
++        fire_window = getattr(game, "fire_miracle_window", None)
++        if callable(fire_window):
++            fire_window(player, card)
++
+     return card
+ 
+ 
+diff -ruN a/game_state.py b/game_state.py
+--- a/game_state.py	2026-05-25 16:43:11.729292098 +0000
++++ b/game_state.py	2026-06-01 09:59:50.980272652 +0000
+@@ -81,6 +81,22 @@
+         # normal rotation.  When extras are exhausted the game picks up
+         # from _normal_next_index.
+         self._normal_next_index: int = 1
++        # Additive miracle support (rule 702.94). Each entry is a dict with a
++        # ``grant`` callable ``(game, player, drawn_card) -> ManaCost | None``
++        # plus ``source``/``controller`` for cleanup. Empty by default, so the
++        # miracle draw-window (fired from ``engine.game.draw_card``) is a strict
++        # no-op unless a card such as Lorehold registers a grant.
++        self._miracle_grants: list[dict[str, Any]] = []
++        # Additive game-level spell cost-reduction registry. Each entry is a
++        # dict with a ``predicate`` callable ``(game, card, controller) -> bool``
++        # and an ``amount`` callable ``(game, card, controller) -> int`` plus a
++        # ``source`` for cleanup. Empty by default, so
++        # ``engine.casting.get_cost_reduction`` adds zero external reduction and
++        # existing casting / cost-reduction tests are strictly unaffected. A
++        # permanent (e.g. Witherbloom, the Balancer) registers a reducer to grant
++        # "affinity for creatures" to the controller's other instant/sorcery
++        # spells while it is on the battlefield.
++        self.spell_cost_reducers: list[dict[str, Any]] = []
+ 
+     # ------------------------------------------------------------------
+     # Player properties
+@@ -126,6 +142,146 @@
+         return player.zones[Zone.EXILE]
+ 
+     # ------------------------------------------------------------------
++    # Miracle support (additive — no-op unless a grant is registered)
++    # ------------------------------------------------------------------
++
++    def register_miracle_grant(
++        self,
++        grant: Any,
++        *,
++        source: Any = None,
++        controller: Any = None,
++    ) -> None:
++        """Register a miracle grant (rule 702.94).
++
++        *grant* is a callable ``(game, player, drawn_card) -> ManaCost | None``
++        that returns the cost the *drawn_card* may be cast for via miracle (or
++        ``None`` if this grant does not apply). The grant is consulted by
++        :meth:`fire_miracle_window`, fired from ``engine.game.draw_card`` when a
++        player draws the first card of their turn. ``source`` is used by
++        :meth:`unregister_miracle_grant` for cleanup.
++        """
++        self._miracle_grants.append(
++            {"grant": grant, "source": source, "controller": controller}
++        )
++
++    def unregister_miracle_grant(self, source: Any) -> None:
++        """Remove all miracle grants registered by *source* (identity-based)."""
++        self._miracle_grants = [
++            g for g in self._miracle_grants if g.get("source") is not source
++        ]
++
++    def fire_miracle_window(self, player: Player, drawn_card: Any) -> None:
++        """Offer a miracle cast for *drawn_card* (the first card drawn this turn).
++
++        Consults every registered miracle grant; the first grant that returns a
++        cost offers *player* the option to cast *drawn_card* for that cost via
++        :func:`engine.casting.cast_spell_alternative`. With no registered grants
++        this is a strict no-op, so normal draws are unaffected.
++        """
++        if not self._miracle_grants:
++            return
++
++        for entry in list(self._miracle_grants):
++            grant = entry.get("grant")
++            if grant is None:
++                continue
++            try:
++                cost = grant(self, player, drawn_card)
++            except Exception:
++                cost = None
++            if cost is None:
++                continue
++
++            # "you may cast it" — ask the player.
++            choose_yes_no = getattr(player, "choose_yes_no", None)
++            wants = False
++            if choose_yes_no is not None:
++                try:
++                    wants = bool(
++                        choose_yes_no(
++                            f"Cast {getattr(drawn_card, 'name', drawn_card)!r} "
++                            "for its miracle cost?"
++                        )
++                    )
++                except Exception:
++                    wants = False
++            if not wants:
++                return
++
++            from engine.casting import CastingError, cast_spell_alternative
++
++            try:
++                cast_spell_alternative(
++                    self, player, drawn_card, Zone.HAND, cost
++                )
++            except CastingError:
++                return
++            return
++
++    # ------------------------------------------------------------------
++    # Spell cost-reduction registry (additive — no-op unless registered)
++    # ------------------------------------------------------------------
++
++    def register_spell_cost_reducer(
++        self,
++        predicate: Any,
++        amount: Any,
++        *,
++        source: Any = None,
++    ) -> None:
++        """Register a game-level generic cost reducer for spells.
++
++        *predicate* is a callable ``(game, card, controller) -> bool`` that
++        returns ``True`` when this reducer applies to *card* being cast by
++        *controller*. *amount* is a callable ``(game, card, controller) -> int``
++        returning the generic mana reduction to grant.
++
++        The reducer is summed by :meth:`spell_cost_reduction_from_reducers`
++        (consulted by :func:`engine.casting.get_cost_reduction`) alongside the
++        spell's own ``cost_reduction()`` hook. ``source`` is used by
++        :meth:`unregister_spell_cost_reducer` for cleanup. With no registered
++        reducers the registry is a strict no-op.
++        """
++        self.spell_cost_reducers.append(
++            {"predicate": predicate, "amount": amount, "source": source}
++        )
++
++    def unregister_spell_cost_reducer(self, source: Any) -> None:
++        """Remove all spell cost reducers registered by *source* (identity-based)."""
++        self.spell_cost_reducers = [
++            r for r in self.spell_cost_reducers if r.get("source") is not source
++        ]
++
++    def spell_cost_reduction_from_reducers(
++        self, card: Any, controller: Any
++    ) -> int:
++        """Return the summed generic reduction from registered reducers.
++
++        Each registered reducer whose ``predicate`` returns ``True`` for
++        (*card*, *controller*) contributes its ``amount``. Returns 0 when the
++        registry is empty or no reducer applies, so it is a strict no-op for
++        spells that no external source reduces.
++        """
++        if not self.spell_cost_reducers:
++            return 0
++        total = 0
++        for entry in list(self.spell_cost_reducers):
++            predicate = entry.get("predicate")
++            amount = entry.get("amount")
++            if predicate is None or amount is None:
++                continue
++            try:
++                if not predicate(self, card, controller):
++                    continue
++                value = int(amount(self, card, controller))
++            except Exception:
++                continue
++            if value > 0:
++                total += value
++        return total
++
++    # ------------------------------------------------------------------
+     # Phase/step progression
+     # ------------------------------------------------------------------
+ 
+@@ -144,6 +300,7 @@
+             next_phase, next_step = _TURN_SEQUENCE[idx + 1]
+             self.phase = next_phase
+             self.step = next_step
++            self._fire_beginning_of_main_phase()
+         else:
+             # End of turn — wrap around.
+             self.turn_number += 1
+@@ -156,13 +313,86 @@
+             else:
+                 self.active_player_index = self._normal_next_index
+                 self._normal_next_index = 1 - self._normal_next_index
++            # Skip-turn support: if the player who would become active has
++            # queued skipped turns, consume one and hand the turn to the other
++            # player instead. Default skipped_turns == 0 makes this a no-op, so
++            # existing turn rotation is unaffected.
++            self._apply_skipped_turns()
+             self.priority_player_index = self.active_player_index
+             self.phase = _TURN_SEQUENCE[0][0]
+             self.step = _TURN_SEQUENCE[0][1]
+ 
+         self.empty_mana_pools()
+ 
++    def _apply_skipped_turns(self) -> None:
++        """Skip the active player's turn(s) if they have ``skipped_turns`` queued.
++
++        Additive turn-skip support. When the player just rotated to as active
++        has ``skipped_turns > 0``, decrement it and pass the turn to the other
++        player (advancing the normal rotation so the skipped player does not
++        immediately regain it). Loops to handle consecutive skips. Bounded by
++        the number of players with queued skips so it always terminates.
++
++        Default ``skipped_turns == 0`` for all players makes this a no-op.
++        """
++        # Guard: nothing to do if no player has queued skips.
++        guard = 0
++        max_iterations = sum(
++            max(0, getattr(p, "skipped_turns", 0)) for p in self.players
++        ) + len(self.players)
++        while getattr(self.active_player, "skipped_turns", 0) > 0:
++            self.active_player.skipped_turns -= 1
++            self.turn_number += 1
++            self.active_player_index = self._normal_next_index
++            self._normal_next_index = 1 - self._normal_next_index
++            guard += 1
++            if guard > max_iterations:
++                break
++
++    def flip_coin(self, player: Player | None = None) -> bool:
++        """Flip a coin, returning ``True`` for heads.
++
++        Deterministic in tests: if *player* is a scripted player, the result is
++        read from its choice script via ``choose_yes_no`` so a test can force a
++        known sequence of heads/tails. Falls back to real randomness when no
++        scriptable player is available.
++
++        Parameters:
++            player: The player flipping (whose script supplies the result in
++                tests). May be ``None``.
++
++        Returns:
++            ``True`` for heads, ``False`` for tails.
++        """
++        if player is not None and hasattr(player, "_script"):
++            # Scripted player: pull the next answer if one is queued, otherwise
++            # fall through to randomness so resolution never raises mid-flip.
++            script = getattr(player, "_script", None)
++            if script:
++                return bool(player.choose_yes_no("Flip a coin (heads?)"))
++        import random
++
++        return random.choice((True, False))
++
+     def empty_mana_pools(self) -> None:
+         """Empty all players' mana pools — called on each phase/step transition."""
+         for player in self.players:
+             player.mana_pool.empty()
++
++    def _fire_beginning_of_main_phase(self) -> None:
++        """Fire ``BeginningOfMainPhaseTriggeredEvent`` if we just entered a main phase.
++
++        Additive hook used by delayed "at the beginning of your next main
++        phase" triggers (e.g. Mana Sculpt's {C} bonus).  Safe no-op when the
++        current phase is not a main phase.
++        """
++        if self.phase not in (Phase.PRECOMBAT_MAIN, Phase.POSTCOMBAT_MAIN):
++            return
++        from engine.events import BeginningOfMainPhaseTriggeredEvent
++
++        self.trigger_manager.fire_event(
++            self,
++            BeginningOfMainPhaseTriggeredEvent(
++                player=self.active_player, phase=self.phase
++            ),
++        )
+diff -ruN a/player.py b/player.py
+--- a/player.py	2026-05-25 16:43:11.729292098 +0000
++++ b/player.py	2026-06-01 09:19:49.041222895 +0000
+@@ -35,6 +35,10 @@
+         self.has_lost: bool = False
+         self.land_plays_remaining: int = 1
+         self.drawn_from_empty_library: bool = False
++        # Number of this player's upcoming turns that are skipped. Defaults to
++        # 0 (no-op) so existing turn rotation is unaffected. Consulted by
++        # GameState.advance_phase when rotating to a new active player.
++        self.skipped_turns: int = 0
+ 
+     @abstractmethod
+     def choose_target(self, options: Any, requirement: Any) -> Any:
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/abilities.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/abilities.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/abilities.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/abilities.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/basic_lands.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/basic_lands.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/card.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/card.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/card.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/card.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/casting.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/casting.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/casting.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/casting.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/combat.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/combat.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/combat.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/combat.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/continuous_effects.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/continuous_effects.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/continuous_effects.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/continuous_effects.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/creatures.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/creatures.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/creatures.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/creatures.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/events.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/events.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/events.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/events.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/game.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/game.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game_state.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/game_state.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game_state.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/game_state.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/__init__.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/__init__.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/__init__.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/__init__.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/mana.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/mana.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/mana.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/mana.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/player.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/player.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/player.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/player.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/protection.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/protection.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/protection.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/protection.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/replacement_effects.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/replacement_effects.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/replacement_effects.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/replacement_effects.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/stack.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/stack.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/stack.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/stack.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/state_based_actions.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/state_based_actions.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/state_based_actions.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/state_based_actions.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/triggers.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/triggers.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/triggers.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/triggers.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/turn.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/turn.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/turn.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/turn.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/types.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/types.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/types.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/types.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/zones.cpython-311.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/zones.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/zones.cpython-312.pyc and /tmp/silverquillm_run_caw_mo0y/workspace/engine/__pycache__/zones.cpython-312.pyc differ

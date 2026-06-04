@@ -1,20 +1,17 @@
 {
   "card_id": "sos_257",
   "card_name": "Great Hall of the Biblioplex",
-  "tests_passed": 4,
-  "tests_failed": 9,
+  "tests_passed": 7,
+  "tests_failed": 6,
   "tests_total": 13,
-  "pass_rate": 0.3076923076923077,
+  "pass_rate": 0.5384615384615384,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_l1mwsh12/tests.py::TestLandDrop::test_played_as_the_one_land_per_turn",
-    "FAILED ../../../../tmp/eval_sos_l1mwsh12/tests.py::TestManaAbilities::test_second_ability_costs_life_and_taps",
-    "FAILED ../../../../tmp/eval_sos_l1mwsh12/tests.py::TestManaAbilities::test_restricted_mana_pays_an_instant",
-    "FAILED ../../../../tmp/eval_sos_l1mwsh12/tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature",
-    "FAILED ../../../../tmp/eval_sos_l1mwsh12/tests.py::TestAnimation::test_animation_makes_a_2_4_wizard_that_is_still_a_land",
-    "FAILED ../../../../tmp/eval_sos_l1mwsh12/tests.py::TestAnimation::test_reanimation_is_a_gated_noop",
-    "FAILED ../../../../tmp/eval_sos_l1mwsh12/tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup",
-    "FAILED ../../../../tmp/eval_sos_l1mwsh12/tests.py::TestSpellCastBoost::test_opponent_spell_does_not_boost",
-    "FAILED ../../../../tmp/eval_sos_l1mwsh12/tests.py::TestSpellCastBoost::test_two_spells_stack_boosts"
+    "FAILED ../../../../tmp/eval_sos_ois4eogr/tests.py::TestLandDrop::test_played_as_the_one_land_per_turn",
+    "FAILED ../../../../tmp/eval_sos_ois4eogr/tests.py::TestAnimation::test_animation_makes_a_2_4_wizard_that_is_still_a_land",
+    "FAILED ../../../../tmp/eval_sos_ois4eogr/tests.py::TestAnimation::test_reanimation_is_a_gated_noop",
+    "FAILED ../../../../tmp/eval_sos_ois4eogr/tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup",
+    "FAILED ../../../../tmp/eval_sos_ois4eogr/tests.py::TestSpellCastBoost::test_opponent_spell_does_not_boost",
+    "FAILED ../../../../tmp/eval_sos_ois4eogr/tests.py::TestSpellCastBoost::test_two_spells_stack_boosts"
   ],
   "skipped": false,
   "test_nodes": [
@@ -32,15 +29,15 @@
     },
     {
       "test_node": "tests.py::TestManaAbilities::test_second_ability_costs_life_and_taps",
-      "outcome": "fail"
+      "outcome": "pass"
     },
     {
       "test_node": "tests.py::TestManaAbilities::test_restricted_mana_pays_an_instant",
-      "outcome": "fail"
+      "outcome": "pass"
     },
     {
       "test_node": "tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature",
-      "outcome": "fail"
+      "outcome": "pass"
     },
     {
       "test_node": "tests.py::TestAnimation::test_animation_makes_a_2_4_wizard_that_is_still_a_land",
@@ -71,5 +68,5 @@
       "outcome": "pass"
     }
   ],
-  "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6"
+  "tests_hash": "7e6f37a904d34f874a4e0f264a86d03fde6b89e026ccf26e4a913db6fe4541fd"
 }

@@ -1,17 +1,15 @@
 {
   "card_id": "sos_257",
   "card_name": "Great Hall of the Biblioplex",
-  "tests_passed": 7,
-  "tests_failed": 6,
+  "tests_passed": 9,
+  "tests_failed": 4,
   "tests_total": 13,
-  "pass_rate": 0.5384615384615384,
+  "pass_rate": 0.6923076923076923,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_0775zphm/tests.py::TestManaAbilities::test_second_ability_costs_life_and_taps",
-    "FAILED ../../../../tmp/eval_sos_0775zphm/tests.py::TestManaAbilities::test_restricted_mana_pays_an_instant",
-    "FAILED ../../../../tmp/eval_sos_0775zphm/tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature",
-    "FAILED ../../../../tmp/eval_sos_0775zphm/tests.py::TestAnimation::test_animation_requires_five_mana",
-    "FAILED ../../../../tmp/eval_sos_0775zphm/tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup",
-    "FAILED ../../../../tmp/eval_sos_0775zphm/tests.py::TestSpellCastBoost::test_no_boost_when_not_animated"
+    "FAILED ../../../../tmp/eval_sos_k_bqizir/tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature",
+    "FAILED ../../../../tmp/eval_sos_k_bqizir/tests.py::TestAnimation::test_animation_requires_five_mana",
+    "FAILED ../../../../tmp/eval_sos_k_bqizir/tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup",
+    "FAILED ../../../../tmp/eval_sos_k_bqizir/tests.py::TestSpellCastBoost::test_no_boost_when_not_animated"
   ],
   "skipped": false,
   "test_nodes": [
@@ -29,11 +27,11 @@
     },
     {
       "test_node": "tests.py::TestManaAbilities::test_second_ability_costs_life_and_taps",
-      "outcome": "fail"
+      "outcome": "pass"
     },
     {
       "test_node": "tests.py::TestManaAbilities::test_restricted_mana_pays_an_instant",
-      "outcome": "fail"
+      "outcome": "pass"
     },
     {
       "test_node": "tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature",
@@ -68,5 +66,5 @@
       "outcome": "fail"
     }
   ],
-  "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6"
+  "tests_hash": "7e6f37a904d34f874a4e0f264a86d03fde6b89e026ccf26e4a913db6fe4541fd"
 }

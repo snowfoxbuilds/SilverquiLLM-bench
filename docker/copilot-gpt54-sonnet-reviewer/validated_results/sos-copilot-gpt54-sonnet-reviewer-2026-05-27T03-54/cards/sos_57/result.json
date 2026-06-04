@@ -6,9 +6,9 @@
   "tests_total": 9,
   "pass_rate": 0.6666666666666666,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_4m2h8bu7/tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase",
-    "FAILED ../../../../tmp/eval_sos_4m2h8bu7/tests.py::TestRefund::test_refund_amount_tracks_opponents_spell_cost",
-    "FAILED ../../../../tmp/eval_sos_4m2h8bu7/tests.py::TestFizzle::test_fizzle_when_target_already_countered"
+    "FAILED ../../../../tmp/eval_sos_hwz2ox75/tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase",
+    "FAILED ../../../../tmp/eval_sos_hwz2ox75/tests.py::TestRefund::test_refund_amount_tracks_opponents_spell_cost",
+    "FAILED ../../../../tmp/eval_sos_hwz2ox75/tests.py::TestFizzle::test_fizzle_when_target_already_countered"
   ],
   "skipped": false,
   "test_nodes": [

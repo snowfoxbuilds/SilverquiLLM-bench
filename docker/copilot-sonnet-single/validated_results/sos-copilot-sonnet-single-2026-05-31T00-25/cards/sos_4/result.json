@@ -6,8 +6,8 @@
   "tests_total": 5,
   "pass_rate": 0.6,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_ruvvqs7y/tests.py::TestOneColorResolution::test_one_color_draw_damage_life",
-    "FAILED ../../../../tmp/eval_sos_ruvvqs7y/tests.py::TestFiveColorResolution::test_five_colors_full_effect"
+    "FAILED ../../../../tmp/eval_sos_srwu4x3p/tests.py::TestOneColorResolution::test_one_color_draw_damage_life",
+    "FAILED ../../../../tmp/eval_sos_srwu4x3p/tests.py::TestFiveColorResolution::test_five_colors_full_effect"
   ],
   "skipped": false,
   "test_nodes": [

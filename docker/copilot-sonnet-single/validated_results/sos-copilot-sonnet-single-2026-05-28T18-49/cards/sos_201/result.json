@@ -6,7 +6,7 @@
   "tests_total": 9,
   "pass_rate": 0.8888888888888888,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos__4vdezlv/tests.py::TestMiracle::test_no_miracle_on_second_draw"
+    "FAILED ../../../../tmp/eval_sos_7u12hyzj/tests.py::TestMiracle::test_no_miracle_on_second_draw"
   ],
   "skipped": false,
   "test_nodes": [

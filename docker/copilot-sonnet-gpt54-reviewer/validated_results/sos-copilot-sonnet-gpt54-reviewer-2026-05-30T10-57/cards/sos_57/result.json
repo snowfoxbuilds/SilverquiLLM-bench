@@ -6,13 +6,13 @@
   "tests_total": 9,
   "pass_rate": 0.2222222222222222,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_zr_sivb8/tests.py::TestCounter::test_counters_target_spell",
-    "FAILED ../../../../tmp/eval_sos_zr_sivb8/tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase",
-    "FAILED ../../../../tmp/eval_sos_zr_sivb8/tests.py::TestRefund::test_refund_amount_tracks_opponents_spell_cost",
-    "FAILED ../../../../tmp/eval_sos_zr_sivb8/tests.py::TestRefund::test_no_refund_without_wizard",
-    "FAILED ../../../../tmp/eval_sos_zr_sivb8/tests.py::TestRefund::test_no_refund_when_countered_spell_was_cast_for_free",
-    "FAILED ../../../../tmp/eval_sos_zr_sivb8/tests.py::TestRefund::test_non_wizard_creature_does_not_enable_refund",
-    "FAILED ../../../../tmp/eval_sos_zr_sivb8/tests.py::TestFizzle::test_fizzle_when_target_already_countered"
+    "FAILED ../../../../tmp/eval_sos_rvlr0igg/tests.py::TestCounter::test_counters_target_spell",
+    "FAILED ../../../../tmp/eval_sos_rvlr0igg/tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase",
+    "FAILED ../../../../tmp/eval_sos_rvlr0igg/tests.py::TestRefund::test_refund_amount_tracks_opponents_spell_cost",
+    "FAILED ../../../../tmp/eval_sos_rvlr0igg/tests.py::TestRefund::test_no_refund_without_wizard",
+    "FAILED ../../../../tmp/eval_sos_rvlr0igg/tests.py::TestRefund::test_no_refund_when_countered_spell_was_cast_for_free",
+    "FAILED ../../../../tmp/eval_sos_rvlr0igg/tests.py::TestRefund::test_non_wizard_creature_does_not_enable_refund",
+    "FAILED ../../../../tmp/eval_sos_rvlr0igg/tests.py::TestFizzle::test_fizzle_when_target_already_countered"
   ],
   "skipped": false,
   "test_nodes": [

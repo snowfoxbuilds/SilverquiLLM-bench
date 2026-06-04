@@ -6,7 +6,7 @@
   "tests_total": 9,
   "pass_rate": 0.8888888888888888,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_cx49b8zn/tests.py::TestOpponentUpkeepTrigger::test_opponent_upkeep_discard_to_draw_accepted"
+    "FAILED ../../../../tmp/eval_sos_50eutgy_/tests.py::TestOpponentUpkeepTrigger::test_opponent_upkeep_discard_to_draw_accepted"
   ],
   "skipped": false,
   "test_nodes": [

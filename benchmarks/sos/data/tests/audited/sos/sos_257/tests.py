@@ -10,9 +10,11 @@ Oracle: Land.
 
 Simulation-only shape (AUDITED-TEST-API.md): abilities are activated by
 printed-order index via ``ActivateAbility`` (mana abilities resolve straight
-into the pool; the {5} animation uses the stack).  The restricted mana is
-oracle-only mechanics, exercised indirectly: a real cast paid from it either
-succeeds (instant) or is rejected (creature, ``perform_illegal_action``).
+into the pool; the {5} animation uses the stack).  "Add one mana of any
+color" is a player choice answered from the choice script (Channel 2) — the
+tests float white.  The restricted mana is oracle-only mechanics, exercised
+indirectly: a real cast paid from it either succeeds (instant) or is rejected
+(creature, ``perform_illegal_action``).
 The prowess-like boost is until-end-of-turn, so the reset is reached with
 ``advance_to_phase(ENDING, CLEANUP)`` — P/T asserted before and after.
 
@@ -132,18 +134,19 @@ class TestManaAbilities:
         assert_life_total(game, 0, 20)
 
     def test_second_ability_costs_life_and_taps(self) -> None:
-        """{T}, Pay 1 life: Add one mana — printed ability index 1."""
+        """{T}, Pay 1 life: Add one mana of any color — printed ability index 1.
+        The color is the controller's choice; here white is floated."""
         game = create_game()
         hall = _setup_hall(game)
 
         set_player(game, 0, DeterministicPlayer("P0", script=[
             perform_action(ActivateAbility(hall, 1)),
-        ]))
+        ], choices=[ManaType.WHITE]))
         set_player(game, 1, DeterministicPlayer("P1"))
         priority_loop(game)
 
         assert_life_total(game, 0, 19)
-        assert_mana_pool(game, 0, {ManaType.COLORLESS: 1})
+        assert_mana_pool(game, 0, {ManaType.WHITE: 1})
         assert_tapped(game, hall, True)
 
     def test_restricted_mana_pays_an_instant(self) -> None:
@@ -157,7 +160,7 @@ class TestManaAbilities:
             perform_action(CastSpell("Quick Fix")),
             no_op(),
             no_op(),
-        ]))
+        ], choices=[ManaType.WHITE]))
         set_player(game, 1, DeterministicPlayer("P1", script=[no_op(), no_op()]))
         priority_loop(game)
 
@@ -179,12 +182,12 @@ class TestManaAbilities:
             perform_action(ActivateAbility(hall, 1)),
             perform_illegal_action(CastSpell("Grizzly Bears")),
             no_op(),
-        ]))
+        ], choices=[ManaType.WHITE]))
         set_player(game, 1, DeterministicPlayer("P1", script=[no_op()]))
         priority_loop(game)
 
         assert_in_zone(game, 0, Zone.HAND, "Grizzly Bears")
-        assert_mana_pool(game, 0, {ManaType.COLORLESS: 1})
+        assert_mana_pool(game, 0, {ManaType.WHITE: 1})
 
 
 class TestAnimation:

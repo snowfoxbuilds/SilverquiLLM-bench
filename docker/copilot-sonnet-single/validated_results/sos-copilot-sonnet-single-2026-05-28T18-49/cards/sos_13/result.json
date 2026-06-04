@@ -6,12 +6,12 @@
   "tests_total": 6,
   "pass_rate": 0.0,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_aup6zdpu/tests.py::TestIdentity::test_card_identity",
-    "FAILED ../../../../tmp/eval_sos_aup6zdpu/tests.py::TestETBToken::test_etb_creates_inkling_for_target_player",
-    "FAILED ../../../../tmp/eval_sos_aup6zdpu/tests.py::TestETBToken::test_etb_token_can_be_given_to_self",
-    "FAILED ../../../../tmp/eval_sos_aup6zdpu/tests.py::TestPreparedBackFace::test_prepared_back_face_exiles_creature_and_grants_life",
-    "FAILED ../../../../tmp/eval_sos_aup6zdpu/tests.py::TestPreparedBackFace::test_not_prepared_when_creature_counts_equal",
-    "FAILED ../../../../tmp/eval_sos_aup6zdpu/tests.py::TestPreparedBackFace::test_prepared_consumed_after_back_face_cast"
+    "FAILED ../../../../tmp/eval_sos_sy_4py7q/tests.py::TestIdentity::test_card_identity",
+    "FAILED ../../../../tmp/eval_sos_sy_4py7q/tests.py::TestETBToken::test_etb_creates_inkling_for_target_player",
+    "FAILED ../../../../tmp/eval_sos_sy_4py7q/tests.py::TestETBToken::test_etb_token_can_be_given_to_self",
+    "FAILED ../../../../tmp/eval_sos_sy_4py7q/tests.py::TestPreparedBackFace::test_prepared_back_face_exiles_creature_and_grants_life",
+    "FAILED ../../../../tmp/eval_sos_sy_4py7q/tests.py::TestPreparedBackFace::test_not_prepared_when_creature_counts_equal",
+    "FAILED ../../../../tmp/eval_sos_sy_4py7q/tests.py::TestPreparedBackFace::test_prepared_consumed_after_back_face_cast"
   ],
   "skipped": false,
   "test_nodes": [

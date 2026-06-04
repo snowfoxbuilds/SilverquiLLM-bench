@@ -6,8 +6,8 @@
   "tests_total": 9,
   "pass_rate": 0.7777777777777778,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_lizi05ab/tests.py::TestUltimate::test_ultimate_skips_turns_per_seeded_coin_flips",
-    "FAILED ../../../../tmp/eval_sos_lizi05ab/tests.py::TestLoyaltyLegality::test_planeswalker_dies_at_zero_loyalty"
+    "FAILED ../../../../tmp/eval_sos_9qrcbiyk/tests.py::TestUltimate::test_ultimate_skips_turns_per_seeded_coin_flips",
+    "FAILED ../../../../tmp/eval_sos_9qrcbiyk/tests.py::TestLoyaltyLegality::test_planeswalker_dies_at_zero_loyalty"
   ],
   "skipped": false,
   "test_nodes": [

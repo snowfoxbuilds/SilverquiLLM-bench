@@ -6,9 +6,9 @@
   "tests_total": 9,
   "pass_rate": 0.6666666666666666,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_29_sxmop/tests.py::TestPlusOne::test_plus_one_surveil_keep_one_on_top",
-    "FAILED ../../../../tmp/eval_sos_29_sxmop/tests.py::TestUltimate::test_ultimate_skips_turns_per_seeded_coin_flips",
-    "FAILED ../../../../tmp/eval_sos_29_sxmop/tests.py::TestLoyaltyLegality::test_planeswalker_dies_at_zero_loyalty"
+    "FAILED ../../../../tmp/eval_sos_7mm_0hqd/tests.py::TestPlusOne::test_plus_one_surveil_keep_one_on_top",
+    "FAILED ../../../../tmp/eval_sos_7mm_0hqd/tests.py::TestUltimate::test_ultimate_skips_turns_per_seeded_coin_flips",
+    "FAILED ../../../../tmp/eval_sos_7mm_0hqd/tests.py::TestLoyaltyLegality::test_planeswalker_dies_at_zero_loyalty"
   ],
   "skipped": false,
   "test_nodes": [

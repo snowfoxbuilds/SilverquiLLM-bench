@@ -6,11 +6,16 @@ from the repo root (the same population the harvester reads) and emits one CSV
 row per run with:
 
     run_id, image_name, benchmark, timestamp,
-    sos_card_correctness.*, fdn_regression.*, engine_regression.*
+    sos_card_correctness.*, fdn_regression.*, engine_regression.*,
+    cost.total_usd, cost.per_card_usd
 
 The three metric blocks are flattened dynamically: the column set is the union
 of keys actually present across all discovered ``run_summary.json`` files, so
 the table adapts if a metric is added or removed.
+
+The two trailing ``cost.*`` columns are parsed from each run's sibling
+``tokens.md`` (only emitted for Claude Code runs); they are left blank when the
+file is absent. ``cost.per_card_usd`` is ``total_usd / card_count``.
 
 Usage::
 
@@ -31,6 +36,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Optional
@@ -44,6 +50,35 @@ METRIC_BLOCKS = ("sos_card_correctness", "fdn_regression", "engine_regression")
 
 # Fixed identity columns that always lead the table.
 IDENTITY_COLUMNS = ("run_id", "image_name", "benchmark", "timestamp")
+
+# Cost columns parsed from each run's ``tokens.md``, appended after the metric
+# blocks. Blank for runs without a ``tokens.md`` (non-Claude-Code runs).
+COST_COLUMNS = ("cost.total_usd", "cost.per_card_usd")
+
+# Matches the total-spend line in the "Cost (USD) by model" section of a
+# ``tokens.md``, e.g. ``TOTAL   $20.2607`` (commas tolerated for >= $1,000).
+# The token-table ``TOTAL`` row has no ``$`` and so never matches.
+_COST_TOTAL_RE = re.compile(r"^\s*TOTAL\s+\$([0-9][0-9,]*(?:\.[0-9]+)?)", re.MULTILINE)
+
+
+def parse_total_cost_usd(run_dir: Path) -> Optional[float]:
+    """Parse the total USD spend from a run's sibling ``tokens.md``.
+
+    ``tokens.md`` (emitted only for Claude Code runs) ends with a "Cost (USD)
+    by model" section whose ``TOTAL`` line carries the run's total spend.
+    Returns ``None`` when the file is absent or has no parseable total.
+    """
+    try:
+        text = (run_dir / "tokens.md").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    match = _COST_TOTAL_RE.search(text)
+    if match is None:
+        return None
+    try:
+        return float(match.group(1).replace(",", ""))
+    except ValueError:
+        return None
 
 
 def discover_summaries(
@@ -87,9 +122,16 @@ def discover_summaries(
             continue
 
         timestamp = ""
+        card_count = None
         meta = data.get("run_metadata")
         if isinstance(meta, dict):
             timestamp = meta.get("timestamp", "") or ""
+            card_count = meta.get("card_count")
+
+        total_cost = parse_total_cost_usd(run_dir)
+        per_card_cost = None
+        if total_cost is not None and isinstance(card_count, (int, float)) and card_count:
+            per_card_cost = round(total_cost / card_count, 4)
 
         records.append({
             "run_id": run_id,
@@ -98,6 +140,10 @@ def discover_summaries(
             "timestamp": timestamp,
             "blocks": {b: data.get(b) if isinstance(data.get(b), dict) else {}
                        for b in METRIC_BLOCKS},
+            "cost": {
+                "cost.total_usd": total_cost if total_cost is not None else "",
+                "cost.per_card_usd": per_card_cost if per_card_cost is not None else "",
+            },
         })
 
     records.sort(key=lambda r: (r["image_name"], r["run_id"]))
@@ -120,6 +166,7 @@ def build_columns(records: list[dict]) -> tuple[list[str], dict[str, list[str]]]
     columns = list(IDENTITY_COLUMNS)
     for block in METRIC_BLOCKS:
         columns.extend(f"{block}.{k}" for k in per_block_keys[block])
+    columns.extend(COST_COLUMNS)
     return columns, per_block_keys
 
 
@@ -134,6 +181,7 @@ def write_csv(records: list[dict], out) -> int:
             block_data = rec["blocks"].get(block, {})
             for key in per_block_keys[block]:
                 row[f"{block}.{key}"] = block_data.get(key, "")
+        row.update(rec.get("cost", {}))
         writer.writerow(row)
     return len(records)
 

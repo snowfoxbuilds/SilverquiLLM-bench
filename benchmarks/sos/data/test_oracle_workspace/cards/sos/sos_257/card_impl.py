@@ -108,17 +108,30 @@ class GreatHallOfTheBiblioplex(Land):
     def _produce_any_color_restricted(self, game: Any = None) -> dict[str, Any]:
         """Produce one mana of any color, restricted to instant/sorcery spells.
 
-        Uses the engine's restricted-mana primitive via ManaPool.add_restricted().
-        Read restrictions back via `controller.mana_pool.restricted_mana`.
+        The controller chooses the color via the canonical ``choose`` prompt
+        (matching FDN #267 Secluded Courtyard's any-color ability — "any color"
+        is a player choice, not a fixed colorless).  The instant/sorcery spend
+        restriction is tracked with the engine's restricted-mana primitive
+        (``ManaPool.add_restricted``); read it back via
+        ``controller.mana_pool.restricted_mana``.
         """
         controller = getattr(self, "controller", None)
-        if controller is not None:
-            controller.mana_pool.add_restricted(
-                ManaType.COLORLESS, 1,
-                restriction="instant_or_sorcery",
-                source=self,
-            )
-        return {"type": "any_color", "amount": 1, "restriction": "instant_or_sorcery"}
+        if controller is None:
+            return {"type": "any_color", "amount": 1, "restriction": "instant_or_sorcery"}
+        color_options = [
+            ManaType.WHITE, ManaType.BLUE, ManaType.BLACK,
+            ManaType.RED, ManaType.GREEN,
+        ]
+        chosen_color = controller.choose(
+            color_options,
+            "Choose a color of mana to produce",
+        )
+        controller.mana_pool.add_restricted(
+            chosen_color, 1,
+            restriction="instant_or_sorcery",
+            source=self,
+        )
+        return {"type": chosen_color, "amount": 1, "restriction": "instant_or_sorcery"}
 
     # ------------------------------------------------------------------
     # (b) Persistent animation

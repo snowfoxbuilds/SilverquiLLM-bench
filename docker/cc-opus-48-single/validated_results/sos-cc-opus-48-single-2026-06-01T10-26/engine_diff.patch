@@ -1,0 +1,1023 @@
+diff -ruN a/card.py b/card.py
+--- a/card.py	2026-05-25 16:43:11.728292087 +0000
++++ b/card.py	2026-06-01 10:50:00.320614198 +0000
+@@ -17,7 +17,7 @@
+ from dataclasses import dataclass
+ from typing import TYPE_CHECKING, Any, Callable
+ 
+-from engine.types import CardType, Keyword, ManaCost, Supertype
++from engine.types import CardType, Color, Keyword, ManaCost, ManaType, Supertype
+ 
+ if TYPE_CHECKING:
+     from engine.game_state import GameState
+@@ -101,6 +101,35 @@
+     description: str = ""
+ 
+ 
++_MANA_TYPE_TO_COLOR: dict[ManaType, Color] = {
++    ManaType.WHITE: Color.WHITE,
++    ManaType.BLUE: Color.BLUE,
++    ManaType.BLACK: Color.BLACK,
++    ManaType.RED: Color.RED,
++    ManaType.GREEN: Color.GREEN,
++}
++
++
++def _colors_from_mana_cost(cost: ManaCost) -> set[Color]:
++    """Derive the set of :class:`~engine.types.Color` from a mana cost.
++
++    Colored pips contribute their color; hybrid symbols contribute both of
++    their (non-colorless) options. Generic, ``{C}``, and ``{X}`` contribute
++    nothing. Returns an empty set for a colorless / costless object.
++    """
++    colors: set[Color] = set()
++    for mana_type in getattr(cost, "pips", {}):
++        color = _MANA_TYPE_TO_COLOR.get(mana_type)
++        if color is not None:
++            colors.add(color)
++    for hybrid in getattr(cost, "hybrid", []):
++        for option in (hybrid.option_a, hybrid.option_b):
++            color = _MANA_TYPE_TO_COLOR.get(option)
++            if color is not None:
++                colors.add(color)
++    return colors
++
++
+ # ---------------------------------------------------------------------------
+ # GameObject — base class for zone-resident objects
+ # ---------------------------------------------------------------------------
+@@ -162,6 +191,7 @@
+         rules_text: str = "",
+         owner: Player | None = None,
+         controller: Player | None = None,
++        colors: set[Color] | None = None,
+     ) -> None:
+         super().__init__(owner=owner, controller=controller)
+         self.name: str = name
+@@ -171,6 +201,14 @@
+         self.supertypes: set[Supertype] = supertypes if supertypes is not None else set()
+         self.keywords: Keyword = keywords if keywords is not None else Keyword(0)
+         self.rules_text: str = rules_text
++        # Color identity of this object (rule 105). When ``colors`` is given
++        # explicitly (e.g. for tokens, which have no mana cost) it is used
++        # verbatim; otherwise colors are derived from the mana cost's pips.
++        # Stored as a set of :class:`~engine.types.Color`.
++        self.colors: set[Color] = (
++            set(colors) if colors is not None
++            else _colors_from_mana_cost(self.mana_cost)
++        )
+         # Snapshot original characteristics for continuous-effect reset.
+         self._original_card_types: frozenset[CardType] = frozenset(self.card_types)
+         self._original_keywords: Keyword = self.keywords
+@@ -278,6 +316,7 @@
+         controller: Player | None = None,
+         base_power: int = 0,
+         base_toughness: int = 0,
++        colors: set[Color] | None = None,
+     ) -> None:
+         # Always include CREATURE in card_types.
+         card_types = (card_types or set()) | {CardType.CREATURE}
+@@ -291,6 +330,7 @@
+             rules_text=rules_text,
+             owner=owner,
+             controller=controller,
++            colors=colors,
+         )
+         self.base_power: int = base_power
+         self.base_toughness: int = base_toughness
+diff -ruN a/casting.py b/casting.py
+--- a/casting.py	2026-05-25 16:43:11.728292087 +0000
++++ b/casting.py	2026-06-01 12:08:21.264070260 +0000
+@@ -104,10 +104,52 @@
+     # Restore previous controller in case the caller doesn't want a
+     # side-effect (get_cost_reduction is a query, not a mutation).
+     card.controller = prev_controller
++    # Additively fold in any granted reductions from permanents on the
++    # battlefield that dynamically grant cost reduction to *controller*'s
++    # spells (e.g. Witherbloom granting affinity for creatures to the
++    # controller's instant/sorcery spells).  The grant is derived dynamically
++    # from the active granters, so it only applies while the granter is in
++    # play and is never sticky.
++    raw += _granted_cost_reduction(game, card, controller)
+     generic = card.mana_cost.generic if card.mana_cost else 0
+     return max(0, min(raw, generic))
+ 
+ 
++def _granted_cost_reduction(
++    game: GameState, card: CardImpl, controller: Player
++) -> int:
++    """Return the extra generic reduction *controller*'s battlefield grants to *card*.
++
++    Consults every permanent on *controller*'s battlefield that exposes a
++    callable ``affinity_for_creatures_grant(game, card, controller)`` method
++    (an additive, dynamically-derived grant surface analogous to the miracle
++    grant in :mod:`engine.miracle`).  Each grant returns the generic reduction
++    it confers on *card* (0 when it does not apply); the results are summed.
++
++    This is additive to the card's own ``cost_reduction`` so a spell that both
++    has its own affinity *and* is granted one is not double-counted by the
++    grant path: grant methods scope themselves to the controller's spells and
++    return their own count, and a card's intrinsic ``cost_reduction`` is read
++    separately above.  In the current single-source SOS model only one such
++    granter exists, so no inter-grant double counting occurs.
++    """
++    if controller is None:
++        return 0
++    total = 0
++    for permanent in game.get_battlefield(controller).get_all():
++        grant = getattr(permanent, "affinity_for_creatures_grant", None)
++        if not callable(grant):
++            continue
++        try:
++            amount = grant(game, card, controller)
++        except TypeError:
++            # Not a (game, card, controller) grant method — skip defensively.
++            continue
++        if amount:
++            total += int(amount)
++    return total
++
++
+ def _apply_cost_reduction(cost: ManaCost, reduction: int) -> ManaCost:
+     """Return a new :class:`ManaCost` with *reduction* subtracted from generic."""
+     new_generic = max(0, cost.generic - reduction)
+@@ -228,6 +270,12 @@
+     # that care about the colors used to cast the spell.
+     card.colors_spent = list(player.mana_pool.last_payment_colors)  # type: ignore[attr-defined]
+ 
++    # Record the TOTAL amount of mana spent to cast this spell (rule 107.7).
++    # Unlike the printed mana value, this reflects actual mana paid, so X
++    # spells / cost-reduced spells diverge from CMC.  Effects such as Mana
++    # Sculpt read this at resolution.
++    card.mana_spent = player.mana_pool.last_payment_total  # type: ignore[attr-defined]
++
+     # 7. Call on_cast hook
+     card.on_cast(game)
+ 
+@@ -245,6 +293,32 @@
+     stack_obj.on_resolve = _on_resolve
+     game.stack.push(stack_obj)
+ 
++    # Fire the "when you cast this spell" event so cast-time grants (casualty
++    # and other "whenever you cast ..." triggers) can observe a real cast.
++    # The spell is already on the stack, matching MTG timing where such
++    # triggers are put on the stack above the spell that caused them.
++    _fire_spell_cast_event(game, player, card)
++
++
++def _fire_spell_cast_event(game: GameState, player: Player, card: CardImpl) -> None:
++    """Fire :class:`~engine.events.SpellCastTriggeredEvent` for a cast spell.
++
++    Additive hook used by the casting pipeline so "whenever you cast a(n)
++    instant/sorcery spell" and casualty-style cast-time grants can trigger.
++    Safe no-op if the game has no ``trigger_manager``.
++    """
++    trigger_manager = getattr(game, "trigger_manager", None)
++    if trigger_manager is None:
++        return
++    from engine.events import SpellCastTriggeredEvent
++
++    trigger_manager.fire_event(
++        game,
++        SpellCastTriggeredEvent(
++            spell=card, player=player, card=card, controller=player
++        ),
++    )
++
+ 
+ # ------------------------------------------------------------------
+ # Cast spell without paying mana cost (free-cast from any zone)
+@@ -372,6 +446,124 @@
+ 
+ 
+ # ------------------------------------------------------------------
++# Cast spell paying an alternative cost (e.g. miracle)
++# ------------------------------------------------------------------
++
++
++def cast_spell_alternative(
++    game: GameState,
++    player: Player,
++    card: CardImpl,
++    alternative_cost: ManaCost,
++    from_zone: Zone = Zone.HAND,
++) -> None:
++    """Cast *card* paying *alternative_cost* instead of its mana cost.
++
++    Used by alternative-cost mechanics such as **miracle** (rule 702.94),
++    where the spell is cast "by paying [cost] rather than its mana cost".
++    The alternative cost is paid as a normal mana cost from *player*'s pool.
++
++    Unlike :func:`cast_spell` this skips the normal sorcery-speed/instant
++    timing check (miracle casts happen at draw time, outside normal timing),
++    but otherwise mirrors the cast pipeline: ``can_cast`` legality, target
++    choice/validation, mana payment (with rollback on failure), the
++    ``on_cast`` hook, and pushing a resolving :class:`StackObject`.
++
++    Note: cost reduction (``get_cost_reduction``) is intentionally NOT applied
++    to *alternative_cost* — unlike :func:`cast_spell`, an alternative cost such
++    as miracle is paid exactly as printed.  Callers that want a reduction on an
++    alternative cost must fold it into *alternative_cost* before calling.
++
++    Parameters:
++        game: The current game state.
++        player: The player casting the spell.
++        card: The card to cast (must be in *from_zone*).
++        alternative_cost: The :class:`ManaCost` to pay instead of
++            ``card.mana_cost``.
++        from_zone: The zone the card is currently in (default hand).
++
++    Raises:
++        CastingError: If any legality check fails or mana cannot be paid.
++    """
++    if card.controller is None:
++        card.controller = player
++    if card.owner is None:
++        card.owner = player
++
++    # can_cast legality (timing is intentionally skipped for miracle casts).
++    if not card.can_cast(game):
++        raise CastingError(f"Cannot cast {card.name!r} — can_cast returned False")
++
++    source_zone = player.zones[from_zone]
++    if not source_zone.contains(card):
++        raise CastingError(
++            f"Cannot cast {card.name!r} — card not found in {from_zone.name}"
++        )
++
++    stack_zone = player.zones[Zone.STACK]
++    source_zone.remove(card)
++    stack_zone.add(card)
++
++    if hasattr(card, "colors_spent"):
++        del card.colors_spent
++
++    # Choose targets (with rollback to the source zone on failure).
++    try:
++        target_specs = card.get_targets(game)
++        chosen_targets: list[Any] = []
++        if target_specs:
++            for spec in target_specs:
++                target = player.choose_target(target_specs, spec)
++                filter_fn = getattr(spec, "filter_fn", None)
++                if filter_fn is not None and target is not None:
++                    if not filter_fn(target):
++                        raise CastingError(
++                            f"Cannot cast {card.name!r} — chosen target does not "
++                            f"satisfy filter: {getattr(spec, 'description', '')}"
++                        )
++                chosen_targets.append(target)
++
++        from engine.protection import has_protection_from
++
++        for target in chosen_targets:
++            if has_protection_from(target, card):
++                raise CastingError(
++                    f"Cannot cast {card.name!r} — target has protection from this spell"
++                )
++    except Exception as exc:
++        stack_zone.remove(card)
++        source_zone.add(card)
++        raise CastingError(str(exc)) from exc
++
++    # Pay the alternative cost (rollback on failure).
++    if not player.mana_pool.can_pay(alternative_cost):
++        stack_zone.remove(card)
++        source_zone.add(card)
++        raise CastingError(
++            f"Cannot cast {card.name!r} — insufficient mana for alternative cost"
++        )
++    player.mana_pool.pay(alternative_cost)
++
++    card.colors_spent = list(player.mana_pool.last_payment_colors)  # type: ignore[attr-defined]
++    card.mana_spent = player.mana_pool.last_payment_total  # type: ignore[attr-defined]
++
++    card.on_cast(game)
++
++    stack_obj = StackObject(
++        source=card,
++        controller=player,
++        targets=chosen_targets,
++        on_resolve=lambda g: None,  # replaced below
++    )
++
++    def _on_resolve(g: GameState) -> None:
++        _resolve_spell(g, card, player, stack_obj)
++
++    stack_obj.on_resolve = _on_resolve
++    game.stack.push(stack_obj)
++
++
++# ------------------------------------------------------------------
+ # Resolution (called when the stack pops)
+ # ------------------------------------------------------------------
+ 
+@@ -406,8 +598,48 @@
+         # trigger/replacement-effect registration and ENTERS_BATTLEFIELD event.
+         move_to_zone(game, card, Zone.STACK, Zone.BATTLEFIELD)
+     else:
+-        # Instant/sorcery: move from stack to graveyard via move_to_zone.
+-        move_to_zone(game, card, Zone.STACK, Zone.GRAVEYARD)
++        # Instant/sorcery: the spell would be put into its owner's graveyard.
++        # Consult replacement effects so that effects such as "if that spell
++        # would be put into your graveyard, exile it instead" can redirect
++        # the destination zone.
++        dest_zone = _resolve_spell_graveyard_destination(game, card)
++        move_to_zone(game, card, Zone.STACK, dest_zone)
++        # Clean up any spell-specific exile replacement / flag now that the
++        # spell has left the stack.
++        game.replacement_manager.unregister(card)
++        if hasattr(card, "_exile_if_goes_to_graveyard"):
++            del card._exile_if_goes_to_graveyard
++
++
++# Destination string → Zone for spell graveyard-replacement redirection.
++_SPELL_DESTINATION_ZONE_MAP: dict[str, Zone] = {
++    "graveyard": Zone.GRAVEYARD,
++    "exile": Zone.EXILE,
++    "hand": Zone.HAND,
++    "library": Zone.LIBRARY,
++}
++
++
++def _resolve_spell_graveyard_destination(game: GameState, card: CardImpl) -> Zone:
++    """Return the zone an instant/sorcery should move to on resolution.
++
++    Builds a :class:`~engine.events.SpellToGraveyardReplacementEvent` and runs
++    it through the replacement manager so replacement effects can redirect the
++    spell (e.g. exile instead of graveyard).  Defaults to the graveyard.
++    """
++    from engine.events import SpellToGraveyardReplacementEvent
++
++    controller = getattr(card, "controller", None)
++    owner = getattr(card, "owner", None) or controller
++    event = SpellToGraveyardReplacementEvent(
++        destination="graveyard",
++        controller=controller,
++        owner=owner,
++        spell=card,
++    )
++    event = game.replacement_manager.apply(game, event)
++    destination_str = getattr(event, "destination", "graveyard")
++    return _SPELL_DESTINATION_ZONE_MAP.get(destination_str, Zone.GRAVEYARD)
+ 
+ 
+ # ------------------------------------------------------------------
+@@ -472,6 +704,85 @@
+     player.land_plays_remaining -= 1
+ 
+ 
++def cast_prepared_spell(
++    game: GameState,
++    permanent: Any,
++    targets: list[Any] | None = None,
++) -> StackObject | None:
++    """Cast a copy of *permanent*'s prepare spell while it is prepared.
++
++    This implements the SOS **Prepared** mechanic
++    (rules text: "While it's prepared, you may cast a copy of its spell.
++    Doing so unprepares it.").
++
++    A prepared permanent exposes:
++
++    * a truthy ``is_prepared`` flag, and
++    * a ``prepare_spell`` attribute — a :class:`~engine.card.CardImpl` (the
++      inset spell, e.g. Swords to Plowshares).
++
++    This helper creates a *copy* of that prepare spell, places it in the
++    controller's exile zone, casts it for free (no mana cost) onto the stack,
++    and clears the permanent's prepared designation. The returned
++    :class:`StackObject` can be resolved to apply the prepare spell's effect.
++
++    Parameters:
++        game: The current game state.
++        permanent: The prepared permanent (must have ``is_prepared`` truthy
++            and a ``prepare_spell``).
++        targets: Optional explicit targets for the copy. If provided, they
++            are scripted into the controller's choices so the copy resolves
++            against them.
++
++    Returns:
++        The :class:`StackObject` for the prepare-spell copy, or ``None`` if
++        *permanent* is not prepared / exposes no prepare spell.
++    """
++    import copy as _copy
++
++    if not getattr(permanent, "is_prepared", False):
++        return None
++    prepare_spell = getattr(permanent, "prepare_spell", None)
++    if prepare_spell is None:
++        return None
++
++    controller = getattr(permanent, "controller", None) or game.active_player
++
++    # Build a fresh copy of the prepare spell so the original face stays put.
++    spell_copy = _copy.copy(prepare_spell)
++    # Give the copy a unique identity & clean target state.
++    from engine.card import GameObject as _GameObject
++
++    spell_copy.object_id = _GameObject._next_id
++    _GameObject._next_id += 1
++    spell_copy.controller = controller
++    spell_copy.owner = controller
++    if hasattr(spell_copy, "chosen_targets"):
++        spell_copy.chosen_targets = []
++
++    # Casting unprepares the permanent (rule text: "Doing so unprepares it.").
++    permanent.is_prepared = False
++
++    # Place the copy in exile so it is cast "from exile" like a real copy.
++    exile_zone = controller.zones[Zone.EXILE]
++    exile_zone.add(spell_copy)
++
++    stack_before = len(game.stack)
++
++    # Script the explicit targets so cast_spell_free's target choices resolve.
++    if targets:
++        appendleft = getattr(getattr(controller, "_script", None), "appendleft", None)
++        if appendleft is not None:
++            for target in reversed(targets):
++                controller._script.appendleft(target)
++
++    cast_spell_free(game, controller, spell_copy, Zone.EXILE)
++
++    if len(game.stack) > stack_before:
++        return game.stack.peek()
++    return None
++
++
+ def resolve_top(game: GameState) -> None:
+     """Resolve the top spell/ability on the stack.
+ 
+diff -ruN a/events.py b/events.py
+--- a/events.py	2026-05-25 04:23:31.883982600 +0000
++++ b/events.py	2026-06-01 11:04:14.174061944 +0000
+@@ -72,6 +72,20 @@
+ 
+ 
+ @dataclass
++class BeginningOfMainPhaseTriggeredEvent(TriggeredEvent):
++    """Fired at the start of each main phase (precombat and postcombat).
++
++    Mirrors :class:`BeginningOfUpkeepTriggeredEvent`.  ``player`` is the
++    active player whose main phase is beginning, and ``phase`` is the
++    :class:`~engine.types.Phase` value (``PRECOMBAT_MAIN`` / ``POSTCOMBAT_MAIN``)
++    so triggers can distinguish the two main phases when needed.
++    """
++
++    player: Any = None
++    phase: Any = None
++
++
++@dataclass
+ class BeginningOfCombatTriggeredEvent(TriggeredEvent):
+     pass
+ 
+@@ -186,6 +200,25 @@
+ 
+ 
+ @dataclass
++class SpellToGraveyardReplacementEvent(MoveToGraveyardReplacementEvent):
++    """An instant or sorcery spell about to move from the stack to a graveyard.
++
++    Fired by the casting-resolution pipeline (:func:`engine.casting._resolve_spell`)
++    before a non-permanent spell is put into its owner's graveyard, so that
++    replacement effects (e.g. "if that spell would be put into your graveyard,
++    exile it instead") can redirect the destination.
++
++    A replacement may set ``destination`` to ``"exile"`` (etc.) to redirect.
++    """
++
++    spell: Any = None
++
++    @property
++    def card(self) -> Any:
++        return self.spell
++
++
++@dataclass
+ class CreateTokenReplacementEvent(ReplacementEvent):
+     """An effect about to create one or more tokens."""
+ 
+diff -ruN a/game.py b/game.py
+--- a/game.py	2026-05-25 16:43:11.729292098 +0000
++++ b/game.py	2026-06-01 11:45:36.032206922 +0000
+@@ -332,6 +332,17 @@
+             DrawsCardTriggeredEvent(player=player, card=card),
+         )
+ 
++    # Miracle (rule 702.94): when this is the first card drawn this turn, offer
++    # to cast the just-drawn card for its miracle cost (paid as an alternative
++    # cost).  The miracle cost is derived DYNAMICALLY from active grants at draw
++    # time (e.g. a Lorehold on the battlefield granting {2} to instant/sorcery
++    # cards its controller draws), so a naturally-drawn card fires the offer
++    # without any manual pre-stamping, and the grant is not sticky (a stale
++    # stamp left over from a granter that has left play yields no offer).
++    from engine.miracle import offer_miracle
++
++    offer_miracle(game, player, card)
++
+     return card
+ 
+ 
+@@ -350,6 +361,90 @@
+     move_to_zone(game, card, Zone.HAND, Zone.GRAVEYARD)
+ 
+ 
++def surveil(game: GameState, player: Player, amount: int) -> None:
++    """Surveil *amount* (rule 701.43) for *player*.
++
++    Look at the top *amount* cards of *player*'s library, then for each (from
++    the top down) the player decides whether to keep it on top of the library
++    or put it into the graveyard.  Cards kept on top retain their relative
++    order.
++
++    The decision is driven by ``player.choose_yes_no`` — ``True`` keeps the
++    card on top, ``False`` puts it into the graveyard.
++
++    Parameters:
++        game: The current game state.
++        player: The player surveilling.
++        amount: The number of cards to look at.
++    """
++    if amount <= 0:
++        return
++
++    library = game.get_library(player)
++    # ``top(n)`` returns bottom→top order; reverse so we process from the
++    # top of the library downward (the order the player looks at them).
++    looked_at = list(reversed(library.top(amount)))
++
++    keep_on_top: list[Any] = []
++    for card in looked_at:
++        keep = True
++        if hasattr(player, "choose_yes_no"):
++            keep = player.choose_yes_no(f"Keep {getattr(card, 'name', card)!r} on top?")
++        if keep:
++            keep_on_top.append(card)
++        else:
++            move_to_zone(game, card, Zone.LIBRARY, Zone.GRAVEYARD)
++
++    # Re-place the kept cards on top, preserving their original top-down order
++    # (so the previous top card remains on top).
++    for card in reversed(keep_on_top):
++        if library.contains(card):
++            library.remove(card)
++    for card in reversed(keep_on_top):
++        library.add(card, position="top")
++
++
++def flip_coin(game: GameState | None = None) -> bool:
++    """Flip a coin (rule 705).  Returns ``True`` for heads, ``False`` for tails.
++
++    Uses the :mod:`random` module so tests can force the outcome by patching
++    ``random.random`` / ``random.choice`` / ``random.randint``.
++
++    The optional ``game`` parameter is currently unused; it is accepted for
++    signature symmetry with the other ``engine.game`` helpers so callers can
++    pass the game state uniformly.
++    """
++    import random
++
++    return random.random() < 0.5
++
++
++def skip_turns(game: GameState, player: Player, count: int) -> None:
++    """Record that *player* skips their next *count* turns.
++
++    The engine has no full turn-skip execution path; this surfaces the
++    recorded count both on the player (``player.skipped_turns``) and on the
++    game keyed by seat index (``game.skipped_turns[seat]``) so it is
++    observable.
++
++    Parameters:
++        game: The current game state.
++        player: The player who will skip turns.
++        count: Number of turns to skip (clamped to non-negative).
++    """
++    count = max(0, count)
++    player.skipped_turns = getattr(player, "skipped_turns", 0) + count
++
++    if not hasattr(game, "skipped_turns") or game.skipped_turns is None:
++        game.skipped_turns = {}
++    try:
++        seat = game.players.index(player)
++    except ValueError:
++        seat = None
++    if seat is not None:
++        game.skipped_turns[seat] = game.skipped_turns.get(seat, 0) + count
++
++
+ def create_token(game: GameState, player: Player, token: Any) -> None:
+     """Create a token on the battlefield under *player*'s control.
+ 
+diff -ruN a/game_state.py b/game_state.py
+--- a/game_state.py	2026-05-25 16:43:11.729292098 +0000
++++ b/game_state.py	2026-06-01 11:20:52.292330686 +0000
+@@ -156,12 +156,51 @@
+             else:
+                 self.active_player_index = self._normal_next_index
+                 self._normal_next_index = 1 - self._normal_next_index
++            # Consume any pending "skip your next turn" counters.  Symmetric
++            # to the extra_turns FIFO above: when the rotation is about to
++            # make a seat with skipped_turns > 0 the active player, decrement
++            # that seat's counter and advance the rotation again instead of
++            # running their turn.  (Recorded by engine.game.skip_turns.)
++            self._consume_skipped_turns()
+             self.priority_player_index = self.active_player_index
+             self.phase = _TURN_SEQUENCE[0][0]
+             self.step = _TURN_SEQUENCE[0][1]
+ 
+         self.empty_mana_pools()
+ 
++    def _consume_skipped_turns(self) -> None:
++        """Skip the active player's turn(s) if they have pending skips.
++
++        ``engine.game.skip_turns`` records, per seat index, how many of a
++        player's upcoming turns are skipped (``game.skipped_turns[seat]`` and
++        ``player.skipped_turns``).  When the rotation is about to hand the turn
++        to such a seat, we decrement the counter and advance the rotation again
++        — symmetric to how :attr:`extra_turns` inserts turns.
++
++        Extra turns already queued take precedence (they are consumed first, in
++        FIFO order); only seats reached via the *normal* rotation are skipped,
++        and a guard prevents an infinite loop if every seat is skipped.
++        """
++        skipped = getattr(self, "skipped_turns", None)
++        if not skipped:
++            return
++
++        # Bound the loop by the number of seats so an all-skipped board (which
++        # cannot make progress) still terminates rather than spinning forever.
++        for _ in range(len(self.players)):
++            seat = self.active_player_index
++            remaining = skipped.get(seat, 0)
++            if remaining <= 0:
++                return
++            # Burn one skipped turn for this seat...
++            skipped[seat] = remaining - 1
++            player = self.players[seat]
++            if getattr(player, "skipped_turns", 0) > 0:
++                player.skipped_turns -= 1
++            # ...and hand the turn to the next seat in the normal rotation.
++            self.active_player_index = self._normal_next_index
++            self._normal_next_index = 1 - self._normal_next_index
++
+     def empty_mana_pools(self) -> None:
+         """Empty all players' mana pools — called on each phase/step transition."""
+         for player in self.players:
+diff -ruN a/mana.py b/mana.py
+--- a/mana.py	2026-05-25 16:43:11.729292098 +0000
++++ b/mana.py	2026-06-01 11:04:03.487946139 +0000
+@@ -24,6 +24,7 @@
+     def __init__(self) -> None:
+         self._pool: dict[ManaType, int] = {mt: 0 for mt in ManaType}
+         self._last_payment_colors: list[Color] = []
++        self._last_payment_total: int = 0
+ 
+     # ------------------------------------------------------------------
+     # Basic operations
+@@ -63,6 +64,19 @@
+         """
+         return list(self._last_payment_colors)
+ 
++    @property
++    def last_payment_total(self) -> int:
++        """Return the TOTAL quantity of mana spent in the last :meth:`pay` call.
++
++        Unlike :attr:`last_payment_colors` (which records only the *distinct*
++        colors), this counts every mana paid — colored and colorless alike —
++        and so reflects the *amount of mana spent* to pay the cost (rule 107.7,
++        "amount of mana spent").  This diverges from a spell's printed mana
++        value when X spells, additional costs, or cost reductions are involved.
++        Reset to ``0`` until the first payment.
++        """
++        return self._last_payment_total
++
+     # ------------------------------------------------------------------
+     # Cost payment
+     # ------------------------------------------------------------------
+@@ -155,11 +169,15 @@
+         # Commit the payment.
+         # Compute colors of mana spent by comparing old pool to new working pool.
+         colors_spent: set[Color] = set()
++        total_spent = 0
+         for mt, old_amount in self._pool.items():
+             new_amount = working.get(mt, 0)
+-            if new_amount < old_amount and mt in _MANA_TO_COLOR:
+-                colors_spent.add(_MANA_TO_COLOR[mt])
++            if new_amount < old_amount:
++                total_spent += old_amount - new_amount
++                if mt in _MANA_TO_COLOR:
++                    colors_spent.add(_MANA_TO_COLOR[mt])
+         self._last_payment_colors = sorted(colors_spent, key=lambda c: c.value)
++        self._last_payment_total = total_spent
+         self._pool = working
+         return True
+ 
+diff -ruN a/miracle.py b/miracle.py
+--- a/miracle.py	1970-01-01 00:00:00.000000000 +0000
++++ b/miracle.py	2026-06-01 11:47:15.900538318 +0000
+@@ -0,0 +1,209 @@
++"""Miracle mechanic support (rule 702.94) — additive engine surface.
++
++Miracle is a static ability linked to a triggered ability:
++
++    "Miracle [cost]" means "You may reveal this card from your hand as you
++    draw it if it's the first card you've drawn this turn. When you reveal
++    this card this way, you may cast it by paying [cost] rather than its
++    mana cost."
++
++The engine has no native ``miracle`` keyword (and the :class:`~engine.types.Keyword`
++enum is pinned at 16 members by ``engine_tests/test_types.py``), so miracle is
++surfaced via a per-card ``miracle_cost`` attribute and a small set of helper
++functions here instead of a flag.
++
++Contract exposed to cards / tests
++----------------------------------
++
++* :func:`set_miracle_cost` — stamp a :class:`~engine.types.ManaCost` (the
++  miracle/alternative cost) onto a card and mark it ``has_miracle = True``.
++* :func:`clear_miracle_cost` — remove the stamp (used when the granting
++  source leaves the battlefield / the card leaves the hand).
++* :func:`get_miracle_cost` — read the assigned miracle cost (``None`` if the
++  card has no miracle).
++* :func:`is_first_draw_this_turn` — first-card-drawn-this-turn gating, reading
++  the ``player.cards_drawn_this_turn`` counter the draw step maintains.
++* :func:`can_miracle_cast` — ``True`` iff the just-drawn card has a miracle
++  cost AND it is the first card drawn this turn.
++* :func:`derive_miracle_cost` — DYNAMICALLY compute the miracle cost a just-drawn
++  card has *right now*, by consulting active grants (permanents on the drawer's
++  battlefield that expose a ``miracle_cost(game, card)`` grant method, e.g. a
++  Lorehold). This is what makes miracle fire on a naturally-drawn card with no
++  manual pre-stamping, and what makes the grant non-sticky: when no granter
++  applies the derived cost is ``None`` even if a stale stamp is present.
++* :func:`offer_miracle` — the draw-time hook: if the card may be miracle-cast
++  and the controller says yes (``choose_yes_no``), cast it for the miracle
++  cost as an alternative cost via :func:`engine.casting.cast_spell_alternative`.
++
++The miracle cost is paid as a normal mana cost (just a *different* cost), so
++the alternative-cost cast path pays from the player's mana pool.
++"""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING, Any
++
++if TYPE_CHECKING:
++    from engine.game_state import GameState
++    from engine.player import Player
++    from engine.types import ManaCost
++
++
++# Attribute name used to stamp the miracle cost onto a card.
++_MIRACLE_COST_ATTR = "miracle_cost"
++
++
++def set_miracle_cost(card: Any, cost: "ManaCost") -> None:
++    """Assign *cost* as *card*'s miracle (alternative) cost.
++
++    Sets both ``card.miracle_cost`` and a ``card.has_miracle`` boolean flag
++    so callers can detect the grant without a ``None`` comparison.
++    """
++    setattr(card, _MIRACLE_COST_ATTR, cost)
++    card.has_miracle = True
++
++
++def clear_miracle_cost(card: Any) -> None:
++    """Remove any miracle cost previously assigned to *card*."""
++    if hasattr(card, _MIRACLE_COST_ATTR):
++        try:
++            delattr(card, _MIRACLE_COST_ATTR)
++        except AttributeError:
++            setattr(card, _MIRACLE_COST_ATTR, None)
++    card.has_miracle = False
++
++
++def get_miracle_cost(card: Any) -> "ManaCost | None":
++    """Return *card*'s assigned miracle cost, or ``None`` if it has none."""
++    return getattr(card, _MIRACLE_COST_ATTR, None)
++
++
++def derive_miracle_cost(
++    game: "GameState", player: "Player", card: Any
++) -> "ManaCost | None":
++    """Dynamically compute the miracle cost *card* has *right now* for *player*.
++
++    This is the authoritative, non-sticky source of a card's miracle cost at
++    draw time.  It consults the active grants in play rather than relying solely
++    on a pre-applied (and potentially stale) stamp:
++
++    * Every permanent on *player*'s battlefield that exposes a callable
++      ``miracle_cost(game, card)`` grant method is asked whether it grants a
++      miracle cost to *card* (e.g. Lorehold grants ``{2}`` to instant/sorcery
++      cards in its controller's hand).  The first non-``None`` result wins.
++    * If a grant applies, the stamp is (re)synchronised onto the card via
++      :func:`set_miracle_cost` so downstream readers stay consistent, and the
++      cost is returned.
++    * If NO grant applies, any previously-applied stamp is cleared via
++      :func:`clear_miracle_cost` and ``None`` is returned.  This is what makes
++      the grant end when the granter leaves play (or the card leaves the hand):
++      a card stamped earlier no longer offers miracle once no granter is active.
++
++    The drawn *card* is in *player*'s hand at draw time, so battlefield grants
++    scoped to "instant/sorcery cards in your hand" (like Lorehold's) see it.
++    """
++    granted: "ManaCost | None" = None
++    battlefield = game.get_battlefield(player)
++    for permanent in battlefield.get_all():
++        grant = getattr(permanent, _MIRACLE_COST_ATTR, None)
++        if not callable(grant):
++            continue
++        try:
++            cost = grant(game, card)
++        except TypeError:
++            # Not a (game, card) grant method — skip defensively.
++            continue
++        if cost is not None:
++            granted = cost
++            break
++
++    if granted is not None:
++        set_miracle_cost(card, granted)
++        return granted
++
++    # No active granter: drop any stale stamp so the grant is not sticky.
++    if get_miracle_cost(card) is not None:
++        clear_miracle_cost(card)
++    return None
++
++
++def _is_active_player(game: "GameState", player: "Player") -> bool:
++    """Return ``True`` if *player* is the game's current active player.
++
++    Miracle's offer is presented on the drawing player's own turn (their draw
++    step or a draw effect they control on their turn).  Draws taken during
++    another player's turn (e.g. a loot effect resolving on an opponent's
++    upkeep) are not offered a miracle cast here.  When the game exposes no
++    active-player information we conservatively treat the draw as eligible.
++    """
++    active = getattr(game, "active_player", None)
++    if active is None:
++        return True
++    return active is player
++
++
++def is_first_draw_this_turn(player: "Player") -> bool:
++    """Return ``True`` if at most one card has been drawn by *player* this turn.
++
++    Miracle keys off "the first card you've drawn this turn".  The draw helper
++    (:func:`engine.game.draw_card`) increments ``player.cards_drawn_this_turn``
++    *before* firing the draw trigger, so when this is evaluated at draw time the
++    counter reads ``1`` for the first draw of the turn.
++    """
++    count = getattr(player, "cards_drawn_this_turn", 0)
++    return count <= 1
++
++
++def can_miracle_cast(player: "Player", card: Any) -> bool:
++    """Return ``True`` if *card* may be miracle-cast as it is drawn.
++
++    Requires both that *card* carries an assigned miracle cost and that it is
++    the first card *player* has drawn this turn.
++    """
++    if get_miracle_cost(card) is None:
++        return False
++    return is_first_draw_this_turn(player)
++
++
++def offer_miracle(game: "GameState", player: "Player", card: Any) -> bool:
++    """Draw-time miracle hook — offer to cast the just-drawn *card* for miracle.
++
++    Returns ``True`` if the card was miracle-cast (put on the stack), ``False``
++    otherwise.  No-op (returns ``False``) when the card has no miracle cost or
++    it is not the first card drawn this turn.
++
++    The optionality is driven by ``player.choose_yes_no`` (the "you may"
++    clause).  On a yes, the card is cast for its miracle cost via the
++    alternative-cost cast path.
++
++    The miracle cost is derived DYNAMICALLY from the grants active right now
++    (see :func:`derive_miracle_cost`), so a naturally-drawn card gets the offer
++    with no manual pre-stamping, and a stale stamp left over from a granter that
++    has since left play does NOT produce an offer.
++
++    The offer is scoped to the *active player*'s own draw (their draw step / a
++    draw effect on their turn).  Draws taken on another player's turn — e.g. a
++    looting effect that resolves during an opponent's upkeep — do not present a
++    miracle offer here.
++    """
++    if not _is_active_player(game, player):
++        return False
++
++    cost = derive_miracle_cost(game, player, card)
++    if cost is None:
++        return False
++    if not is_first_draw_this_turn(player):
++        return False
++
++    name = getattr(card, "name", "card")
++    if hasattr(player, "choose_yes_no"):
++        if not player.choose_yes_no(f"Cast {name!r} for its miracle cost?"):
++            return False
++
++    from engine.casting import cast_spell_alternative, CastingError
++
++    try:
++        cast_spell_alternative(game, player, card, cost)
++    except CastingError:
++        return False
++    return True
+diff -ruN a/protection.py b/protection.py
+--- a/protection.py	2026-05-25 16:43:11.729292098 +0000
++++ b/protection.py	2026-06-01 10:52:02.099999471 +0000
+@@ -46,8 +46,11 @@
+ 
+     Colourless objects return an empty set.
+     """
+-    # Explicit colors attribute (takes precedence)
+-    if hasattr(obj, "colors") and obj.colors is not None:
++    # Explicit colors attribute (takes precedence). A present-but-empty set is
++    # treated as "no explicit color information" so that derivation from the
++    # mana cost or a singular ``color`` attribute can still apply (cards now
++    # always carry a ``colors`` set, defaulting to empty for colorless cards).
++    if hasattr(obj, "colors") and obj.colors:
+         return set(obj.colors)
+ 
+     # Derive from mana cost pips
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/abilities.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/abilities.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/abilities.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/abilities.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/basic_lands.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/basic_lands.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/card.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/card.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/card.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/card.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/casting.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/casting.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/casting.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/casting.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/combat.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/combat.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/combat.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/combat.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/continuous_effects.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/continuous_effects.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/continuous_effects.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/continuous_effects.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/creatures.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/creatures.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/creatures.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/creatures.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/events.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/events.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/events.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/events.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/game.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/game.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game_state.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/game_state.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game_state.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/game_state.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/__init__.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/__init__.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/__init__.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/__init__.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/mana.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/mana.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/mana.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/mana.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/miracle.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/miracle.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/player.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/player.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/player.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/player.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/protection.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/protection.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/protection.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/protection.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/replacement_effects.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/replacement_effects.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/replacement_effects.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/replacement_effects.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/stack.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/stack.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/stack.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/stack.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/state_based_actions.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/state_based_actions.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/state_based_actions.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/state_based_actions.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/triggers.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/triggers.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/triggers.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/triggers.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/turn.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/turn.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/turn.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/turn.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/types.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/types.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/types.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/types.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/zones.cpython-311.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/zones.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/zones.cpython-312.pyc and /tmp/silverquillm_run_6zedv4rg/workspace/engine/__pycache__/zones.cpython-312.pyc differ
+diff -ruN a/turn.py b/turn.py
+--- a/turn.py	2026-05-25 16:43:11.729292098 +0000
++++ b/turn.py	2026-06-01 11:46:05.581606574 +0000
+@@ -41,6 +41,15 @@
+     # Reset land plays for the active player
+     active.land_plays_remaining = 1
+ 
++    # Reset the per-turn draw counter for ALL players so the miracle
++    # "first card drawn this turn" gating (rule 702.94) resets each turn.
++    # Note: this fires at the ACTIVE player's untap, i.e. once per turn
++    # cycle.  For miracle's "first card you drew this turn" this per-turn-
++    # rotation reset is the desired semantics; a strict per-player-turn
++    # counter would need a different reset point.
++    for player in game.players:
++        player.cards_drawn_this_turn = 0
++
+ 
+ def _do_draw_step(game: GameState) -> None:
+     """Perform draw step actions: active player draws a card.
+@@ -204,6 +213,14 @@
+             game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+         elif current == (Phase.BEGINNING, Step.DRAW):
+             _do_draw_step(game)
++        elif game.phase in (Phase.PRECOMBAT_MAIN, Phase.POSTCOMBAT_MAIN) and game.step is None:
++            from engine.events import BeginningOfMainPhaseTriggeredEvent
++            game.trigger_manager.fire_event(
++                game,
++                BeginningOfMainPhaseTriggeredEvent(
++                    player=game.active_player, phase=game.phase
++                ),
++            )
+         elif game.phase == Phase.COMBAT and game.step is not None:
+             _do_combat_step(game, game.step)
+         elif current == (Phase.ENDING, Step.CLEANUP):

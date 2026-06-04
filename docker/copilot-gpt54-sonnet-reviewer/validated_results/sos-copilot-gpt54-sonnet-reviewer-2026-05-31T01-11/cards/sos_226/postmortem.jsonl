@@ -1,2 +1,2 @@
-{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_icta4s6z/tests.py::TestCasualty::test_casualty_paid_copies_the_spell"}
-{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_icta4s6z/tests.py::TestCasualty::test_zero_power_creature_is_not_a_legal_casualty_sacrifice"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cayxkmpi/tests.py::TestCasualty::test_casualty_paid_copies_the_spell"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cayxkmpi/tests.py::TestCasualty::test_zero_power_creature_is_not_a_legal_casualty_sacrifice"}

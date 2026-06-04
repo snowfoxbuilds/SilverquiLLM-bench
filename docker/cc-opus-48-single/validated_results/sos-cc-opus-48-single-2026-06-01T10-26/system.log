@@ -1,0 +1,5 @@
+[10:26:00] Starting entrypoint
+[10:26:00] Installed skills into /home/node/.claude/skills
+[10:26:00] Installed agents into /home/node/.claude/agents
+[10:26:00] Starting claude code session
+[12:22:55] Session complete with exit code 0

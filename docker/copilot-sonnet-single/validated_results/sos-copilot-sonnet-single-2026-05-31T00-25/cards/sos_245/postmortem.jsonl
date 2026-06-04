@@ -1,1 +1,1 @@
-{"collector_number": "sos_245", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bx_oe9zq/tests.py::TestGrantedAffinity::test_granted_affinity_reduces_instant_cost"}
+{"collector_number": "sos_245", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ydtzieir/tests.py::TestGrantedAffinity::test_granted_affinity_reduces_instant_cost"}

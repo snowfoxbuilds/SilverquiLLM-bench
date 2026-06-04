@@ -1,2 +1,2 @@
-{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2jce4hdw/tests.py::TestCastBehaviour::test_exiled_card_may_be_cast_for_free"}
-{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2jce4hdw/tests.py::TestParadigmRecurrence::test_paradigm_recurrence_casts_copy_from_exile"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4bk4pkne/tests.py::TestCastBehaviour::test_exiled_card_may_be_cast_for_free"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4bk4pkne/tests.py::TestParadigmRecurrence::test_paradigm_recurrence_casts_copy_from_exile"}

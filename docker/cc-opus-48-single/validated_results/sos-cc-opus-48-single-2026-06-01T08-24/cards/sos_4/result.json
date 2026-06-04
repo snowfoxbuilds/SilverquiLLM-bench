@@ -1,0 +1,33 @@
+{
+  "card_id": "sos_4",
+  "card_name": "Together as One",
+  "tests_passed": 5,
+  "tests_failed": 0,
+  "tests_total": 5,
+  "pass_rate": 1.0,
+  "errors": [],
+  "skipped": false,
+  "test_nodes": [
+    {
+      "test_node": "tests.py::TestIdentity::test_card_identity",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestOneColorResolution::test_one_color_draw_damage_life",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestFiveColorResolution::test_five_colors_full_effect",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestZeroColorDiscriminator::test_zero_colors_no_effect",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCastLegality::test_insufficient_mana_cast_rejected",
+      "outcome": "pass"
+    }
+  ],
+  "tests_hash": "5c48cfcd997494e3367b7192eea5afb34c037bd17cb130c3472e5aa370abf5e0"
+}
