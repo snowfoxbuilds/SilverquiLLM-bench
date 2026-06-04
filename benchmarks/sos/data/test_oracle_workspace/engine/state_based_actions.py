@@ -94,10 +94,20 @@ def _sba_player_life_zero(game: GameState) -> bool:
 
 def _sba_creature_zero_toughness(game: GameState) -> bool:
     """A creature with toughness 0 or less is put into its owner's graveyard."""
+    from engine.types import CardType
+
     action_taken = False
     to_remove: list[tuple[Player, Any]] = []
     for player in game.players:
         for obj in _battlefield(game, player).get_all():
+            # Rule 704.5f applies to creatures only — a permanent that
+            # explicitly declares non-creature card types while merely
+            # *exposing* a toughness attribute (e.g. an unanimated
+            # creature-land) is not subject to this SBA.  Objects without
+            # card_types are duck-typed as creatures.
+            card_types = getattr(obj, "card_types", None)
+            if card_types is not None and CardType.CREATURE not in card_types:
+                continue
             if hasattr(obj, "toughness") and obj.toughness <= 0:
                 to_remove.append((player, obj))
     for player, obj in to_remove:
@@ -119,6 +129,14 @@ def _sba_creature_lethal_damage(game: GameState) -> bool:
     for player in game.players:
         for obj in _battlefield(game, player).get_all():
             if not hasattr(obj, "toughness") or not hasattr(obj, "damage_marked"):
+                continue
+
+            # Rules 704.5g/h apply to creatures only (objects without
+            # card_types are duck-typed as creatures).
+            from engine.types import CardType
+
+            card_types = getattr(obj, "card_types", None)
+            if card_types is not None and CardType.CREATURE not in card_types:
                 continue
 
             # Skip indestructible creatures

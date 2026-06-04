@@ -450,7 +450,6 @@ class TestDeclareBlockersExtra:
         p0._script.appendleft([blocker1, blocker2])
 
         declare_attackers(game, ["Attacker"])
-        advance_to_phase(game, Phase.COMBAT, Step.DECLARE_BLOCKERS)
         declare_blockers(game, {"Attacker": ["Blocker1", "Blocker2"]})
         assert blocker1.is_blocking
         assert blocker2.is_blocking
@@ -487,8 +486,12 @@ class TestMetaIntegrationExtra:
         assert bf.contains(bear)
 
     def test_set_board_state_advance_and_verify(self) -> None:
-        """Integration: set state, advance phases, verify state persists."""
-        game = create_game()
+        """Integration: set state, advance phases, verify state persists.
+
+        Post-Phase-18 advance_to_phase processes combat declarations from
+        the choice script, so passing through combat with an eligible
+        attacker needs a scripted (empty) attacker list."""
+        game = create_game(scripts=([[]], []))
         bear = _bear("PersistBear")
         set_board_state(game, 0, battlefield=[bear], life=10)
 
