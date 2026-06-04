@@ -6,8 +6,8 @@ The container receives the full benchmark workload — all cards, the engine, th
 
 See also:
 
-- [WORKSPACE-CONTRACT.md](https://www.notion.so/ad4d407fda954387adf7eb4ba8674371) for the canonical Workspace layout and card/engine edit contract.
-- [RUN-ARTIFACTS-AND-TELEMETRY.md](https://www.notion.so/1ffe911b65564fa6860b2a91dcc94fb5) for snapshots, telemetry, fallback, and log artifacts.
+- [WORKSPACE-CONTRACT.md](https://app.notion.com/p/ad4d407fda954387adf7eb4ba8674371) for the canonical Workspace layout and card/engine edit contract.
+- [RUN-ARTIFACTS-AND-TELEMETRY.md](https://app.notion.com/p/1ffe911b65564fa6860b2a91dcc94fb5) for snapshots, telemetry, fallback, and log artifacts.
 ## Architecture
 
 ```mermaid
@@ -33,7 +33,7 @@ flowchart TB
 
 ## Workspace Layout
 
-> **Canonical layout lives in **[WORKSPACE-CONTRACT.md](https://www.notion.so/ad4d407fda954387adf7eb4ba8674371)** → Workspace layout.** The `/workspace/` tree shown below is a superseded pre-contract draft — it predates `rulebook.txt`, `AGENTS.md`/`PROJECT_MAP.md`, `engine_tests/`, and the `fdn_`/`sos_`-prefixed card directories — kept only for narrative context and archived in Historical Context.
+> **Canonical layout lives in **[WORKSPACE-CONTRACT.md](https://app.notion.com/p/ad4d407fda954387adf7eb4ba8674371)** → Workspace layout.** The `/workspace/` tree shown below is a superseded pre-contract draft — it predates `rulebook.txt`, `AGENTS.md`/`PROJECT_MAP.md`, `engine_tests/`, and the `fdn_`/`sos_`-prefixed card directories — kept only for narrative context and archived in Historical Context.
 
 The runner stages a workspace that resembles a real codebase. Every card directory — FDN (examples) and SOS (targets) — has the same structure: `card_spec.json` and `card_impl.py`. The only difference is that FDN implementations are filled in and SOS implementations are empty templates.
 

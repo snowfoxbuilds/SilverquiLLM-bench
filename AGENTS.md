@@ -16,7 +16,7 @@ LLM benchmark that evaluates coding ability by tasking models with implementing 
 - Development phases: Phase 1 (engine port) → Phase 2 (container harness + audited tests) → Phase 3 (FDN completion + replay validation) → Phase 4 (SOS benchmark runs + leaderboard)
 ## Domain Language
 
-See [CONTEXT.md](https://www.notion.so/3a3e1d4cf0384c3cb2735ae280b71918) for the project's domain glossary.
+See [CONTEXT.md](https://app.notion.com/p/3a3e1d4cf0384c3cb2735ae280b71918) for the project's domain glossary.
 
 All specs, code, and agent instructions use these terms exactly.
 
@@ -39,6 +39,7 @@ Agent-written tests are harvested as artifacts but not scored in v1. Cross-eval 
 | `GAME-ENGINE.md` | Python port of XMage rules engine, core systems, and game state API |
 | `CARD-INTERFACE.md` | Card class hierarchy, hook methods, and supporting types |
 | `AUDITED-TEST-SUITE.md` | Test structure, test utilities API, audited test path, test harvester (v2) |
+| `AUDITED-TEST-API.md` | The sanctioned test-only engine interface for audited tests: set up, host-side `priority_loop` / `advance_to_phase`, `DeterministicPlayer` directives, assertions; canonical-only, composes/duplicates canonical behavior, no workspace-engine changes |
 | `BENCHMARK-RUNNER.md` | Host-side orchestrator: workspace staging, container launch, result harvesting, evaluation |
 | `SCORING.md` | Three evaluation dimensions, complexity weighting, leaderboard format |
 | `AGENT-CONTAINERS.md` | Docker black-box architecture, file-based contract, entrypoint design, isolation guarantees |

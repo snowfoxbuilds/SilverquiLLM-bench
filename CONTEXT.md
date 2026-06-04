@@ -68,7 +68,7 @@ All cards contained in draft booster packs for a given MTG release. A Draft Set 
 
 **DeterministicPlayer**
 
-Test player with scripted actions for reproducible game state setup. All benchmark tests use this — no AI decision-making in v1.
+Test player driven by two explicit, separate, ordered channels: a **directive queue** (`script` — per-priority `no_op` / `perform_action` / `perform_illegal_action`, consumed each time the player holds priority under the Host-Side Driver) and a **choice script** (`choices` — the canonical answer deque the engine consumes via `choose_target` / `choose` / `choose_yes_no` / `choose_card` / `assign_damage_order` for decisions raised mid-cast / mid-resolution). Reproducible, no AI decision-making in v1; a dry queue on *either* channel fails the test (`ScriptExhaustedError`), never hangs or auto-passes. Player-initiated casts/activations carry their own targets on the directive; engine-initiated (triggered) objects pull targets/choices from the choice script.
 
 *Avoid*: "test player", "mock player"
 
@@ -258,6 +258,18 @@ The `tests.py` files a coding agent writes during a Tested Mode run — one per 
 
 *Avoid*: "benchmark tests" (ambiguous — "benchmark" already names Run/Tier/Mode, and Audited Tests also serve the benchmark), "candidate tests" (reserve for promotion candidates mined from Agent Tests), "harvested tests" (Harvested Results is the post-harvest dataset; pre-harvest these are Agent Tests)
 
+**Audited Test API**
+
+The single sanctioned interface audited tests use to touch the engine, specified in [AUDITED-TEST-API.md](http://audited-test-api.md/). Four parts: set up (`set_board_state` / `PermanentSpec`), advance (Host-Side Driver `priority_loop` + sparing `advance_to_phase`), `DeterministicPlayer` directives (`CastSpell` / `CastSpellFree` / `ActivateAbility` / `PlayLand`), and `assert_*` observations. References only canonical-engine primitives and *composes or duplicates* canonical behavior (e.g. `cast_spell_from_exile` for alt-zone casts); building and using it requires no change to any workspace engine. The tests it drives still run against the oracle and each candidate engine, which may diverge — only the test *result* depends on the engine.
+
+*Avoid*: "test harness" (collides with the validation harness `tests/test_audited_against_reference.py`), "test_utils" alone (that is one module within the API)
+
+**Host-Side Driver**
+
+The `priority_loop(game)` advancer audited tests use to move the game forward by polling players for directives in APNAP order — not the engine's own all-pass auto-drain. Each iteration: check state-based actions, place triggered abilities, poll for one directive (retain-on-action), and if no one acts resolve **exactly one** stack object via `resolve_top`. Single-step resolution keeps every resolution observable; a dry directive queue or choice script raises `ScriptExhaustedError` (test fails, never hangs). Contrast `advance_to_phase`, which fast-forwards turn structure — processing turn-based actions, triggers, and end-of-turn cleanup but opening no priority windows (a triggered ability that forces a choice is still answered from the choice script).
+
+*Avoid*: "game loop" / "run loop" (`game.run()` is banned in audited tests), "auto-drain" (that is the engine's loop, which this replaces)
+
 ## Relationships
 
 - A Benchmark Run evaluates one Agent Container (one agent + one model) against one Draft Set.
@@ -289,3 +301,8 @@ The `tests.py` files a coding agent writes during a Tested Mode run — one per 
 - Audited tests call only public APIs present in the canonical engine. Tests never depend on extensions present in the Test Oracle Workspace's engine but absent from canonical — otherwise correct agent impls using different primitives would fail tests for non-correctness reasons.
 - Audited tests are authored inside the Test Oracle Workspace mirror at `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_{cn}/tests.py` and copied to the canonical audited path at `benchmarks/sos/data/tests/audited/sos/sos_{cn}/tests.py` once green against the matching Test Oracle Impl. The canonical path is what the validation harness `tests/test_audited_against_reference.py` reads from when running against agent impls.
 - Audited tests target observable game-state outcomes ("what the card does"), not card-text annotations ("what the card says"). Ability Words are not tested for presence; only the behavior described by the text following the ability word is asserted.
+- The Audited Test API is the only sanctioned way an audited test touches the engine. It references only canonical-engine primitives and composes or duplicates canonical behavior (e.g. `cast_spell_from_exile` for alt-zone casts); building and using it requires no change to any workspace engine.
+- The Host-Side Driver (`priority_loop`) advances audited tests by polling DeterministicPlayers for directives and resolving one stack object at a time; `advance_to_phase` fast-forwards turn structure (turn-based actions, triggers, end-of-turn cleanup) without opening priority windows, though a triggered ability that forces a choice is still answered from the choice script.
+- Audited tests import whatever engine they run on (`engine.*` — the oracle during validation, the candidate during evaluation); portability comes from every candidate implementing the canonical public API, not from restricting imports. The paradigm forbids private-attribute poking (`_script`, `_resolve_targets`), not engine imports.
+- Mechanics absent from the canonical engine (sos_57 `mana_spent` refund, sos_226 casualty, sos_201 miracle, sos_245 affinity, sos_1 / sos_120 graveyard→exile redirect, sos_97 coin-flip RNG) are exercised indirectly through canonical entrypoints + observable-state assertions, with RNG made deterministic test-side via seed-replacement (`game.rng = random.Random(seed)`); no mechanic-specific test-API support and no engine change.
+- Player-initiated casts/activations carry their targets on the directive; engine-initiated (triggered) objects take no directive and pull targets/choices from the choice script. `ActivateAbility` names the ability by its index into `get_activated_abilities()` / `get_loyalty_abilities()` (printed order).

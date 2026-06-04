@@ -27,7 +27,7 @@ Specifically:
 - **`docker_image`**: read order is `run_manifest.json` → resolved path's `<image-dir>` component → `run_summary.json`. All available sources are cross-checked; mismatch aborts.
 - **`--timeout`**: read from `run_manifest.json`.
 - **Snapshot fallback bool + ****`snapshot_utc`**: read from the snapshot ledger only. Do not read `run_summary.json.used_snapshot_fallback` or `run_summary.json.snapshot_utc` for this purpose.
-- **`run_status`**: read from `run_summary.json` (no alternative source). Missing-summary handling is explicit and gated by `--force-missing-summary` (see [BENCHMARK-RUNNER.md](https://www.notion.so/4780fb5302b244dfb81dc3276dec46c6) → Resume).
+- **`run_status`**: read from `run_summary.json` (no alternative source). Missing-summary handling is explicit and gated by `--force-missing-summary` (see [BENCHMARK-RUNNER.md](https://app.notion.com/p/4780fb5302b244dfb81dc3276dec46c6) → Resume).
 - **Wall-clock-used**: read from `run_summary.json` (no alternative source for v1; could derive from snapshot ledger timestamps in future).
 This makes resume staging resilient to the harvester-failed-but-workspace-is-fine case. It also makes the snapshot ledger format a stability contract: changing the ledger schema is now a breaking change for resume, not just for snapshot fallback.
 
