@@ -1,62 +1,43 @@
 {
   "card_id": "sos_13",
   "card_name": "Emeritus of Truce // Swords to Plowshares",
-  "tests_passed": 2,
-  "tests_failed": 8,
-  "tests_total": 10,
-  "pass_rate": 0.2,
+  "tests_passed": 1,
+  "tests_failed": 5,
+  "tests_total": 6,
+  "pass_rate": 0.16666666666666666,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_k3ztmfsg/tests.py::TestETBTokenCreation::test_etb_token_creation",
-    "FAILED ../../../../tmp/eval_sos_k3ztmfsg/tests.py::TestTokenCharacteristics::test_token_characteristics",
-    "FAILED ../../../../tmp/eval_sos_k3ztmfsg/tests.py::TestPreparedCastFromExile::test_prepared_cast_from_exile",
-    "FAILED ../../../../tmp/eval_sos_k3ztmfsg/tests.py::TestPreparedRejectedWithoutFlag::test_prepared_rejected_without_flag",
-    "FAILED ../../../../tmp/eval_sos_k3ztmfsg/tests.py::TestPreparedConditionEdgeCases::test_not_prepared_when_creatures_equal",
-    "FAILED ../../../../tmp/eval_sos_k3ztmfsg/tests.py::TestPreparedConditionEdgeCases::test_prepared_when_opponent_has_more",
-    "FAILED ../../../../tmp/eval_sos_k3ztmfsg/tests.py::TestPreparedFlagLifecycle::test_prepared_consumed_after_alt_cast",
-    "FAILED ../../../../tmp/eval_sos_k3ztmfsg/tests.py::TestTokenSummoningSickness::test_token_is_summoning_sick"
+    "FAILED ../../../../tmp/eval_sos_t9xzw6a1/tests.py::TestETBToken::test_etb_creates_inkling_for_target_player",
+    "FAILED ../../../../tmp/eval_sos_t9xzw6a1/tests.py::TestETBToken::test_etb_token_can_be_given_to_self",
+    "FAILED ../../../../tmp/eval_sos_t9xzw6a1/tests.py::TestPreparedBackFace::test_prepared_back_face_exiles_creature_and_grants_life",
+    "FAILED ../../../../tmp/eval_sos_t9xzw6a1/tests.py::TestPreparedBackFace::test_not_prepared_when_creature_counts_equal",
+    "FAILED ../../../../tmp/eval_sos_t9xzw6a1/tests.py::TestPreparedBackFace::test_prepared_consumed_after_back_face_cast"
   ],
   "skipped": false,
   "test_nodes": [
     {
-      "test_node": "tests.py::TestIdentity::test_identity",
+      "test_node": "tests.py::TestIdentity::test_card_identity",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestETBTokenCreation::test_etb_token_creation",
+      "test_node": "tests.py::TestETBToken::test_etb_creates_inkling_for_target_player",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestTokenCharacteristics::test_token_characteristics",
+      "test_node": "tests.py::TestETBToken::test_etb_token_can_be_given_to_self",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestPreparedCastFromExile::test_prepared_cast_from_exile",
+      "test_node": "tests.py::TestPreparedBackFace::test_prepared_back_face_exiles_creature_and_grants_life",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestPreparedRejectedWithoutFlag::test_prepared_rejected_without_flag",
+      "test_node": "tests.py::TestPreparedBackFace::test_not_prepared_when_creature_counts_equal",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestBackHalfCostNotInCMC::test_back_half_cost_not_in_cmc",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestPreparedConditionEdgeCases::test_not_prepared_when_creatures_equal",
-      "outcome": "fail"
-    },
-    {
-      "test_node": "tests.py::TestPreparedConditionEdgeCases::test_prepared_when_opponent_has_more",
-      "outcome": "fail"
-    },
-    {
-      "test_node": "tests.py::TestPreparedFlagLifecycle::test_prepared_consumed_after_alt_cast",
-      "outcome": "fail"
-    },
-    {
-      "test_node": "tests.py::TestTokenSummoningSickness::test_token_is_summoning_sick",
+      "test_node": "tests.py::TestPreparedBackFace::test_prepared_consumed_after_back_face_cast",
       "outcome": "fail"
     }
   ],
-  "tests_hash": "041089b2ed20945cb3a0b5128a6bffbcac858cc3454797ea0d54551f47af699a"
+  "tests_hash": "e0c0e65c288bb61e2643f7446c8355897bbc359bf5828da255487ec3476a27e3"
 }

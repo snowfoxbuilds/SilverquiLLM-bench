@@ -1,73 +1,55 @@
 {
   "card_id": "sos_245",
   "card_name": "Witherbloom, the Balancer",
-  "tests_passed": 11,
-  "tests_failed": 3,
-  "tests_total": 14,
-  "pass_rate": 0.7857142857142857,
+  "tests_passed": 9,
+  "tests_failed": 1,
+  "tests_total": 10,
+  "pass_rate": 0.9,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_iqr47mgs/tests.py::TestAffinityGrantToInstantsAndSorceries::test_instant_gets_reduction",
-    "FAILED ../../../../tmp/eval_sos_iqr47mgs/tests.py::TestAffinityGrantToInstantsAndSorceries::test_sorcery_gets_reduction",
-    "FAILED ../../../../tmp/eval_sos_iqr47mgs/tests.py::TestGrantRemovedWhenWitherbloomLeaves::test_removal_ends_grant"
+    "FAILED ../../../../tmp/eval_sos__guy46xr/tests.py::TestGrantedAffinity::test_granted_affinity_reduces_instant_cost"
   ],
   "skipped": false,
   "test_nodes": [
     {
-      "test_node": "tests.py::TestIdentity::test_name_and_mana_cost",
+      "test_node": "tests.py::TestIdentity::test_card_identity",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestIdentity::test_power_toughness",
+      "test_node": "tests.py::TestOwnAffinity::test_own_affinity_reduces_cost_by_creature_count",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestIdentity::test_types_and_supertypes",
+      "test_node": "tests.py::TestOwnAffinity::test_own_affinity_reduction_is_not_one_more",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestIdentity::test_colors",
+      "test_node": "tests.py::TestOwnAffinity::test_own_affinity_clamps_at_generic_portion",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestKeywords::test_has_flying",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestKeywords::test_has_deathtouch",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestAffinityReducesOwnCost::test_reduction_equals_creature_count",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestAffinityReducesOwnCost::test_no_creatures_no_reduction",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestAffinityReducesOwnCost::test_reduction_clamped_to_generic",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestAffinityGrantToInstantsAndSorceries::test_instant_gets_reduction",
+      "test_node": "tests.py::TestGrantedAffinity::test_granted_affinity_reduces_instant_cost",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestAffinityGrantToInstantsAndSorceries::test_sorcery_gets_reduction",
-      "outcome": "fail"
-    },
-    {
-      "test_node": "tests.py::TestNoGrantToCreatureSpells::test_creature_spell_no_grant",
+      "test_node": "tests.py::TestGrantedAffinity::test_granted_affinity_reduction_is_not_one_more",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestNoGrantToOpponent::test_opponent_instant_no_reduction",
+      "test_node": "tests.py::TestGrantedAffinity::test_grant_does_not_apply_to_creature_spells",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestGrantRemovedWhenWitherbloomLeaves::test_removal_ends_grant",
-      "outcome": "fail"
+      "test_node": "tests.py::TestGrantedAffinity::test_grant_does_not_apply_to_opponents_spells",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCombatKeywordsByOutcome::test_flying_evades_ground_blocker_by_outcome",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCombatKeywordsByOutcome::test_deathtouch_fells_tough_blocker_by_outcome",
+      "outcome": "pass"
     }
   ],
-  "tests_hash": "c9332f3f6000685a6b05032d94fab62998be8d54923485ee63ca71a29da4e210"
+  "tests_hash": "abd06914c5996a2cdeea2c247fd6faf2ad28188918a0eb7f576e60d34ce044fb"
 }

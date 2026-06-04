@@ -1,3 +1,7 @@
-{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gmr5p2cl/tests.py::TestManaAbilities::test_mana_adds_any_color"}
-{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gmr5p2cl/tests.py::TestPersistentAnimation::test_animation_cleared_on_leaves_play"}
-{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gmr5p2cl/tests.py::TestSpellCastTrigger::test_trigger_inactive_when_unanimated"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4j2obh28/tests.py::TestManaAbilities::test_second_ability_costs_life_and_taps"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4j2obh28/tests.py::TestManaAbilities::test_restricted_mana_pays_an_instant"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4j2obh28/tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4j2obh28/tests.py::TestAnimation::test_animation_requires_five_mana"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4j2obh28/tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4j2obh28/tests.py::TestSpellCastBoost::test_two_spells_stack_boosts"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4j2obh28/tests.py::TestSpellCastBoost::test_no_boost_when_not_animated"}

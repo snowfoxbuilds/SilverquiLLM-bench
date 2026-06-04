@@ -1,3 +1,1 @@
-{"collector_number": "sos_245", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iqr47mgs/tests.py::TestAffinityGrantToInstantsAndSorceries::test_instant_gets_reduction"}
-{"collector_number": "sos_245", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iqr47mgs/tests.py::TestAffinityGrantToInstantsAndSorceries::test_sorcery_gets_reduction"}
-{"collector_number": "sos_245", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iqr47mgs/tests.py::TestGrantRemovedWhenWitherbloomLeaves::test_removal_ends_grant"}
+{"collector_number": "sos_245", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__guy46xr/tests.py::TestGrantedAffinity::test_granted_affinity_reduces_instant_cost"}

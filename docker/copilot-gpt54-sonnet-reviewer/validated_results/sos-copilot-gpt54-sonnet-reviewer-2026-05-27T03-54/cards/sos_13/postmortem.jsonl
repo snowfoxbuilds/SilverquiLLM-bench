@@ -1,4 +1,3 @@
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0bj_xw61/tests.py::TestTokenCharacteristics::test_token_characteristics"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0bj_xw61/tests.py::TestPreparedCastFromExile::test_prepared_cast_from_exile"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0bj_xw61/tests.py::TestPreparedConditionEdgeCases::test_prepared_when_opponent_has_more"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0bj_xw61/tests.py::TestPreparedFlagLifecycle::test_prepared_consumed_after_alt_cast"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e16pmphc/tests.py::TestETBToken::test_etb_creates_inkling_for_target_player"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e16pmphc/tests.py::TestPreparedBackFace::test_prepared_back_face_exiles_creature_and_grants_life"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e16pmphc/tests.py::TestPreparedBackFace::test_prepared_consumed_after_back_face_cast"}

@@ -1,54 +1,40 @@
 {
   "card_id": "sos_120",
   "card_name": "Improvisation Capstone",
-  "tests_passed": 5,
-  "tests_failed": 4,
-  "tests_total": 9,
-  "pass_rate": 0.5555555555555556,
+  "tests_passed": 4,
+  "tests_failed": 2,
+  "tests_total": 6,
+  "pass_rate": 0.6666666666666666,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_ti1fh7ed/tests.py::TestCastChosenExiledCardsForFree::test_cast_exiled_card_free",
-    "FAILED ../../../../tmp/eval_sos_ti1fh7ed/tests.py::TestParadigmExilesSelf::test_paradigm_exiles_self_on_resolution",
-    "FAILED ../../../../tmp/eval_sos_ti1fh7ed/tests.py::TestParadigmRecurringCast::test_recurring_cast_across_3_turns",
-    "FAILED ../../../../tmp/eval_sos_ti1fh7ed/tests.py::TestParadigmOfferCanBeDeclined::test_paradigm_offer_declined"
+    "FAILED ../../../../tmp/eval_sos_74upku99/tests.py::TestCastBehaviour::test_exiled_card_may_be_cast_for_free",
+    "FAILED ../../../../tmp/eval_sos_74upku99/tests.py::TestParadigmRecurrence::test_paradigm_recurrence_casts_copy_from_exile"
   ],
   "skipped": false,
   "test_nodes": [
     {
-      "test_node": "tests.py::TestIdentity::test_identity",
+      "test_node": "tests.py::TestIdentity::test_card_identity",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestExileFromLibraryUntilThreshold::test_exile_until_mv_sum_ge_4",
+      "test_node": "tests.py::TestCastBehaviour::test_cast_exiles_until_mv_threshold_and_self_exiles",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestDoesNotTargetOpponentCreatures::test_no_targets",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestDoesNotTargetOpponentCreatures::test_resolution_does_not_affect_opponent_board",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestCastChosenExiledCardsForFree::test_cast_exiled_card_free",
+      "test_node": "tests.py::TestCastBehaviour::test_exiled_card_may_be_cast_for_free",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestCastChosenExiledCardsForFree::test_decline_cast_exiled_card",
+      "test_node": "tests.py::TestCastBehaviour::test_exiled_card_cast_may_be_declined",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestParadigmExilesSelf::test_paradigm_exiles_self_on_resolution",
+      "test_node": "tests.py::TestParadigmRecurrence::test_paradigm_recurrence_casts_copy_from_exile",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestParadigmRecurringCast::test_recurring_cast_across_3_turns",
-      "outcome": "fail"
-    },
-    {
-      "test_node": "tests.py::TestParadigmOfferCanBeDeclined::test_paradigm_offer_declined",
-      "outcome": "fail"
+      "test_node": "tests.py::TestParadigmRecurrence::test_paradigm_recurrence_may_be_declined",
+      "outcome": "pass"
     }
   ],
-  "tests_hash": "bde8803648b674d76c2c2c228446dc4737ea32d69600d06fa565edbf716590a9"
+  "tests_hash": "542db4c3c3797c5e26c1046f533ab299b36a4d7b2864b0399cf79db2424ac3bf"
 }

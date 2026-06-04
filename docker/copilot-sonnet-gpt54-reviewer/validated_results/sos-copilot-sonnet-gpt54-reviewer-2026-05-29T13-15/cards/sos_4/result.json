@@ -1,39 +1,19 @@
 {
   "card_id": "sos_4",
   "card_name": "Together as One",
-  "tests_passed": 7,
+  "tests_passed": 2,
   "tests_failed": 3,
-  "tests_total": 10,
-  "pass_rate": 0.7,
+  "tests_total": 5,
+  "pass_rate": 0.4,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_s21g8nqv/tests.py::TestOneColorResolution::test_one_color_draw_damage_life",
-    "FAILED ../../../../tmp/eval_sos_s21g8nqv/tests.py::TestFiveColorResolution::test_five_color_full_effect",
-    "FAILED ../../../../tmp/eval_sos_s21g8nqv/tests.py::TestFizzleKeepsLegalEffects::test_damage_target_illegal_draw_and_life_still_resolve"
+    "FAILED ../../../../tmp/eval_sos_awbmtoc2/tests.py::TestOneColorResolution::test_one_color_draw_damage_life",
+    "FAILED ../../../../tmp/eval_sos_awbmtoc2/tests.py::TestFiveColorResolution::test_five_colors_full_effect",
+    "FAILED ../../../../tmp/eval_sos_awbmtoc2/tests.py::TestZeroColorDiscriminator::test_zero_colors_no_effect"
   ],
   "skipped": false,
   "test_nodes": [
     {
-      "test_node": "tests.py::TestIdentity::test_is_sorcery_subclass",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestIdentity::test_card_type_sorcery",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestIdentity::test_mana_cost_cmc_6",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestIdentity::test_colorless_identity",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestIdentity::test_name",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestIdentity::test_no_converge_keyword",
+      "test_node": "tests.py::TestIdentity::test_card_identity",
       "outcome": "pass"
     },
     {
@@ -41,17 +21,17 @@
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestFiveColorResolution::test_five_color_full_effect",
+      "test_node": "tests.py::TestFiveColorResolution::test_five_colors_full_effect",
       "outcome": "fail"
     },
     {
       "test_node": "tests.py::TestZeroColorDiscriminator::test_zero_colors_no_effect",
-      "outcome": "pass"
+      "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestFizzleKeepsLegalEffects::test_damage_target_illegal_draw_and_life_still_resolve",
-      "outcome": "fail"
+      "test_node": "tests.py::TestCastLegality::test_insufficient_mana_cast_rejected",
+      "outcome": "pass"
     }
   ],
-  "tests_hash": "741d0e84fa90a1e742662aafe554fd5c0c18914b40da45fb3b9922f151758400"
+  "tests_hash": "5c48cfcd997494e3367b7192eea5afb34c037bd17cb130c3472e5aa370abf5e0"
 }

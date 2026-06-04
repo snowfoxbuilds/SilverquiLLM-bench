@@ -1,0 +1,3 @@
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_61718vwp/tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_61718vwp/tests.py::TestRefund::test_refund_amount_tracks_opponents_spell_cost"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_61718vwp/tests.py::TestFizzle::test_fizzle_when_target_already_countered"}

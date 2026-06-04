@@ -1,96 +1,77 @@
 {
   "card_id": "sos_257",
   "card_name": "Great Hall of the Biblioplex",
-  "tests_passed": 3,
-  "tests_failed": 14,
-  "tests_total": 17,
-  "pass_rate": 0.17647058823529413,
+  "tests_passed": 2,
+  "tests_failed": 11,
+  "tests_total": 13,
+  "pass_rate": 0.15384615384615385,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_578z55k0/tests.py::TestManaAbilities::test_mana_adds_colorless",
-    "FAILED ../../../../tmp/eval_sos_578z55k0/tests.py::TestManaAbilities::test_mana_adds_any_color",
-    "FAILED ../../../../tmp/eval_sos_578z55k0/tests.py::TestPersistentAnimation::test_animation_persists_across_turns",
-    "FAILED ../../../../tmp/eval_sos_578z55k0/tests.py::TestPersistentAnimation::test_no_op_when_already_creature",
-    "FAILED ../../../../tmp/eval_sos_578z55k0/tests.py::TestPersistentAnimation::test_animation_cleared_on_leaves_play",
-    "FAILED ../../../../tmp/eval_sos_578z55k0/tests.py::TestPersistentAnimation::test_activation_cost_payment",
-    "FAILED ../../../../tmp/eval_sos_578z55k0/tests.py::TestPersistentAnimation::test_animated_can_attack",
-    "FAILED ../../../../tmp/eval_sos_578z55k0/tests.py::TestPersistentAnimation::test_animation_gives_creature_type",
-    "FAILED ../../../../tmp/eval_sos_578z55k0/tests.py::TestSpellCastTrigger::test_boost_on_instant",
-    "FAILED ../../../../tmp/eval_sos_578z55k0/tests.py::TestSpellCastTrigger::test_boost_on_sorcery",
-    "FAILED ../../../../tmp/eval_sos_578z55k0/tests.py::TestSpellCastTrigger::test_opponent_cast_filter",
-    "FAILED ../../../../tmp/eval_sos_578z55k0/tests.py::TestSpellCastTrigger::test_end_of_turn_revert",
-    "FAILED ../../../../tmp/eval_sos_578z55k0/tests.py::TestSpellCastTrigger::test_trigger_inactive_when_unanimated",
-    "FAILED ../../../../tmp/eval_sos_578z55k0/tests.py::TestSpellCastTrigger::test_multiple_triggers_stack"
+    "FAILED ../../../../tmp/eval_sos__a9ck7w6/tests.py::TestManaAbilities::test_first_ability_adds_colorless",
+    "FAILED ../../../../tmp/eval_sos__a9ck7w6/tests.py::TestManaAbilities::test_second_ability_costs_life_and_taps",
+    "FAILED ../../../../tmp/eval_sos__a9ck7w6/tests.py::TestManaAbilities::test_restricted_mana_pays_an_instant",
+    "FAILED ../../../../tmp/eval_sos__a9ck7w6/tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature",
+    "FAILED ../../../../tmp/eval_sos__a9ck7w6/tests.py::TestAnimation::test_animation_makes_a_2_4_wizard_that_is_still_a_land",
+    "FAILED ../../../../tmp/eval_sos__a9ck7w6/tests.py::TestAnimation::test_animation_requires_five_mana",
+    "FAILED ../../../../tmp/eval_sos__a9ck7w6/tests.py::TestAnimation::test_reanimation_is_a_gated_noop",
+    "FAILED ../../../../tmp/eval_sos__a9ck7w6/tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup",
+    "FAILED ../../../../tmp/eval_sos__a9ck7w6/tests.py::TestSpellCastBoost::test_opponent_spell_does_not_boost",
+    "FAILED ../../../../tmp/eval_sos__a9ck7w6/tests.py::TestSpellCastBoost::test_two_spells_stack_boosts",
+    "FAILED ../../../../tmp/eval_sos__a9ck7w6/tests.py::TestSpellCastBoost::test_no_boost_when_not_animated"
   ],
   "skipped": false,
   "test_nodes": [
     {
-      "test_node": "tests.py::TestIdentity::test_identity",
+      "test_node": "tests.py::TestIdentity::test_card_identity",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestManaAbilities::test_mana_adds_colorless",
-      "outcome": "fail"
-    },
-    {
-      "test_node": "tests.py::TestManaAbilities::test_mana_adds_any_color",
-      "outcome": "fail"
-    },
-    {
-      "test_node": "tests.py::TestManaAbilities::test_restricted_spend_legal",
+      "test_node": "tests.py::TestLandDrop::test_played_as_the_one_land_per_turn",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestManaAbilities::test_restricted_spend_illegal",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestPersistentAnimation::test_animation_persists_across_turns",
+      "test_node": "tests.py::TestManaAbilities::test_first_ability_adds_colorless",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestPersistentAnimation::test_no_op_when_already_creature",
+      "test_node": "tests.py::TestManaAbilities::test_second_ability_costs_life_and_taps",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestPersistentAnimation::test_animation_cleared_on_leaves_play",
+      "test_node": "tests.py::TestManaAbilities::test_restricted_mana_pays_an_instant",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestPersistentAnimation::test_activation_cost_payment",
+      "test_node": "tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestPersistentAnimation::test_animated_can_attack",
+      "test_node": "tests.py::TestAnimation::test_animation_makes_a_2_4_wizard_that_is_still_a_land",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestPersistentAnimation::test_animation_gives_creature_type",
+      "test_node": "tests.py::TestAnimation::test_animation_requires_five_mana",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestSpellCastTrigger::test_boost_on_instant",
+      "test_node": "tests.py::TestAnimation::test_reanimation_is_a_gated_noop",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestSpellCastTrigger::test_boost_on_sorcery",
+      "test_node": "tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestSpellCastTrigger::test_opponent_cast_filter",
+      "test_node": "tests.py::TestSpellCastBoost::test_opponent_spell_does_not_boost",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestSpellCastTrigger::test_end_of_turn_revert",
+      "test_node": "tests.py::TestSpellCastBoost::test_two_spells_stack_boosts",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestSpellCastTrigger::test_trigger_inactive_when_unanimated",
-      "outcome": "fail"
-    },
-    {
-      "test_node": "tests.py::TestSpellCastTrigger::test_multiple_triggers_stack",
+      "test_node": "tests.py::TestSpellCastBoost::test_no_boost_when_not_animated",
       "outcome": "fail"
     }
   ],
-  "tests_hash": "1ac07ed4e03c2053232f2ede8b403575a6fd28a27cb1f1ad5067270bbdf93e05"
+  "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6"
 }

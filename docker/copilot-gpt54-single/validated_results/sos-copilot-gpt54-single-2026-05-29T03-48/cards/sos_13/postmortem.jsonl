@@ -1,6 +1,5 @@
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s157ky6k/tests.py::TestTokenCharacteristics::test_token_characteristics"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s157ky6k/tests.py::TestPreparedCastFromExile::test_prepared_cast_from_exile"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s157ky6k/tests.py::TestPreparedRejectedWithoutFlag::test_prepared_rejected_without_flag"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s157ky6k/tests.py::TestPreparedConditionEdgeCases::test_not_prepared_when_creatures_equal"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s157ky6k/tests.py::TestPreparedConditionEdgeCases::test_prepared_when_opponent_has_more"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s157ky6k/tests.py::TestPreparedFlagLifecycle::test_prepared_consumed_after_alt_cast"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_z8z_221n/tests.py::TestETBToken::test_etb_creates_inkling_for_target_player"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_z8z_221n/tests.py::TestETBToken::test_etb_token_can_be_given_to_self"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_z8z_221n/tests.py::TestPreparedBackFace::test_prepared_back_face_exiles_creature_and_grants_life"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_z8z_221n/tests.py::TestPreparedBackFace::test_not_prepared_when_creature_counts_equal"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_z8z_221n/tests.py::TestPreparedBackFace::test_prepared_consumed_after_back_face_cast"}

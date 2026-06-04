@@ -6,7 +6,7 @@
   "tests_total": 1,
   "pass_rate": 0.0,
   "errors": [
-    "ERROR ../../../../tmp/eval_sos_r0nwdctv/tests.py - ValueError: <flag 'Keyword..."
+    "ERROR ../../../../tmp/eval_sos_56_w52x5/tests.py - ValueError: <flag 'Keyword..."
   ],
   "skipped": false,
   "test_nodes": [
@@ -15,5 +15,5 @@
       "outcome": "fail"
     }
   ],
-  "tests_hash": "d9f2ee477267a6d6a1466ae68c9c2acb0d3c712c01dd1674b21e6f0161778bea"
+  "tests_hash": "6cde687bbec7844e13f26d159434d0adf616cee1245ce40ca3144846ca64b2f8"
 }

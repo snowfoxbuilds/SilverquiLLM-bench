@@ -1,99 +1,58 @@
 {
   "card_id": "sos_1",
   "card_name": "The Dawning Archaic",
-  "tests_passed": 15,
-  "tests_failed": 5,
-  "tests_total": 20,
-  "pass_rate": 0.75,
+  "tests_passed": 6,
+  "tests_failed": 4,
+  "tests_total": 10,
+  "pass_rate": 0.6,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_zgjsxe0b/tests.py::TestTheDawningArchaicAttackTriggerAccept::test_accept_casts_spell_from_gy",
-    "FAILED ../../../../tmp/eval_sos_zgjsxe0b/tests.py::TestTheDawningArchaicAttackTriggerAccept::test_accept_spell_resolves_to_exile",
-    "FAILED ../../../../tmp/eval_sos_zgjsxe0b/tests.py::TestTheDawningArchaicExileSorcery::test_sorcery_from_gy_goes_to_exile",
-    "FAILED ../../../../tmp/eval_sos_zgjsxe0b/tests.py::TestTheDawningArchaicScopeNotGlobal::test_other_spells_go_to_graveyard_normally",
-    "FAILED ../../../../tmp/eval_sos_zgjsxe0b/tests.py::TestTheDawningArchaicTargeting::test_only_chosen_card_is_exiled"
+    "FAILED ../../../../tmp/eval_sos_klr41921/tests.py::TestAttackTrigger::test_attack_trigger_casts_instant_from_graveyard_to_exile",
+    "FAILED ../../../../tmp/eval_sos_klr41921/tests.py::TestAttackTrigger::test_attack_trigger_targets_only_chosen_card",
+    "FAILED ../../../../tmp/eval_sos_klr41921/tests.py::TestAttackTrigger::test_attack_trigger_sorcery_also_exiled",
+    "FAILED ../../../../tmp/eval_sos_klr41921/tests.py::TestAttackTrigger::test_other_spells_still_go_to_graveyard"
   ],
   "skipped": false,
   "test_nodes": [
     {
-      "test_node": "tests.py::TestTheDawningArchaicIdentity::test_name",
+      "test_node": "tests.py::TestIdentity::test_card_identity",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestTheDawningArchaicIdentity::test_mana_cost",
+      "test_node": "tests.py::TestCostReduction::test_cost_reduced_by_instants_and_sorceries_in_graveyard",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestTheDawningArchaicIdentity::test_cmc",
+      "test_node": "tests.py::TestCostReduction::test_cost_reduction_is_not_one_more",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestTheDawningArchaicIdentity::test_is_creature",
+      "test_node": "tests.py::TestCostReduction::test_creatures_in_graveyard_do_not_reduce",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestTheDawningArchaicIdentity::test_legendary_supertype",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestTheDawningArchaicIdentity::test_subtypes",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestTheDawningArchaicIdentity::test_reach_keyword",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestTheDawningArchaicIdentity::test_power_toughness",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestTheDawningArchaicIdentity::test_colorless",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestTheDawningArchaicCostReduction::test_no_instants_or_sorceries_in_gy",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestTheDawningArchaicCostReduction::test_counts_instants_in_gy",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestTheDawningArchaicCostReduction::test_counts_sorceries_in_gy",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestTheDawningArchaicCostReduction::test_does_not_count_creatures",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestTheDawningArchaicAttackTriggerDecline::test_decline_does_not_cast_from_gy",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestTheDawningArchaicAttackTriggerDecline::test_decline_leaves_stack_empty",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestTheDawningArchaicAttackTriggerAccept::test_accept_casts_spell_from_gy",
+      "test_node": "tests.py::TestAttackTrigger::test_attack_trigger_casts_instant_from_graveyard_to_exile",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestTheDawningArchaicAttackTriggerAccept::test_accept_spell_resolves_to_exile",
+      "test_node": "tests.py::TestAttackTrigger::test_attack_trigger_may_be_declined",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestAttackTrigger::test_attack_trigger_targets_only_chosen_card",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestTheDawningArchaicExileSorcery::test_sorcery_from_gy_goes_to_exile",
+      "test_node": "tests.py::TestAttackTrigger::test_attack_trigger_sorcery_also_exiled",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestTheDawningArchaicScopeNotGlobal::test_other_spells_go_to_graveyard_normally",
-      "outcome": "fail"
+      "test_node": "tests.py::TestAttackTrigger::test_no_trigger_without_instant_or_sorcery_in_graveyard",
+      "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestTheDawningArchaicTargeting::test_only_chosen_card_is_exiled",
+      "test_node": "tests.py::TestAttackTrigger::test_other_spells_still_go_to_graveyard",
       "outcome": "fail"
     }
   ],
-  "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81"
+  "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a"
 }

@@ -1,0 +1,4 @@
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nrh5klbv/tests.py::TestLandDrop::test_played_as_the_one_land_per_turn"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nrh5klbv/tests.py::TestManaAbilities::test_second_ability_costs_life_and_taps"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nrh5klbv/tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nrh5klbv/tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup"}

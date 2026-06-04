@@ -1,5 +1,3 @@
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_imen4pbc/tests.py::TestTargeting::test_get_targets_returns_stack_spells"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_imen4pbc/tests.py::TestTargeting::test_get_targets_excludes_permanents"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_imen4pbc/tests.py::TestTargeting::test_get_targets_excludes_empty_stack"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_imen4pbc/tests.py::TestCounter::test_fizzle_when_target_removed"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_imen4pbc/tests.py::TestRefund::test_no_refund_when_fizzled"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gl_1qf_f/tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gl_1qf_f/tests.py::TestRefund::test_refund_amount_tracks_opponents_spell_cost"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gl_1qf_f/tests.py::TestFizzle::test_fizzle_when_target_already_countered"}

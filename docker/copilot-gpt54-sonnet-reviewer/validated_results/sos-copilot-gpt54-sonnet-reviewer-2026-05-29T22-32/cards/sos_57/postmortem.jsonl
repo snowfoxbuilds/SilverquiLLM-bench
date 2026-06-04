@@ -1,8 +1,1 @@
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ehc80hc2/tests.py::TestTargeting::test_get_targets_returns_stack_spells"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ehc80hc2/tests.py::TestTargeting::test_get_targets_excludes_permanents"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ehc80hc2/tests.py::TestTargeting::test_get_targets_excludes_empty_stack"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ehc80hc2/tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ehc80hc2/tests.py::TestRefund::test_refund_amount_equals_mana_spent"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ehc80hc2/tests.py::TestRefund::test_no_refund_on_opponent_main_phase"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ehc80hc2/tests.py::TestRefund::test_refund_fires_only_once"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ehc80hc2/tests.py::TestRefund::test_refund_locked_in_when_wizard_leaves_before_next_main"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f5atg8fh/tests.py::TestFizzle::test_fizzle_when_target_already_countered"}

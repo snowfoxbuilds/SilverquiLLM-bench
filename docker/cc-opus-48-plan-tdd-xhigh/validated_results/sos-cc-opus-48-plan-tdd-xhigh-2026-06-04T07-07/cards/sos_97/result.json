@@ -1,0 +1,54 @@
+{
+  "card_id": "sos_97",
+  "card_name": "Ral Zarek, Guest Lecturer",
+  "tests_passed": 5,
+  "tests_failed": 4,
+  "tests_total": 9,
+  "pass_rate": 0.5555555555555556,
+  "errors": [
+    "FAILED ../../../../tmp/eval_sos_z6hn2a9n/tests.py::TestMinusOne::test_minus_one_targeted_player_discards",
+    "FAILED ../../../../tmp/eval_sos_z6hn2a9n/tests.py::TestMinusTwo::test_minus_two_returns_creature_from_graveyard",
+    "FAILED ../../../../tmp/eval_sos_z6hn2a9n/tests.py::TestUltimate::test_ultimate_skips_turns_per_seeded_coin_flips",
+    "FAILED ../../../../tmp/eval_sos_z6hn2a9n/tests.py::TestLoyaltyLegality::test_planeswalker_dies_at_zero_loyalty"
+  ],
+  "skipped": false,
+  "test_nodes": [
+    {
+      "test_node": "tests.py::TestIdentity::test_card_identity",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestPlusOne::test_plus_one_surveil_both_to_graveyard",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestPlusOne::test_plus_one_surveil_keep_one_on_top",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestMinusOne::test_minus_one_targeted_player_discards",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestMinusTwo::test_minus_two_returns_creature_from_graveyard",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestUltimate::test_ultimate_skips_turns_per_seeded_coin_flips",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestLoyaltyLegality::test_insufficient_loyalty_rejected",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestLoyaltyLegality::test_planeswalker_dies_at_zero_loyalty",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestLoyaltyLegality::test_second_loyalty_activation_same_turn_rejected",
+      "outcome": "pass"
+    }
+  ],
+  "tests_hash": "8eabfdd40c609ce59cbfafbe9b1972ddd5cf12ac546eb544445644cf7d872112"
+}

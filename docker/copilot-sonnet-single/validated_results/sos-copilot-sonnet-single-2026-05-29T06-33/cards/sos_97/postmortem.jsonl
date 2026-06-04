@@ -1,3 +1,3 @@
-{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yoiwunk1/tests.py::TestRalZarekGuestLecturer::test_plus_one_effect_one_on_top"}
-{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yoiwunk1/tests.py::TestRalZarekGuestLecturer::test_minus_one_effect"}
-{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yoiwunk1/tests.py::TestRalZarekGuestLecturer::test_ultimate_effect"}
+{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_29_sxmop/tests.py::TestPlusOne::test_plus_one_surveil_keep_one_on_top"}
+{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_29_sxmop/tests.py::TestUltimate::test_ultimate_skips_turns_per_seeded_coin_flips"}
+{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_29_sxmop/tests.py::TestLoyaltyLegality::test_planeswalker_dies_at_zero_loyalty"}

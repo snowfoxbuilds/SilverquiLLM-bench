@@ -1,45 +1,39 @@
 {
   "card_id": "sos_226",
   "card_name": "Silverquill, the Disputant",
-  "tests_passed": 4,
-  "tests_failed": 3,
-  "tests_total": 7,
-  "pass_rate": 0.5714285714285714,
+  "tests_passed": 5,
+  "tests_failed": 1,
+  "tests_total": 6,
+  "pass_rate": 0.8333333333333334,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_ypz4qjrh/tests.py::TestCasualtyOfferedOnControllerInstant::test_casualty_offered_on_instant",
-    "FAILED ../../../../tmp/eval_sos_ypz4qjrh/tests.py::TestCasualtyWithSacCopiesSpell::test_casualty_sac_copies_spell",
-    "FAILED ../../../../tmp/eval_sos_ypz4qjrh/tests.py::TestNoLegalSacrificeDeclined::test_no_legal_sacrifice"
+    "FAILED ../../../../tmp/eval_sos_23issqem/tests.py::TestCasualty::test_casualty_paid_copies_the_spell"
   ],
   "skipped": false,
   "test_nodes": [
     {
-      "test_node": "tests.py::TestIdentity::test_identity",
+      "test_node": "tests.py::TestIdentity::test_card_identity",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestNoGetTargets::test_no_get_targets",
+      "test_node": "tests.py::TestCasualty::test_casualty_paid_copies_the_spell",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestCasualty::test_casualty_may_be_declined",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestCasualtyOfferedOnControllerInstant::test_casualty_offered_on_instant",
-      "outcome": "fail"
-    },
-    {
-      "test_node": "tests.py::TestCasualtyWithSacCopiesSpell::test_casualty_sac_copies_spell",
-      "outcome": "fail"
-    },
-    {
-      "test_node": "tests.py::TestNoLegalSacrificeDeclined::test_no_legal_sacrifice",
-      "outcome": "fail"
-    },
-    {
-      "test_node": "tests.py::TestNoCasualtyOnCreatureSpell::test_no_casualty_on_creature",
+      "test_node": "tests.py::TestCasualty::test_zero_power_creature_is_not_a_legal_casualty_sacrifice",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestRemovedWhenSilverquillLeaves::test_no_casualty_after_silverquill_leaves",
+      "test_node": "tests.py::TestCasualty::test_no_casualty_on_creature_spells",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCasualty::test_no_casualty_without_the_granter",
       "outcome": "pass"
     }
   ],
-  "tests_hash": "0eedd5314fa4eb758510f7a44013aa637dc9930c8e94d1ebd8e8b4fe98e8314d"
+  "tests_hash": "15a392cad56286171f7c01f40ade57df0eb45e3a6649c97a42e9273d5dc2436e"
 }

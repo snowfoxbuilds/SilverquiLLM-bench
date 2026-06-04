@@ -4,8 +4,8 @@
     "image": "silverquillm-copilot-gpt54-sonnet-reviewer:latest",
     "timestamp": "2026-05-29T00:49:17Z",
     "card_count": 10,
-    "timeout_seconds": 7200,
-    "harness_version": "2c75fb641bf3961116fb9282ac3f3f70ca41352d"
+    "timeout_seconds": 360000,
+    "harness_version": "9b730948405b0207ff547d0decc355a747dbe527"
   },
   "sos_card_correctness": {
     "audited_pass_rate": 0.0,

@@ -1,2 +1,1 @@
-{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_y3kut_fq/tests.py::TestRalZarekGuestLecturer::test_plus_one_effect_one_on_top"}
-{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_y3kut_fq/tests.py::TestRalZarekGuestLecturer::test_ultimate_effect"}
+{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tbxthxr7/tests.py::TestUltimate::test_ultimate_skips_turns_per_seeded_coin_flips"}

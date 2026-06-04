@@ -1,45 +1,31 @@
 {
   "card_id": "sos_57",
   "card_name": "Mana Sculpt",
-  "tests_passed": 4,
-  "tests_failed": 9,
-  "tests_total": 13,
-  "pass_rate": 0.3076923076923077,
+  "tests_passed": 2,
+  "tests_failed": 7,
+  "tests_total": 9,
+  "pass_rate": 0.2222222222222222,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_3d5khxlj/tests.py::TestTargeting::test_get_targets_returns_stack_spells",
-    "FAILED ../../../../tmp/eval_sos_3d5khxlj/tests.py::TestTargeting::test_get_targets_excludes_permanents",
-    "FAILED ../../../../tmp/eval_sos_3d5khxlj/tests.py::TestTargeting::test_get_targets_excludes_empty_stack",
-    "FAILED ../../../../tmp/eval_sos_3d5khxlj/tests.py::TestCounter::test_counters_via_real_cast",
-    "FAILED ../../../../tmp/eval_sos_3d5khxlj/tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase",
-    "FAILED ../../../../tmp/eval_sos_3d5khxlj/tests.py::TestRefund::test_refund_amount_equals_mana_spent",
-    "FAILED ../../../../tmp/eval_sos_3d5khxlj/tests.py::TestRefund::test_no_refund_on_opponent_main_phase",
-    "FAILED ../../../../tmp/eval_sos_3d5khxlj/tests.py::TestRefund::test_refund_fires_only_once",
-    "FAILED ../../../../tmp/eval_sos_3d5khxlj/tests.py::TestRefund::test_refund_locked_in_when_wizard_leaves_before_next_main"
+    "FAILED ../../../../tmp/eval_sos__vaybui6/tests.py::TestCounter::test_counters_target_spell",
+    "FAILED ../../../../tmp/eval_sos__vaybui6/tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase",
+    "FAILED ../../../../tmp/eval_sos__vaybui6/tests.py::TestRefund::test_refund_amount_tracks_opponents_spell_cost",
+    "FAILED ../../../../tmp/eval_sos__vaybui6/tests.py::TestRefund::test_no_refund_without_wizard",
+    "FAILED ../../../../tmp/eval_sos__vaybui6/tests.py::TestRefund::test_no_refund_when_countered_spell_was_cast_for_free",
+    "FAILED ../../../../tmp/eval_sos__vaybui6/tests.py::TestRefund::test_non_wizard_creature_does_not_enable_refund",
+    "FAILED ../../../../tmp/eval_sos__vaybui6/tests.py::TestFizzle::test_fizzle_when_target_already_countered"
   ],
   "skipped": false,
   "test_nodes": [
     {
-      "test_node": "tests.py::TestIdentity::test_identity",
+      "test_node": "tests.py::TestIdentity::test_card_identity",
       "outcome": "pass"
     },
     {
-      "test_node": "tests.py::TestTargeting::test_get_targets_returns_stack_spells",
+      "test_node": "tests.py::TestCounter::test_counters_target_spell",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestTargeting::test_get_targets_excludes_permanents",
-      "outcome": "fail"
-    },
-    {
-      "test_node": "tests.py::TestTargeting::test_get_targets_excludes_empty_stack",
-      "outcome": "fail"
-    },
-    {
-      "test_node": "tests.py::TestCounter::test_counters_via_real_cast",
-      "outcome": "fail"
-    },
-    {
-      "test_node": "tests.py::TestCounter::test_fizzle_when_target_removed",
+      "test_node": "tests.py::TestCounter::test_insufficient_mana_cast_rejected",
       "outcome": "pass"
     },
     {
@@ -47,29 +33,25 @@
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestRefund::test_refund_amount_equals_mana_spent",
+      "test_node": "tests.py::TestRefund::test_refund_amount_tracks_opponents_spell_cost",
       "outcome": "fail"
     },
     {
       "test_node": "tests.py::TestRefund::test_no_refund_without_wizard",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestRefund::test_no_refund_when_fizzled",
-      "outcome": "pass"
-    },
-    {
-      "test_node": "tests.py::TestRefund::test_no_refund_on_opponent_main_phase",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestRefund::test_refund_fires_only_once",
+      "test_node": "tests.py::TestRefund::test_no_refund_when_countered_spell_was_cast_for_free",
       "outcome": "fail"
     },
     {
-      "test_node": "tests.py::TestRefund::test_refund_locked_in_when_wizard_leaves_before_next_main",
+      "test_node": "tests.py::TestRefund::test_non_wizard_creature_does_not_enable_refund",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestFizzle::test_fizzle_when_target_already_countered",
       "outcome": "fail"
     }
   ],
-  "tests_hash": "4d413364affaa9f9e3268263d1bab6f7c85a002dfe1f00fa9931f11bd772a3e5"
+  "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a"
 }

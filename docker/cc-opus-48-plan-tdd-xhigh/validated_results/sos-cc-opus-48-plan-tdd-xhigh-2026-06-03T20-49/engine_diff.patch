@@ -1,0 +1,375 @@
+diff -ruN a/casting.py b/casting.py
+--- a/casting.py	2026-05-25 16:43:11.728292087 +0000
++++ b/casting.py	2026-06-03 21:36:41.908223302 +0000
+@@ -104,8 +104,22 @@
+     # Restore previous controller in case the caller doesn't want a
+     # side-effect (get_cost_reduction is a query, not a mutation).
+     card.controller = prev_controller
++
++    # Aggregate cost reductions granted by the controller's permanents
++    # (e.g. "Instant and sorcery spells you cast have affinity for
++    # creatures").  Each permanent may expose a ``grants_cost_reduction``
++    # hook taking (game, card) and returning the generic reduction it
++    # grants for casting *card*.
++    granted = 0
++    battlefield = game.get_battlefield(controller)
++    if battlefield is not None:
++        for perm in battlefield.get_all():
++            grant_hook = getattr(perm, "grants_cost_reduction", None)
++            if callable(grant_hook):
++                granted += grant_hook(game, card)
++
+     generic = card.mana_cost.generic if card.mana_cost else 0
+-    return max(0, min(raw, generic))
++    return max(0, min(raw + granted, generic))
+ 
+ 
+ def _apply_cost_reduction(cost: ManaCost, reduction: int) -> ManaCost:
+@@ -245,6 +259,16 @@
+     stack_obj.on_resolve = _on_resolve
+     game.stack.push(stack_obj)
+ 
++    # 9. Fire the "whenever you cast a spell" event so that triggers
++    #    (casualty, Wizard buffs, storm, etc.) can react.  The spell is
++    #    already on the stack; triggers are pushed above it.
++    from engine.events import SpellCastTriggeredEvent
++
++    game.trigger_manager.fire_event(
++        game,
++        SpellCastTriggeredEvent(spell=card, player=player, card=card, controller=player),
++    )
++
+ 
+ # ------------------------------------------------------------------
+ # Cast spell without paying mana cost (free-cast from any zone)
+@@ -370,6 +394,128 @@
+     stack_obj.on_resolve = _on_resolve
+     game.stack.push(stack_obj)
+ 
++    # Fire the "whenever you cast a spell" event (free casts are still casts).
++    from engine.events import SpellCastTriggeredEvent
++
++    game.trigger_manager.fire_event(
++        game,
++        SpellCastTriggeredEvent(spell=card, player=player, card=card, controller=player),
++    )
++
++
++# ------------------------------------------------------------------
++# Cast for an alternative cost (e.g. miracle)
++# ------------------------------------------------------------------
++
++
++def cast_spell_alt_cost(
++    game: GameState,
++    player: Player,
++    card: CardImpl,
++    from_zone: Zone,
++    alt_cost: ManaCost,
++) -> None:
++    """Cast *card* from *from_zone* paying *alt_cost* instead of its mana cost.
++
++    Used by alternative-cost mechanics such as miracle: the card is cast as a
++    normal spell (goes on the stack, can be responded to, fires the
++    "whenever you cast a spell" event), but the player pays *alt_cost* rather
++    than the printed ``card.mana_cost``.
++
++    No sorcery-speed timing check is performed — alternative-cost casts of
++    this kind are special actions/triggers that grant their own timing
++    permission.  Cost reduction is not applied to the alternative cost.
++
++    Raises:
++        CastingError: If legality, location, targeting, or mana checks fail.
++    """
++    # 1. can_cast legality (timing is granted by the alt-cost permission).
++    if not card.can_cast(game):
++        raise CastingError(f"Cannot cast {card.name!r} — can_cast returned False")
++
++    # 2. Locate card in source zone.
++    source_zone_container = player.zones[from_zone]
++    if not source_zone_container.contains(card):
++        raise CastingError(
++            f"Cannot cast {card.name!r} — card not found in {from_zone.name}"
++        )
++
++    # 3. Move card from source zone to stack zone.
++    stack_zone = player.zones[Zone.STACK]
++    source_zone_container.remove(card)
++    stack_zone.add(card)
++
++    # Clear any stale colors_spent from a prior cast before new payment.
++    if hasattr(card, "colors_spent"):
++        del card.colors_spent
++
++    if card.controller is None:
++        card.controller = player
++    if card.owner is None:
++        card.owner = player
++
++    # 4. Choose targets (with rollback on failure).
++    try:
++        target_specs = card.get_targets(game)
++        chosen_targets: list[Any] = []
++        if target_specs:
++            for spec in target_specs:
++                target = player.choose_target(target_specs, spec)
++                filter_fn = getattr(spec, "filter_fn", None)
++                if filter_fn is not None and target is not None:
++                    if not filter_fn(target):
++                        raise CastingError(
++                            f"Cannot cast {card.name!r} — chosen target does not "
++                            f"satisfy filter: {getattr(spec, 'description', '')}"
++                        )
++                chosen_targets.append(target)
++
++        from engine.protection import has_protection_from
++
++        for target in chosen_targets:
++            if has_protection_from(target, card):
++                raise CastingError(
++                    f"Cannot cast {card.name!r} — target has protection from this spell"
++                )
++    except Exception as exc:
++        stack_zone.remove(card)
++        source_zone_container.add(card)
++        raise CastingError(str(exc)) from exc
++
++    # 5. Mana check / payment of the alternative cost (rollback on failure).
++    if not player.mana_pool.can_pay(alt_cost):
++        stack_zone.remove(card)
++        source_zone_container.add(card)
++        raise CastingError(f"Cannot cast {card.name!r} — insufficient mana")
++
++    player.mana_pool.pay(alt_cost)
++    card.colors_spent = list(player.mana_pool.last_payment_colors)  # type: ignore[attr-defined]
++
++    # 6. Call on_cast hook.
++    card.on_cast(game)
++
++    # 7. Push StackObject.
++    stack_obj = StackObject(
++        source=card,
++        controller=player,
++        targets=chosen_targets,
++        on_resolve=lambda g: None,  # replaced below
++    )
++
++    def _on_resolve(g: GameState) -> None:
++        _resolve_spell(g, card, player, stack_obj)
++
++    stack_obj.on_resolve = _on_resolve
++    game.stack.push(stack_obj)
++
++    # 8. Fire the "whenever you cast a spell" event (G1).
++    from engine.events import SpellCastTriggeredEvent
++
++    game.trigger_manager.fire_event(
++        game,
++        SpellCastTriggeredEvent(spell=card, player=player, card=card, controller=player),
++    )
++
+ 
+ # ------------------------------------------------------------------
+ # Resolution (called when the stack pops)
+@@ -406,8 +552,14 @@
+         # trigger/replacement-effect registration and ENTERS_BATTLEFIELD event.
+         move_to_zone(game, card, Zone.STACK, Zone.BATTLEFIELD)
+     else:
+-        # Instant/sorcery: move from stack to graveyard via move_to_zone.
+-        move_to_zone(game, card, Zone.STACK, Zone.GRAVEYARD)
++        # Instant/sorcery: move from stack to graveyard via move_to_zone,
++        # unless an effect marked this spell to be exiled on resolution
++        # instead (e.g. "If that spell would be put into your graveyard,
++        # exile it instead").
++        dest = Zone.GRAVEYARD
++        if getattr(card, "_exile_on_resolution", False):
++            dest = Zone.EXILE
++        move_to_zone(game, card, Zone.STACK, dest)
+ 
+ 
+ # ------------------------------------------------------------------
+diff -ruN a/events.py b/events.py
+--- a/events.py	2026-05-25 04:23:31.883982600 +0000
++++ b/events.py	2026-06-03 21:06:40.941600532 +0000
+@@ -77,6 +77,19 @@
+ 
+ 
+ @dataclass
++class BeginningOfMainPhaseTriggeredEvent(TriggeredEvent):
++    """Fires at the start of a main phase (precombat or postcombat).
++
++    ``player`` is the active player whose main phase is beginning.
++    ``is_precombat`` distinguishes the first (precombat) main phase from
++    the second (postcombat) one.
++    """
++
++    player: Any = None
++    is_precombat: bool = True
++
++
++@dataclass
+ class EndOfTurnTriggeredEvent(TriggeredEvent):
+     pass
+ 
+diff -ruN a/game.py b/game.py
+--- a/game.py	2026-05-25 16:43:11.729292098 +0000
++++ b/game.py	2026-06-03 21:31:36.168390775 +0000
+@@ -335,6 +335,30 @@
+     return card
+ 
+ 
++def surveil(game: GameState, player: Player, n: int) -> None:
++    """Surveil *n* — look at the top *n* cards of *player*'s library, then put
++    any number of them into the graveyard and leave the rest on top.
++
++    For each looked-at card (top first) the player chooses ``"graveyard"`` or
++    ``"top"`` via :meth:`Player.choose`; only ``"graveyard"`` moves the card.
++    Cards kept on top retain their relative order.
++    """
++    if n <= 0:
++        return
++    library = player.zones[Zone.LIBRARY]
++    if len(library) == 0:
++        return
++
++    looked = list(reversed(library.top(n)))  # top-first
++    for card in looked:
++        choice = player.choose(
++            ["top", "graveyard"],
++            f"surveil: {getattr(card, 'name', '?')}",
++        )
++        if choice == "graveyard":
++            move_to_zone(game, card, Zone.LIBRARY, Zone.GRAVEYARD)
++
++
+ def discard(game: GameState, player: Player, card: Any) -> None:
+     """Discard *card* from *player*'s hand to the owner's graveyard.
+ 
+diff -ruN a/game_state.py b/game_state.py
+--- a/game_state.py	2026-05-25 16:43:11.729292098 +0000
++++ b/game_state.py	2026-06-03 21:31:07.353137727 +0000
+@@ -81,6 +81,10 @@
+         # normal rotation.  When extras are exhausted the game picks up
+         # from _normal_next_index.
+         self._normal_next_index: int = 1
++        # Skip-turns: seat index -> number of that player's upcoming turns
++        # to skip.  Consumed in advance_phase when a player would become
++        # active.  Multiple skips stack (rule 720.4).
++        self.skip_turns: dict[int, int] = {}
+ 
+     # ------------------------------------------------------------------
+     # Player properties
+@@ -152,16 +156,32 @@
+                 # next player seat index; that player gets the next turn.
+                 # Normal rotation is NOT advanced — extra turns are
+                 # inserted before the normal next turn.
+-                self.active_player_index = self.extra_turns.pop(0)
++                self.active_player_index = self._consume_skips(self.extra_turns.pop(0))
+             else:
+-                self.active_player_index = self._normal_next_index
+-                self._normal_next_index = 1 - self._normal_next_index
++                chosen = self._consume_skips(self._normal_next_index)
++                self.active_player_index = chosen
++                self._normal_next_index = 1 - chosen
+             self.priority_player_index = self.active_player_index
+             self.phase = _TURN_SEQUENCE[0][0]
+             self.step = _TURN_SEQUENCE[0][1]
+ 
+         self.empty_mana_pools()
+ 
++    def _consume_skips(self, idx: int) -> int:
++        """Resolve skip-turns: return the seat that actually takes the turn.
++
++        If the candidate seat *idx* has pending skips, decrement its counter
++        and pass the turn to the other seat, repeating until a non-skipped
++        seat is found.  Each iteration strictly decrements a positive counter,
++        so the loop always terminates (the guard is belt-and-suspenders).
++        """
++        guard = sum(self.skip_turns.values()) + len(self.players) + 1
++        while self.skip_turns.get(idx, 0) > 0 and guard > 0:
++            self.skip_turns[idx] -= 1
++            idx = 1 - idx
++            guard -= 1
++        return idx
++
+     def empty_mana_pools(self) -> None:
+         """Empty all players' mana pools — called on each phase/step transition."""
+         for player in self.players:
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/abilities.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/abilities.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/abilities.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/abilities.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/basic_lands.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/basic_lands.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/card.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/card.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/card.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/card.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/casting.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/casting.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/casting.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/casting.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/combat.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/combat.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/combat.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/combat.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/continuous_effects.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/continuous_effects.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/continuous_effects.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/continuous_effects.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/creatures.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/creatures.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/creatures.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/creatures.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/events.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/events.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/events.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/events.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/game.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/game.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game_state.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/game_state.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game_state.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/game_state.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/__init__.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/__init__.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/__init__.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/__init__.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/mana.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/mana.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/mana.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/mana.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/player.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/player.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/player.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/player.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/protection.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/protection.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/protection.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/protection.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/replacement_effects.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/replacement_effects.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/replacement_effects.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/replacement_effects.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/stack.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/stack.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/stack.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/stack.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/state_based_actions.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/state_based_actions.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/state_based_actions.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/state_based_actions.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/triggers.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/triggers.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/triggers.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/triggers.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/turn.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/turn.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/turn.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/turn.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/types.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/types.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/types.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/types.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/zones.cpython-311.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/zones.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/zones.cpython-312.pyc and /tmp/silverquillm_run_ivc715ps/workspace/engine/__pycache__/zones.cpython-312.pyc differ
+diff -ruN a/turn.py b/turn.py
+--- a/turn.py	2026-05-25 16:43:11.729292098 +0000
++++ b/turn.py	2026-06-03 21:06:51.425721488 +0000
+@@ -41,6 +41,10 @@
+     # Reset land plays for the active player
+     active.land_plays_remaining = 1
+ 
++    # Reset first-draw tracking for the turn so that "the first card you
++    # drew this turn" (miracle) can be detected reliably.
++    active.cards_drawn_this_turn = 0
++
+ 
+ def _do_draw_step(game: GameState) -> None:
+     """Perform draw step actions: active player draws a card.
+@@ -204,6 +208,22 @@
+             game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+         elif current == (Phase.BEGINNING, Step.DRAW):
+             _do_draw_step(game)
++        elif current == (Phase.PRECOMBAT_MAIN, None):
++            from engine.events import BeginningOfMainPhaseTriggeredEvent
++            game.trigger_manager.fire_event(
++                game,
++                BeginningOfMainPhaseTriggeredEvent(
++                    player=game.active_player, is_precombat=True
++                ),
++            )
++        elif current == (Phase.POSTCOMBAT_MAIN, None):
++            from engine.events import BeginningOfMainPhaseTriggeredEvent
++            game.trigger_manager.fire_event(
++                game,
++                BeginningOfMainPhaseTriggeredEvent(
++                    player=game.active_player, is_precombat=False
++                ),
++            )
+         elif game.phase == Phase.COMBAT and game.step is not None:
+             _do_combat_step(game, game.step)
+         elif current == (Phase.ENDING, Step.CLEANUP):

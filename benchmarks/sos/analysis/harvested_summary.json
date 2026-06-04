@@ -1,11 +1,50 @@
 [
   {
-    "card": "sos_120",
-    "test_node": "tests.py::TestCastChosenExiledCardsForFree::test_cast_exiled_card_free",
-    "tests_hash": "bde8803648b674d76c2c2c228446dc4737ea32d69600d06fa565edbf716590a9",
-    "breadth": 7,
+    "card": "sos_1",
+    "test_node": "tests.py::TestAttackTrigger::test_attack_trigger_casts_instant_from_graveyard_to_exile",
+    "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
+    "breadth": 10,
     "failing_images": [
       "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_1",
+    "test_node": "tests.py::TestAttackTrigger::test_attack_trigger_sorcery_also_exiled",
+    "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
+    "breadth": 10,
+    "failing_images": [
+      "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_1",
+    "test_node": "tests.py::TestAttackTrigger::test_other_spells_still_go_to_graveyard",
+    "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
+    "breadth": 10,
+    "failing_images": [
+      "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -16,11 +55,14 @@
   },
   {
     "card": "sos_120",
-    "test_node": "tests.py::TestParadigmExilesSelf::test_paradigm_exiles_self_on_resolution",
-    "tests_hash": "bde8803648b674d76c2c2c228446dc4737ea32d69600d06fa565edbf716590a9",
-    "breadth": 7,
+    "test_node": "tests.py::TestCastBehaviour::test_exiled_card_may_be_cast_for_free",
+    "tests_hash": "542db4c3c3797c5e26c1046f533ab299b36a4d7b2864b0399cf79db2424ac3bf",
+    "breadth": 10,
     "failing_images": [
       "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -31,26 +73,14 @@
   },
   {
     "card": "sos_120",
-    "test_node": "tests.py::TestParadigmOfferCanBeDeclined::test_paradigm_offer_declined",
-    "tests_hash": "bde8803648b674d76c2c2c228446dc4737ea32d69600d06fa565edbf716590a9",
-    "breadth": 7,
+    "test_node": "tests.py::TestParadigmRecurrence::test_paradigm_recurrence_casts_copy_from_exile",
+    "tests_hash": "542db4c3c3797c5e26c1046f533ab299b36a4d7b2864b0399cf79db2424ac3bf",
+    "breadth": 10,
     "failing_images": [
       "cc-opus-48-bare",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_120",
-    "test_node": "tests.py::TestParadigmRecurringCast::test_recurring_cast_across_3_turns",
-    "tests_hash": "bde8803648b674d76c2c2c228446dc4737ea32d69600d06fa565edbf716590a9",
-    "breadth": 7,
-    "failing_images": [
-      "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -61,11 +91,14 @@
   },
   {
     "card": "sos_13",
-    "test_node": "tests.py::TestETBTokenCreation::test_etb_token_creation",
-    "tests_hash": "041089b2ed20945cb3a0b5128a6bffbcac858cc3454797ea0d54551f47af699a",
-    "breadth": 7,
+    "test_node": "tests.py::TestETBToken::test_etb_creates_inkling_for_target_player",
+    "tests_hash": "e0c0e65c288bb61e2643f7446c8355897bbc359bf5828da255487ec3476a27e3",
+    "breadth": 10,
     "failing_images": [
       "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -76,11 +109,14 @@
   },
   {
     "card": "sos_13",
-    "test_node": "tests.py::TestPreparedCastFromExile::test_prepared_cast_from_exile",
-    "tests_hash": "041089b2ed20945cb3a0b5128a6bffbcac858cc3454797ea0d54551f47af699a",
-    "breadth": 7,
+    "test_node": "tests.py::TestETBToken::test_etb_token_can_be_given_to_self",
+    "tests_hash": "e0c0e65c288bb61e2643f7446c8355897bbc359bf5828da255487ec3476a27e3",
+    "breadth": 10,
     "failing_images": [
       "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -91,11 +127,14 @@
   },
   {
     "card": "sos_13",
-    "test_node": "tests.py::TestPreparedConditionEdgeCases::test_not_prepared_when_creatures_equal",
-    "tests_hash": "041089b2ed20945cb3a0b5128a6bffbcac858cc3454797ea0d54551f47af699a",
-    "breadth": 7,
+    "test_node": "tests.py::TestPreparedBackFace::test_not_prepared_when_creature_counts_equal",
+    "tests_hash": "e0c0e65c288bb61e2643f7446c8355897bbc359bf5828da255487ec3476a27e3",
+    "breadth": 10,
     "failing_images": [
       "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -106,11 +145,14 @@
   },
   {
     "card": "sos_13",
-    "test_node": "tests.py::TestPreparedConditionEdgeCases::test_prepared_when_opponent_has_more",
-    "tests_hash": "041089b2ed20945cb3a0b5128a6bffbcac858cc3454797ea0d54551f47af699a",
-    "breadth": 7,
+    "test_node": "tests.py::TestPreparedBackFace::test_prepared_back_face_exiles_creature_and_grants_life",
+    "tests_hash": "e0c0e65c288bb61e2643f7446c8355897bbc359bf5828da255487ec3476a27e3",
+    "breadth": 10,
     "failing_images": [
       "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -121,116 +163,14 @@
   },
   {
     "card": "sos_13",
-    "test_node": "tests.py::TestPreparedFlagLifecycle::test_prepared_consumed_after_alt_cast",
-    "tests_hash": "041089b2ed20945cb3a0b5128a6bffbcac858cc3454797ea0d54551f47af699a",
-    "breadth": 7,
+    "test_node": "tests.py::TestPreparedBackFace::test_prepared_consumed_after_back_face_cast",
+    "tests_hash": "e0c0e65c288bb61e2643f7446c8355897bbc359bf5828da255487ec3476a27e3",
+    "breadth": 10,
     "failing_images": [
       "cc-opus-48-bare",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_13",
-    "test_node": "tests.py::TestPreparedRejectedWithoutFlag::test_prepared_rejected_without_flag",
-    "tests_hash": "041089b2ed20945cb3a0b5128a6bffbcac858cc3454797ea0d54551f47af699a",
-    "breadth": 7,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_13",
-    "test_node": "tests.py::TestTokenCharacteristics::test_token_characteristics",
-    "tests_hash": "041089b2ed20945cb3a0b5128a6bffbcac858cc3454797ea0d54551f47af699a",
-    "breadth": 7,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_13",
-    "test_node": "tests.py::TestTokenSummoningSickness::test_token_is_summoning_sick",
-    "tests_hash": "041089b2ed20945cb3a0b5128a6bffbcac858cc3454797ea0d54551f47af699a",
-    "breadth": 7,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_201",
-    "test_node": "tests.py::TestGrantRemovedWhenLoreholdLeaves::test_miracle_grant_removed_on_leave",
-    "tests_hash": "d9f2ee477267a6d6a1466ae68c9c2acb0d3c712c01dd1674b21e6f0161778bea",
-    "breadth": 7,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_201",
-    "test_node": "tests.py::TestMiracleGrantAfterCardDrawnIntoHand::test_card_drawn_into_hand_gets_miracle_cost_on_next_apply",
-    "tests_hash": "d9f2ee477267a6d6a1466ae68c9c2acb0d3c712c01dd1674b21e6f0161778bea",
-    "breadth": 7,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_201",
-    "test_node": "tests.py::TestMiracleGrantToInstantsAndSorceries::test_miracle_granted_to_instants_and_sorceries_not_creatures",
-    "tests_hash": "d9f2ee477267a6d6a1466ae68c9c2acb0d3c712c01dd1674b21e6f0161778bea",
-    "breadth": 7,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_201",
-    "test_node": "tests.py::TestMultipleInstantsGrantedMiracle::test_multiple_cards_all_get_miracle_cost",
-    "tests_hash": "d9f2ee477267a6d6a1466ae68c9c2acb0d3c712c01dd1674b21e6f0161778bea",
-    "breadth": 7,
-    "failing_images": [
-      "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -241,11 +181,14 @@
   },
   {
     "card": "sos_226",
-    "test_node": "tests.py::TestCasualtyWithSacCopiesSpell::test_casualty_sac_copies_spell",
-    "tests_hash": "0eedd5314fa4eb758510f7a44013aa637dc9930c8e94d1ebd8e8b4fe98e8314d",
-    "breadth": 7,
+    "test_node": "tests.py::TestCasualty::test_casualty_paid_copies_the_spell",
+    "tests_hash": "15a392cad56286171f7c01f40ade57df0eb45e3a6649c97a42e9273d5dc2436e",
+    "breadth": 10,
     "failing_images": [
       "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -256,11 +199,14 @@
   },
   {
     "card": "sos_257",
-    "test_node": "tests.py::TestPersistentAnimation::test_animation_cleared_on_leaves_play",
-    "tests_hash": "1ac07ed4e03c2053232f2ede8b403575a6fd28a27cb1f1ad5067270bbdf93e05",
-    "breadth": 7,
+    "test_node": "tests.py::TestAnimation::test_animation_requires_five_mana",
+    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
+    "breadth": 10,
     "failing_images": [
       "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -271,11 +217,14 @@
   },
   {
     "card": "sos_257",
-    "test_node": "tests.py::TestSpellCastTrigger::test_trigger_inactive_when_unanimated",
-    "tests_hash": "1ac07ed4e03c2053232f2ede8b403575a6fd28a27cb1f1ad5067270bbdf93e05",
-    "breadth": 7,
+    "test_node": "tests.py::TestManaAbilities::test_restricted_mana_pays_an_instant",
+    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
+    "breadth": 10,
     "failing_images": [
       "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -285,12 +234,51 @@
     ]
   },
   {
-    "card": "sos_4",
-    "test_node": "tests.py::TestFizzleKeepsLegalEffects::test_damage_target_illegal_draw_and_life_still_resolve",
-    "tests_hash": "741d0e84fa90a1e742662aafe554fd5c0c18914b40da45fb3b9922f151758400",
-    "breadth": 7,
+    "card": "sos_257",
+    "test_node": "tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature",
+    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
+    "breadth": 10,
     "failing_images": [
       "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_257",
+    "test_node": "tests.py::TestManaAbilities::test_second_ability_costs_life_and_taps",
+    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
+    "breadth": 10,
+    "failing_images": [
+      "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_257",
+    "test_node": "tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup",
+    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
+    "breadth": 10,
+    "failing_images": [
+      "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -301,11 +289,14 @@
   },
   {
     "card": "sos_57",
-    "test_node": "tests.py::TestCounter::test_fizzle_when_target_removed",
-    "tests_hash": "4d413364affaa9f9e3268263d1bab6f7c85a002dfe1f00fa9931f11bd772a3e5",
-    "breadth": 7,
+    "test_node": "tests.py::TestFizzle::test_fizzle_when_target_already_countered",
+    "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
+    "breadth": 10,
     "failing_images": [
       "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -316,307 +307,14 @@
   },
   {
     "card": "sos_57",
-    "test_node": "tests.py::TestRefund::test_no_refund_when_fizzled",
-    "tests_hash": "4d413364affaa9f9e3268263d1bab6f7c85a002dfe1f00fa9931f11bd772a3e5",
-    "breadth": 7,
+    "test_node": "tests.py::TestRefund::test_refund_amount_tracks_opponents_spell_cost",
+    "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
+    "breadth": 10,
     "failing_images": [
       "cc-opus-48-bare",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_57",
-    "test_node": "tests.py::TestTargeting::test_get_targets_returns_stack_spells",
-    "tests_hash": "4d413364affaa9f9e3268263d1bab6f7c85a002dfe1f00fa9931f11bd772a3e5",
-    "breadth": 7,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_97",
-    "test_node": "tests.py::TestRalZarekGuestLecturer::test_ultimate_effect",
-    "tests_hash": "50b39f075ddd5a03758c3be0ef6907d0b5e4f3751a58a0e7fe373219b4cdfbb4",
-    "breadth": 7,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicAttackTriggerAccept::test_accept_casts_spell_from_gy",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicAttackTriggerAccept::test_accept_spell_resolves_to_exile",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicExileSorcery::test_sorcery_from_gy_goes_to_exile",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicScopeNotGlobal::test_other_spells_go_to_graveyard_normally",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicTargeting::test_only_chosen_card_is_exiled",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_201",
-    "test_node": "tests.py::TestMiracleCastOnFirstDraw::test_miracle_cast_on_first_draw",
-    "tests_hash": "d9f2ee477267a6d6a1466ae68c9c2acb0d3c712c01dd1674b21e6f0161778bea",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_257",
-    "test_node": "tests.py::TestManaAbilities::test_mana_adds_any_color",
-    "tests_hash": "1ac07ed4e03c2053232f2ede8b403575a6fd28a27cb1f1ad5067270bbdf93e05",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_257",
-    "test_node": "tests.py::TestPersistentAnimation::test_animation_gives_creature_type",
-    "tests_hash": "1ac07ed4e03c2053232f2ede8b403575a6fd28a27cb1f1ad5067270bbdf93e05",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_257",
-    "test_node": "tests.py::TestPersistentAnimation::test_animation_persists_across_turns",
-    "tests_hash": "1ac07ed4e03c2053232f2ede8b403575a6fd28a27cb1f1ad5067270bbdf93e05",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_257",
-    "test_node": "tests.py::TestPersistentAnimation::test_no_op_when_already_creature",
-    "tests_hash": "1ac07ed4e03c2053232f2ede8b403575a6fd28a27cb1f1ad5067270bbdf93e05",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_257",
-    "test_node": "tests.py::TestSpellCastTrigger::test_boost_on_instant",
-    "tests_hash": "1ac07ed4e03c2053232f2ede8b403575a6fd28a27cb1f1ad5067270bbdf93e05",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_257",
-    "test_node": "tests.py::TestSpellCastTrigger::test_boost_on_sorcery",
-    "tests_hash": "1ac07ed4e03c2053232f2ede8b403575a6fd28a27cb1f1ad5067270bbdf93e05",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_257",
-    "test_node": "tests.py::TestSpellCastTrigger::test_end_of_turn_revert",
-    "tests_hash": "1ac07ed4e03c2053232f2ede8b403575a6fd28a27cb1f1ad5067270bbdf93e05",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_257",
-    "test_node": "tests.py::TestSpellCastTrigger::test_multiple_triggers_stack",
-    "tests_hash": "1ac07ed4e03c2053232f2ede8b403575a6fd28a27cb1f1ad5067270bbdf93e05",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_257",
-    "test_node": "tests.py::TestSpellCastTrigger::test_opponent_cast_filter",
-    "tests_hash": "1ac07ed4e03c2053232f2ede8b403575a6fd28a27cb1f1ad5067270bbdf93e05",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_57",
-    "test_node": "tests.py::TestRefund::test_no_refund_on_opponent_main_phase",
-    "tests_hash": "4d413364affaa9f9e3268263d1bab6f7c85a002dfe1f00fa9931f11bd772a3e5",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_57",
-    "test_node": "tests.py::TestRefund::test_refund_amount_equals_mana_spent",
-    "tests_hash": "4d413364affaa9f9e3268263d1bab6f7c85a002dfe1f00fa9931f11bd772a3e5",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_57",
-    "test_node": "tests.py::TestRefund::test_refund_fires_only_once",
-    "tests_hash": "4d413364affaa9f9e3268263d1bab6f7c85a002dfe1f00fa9931f11bd772a3e5",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_57",
-    "test_node": "tests.py::TestRefund::test_refund_locked_in_when_wizard_leaves_before_next_main",
-    "tests_hash": "4d413364affaa9f9e3268263d1bab6f7c85a002dfe1f00fa9931f11bd772a3e5",
-    "breadth": 6,
-    "failing_images": [
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -628,37 +326,13 @@
   {
     "card": "sos_57",
     "test_node": "tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase",
-    "tests_hash": "4d413364affaa9f9e3268263d1bab6f7c85a002dfe1f00fa9931f11bd772a3e5",
-    "breadth": 6,
+    "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
+    "breadth": 10,
     "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_57",
-    "test_node": "tests.py::TestTargeting::test_get_targets_excludes_empty_stack",
-    "tests_hash": "4d413364affaa9f9e3268263d1bab6f7c85a002dfe1f00fa9931f11bd772a3e5",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_57",
-    "test_node": "tests.py::TestTargeting::test_get_targets_excludes_permanents",
-    "tests_hash": "4d413364affaa9f9e3268263d1bab6f7c85a002dfe1f00fa9931f11bd772a3e5",
-    "breadth": 6,
-    "failing_images": [
+      "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -669,40 +343,16 @@
   },
   {
     "card": "sos_97",
-    "test_node": "tests.py::TestRalZarekGuestLecturer::test_minus_one_effect",
-    "tests_hash": "50b39f075ddd5a03758c3be0ef6907d0b5e4f3751a58a0e7fe373219b4cdfbb4",
-    "breadth": 6,
+    "test_node": "tests.py::TestLoyaltyLegality::test_planeswalker_dies_at_zero_loyalty",
+    "tests_hash": "8eabfdd40c609ce59cbfafbe9b1972ddd5cf12ac546eb544445644cf7d872112",
+    "breadth": 10,
     "failing_images": [
       "cc-opus-48-bare",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_97",
-    "test_node": "tests.py::TestRalZarekGuestLecturer::test_minus_two_effect",
-    "tests_hash": "50b39f075ddd5a03758c3be0ef6907d0b5e4f3751a58a0e7fe373219b4cdfbb4",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_97",
-    "test_node": "tests.py::TestRalZarekGuestLecturer::test_plus_one_effect_one_on_top",
-    "tests_hash": "50b39f075ddd5a03758c3be0ef6907d0b5e4f3751a58a0e7fe373219b4cdfbb4",
-    "breadth": 6,
-    "failing_images": [
-      "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
       "cc-opus-single",
+      "cc-sonnet-single",
       "copilot-gpt54-single",
       "copilot-gpt54-sonnet-reviewer",
       "copilot-sonnet-gpt54-reviewer",
@@ -710,38 +360,164 @@
     ]
   },
   {
-    "card": "sos_226",
-    "test_node": "tests.py::TestCasualtyOfferedOnControllerInstant::test_casualty_offered_on_instant",
-    "tests_hash": "0eedd5314fa4eb758510f7a44013aa637dc9930c8e94d1ebd8e8b4fe98e8314d",
-    "breadth": 5,
+    "card": "sos_97",
+    "test_node": "tests.py::TestUltimate::test_ultimate_skips_turns_per_seeded_coin_flips",
+    "tests_hash": "8eabfdd40c609ce59cbfafbe9b1972ddd5cf12ac546eb544445644cf7d872112",
+    "breadth": 10,
     "failing_images": [
       "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
       "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer"
-    ]
-  },
-  {
-    "card": "sos_226",
-    "test_node": "tests.py::TestNoLegalSacrificeDeclined::test_no_legal_sacrifice",
-    "tests_hash": "0eedd5314fa4eb758510f7a44013aa637dc9930c8e94d1ebd8e8b4fe98e8314d",
-    "breadth": 5,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer"
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
     ]
   },
   {
     "card": "sos_257",
-    "test_node": "tests.py::TestPersistentAnimation::test_animated_can_attack",
-    "tests_hash": "1ac07ed4e03c2053232f2ede8b403575a6fd28a27cb1f1ad5067270bbdf93e05",
-    "breadth": 5,
+    "test_node": "tests.py::TestSpellCastBoost::test_no_boost_when_not_animated",
+    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
+    "breadth": 9,
     "failing_images": [
+      "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
       "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_257",
+    "test_node": "tests.py::TestSpellCastBoost::test_two_spells_stack_boosts",
+    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
+    "breadth": 9,
+    "failing_images": [
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_97",
+    "test_node": "tests.py::TestMinusOne::test_minus_one_targeted_player_discards",
+    "tests_hash": "8eabfdd40c609ce59cbfafbe9b1972ddd5cf12ac546eb544445644cf7d872112",
+    "breadth": 9,
+    "failing_images": [
+      "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_97",
+    "test_node": "tests.py::TestMinusTwo::test_minus_two_returns_creature_from_graveyard",
+    "tests_hash": "8eabfdd40c609ce59cbfafbe9b1972ddd5cf12ac546eb544445644cf7d872112",
+    "breadth": 9,
+    "failing_images": [
+      "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_257",
+    "test_node": "tests.py::TestAnimation::test_animation_makes_a_2_4_wizard_that_is_still_a_land",
+    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
+    "breadth": 8,
+    "failing_images": [
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_257",
+    "test_node": "tests.py::TestAnimation::test_reanimation_is_a_gated_noop",
+    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
+    "breadth": 8,
+    "failing_images": [
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_257",
+    "test_node": "tests.py::TestLandDrop::test_played_as_the_one_land_per_turn",
+    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
+    "breadth": 8,
+    "failing_images": [
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_257",
+    "test_node": "tests.py::TestSpellCastBoost::test_opponent_spell_does_not_boost",
+    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
+    "breadth": 8,
+    "failing_images": [
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_1",
+    "test_node": "tests.py::TestAttackTrigger::test_attack_trigger_targets_only_chosen_card",
+    "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
+    "breadth": 7,
+    "failing_images": [
+      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-single",
+      "cc-sonnet-single",
       "copilot-gpt54-single",
       "copilot-gpt54-sonnet-reviewer",
       "copilot-sonnet-gpt54-reviewer",
@@ -750,10 +526,13 @@
   },
   {
     "card": "sos_13",
-    "test_node": "tests.py::TestIdentity::test_identity",
-    "tests_hash": "041089b2ed20945cb3a0b5128a6bffbcac858cc3454797ea0d54551f47af699a",
-    "breadth": 4,
+    "test_node": "tests.py::TestIdentity::test_card_identity",
+    "tests_hash": "e0c0e65c288bb61e2643f7446c8355897bbc359bf5828da255487ec3476a27e3",
+    "breadth": 7,
     "failing_images": [
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
       "cc-opus-single",
       "copilot-gpt54-single",
       "copilot-sonnet-gpt54-reviewer",
@@ -761,89 +540,97 @@
     ]
   },
   {
-    "card": "sos_245",
-    "test_node": "tests.py::TestGrantRemovedWhenWitherbloomLeaves::test_removal_ends_grant",
-    "tests_hash": "c9332f3f6000685a6b05032d94fab62998be8d54923485ee63ca71a29da4e210",
+    "card": "sos_226",
+    "test_node": "tests.py::TestCasualty::test_zero_power_creature_is_not_a_legal_casualty_sacrifice",
+    "tests_hash": "15a392cad56286171f7c01f40ade57df0eb45e3a6649c97a42e9273d5dc2436e",
+    "breadth": 7,
+    "failing_images": [
+      "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer"
+    ]
+  },
+  {
+    "card": "sos_201",
+    "test_node": "tests.py::TestMiracle::test_miracle_cast_on_first_draw",
+    "tests_hash": "6cde687bbec7844e13f26d159434d0adf616cee1245ce40ca3144846ca64b2f8",
+    "breadth": 6,
+    "failing_images": [
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_257",
+    "test_node": "tests.py::TestManaAbilities::test_first_ability_adds_colorless",
+    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
+    "breadth": 6,
+    "failing_images": [
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-single",
+      "copilot-gpt54-single",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_97",
+    "test_node": "tests.py::TestPlusOne::test_plus_one_surveil_keep_one_on_top",
+    "tests_hash": "8eabfdd40c609ce59cbfafbe9b1972ddd5cf12ac546eb544445644cf7d872112",
     "breadth": 4,
     "failing_images": [
+      "cc-opus-48-plan-tdd-xhigh",
       "cc-opus-single",
-      "cc-sonnet-single",
       "copilot-sonnet-gpt54-reviewer",
       "copilot-sonnet-single"
     ]
   },
   {
-    "card": "sos_257",
-    "test_node": "tests.py::TestManaAbilities::test_restricted_spend_illegal",
-    "tests_hash": "1ac07ed4e03c2053232f2ede8b403575a6fd28a27cb1f1ad5067270bbdf93e05",
-    "breadth": 4,
+    "card": "sos_120",
+    "test_node": "tests.py::TestCastBehaviour::test_cast_exiles_until_mv_threshold_and_self_exiles",
+    "tests_hash": "542db4c3c3797c5e26c1046f533ab299b36a4d7b2864b0399cf79db2424ac3bf",
+    "breadth": 3,
     "failing_images": [
       "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
+      "copilot-gpt54-single",
+      "copilot-sonnet-gpt54-reviewer"
     ]
   },
   {
-    "card": "sos_257",
-    "test_node": "tests.py::TestManaAbilities::test_restricted_spend_legal",
-    "tests_hash": "1ac07ed4e03c2053232f2ede8b403575a6fd28a27cb1f1ad5067270bbdf93e05",
-    "breadth": 4,
+    "card": "sos_201",
+    "test_node": "tests.py::TestOpponentUpkeepTrigger::test_opponent_upkeep_discard_to_draw_accepted",
+    "tests_hash": "6cde687bbec7844e13f26d159434d0adf616cee1245ce40ca3144846ca64b2f8",
+    "breadth": 3,
     "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-sonnet-gpt54-reviewer",
+      "cc-opus-48-bare",
+      "cc-opus-48-plan-tdd-xhigh",
       "copilot-sonnet-single"
     ]
   },
   {
     "card": "sos_245",
-    "test_node": "tests.py::TestAffinityGrantToInstantsAndSorceries::test_instant_gets_reduction",
-    "tests_hash": "c9332f3f6000685a6b05032d94fab62998be8d54923485ee63ca71a29da4e210",
+    "test_node": "tests.py::TestGrantedAffinity::test_granted_affinity_reduces_instant_cost",
+    "tests_hash": "abd06914c5996a2cdeea2c247fd6faf2ad28188918a0eb7f576e60d34ce044fb",
     "breadth": 3,
     "failing_images": [
       "cc-sonnet-single",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_245",
-    "test_node": "tests.py::TestAffinityGrantToInstantsAndSorceries::test_sorcery_gets_reduction",
-    "tests_hash": "c9332f3f6000685a6b05032d94fab62998be8d54923485ee63ca71a29da4e210",
-    "breadth": 3,
-    "failing_images": [
-      "cc-sonnet-single",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_257",
-    "test_node": "tests.py::TestManaAbilities::test_mana_adds_colorless",
-    "tests_hash": "1ac07ed4e03c2053232f2ede8b403575a6fd28a27cb1f1ad5067270bbdf93e05",
-    "breadth": 3,
-    "failing_images": [
-      "cc-opus-single",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_257",
-    "test_node": "tests.py::TestPersistentAnimation::test_activation_cost_payment",
-    "tests_hash": "1ac07ed4e03c2053232f2ede8b403575a6fd28a27cb1f1ad5067270bbdf93e05",
-    "breadth": 3,
-    "failing_images": [
-      "cc-opus-single",
       "copilot-sonnet-gpt54-reviewer",
       "copilot-sonnet-single"
     ]
   },
   {
     "card": "sos_4",
-    "test_node": "tests.py::TestFiveColorResolution::test_five_color_full_effect",
-    "tests_hash": "741d0e84fa90a1e742662aafe554fd5c0c18914b40da45fb3b9922f151758400",
+    "test_node": "tests.py::TestFiveColorResolution::test_five_colors_full_effect",
+    "tests_hash": "5c48cfcd997494e3367b7192eea5afb34c037bd17cb130c3472e5aa370abf5e0",
     "breadth": 3,
     "failing_images": [
       "cc-sonnet-single",
@@ -854,7 +641,7 @@
   {
     "card": "sos_4",
     "test_node": "tests.py::TestOneColorResolution::test_one_color_draw_damage_life",
-    "tests_hash": "741d0e84fa90a1e742662aafe554fd5c0c18914b40da45fb3b9922f151758400",
+    "tests_hash": "5c48cfcd997494e3367b7192eea5afb34c037bd17cb130c3472e5aa370abf5e0",
     "breadth": 3,
     "failing_images": [
       "cc-sonnet-single",
@@ -865,7 +652,7 @@
   {
     "card": "sos_4",
     "test_node": "tests.py::TestZeroColorDiscriminator::test_zero_colors_no_effect",
-    "tests_hash": "741d0e84fa90a1e742662aafe554fd5c0c18914b40da45fb3b9922f151758400",
+    "tests_hash": "5c48cfcd997494e3367b7192eea5afb34c037bd17cb130c3472e5aa370abf5e0",
     "breadth": 3,
     "failing_images": [
       "cc-sonnet-single",
@@ -875,8 +662,41 @@
   },
   {
     "card": "sos_57",
-    "test_node": "tests.py::TestCounter::test_counters_via_real_cast",
-    "tests_hash": "4d413364affaa9f9e3268263d1bab6f7c85a002dfe1f00fa9931f11bd772a3e5",
+    "test_node": "tests.py::TestCounter::test_counters_target_spell",
+    "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
+    "breadth": 3,
+    "failing_images": [
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-sonnet-gpt54-reviewer"
+    ]
+  },
+  {
+    "card": "sos_57",
+    "test_node": "tests.py::TestRefund::test_no_refund_when_countered_spell_was_cast_for_free",
+    "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
+    "breadth": 3,
+    "failing_images": [
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-sonnet-gpt54-reviewer"
+    ]
+  },
+  {
+    "card": "sos_57",
+    "test_node": "tests.py::TestRefund::test_no_refund_without_wizard",
+    "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
+    "breadth": 3,
+    "failing_images": [
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-sonnet-gpt54-reviewer"
+    ]
+  },
+  {
+    "card": "sos_57",
+    "test_node": "tests.py::TestRefund::test_non_wizard_creature_does_not_enable_refund",
+    "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
     "breadth": 3,
     "failing_images": [
       "cc-opus-single",
@@ -886,18 +706,18 @@
   },
   {
     "card": "sos_120",
-    "test_node": "tests.py::TestExileFromLibraryUntilThreshold::test_exile_until_mv_sum_ge_4",
-    "tests_hash": "bde8803648b674d76c2c2c228446dc4737ea32d69600d06fa565edbf716590a9",
+    "test_node": "tests.py::TestCastBehaviour::test_exiled_card_cast_may_be_declined",
+    "tests_hash": "542db4c3c3797c5e26c1046f533ab299b36a4d7b2864b0399cf79db2424ac3bf",
     "breadth": 2,
     "failing_images": [
-      "copilot-gpt54-single",
-      "copilot-sonnet-gpt54-reviewer"
+      "cc-opus-single",
+      "copilot-gpt54-single"
     ]
   },
   {
     "card": "sos_13",
     "test_node": "tests.py",
-    "tests_hash": "041089b2ed20945cb3a0b5128a6bffbcac858cc3454797ea0d54551f47af699a",
+    "tests_hash": "e0c0e65c288bb61e2643f7446c8355897bbc359bf5828da255487ec3476a27e3",
     "breadth": 2,
     "failing_images": [
       "copilot-gpt54-sonnet-reviewer",
@@ -906,28 +726,28 @@
   },
   {
     "card": "sos_201",
-    "test_node": "tests.py::TestOpponentUpkeepDiscardAccepted::test_discard_to_draw_accepted",
-    "tests_hash": "d9f2ee477267a6d6a1466ae68c9c2acb0d3c712c01dd1674b21e6f0161778bea",
+    "test_node": "tests.py::TestOpponentUpkeepTrigger::test_opponent_upkeep_discard_declined",
+    "tests_hash": "6cde687bbec7844e13f26d159434d0adf616cee1245ce40ca3144846ca64b2f8",
     "breadth": 2,
     "failing_images": [
-      "cc-opus-48-bare",
+      "copilot-sonnet-gpt54-reviewer",
       "copilot-sonnet-single"
     ]
   },
   {
     "card": "sos_97",
-    "test_node": "tests.py::TestRalZarekGuestLecturer::test_dies_at_zero_loyalty",
-    "tests_hash": "50b39f075ddd5a03758c3be0ef6907d0b5e4f3751a58a0e7fe373219b4cdfbb4",
+    "test_node": "tests.py::TestPlusOne::test_plus_one_surveil_both_to_graveyard",
+    "tests_hash": "8eabfdd40c609ce59cbfafbe9b1972ddd5cf12ac546eb544445644cf7d872112",
     "breadth": 2,
     "failing_images": [
-      "cc-opus-48-bare",
+      "cc-opus-48-plan-tdd-xhigh",
       "copilot-sonnet-gpt54-reviewer"
     ]
   },
   {
     "card": "sos_1",
     "test_node": "tests.py",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
+    "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
     "breadth": 1,
     "failing_images": [
       "copilot-gpt54-sonnet-reviewer"
@@ -936,34 +756,16 @@
   {
     "card": "sos_120",
     "test_node": "tests.py",
-    "tests_hash": "bde8803648b674d76c2c2c228446dc4737ea32d69600d06fa565edbf716590a9",
+    "tests_hash": "542db4c3c3797c5e26c1046f533ab299b36a4d7b2864b0399cf79db2424ac3bf",
     "breadth": 1,
     "failing_images": [
       "copilot-gpt54-sonnet-reviewer"
-    ]
-  },
-  {
-    "card": "sos_120",
-    "test_node": "tests.py::TestCastChosenExiledCardsForFree::test_decline_cast_exiled_card",
-    "tests_hash": "bde8803648b674d76c2c2c228446dc4737ea32d69600d06fa565edbf716590a9",
-    "breadth": 1,
-    "failing_images": [
-      "copilot-gpt54-single"
-    ]
-  },
-  {
-    "card": "sos_120",
-    "test_node": "tests.py::TestDoesNotTargetOpponentCreatures::test_resolution_does_not_affect_opponent_board",
-    "tests_hash": "bde8803648b674d76c2c2c228446dc4737ea32d69600d06fa565edbf716590a9",
-    "breadth": 1,
-    "failing_images": [
-      "copilot-gpt54-single"
     ]
   },
   {
     "card": "sos_201",
     "test_node": "tests.py",
-    "tests_hash": "d9f2ee477267a6d6a1466ae68c9c2acb0d3c712c01dd1674b21e6f0161778bea",
+    "tests_hash": "6cde687bbec7844e13f26d159434d0adf616cee1245ce40ca3144846ca64b2f8",
     "breadth": 1,
     "failing_images": [
       "copilot-gpt54-sonnet-reviewer"
@@ -971,35 +773,17 @@
   },
   {
     "card": "sos_201",
-    "test_node": "tests.py::TestCreatureDrawnNoMiracle::test_creature_first_draw_no_miracle_trigger",
-    "tests_hash": "d9f2ee477267a6d6a1466ae68c9c2acb0d3c712c01dd1674b21e6f0161778bea",
+    "test_node": "tests.py::TestMiracle::test_no_miracle_on_second_draw",
+    "tests_hash": "6cde687bbec7844e13f26d159434d0adf616cee1245ce40ca3144846ca64b2f8",
     "breadth": 1,
     "failing_images": [
       "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_201",
-    "test_node": "tests.py::TestNoMiracleOnSubsequentDraws::test_no_miracle_on_second_draw",
-    "tests_hash": "d9f2ee477267a6d6a1466ae68c9c2acb0d3c712c01dd1674b21e6f0161778bea",
-    "breadth": 1,
-    "failing_images": [
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_201",
-    "test_node": "tests.py::TestOpponentUpkeepDiscardDeclined::test_discard_to_draw_declined",
-    "tests_hash": "d9f2ee477267a6d6a1466ae68c9c2acb0d3c712c01dd1674b21e6f0161778bea",
-    "breadth": 1,
-    "failing_images": [
-      "copilot-sonnet-gpt54-reviewer"
     ]
   },
   {
     "card": "sos_226",
     "test_node": "tests.py",
-    "tests_hash": "0eedd5314fa4eb758510f7a44013aa637dc9930c8e94d1ebd8e8b4fe98e8314d",
+    "tests_hash": "15a392cad56286171f7c01f40ade57df0eb45e3a6649c97a42e9273d5dc2436e",
     "breadth": 1,
     "failing_images": [
       "copilot-gpt54-sonnet-reviewer"
@@ -1008,16 +792,43 @@
   {
     "card": "sos_245",
     "test_node": "tests.py",
-    "tests_hash": "c9332f3f6000685a6b05032d94fab62998be8d54923485ee63ca71a29da4e210",
+    "tests_hash": "abd06914c5996a2cdeea2c247fd6faf2ad28188918a0eb7f576e60d34ce044fb",
     "breadth": 1,
     "failing_images": [
       "copilot-gpt54-sonnet-reviewer"
+    ]
+  },
+  {
+    "card": "sos_245",
+    "test_node": "tests.py::TestOwnAffinity::test_own_affinity_clamps_at_generic_portion",
+    "tests_hash": "abd06914c5996a2cdeea2c247fd6faf2ad28188918a0eb7f576e60d34ce044fb",
+    "breadth": 1,
+    "failing_images": [
+      "copilot-sonnet-gpt54-reviewer"
+    ]
+  },
+  {
+    "card": "sos_245",
+    "test_node": "tests.py::TestOwnAffinity::test_own_affinity_reduces_cost_by_creature_count",
+    "tests_hash": "abd06914c5996a2cdeea2c247fd6faf2ad28188918a0eb7f576e60d34ce044fb",
+    "breadth": 1,
+    "failing_images": [
+      "copilot-sonnet-gpt54-reviewer"
+    ]
+  },
+  {
+    "card": "sos_245",
+    "test_node": "tests.py::TestOwnAffinity::test_own_affinity_reduction_is_not_one_more",
+    "tests_hash": "abd06914c5996a2cdeea2c247fd6faf2ad28188918a0eb7f576e60d34ce044fb",
+    "breadth": 1,
+    "failing_images": [
+      "copilot-sonnet-gpt54-reviewer"
     ]
   },
   {
     "card": "sos_257",
     "test_node": "tests.py",
-    "tests_hash": "1ac07ed4e03c2053232f2ede8b403575a6fd28a27cb1f1ad5067270bbdf93e05",
+    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
     "breadth": 1,
     "failing_images": [
       "copilot-gpt54-sonnet-reviewer"
@@ -1026,16 +837,25 @@
   {
     "card": "sos_4",
     "test_node": "tests.py",
-    "tests_hash": "741d0e84fa90a1e742662aafe554fd5c0c18914b40da45fb3b9922f151758400",
+    "tests_hash": "5c48cfcd997494e3367b7192eea5afb34c037bd17cb130c3472e5aa370abf5e0",
     "breadth": 1,
     "failing_images": [
       "copilot-gpt54-sonnet-reviewer"
+    ]
+  },
+  {
+    "card": "sos_4",
+    "test_node": "tests.py::TestCastLegality::test_insufficient_mana_cast_rejected",
+    "tests_hash": "5c48cfcd997494e3367b7192eea5afb34c037bd17cb130c3472e5aa370abf5e0",
+    "breadth": 1,
+    "failing_images": [
+      "copilot-sonnet-gpt54-reviewer"
     ]
   },
   {
     "card": "sos_57",
     "test_node": "tests.py",
-    "tests_hash": "4d413364affaa9f9e3268263d1bab6f7c85a002dfe1f00fa9931f11bd772a3e5",
+    "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
     "breadth": 1,
     "failing_images": [
       "copilot-gpt54-sonnet-reviewer"
@@ -1044,7 +864,7 @@
   {
     "card": "sos_97",
     "test_node": "tests.py",
-    "tests_hash": "50b39f075ddd5a03758c3be0ef6907d0b5e4f3751a58a0e7fe373219b4cdfbb4",
+    "tests_hash": "8eabfdd40c609ce59cbfafbe9b1972ddd5cf12ac546eb544445644cf7d872112",
     "breadth": 1,
     "failing_images": [
       "copilot-gpt54-sonnet-reviewer"
@@ -1052,8 +872,8 @@
   },
   {
     "card": "sos_97",
-    "test_node": "tests.py::TestRalZarekGuestLecturer::test_insufficient_loyalty_rejection",
-    "tests_hash": "50b39f075ddd5a03758c3be0ef6907d0b5e4f3751a58a0e7fe373219b4cdfbb4",
+    "test_node": "tests.py::TestLoyaltyLegality::test_insufficient_loyalty_rejected",
+    "tests_hash": "8eabfdd40c609ce59cbfafbe9b1972ddd5cf12ac546eb544445644cf7d872112",
     "breadth": 1,
     "failing_images": [
       "copilot-sonnet-gpt54-reviewer"
@@ -1061,26 +881,8 @@
   },
   {
     "card": "sos_97",
-    "test_node": "tests.py::TestRalZarekGuestLecturer::test_loyalty_ability_structure",
-    "tests_hash": "50b39f075ddd5a03758c3be0ef6907d0b5e4f3751a58a0e7fe373219b4cdfbb4",
-    "breadth": 1,
-    "failing_images": [
-      "copilot-sonnet-gpt54-reviewer"
-    ]
-  },
-  {
-    "card": "sos_97",
-    "test_node": "tests.py::TestRalZarekGuestLecturer::test_one_ability_per_turn",
-    "tests_hash": "50b39f075ddd5a03758c3be0ef6907d0b5e4f3751a58a0e7fe373219b4cdfbb4",
-    "breadth": 1,
-    "failing_images": [
-      "copilot-sonnet-gpt54-reviewer"
-    ]
-  },
-  {
-    "card": "sos_97",
-    "test_node": "tests.py::TestRalZarekGuestLecturer::test_plus_one_effect_both_to_graveyard",
-    "tests_hash": "50b39f075ddd5a03758c3be0ef6907d0b5e4f3751a58a0e7fe373219b4cdfbb4",
+    "test_node": "tests.py::TestLoyaltyLegality::test_second_loyalty_activation_same_turn_rejected",
+    "tests_hash": "8eabfdd40c609ce59cbfafbe9b1972ddd5cf12ac546eb544445644cf7d872112",
     "breadth": 1,
     "failing_images": [
       "copilot-sonnet-gpt54-reviewer"
@@ -1088,323 +890,197 @@
   },
   {
     "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicAttackTriggerDecline::test_decline_does_not_cast_from_gy",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
+    "test_node": "tests.py::TestAttackTrigger::test_attack_trigger_may_be_declined",
+    "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicAttackTriggerDecline::test_decline_leaves_stack_empty",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
+    "test_node": "tests.py::TestAttackTrigger::test_no_trigger_without_instant_or_sorcery_in_graveyard",
+    "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicCostReduction::test_counts_instants_in_gy",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
+    "test_node": "tests.py::TestCostReduction::test_cost_reduced_by_instants_and_sorceries_in_graveyard",
+    "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicCostReduction::test_counts_sorceries_in_gy",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
+    "test_node": "tests.py::TestCostReduction::test_cost_reduction_is_not_one_more",
+    "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicCostReduction::test_does_not_count_creatures",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
+    "test_node": "tests.py::TestCostReduction::test_creatures_in_graveyard_do_not_reduce",
+    "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicCostReduction::test_no_instants_or_sorceries_in_gy",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicIdentity::test_cmc",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicIdentity::test_colorless",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicIdentity::test_is_creature",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicIdentity::test_legendary_supertype",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicIdentity::test_mana_cost",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicIdentity::test_name",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicIdentity::test_power_toughness",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicIdentity::test_reach_keyword",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_1",
-    "test_node": "tests.py::TestTheDawningArchaicIdentity::test_subtypes",
-    "tests_hash": "d191bce58ec0b7a83f815de9755f1e404bd450a1bcbde475ab5f17cb06cd9b81",
+    "test_node": "tests.py::TestIdentity::test_card_identity",
+    "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_120",
-    "test_node": "tests.py::TestDoesNotTargetOpponentCreatures::test_no_targets",
-    "tests_hash": "bde8803648b674d76c2c2c228446dc4737ea32d69600d06fa565edbf716590a9",
+    "test_node": "tests.py::TestIdentity::test_card_identity",
+    "tests_hash": "542db4c3c3797c5e26c1046f533ab299b36a4d7b2864b0399cf79db2424ac3bf",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_120",
-    "test_node": "tests.py::TestIdentity::test_identity",
-    "tests_hash": "bde8803648b674d76c2c2c228446dc4737ea32d69600d06fa565edbf716590a9",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_13",
-    "test_node": "tests.py::TestBackHalfCostNotInCMC::test_back_half_cost_not_in_cmc",
-    "tests_hash": "041089b2ed20945cb3a0b5128a6bffbcac858cc3454797ea0d54551f47af699a",
+    "test_node": "tests.py::TestParadigmRecurrence::test_paradigm_recurrence_may_be_declined",
+    "tests_hash": "542db4c3c3797c5e26c1046f533ab299b36a4d7b2864b0399cf79db2424ac3bf",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_201",
-    "test_node": "tests.py::TestIdentity::test_identity",
-    "tests_hash": "d9f2ee477267a6d6a1466ae68c9c2acb0d3c712c01dd1674b21e6f0161778bea",
+    "test_node": "tests.py::TestIdentity::test_card_identity",
+    "tests_hash": "6cde687bbec7844e13f26d159434d0adf616cee1245ce40ca3144846ca64b2f8",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_201",
-    "test_node": "tests.py::TestMiracleDeclined::test_miracle_offer_declined_card_stays_in_hand",
-    "tests_hash": "d9f2ee477267a6d6a1466ae68c9c2acb0d3c712c01dd1674b21e6f0161778bea",
+    "test_node": "tests.py::TestMiracle::test_miracle_grant_scoped_to_controllers_hand",
+    "tests_hash": "6cde687bbec7844e13f26d159434d0adf616cee1245ce40ca3144846ca64b2f8",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_201",
-    "test_node": "tests.py::TestNoTriggerOnControllerUpkeep::test_no_trigger_on_own_upkeep",
-    "tests_hash": "d9f2ee477267a6d6a1466ae68c9c2acb0d3c712c01dd1674b21e6f0161778bea",
+    "test_node": "tests.py::TestMiracle::test_miracle_offer_may_be_declined",
+    "tests_hash": "6cde687bbec7844e13f26d159434d0adf616cee1245ce40ca3144846ca64b2f8",
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_201",
+    "test_node": "tests.py::TestMiracle::test_no_miracle_without_lorehold",
+    "tests_hash": "6cde687bbec7844e13f26d159434d0adf616cee1245ce40ca3144846ca64b2f8",
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_201",
+    "test_node": "tests.py::TestOpponentUpkeepTrigger::test_no_trigger_on_controllers_own_upkeep",
+    "tests_hash": "6cde687bbec7844e13f26d159434d0adf616cee1245ce40ca3144846ca64b2f8",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_226",
-    "test_node": "tests.py::TestIdentity::test_identity",
-    "tests_hash": "0eedd5314fa4eb758510f7a44013aa637dc9930c8e94d1ebd8e8b4fe98e8314d",
+    "test_node": "tests.py::TestCasualty::test_casualty_may_be_declined",
+    "tests_hash": "15a392cad56286171f7c01f40ade57df0eb45e3a6649c97a42e9273d5dc2436e",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_226",
-    "test_node": "tests.py::TestNoCasualtyOnCreatureSpell::test_no_casualty_on_creature",
-    "tests_hash": "0eedd5314fa4eb758510f7a44013aa637dc9930c8e94d1ebd8e8b4fe98e8314d",
+    "test_node": "tests.py::TestCasualty::test_no_casualty_on_creature_spells",
+    "tests_hash": "15a392cad56286171f7c01f40ade57df0eb45e3a6649c97a42e9273d5dc2436e",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_226",
-    "test_node": "tests.py::TestNoGetTargets::test_no_get_targets",
-    "tests_hash": "0eedd5314fa4eb758510f7a44013aa637dc9930c8e94d1ebd8e8b4fe98e8314d",
+    "test_node": "tests.py::TestCasualty::test_no_casualty_without_the_granter",
+    "tests_hash": "15a392cad56286171f7c01f40ade57df0eb45e3a6649c97a42e9273d5dc2436e",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_226",
-    "test_node": "tests.py::TestRemovedWhenSilverquillLeaves::test_no_casualty_after_silverquill_leaves",
-    "tests_hash": "0eedd5314fa4eb758510f7a44013aa637dc9930c8e94d1ebd8e8b4fe98e8314d",
+    "test_node": "tests.py::TestIdentity::test_card_identity",
+    "tests_hash": "15a392cad56286171f7c01f40ade57df0eb45e3a6649c97a42e9273d5dc2436e",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_245",
-    "test_node": "tests.py::TestAffinityReducesOwnCost::test_no_creatures_no_reduction",
-    "tests_hash": "c9332f3f6000685a6b05032d94fab62998be8d54923485ee63ca71a29da4e210",
+    "test_node": "tests.py::TestCombatKeywordsByOutcome::test_deathtouch_fells_tough_blocker_by_outcome",
+    "tests_hash": "abd06914c5996a2cdeea2c247fd6faf2ad28188918a0eb7f576e60d34ce044fb",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_245",
-    "test_node": "tests.py::TestAffinityReducesOwnCost::test_reduction_clamped_to_generic",
-    "tests_hash": "c9332f3f6000685a6b05032d94fab62998be8d54923485ee63ca71a29da4e210",
+    "test_node": "tests.py::TestCombatKeywordsByOutcome::test_flying_evades_ground_blocker_by_outcome",
+    "tests_hash": "abd06914c5996a2cdeea2c247fd6faf2ad28188918a0eb7f576e60d34ce044fb",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_245",
-    "test_node": "tests.py::TestAffinityReducesOwnCost::test_reduction_equals_creature_count",
-    "tests_hash": "c9332f3f6000685a6b05032d94fab62998be8d54923485ee63ca71a29da4e210",
+    "test_node": "tests.py::TestGrantedAffinity::test_grant_does_not_apply_to_creature_spells",
+    "tests_hash": "abd06914c5996a2cdeea2c247fd6faf2ad28188918a0eb7f576e60d34ce044fb",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_245",
-    "test_node": "tests.py::TestIdentity::test_colors",
-    "tests_hash": "c9332f3f6000685a6b05032d94fab62998be8d54923485ee63ca71a29da4e210",
+    "test_node": "tests.py::TestGrantedAffinity::test_grant_does_not_apply_to_opponents_spells",
+    "tests_hash": "abd06914c5996a2cdeea2c247fd6faf2ad28188918a0eb7f576e60d34ce044fb",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_245",
-    "test_node": "tests.py::TestIdentity::test_name_and_mana_cost",
-    "tests_hash": "c9332f3f6000685a6b05032d94fab62998be8d54923485ee63ca71a29da4e210",
+    "test_node": "tests.py::TestGrantedAffinity::test_granted_affinity_reduction_is_not_one_more",
+    "tests_hash": "abd06914c5996a2cdeea2c247fd6faf2ad28188918a0eb7f576e60d34ce044fb",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_245",
-    "test_node": "tests.py::TestIdentity::test_power_toughness",
-    "tests_hash": "c9332f3f6000685a6b05032d94fab62998be8d54923485ee63ca71a29da4e210",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_245",
-    "test_node": "tests.py::TestIdentity::test_types_and_supertypes",
-    "tests_hash": "c9332f3f6000685a6b05032d94fab62998be8d54923485ee63ca71a29da4e210",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_245",
-    "test_node": "tests.py::TestKeywords::test_has_deathtouch",
-    "tests_hash": "c9332f3f6000685a6b05032d94fab62998be8d54923485ee63ca71a29da4e210",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_245",
-    "test_node": "tests.py::TestKeywords::test_has_flying",
-    "tests_hash": "c9332f3f6000685a6b05032d94fab62998be8d54923485ee63ca71a29da4e210",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_245",
-    "test_node": "tests.py::TestNoGrantToCreatureSpells::test_creature_spell_no_grant",
-    "tests_hash": "c9332f3f6000685a6b05032d94fab62998be8d54923485ee63ca71a29da4e210",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_245",
-    "test_node": "tests.py::TestNoGrantToOpponent::test_opponent_instant_no_reduction",
-    "tests_hash": "c9332f3f6000685a6b05032d94fab62998be8d54923485ee63ca71a29da4e210",
+    "test_node": "tests.py::TestIdentity::test_card_identity",
+    "tests_hash": "abd06914c5996a2cdeea2c247fd6faf2ad28188918a0eb7f576e60d34ce044fb",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_257",
-    "test_node": "tests.py::TestIdentity::test_identity",
-    "tests_hash": "1ac07ed4e03c2053232f2ede8b403575a6fd28a27cb1f1ad5067270bbdf93e05",
+    "test_node": "tests.py::TestIdentity::test_card_identity",
+    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_4",
-    "test_node": "tests.py::TestIdentity::test_card_type_sorcery",
-    "tests_hash": "741d0e84fa90a1e742662aafe554fd5c0c18914b40da45fb3b9922f151758400",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_4",
-    "test_node": "tests.py::TestIdentity::test_colorless_identity",
-    "tests_hash": "741d0e84fa90a1e742662aafe554fd5c0c18914b40da45fb3b9922f151758400",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_4",
-    "test_node": "tests.py::TestIdentity::test_is_sorcery_subclass",
-    "tests_hash": "741d0e84fa90a1e742662aafe554fd5c0c18914b40da45fb3b9922f151758400",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_4",
-    "test_node": "tests.py::TestIdentity::test_mana_cost_cmc_6",
-    "tests_hash": "741d0e84fa90a1e742662aafe554fd5c0c18914b40da45fb3b9922f151758400",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_4",
-    "test_node": "tests.py::TestIdentity::test_name",
-    "tests_hash": "741d0e84fa90a1e742662aafe554fd5c0c18914b40da45fb3b9922f151758400",
-    "breadth": 0,
-    "failing_images": []
-  },
-  {
-    "card": "sos_4",
-    "test_node": "tests.py::TestIdentity::test_no_converge_keyword",
-    "tests_hash": "741d0e84fa90a1e742662aafe554fd5c0c18914b40da45fb3b9922f151758400",
+    "test_node": "tests.py::TestIdentity::test_card_identity",
+    "tests_hash": "5c48cfcd997494e3367b7192eea5afb34c037bd17cb130c3472e5aa370abf5e0",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_57",
-    "test_node": "tests.py::TestIdentity::test_identity",
-    "tests_hash": "4d413364affaa9f9e3268263d1bab6f7c85a002dfe1f00fa9931f11bd772a3e5",
+    "test_node": "tests.py::TestCounter::test_insufficient_mana_cast_rejected",
+    "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_57",
-    "test_node": "tests.py::TestRefund::test_no_refund_without_wizard",
-    "tests_hash": "4d413364affaa9f9e3268263d1bab6f7c85a002dfe1f00fa9931f11bd772a3e5",
+    "test_node": "tests.py::TestIdentity::test_card_identity",
+    "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
     "breadth": 0,
     "failing_images": []
   },
   {
     "card": "sos_97",
-    "test_node": "tests.py::TestRalZarekGuestLecturer::test_identity",
-    "tests_hash": "50b39f075ddd5a03758c3be0ef6907d0b5e4f3751a58a0e7fe373219b4cdfbb4",
+    "test_node": "tests.py::TestIdentity::test_card_identity",
+    "tests_hash": "8eabfdd40c609ce59cbfafbe9b1972ddd5cf12ac546eb544445644cf7d872112",
     "breadth": 0,
     "failing_images": []
   }
