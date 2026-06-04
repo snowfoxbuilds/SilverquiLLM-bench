@@ -348,6 +348,25 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     #    granter is on the controller's battlefield, offer the additional cost.
     _handle_casualty(game, card, player, stack_obj)
 
+    # 10. Fire the spell-cast event so "whenever you cast ..." triggered
+    #     abilities are placed on the stack (above the spell).
+    _fire_spell_cast_event(game, card, player)
+
+
+def _fire_spell_cast_event(game: GameState, card: CardImpl, player: Player) -> None:
+    """Fire :class:`~engine.events.SpellCastTriggeredEvent` for a cast spell.
+
+    Pushes any matching "whenever ... casts a spell" triggered abilities onto
+    the stack.  Spell *copies* (casualty, etc.) are put onto the stack without
+    being cast, so they do not fire this event.
+    """
+    from engine.events import SpellCastTriggeredEvent
+
+    game.trigger_manager.fire_event(
+        game,
+        SpellCastTriggeredEvent(spell=card, player=player, card=card, controller=player),
+    )
+
 
 # ------------------------------------------------------------------
 # Casualty primitive
@@ -391,24 +410,26 @@ def _handle_casualty(
     candidates = []
     for perm in bf.get_all():
         if CardType.CREATURE in getattr(perm, "card_types", set()):
-            power = getattr(perm, "base_power", 0)
-            # Use modified_power if available (for P/T effects)
-            power = getattr(perm, "modified_power", power)
+            # Current power (counters-aware), falling back through
+            # modified/base power for duck-typed objects without the
+            # canonical ``power`` property.
+            power = getattr(
+                perm, "power",
+                getattr(perm, "modified_power", getattr(perm, "base_power", 0)),
+            )
             if power >= casualty_n:
                 candidates.append(perm)
 
     if not candidates:
         return  # No legal sacrifice — casualty not offered
 
-    # Ask the player whether to pay casualty (scripted choice)
-    from engine.player import DeterministicPlayer
-
-    if isinstance(player, DeterministicPlayer):
-        if not player._script:
-            return  # No script entry — auto-decline
-        choice = player._pop()
-    else:
-        choice = player.choose(candidates, "Choose a creature to sacrifice for casualty (or decline)")
+    # Ask the player whether to pay casualty via the public choice API.
+    # Scripted players answer from their choice script; an answer of
+    # "decline_casualty" or None declines the additional cost.
+    choice = player.choose(
+        candidates,
+        "Choose a creature to sacrifice for casualty (or decline)",
+    )
 
     if choice == "decline_casualty" or choice is None:
         return
@@ -578,6 +599,9 @@ def cast_spell_free(
 
     # Casualty — offer for instant/sorcery spells
     _handle_casualty(game, card, player, stack_obj)
+
+    # Fire the spell-cast event ("whenever you cast ..." triggers).
+    _fire_spell_cast_event(game, card, player)
 
 
 # ------------------------------------------------------------------
@@ -759,6 +783,9 @@ def cast_spell_for_cost(
 
     # Casualty — offer for instant/sorcery spells
     _handle_casualty(game, card, player, stack_obj)
+
+    # Fire the spell-cast event ("whenever you cast ..." triggers).
+    _fire_spell_cast_event(game, card, player)
 
 
 def resolve_top(game: GameState) -> None:

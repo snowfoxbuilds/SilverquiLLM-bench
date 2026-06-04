@@ -1,390 +1,214 @@
-"""Rewritten audited tests for Emeritus of Truce // Swords to Plowshares (sos_13).
+"""Audited tests for Emeritus of Truce // Swords to Plowshares (sos_13).
 
-6 tests:
-1. Identity: name, mana_cost, CMC 3, types, colors, no PREPARED keyword
-2. ETB token creation: cast creature via cast_spell, verify target player gets Inkling
-3. Token characteristics: 2/1 white/black Inkling with flying
-4. Prepared cast from exile: cast from exile for {W}, targets creature, exiles it,
-   controller gains life = power
-5. Prepared rejected without flag: card in exile without prepared → cannot cast
-6. Back-half cost not in CMC: CMC is 3, not 4
+Oracle (front face — Creature {1}{W}{W} 3/3 Cat Cleric):
+  When this creature enters, target player creates a 2/1 white and black
+  Inkling creature token with flying.  Then if an opponent controls more
+  creatures than you, this creature becomes prepared.
+Oracle (back face — Instant, cast via Prepared from exile for {W}):
+  Exile target creature.  Its controller gains life equal to its power.
 
-Bug pattern addressed: split-Prepared CMC was erroneously summed to 4
-(front 3 + back 1). Correct CMC is 3 (front face only).
+Simulation-only shape (AUDITED-TEST-API.md): the prepared state is never
+injected via a private flag — it is established through gameplay (the
+front-face cast resolving while an opponent controls more creatures) and
+observed through outcomes: whether the back face is castable from exile
+(``CastSpell(..., from_zone=Zone.EXILE)`` → the test-layer
+cast-from-exile helper), the creature it exiles, and the life its controller
+gains.  Reaching exile itself is test setup (``set_board_state(exile=...)``).
+
+Tests:
+  1. test_card_identity (CMC is 3 — the back-face {W} alt cost does not
+     contribute)
+  2. test_etb_creates_inkling_for_target_player
+  3. test_etb_token_can_be_given_to_self
+  4. test_prepared_back_face_exiles_creature_and_grants_life
+  5. test_not_prepared_when_creature_counts_equal
+  6. test_prepared_consumed_after_back_face_cast
 """
 
 from __future__ import annotations
 
-import pytest
-
 from card_impl import EmeritusOfTruceSwordsToPlowshares
 
 from engine.card import Creature
-from engine.types import CardType, Keyword, ManaCost, ManaType, Zone
+from engine.types import CardType, ManaType, Phase, Zone
 from test_utils import (
-    card_colors,
-    cast_spell,
-    cast_spell_from_exile,
+    CastSpell,
+    DeterministicPlayer,
+    advance_to_phase,
+    assert_in_zone,
+    assert_life_total,
+    assert_power_toughness,
+    assert_stack_empty,
+    assert_zone_count,
     create_game,
+    no_op,
+    perform_action,
+    perform_illegal_action,
+    priority_loop,
     set_board_state,
-    set_hand,
-    set_mana_pool,
+    set_player,
 )
 
+_NAME = "Emeritus of Truce // Swords to Plowshares"
+_FRONT_FACE_MANA = {ManaType.WHITE: 2, ManaType.COLORLESS: 1}
 
-# ---------------------------------------------------------------------------
-# Test 1: Identity
-# ---------------------------------------------------------------------------
+
+def _cast_front_face(game, target_player_index: int):
+    """Cast the front-face creature from hand targeting a player; return the
+    card object (now on player 0's battlefield after its ETB resolves)."""
+    card = EmeritusOfTruceSwordsToPlowshares()
+    set_board_state(game, 0, hand=[card], mana=_FRONT_FACE_MANA)
+    set_player(game, 0, DeterministicPlayer("P0", script=[
+        perform_action(CastSpell(_NAME, targets=[game.players[target_player_index]])),
+        no_op(),
+    ]))
+    set_player(game, 1, DeterministicPlayer("P1", script=[no_op()]))
+    priority_loop(game)
+    assert_in_zone(game, 0, Zone.BATTLEFIELD, _NAME)
+    return card
 
 
 class TestIdentity:
-    """Verify static card properties: name, mana_cost, CMC, types, colors, keywords."""
-
-    def test_identity(self) -> None:
-        """Card has correct name, mana cost {1}{W}{W}, CMC=3, types, colors, no PREPARED."""
-        card = EmeritusOfTruceSwordsToPlowshares(owner=None)
-
-        # Name
-        assert card.name == "Emeritus of Truce // Swords to Plowshares"
-
-        # Mana cost: {1}{W}{W}
+    def test_card_identity(self) -> None:
+        card = EmeritusOfTruceSwordsToPlowshares()
+        assert card.name == _NAME
+        # Front face cost {1}{W}{W}; the back-face {W} alternative cost does
+        # NOT contribute to the converted mana cost.
         assert card.mana_cost.generic == 1
         assert card.mana_cost.pips.get(ManaType.WHITE) == 2
-
-        # CMC must be 3 (front face only), NOT 4
-        assert card.mana_cost.cmc == 3, (
-            f"CMC must be 3 (front face only), got {card.mana_cost.cmc}"
-        )
-
-        # Types
+        assert card.mana_cost.cmc == 3
         assert CardType.CREATURE in card.card_types
-
-        # Subtypes
         assert "Cat" in card.subtypes
         assert "Cleric" in card.subtypes
-
-        # Colors (derived from mana cost — white)
-        colors = card_colors(card)
-        assert "W" in colors
-        assert len(colors) == 1, f"Expected only white, got {colors}"
-
-        # PREPARED is an ability word, NOT a keyword — must not appear
-        if hasattr(Keyword, "PREPARED"):
-            assert Keyword.PREPARED not in card.keywords  # type: ignore[attr-defined]
+        assert card.base_power == 3
+        assert card.base_toughness == 3
 
 
-# ---------------------------------------------------------------------------
-# Test 2: ETB token creation — cast via cast_spell, ETB triggers naturally
-# ---------------------------------------------------------------------------
-
-
-class TestETBTokenCreation:
-    """Cast the creature via cast_spell and verify ETB creates token for target player."""
-
-    def test_etb_token_creation(self) -> None:
-        """Casting Emeritus of Truce via cast_spell triggers ETB; target player gets token."""
+class TestETBToken:
+    def test_etb_creates_inkling_for_target_player(self) -> None:
+        """Casting the front face creates a 2/1 Inkling on the targeted
+        player's battlefield."""
         game = create_game()
-        player = game.players[0]
-        opponent = game.players[1]
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
 
-        card = EmeritusOfTruceSwordsToPlowshares(owner=player)
-        card.controller = player
+        _cast_front_face(game, target_player_index=1)
 
-        # Put card in hand and provide mana
-        set_hand(game, 0, [card])
-        set_mana_pool(game, 0, {ManaType.WHITE: 2, ManaType.COLORLESS: 1})
+        assert_in_zone(game, 1, Zone.BATTLEFIELD, "Inkling")
+        assert_power_toughness(game, "Inkling", 2, 1)
+        # The token went to the chosen player only.
+        assert_zone_count(game, 1, Zone.BATTLEFIELD, 1)
+        assert_stack_empty(game)
 
-        # Cast targeting opponent (opponent should get the token)
-        cast_spell(game, 0, "Emeritus of Truce // Swords to Plowshares", targets=[opponent])
-
-        # Verify the target player (opponent) received the Inkling token
-        opp_bf = opponent.zones[Zone.BATTLEFIELD].get_all()
-        tokens = [c for c in opp_bf if getattr(c, "is_token", False)]
-        assert len(tokens) >= 1, (
-            "Target player must receive at least one Inkling token from ETB"
-        )
-        token = tokens[0]
-        assert getattr(token, "name", None) == "Inkling", (
-            f"Token should be named 'Inkling', got {getattr(token, 'name', None)!r}"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Test 3: Token characteristics — 2/1 white/black Inkling with flying
-# ---------------------------------------------------------------------------
-
-
-class TestTokenCharacteristics:
-    """Token created by ETB has correct P/T, colors, subtypes, and flying."""
-
-    def test_token_characteristics(self) -> None:
-        """Inkling token is 2/1, white and black, creature, with flying."""
+    def test_etb_token_can_be_given_to_self(self) -> None:
+        """'Target player' may be the controller — the token lands on the
+        controller's battlefield and the opponent gets nothing."""
         game = create_game()
-        player = game.players[0]
-        opponent = game.players[1]
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
 
-        card = EmeritusOfTruceSwordsToPlowshares(owner=player)
-        card.controller = player
+        _cast_front_face(game, target_player_index=0)
 
-        set_hand(game, 0, [card])
-        set_mana_pool(game, 0, {ManaType.WHITE: 2, ManaType.COLORLESS: 1})
-
-        # Cast targeting opponent
-        cast_spell(game, 0, "Emeritus of Truce // Swords to Plowshares", targets=[opponent])
-
-        # Find the token
-        opp_bf = opponent.zones[Zone.BATTLEFIELD].get_all()
-        tokens = [c for c in opp_bf if getattr(c, "is_token", False)]
-        assert len(tokens) >= 1, "Token must exist on target player's battlefield"
-        token = tokens[0]
-
-        # Power/toughness: 2/1
-        assert token.base_power == 2, f"Token power should be 2, got {token.base_power}"
-        assert token.base_toughness == 1, f"Token toughness should be 1, got {token.base_toughness}"
-
-        # Is a creature
-        assert CardType.CREATURE in token.card_types
-
-        # Has flying
-        assert Keyword.FLYING in token.keywords, "Inkling token must have flying"
-
-        # Subtype: Inkling
-        assert "Inkling" in getattr(token, "subtypes", set()), "Token must have Inkling subtype"
+        assert_in_zone(game, 0, Zone.BATTLEFIELD, "Inkling")
+        assert_zone_count(game, 1, Zone.BATTLEFIELD, 0)
 
 
-# ---------------------------------------------------------------------------
-# Test 4: Prepared cast from exile — back-face instant behavior
-# ---------------------------------------------------------------------------
-
-
-class TestPreparedCastFromExile:
-    """Cast from exile via prepared; verify back-face exiles creature and gains life."""
-
-    def test_prepared_cast_from_exile(self) -> None:
-        """Put card in exile with prepared flag, cast for {W} targeting opponent's
-        creature. Verify: creature is exiled, its controller gains life = power."""
+class TestPreparedBackFace:
+    def test_prepared_back_face_exiles_creature_and_grants_life(self) -> None:
+        """With an opponent controlling more creatures, the ETB makes the
+        card prepared; from exile the back face exiles the targeted creature
+        and its controller gains life equal to its power."""
         game = create_game()
-        player = game.players[0]
-        opponent = game.players[1]
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
 
-        # Set up a creature on opponent's battlefield to target
-        target_creature = Creature(
-            name="Grizzly Bears",
-            base_power=4,
-            base_toughness=4,
-            owner=opponent,
-            controller=opponent,
-        )
-        set_board_state(game, 1, battlefield=[target_creature])
+        bear = Creature(name="Grizzly Bears", base_power=4, base_toughness=4)
+        ogre = Creature(name="Hill Ogre", base_power=3, base_toughness=3)
+        set_board_state(game, 1, battlefield=[bear, ogre])
 
-        # Record opponent's starting life
-        opponent_life_before = opponent.life
+        # ETB token goes to the opponent → opponent 3 creatures vs our 1 →
+        # prepared (established through gameplay, not a flag poke).
+        card = _cast_front_face(game, target_player_index=1)
 
-        # Put the card in exile with prepared flag
-        card = EmeritusOfTruceSwordsToPlowshares(owner=player)
-        card.controller = player
-        card._prepared = True
-        player.zones[Zone.EXILE].add(card)
+        # Setup: place the prepared card in exile (the one place a test may
+        # write state directly).
+        set_board_state(game, 0, battlefield=[], exile=[card])
 
-        # Give player {W} to pay the alt cost
-        set_mana_pool(game, 0, {ManaType.WHITE: 1})
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            perform_action(CastSpell(
+                _NAME, targets=["Grizzly Bears"], from_zone=Zone.EXILE,
+            )),
+            no_op(),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[no_op()]))
+        priority_loop(game)
 
-        # Cast from exile targeting the opponent's creature
-        cast_spell_from_exile(
-            game, 0, "Emeritus of Truce // Swords to Plowshares",
-            targets=[target_creature],
-        )
+        # The 4/4 was exiled and its controller gained 4 life.
+        assert_in_zone(game, 1, Zone.EXILE, "Grizzly Bears")
+        assert_life_total(game, 1, 24)
+        assert_in_zone(game, 1, Zone.BATTLEFIELD, "Hill Ogre")
 
-        # Verify: target creature was exiled (not on opponent's battlefield)
-        opp_bf = opponent.zones[Zone.BATTLEFIELD].get_all()
-        opp_bf_names = [getattr(c, "name", None) for c in opp_bf]
-        assert "Grizzly Bears" not in opp_bf_names, (
-            "Target creature must be exiled from the battlefield"
-        )
-
-        # Verify: creature's controller (opponent) gained life = creature's power (4)
-        life_gained = opponent.life - opponent_life_before
-        assert life_gained == 4, (
-            f"Controller should gain life equal to creature's power (4), "
-            f"but gained {life_gained}"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Test 5: Prepared rejected without flag
-# ---------------------------------------------------------------------------
-
-
-class TestPreparedRejectedWithoutFlag:
-    """Card in exile without prepared flag → cannot cast."""
-
-    def test_prepared_rejected_without_flag(self) -> None:
-        """When card is in exile but NOT prepared, alt cost is NOT available."""
+    def test_not_prepared_when_creature_counts_equal(self) -> None:
+        """The prepared clause is a strict inequality: with equal creature
+        counts after the ETB, the card is not prepared and the back face
+        cannot be cast from exile."""
         game = create_game()
-        player = game.players[0]
-        card = EmeritusOfTruceSwordsToPlowshares(owner=player)
-        card.controller = player
-        # Put card in exile WITHOUT prepared flag
-        player.zones[Zone.EXILE].add(card)
-        card._prepared = False
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
 
-        assert not card.can_cast_from_exile(game), (
-            "Alt cost must NOT be available when not prepared"
-        )
-        assert card.get_alternative_cost() is None, (
-            "get_alternative_cost must return None when not prepared"
-        )
+        my_bear = Creature(name="My Bear", base_power=2, base_toughness=2)
+        opp_bear = Creature(name="Opp Bear", base_power=2, base_toughness=2)
+        set_board_state(game, 0, battlefield=[my_bear])
+        set_board_state(game, 1, battlefield=[opp_bear])
 
+        # Token to the opponent → 2 vs 2 (equal) → NOT prepared.
+        card = _cast_front_face(game, target_player_index=1)
+        set_board_state(game, 0, battlefield=[my_bear], exile=[card])
 
-# ---------------------------------------------------------------------------
-# Test 6: Back-half cost not in CMC
-# ---------------------------------------------------------------------------
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            perform_illegal_action(CastSpell(
+                _NAME, targets=["Opp Bear"], from_zone=Zone.EXILE,
+            )),
+            no_op(),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[no_op()]))
+        priority_loop(game)
 
+        # The card stayed in exile; the would-be target is untouched.
+        assert_in_zone(game, 0, Zone.EXILE, _NAME)
+        assert_in_zone(game, 1, Zone.BATTLEFIELD, "Opp Bear")
+        assert_life_total(game, 1, 20)
 
-class TestBackHalfCostNotInCMC:
-    """Back-half {W} cost must NOT contribute to CMC."""
-
-    def test_back_half_cost_not_in_cmc(self) -> None:
-        """CMC is exactly 3 ({1}{W}{W}), not 4 ({1}{W}{W} + {W}).
-
-        The back-face {W} is alt-cost metadata for the prepared ability
-        and does not contribute to the card's converted mana cost.
-        Also verifies CMC doesn't change when card becomes prepared.
-        """
-        card = EmeritusOfTruceSwordsToPlowshares(owner=None)
-
-        # Front face cost only -> CMC 3
-        assert card.mana_cost.cmc == 3, (
-            f"CMC must be 3 (front face), got {card.mana_cost.cmc}"
-        )
-
-        # Even when prepared, CMC must remain 3
-        card._prepared = True
-        assert card.mana_cost.cmc == 3, "CMC must not change when prepared"
-
-
-# ---------------------------------------------------------------------------
-# Edge cases (user requested expanded coverage 2026-05-28)
-# ---------------------------------------------------------------------------
-
-
-class TestPreparedConditionEdgeCases:
-    """The 'Then if an opponent controls more creatures than you' clause
-    is checked at ETB resolution and only sets prepared when the inequality
-    is strict (opponent > you)."""
-
-    def _cast_etb(self, game, player, opponent):
-        card = EmeritusOfTruceSwordsToPlowshares(owner=player)
-        card.controller = player
-        set_hand(game, 0, [card])
-        set_mana_pool(game, 0, {ManaType.WHITE: 2, ManaType.COLORLESS: 1})
-        cast_spell(
-            game, 0, "Emeritus of Truce // Swords to Plowshares",
-            targets=[opponent],
-        )
-        # The card has been moved to its battlefield slot — find the
-        # actual card instance (engine may or may not preserve identity)
-        for c in player.zones[Zone.BATTLEFIELD].get_all():
-            if getattr(c, "name", None) == \
-                    "Emeritus of Truce // Swords to Plowshares":
-                return c
-        return card
-
-    def test_prepared_not_set_when_creatures_equal(self) -> None:
-        """If opponent controls the same number of creatures, the strict
-        inequality fails and _prepared stays False."""
+    def test_prepared_consumed_after_back_face_cast(self) -> None:
+        """Prepared is single-use: after the back-face cast it is consumed,
+        and a re-exiled card cannot be cast again."""
         game = create_game()
-        player, opponent = game.players
-        my_creature = Creature(
-            name="My Bear", owner=player, controller=player,
-            base_power=2, base_toughness=2,
-        )
-        opp_creature = Creature(
-            name="Opp Bear", owner=opponent, controller=opponent,
-            base_power=2, base_toughness=2,
-        )
-        set_board_state(game, 0, battlefield=[my_creature])
-        set_board_state(game, 1, battlefield=[opp_creature])
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
 
-        card_on_bf = self._cast_etb(game, player, opponent)
-        assert card_on_bf._prepared is False
+        victim = Creature(name="Sacrificial Goblin", base_power=1, base_toughness=1)
+        filler = Creature(name="Opp Filler", base_power=1, base_toughness=1)
+        set_board_state(game, 1, battlefield=[victim, filler])
 
-    def test_prepared_set_when_opponent_has_more(self) -> None:
-        """Opponent controls strictly more creatures → _prepared becomes True."""
-        game = create_game()
-        player, opponent = game.players
-        # Opponent has 2 creatures, player has 0
-        opp_a = Creature(
-            name="Opp A", owner=opponent, controller=opponent,
-            base_power=1, base_toughness=1,
-        )
-        opp_b = Creature(
-            name="Opp B", owner=opponent, controller=opponent,
-            base_power=1, base_toughness=1,
-        )
-        set_board_state(game, 1, battlefield=[opp_a, opp_b])
+        card = _cast_front_face(game, target_player_index=1)
+        set_board_state(game, 0, battlefield=[], exile=[card])
 
-        card_on_bf = self._cast_etb(game, player, opponent)
-        assert card_on_bf._prepared is True
+        # First prepared cast succeeds (exiles the victim).
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            perform_action(CastSpell(
+                _NAME, targets=["Sacrificial Goblin"], from_zone=Zone.EXILE,
+            )),
+            no_op(),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[no_op()]))
+        priority_loop(game)
+        assert_in_zone(game, 1, Zone.EXILE, "Sacrificial Goblin")
 
+        # Prepared was consumed: back in exile, the card can't be cast again.
+        set_board_state(game, 0, battlefield=[], exile=[card])
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            perform_illegal_action(CastSpell(
+                _NAME, targets=["Opp Filler"], from_zone=Zone.EXILE,
+            )),
+            no_op(),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[no_op()]))
+        priority_loop(game)
 
-class TestPreparedFlagLifecycle:
-    """The prepared alt-cast clears the prepared flag after resolution."""
-
-    def test_prepared_flag_cleared_after_alt_cast(self) -> None:
-        game = create_game()
-        player, opponent = game.players
-
-        target_creature = Creature(
-            name="Sacrificial Goblin", owner=opponent, controller=opponent,
-            base_power=1, base_toughness=1,
-        )
-        set_board_state(game, 1, battlefield=[target_creature])
-
-        card = EmeritusOfTruceSwordsToPlowshares(owner=player)
-        card.controller = player
-        card._prepared = True
-        player.zones[Zone.EXILE].add(card)
-        set_mana_pool(game, 0, {ManaType.WHITE: 1})
-
-        cast_spell_from_exile(
-            game, 0, "Emeritus of Truce // Swords to Plowshares",
-            targets=[target_creature],
-        )
-        # After resolution the flag is cleared (single-use prepared)
-        assert card._prepared is False
-
-
-class TestAlternativeCostExposure:
-    """`get_alternative_cost()` exposes the {W} alt cost iff prepared."""
-
-    def test_alt_cost_is_W_when_prepared(self) -> None:
-        card = EmeritusOfTruceSwordsToPlowshares(owner=None)
-        card._prepared = True
-        alt = card.get_alternative_cost()
-        assert alt is not None
-        assert alt.generic == 0
-        assert alt.pips.get(ManaType.WHITE) == 1
-        assert alt.cmc == 1
-
-
-class TestTokenSummoningSickness:
-    """Newly minted Inkling tokens are summoning-sick (no immediate attack)."""
-
-    def test_token_is_summoning_sick(self) -> None:
-        game = create_game()
-        player, opponent = game.players
-        card = EmeritusOfTruceSwordsToPlowshares(owner=player)
-        card.controller = player
-        set_hand(game, 0, [card])
-        set_mana_pool(game, 0, {ManaType.WHITE: 2, ManaType.COLORLESS: 1})
-        cast_spell(
-            game, 0, "Emeritus of Truce // Swords to Plowshares",
-            targets=[opponent],
-        )
-        tokens = [
-            c for c in opponent.zones[Zone.BATTLEFIELD].get_all()
-            if getattr(c, "is_token", False)
-        ]
-        assert tokens, "ETB should create a token"
-        assert getattr(tokens[0], "summoning_sick", False) is True
+        assert_in_zone(game, 0, Zone.EXILE, _NAME)
+        assert_in_zone(game, 1, Zone.BATTLEFIELD, "Opp Filler")

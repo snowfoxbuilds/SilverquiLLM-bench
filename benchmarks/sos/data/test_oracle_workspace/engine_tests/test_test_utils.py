@@ -283,13 +283,14 @@ class TestAdvanceToPhase:
         assert game.phase == Phase.ENDING
         assert game.step == Step.END
 
-    def test_advance_wraps_to_next_turn(self) -> None:
+    def test_advance_cannot_cross_turn_boundary(self) -> None:
+        """Post-Phase-18 semantics: advance_to_phase fast-forwards within the
+        current turn only — crossing a turn boundary raises (multi-player
+        turn control is deferred per AUDITED-TEST-API.md)."""
         game = create_game()
         advance_to_phase(game, Phase.ENDING, Step.CLEANUP)
-        turn = game.turn_number
-        # Now advance to beginning of next turn
-        advance_to_phase(game, Phase.BEGINNING, Step.UNTAP)
-        assert game.turn_number == turn + 1
+        with pytest.raises(TestSetupError, match="turn boundary"):
+            advance_to_phase(game, Phase.BEGINNING, Step.UNTAP)
 
 
 # ===================================================================
@@ -363,8 +364,7 @@ class TestDeclareBlockers:
         # Declare attackers first
         declare_attackers(game, ["Attacker"])
 
-        # Now declare blockers
-        advance_to_phase(game, Phase.COMBAT, Step.DECLARE_BLOCKERS)
+        # Now declare blockers (the legacy helper advances the step itself)
         declare_blockers(game, {"Attacker": ["Blocker"]})
         assert blocker.is_blocking is True
 
@@ -380,7 +380,6 @@ class TestDeclareBlockers:
         game.active_player_index = 0
 
         declare_attackers(game, ["Attacker"])
-        advance_to_phase(game, Phase.COMBAT, Step.DECLARE_BLOCKERS)
 
         with pytest.raises(TestSetupError, match="Attacker.*not found"):
             declare_blockers(game, {"Phantom": ["Blocker"]})
@@ -394,7 +393,6 @@ class TestDeclareBlockers:
         game.active_player_index = 0
 
         declare_attackers(game, ["Attacker"])
-        advance_to_phase(game, Phase.COMBAT, Step.DECLARE_BLOCKERS)
 
         with pytest.raises(TestSetupError, match="Blocker.*not found"):
             declare_blockers(game, {"Attacker": ["Ghost"]})
@@ -450,13 +448,16 @@ class TestMetaIntegration:
         declare_attackers(game, ["Attacker"])
         assert attacker.is_attacking
 
-        advance_to_phase(game, Phase.COMBAT, Step.DECLARE_BLOCKERS)
         declare_blockers(game, {"Attacker": ["Blocker"]})
         assert blocker.is_blocking
 
     def test_set_board_state_and_advance_phase(self) -> None:
-        """Integration: set board state and advance to a specific phase."""
-        game = create_game()
+        """Integration: set board state and advance to a specific phase.
+
+        Post-Phase-18 advance_to_phase processes combat declarations from the
+        choice script, so passing through combat with an eligible attacker
+        needs a scripted (empty) attacker list."""
+        game = create_game(scripts=([[]], []))
         bear = _bear("TestBear")
         set_board_state(game, 0, battlefield=[bear], life=15)
 

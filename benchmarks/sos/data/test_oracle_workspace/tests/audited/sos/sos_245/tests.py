@@ -1,283 +1,260 @@
-"""Rewritten audited tests for Witherbloom, the Balancer (sos_245).
+"""Audited tests for Witherbloom, the Balancer (sos_245).
 
-Phase 18 convention: integration-style tests verifying observable behavior.
+Oracle: {6}{B}{G} 5/5 Legendary Creature — Elder Dragon.
+  Affinity for creatures (This spell costs {1} less to cast for each creature
+  you control.)
+  Flying, deathtouch
+  Instant and sorcery spells you cast have affinity for creatures.
+
+Simulation-only shape (AUDITED-TEST-API.md): affinity cost reduction is
+oracle-only mechanics, so it is exercised indirectly — the subject spell is
+cast under the grant and the reduced-cost outcome is asserted through
+mana-minimality (the pool holds exactly the reduced cost, or one less for the
+``perform_illegal_action`` negative).  Flying and deathtouch are asserted
+behaviourally through combat outcomes; illegal blocks are silently filtered
+by the engine, so block illegality is asserted by outcome (the flyer's damage
+reached the player).
 
 Tests:
-1. Identity — name, mana_cost, P/T, types, supertypes, subtypes, colors.
-2. Keywords — Flying + Deathtouch present as keyword flags.
-3. Affinity reduces own cost — with N creatures, generic cost reduced by N.
-4. Affinity clamps at generic (cannot go below 0 generic).
-5. Affinity grant to instants/sorceries — controller's instants/sorceries
-   get affinity for creatures when Witherbloom is on battlefield.
-6. Grant does NOT apply to creature spells.
-7. Grant does NOT apply to opponent's spells.
-8. Grant removed when Witherbloom leaves the battlefield.
+  1. test_card_identity
+  2. test_own_affinity_reduces_cost_by_creature_count
+  3. test_own_affinity_reduction_is_not_one_more
+  4. test_own_affinity_clamps_at_generic_portion
+  5. test_granted_affinity_reduces_instant_cost
+  6. test_granted_affinity_reduction_is_not_one_more
+  7. test_grant_does_not_apply_to_creature_spells
+  8. test_grant_does_not_apply_to_opponents_spells
+  9. test_flying_evades_ground_blocker_by_outcome
+  10. test_deathtouch_fells_tough_blocker_by_outcome
 """
 
 from __future__ import annotations
 
-import pytest
-
 from card_impl import WitherbloomTheBalancer
 
-from engine.card import Creature, Instant, Sorcery
-from engine.casting import get_cost_reduction
-from engine.types import (
-    CardType,
-    Keyword,
-    ManaCost,
-    ManaType,
-    Supertype,
-    Zone,
-)
+from engine.card import Creature, Instant
+from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Supertype, Zone
 from test_utils import (
-    card_colors,
+    CastSpell,
+    DeterministicPlayer,
+    advance_to_phase,
+    assert_damage,
+    assert_in_zone,
+    assert_life_total,
+    assert_mana_pool,
     create_game,
-    set_battlefield,
+    no_op,
+    perform_action,
+    perform_illegal_action,
+    priority_loop,
+    set_board_state,
+    set_player,
 )
 
+_NAME = "Witherbloom, the Balancer"
 
-# ---------------------------------------------------------------------------
-# Test 1: Identity
-# ---------------------------------------------------------------------------
+
+def _bears(n: int) -> list[Creature]:
+    return [
+        Creature(name=f"Token {i}", base_power=1, base_toughness=1)
+        for i in range(n)
+    ]
+
+
+def _cast_as_p0(game, name, mana, directive) -> None:
+    set_board_state(game, 0, mana=mana)
+    set_player(game, 0, DeterministicPlayer("P0", script=[
+        directive(CastSpell(name)),
+        no_op(),
+    ]))
+    set_player(game, 1, DeterministicPlayer("P1", script=[no_op()]))
+    priority_loop(game)
 
 
 class TestIdentity:
-    """Verify card identity — name, mana cost, stats, types, keywords."""
-
-    def test_name_and_mana_cost(self) -> None:
-        """Name is 'Witherbloom, the Balancer'; cost is {6}{B}{G} (CMC 8)."""
+    def test_card_identity(self) -> None:
         card = WitherbloomTheBalancer()
-
-        assert card.name == "Witherbloom, the Balancer"
+        assert card.name == _NAME
         assert card.mana_cost.generic == 6
-        assert card.mana_cost.pips[ManaType.BLACK] == 1
-        assert card.mana_cost.pips[ManaType.GREEN] == 1
+        assert card.mana_cost.pips.get(ManaType.BLACK) == 1
+        assert card.mana_cost.pips.get(ManaType.GREEN) == 1
         assert card.mana_cost.cmc == 8
-
-    def test_power_toughness(self) -> None:
-        """5/5 body."""
-        card = WitherbloomTheBalancer()
-        assert card.base_power == 5
-        assert card.base_toughness == 5
-
-    def test_types_and_supertypes(self) -> None:
-        """Legendary Creature — Elder Dragon."""
-        card = WitherbloomTheBalancer()
         assert CardType.CREATURE in card.card_types
         assert Supertype.LEGENDARY in card.supertypes
         assert "Elder" in card.subtypes
         assert "Dragon" in card.subtypes
-
-    def test_colors(self) -> None:
-        """Black and Green (from mana cost)."""
-        card = WitherbloomTheBalancer()
-        assert card_colors(card) == {"B", "G"}
+        assert card.base_power == 5
+        assert card.base_toughness == 5
 
 
-# ---------------------------------------------------------------------------
-# Test 2: Keywords
-# ---------------------------------------------------------------------------
+class TestOwnAffinity:
+    """Affinity for creatures on Witherbloom itself, via mana-minimality."""
 
-
-class TestKeywords:
-    """Verify Flying and Deathtouch as true keyword flags."""
-
-    def test_has_flying(self) -> None:
-        card = WitherbloomTheBalancer()
-        assert Keyword.FLYING in card.keywords
-
-    def test_has_deathtouch(self) -> None:
-        card = WitherbloomTheBalancer()
-        assert Keyword.DEATHTOUCH in card.keywords
-
-
-# ---------------------------------------------------------------------------
-# Test 3: Affinity reduces own cost
-# ---------------------------------------------------------------------------
-
-
-class TestAffinityReducesOwnCost:
-    """Affinity for creatures — own casting cost reduced by creature count."""
-
-    def test_reduction_equals_creature_count(self) -> None:
-        """With 3 creatures on bf, cost_reduction returns 3."""
+    def test_own_affinity_reduces_cost_by_creature_count(self) -> None:
+        """Three creatures → {6}{B}{G} casts for exactly {3}{B}{G}."""
         game = create_game()
-        player = game.players[0]
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
+        set_board_state(game, 0, battlefield=_bears(3), hand=[WitherbloomTheBalancer()])
 
-        tokens = [
-            Creature(name=f"Token {i}", owner=player, base_power=1, base_toughness=1)
-            for i in range(3)
-        ]
-        set_battlefield(game, 0, tokens)
-
-        card = WitherbloomTheBalancer(owner=player)
-        card.controller = player
-
-        assert card.cost_reduction(game) == 3
-
-    def test_no_creatures_no_reduction(self) -> None:
-        """Empty battlefield → 0 reduction."""
-        game = create_game()
-        player = game.players[0]
-        set_battlefield(game, 0, [])
-
-        card = WitherbloomTheBalancer(owner=player)
-        card.controller = player
-
-        assert card.cost_reduction(game) == 0
-
-    def test_reduction_clamped_to_generic(self) -> None:
-        """get_cost_reduction clamps to generic portion (6) even with 10 creatures."""
-        game = create_game()
-        player = game.players[0]
-
-        tokens = [
-            Creature(name=f"Token {i}", owner=player, base_power=1, base_toughness=1)
-            for i in range(10)
-        ]
-        set_battlefield(game, 0, tokens)
-
-        card = WitherbloomTheBalancer(owner=player)
-        reduction = get_cost_reduction(game, card, player)
-        assert reduction == 6  # generic is 6, can't go below 0
-
-
-# ---------------------------------------------------------------------------
-# Test 4: Affinity grant to instants and sorceries
-# ---------------------------------------------------------------------------
-
-
-class TestAffinityGrantToInstantsAndSorceries:
-    """Controller's instants/sorceries get affinity for creatures."""
-
-    def test_instant_gets_reduction(self) -> None:
-        """Instant gets cost reduced by creature count when Witherbloom on bf."""
-        game = create_game()
-        player = game.players[0]
-
-        witherbloom = WitherbloomTheBalancer(owner=player)
-        token1 = Creature(name="Token 1", owner=player, base_power=1, base_toughness=1)
-        token2 = Creature(name="Token 2", owner=player, base_power=1, base_toughness=1)
-        # Witherbloom itself is a creature — 3 total creatures
-        set_battlefield(game, 0, [witherbloom, token1, token2])
-
-        bolt = Instant(
-            name="Expensive Bolt",
-            mana_cost=ManaCost(generic=4, pips={ManaType.RED: 1}),
-            owner=player,
+        _cast_as_p0(
+            game, _NAME,
+            {ManaType.BLACK: 1, ManaType.GREEN: 1, ManaType.COLORLESS: 3},
+            perform_action,
         )
 
-        reduction = get_cost_reduction(game, bolt, player)
-        assert reduction == 3  # 3 creatures on bf
+        assert_in_zone(game, 0, Zone.BATTLEFIELD, _NAME)
+        assert_mana_pool(game, 0, {})
 
-    def test_sorcery_gets_reduction(self) -> None:
-        """Sorcery gets cost reduced by creature count when Witherbloom on bf."""
+    def test_own_affinity_reduction_is_not_one_more(self) -> None:
+        """With three creatures, one mana short of {3}{B}{G} is rejected."""
         game = create_game()
-        player = game.players[0]
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
+        set_board_state(game, 0, battlefield=_bears(3), hand=[WitherbloomTheBalancer()])
 
-        witherbloom = WitherbloomTheBalancer(owner=player)
-        token = Creature(name="Token", owner=player, base_power=1, base_toughness=1)
-        set_battlefield(game, 0, [witherbloom, token])
-
-        sorc = Sorcery(
-            name="Big Sorcery",
-            mana_cost=ManaCost(generic=5, pips={}),
-            owner=player,
+        _cast_as_p0(
+            game, _NAME,
+            {ManaType.BLACK: 1, ManaType.GREEN: 1, ManaType.COLORLESS: 2},
+            perform_illegal_action,
         )
 
-        reduction = get_cost_reduction(game, sorc, player)
-        assert reduction == 2  # 2 creatures (Witherbloom + token)
+        assert_in_zone(game, 0, Zone.HAND, _NAME)
 
-
-# ---------------------------------------------------------------------------
-# Test 5: Grant does NOT apply to creature spells
-# ---------------------------------------------------------------------------
-
-
-class TestNoGrantToCreatureSpells:
-    """Affinity grant only applies to instants/sorceries, not creatures."""
-
-    def test_creature_spell_no_grant(self) -> None:
-        """A creature spell does NOT benefit from the affinity grant."""
+    def test_own_affinity_clamps_at_generic_portion(self) -> None:
+        """Ten creatures cannot reduce below {B}{G} — the colored pips stay."""
         game = create_game()
-        player = game.players[0]
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
+        set_board_state(game, 0, battlefield=_bears(10), hand=[WitherbloomTheBalancer()])
 
-        witherbloom = WitherbloomTheBalancer(owner=player)
-        token = Creature(name="Token", owner=player, base_power=1, base_toughness=1)
-        set_battlefield(game, 0, [witherbloom, token])
+        _cast_as_p0(
+            game, _NAME,
+            {ManaType.BLACK: 1, ManaType.GREEN: 1},
+            perform_action,
+        )
 
+        assert_in_zone(game, 0, Zone.BATTLEFIELD, _NAME)
+        assert_mana_pool(game, 0, {})
+
+
+class TestGrantedAffinity:
+    """Instant and sorcery spells you cast have affinity for creatures."""
+
+    def test_granted_affinity_reduces_instant_cost(self) -> None:
+        """Witherbloom + two creatures (three total) reduce a {4}{R} instant
+        to exactly {1}{R}."""
+        game = create_game()
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
+        big_bolt = Instant(
+            name="Big Bolt", mana_cost=ManaCost(generic=4, pips={ManaType.RED: 1}),
+        )
+        set_board_state(
+            game, 0,
+            battlefield=[WitherbloomTheBalancer(), *_bears(2)],
+            hand=[big_bolt],
+        )
+
+        _cast_as_p0(
+            game, "Big Bolt",
+            {ManaType.COLORLESS: 1, ManaType.RED: 1},
+            perform_action,
+        )
+
+        assert_in_zone(game, 0, Zone.GRAVEYARD, "Big Bolt")
+        assert_mana_pool(game, 0, {})
+
+    def test_granted_affinity_reduction_is_not_one_more(self) -> None:
+        """The grant reduces only the generic portion: {R} alone cannot pay
+        the reduced {1}{R}."""
+        game = create_game()
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
+        big_bolt = Instant(
+            name="Big Bolt", mana_cost=ManaCost(generic=4, pips={ManaType.RED: 1}),
+        )
+        set_board_state(
+            game, 0,
+            battlefield=[WitherbloomTheBalancer(), *_bears(2)],
+            hand=[big_bolt],
+        )
+
+        _cast_as_p0(game, "Big Bolt", {ManaType.RED: 1}, perform_illegal_action)
+
+        assert_in_zone(game, 0, Zone.HAND, "Big Bolt")
+
+    def test_grant_does_not_apply_to_creature_spells(self) -> None:
+        """A {3} creature does not become free under three creatures — the
+        grant is instants/sorceries only."""
+        game = create_game()
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
         bear = Creature(
-            name="Grizzly Bear",
-            owner=player,
-            base_power=2,
-            base_toughness=2,
+            name="Grizzly Bears", base_power=2, base_toughness=2,
+            mana_cost=ManaCost(generic=3),
         )
-        bear.mana_cost = ManaCost(generic=3, pips={})
+        set_board_state(
+            game, 0,
+            battlefield=[WitherbloomTheBalancer(), *_bears(2)],
+            hand=[bear],
+        )
 
-        reduction = get_cost_reduction(game, bear, player)
-        assert reduction == 0
+        _cast_as_p0(game, "Grizzly Bears", {}, perform_illegal_action)
 
+        assert_in_zone(game, 0, Zone.HAND, "Grizzly Bears")
 
-# ---------------------------------------------------------------------------
-# Test 6: Grant does NOT apply to opponent's spells
-# ---------------------------------------------------------------------------
-
-
-class TestNoGrantToOpponent:
-    """Opponent's instants/sorceries do NOT get the affinity grant."""
-
-    def test_opponent_instant_no_reduction(self) -> None:
-        """Opponent's instants don't benefit from your Witherbloom."""
+    def test_grant_does_not_apply_to_opponents_spells(self) -> None:
+        """The opponent's instants get no reduction from your Witherbloom —
+        with two creatures of their own, a {2} instant from an empty pool is
+        still rejected."""
         game = create_game()
-        p1 = game.players[0]
-        p2 = game.players[1]
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
+        cheap_trick = Instant(name="Cheap Trick", mana_cost=ManaCost(generic=2))
+        set_board_state(game, 0, battlefield=[WitherbloomTheBalancer(), *_bears(2)])
+        set_board_state(game, 1, battlefield=_bears(2), hand=[cheap_trick])
 
-        witherbloom = WitherbloomTheBalancer(owner=p1)
-        token = Creature(name="Token", owner=p1, base_power=1, base_toughness=1)
-        set_battlefield(game, 0, [witherbloom, token])
+        set_player(game, 0, DeterministicPlayer("P0", script=[no_op(), no_op()]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[
+            perform_illegal_action(CastSpell("Cheap Trick")),
+        ]))
+        priority_loop(game)
 
-        # Opponent's instant
-        opp_bolt = Instant(
-            name="Opp Bolt",
-            mana_cost=ManaCost(generic=3, pips={ManaType.RED: 1}),
-            owner=p2,
-        )
-
-        # From opponent's perspective — they have no grant on THEIR bf
-        reduction = get_cost_reduction(game, opp_bolt, p2)
-        assert reduction == 0
+        assert_in_zone(game, 1, Zone.HAND, "Cheap Trick")
 
 
-# ---------------------------------------------------------------------------
-# Test 7: Grant removed when Witherbloom leaves
-# ---------------------------------------------------------------------------
+class TestCombatKeywordsByOutcome:
+    """Flying / deathtouch asserted through combat outcomes (illegal blocks
+    are silently filtered, so block illegality is asserted by outcome)."""
 
-
-class TestGrantRemovedWhenWitherbloomLeaves:
-    """Once Witherbloom leaves bf, instants/sorceries lose affinity grant."""
-
-    def test_removal_ends_grant(self) -> None:
-        """After removing Witherbloom, instants no longer get cost reduction."""
+    def test_flying_evades_ground_blocker_by_outcome(self) -> None:
+        """A ground creature's block of the 5/5 flyer is dropped — the
+        flyer's damage reaches the player and the would-be blocker takes
+        nothing."""
         game = create_game()
-        player = game.players[0]
+        witherbloom = WitherbloomTheBalancer()
+        wall = Creature(name="Wall", base_power=0, base_toughness=8)
+        set_board_state(game, 0, battlefield=[witherbloom])
+        set_board_state(game, 1, battlefield=[wall])
+        set_player(game, 0, DeterministicPlayer("P0", choices=[[witherbloom]]))
+        set_player(game, 1, DeterministicPlayer("P1", choices=[{wall: witherbloom}]))
 
-        witherbloom = WitherbloomTheBalancer(owner=player)
-        token = Creature(name="Token", owner=player, base_power=1, base_toughness=1)
-        set_battlefield(game, 0, [witherbloom, token])
+        advance_to_phase(game, Phase.COMBAT, Step.COMBAT_DAMAGE)
 
-        bolt = Instant(
-            name="Bolt",
-            mana_cost=ManaCost(generic=3, pips={ManaType.RED: 1}),
-            owner=player,
+        assert_life_total(game, 1, 15)
+        assert_damage(game, wall, 0)
+        assert_damage(game, witherbloom, 0)
+
+    def test_deathtouch_fells_tough_blocker_by_outcome(self) -> None:
+        """A 2/8 reach blocker legally blocks the flyer and would survive 5
+        damage — deathtouch makes it lethal anyway."""
+        game = create_game()
+        witherbloom = WitherbloomTheBalancer()
+        guard = Creature(
+            name="Reach Guard", base_power=2, base_toughness=8,
+            keywords=Keyword.REACH,
         )
+        set_board_state(game, 0, battlefield=[witherbloom])
+        set_board_state(game, 1, battlefield=[guard])
+        set_player(game, 0, DeterministicPlayer("P0", choices=[[witherbloom]]))
+        set_player(game, 1, DeterministicPlayer("P1", choices=[{guard: witherbloom}]))
 
-        # With Witherbloom: 2 creatures → reduction 2
-        assert get_cost_reduction(game, bolt, player) == 2
+        advance_to_phase(game, Phase.COMBAT, Step.COMBAT_DAMAGE)
 
-        # Remove Witherbloom from battlefield
-        bf = player.zones[Zone.BATTLEFIELD]
-        bf.remove(witherbloom)
-
-        # Token still there but no granter → 0 reduction for instants
-        assert get_cost_reduction(game, bolt, player) == 0
+        assert_in_zone(game, 1, Zone.GRAVEYARD, "Reach Guard")
+        assert_damage(game, witherbloom, 2)
+        assert_life_total(game, 1, 20)

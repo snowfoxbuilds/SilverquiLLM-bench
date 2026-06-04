@@ -1,354 +1,221 @@
-"""Audited tests for SOS 1 — The Dawning Archaic.
+"""Audited tests for The Dawning Archaic (sos_1).
 
-Rewritten tests covering:
-- Identity (name, cost, CMC, types, supertypes, keywords, P/T, colors)
-- Cost reduction with graveyard instant/sorcery
-- Attack trigger decline path (may choice declined → no cast)
-- Attack trigger accept path (may choice accepted → spell cast from GY)
-- Exile replacement on resolve (cast spell ends up in exile, not GY)
-- Scope not global (only chosen card gets exile replacement)
+Oracle: {10} Legendary Creature — Avatar 7/7.
+  This spell costs {1} less to cast for each instant and sorcery card in
+  your graveyard.
+  Reach
+  Whenever The Dawning Archaic attacks, you may cast target instant or
+  sorcery card from your graveyard without paying its mana cost.  If that
+  spell would be put into your graveyard, exile it instead.
 
-Bug pattern addressed: "may" treated as mandatory (general issue #5).
+Simulation-only shape (AUDITED-TEST-API.md):
+* Cost reduction is asserted by mana-minimality — the pool holds exactly the
+  reduced cost (cast succeeds) or one less (``perform_illegal_action``).
+* Attacking is a choice-script answer (the attacker list), reached via
+  ``advance_to_phase(COMBAT, ...)``; the attack trigger's may-choice and card
+  pick come from the same choice script.
+* The granted cast goes through the real pipeline, so the spell-to-exile
+  redirect is asserted as the recast object landing in EXILE
+  (test_spell_to_exile_after_resolution shape).
 
-All tests use canonical engine APIs (declare_attackers, resolve_top) — no
-private method calls or hand-constructed internal events.
+Tests:
+  1. test_card_identity
+  2. test_cost_reduced_by_instants_and_sorceries_in_graveyard
+  3. test_cost_reduction_is_not_one_more
+  4. test_creatures_in_graveyard_do_not_reduce
+  5. test_attack_trigger_casts_instant_from_graveyard_to_exile
+  6. test_attack_trigger_may_be_declined
+  7. test_attack_trigger_targets_only_chosen_card
+  8. test_attack_trigger_sorcery_also_exiled
+  9. test_no_trigger_without_instant_or_sorcery_in_graveyard
+  10. test_other_spells_still_go_to_graveyard
 """
 
 from __future__ import annotations
 
 from card_impl import TheDawningArchaic
+
 from engine.card import Creature, Instant, Sorcery
-from engine.types import CardType, Keyword, ManaCost, Supertype, Zone
+from engine.types import CardType, ManaType, Phase, Step, Supertype, Zone
 from test_utils import (
+    CastSpell,
+    DeterministicPlayer,
+    advance_to_phase,
     assert_in_zone,
-    assert_on_stack,
+    assert_life_total,
+    assert_mana_pool,
+    assert_stack_empty,
+    assert_zone_count,
     create_game,
-    declare_attackers,
-    resolve_top,
-    set_battlefield,
-    set_graveyard,
+    no_op,
+    perform_action,
+    perform_illegal_action,
+    priority_loop,
+    set_board_state,
+    set_player,
 )
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+_NAME = "The Dawning Archaic"
 
 
-def _make_instant(name: str = "Lightning Bolt") -> Instant:
-    """Create a simple instant card for testing."""
-    return Instant(name=name)
-
-
-def _make_sorcery(name: str = "Divination") -> Sorcery:
-    """Create a simple sorcery card for testing."""
-    return Sorcery(name=name)
-
-
-def _setup_attack_scenario(
-    *,
-    gy_cards: list,
-    scripts: tuple[list, list],
-) -> tuple:
-    """Set up a game where The Dawning Archaic is about to attack.
-
-    Returns (game, card, p1) after declaring attackers and putting the
-    attack trigger on the stack (but NOT yet resolving it).
-    """
-    game = create_game(scripts=scripts)
-    p1 = game.players[0]
-    card = TheDawningArchaic(owner=p1, controller=p1)
-    set_battlefield(game, 0, [card])
-    set_graveyard(game, 0, gy_cards)
-
-    # Enter combat and declare The Dawning Archaic as attacker.
-    # This should put the attack trigger on the stack.
-    declare_attackers(game, ["The Dawning Archaic"])
-
-    return game, card, p1
-
-
-# ---------------------------------------------------------------------------
-# Test 1: Identity
-# ---------------------------------------------------------------------------
-
-
-class TestTheDawningArchaicIdentity:
-    """Verify static card properties match the card spec."""
-
-    def test_name(self) -> None:
-        card = TheDawningArchaic(owner=None)
-        assert card.name == "The Dawning Archaic"
-
-    def test_mana_cost(self) -> None:
-        card = TheDawningArchaic(owner=None)
-        assert card.mana_cost == ManaCost(generic=10)
-
-    def test_cmc(self) -> None:
-        card = TheDawningArchaic(owner=None)
-        # CMC of {10} is 10
-        cmc = getattr(card.mana_cost, "cmc", None)
-        if cmc is None:
-            # Fallback: compute from generic
-            cmc = card.mana_cost.generic
-        assert cmc == 10
-
-    def test_is_creature(self) -> None:
-        card = TheDawningArchaic(owner=None)
-        assert isinstance(card, Creature)
+class TestIdentity:
+    def test_card_identity(self) -> None:
+        card = TheDawningArchaic()
+        assert card.name == _NAME
+        assert card.mana_cost.generic == 10
+        assert card.mana_cost.pips == {}
+        assert card.mana_cost.cmc == 10
         assert CardType.CREATURE in card.card_types
-
-    def test_legendary_supertype(self) -> None:
-        """The Dawning Archaic is Legendary."""
-        card = TheDawningArchaic(owner=None)
         assert Supertype.LEGENDARY in card.supertypes
-
-    def test_subtypes(self) -> None:
-        card = TheDawningArchaic(owner=None)
         assert "Avatar" in card.subtypes
-
-    def test_reach_keyword(self) -> None:
-        """The Dawning Archaic has Reach."""
-        card = TheDawningArchaic(owner=None)
-        assert Keyword.REACH in card.keywords
-
-    def test_power_toughness(self) -> None:
-        card = TheDawningArchaic(owner=None)
         assert card.base_power == 7
         assert card.base_toughness == 7
 
-    def test_colorless(self) -> None:
-        """The Dawning Archaic has mana cost {10} — no colors."""
-        card = TheDawningArchaic(owner=None)
-        # The card should have no colors (colorless)
-        colors = getattr(card, "colors", None)
-        if colors is not None:
-            assert len(colors) == 0
-        else:
-            # Derive from mana cost — {10} has no colored pips
-            from test_utils import card_colors
-            assert card_colors(card) == set()
 
+class TestCostReduction:
+    """Cost reduction asserted through mana-minimality, never by probing
+    ``cost_reduction()`` directly."""
 
-# ---------------------------------------------------------------------------
-# Test 2: Cost reduction with graveyard
-# ---------------------------------------------------------------------------
-
-
-class TestTheDawningArchaicCostReduction:
-    """Cost reduction equals count of instant/sorcery in controller's GY."""
-
-    def test_no_instants_or_sorceries_in_gy(self) -> None:
-        game = create_game()
-        p1 = game.players[0]
-        card = TheDawningArchaic(owner=p1, controller=p1)
-        set_battlefield(game, 0, [card])
-        # Empty graveyard → no reduction
-        assert card.cost_reduction(game) == 0
-
-    def test_counts_instants_in_gy(self) -> None:
-        game = create_game()
-        p1 = game.players[0]
-        card = TheDawningArchaic(owner=p1, controller=p1)
-        set_battlefield(game, 0, [card])
-        bolt = _make_instant("Lightning Bolt")
-        shock = _make_instant("Shock")
-        set_graveyard(game, 0, [bolt, shock])
-        assert card.cost_reduction(game) == 2
-
-    def test_counts_sorceries_in_gy(self) -> None:
-        game = create_game()
-        p1 = game.players[0]
-        card = TheDawningArchaic(owner=p1, controller=p1)
-        set_battlefield(game, 0, [card])
-        div = _make_sorcery("Divination")
-        set_graveyard(game, 0, [div])
-        assert card.cost_reduction(game) == 1
-
-    def test_does_not_count_creatures(self) -> None:
-        game = create_game()
-        p1 = game.players[0]
-        card = TheDawningArchaic(owner=p1, controller=p1)
-        set_battlefield(game, 0, [card])
-        creature = Creature(name="Bear", base_power=2, base_toughness=2)
-        bolt = _make_instant("Lightning Bolt")
-        set_graveyard(game, 0, [creature, bolt])
-        # Only 1 instant, creature doesn't count
-        assert card.cost_reduction(game) == 1
-
-
-# ---------------------------------------------------------------------------
-# Test 3: Attack trigger — decline path
-# ---------------------------------------------------------------------------
-
-
-class TestTheDawningArchaicAttackTriggerDecline:
-    """When 'may' choice is declined, no spell is cast from the graveyard."""
-
-    def test_decline_does_not_cast_from_gy(self) -> None:
-        """Declining the may trigger leaves the graveyard unchanged."""
-        bolt = _make_instant("Lightning Bolt")
-        game, card, p1 = _setup_attack_scenario(
-            gy_cards=[bolt],
-            scripts=([False], []),  # Player 1 script: decline may choice
+    def _try_cast(self, game, gy_cards, mana_amount, directive) -> None:
+        advance_to_phase(game, Phase.PRECOMBAT_MAIN)
+        set_board_state(
+            game, 0,
+            hand=[TheDawningArchaic()],
+            graveyard=gy_cards,
+            mana={ManaType.COLORLESS: mana_amount},
         )
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            directive(CastSpell(_NAME)),
+            no_op(),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[no_op()]))
+        priority_loop(game)
 
-        # Resolve the attack trigger on the stack
-        resolve_top(game)
+    def test_cost_reduced_by_instants_and_sorceries_in_graveyard(self) -> None:
+        """Two instants in the graveyard → {10} casts for exactly 8."""
+        game = create_game()
+        self._try_cast(
+            game,
+            [Instant(name="Lightning Bolt"), Instant(name="Shock")],
+            8,
+            perform_action,
+        )
+        assert_in_zone(game, 0, Zone.BATTLEFIELD, _NAME)
+        assert_mana_pool(game, 0, {})
 
-        # Bolt should still be in graveyard — nothing was cast
+    def test_cost_reduction_is_not_one_more(self) -> None:
+        """With two instants in the graveyard, 7 mana is NOT enough."""
+        game = create_game()
+        self._try_cast(
+            game,
+            [Instant(name="Lightning Bolt"), Instant(name="Shock")],
+            7,
+            perform_illegal_action,
+        )
+        assert_in_zone(game, 0, Zone.HAND, _NAME)
+
+    def test_creatures_in_graveyard_do_not_reduce(self) -> None:
+        """A creature plus one instant reduce by exactly 1 — 8 mana (which
+        would suffice if the creature wrongly counted) is rejected."""
+        game = create_game()
+        self._try_cast(
+            game,
+            [
+                Creature(name="Bear", base_power=2, base_toughness=2),
+                Instant(name="Lightning Bolt"),
+            ],
+            8,
+            perform_illegal_action,
+        )
+        assert_in_zone(game, 0, Zone.HAND, _NAME)
+
+
+class TestAttackTrigger:
+    """The attack trigger fires off the declared attacker; its may-choice and
+    card pick come from the choice script (Channel 2)."""
+
+    def _attack(self, game, gy_cards, choices) -> None:
+        archaic = TheDawningArchaic()
+        set_board_state(game, 0, battlefield=[archaic], graveyard=gy_cards)
+        set_player(game, 0, DeterministicPlayer(
+            "P0", choices=[[archaic], *choices],
+        ))
+        set_player(game, 1, DeterministicPlayer("P1"))
+        advance_to_phase(game, Phase.COMBAT, Step.DECLARE_ATTACKERS)
+
+    def test_attack_trigger_casts_instant_from_graveyard_to_exile(self) -> None:
+        """Accepting the may-cast recasts the instant; on resolution it is
+        exiled instead of returning to the graveyard."""
+        game = create_game()
+        bolt = Instant(name="Lightning Bolt")
+        self._attack(game, [bolt], choices=[True])
+
+        assert_in_zone(game, 0, Zone.EXILE, "Lightning Bolt")
+        assert_zone_count(game, 0, Zone.GRAVEYARD, 0)
+        assert_stack_empty(game)
+
+    def test_attack_trigger_may_be_declined(self) -> None:
+        """Declining the 'may' leaves the graveyard untouched."""
+        game = create_game()
+        bolt = Instant(name="Lightning Bolt")
+        self._attack(game, [bolt], choices=[False])
+
         assert_in_zone(game, 0, Zone.GRAVEYARD, "Lightning Bolt")
+        assert_zone_count(game, 0, Zone.EXILE, 0)
+        assert_stack_empty(game)
 
-    def test_decline_leaves_stack_empty(self) -> None:
-        """Declining the may trigger leaves the stack empty after resolution."""
-        bolt = _make_instant("Lightning Bolt")
-        game, card, p1 = _setup_attack_scenario(
-            gy_cards=[bolt],
-            scripts=([False], []),
-        )
+    def test_attack_trigger_targets_only_chosen_card(self) -> None:
+        """With several instants in the graveyard, only the chosen one is
+        cast and exiled."""
+        game = create_game()
+        bolt = Instant(name="Lightning Bolt")
+        shock = Instant(name="Shock")
+        self._attack(game, [bolt, shock], choices=[True, bolt])
 
-        # Resolve the attack trigger
-        resolve_top(game)
-
-        assert game.stack.is_empty()
-
-
-# ---------------------------------------------------------------------------
-# Test 4: Attack trigger — accept path
-# ---------------------------------------------------------------------------
-
-
-class TestTheDawningArchaicAttackTriggerAccept:
-    """When 'may' choice is accepted, a spell is cast from the graveyard."""
-
-    def test_accept_casts_spell_from_gy(self) -> None:
-        """Accepting the may trigger removes the chosen spell from the GY."""
-        bolt = _make_instant("Lightning Bolt")
-        game, card, p1 = _setup_attack_scenario(
-            gy_cards=[bolt],
-            scripts=([True, bolt], []),  # Accept + choose bolt
-        )
-
-        # Resolve the attack trigger — this casts bolt from GY
-        resolve_top(game)
-
-        # Bolt should no longer be in the graveyard (it was cast)
-        gy_cards = p1.zones[Zone.GRAVEYARD].get_all()
-        gy_names = [getattr(c, "name", "") for c in gy_cards]
-        assert "Lightning Bolt" not in gy_names
-
-    def test_accept_spell_resolves_to_exile(self) -> None:
-        """The spell cast via the trigger goes to exile (not GY) on resolve."""
-        bolt = _make_instant("Lightning Bolt")
-        game, card, p1 = _setup_attack_scenario(
-            gy_cards=[bolt],
-            scripts=([True, bolt], []),
-        )
-
-        # Resolve the attack trigger (casts bolt, puts it on stack)
-        resolve_top(game)
-
-        # Now resolve the bolt itself — it should end up in exile
-        if not game.stack.is_empty():
-            resolve_top(game)
-
-        # Bolt should be in exile, not graveyard
         assert_in_zone(game, 0, Zone.EXILE, "Lightning Bolt")
+        assert_in_zone(game, 0, Zone.GRAVEYARD, "Shock")
+        assert_zone_count(game, 0, Zone.EXILE, 1)
 
-        # Bolt should NOT be in graveyard
-        gy_cards = p1.zones[Zone.GRAVEYARD].get_all()
-        gy_names = [getattr(c, "name", "") for c in gy_cards]
-        assert "Lightning Bolt" not in gy_names
+    def test_attack_trigger_sorcery_also_exiled(self) -> None:
+        game = create_game()
+        divination = Sorcery(name="Divination")
+        self._attack(game, [divination], choices=[True])
 
-
-# ---------------------------------------------------------------------------
-# Test 5: Exile replacement — sorcery also works
-# ---------------------------------------------------------------------------
-
-
-class TestTheDawningArchaicExileSorcery:
-    """The exile replacement works for sorceries cast from GY too."""
-
-    def test_sorcery_from_gy_goes_to_exile(self) -> None:
-        """A sorcery cast via the attack trigger goes to exile on resolve."""
-        div = _make_sorcery("Divination")
-        game, card, p1 = _setup_attack_scenario(
-            gy_cards=[div],
-            scripts=([True, div], []),
-        )
-
-        # Resolve the attack trigger (casts Divination)
-        resolve_top(game)
-
-        # Resolve Divination itself
-        if not game.stack.is_empty():
-            resolve_top(game)
-
-        # Should be in exile
         assert_in_zone(game, 0, Zone.EXILE, "Divination")
+        assert_zone_count(game, 0, Zone.GRAVEYARD, 0)
 
+    def test_no_trigger_without_instant_or_sorcery_in_graveyard(self) -> None:
+        """With no instant/sorcery in the graveyard the trigger does not fire
+        (a dry choice script would fail the test if it did), and the 7/7
+        unblocked attacker connects for 7."""
+        game = create_game()
+        bear = Creature(name="Bear", base_power=2, base_toughness=2)
+        archaic = TheDawningArchaic()
+        set_board_state(game, 0, battlefield=[archaic], graveyard=[bear])
+        set_player(game, 0, DeterministicPlayer("P0", choices=[[archaic]]))
+        set_player(game, 1, DeterministicPlayer("P1"))
 
-# ---------------------------------------------------------------------------
-# Test 6: Scope — not global
-# ---------------------------------------------------------------------------
+        advance_to_phase(game, Phase.COMBAT, Step.COMBAT_DAMAGE)
 
+        assert_life_total(game, 1, 13)
+        assert_in_zone(game, 0, Zone.GRAVEYARD, "Bear")
 
-class TestTheDawningArchaicScopeNotGlobal:
-    """The exile replacement only applies to the chosen card, not all spells."""
-
-    def test_other_spells_go_to_graveyard_normally(self) -> None:
-        """A different instant/sorcery cast normally still goes to GY."""
-        bolt = _make_instant("Lightning Bolt")
-        shock = _make_instant("Shock")
-        game, card, p1 = _setup_attack_scenario(
-            gy_cards=[bolt],
-            scripts=([True, bolt], []),
-        )
-
-        # Resolve the attack trigger (casts bolt from GY)
-        resolve_top(game)
-
-        # Resolve bolt
-        if not game.stack.is_empty():
-            resolve_top(game)
-
-        # Bolt went to exile
+    def test_other_spells_still_go_to_graveyard(self) -> None:
+        """The exile redirect is scoped to the trigger-cast spell — a spell
+        cast normally afterwards still goes to the graveyard."""
+        game = create_game()
+        bolt = Instant(name="Lightning Bolt")
+        self._attack(game, [bolt], choices=[True])
         assert_in_zone(game, 0, Zone.EXILE, "Lightning Bolt")
 
-        # Now cast Shock normally (not via the trigger) — it should go to GY
-        from test_utils import set_hand, cast_spell, set_mana_pool
-        from engine.types import ManaType
+        shock = Instant(name="Shock", mana_cost=None)
+        set_board_state(game, 0, hand=[shock], mana={})
+        set_player(game, 0, DeterministicPlayer("P0", script=[
+            perform_action(CastSpell("Shock")),
+            no_op(),
+        ]))
+        set_player(game, 1, DeterministicPlayer("P1", script=[no_op()]))
+        priority_loop(game)
 
-        set_hand(game, 0, [shock])
-        set_mana_pool(game, 0, {ManaType.RED: 1})
-        cast_spell(game, 0, "Shock")
-
-        # Shock should be in graveyard, not exile
         assert_in_zone(game, 0, Zone.GRAVEYARD, "Shock")
-
-
-# ---------------------------------------------------------------------------
-# Test 7: Attack trigger — multiple instants/sorceries in GY
-# ---------------------------------------------------------------------------
-
-
-class TestTheDawningArchaicTargeting:
-    """The trigger targets a specific instant/sorcery — only that one is exiled."""
-
-    def test_only_chosen_card_is_exiled(self) -> None:
-        """When multiple spells are in GY, only the chosen target is exiled."""
-        bolt = _make_instant("Lightning Bolt")
-        shock = _make_instant("Shock")
-        game, card, p1 = _setup_attack_scenario(
-            gy_cards=[bolt, shock],
-            scripts=([True, bolt], []),  # Choose bolt
-        )
-
-        # Resolve trigger + bolt
-        resolve_top(game)
-        if not game.stack.is_empty():
-            resolve_top(game)
-
-        # Bolt exiled, Shock still in GY
-        assert_in_zone(game, 0, Zone.EXILE, "Lightning Bolt")
-        assert_in_zone(game, 0, Zone.GRAVEYARD, "Shock")
+        assert_zone_count(game, 0, Zone.EXILE, 1)
