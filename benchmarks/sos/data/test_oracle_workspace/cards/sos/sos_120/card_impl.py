@@ -53,6 +53,28 @@ class ImprovisationCapstone(Sorcery):
         super().__init__(**kwargs)
 
     # ------------------------------------------------------------------
+    # Casting
+    # ------------------------------------------------------------------
+
+    def on_cast(self, game: GameState) -> None:
+        """Register the Paradigm hooks when the spell is actually cast.
+
+        Sorceries never enter the battlefield, so the zone-change machinery
+        never calls ``register_replacement_effects`` / ``register_triggers``
+        for them — the cast pipeline's ``on_cast`` hook is the canonical
+        place to attach the Paradigm self-exile replacement and the
+        recurring cast-from-exile trigger (the trigger's condition gates on
+        this card actually being in exile, so registering at cast time is
+        safe).  Paradigm *copies* cease to exist after resolving and get no
+        hooks of their own.
+        """
+        if getattr(self, "_is_paradigm_copy", False):
+            return
+        self.register_replacement_effects(game)
+        if not game.trigger_manager.get_triggers_for_source(self):
+            self.register_triggers(game)
+
+    # ------------------------------------------------------------------
     # Resolution
     # ------------------------------------------------------------------
 
@@ -165,6 +187,7 @@ class ImprovisationCapstone(Sorcery):
             # Create a copy and cast it free through the proper pipeline.
             # Place copy in exile so cast_spell_free can move it to stack.
             copied = copy.copy(self)
+            copied._is_paradigm_copy = True  # copies get no Paradigm hooks
             copied.controller = controller
             copied.owner = controller
             exile_zone = controller.zones[Zone.EXILE]
