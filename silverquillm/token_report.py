@@ -30,23 +30,27 @@ def _iter_events(log_path: Path) -> Iterator[dict]:
                 continue
 
 
-def parse_usage(log_path: Path) -> tuple[dict[tuple[str, str], dict], dict | None]:
-    """Walk ``log_path`` and return (per-(agent,model) totals, final result event).
+def parse_usage(log_path: Path) -> tuple[dict[tuple[str, str], dict], list[dict]]:
+    """Walk ``log_path`` and return (per-(agent,model) totals, result events).
 
-    The final ``result`` event carries authoritative cost data per model
-    (``modelUsage[*].costUSD``) which we can't compute per-message.
+    Each ``claude -p`` session emits one final ``result`` event carrying
+    authoritative cost (``modelUsage[*].costUSD`` / ``total_cost_usd``) we can't
+    compute per-message. A single run may contain more than one session — e.g. a
+    multi-phase entrypoint that invokes ``claude`` once per phase — so we collect
+    *every* ``result`` event and let the caller sum cost across them, instead of
+    keeping only the last session's.
     """
     task_to_agent: dict[str, str] = {}
     agg: dict[tuple[str, str], dict] = defaultdict(
         lambda: {"messages": 0, "input": 0, "output": 0, "cache_read": 0, "cache_creation": 0}
     )
-    final_result: dict | None = None
+    result_events: list[dict] = []
 
     for evt in _iter_events(log_path):
         etype = evt.get("type")
 
         if etype == "result":
-            final_result = evt
+            result_events.append(evt)
             continue
 
         # Authoritative subagent-start marker. Carries tool_use_id + subagent_type
@@ -88,21 +92,31 @@ def parse_usage(log_path: Path) -> tuple[dict[tuple[str, str], dict], dict | Non
         bucket["cache_read"] += usage.get("cache_read_input_tokens", 0) or 0
         bucket["cache_creation"] += usage.get("cache_creation_input_tokens", 0) or 0
 
-    return agg, final_result
+    return agg, result_events
 
 
 def format_table(
     agg: dict[tuple[str, str], dict],
-    final_result: dict | None = None,
+    result_events: list[dict] | None = None,
 ) -> str:
-    """Render per-(agent, model) totals as a monospace text table."""
+    """Render per-(agent, model) totals as a monospace text table.
+
+    Cost is summed across every ``result`` event (one per ``claude`` session), so
+    a multi-phase run reports its full cost, not just the last phase's.
+    """
     if not agg:
         return "(no token usage events found in log)"
 
     cost_by_model: dict[str, float] = {}
-    if final_result:
-        for model, mu in (final_result.get("modelUsage") or {}).items():
-            cost_by_model[model] = mu.get("costUSD", 0.0) or 0.0
+    summed_total = 0.0
+    any_total = False
+    for result in result_events or []:
+        for model, mu in (result.get("modelUsage") or {}).items():
+            cost_by_model[model] = cost_by_model.get(model, 0.0) + (mu.get("costUSD", 0.0) or 0.0)
+        tc = result.get("total_cost_usd")
+        if tc is not None:
+            summed_total += tc
+            any_total = True
 
     cols = ("Agent", "Model", "Msgs", "Input", "Cache rd", "Cache wr", "Output")
     rows: list[tuple[str, ...]] = []
@@ -144,10 +158,10 @@ def format_table(
 
     if cost_by_model:
         lines.append("")
-        lines.append("Cost (USD) by model — from final result event:")
+        lines.append("Cost (USD) by model — summed across agent sessions:")
         for model in sorted(cost_by_model):
             lines.append(f"  {model:<35s} ${cost_by_model[model]:.4f}")
-        total_cost = (final_result or {}).get("total_cost_usd", sum(cost_by_model.values()))
+        total_cost = summed_total if any_total else sum(cost_by_model.values())
         lines.append(f"  {'TOTAL':<35s} ${total_cost:.4f}")
 
     return "\n".join(lines)
@@ -159,7 +173,7 @@ def render(log_path: Path) -> str | None:
     can skip emission entirely."""
     if not log_path.exists():
         return None
-    agg, final = parse_usage(log_path)
-    if not agg and final is None:
+    agg, results = parse_usage(log_path)
+    if not agg and not results:
         return None
-    return format_table(agg, final)
+    return format_table(agg, results)
