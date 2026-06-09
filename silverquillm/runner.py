@@ -49,6 +49,8 @@ class ContainerLifecycle:
         snapshot_callback: callable | None = None,
         run_dir: Path | None = None,
         card_name_map: dict[str, str] | None = None,
+        cpus: str = "2",
+        memory: str = "16g",
     ):
         self.image = image
         self.container_name = container_name
@@ -57,6 +59,8 @@ class ContainerLifecycle:
         self.hard_timeout = hard_timeout
         self.hang_timeout = hang_timeout
         self.env_args = env_args or []
+        self.cpus = cpus
+        self.memory = memory
         self.snapshot_callback = snapshot_callback
         self.run_dir = Path(run_dir) if run_dir else None
         self.card_name_map = card_name_map or {}
@@ -84,6 +88,7 @@ class ContainerLifecycle:
         cmd = [
             "docker", "run", "--rm", "--name", self.container_name,
             "--runtime", "runc", "--network=host",
+            "--cpus", self.cpus, "--memory", self.memory,
             "-v", f"{self.workspace}:/workspace",
             "-v", f"{self.output}:/output",
             *self.env_args,

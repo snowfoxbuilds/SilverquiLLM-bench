@@ -524,6 +524,45 @@ class TestDockerCommand:
         assert "FOO=bar" in cmd
         assert "BAZ=qux" in cmd
 
+    def test_default_resource_limits_in_command(self, workspace, output):
+        """Containers are capped at 2 CPUs and 16g memory by default."""
+        mock_proc = _make_mock_popen(exit_code=0, exit_delay=0.1)
+
+        with patch("silverquillm.runner.subprocess.Popen", return_value=mock_proc) as mock_popen, \
+             patch("silverquillm.runner.subprocess.run"):
+            lc = ContainerLifecycle(
+                image="img",
+                container_name="ctr",
+                workspace=workspace,
+                output=output,
+                hard_timeout=300,
+            )
+            lc.run()
+
+        cmd = mock_popen.call_args[0][0]
+        assert cmd[cmd.index("--cpus") + 1] == "2"
+        assert cmd[cmd.index("--memory") + 1] == "16g"
+
+    def test_resource_limits_are_overridable(self, workspace, output):
+        mock_proc = _make_mock_popen(exit_code=0, exit_delay=0.1)
+
+        with patch("silverquillm.runner.subprocess.Popen", return_value=mock_proc) as mock_popen, \
+             patch("silverquillm.runner.subprocess.run"):
+            lc = ContainerLifecycle(
+                image="img",
+                container_name="ctr",
+                workspace=workspace,
+                output=output,
+                hard_timeout=300,
+                cpus="4",
+                memory="32g",
+            )
+            lc.run()
+
+        cmd = mock_popen.call_args[0][0]
+        assert cmd[cmd.index("--cpus") + 1] == "4"
+        assert cmd[cmd.index("--memory") + 1] == "32g"
+
 
 # ---------------------------------------------------------------------------
 # Snapshot callback

@@ -17,57 +17,18 @@ pytest tests/audited/fdn tests/engine
 # Docker
 docker build -t silverquillm-local-pi-blind:latest docker/local-pi-blind/
 
-
-docker build -t silverquillm-cc-sonnet-single:latest docker/cc-sonnet-single/
-docker build -t silverquillm-cc-opus-single:latest docker/cc-opus-single/docker build -t silverquillm-cc-opus-48-single:latest docker/cc-opus-48-single/
-docker build -t silverquillm-cc-opus-48-bare:latest docker/cc-opus-48-bare/
-docker build -t silverquillm-cc-opus-46-bare-high:latest docker/cc-opus-46-bare-high/
-
-docker build -t silverquillm-cc-opus-48-bare-xhigh:latest docker/cc-opus-48-bare-xhigh/
-docker build -t silverquillm-cc-opus-48-single-xhigh:latest docker/cc-opus-48-single-xhigh/
-docker build -t silverquillm-cc-opus-48-xhigh-cheap-impl:latest docker/cc-opus-48-xhigh-cheap-impl/
-docker build -t silverquillm-cc-opus-48-xhigh-cheap-review:latest docker/cc-opus-48-xhigh-cheap-review/
-
-
-docker build -t silverquillm-cc-opus-48-skill-xhigh:latest docker/cc-opus-48-skill-xhigh/
-docker build -t silverquillm-cc-opus-48-coord-fixed-xhigh:latest docker/cc-opus-48-coord-fixed-xhigh/
-docker build -t silverquillm-cc-opus-48-plan-tdd-xhigh:latest docker/cc-opus-48-plan-tdd-xhigh/
-docker build -t silverquillm-cc-opus-48-plan-tdd-v2-xhigh:latest docker/cc-opus-48-plan-tdd-v2-xhigh/
+docker build -t silverquillm-cc-opus-48-bare-high-planned:latest docker/cc-opus-48-bare-high-planned/
 
 # Smoke
 silverquillm smoke --image silverquillm-local-pi-blind:latest
 silverquillm smoke --image silverquillm-copilot-gpt-4.1:latest
 silverquillm smoke --image silverquillm-cc-sonnet-single:latest
+silverquillm smoke --image silverquillm-cc-opus-48-bare-high-planned:latest
 
 # Validation
-silverquillm run --image silverquillm-local-pi-blind:latest --cards 1,7,13,44,97 --timeout 36000
-
-
-
-silverquillm run --image silverquillm-cc-sonnet-single:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
-silverquillm run --image silverquillm-cc-opus-single:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
-silverquillm run --image silverquillm-cc-opus-single:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
-
-silverquillm run --image silverquillm-cc-opus-48-bare:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
-
-silverquillm run --image silverquillm-cc-opus-46-bare-high:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
-silverquillm run --image silverquillm-cc-opus-46-bare-high:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
-silverquillm run --image silverquillm-cc-opus-48-single:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
-silverquillm run --image silverquillm-cc-opus-48-single:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
-
-
-silverquillm run --image silverquillm-cc-opus-48-bare-xhigh:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
-silverquillm run --image silverquillm-cc-opus-48-single-xhigh:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
-silverquillm run --image silverquillm-cc-opus-48-xhigh-cheap-impl:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
-silverquillm run --image silverquillm-cc-opus-48-xhigh-cheap-review:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
-
-
-silverquillm run --image silverquillm-cc-opus-48-skill-xhigh:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
-silverquillm run --image silverquillm-cc-opus-48-coord-fixed-xhigh:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
-
-silverquillm run --image silverquillm-cc-opus-48-bare-xhigh:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
-silverquillm run --image silverquillm-cc-opus-48-plan-tdd-xhigh:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
 silverquillm run --image silverquillm-cc-opus-48-plan-tdd-v2-xhigh:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000
+
+silverquillm run --image silverquillm-cc-opus-48-bare-high-planned:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000
 
 silverquillm run \
   --image silverquillm-local-pi-blind:latest \
