@@ -9,6 +9,7 @@ RUN pip3 install --break-system-packages pytest
 RUN npm install -g @anthropic-ai/claude-code
 
 ENV CLAUDE_CODE_DISABLE_TELEMETRY=1
+ENV CLAUDE_CODE_DISABLE_1M_CONTEXT=1
 
 # Pre-trust the staged workspace so the agent does not waste tokens on git safe.directory recovery.
 # Use --system so it applies to whichever user runs the container.

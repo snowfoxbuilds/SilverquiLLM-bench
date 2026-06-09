@@ -23,7 +23,6 @@ docker build -t silverquillm-cc-opus-48-bare-high-planned:latest docker/cc-opus-
 silverquillm smoke --image silverquillm-local-pi-blind:latest
 silverquillm smoke --image silverquillm-copilot-gpt-4.1:latest
 silverquillm smoke --image silverquillm-cc-sonnet-single:latest
-silverquillm smoke --image silverquillm-cc-opus-48-bare-high-planned:latest
 
 # Validation
 silverquillm run --image silverquillm-cc-opus-48-plan-tdd-v2-xhigh:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000

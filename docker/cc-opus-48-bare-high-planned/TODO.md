@@ -85,6 +85,16 @@ engine edit noted), and add a one-line comment on any deliberate limitation. Do
 items below: Miracle (sos_201), the split/back-face (sos_13), the restricted-mana
 tag + land animation (sos_257), and coin-flips / skip-turns / surveil (sos_97).
 
+**E1–E3 and the per-card edits below are not an exhaustive list of the engine
+changes you may make.** If a card genuinely needs an engine change that isn't
+listed — a new event, a field on a permanent or on game state, a small helper —
+you are free to add it. The bar is *minimal, additive, and justified by a real
+card need*, not a fixed whitelist; what to avoid is a speculative general
+*subsystem* for one card's mechanic, not engine edits as such. Whenever you touch
+`engine/`, keep the change as small as possible, comment any deliberate
+limitation, never rename/move/delete existing symbols, and keep `engine_tests/`
+green.
+
 ## Build order
 
 Work the items **in order, one at a time**. Items E1–E3 are the shared engine
@@ -194,8 +204,13 @@ then run `python3 -m pytest engine_tests/ -q` before moving on.
     then if an opponent controls more creatures than you, this becomes prepared;
     while prepared you may cast a copy of its spell (Swords to Plowshares),
     which unprepares it.
-  - Reuse: one Creature class `EmeritusOfTruceSwordsToPlowshares` (3/3 Cat Cleric)
-    + a `SwordsToPlowshares(Instant)` **helper class in the same file** (exile
+  - Reuse: one Creature class `EmeritusOfTruceSwordsToPlowshares` (3/3 Cat Cleric).
+    **Bake its identity in so the class constructs bare** — set `name` to the full
+    card name from `card_spec.json`, exactly `"Emeritus of Truce // Swords to
+    Plowshares"` (a double-faced card's name is the whole `front // back` string,
+    not just the front face). The engine and tests instantiate the card with no
+    arguments and key off `name`, so a front-face-only name makes it unfindable.
+    Add a `SwordsToPlowshares(Instant)` **helper class in the same file** (exile
     target creature; its controller gains life = its power). `register_triggers`
     on `EntersBattlefieldTriggeredEvent`; `create_token`. When prepared and the
     player elects: create an **actual copy** of the Swords instant, put it in
@@ -242,10 +257,12 @@ then run `python3 -m pytest engine_tests/ -q` before moving on.
 1. **A new subsystem for a one-card mechanic is the trap.** It is tempting to
    build generic miracle/casualty/affinity/paradigm/animation/preparation systems
    — but each here serves exactly one card, and that path balloons into sprawling,
-   speculative machinery that drifts from the cards' real behavior. The only
-   shared engine changes worth making are E1–E3 above (each reused by ≥ 2 cards).
-   If you're adding a manager, framework, or registry for something only one card
-   uses, stop and make it card-local instead.
+   speculative machinery that drifts from the cards' real behavior. E1–E3 are the
+   *shared* engine changes worth building up front (each reused by ≥ 2 cards);
+   beyond them, add small additive engine edits whenever a single card genuinely
+   needs one — just never a general *subsystem* for a one-card mechanic. If you're
+   adding a manager, framework, or registry for something only one card uses, stop
+   and make it card-local instead.
 2. **Your own green tests are not proof.** Tests you write can encode the same
    misreading as your code — passing them only proves the code matches your
    reading, not the card. After each card, re-derive the behavior from

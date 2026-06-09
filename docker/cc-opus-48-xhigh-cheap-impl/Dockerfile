@@ -9,6 +9,7 @@ RUN pip3 install --break-system-packages pytest
 RUN npm install -g @anthropic-ai/claude-code
 
 ENV CLAUDE_CODE_DISABLE_TELEMETRY=1
+ENV CLAUDE_CODE_DISABLE_1M_CONTEXT=1
 
 # xhigh effort pushes more tokens per turn; give the model headroom so a long
 # turn ends on its own rather than being truncated with stop_reason: max_tokens.
