@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "id": "sos",
+  "id": "msh",
   "display_name": "Marvel Superheroes",
   "draft_set": {
     "primary_set_code": "MSH",
