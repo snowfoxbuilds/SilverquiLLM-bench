@@ -1,0 +1,19 @@
+{
+  "name": "Pet Avengers",
+  "mana_cost": "{3}{G}",
+  "type_line": "Creature — Dragon Cat Dog Bird Frog Hero",
+  "oracle_text": "Reach\nPower-up — {6}{G}: Put a +1/+1 counter on this creature and create a 3/2 white Hero creature token with vigilance. (Activate each power-up ability only once. Reduce the cost by its mana cost if it entered this turn.)",
+  "power": "4",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Power-up",
+    "Reach"
+  ],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "178"
+}

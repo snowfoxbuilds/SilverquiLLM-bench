@@ -1,0 +1,16 @@
+{
+  "name": "Depower",
+  "mana_cost": "{2}{U}",
+  "type_line": "Instant",
+  "oracle_text": "This spell costs {2} less to cast if it targets an attacking creature.\nTarget creature gets -4/-0 until end of turn.\nDraw a card.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "50"
+}

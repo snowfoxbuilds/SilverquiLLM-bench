@@ -1,0 +1,21 @@
+{
+  "name": "Spider-Man, To the Rescue",
+  "mana_cost": "{2}{G/W}",
+  "type_line": "Legendary Creature — Spider Human Hero",
+  "oracle_text": "Flash\nVigilance, reach\nNo One Dies! — When Spider-Man enters, you may tap him. When you do, another target nonattacking creature you control gains indestructible until end of turn. (Damage and effects that say \"destroy\" don't destroy it.)",
+  "power": "3",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "G",
+    "W"
+  ],
+  "keywords": [
+    "Reach",
+    "Vigilance",
+    "Flash"
+  ],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "228"
+}

@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "id": "sos",
-  "display_name": "Secrets of Strixhaven",
+  "display_name": "Marvel Superheroes",
   "draft_set": {
-    "primary_set_code": "SOS",
-    "collector_range": "001-271",
+    "primary_set_code": "MSH",
+    "collector_range": "001-276",
     "extra_set_codes": []
   },
-  "tier": "benchmarking",
-  "cards": ["001", "004", "013", "057", "097", "120", "201", "226", "245", "257"],
+  "tier": "testing",
+  "cards": [],
   "leaderboard": {
     "requires_full_set": true,
     "requires_unfiltered": true

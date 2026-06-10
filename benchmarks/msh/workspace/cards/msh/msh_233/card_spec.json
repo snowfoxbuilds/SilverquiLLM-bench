@@ -1,0 +1,22 @@
+{
+  "name": "Thanos, the Mad Titan",
+  "mana_cost": "{R}{W}{B}",
+  "type_line": "Legendary Creature — Eternal Villain",
+  "oracle_text": "Deathtouch, lifelink\nPower-up — {C}{W}{U}{B}{R}{G}: Put two +1/+1 counters on Thanos. Choose odd or even. Destroy each other creature with mana value of the chosen quality. (Activate each power-up ability only once. Reduce the cost by his mana cost if he entered this turn. Zero is even.)",
+  "power": "4",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "B",
+    "R",
+    "W"
+  ],
+  "keywords": [
+    "Deathtouch",
+    "Power-up",
+    "Lifelink"
+  ],
+  "rarity": "mythic",
+  "set_code": "msh",
+  "collector_number": "233"
+}

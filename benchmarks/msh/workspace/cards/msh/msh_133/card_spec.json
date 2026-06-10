@@ -1,0 +1,16 @@
+{
+  "name": "Hex Magic",
+  "mana_cost": "{2}{R}",
+  "type_line": "Sorcery — Arcane",
+  "oracle_text": "Exile all the cards from your hand, then draw that many cards. Until the end of your next turn, you may play cards exiled this way.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "133"
+}

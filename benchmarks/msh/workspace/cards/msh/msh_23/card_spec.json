@@ -1,0 +1,21 @@
+{
+  "name": "Monica Rambeau // Photon, Living Light",
+  "mana_cost": "{2}{W}",
+  "type_line": "Legendary Creature — Human Hero // Legendary Creature — Elemental Hero",
+  "oracle_text": "Flying, prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)\n{2}{R}{W}{W}: Transform Monica Rambeau. Activate only as a sorcery.",
+  "power": "3",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Flying",
+    "Prowess",
+    "Transform",
+    "Hexproof"
+  ],
+  "rarity": "mythic",
+  "set_code": "msh",
+  "collector_number": "23"
+}

@@ -1,0 +1,16 @@
+{
+  "name": "Punishing Punch",
+  "mana_cost": "{2}{G}",
+  "type_line": "Instant",
+  "oracle_text": "This spell costs {2} less to cast if there are two or more creature cards in your graveyard.\nTarget creature you control deals damage equal to twice its power to target creature an opponent controls.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "180"
+}

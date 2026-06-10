@@ -1,0 +1,18 @@
+{
+  "name": "Madame Masque",
+  "mana_cost": "{4}{B}",
+  "type_line": "Legendary Creature — Human Villain",
+  "oracle_text": "When Madame Masque enters, she connives. (Draw a card, then discard a card. If you discarded a nonland card, put a +1/+1 counter on this creature.)\nWhenever you draw your second card each turn, create a 2/1 black Villain creature token with menace. (It can't be blocked except by two or more creatures.)",
+  "power": "3",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Connive"
+  ],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "104"
+}

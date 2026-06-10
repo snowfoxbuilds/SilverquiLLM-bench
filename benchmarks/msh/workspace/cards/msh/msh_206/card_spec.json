@@ -1,0 +1,17 @@
+{
+  "name": "Beast, Erudite Aerialist",
+  "mana_cost": "{3}{G/U}",
+  "type_line": "Legendary Creature — Mutant Scientist Hero",
+  "oracle_text": "As long as you've put one or more +1/+1 counters on Beast this turn, he has flying.\nWhenever Beast deals combat damage to a player, draw a card.",
+  "power": "3",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "G",
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "206"
+}

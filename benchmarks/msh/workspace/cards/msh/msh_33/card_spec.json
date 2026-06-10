@@ -1,0 +1,16 @@
+{
+  "name": "Raft Security Officer",
+  "mana_cost": "{1}{W}",
+  "type_line": "Creature — Human Soldier",
+  "oracle_text": "{2}, {T}: Tap target creature. This ability costs {1} less to activate if it targets a creature with power 3 or less.",
+  "power": "1",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "33"
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Storm, Windrider",
+  "mana_cost": "{1}{G}{W}{W}",
+  "type_line": "Legendary Creature — Mutant Hero",
+  "oracle_text": "Flying\nCreatures with flying can't attack you or block creatures you control.\nWhenever you cast a spell that targets one or more creatures, those creatures gain flying until end of turn.",
+  "power": "4",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "G",
+    "W"
+  ],
+  "keywords": [
+    "Flying"
+  ],
+  "rarity": "rare",
+  "set_code": "msh",
+  "collector_number": "230"
+}

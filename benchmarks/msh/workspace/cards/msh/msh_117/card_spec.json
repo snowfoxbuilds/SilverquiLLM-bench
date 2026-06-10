@@ -1,0 +1,18 @@
+{
+  "name": "Thunderbolts Conspiracy",
+  "mana_cost": "{3}{B}",
+  "type_line": "Enchantment",
+  "oracle_text": "Flash\nWhenever a Villain you control dies, return it to the battlefield under its owner's control with a finality counter on it. That creature is a Hero in addition to its other types. (If a creature with a finality counter on it would die, exile it instead.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Flash"
+  ],
+  "rarity": "rare",
+  "set_code": "msh",
+  "collector_number": "117"
+}

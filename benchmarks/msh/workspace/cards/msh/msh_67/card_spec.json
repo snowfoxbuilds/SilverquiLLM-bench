@@ -1,0 +1,19 @@
+{
+  "name": "Ms. Marvel, Kamala Khan",
+  "mana_cost": "{2}{U}",
+  "type_line": "Legendary Creature — Mutant Inhuman Hero",
+  "oracle_text": "Vigilance, reach\nYou have no maximum hand size.\nEmbiggen Fist — Whenever you cast a spell that targets a creature you control, draw a card. Until end of turn, Ms. Marvel gains \"Ms. Marvel's base power is equal to the number of cards in your hand.\"",
+  "power": "1",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Reach",
+    "Vigilance"
+  ],
+  "rarity": "rare",
+  "set_code": "msh",
+  "collector_number": "67"
+}

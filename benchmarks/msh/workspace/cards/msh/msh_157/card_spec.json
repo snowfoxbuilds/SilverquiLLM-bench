@@ -1,0 +1,16 @@
+{
+  "name": "Truck Toss",
+  "mana_cost": "{2}{R}{R}",
+  "type_line": "Instant",
+  "oracle_text": "This spell costs {2} less to cast if you control a Vehicle.\nTruck Toss deals 4 damage to any target.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "157"
+}

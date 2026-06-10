@@ -1,0 +1,16 @@
+{
+  "name": "Mister Hyde, Monster Within",
+  "mana_cost": "{2}{G}",
+  "type_line": "Legendary Creature — Human Villain",
+  "oracle_text": "At the beginning of your upkeep, choose one —\n• Put a +1/+1 counter on Mister Hyde.\n• Remove a counter from a creature you control. If you do, draw a card.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "176"
+}

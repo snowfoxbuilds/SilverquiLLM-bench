@@ -1,0 +1,18 @@
+{
+  "name": "Hercules, Prince of Power",
+  "mana_cost": "{2}{G}",
+  "type_line": "Legendary Creature — Demigod Warrior Hero",
+  "oracle_text": "Power-up — {4}{G}: Put a +1/+1 counter on Hercules. He gains vigilance, indestructible, and haste until end of turn. (Activate each power-up ability only once. Reduce the cost by his mana cost if he entered this turn.)",
+  "power": "3",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Power-up"
+  ],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "171"
+}

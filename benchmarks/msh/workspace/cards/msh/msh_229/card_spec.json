@@ -1,0 +1,19 @@
+{
+  "name": "Spider-Woman, Secret Agent",
+  "mana_cost": "{3}{W/U}",
+  "type_line": "Legendary Creature — Spider Human Spy Hero",
+  "oracle_text": "Flash\nWhen Spider-Woman enters, tap target creature an opponent controls. That creature can't become untapped for as long as you control Spider-Woman.",
+  "power": "1",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "U",
+    "W"
+  ],
+  "keywords": [
+    "Flash"
+  ],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "229"
+}

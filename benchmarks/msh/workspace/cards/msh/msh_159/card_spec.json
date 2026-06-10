@@ -1,0 +1,19 @@
+{
+  "name": "Volcanic Villain",
+  "mana_cost": "{2}{R}",
+  "type_line": "Creature — Elemental Villain",
+  "oracle_text": "Haste\nPower-up — {5}{R}: Put two +1/+1 counters on this creature. (Activate each power-up ability only once. Reduce the cost by its mana cost if it entered this turn.)",
+  "power": "3",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Power-up",
+    "Haste"
+  ],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "159"
+}

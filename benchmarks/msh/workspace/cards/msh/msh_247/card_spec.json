@@ -1,0 +1,16 @@
+{
+  "name": "H.E.R.B.I.E. Scout Unit",
+  "mana_cost": "{4}",
+  "type_line": "Artifact Creature — Robot Scout",
+  "oracle_text": "Flying\nWhen this creature enters, draw a card, then you may put a land card from your hand onto the battlefield tapped.",
+  "power": "2",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [],
+  "keywords": [
+    "Flying"
+  ],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "247"
+}

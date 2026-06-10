@@ -1,0 +1,16 @@
+{
+  "name": "Kid Loki",
+  "mana_cost": "{U}",
+  "type_line": "Legendary Creature — God Hero Villain",
+  "oracle_text": "Each creature you control that you've put one or more +1/+1 counters on this turn has hexproof.\nWhenever you draw your second card each turn, put a +1/+1 counter on Kid Loki.",
+  "power": "1",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "63"
+}

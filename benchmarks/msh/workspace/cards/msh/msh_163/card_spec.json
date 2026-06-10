@@ -1,0 +1,18 @@
+{
+  "name": "Claim the Kingdom",
+  "mana_cost": "{1}{G}",
+  "type_line": "Enchantment — Plan",
+  "oracle_text": "Landfall — Whenever a land you control enters, put a +1/+1 counter on target creature you control and a plan counter on this enchantment.\nWhen the fourth plan counter is put on this enchantment, sacrifice it. When you do, put an indestructible counter on target creature you control.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Landfall"
+  ],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "163"
+}

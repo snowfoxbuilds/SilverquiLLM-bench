@@ -1,0 +1,19 @@
+{
+  "name": "Giant-Sized Flying Ant",
+  "mana_cost": "{3}{U}",
+  "type_line": "Creature — Insect",
+  "oracle_text": "Flash\nFlying\nWhen this creature enters, choose one —\n• Tap target nonland permanent.\n• Untap target nonland permanent.",
+  "power": "3",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Flying",
+    "Flash"
+  ],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "56"
+}

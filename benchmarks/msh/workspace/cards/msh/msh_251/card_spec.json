@@ -1,0 +1,14 @@
+{
+  "name": "The Ten Rings",
+  "mana_cost": "{8}",
+  "type_line": "Legendary Artifact",
+  "oracle_text": "Your maximum hand size is ten.\nAt the beginning of your end step, if you have fewer than ten cards in hand, draw cards equal to the difference.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [],
+  "keywords": [],
+  "rarity": "mythic",
+  "set_code": "msh",
+  "collector_number": "251"
+}

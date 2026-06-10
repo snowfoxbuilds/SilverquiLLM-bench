@@ -1,0 +1,18 @@
+{
+  "name": "Repulsor Blast",
+  "mana_cost": "{3}{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "Teamwork 2 (As an additional cost to cast this spell, you may tap any number of creatures you control with total power 2 or more.)\nRepulsor Blast deals 5 damage to target creature. If this spell was cast using teamwork, it also deals 2 damage to that creature's controller.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Teamwork"
+  ],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "150"
+}

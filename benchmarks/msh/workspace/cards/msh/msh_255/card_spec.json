@@ -1,0 +1,17 @@
+{
+  "name": "The Vision",
+  "mana_cost": "{4}",
+  "type_line": "Legendary Artifact Creature — Robot Hero",
+  "oracle_text": "Flying, vigilance\nWhenever you cast a noncreature spell, choose one that hasn't been chosen this turn —\n• Solar Beam — The Vision gains double strike until end of turn.\n• Density Control — The Vision gains indestructible until end of turn.\n• Technopathy — Draw a card.",
+  "power": "2",
+  "toughness": "5",
+  "loyalty": null,
+  "colors": [],
+  "keywords": [
+    "Flying",
+    "Vigilance"
+  ],
+  "rarity": "rare",
+  "set_code": "msh",
+  "collector_number": "255"
+}

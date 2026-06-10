@@ -1,0 +1,19 @@
+{
+  "name": "The Wondrous Wasp",
+  "mana_cost": "{1}{U}",
+  "type_line": "Legendary Creature — Human Hero",
+  "oracle_text": "Flash\nFlying\nWasp's Sting — When The Wondrous Wasp enters, tap up to one target creature. It loses all abilities for as long as The Wondrous Wasp remains on the battlefield.",
+  "power": "2",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Flying",
+    "Flash"
+  ],
+  "rarity": "rare",
+  "set_code": "msh",
+  "collector_number": "84"
+}

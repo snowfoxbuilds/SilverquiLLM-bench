@@ -1,0 +1,18 @@
+{
+  "name": "Mister Fantastic, Reed Richards",
+  "mana_cost": "{3}{U}",
+  "type_line": "Legendary Creature — Human Scientist Hero",
+  "oracle_text": "Reach\nWhenever one or more tokens you control enter, you may draw a card.",
+  "power": "2",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Reach"
+  ],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "66"
+}

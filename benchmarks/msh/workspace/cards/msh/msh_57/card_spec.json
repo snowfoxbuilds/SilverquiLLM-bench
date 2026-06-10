@@ -1,0 +1,18 @@
+{
+  "name": "Hydraulic Helper",
+  "mana_cost": "{1}{U}",
+  "type_line": "Artifact Creature — Robot",
+  "oracle_text": "Defender\n{T}: Add {U}. This mana can't be spent to cast a nonartifact spell.",
+  "power": "2",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Defender"
+  ],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "57"
+}

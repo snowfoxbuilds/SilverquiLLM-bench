@@ -1,0 +1,17 @@
+{
+  "name": "Scientist Supreme of A.I.M.",
+  "mana_cost": "{U}{B}",
+  "type_line": "Legendary Creature — Human Scientist Villain",
+  "oracle_text": "Pay 2 life: Copy target activated or triggered ability you control from an artifact source. You may choose new targets for the copy. Activate only during your turn and only once each turn. (Mana abilities can't be targeted.)",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "B",
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "msh",
+  "collector_number": "225"
+}

@@ -1,0 +1,18 @@
+{
+  "name": "White Tiger, Ava Ayala",
+  "mana_cost": "{1}{G}",
+  "type_line": "Legendary Creature — Human Hero",
+  "oracle_text": "Power-up — {5}{G}: Put a +1/+1 counter on White Tiger and create The Tiger God, a legendary 4/4 green Cat God creature token with \"The Tiger God can't be blocked by more than one creature.\" (Activate each power-up ability only once. Reduce the cost by her mana cost if she entered this turn.)",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Power-up"
+  ],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "196"
+}

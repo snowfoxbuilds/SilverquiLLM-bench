@@ -1,0 +1,16 @@
+{
+  "name": "Klaw, Sonic Subjugator",
+  "mana_cost": "{2}{B}",
+  "type_line": "Legendary Creature — Human Rogue Villain",
+  "oracle_text": "Sonic Attack — When Klaw enters, target player reveals a number of cards from their hand equal to one plus the number of creature cards in your graveyard. You choose one of them. That player discards that card.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "103"
+}

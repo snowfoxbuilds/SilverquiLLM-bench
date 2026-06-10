@@ -1,0 +1,16 @@
+{
+  "name": "Arc Reactor",
+  "mana_cost": "{5}",
+  "type_line": "Artifact",
+  "oracle_text": "Improvise (Your artifacts can help cast this spell. Each artifact you tap after you're done activating mana abilities pays for {1}.)\nThis artifact enters tapped.\n{T}: Add {C}{C}{C}.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [],
+  "keywords": [
+    "Improvise"
+  ],
+  "rarity": "rare",
+  "set_code": "msh",
+  "collector_number": "243"
+}

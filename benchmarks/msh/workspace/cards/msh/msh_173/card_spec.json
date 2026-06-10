@@ -1,0 +1,18 @@
+{
+  "name": "Hulkling, Burgeoning Bruiser",
+  "mana_cost": "{2}{G}",
+  "type_line": "Legendary Creature — Kree Skrull Hero",
+  "oracle_text": "Vigilance\nWhenever another creature you control enters, if it has greater power or toughness than Hulkling, put a +1/+1 counter on Hulkling.",
+  "power": "2",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Vigilance"
+  ],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "173"
+}

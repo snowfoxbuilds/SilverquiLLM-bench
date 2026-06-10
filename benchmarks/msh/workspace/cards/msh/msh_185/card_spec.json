@@ -1,0 +1,22 @@
+{
+  "name": "Savage Land Dinosaur",
+  "mana_cost": "{4}{G}{G}",
+  "type_line": "Creature — Dinosaur",
+  "oracle_text": "Trample\nBasic landcycling {2} ({2}, Discard this card: Search your library for a basic land card, reveal it, put it into your hand, then shuffle.)",
+  "power": "7",
+  "toughness": "6",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Landcycling",
+    "Trample",
+    "Basic landcycling",
+    "Typecycling",
+    "Cycling"
+  ],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "185"
+}

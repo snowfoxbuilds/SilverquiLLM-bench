@@ -1,0 +1,16 @@
+{
+  "name": "Dark Deed",
+  "mana_cost": "{1}{B}",
+  "type_line": "Instant",
+  "oracle_text": "Target creature gets -4/-4 until end of turn.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "93"
+}

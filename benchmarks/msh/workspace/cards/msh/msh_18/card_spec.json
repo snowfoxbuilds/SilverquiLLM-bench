@@ -1,0 +1,20 @@
+{
+  "name": "Jennifer Walters // The Sensational She-Hulk",
+  "mana_cost": "{1}{W}",
+  "type_line": "Legendary Creature — Human Advisor Hero // Legendary Creature — Gamma Hero",
+  "oracle_text": "Your opponents can't cast spells during your turn.\n{3}{G}{W}{W}: Transform Jennifer Walters. Activate only as a sorcery.",
+  "power": "2",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Reach",
+    "Transform",
+    "Trample"
+  ],
+  "rarity": "mythic",
+  "set_code": "msh",
+  "collector_number": "18"
+}

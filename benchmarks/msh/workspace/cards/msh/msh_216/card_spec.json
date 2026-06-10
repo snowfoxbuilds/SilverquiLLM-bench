@@ -1,0 +1,20 @@
+{
+  "name": "Iron Man, Master of Machines",
+  "mana_cost": "{2}{U}{R}",
+  "type_line": "Legendary Artifact Creature — Human Hero",
+  "oracle_text": "Flying, vigilance\nIron Man gets +1/+0 for each other artifact you control.\nWhenever Iron Man attacks, if an artifact entered the battlefield under your control this turn, draw a card.",
+  "power": "1",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "R",
+    "U"
+  ],
+  "keywords": [
+    "Flying",
+    "Vigilance"
+  ],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "216"
+}

@@ -1,0 +1,20 @@
+{
+  "name": "Tony Stark // The Invincible Iron Man",
+  "mana_cost": "{1}{U}",
+  "type_line": "Legendary Creature — Human Artificer Hero // Legendary Artifact Creature — Human Hero",
+  "oracle_text": "{1}, {T}: Look at the top four cards of your library. You may reveal an artifact card from among them and put it into your hand. Put the rest on the bottom of your library in a random order.\n{4}{U}{R}: Transform Tony Stark. Activate only as a sorcery.",
+  "power": "1",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Flying",
+    "Transform",
+    "Haste"
+  ],
+  "rarity": "mythic",
+  "set_code": "msh",
+  "collector_number": "80"
+}

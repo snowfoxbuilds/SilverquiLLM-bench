@@ -1,0 +1,22 @@
+{
+  "name": "Roxxon Brutes",
+  "mana_cost": "{4}{B}",
+  "type_line": "Creature — Human Berserker Villain",
+  "oracle_text": "Menace (This creature can't be blocked except by two or more creatures.)\nWhenever you draw your second card each turn, put a +1/+1 counter on target creature.\nBasic landcycling {2} ({2}, Discard this card: Search your library for a basic land card, reveal it, put it into your hand, then shuffle.)",
+  "power": "4",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Landcycling",
+    "Menace",
+    "Basic landcycling",
+    "Typecycling",
+    "Cycling"
+  ],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "113"
+}

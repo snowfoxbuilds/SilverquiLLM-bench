@@ -1,0 +1,16 @@
+{
+  "name": "Patriot, Shield Wielder",
+  "mana_cost": "{1}{W}",
+  "type_line": "Legendary Creature — Human Hero",
+  "oracle_text": "{2}, {T}: Another target creature you control gets +2/+0 and gains hexproof until end of turn. (It can't be the target of spells or abilities your opponents control.)",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "30"
+}

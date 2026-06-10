@@ -1,0 +1,14 @@
+{
+  "name": "Avengers Hangar",
+  "mana_cost": "",
+  "type_line": "Land",
+  "oracle_text": "This land enters tapped.\nWhen this land enters, you gain 1 life.\n{T}: Add {W} or {U}.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "259"
+}

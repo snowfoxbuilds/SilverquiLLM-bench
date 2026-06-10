@@ -1,15 +1,18 @@
-"""Fetch and cache Secrets of Strixhaven card data.
+"""Fetch and cache Marvel Super Heroes card data.
 
 Usage::
 
-    python -m benchmarks.sos.fetch_data
+    python -m benchmarks.msh.fetch_data [--force]
 
-Downloads SOS card data from Scryfall, normalizes field names to match
-the project's CardMetadata convention (``mana_cost_str`` instead of
-Scryfall's ``mana_cost``), and writes ``benchmarks/sos/data/sos.json``.
+Downloads MSH card data from Scryfall, deduplicates to one entry per
+unique card (keeping the lowest collector number and dropping the
+alternate-art / showcase reprints that share a name), normalizes field
+names to match the project's CardMetadata convention (``mana_cost_str``
+alongside Scryfall's ``mana_cost``), and writes
+``benchmarks/msh/data/msh.json``.
 
 Logs stats: total count, type breakdown, rarity distribution, and cards
-using new SOS mechanics.
+using MSH mechanics.
 """
 
 from __future__ import annotations
@@ -17,23 +20,31 @@ from __future__ import annotations
 import json
 import logging
 import sys
+import time
 from collections import Counter
 from pathlib import Path
 from typing import Any
-
-# Allow running as script from repo root. Put the workspace dir on sys.path
-# so `cards.scryfall` (etc.) resolves the same way it does for the agent /
-# pytest at runtime. `_REPO_ROOT` is the bench repo root; it's used below
-# for locating cached data files.
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(_REPO_ROOT / "benchmarks" / "sos" / "workspace"))
-
-from cards.scryfall import fetch_set, fetch_scryfall_query  # noqa: E402
+from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 
-#: Output path for normalized SOS card data.
-OUTPUT_PATH = Path(__file__).resolve().parent / "data" / "sos.json"
+#: Bench repo root; used for locating the shared raw-data cache.
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+#: Scryfall set code for Marvel Super Heroes.
+SET_CODE = "msh"
+
+#: Output path for normalized MSH card data.
+OUTPUT_PATH = Path(__file__).resolve().parent / "data" / "msh.json"
+
+#: Raw Scryfall prints cache (shared with the other fetchers).
+RAW_CACHE_PATH = _REPO_ROOT / "data" / "sets" / f"{SET_CODE}.json"
+
+#: Scryfall search API.
+SCRYFALL_SEARCH_URL = "https://api.scryfall.com/cards/search"
+
+#: Minimum delay between Scryfall API requests (seconds), per their policy.
+REQUEST_DELAY: float = 0.1
 
 #: Card types to track in the breakdown.
 TRACKED_TYPES = [
@@ -46,12 +57,61 @@ TRACKED_TYPES = [
     "land",
 ]
 
-#: New SOS mechanics to search for in oracle text.
-NEW_MECHANICS = ["Prepared", "Converge", "Miracle", "Opus"]
+#: New MSH mechanics to search for in oracle text.
+NEW_MECHANICS = ["Power-up", "Teamwork"]
 
-#: Maximum collector number for SOS base set cards in the Draft Set.
-#: Cards with collector_number > 271 are alternate-art reprints / duplicates.
-SOS_BASE_MAX_COLLECTOR_NUMBER = 271
+
+def _cn_int(card_json: dict[str, Any]) -> int:
+    """Return a card's collector number as an int (``-1`` if non-numeric)."""
+    try:
+        return int(card_json.get("collector_number", ""))
+    except (ValueError, TypeError):
+        return -1
+
+
+def _fetch_json(url: str) -> dict[str, Any]:
+    """Fetch JSON from *url* with the User-Agent header Scryfall requires."""
+    request = Request(url, headers={
+        "User-Agent": "SilverquiLLM-bench/0.1.0",
+        "Accept": "application/json",
+    })
+    with urlopen(request, timeout=30) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _fetch_all_prints(set_code: str) -> list[dict[str, Any]]:
+    """Fetch every print in *set_code* from Scryfall (paginated)."""
+    cards: list[dict[str, Any]] = []
+    url: str | None = (
+        f"{SCRYFALL_SEARCH_URL}?order=set&q=e%3A{set_code}&unique=prints"
+    )
+    while url is not None:
+        data = _fetch_json(url)
+        cards.extend(data.get("data", []))
+        if data.get("has_more", False) and data.get("next_page"):
+            url = data["next_page"]
+            time.sleep(REQUEST_DELAY)
+        else:
+            url = None
+    return cards
+
+
+def _dedupe_by_name(cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep one print per unique card name — the lowest collector number.
+
+    MSH ships each card with alternate-art / showcase reprints at higher
+    collector numbers (e.g. nine prints of ``Plains``).  The benchmark wants
+    exactly one stub per unique card, so we keep the lowest-numbered print of
+    each name and drop the rest.  The result is sorted by collector number.
+    """
+    seen: set[str] = set()
+    deduped: list[dict[str, Any]] = []
+    for card in sorted(cards, key=_cn_int):
+        name = card.get("name", "")
+        if name and name not in seen:
+            seen.add(name)
+            deduped.append(card)
+    return deduped
 
 
 def _normalize_card(card_json: dict[str, Any]) -> dict[str, Any]:
@@ -76,24 +136,15 @@ def _normalize_card(card_json: dict[str, Any]) -> dict[str, Any]:
     normalized["mana_cost_str"] = _str("mana_cost_str", "mana_cost")
     normalized["type_line"] = card_json.get("type_line", "")
     normalized["oracle_text"] = _str("oracle_text")
-    # Ensure set_code is always present at top level for multi-set pools
+    # Ensure set_code is always present at top level
     normalized["set_code"] = card_json.get("set", card_json.get("set_code", ""))
     return normalized
 
 
 def _log_stats(cards: list[dict[str, Any]]) -> None:
     """Log summary statistics for the fetched card data."""
-    logger.info("=== SOS Fetch Stats ===")
+    logger.info("=== MSH Fetch Stats ===")
     logger.info("Total cards: %d", len(cards))
-
-    # Set breakdown (SOS vs SOA)
-    set_counts: Counter[str] = Counter()
-    for card in cards:
-        set_counts[card.get("set_code", card.get("set", "unknown"))] += 1
-    if len(set_counts) > 1:
-        logger.info("Set breakdown:")
-        for sc, count in set_counts.most_common():
-            logger.info("  %s: %d", sc.upper(), count)
 
     # Type breakdown
     type_counts: Counter[str] = Counter()
@@ -127,146 +178,62 @@ def _log_stats(cards: list[dict[str, Any]]) -> None:
             logger.info("    ... and %d more", len(matches) - 10)
 
 
-def fetch_sos_data(*, force: bool = False) -> list[dict[str, Any]]:
-    """Fetch SOS data, normalize, cache to ``benchmarks/sos/data/sos.json``.
+def _cache_is_valid(cards: list[dict[str, Any]]) -> bool:
+    """Return ``True`` if a cached ``msh.json`` looks complete and deduped.
+
+    Validates that every entry has a name, a collector number, and the MSH
+    set code, and that there are no duplicate names (the dedup invariant).
+    """
+    if not isinstance(cards, list) or not cards:
+        return False
+    names: set[str] = set()
+    for card in cards:
+        name = card.get("name")
+        if not name or not card.get("collector_number"):
+            return False
+        if card.get("set_code", card.get("set")) != SET_CODE:
+            return False
+        if name in names:
+            return False
+        names.add(name)
+    return True
+
+
+def fetch_msh_data(*, force: bool = False) -> list[dict[str, Any]]:
+    """Fetch MSH data, dedup, normalize, cache to ``benchmarks/msh/data/msh.json``.
 
     Args:
-        force: If True, skip cache and re-fetch from Scryfall.
+        force: If True, skip both caches and re-fetch from Scryfall.
 
     Returns:
-        List of normalized card JSON dicts.
+        List of normalized card JSON dicts (one per unique card).
     """
-    # If already cached locally and not forcing, check whether the cache
-    # includes SOA cards.  Old caches only contain SOS cards and must be
-    # rebuilt so the merged pool is complete.
+    # 1. Reuse a valid normalized cache unless forcing.
     if not force and OUTPUT_PATH.exists():
         with open(OUTPUT_PATH, encoding="utf-8") as f:
             cached = json.load(f)
-        # Validate SOA subset: exactly one card for each collector number 1-65.
-        soa_cns = [
-            int(c.get("collector_number", 0))
-            for c in cached
-            if c.get("set_code", c.get("set", "")) == "soa"
-        ]
-        soa_complete = sorted(soa_cns) == list(range(1, 66))
-        spg_rows = [
-            c for c in cached
-            if c.get("set_code", c.get("set", "")) == "spg"
-        ]
-        spg_cns = [int(c.get("collector_number", 0)) for c in spg_rows]
-        # Validate SOS base-set completeness: exactly one card for each
-        # collector number 1-271, no duplicates, none above the cutoff.
-        sos_cns = [
-            int(c.get("collector_number", 0))
-            for c in cached
-            if c.get("set_code", c.get("set", "")) == "sos"
-        ]
-        sos_complete = sorted(sos_cns) == list(
-            range(1, SOS_BASE_MAX_COLLECTOR_NUMBER + 1)
-        )
-        if (
-            soa_complete
-            and len(spg_rows) == 10
-            and sorted(spg_cns) == list(range(149, 159))
-            and sos_complete
-        ):
+        if _cache_is_valid(cached):
             return cached
-        # Stale cache — fall through to rebuild
+        # Stale / incomplete — fall through to rebuild.
 
-    # Use the existing scryfall fetch (which has its own cache layer).
-    # When forcing, delete the raw cache first so fetch_set re-fetches from
-    # Scryfall, but still pass use_cache=True so it writes the result back.
-    raw_cache = _REPO_ROOT / "data" / "sets" / "sos.json"
-    if force and raw_cache.exists():
-        raw_cache.unlink()
-    _ = fetch_set("sos", use_cache=True)
-
-    # Read the raw Scryfall cache to get raw JSON (not CardMetadata)
-    with open(raw_cache, encoding="utf-8") as f:
-        raw_cards: list[dict[str, Any]] = json.load(f)
-
-    # Filter SOS base set to collector number <= 271 (draft cutoff).
-    # Cards above 271 are alternate-art reprints / duplicates.
-    raw_cards = [
-        c for c in raw_cards
-        if int(c.get("collector_number", 0)) <= SOS_BASE_MAX_COLLECTOR_NUMBER
-    ]
-
-    # Fetch Mystical Archive cards from SOA set (collector numbers 1–65).
-    # These are part of the SOS Draft Set but live in a separate Scryfall set.
-    # Use a query-specific cache file so we never collide with a full-set
-    # ``data/sets/soa.json`` cache that other callers may create/expect.
-    soa_cache = _REPO_ROOT / "data" / "sets" / "soa_cn1-65.json"
-    if force and soa_cache.exists():
-        soa_cache.unlink()
-    if soa_cache.exists() and not force:
-        with open(soa_cache, encoding="utf-8") as f:
-            soa_raw: list[dict[str, Any]] = json.load(f)
-        # Always enforce the collector-number range even on cached data,
-        # guarding against a manually edited or corrupted cache file.
-        soa_raw = [
-            c for c in soa_raw
-            if 1 <= int(c.get("collector_number", 0)) <= 65
-        ]
+    # 2. Get the raw Scryfall prints (use the shared raw cache when possible).
+    if not force and RAW_CACHE_PATH.exists():
+        with open(RAW_CACHE_PATH, encoding="utf-8") as f:
+            raw_cards: list[dict[str, Any]] = json.load(f)
     else:
-        soa_query = "e%3Asoa+cn%3E%3D1+cn%3C%3D65"
-        soa_raw, _ = fetch_scryfall_query(soa_query, set_code="soa")
-        # Cache the SOA subset for future runs
-        soa_cache.parent.mkdir(parents=True, exist_ok=True)
-        with open(soa_cache, "w", encoding="utf-8") as f:
-            json.dump(soa_raw, f, indent=2)
+        raw_cards = _fetch_all_prints(SET_CODE)
+        RAW_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(RAW_CACHE_PATH, "w", encoding="utf-8") as f:
+            json.dump(raw_cards, f, indent=2)
 
-    # Fetch Special Guest cards from SPG set (collector numbers 149–158).
-    # These are part of the SOS Draft Set but live in the SPG Scryfall set.
-    # Distinct from FDN Special Guests (SPG 074–083) added in Phase 5.
-    spg_cache = _REPO_ROOT / "data" / "sets" / "spg_cn149-158.json"
-    if force and spg_cache.exists():
-        spg_cache.unlink()
-    if spg_cache.exists() and not force:
-        with open(spg_cache, encoding="utf-8") as f:
-            spg_raw: list[dict[str, Any]] = json.load(f)
-        # Validate collector-number range and de-duplicate cached data
-        seen_cns: dict[int, dict[str, Any]] = {}
-        for c in spg_raw:
-            cn = int(c.get("collector_number", 0))
-            if 149 <= cn <= 158 and cn not in seen_cns:
-                seen_cns[cn] = c
-        spg_raw = list(seen_cns.values())
-        # Verify completeness — exactly one card for each cn 149-158
-        if set(seen_cns.keys()) != set(range(149, 159)):
-            # Incomplete cache — refetch
-            spg_query = "e%3Aspg+cn%3E%3D149+cn%3C%3D158"
-            spg_raw, _ = fetch_scryfall_query(spg_query, set_code="spg")
-            spg_raw = [
-                c for c in spg_raw
-                if 149 <= int(c.get("collector_number", 0)) <= 158
-            ]
-            with open(spg_cache, "w", encoding="utf-8") as f:
-                json.dump(spg_raw, f, indent=2)
-    else:
-        spg_query = "e%3Aspg+cn%3E%3D149+cn%3C%3D158"
-        spg_raw, _ = fetch_scryfall_query(spg_query, set_code="spg")
-        # Filter to ensure only cn 149–158 (defensive, mirrors cache validation)
-        spg_raw = [
-            c for c in spg_raw
-            if 149 <= int(c.get("collector_number", 0)) <= 158
-        ]
-        # Cache the SPG subset for future runs
-        spg_cache.parent.mkdir(parents=True, exist_ok=True)
-        with open(spg_cache, "w", encoding="utf-8") as f:
-            json.dump(spg_raw, f, indent=2)
+    # 3. Dedup to one print per unique card, then normalize.
+    deduped = _dedupe_by_name(raw_cards)
+    normalized = [_normalize_card(c) for c in deduped]
 
-    # Merge SOS + SOA + SPG cards
-    raw_cards.extend(soa_raw)
-    raw_cards.extend(spg_raw)
-
-    # Normalize
-    normalized = [_normalize_card(c) for c in raw_cards]
-
-    # Write to benchmarks/sos/data/
+    # 4. Write the normalized pool.
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
-        json.dump(normalized, f, indent=2)
+        json.dump(normalized, f, indent=2, ensure_ascii=False)
 
     _log_stats(normalized)
     return normalized
@@ -276,9 +243,9 @@ def main() -> None:
     """CLI entry point."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     force = "--force" in sys.argv
-    cards = fetch_sos_data(force=force)
+    cards = fetch_msh_data(force=force)
     if not logger.handlers or logger.level > logging.INFO:
-        # If stats weren't logged (cached path), log them now
+        # If stats weren't logged (cached path), log them now.
         _log_stats(cards)
     logger.info("Wrote %d cards to %s", len(cards), OUTPUT_PATH)
 

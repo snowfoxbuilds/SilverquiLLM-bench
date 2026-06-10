@@ -1,0 +1,18 @@
+{
+  "name": "Stark Industries Executive",
+  "mana_cost": "{R}",
+  "type_line": "Creature — Human Advisor",
+  "oracle_text": "{2}, {T}: Create a Treasure token. (It's an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")",
+  "power": "1",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Treasure"
+  ],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "153"
+}

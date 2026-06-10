@@ -1,0 +1,16 @@
+{
+  "name": "Loki, God of Mischief",
+  "mana_cost": "{1}{U}",
+  "type_line": "Legendary Creature — God Sorcerer Villain",
+  "oracle_text": "Whenever a player or permanent becomes the target of an ability you control, draw a card. This ability triggers only once each turn.",
+  "power": "2",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "msh",
+  "collector_number": "65"
+}

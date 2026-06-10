@@ -1,0 +1,18 @@
+{
+  "name": "Elektra, Daughter of the Hand",
+  "mana_cost": "{2}{B}{B}",
+  "type_line": "Legendary Creature — Human Ninja Villain",
+  "oracle_text": "Sneak {1}{B}{B} (You may cast this spell for {1}{B}{B} if you also return an unblocked attacker you control to hand during the declare blockers step. She enters tapped and attacking.)\nWhen Elektra enters, destroy target creature an opponent controls with power 3 or less.",
+  "power": "3",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Sneak"
+  ],
+  "rarity": "rare",
+  "set_code": "msh",
+  "collector_number": "97"
+}

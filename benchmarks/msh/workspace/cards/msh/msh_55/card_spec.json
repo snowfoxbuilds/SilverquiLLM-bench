@@ -1,0 +1,16 @@
+{
+  "name": "Futurist Forge",
+  "mana_cost": "{1}{U}",
+  "type_line": "Artifact",
+  "oracle_text": "When this artifact enters, draw a card.\n{3}{U}, Sacrifice this artifact: Draw two cards.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "55"
+}

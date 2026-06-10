@@ -1,0 +1,17 @@
+{
+  "name": "Viv Vision, Teen Synthezoid",
+  "mana_cost": "{3}",
+  "type_line": "Legendary Artifact Creature — Robot Hero",
+  "oracle_text": "Flying\nCybernetic Senses — Whenever Viv Vision attacks, draw a card if her power is 4 or greater.\nPower-up — {7}: Put two +1/+1 counters on Viv Vision. (Activate each power-up ability only once. Reduce the cost by her mana cost if she entered this turn.)",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [],
+  "keywords": [
+    "Flying",
+    "Power-up"
+  ],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "256"
+}

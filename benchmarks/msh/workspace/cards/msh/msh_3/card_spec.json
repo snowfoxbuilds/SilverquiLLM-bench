@@ -1,0 +1,18 @@
+{
+  "name": "Agent of Atlas",
+  "mana_cost": "{1}{W}",
+  "type_line": "Creature — Human Spy Hero",
+  "oracle_text": "Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Prowess"
+  ],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "3"
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Brave Brawler",
+  "mana_cost": "{1}{W}",
+  "type_line": "Creature — Human Warrior Hero",
+  "oracle_text": "Lifelink\nPower-up — {4}{W}: Put two +1/+1 counters on this creature. (Activate each power-up ability only once. Reduce the cost by its mana cost if it entered this turn.)",
+  "power": "2",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Power-up",
+    "Lifelink"
+  ],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "8"
+}

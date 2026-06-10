@@ -1,0 +1,16 @@
+{
+  "name": "Photon Blast Barrage",
+  "mana_cost": "{X}{R}{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "When you cast this spell, copy it X times. You may choose new targets for the copies.\nPhoton Blast Barrage deals 1 damage to target creature.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "147"
+}

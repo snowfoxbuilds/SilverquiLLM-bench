@@ -1,0 +1,19 @@
+{
+  "name": "The Mighty Thor, Jane Foster",
+  "mana_cost": "{1}{W}{U}",
+  "type_line": "Legendary Creature — Human God Hero",
+  "oracle_text": "Flying\nWhenever The Mighty Thor attacks, exile up to one target nontoken artifact or creature, then return that card to the battlefield tapped under its owner's control.\nWhenever an Equipment you control enters, draw a card.",
+  "power": "3",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "U",
+    "W"
+  ],
+  "keywords": [
+    "Flying"
+  ],
+  "rarity": "rare",
+  "set_code": "msh",
+  "collector_number": "222"
+}

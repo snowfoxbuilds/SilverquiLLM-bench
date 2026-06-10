@@ -1,0 +1,16 @@
+{
+  "name": "The Unbeatable Squirrel Girl",
+  "mana_cost": "{1}{G}{G}{G}",
+  "type_line": "Legendary Creature — Squirrel Human Hero",
+  "oracle_text": "Do You Like Squirrels? — Whenever The Unbeatable Squirrel Girl enters or attacks, create a 1/1 green Squirrel creature token.\nI LOVE Squirrels! — {1}{G}{G}{G}: Create X 1/1 green Squirrel creature tokens, where X is the number of Squirrels you control.",
+  "power": "4",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "msh",
+  "collector_number": "193"
+}

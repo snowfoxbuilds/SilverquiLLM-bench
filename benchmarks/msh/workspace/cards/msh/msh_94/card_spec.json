@@ -1,0 +1,16 @@
+{
+  "name": "Decoy Ploy",
+  "mana_cost": "{1}{B}",
+  "type_line": "Instant",
+  "oracle_text": "Choose one or both —\n• Return target Villain card from your graveyard to your hand.\n• Return target Hero card from your graveyard to your hand.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "94"
+}

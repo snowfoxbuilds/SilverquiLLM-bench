@@ -1,0 +1,18 @@
+{
+  "name": "Red Guardian, Super-Soldier",
+  "mana_cost": "{2}{W}",
+  "type_line": "Legendary Creature — Human Soldier Villain",
+  "oracle_text": "Flash\nWhen Red Guardian enters, destroy target creature an opponent controls that dealt damage this turn.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Flash"
+  ],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "34"
+}

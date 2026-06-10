@@ -1,0 +1,16 @@
+{
+  "name": "Agent Maria Hill",
+  "mana_cost": "{W}",
+  "type_line": "Legendary Creature — Human Spy Hero",
+  "oracle_text": "Whenever Agent Maria Hill becomes tapped to pay a teamwork cost, put a +1/+1 counter on her and draw a card.",
+  "power": "2",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "2"
+}

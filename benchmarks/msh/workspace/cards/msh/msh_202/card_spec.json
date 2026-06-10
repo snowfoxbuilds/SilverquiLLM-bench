@@ -1,0 +1,17 @@
+{
+  "name": "Ares, God of War",
+  "mana_cost": "{1}{B}{R}",
+  "type_line": "Legendary Creature — God Warrior Villain",
+  "oracle_text": "Ares attacks each combat if able.\nWhenever an attacking creature you control dies, return that card to its owner's hand.",
+  "power": "4",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "B",
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "msh",
+  "collector_number": "202"
+}

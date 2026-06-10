@@ -1,0 +1,17 @@
+{
+  "name": "Bullseye, Death Dealer",
+  "mana_cost": "{2}{B/R}",
+  "type_line": "Legendary Creature — Human Assassin Villain",
+  "oracle_text": "When Bullseye enters, you may sacrifice an artifact or discard a nonland card. When you do, Bullseye deals 2 damage to any target.\n{3}, {T}, Sacrifice an artifact or discard a nonland card: Bullseye deals 2 damage to any target.",
+  "power": "2",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "B",
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "209"
+}

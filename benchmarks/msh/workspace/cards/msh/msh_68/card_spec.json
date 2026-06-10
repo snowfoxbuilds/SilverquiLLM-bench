@@ -1,0 +1,16 @@
+{
+  "name": "Multiversal Incursion",
+  "mana_cost": "{5}{U}{U}",
+  "type_line": "Sorcery",
+  "oracle_text": "For each nontoken creature you control, create a token that's a copy of that creature, except it isn't legendary.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "mythic",
+  "set_code": "msh",
+  "collector_number": "68"
+}

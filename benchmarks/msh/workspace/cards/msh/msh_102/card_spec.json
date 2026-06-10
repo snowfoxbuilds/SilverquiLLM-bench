@@ -1,0 +1,18 @@
+{
+  "name": "Kingpin's Enforcers",
+  "mana_cost": "{2}{B}",
+  "type_line": "Creature — Human Villain",
+  "oracle_text": "Lifelink\n{2}{B}, Sacrifice an artifact or creature: Draw a card.",
+  "power": "2",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Lifelink"
+  ],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "102"
+}

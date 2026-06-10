@@ -1,0 +1,18 @@
+{
+  "name": "Baron Strucker, HYDRA Overlord",
+  "mana_cost": "{2}{B}",
+  "type_line": "Legendary Creature — Human Villain",
+  "oracle_text": "Villain spells you cast cost {1} less to cast.\nWhenever another Villain you control enters, you may have it connive. Do this only once each turn. (Draw a card, then discard a card. If you discarded a nonland card, put a +1/+1 counter on that creature.)",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Connive"
+  ],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "88"
+}

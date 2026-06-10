@@ -1,0 +1,18 @@
+{
+  "name": "Yellowjacket, Heartless Marauder",
+  "mana_cost": "{1}{B}",
+  "type_line": "Legendary Creature — Human Rogue Villain",
+  "oracle_text": "Flying\nWhenever another Villain you control enters, Yellowjacket gets +1/+0 and gains lifelink until end of turn.",
+  "power": "1",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Flying"
+  ],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "123"
+}

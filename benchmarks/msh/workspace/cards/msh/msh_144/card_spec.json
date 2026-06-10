@@ -1,0 +1,18 @@
+{
+  "name": "Machinesmith Automaton",
+  "mana_cost": "{2}{R}",
+  "type_line": "Artifact Creature — Robot Villain",
+  "oracle_text": "Trample\nWhenever another artifact you control enters, put a +1/+1 counter on this creature.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Trample"
+  ],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "144"
+}

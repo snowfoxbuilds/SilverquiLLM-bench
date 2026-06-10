@@ -1,0 +1,19 @@
+{
+  "name": "Ant-Man's Army",
+  "mana_cost": "{2}{G}",
+  "type_line": "Creature — Insect",
+  "oracle_text": "When this creature enters, create a Food token or a Treasure token. (A Food token is an artifact with \"{2}, {T}, Sacrifice this token: You gain 3 life.\" A Treasure token is an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")",
+  "power": "3",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Treasure",
+    "Food"
+  ],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "161"
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Ghost, Spectral Saboteur",
+  "mana_cost": "{2}{U/B}",
+  "type_line": "Legendary Creature — Human Rogue Villain",
+  "oracle_text": "Flash\nIntangibility — Ghost can't be blocked.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "B",
+    "U"
+  ],
+  "keywords": [
+    "Flash"
+  ],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "214"
+}

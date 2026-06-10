@@ -1,0 +1,16 @@
+{
+  "name": "Evil's Thrall",
+  "mana_cost": "{2}{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "Gain control of target creature until end of turn. If you control a Villain with greater mana value than that creature, gain control of that creature until the end of your next turn instead. Untap that creature. It gains haste until end of turn.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "128"
+}

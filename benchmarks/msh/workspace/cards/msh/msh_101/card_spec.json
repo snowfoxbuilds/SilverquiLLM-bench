@@ -1,0 +1,18 @@
+{
+  "name": "HYDRA Troopers",
+  "mana_cost": "{2}{B}",
+  "type_line": "Creature — Human Soldier Villain",
+  "oracle_text": "When this creature enters, create a tapped 2/1 black Villain creature token with menace if there are two or more creature cards in your graveyard. Otherwise, mill two cards. (Put the top two cards of your library into your graveyard.)",
+  "power": "3",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Mill"
+  ],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "101"
+}

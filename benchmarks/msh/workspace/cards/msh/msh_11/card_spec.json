@@ -1,0 +1,21 @@
+{
+  "name": "Captain Marvel, Earth's Protector",
+  "mana_cost": "{3}{W}{W}",
+  "type_line": "Legendary Creature — Human Kree Hero",
+  "oracle_text": "Flash\nFlying, lifelink\nPower-up — {5}{W}{W}: Put a +1/+1 counter and an indestructible counter on Captain Marvel. (Activate each power-up ability only once. Reduce the cost by her mana cost if she entered this turn.)",
+  "power": "5",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Flying",
+    "Power-up",
+    "Lifelink",
+    "Flash"
+  ],
+  "rarity": "mythic",
+  "set_code": "msh",
+  "collector_number": "11"
+}

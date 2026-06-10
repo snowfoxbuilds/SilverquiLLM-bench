@@ -1,0 +1,21 @@
+{
+  "name": "Bruce Banner // The Incredible Hulk",
+  "mana_cost": "{U}",
+  "type_line": "Legendary Creature — Human Scientist Hero // Legendary Creature — Gamma Berserker Hero",
+  "oracle_text": "{X}{X}, {T}: Draw X cards. Activate only as a sorcery.\n{2}{R}{R}{G}{G}: Transform Bruce Banner. Activate only as a sorcery.",
+  "power": "1",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Reach",
+    "Enrage",
+    "Transform",
+    "Trample"
+  ],
+  "rarity": "mythic",
+  "set_code": "msh",
+  "collector_number": "49"
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Unliving Legionnaire",
+  "mana_cost": "{3}{B}",
+  "type_line": "Creature — Vampire Villain",
+  "oracle_text": "Flying\nPower-up — {5}{B}{B}: Return up to one target creature card from your graveyard to your hand. Put two +1/+1 counters on this creature. (Activate each power-up ability only once. Reduce the cost by its mana cost if it entered this turn.)",
+  "power": "3",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Flying",
+    "Power-up"
+  ],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "119"
+}

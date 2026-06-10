@@ -1,0 +1,17 @@
+{
+  "name": "Black Panther, Vanguard",
+  "mana_cost": "{2}{G}{W}",
+  "type_line": "Legendary Creature — Human Warrior Hero",
+  "oracle_text": "Whenever another nontoken Hero you control enters, choose one —\n• Create a 1/1 white Soldier creature token.\n• Creatures you control get +1/+1 until end of turn.",
+  "power": "4",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "G",
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "207"
+}

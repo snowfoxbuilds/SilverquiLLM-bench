@@ -1,0 +1,16 @@
+{
+  "name": "Avengers Disassembled",
+  "mana_cost": "{1}{R}{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "Choose one or both —\n• Avengers Disassembled deals 3 damage to each creature.\n• Destroy target land. Its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "msh",
+  "collector_number": "124"
+}

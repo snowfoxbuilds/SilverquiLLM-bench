@@ -1,0 +1,19 @@
+{
+  "name": "Kang, Temporal Tyrant",
+  "mana_cost": "{2}{U}{B}",
+  "type_line": "Legendary Creature — Human Villain",
+  "oracle_text": "Whenever Kang attacks, he connives. (Draw a card, then discard a card. If you discarded a nonland card, put a +1/+1 counter on this creature.)\nWhenever you draw your second card each turn, each opponent loses 1 life and you gain 1 life.",
+  "power": "3",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "B",
+    "U"
+  ],
+  "keywords": [
+    "Connive"
+  ],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "217"
+}

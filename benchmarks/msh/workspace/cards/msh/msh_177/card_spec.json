@@ -1,0 +1,19 @@
+{
+  "name": "Mole Man, Moloid Master",
+  "mana_cost": "{2}{G}",
+  "type_line": "Legendary Creature — Human Villain",
+  "oracle_text": "You may play lands from your graveyard.\nLandfall — Whenever a land you control enters, create a 1/1 green Minion creature token named Moloid with \"Whenever this token attacks, you may mill a card.\"",
+  "power": "1",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Mill",
+    "Landfall"
+  ],
+  "rarity": "rare",
+  "set_code": "msh",
+  "collector_number": "177"
+}

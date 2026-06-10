@@ -1,0 +1,18 @@
+{
+  "name": "Rick Jones, Destined Sidekick",
+  "mana_cost": "{G}",
+  "type_line": "Legendary Creature — Human Advisor",
+  "oracle_text": "{3}, {T}: Mill four cards. You may put a Hero or enchantment card from among those cards into your hand. (To mill four cards, put the top four cards of your library into your graveyard.)",
+  "power": "0",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Mill"
+  ],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "184"
+}

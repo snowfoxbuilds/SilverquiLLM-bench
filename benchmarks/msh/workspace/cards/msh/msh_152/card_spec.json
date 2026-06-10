@@ -1,0 +1,18 @@
+{
+  "name": "Speed, Young Avenger",
+  "mana_cost": "{1}{R}",
+  "type_line": "Legendary Creature — Mutant Hero",
+  "oracle_text": "Haste\nWhenever you cast a noncreature spell, you may pay {1}. When you do, target creature with haste can't be blocked this turn except by creatures with haste.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Haste"
+  ],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "152"
+}

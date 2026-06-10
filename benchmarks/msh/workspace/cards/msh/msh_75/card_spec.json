@@ -1,0 +1,16 @@
+{
+  "name": "Shuri, Wakandan Inventor",
+  "mana_cost": "{1}{U}",
+  "type_line": "Legendary Creature — Human Artificer Hero",
+  "oracle_text": "Artifact spells you cast cost {1} less to cast.\n{1}, {T}: Target artifact you control becomes a copy of a second target artifact you control until end of turn, except it isn't legendary. Activate only as a sorcery.",
+  "power": "2",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "msh",
+  "collector_number": "75"
+}

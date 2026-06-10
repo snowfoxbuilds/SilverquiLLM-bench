@@ -1,0 +1,18 @@
+{
+  "name": "S.H.I.E.L.D. Deployment Drone",
+  "mana_cost": "{2}{U}",
+  "type_line": "Artifact Creature — Robot",
+  "oracle_text": "Flying\nWhen this creature enters, create a 1/1 white Soldier creature token.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Flying"
+  ],
+  "rarity": "common",
+  "set_code": "msh",
+  "collector_number": "73"
+}
