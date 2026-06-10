@@ -1,5 +1,6 @@
 {
-  "collector_number": "sos_201",
+  "card_id": "sos_201",
+  "card_name": "Lorehold, the Historian",
   "tests_passed": 9,
   "tests_failed": 0,
   "tests_total": 9,

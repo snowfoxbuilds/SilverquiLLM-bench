@@ -6,7 +6,7 @@
   "tests_total": 6,
   "pass_rate": 0.8333333333333334,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_25_8kfyk/tests.py::TestParadigmRecurrence::test_paradigm_recurrence_casts_copy_from_exile"
+    "FAILED ../../../../tmp/eval_sos_8c2i_1vv/tests.py::TestParadigmRecurrence::test_paradigm_recurrence_casts_copy_from_exile"
   ],
   "skipped": false,
   "test_nodes": [

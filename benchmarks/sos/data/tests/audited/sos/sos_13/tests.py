@@ -1,7 +1,7 @@
 """Audited tests for Emeritus of Truce // Swords to Plowshares (sos_13).
 
 Oracle (front face — Creature {1}{W}{W} 3/3 Cat Cleric):
-  When this creature enters, target player creates a 2/1 white and black
+  When this creature enters, target player creates a 1/1 white and black
   Inkling creature token with flying.  Then if an opponent controls more
   creatures than you, this creature becomes prepared.
 Oracle (back face — Instant, cast via Prepared from exile for {W}):
@@ -86,7 +86,7 @@ class TestIdentity:
 
 class TestETBToken:
     def test_etb_creates_inkling_for_target_player(self) -> None:
-        """Casting the front face creates a 2/1 Inkling on the targeted
+        """Casting the front face creates a 1/1 Inkling on the targeted
         player's battlefield."""
         game = create_game()
         advance_to_phase(game, Phase.PRECOMBAT_MAIN)
@@ -94,7 +94,7 @@ class TestETBToken:
         _cast_front_face(game, target_player_index=1)
 
         assert_in_zone(game, 1, Zone.BATTLEFIELD, "Inkling")
-        assert_power_toughness(game, "Inkling", 2, 1)
+        assert_power_toughness(game, "Inkling", 1, 1)
         # The token went to the chosen player only.
         assert_zone_count(game, 1, Zone.BATTLEFIELD, 1)
         assert_stack_empty(game)

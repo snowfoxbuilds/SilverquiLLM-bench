@@ -19,6 +19,10 @@ docker build -t silverquillm-local-pi-blind:latest docker/local-pi-blind/
 
 docker build -t silverquillm-cc-opus-48-bare-high-planned:latest docker/cc-opus-48-bare-high-planned/
 
+docker build -t silverquillm-cc-opus-48-bare-xhigh-planned:latest docker/cc-opus-48-bare-high-planned/
+
+docker build -t silverquillm-cc-fable-5-bare-xhigh-planned:latest docker/cc-opus-48-bare-high-planned/
+
 # Smoke
 silverquillm smoke --image silverquillm-local-pi-blind:latest
 silverquillm smoke --image silverquillm-copilot-gpt-4.1:latest
@@ -27,7 +31,8 @@ silverquillm smoke --image silverquillm-cc-sonnet-single:latest
 # Validation
 silverquillm run --image silverquillm-cc-opus-48-plan-tdd-v2-xhigh:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000
 
-silverquillm run --image silverquillm-cc-opus-48-bare-high-planned:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000
+silverquillm run --image silverquillm-cc-opus-48-bare-xhigh-planned:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
+silverquillm run --image silverquillm-cc-fable-5-bare-xhigh-planned:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000
 
 silverquillm run \
   --image silverquillm-local-pi-blind:latest \

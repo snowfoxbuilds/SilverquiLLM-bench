@@ -5,7 +5,7 @@
     "timestamp": "2026-05-28T01:18:04Z",
     "card_count": 10,
     "timeout_seconds": 360000,
-    "harness_version": "ddcd47ad1f9423f11064ff84b91562eae1079855"
+    "harness_version": "5ae441a1b9444208ff05fab8fbf1287003273244"
   },
   "sos_card_correctness": {
     "audited_pass_rate": 0.7108,

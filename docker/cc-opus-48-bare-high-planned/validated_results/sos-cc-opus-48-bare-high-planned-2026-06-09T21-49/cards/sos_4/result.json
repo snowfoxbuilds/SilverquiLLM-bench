@@ -1,5 +1,6 @@
 {
-  "collector_number": "sos_4",
+  "card_id": "sos_4",
+  "card_name": "Together as One",
   "tests_passed": 5,
   "tests_failed": 0,
   "tests_total": 5,

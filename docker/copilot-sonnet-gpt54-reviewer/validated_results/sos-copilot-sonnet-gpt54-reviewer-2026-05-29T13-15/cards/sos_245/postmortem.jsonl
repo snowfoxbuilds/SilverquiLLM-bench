@@ -1,3 +1,3 @@
-{"collector_number": "sos_245", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zmbotsm5/tests.py::TestOwnAffinity::test_own_affinity_reduces_cost_by_creature_count"}
-{"collector_number": "sos_245", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zmbotsm5/tests.py::TestOwnAffinity::test_own_affinity_reduction_is_not_one_more"}
-{"collector_number": "sos_245", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zmbotsm5/tests.py::TestOwnAffinity::test_own_affinity_clamps_at_generic_portion"}
+{"collector_number": "sos_245", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f4c12d6i/tests.py::TestOwnAffinity::test_own_affinity_reduces_cost_by_creature_count"}
+{"collector_number": "sos_245", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f4c12d6i/tests.py::TestOwnAffinity::test_own_affinity_reduction_is_not_one_more"}
+{"collector_number": "sos_245", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f4c12d6i/tests.py::TestOwnAffinity::test_own_affinity_clamps_at_generic_portion"}

@@ -1,14 +1,13 @@
 {
   "card_id": "sos_13",
   "card_name": "Emeritus of Truce // Swords to Plowshares",
-  "tests_passed": 3,
-  "tests_failed": 3,
+  "tests_passed": 4,
+  "tests_failed": 2,
   "tests_total": 6,
-  "pass_rate": 0.5,
+  "pass_rate": 0.6666666666666666,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_85m3mg9j/tests.py::TestETBToken::test_etb_creates_inkling_for_target_player",
-    "FAILED ../../../../tmp/eval_sos_85m3mg9j/tests.py::TestPreparedBackFace::test_prepared_back_face_exiles_creature_and_grants_life",
-    "FAILED ../../../../tmp/eval_sos_85m3mg9j/tests.py::TestPreparedBackFace::test_prepared_consumed_after_back_face_cast"
+    "FAILED ../../../../tmp/eval_sos_bqul6tyu/tests.py::TestPreparedBackFace::test_prepared_back_face_exiles_creature_and_grants_life",
+    "FAILED ../../../../tmp/eval_sos_bqul6tyu/tests.py::TestPreparedBackFace::test_prepared_consumed_after_back_face_cast"
   ],
   "skipped": false,
   "test_nodes": [
@@ -18,7 +17,7 @@
     },
     {
       "test_node": "tests.py::TestETBToken::test_etb_creates_inkling_for_target_player",
-      "outcome": "fail"
+      "outcome": "pass"
     },
     {
       "test_node": "tests.py::TestETBToken::test_etb_token_can_be_given_to_self",
@@ -37,5 +36,5 @@
       "outcome": "fail"
     }
   ],
-  "tests_hash": "e0c0e65c288bb61e2643f7446c8355897bbc359bf5828da255487ec3476a27e3"
+  "tests_hash": "3bb30925fa5f3f2086fe81532c461ef00902004c05039e2c3e8444bc194d2091"
 }

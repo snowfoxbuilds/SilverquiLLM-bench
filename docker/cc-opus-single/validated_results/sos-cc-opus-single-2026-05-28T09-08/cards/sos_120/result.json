@@ -6,10 +6,10 @@
   "tests_total": 6,
   "pass_rate": 0.3333333333333333,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_yrryl358/tests.py::TestCastBehaviour::test_cast_exiles_until_mv_threshold_and_self_exiles",
-    "FAILED ../../../../tmp/eval_sos_yrryl358/tests.py::TestCastBehaviour::test_exiled_card_may_be_cast_for_free",
-    "FAILED ../../../../tmp/eval_sos_yrryl358/tests.py::TestCastBehaviour::test_exiled_card_cast_may_be_declined",
-    "FAILED ../../../../tmp/eval_sos_yrryl358/tests.py::TestParadigmRecurrence::test_paradigm_recurrence_casts_copy_from_exile"
+    "FAILED ../../../../tmp/eval_sos_ilyeozak/tests.py::TestCastBehaviour::test_cast_exiles_until_mv_threshold_and_self_exiles",
+    "FAILED ../../../../tmp/eval_sos_ilyeozak/tests.py::TestCastBehaviour::test_exiled_card_may_be_cast_for_free",
+    "FAILED ../../../../tmp/eval_sos_ilyeozak/tests.py::TestCastBehaviour::test_exiled_card_cast_may_be_declined",
+    "FAILED ../../../../tmp/eval_sos_ilyeozak/tests.py::TestParadigmRecurrence::test_paradigm_recurrence_casts_copy_from_exile"
   ],
   "skipped": false,
   "test_nodes": [

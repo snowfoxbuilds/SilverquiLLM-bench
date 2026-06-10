@@ -1,3 +1,3 @@
-{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ybugzn8i/tests.py::TestAttackTrigger::test_attack_trigger_casts_instant_from_graveyard_to_exile"}
-{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ybugzn8i/tests.py::TestAttackTrigger::test_attack_trigger_sorcery_also_exiled"}
-{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ybugzn8i/tests.py::TestAttackTrigger::test_other_spells_still_go_to_graveyard"}
+{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_12og1a72/tests.py::TestAttackTrigger::test_attack_trigger_casts_instant_from_graveyard_to_exile"}
+{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_12og1a72/tests.py::TestAttackTrigger::test_attack_trigger_sorcery_also_exiled"}
+{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_12og1a72/tests.py::TestAttackTrigger::test_other_spells_still_go_to_graveyard"}

@@ -1,13 +1,14 @@
 {
-  "collector_number": "sos_1",
+  "card_id": "sos_1",
+  "card_name": "The Dawning Archaic",
   "tests_passed": 7,
   "tests_failed": 3,
   "tests_total": 10,
   "pass_rate": 0.7,
   "errors": [
-    "FAILED ../../../tmp/eval_sos_ulznrk42/tests.py::TestAttackTrigger::test_attack_trigger_casts_instant_from_graveyard_to_exile",
-    "FAILED ../../../tmp/eval_sos_ulznrk42/tests.py::TestAttackTrigger::test_attack_trigger_sorcery_also_exiled",
-    "FAILED ../../../tmp/eval_sos_ulznrk42/tests.py::TestAttackTrigger::test_other_spells_still_go_to_graveyard"
+    "FAILED ../../../../tmp/eval_sos_cxsp5g75/tests.py::TestAttackTrigger::test_attack_trigger_casts_instant_from_graveyard_to_exile",
+    "FAILED ../../../../tmp/eval_sos_cxsp5g75/tests.py::TestAttackTrigger::test_attack_trigger_sorcery_also_exiled",
+    "FAILED ../../../../tmp/eval_sos_cxsp5g75/tests.py::TestAttackTrigger::test_other_spells_still_go_to_graveyard"
   ],
   "skipped": false,
   "test_nodes": [

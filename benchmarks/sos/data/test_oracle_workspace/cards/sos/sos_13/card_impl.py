@@ -1,7 +1,7 @@
 """Card implementation for Emeritus of Truce // Swords to Plowshares.
 
 Oracle text (front face — Creature):
-    When this creature enters, target player creates a 2/1 white and black
+    When this creature enters, target player creates a 1/1 white and black
     Inkling creature token with flying. Then if an opponent controls more
     creatures than you, this creature becomes prepared.
 
@@ -31,7 +31,7 @@ class EmeritusOfTruceSwordsToPlowshares(Creature):
     """Emeritus of Truce // Swords to Plowshares — Creature — Cat Cleric.
 
     Front face: {1}{W}{W}, 3/3, CMC 3.
-    ETB: target player creates a 2/1 white/black Inkling token with flying.
+    ETB: target player creates a 1/1 white/black Inkling token with flying.
     Prepared: ability word (NOT a keyword). When prepared and in exile,
     can cast back face (Swords to Plowshares) for {W} — exile target
     creature, its controller gains life equal to its power.
@@ -49,7 +49,7 @@ class EmeritusOfTruceSwordsToPlowshares(Creature):
         kwargs.setdefault("base_toughness", 3)
         kwargs.setdefault(
             "rules_text",
-            "When this creature enters, target player creates a 2/1 white "
+            "When this creature enters, target player creates a 1/1 white "
             "and black Inkling creature token with flying. Then if an opponent "
             "controls more creatures than you, this creature becomes prepared.",
         )
@@ -123,7 +123,7 @@ class EmeritusOfTruceSwordsToPlowshares(Creature):
     def on_resolve(self, game: GameState) -> None:
         """Resolve either front face (ETB token) or back face (exile + life).
 
-        Front face: create a 2/1 Inkling token for the targeted player.
+        Front face: create a 1/1 Inkling token for the targeted player.
         Back face (prepared): exile target creature, its controller gains
         life equal to its power.
         """
@@ -137,7 +137,7 @@ class EmeritusOfTruceSwordsToPlowshares(Creature):
             self._resolve_front_face(game, targets)
 
     def _resolve_front_face(self, game: GameState, targets: list[Any]) -> None:
-        """Create a 2/1 Inkling token on the targeted player's battlefield."""
+        """Create a 1/1 Inkling token on the targeted player's battlefield."""
         target_player = targets[0] if targets else self.controller
         if target_player is None:
             return
@@ -183,12 +183,12 @@ class EmeritusOfTruceSwordsToPlowshares(Creature):
     # ------------------------------------------------------------------
 
     def _create_inkling_token(self, token_owner: Any) -> Creature:
-        """Create a 2/1 Inkling token with flying for the target player."""
+        """Create a 1/1 Inkling token with flying for the target player."""
         from engine.card import Creature as _Creature
 
         token = _Creature(
             name="Inkling",
-            base_power=2,
+            base_power=1,
             base_toughness=1,
             keywords=Keyword.FLYING,
             subtypes={"Inkling"},

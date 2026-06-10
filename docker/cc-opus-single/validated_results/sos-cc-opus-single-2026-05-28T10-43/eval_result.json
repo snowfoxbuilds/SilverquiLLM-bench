@@ -46,8 +46,8 @@
       "tests_total": 9
     },
     "sos_97": {
-      "tests_passed": 7,
-      "tests_failed": 2,
+      "tests_passed": 8,
+      "tests_failed": 1,
       "tests_total": 9
     }
   },

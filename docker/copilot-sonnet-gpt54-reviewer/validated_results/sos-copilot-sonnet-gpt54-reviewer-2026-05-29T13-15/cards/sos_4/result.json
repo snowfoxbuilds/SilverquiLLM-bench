@@ -6,9 +6,9 @@
   "tests_total": 5,
   "pass_rate": 0.4,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_mhg6_1zz/tests.py::TestOneColorResolution::test_one_color_draw_damage_life",
-    "FAILED ../../../../tmp/eval_sos_mhg6_1zz/tests.py::TestFiveColorResolution::test_five_colors_full_effect",
-    "FAILED ../../../../tmp/eval_sos_mhg6_1zz/tests.py::TestZeroColorDiscriminator::test_zero_colors_no_effect"
+    "FAILED ../../../../tmp/eval_sos_0fd9rcbe/tests.py::TestOneColorResolution::test_one_color_draw_damage_life",
+    "FAILED ../../../../tmp/eval_sos_0fd9rcbe/tests.py::TestFiveColorResolution::test_five_colors_full_effect",
+    "FAILED ../../../../tmp/eval_sos_0fd9rcbe/tests.py::TestZeroColorDiscriminator::test_zero_colors_no_effect"
   ],
   "skipped": false,
   "test_nodes": [

@@ -6,9 +6,9 @@
   "tests_total": 13,
   "pass_rate": 0.7692307692307693,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_kn5o_xgc/tests.py::TestLandDrop::test_played_as_the_one_land_per_turn",
-    "FAILED ../../../../tmp/eval_sos_kn5o_xgc/tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature",
-    "FAILED ../../../../tmp/eval_sos_kn5o_xgc/tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup"
+    "FAILED ../../../../tmp/eval_sos_wmg9u229/tests.py::TestLandDrop::test_played_as_the_one_land_per_turn",
+    "FAILED ../../../../tmp/eval_sos_wmg9u229/tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature",
+    "FAILED ../../../../tmp/eval_sos_wmg9u229/tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup"
   ],
   "skipped": false,
   "test_nodes": [

@@ -7,6 +7,10 @@ to mirror), and lists the **pitfalls** to avoid. It is a *guide, not a spec* —
 disagrees with a claim here, trust the engine and the spec, fix the code, and jot
 a one-line note next to the item. See `CONTEXT.md` for the vocabulary used below.
 
+You are expected to make changes to the engine to implement new keywords and
+mechanics. The existing code base may not be perfect, you are free to make
+changes that don't break current behavior.
+
 ## Prime directive
 
 One mind builds all ten cards. The goal is **surgical, additive reuse**: build
@@ -31,7 +35,7 @@ bulk of the ten cards:
 | Colors / amount of mana spent | `card.colors_spent` set at cast time in `engine/casting.py` (~line 229); deterministic in tests via `mana_pool.pay(cost, choices=...)` | — | sos_4 (colors), sos_57 (amount) |
 | Triggered abilities | `register_triggers(self, game)` hook + `TriggerRegistration` / `game.trigger_manager.register(...)` in `engine/triggers.py`; event classes in `engine/events.py` | fdn_235, fdn_81 | most cards |
 | Replacement effects (zone redirect) | `register_replacement_effects(self, game)` hook + `ReplacementEffect`; set `MoveToGraveyardReplacementEvent.destination = "exile"` | fdn_244, fdn_137 | sos_1 ("exile instead") |
-| Loyalty abilities | `Planeswalker` + `get_loyalty_abilities()` → `LoyaltyAbility(loyalty_cost, effect, description)`; targeting via `self._resolve_target` / `_resolve_targets` (see fdn_81) | fdn_44, fdn_81 | sos_97 |
+| Loyalty abilities | `Planeswalker` + `get_loyalty_abilities()` → `LoyaltyAbility(loyalty_cost, effect, description)`; read targets from `self.chosen_targets` (the engine sets it from the activation's targets; mirror fdn_81 only for the loyalty scaffolding, not its `_resolve_target` reads) | fdn_44, fdn_81 | sos_97 |
 | Mana abilities | `Land` + `get_mana_abilities()` → `ManaAbility(cost, mana_produced, description)` | (grep fdn lands) | sos_257 |
 | Counter target spell | card-local: mirror an FDN counterspell's local `_counter_spell` (pop from stack → graveyard) + `can_cast` guard + `zone=Zone.STACK` targeting | fdn_48 (Refute) | sos_57 |
 | Tokens | `create_token(game, player, token)` in `engine/game.py` | fdn_44, fdn_81 | sos_13 |
@@ -239,16 +243,19 @@ then run `python3 -m pytest engine_tests/ -q` before moving on.
     each discard a card; −2 return a creature card with mana value ≤ 3 from your
     graveyard to the battlefield; −7 flip five coins, target opponent skips their
     next X turns (X = heads).
-  - Reuse: `Planeswalker` + `get_loyalty_abilities()` (mirror **fdn_81 / fdn_44**;
-    targeting via `self._resolve_target` / `_resolve_targets`). −2 reanimate via
+  - Reuse: `Planeswalker` + `get_loyalty_abilities()` (mirror **fdn_81 / fdn_44**
+    for the loyalty-ability scaffolding, but read this card's targets from
+    `self.chosen_targets`, which the engine sets from the activation's `targets`
+    — do not use `_resolve_target` / `_resolve_targets`). −2 reanimate via
     `move_to_zone(game, card, Zone.GRAVEYARD, Zone.BATTLEFIELD)` (fires ETB). +1
     Surveil 2: look at `library.top(2)`, bin to graveyard or keep on top (small
     local helper; player choice in tests). **Coin flip (gap):** flip each coin
     with `random.Random.randint(0, 1)` via a seeded RNG — add a `game.rng`
     (`random.Random`) if absent so tests are deterministic. **Skip turns
-    (gap):** add a small skip-turn counter on game state checked by the turn loop
-    (`engine/game_state.py` advance logic); X heads → skip that player's next X
-    turns.
+    (gap):** record the count as a `skip_turns` attribute on the targeted player
+    (`target_player.skip_turns += X`), and have the turn loop
+    (`engine/game_state.py` advance logic) check and decrement it; X heads → skip
+    that player's next X turns.
   - Edges: −2 with no valid creature in graveyard; −1 with zero target players;
     ultimate only at loyalty ≥ 7; X = 0 heads skips nothing.
 

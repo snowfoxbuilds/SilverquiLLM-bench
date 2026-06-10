@@ -1,5 +1,6 @@
 {
-  "collector_number": "sos_1",
+  "card_id": "sos_1",
+  "card_name": "The Dawning Archaic",
   "tests_passed": 10,
   "tests_failed": 0,
   "tests_total": 10,

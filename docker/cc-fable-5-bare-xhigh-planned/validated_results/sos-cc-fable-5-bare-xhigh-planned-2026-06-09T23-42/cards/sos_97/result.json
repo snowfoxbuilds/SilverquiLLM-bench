@@ -1,14 +1,15 @@
 {
-  "collector_number": "sos_97",
+  "card_id": "sos_97",
+  "card_name": "Ral Zarek, Guest Lecturer",
   "tests_passed": 5,
   "tests_failed": 4,
   "tests_total": 9,
   "pass_rate": 0.5555555555555556,
   "errors": [
-    "FAILED ../../../tmp/eval_sos_rq4cq_wh/tests.py::TestMinusOne::test_minus_one_targeted_player_discards",
-    "FAILED ../../../tmp/eval_sos_rq4cq_wh/tests.py::TestMinusTwo::test_minus_two_returns_creature_from_graveyard",
-    "FAILED ../../../tmp/eval_sos_rq4cq_wh/tests.py::TestUltimate::test_ultimate_skips_turns_per_seeded_coin_flips",
-    "FAILED ../../../tmp/eval_sos_rq4cq_wh/tests.py::TestLoyaltyLegality::test_planeswalker_dies_at_zero_loyalty"
+    "FAILED ../../../../tmp/eval_sos_8ihxgugs/tests.py::TestMinusOne::test_minus_one_targeted_player_discards",
+    "FAILED ../../../../tmp/eval_sos_8ihxgugs/tests.py::TestMinusTwo::test_minus_two_returns_creature_from_graveyard",
+    "FAILED ../../../../tmp/eval_sos_8ihxgugs/tests.py::TestUltimate::test_ultimate_skips_turns_per_seeded_coin_flips",
+    "FAILED ../../../../tmp/eval_sos_8ihxgugs/tests.py::TestLoyaltyLegality::test_planeswalker_dies_at_zero_loyalty"
   ],
   "skipped": false,
   "test_nodes": [
