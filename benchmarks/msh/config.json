@@ -7,7 +7,7 @@
     "collector_range": "001-276",
     "extra_set_codes": []
   },
-  "tier": "testing",
+  "tier": "Beta",
   "cards": [],
   "leaderboard": {
     "requires_full_set": true,
