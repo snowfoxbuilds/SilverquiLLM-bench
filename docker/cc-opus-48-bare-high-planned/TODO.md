@@ -130,8 +130,9 @@ then run `python3 -m pytest engine_tests/ -q` before moving on.
 
 - [ ] **sos_1 — The Dawning Archaic** *(cost reduction + free cast + trigger + replacement)*
   - Clauses: costs {1} less per instant/sorcery in your graveyard; Reach; on
-    attack, may cast target instant/sorcery from graveyard for free; if that
-    spell would go to the graveyard, exile it instead.
+    attack, may cast target instant/sorcery from graveyard for free (if only one
+    legal target, auto-select it instead of prompting); if that spell would go to
+    the graveyard, exile it instead.
   - Reuse: `cost_reduction` hook (count instant/sorcery in your graveyard);
     `Keyword` for Reach; `register_triggers` on `AttacksTriggeredEvent`;
     `cast_spell_free(game, controller, spell, Zone.GRAVEYARD)`; for exile-instead,
@@ -153,9 +154,11 @@ then run `python3 -m pytest engine_tests/ -q` before moving on.
   - Clauses: Flying, Vigilance; your instant/sorcery spells have Casualty 1.
   - Reuse: `register_triggers` on `SpellCastTriggeredEvent` (now fired by E1),
     gated to instant/sorcery spells you cast while Silverquill is on the
-    battlefield. On trigger, you **may** sacrifice a creature with power ≥ 1
-    (`sacrifice`); if you do, `copy_spell(game, event.spell, controller)` (the
-    copy goes on the stack above the original and may choose new targets).
+    battlefield. On trigger, prompt once for the creature to sacrifice (one
+    `choose_card`; the answer is the creature, or `None` to decline — no separate
+    yes/no), and accept it only if its power ≥ 1 (`sacrifice`); if a creature is
+    sacrificed, `copy_spell(game, event.spell, controller)` (the copy goes on the
+    stack above the original and may choose new targets).
   - Edges: no creature with power ≥ 1 → casualty simply not taken; the copy is
     not itself "cast" (E1 won't re-fire for it — correct).
 
