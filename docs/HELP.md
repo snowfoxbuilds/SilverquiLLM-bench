@@ -17,11 +17,9 @@ pytest tests/audited/fdn tests/engine
 # Docker
 docker build -t silverquillm-local-pi-blind:latest docker/local-pi-blind/
 
-docker build -t silverquillm-cc-opus-48-bare-high-planned:latest docker/cc-opus-48-bare-high-planned/
+docker build -t silverquillm-cc-opus-48-bare-xhigh-planned:latest docker/cc-opus-48-bare-xhigh-planned/
 
-docker build -t silverquillm-cc-opus-48-bare-xhigh-planned:latest docker/cc-opus-48-bare-high-planned/
-
-docker build -t silverquillm-cc-fable-5-bare-xhigh-planned:latest docker/cc-opus-48-bare-high-planned/
+docker build -t silverquillm-cc-fable-5-bare-xhigh-planned:latest docker/cc-fable-5-bare-xhigh-planned/
 
 # Smoke
 silverquillm smoke --image silverquillm-local-pi-blind:latest

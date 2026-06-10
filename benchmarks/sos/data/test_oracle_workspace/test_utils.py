@@ -817,8 +817,11 @@ def priority_loop(game: GameState) -> None:
     entrypoints (retain-on-action: an acting player causes a re-poll from the
     active player), and — when nobody acts and the stack is non-empty —
     resolve exactly one stack object.  Terminates when the stack is empty and
-    every directive queue is exhausted.  A directive poll against a dry queue
-    while the stack is non-empty raises ``ScriptExhaustedError``.
+    every directive queue is exhausted.  A dry directive queue is treated as the
+    player passing priority, so a non-empty stack auto-drains (no scripted
+    response = pass) instead of raising — draining the stack is the driver's job,
+    not each card's ``on_resolve``.  (The choice channel still raises
+    ``ScriptExhaustedError`` when a scripted decision is missing.)
     """
     iterations = 0
     while True:
@@ -843,12 +846,20 @@ def priority_loop(game: GameState) -> None:
         for player in players:
             queue = player._directives
             if not queue:
-                if game.stack.is_empty():
-                    continue  # nothing left to say; remaining players may act
-                raise ScriptExhaustedError(
-                    f"Player {player.name!r} was polled for a directive with "
-                    f"the stack non-empty but the directive queue is dry"
-                )
+                # A dry directive queue means this player has nothing left to
+                # do, so they pass priority.  When every queue is dry and the
+                # stack is still non-empty it auto-drains below via
+                # ``_resolve_one_stack_object`` — real priority semantics: no
+                # scripted response = a pass, so remaining objects resolve
+                # rather than failing the test.  Draining the stack is the
+                # driver's job, not the card's: cards push spells with
+                # ``cast_spell_free`` and return.  Stray leftovers are still
+                # caught by end-state asserts (e.g. ``assert_stack_empty``) and
+                # runaway loops by ``_MAX_DRIVER_ITERATIONS``.  (The *choice*
+                # channel — ``choose``/``choose_card`` during resolution — still
+                # raises ``ScriptExhaustedError`` when dry, so tests must still
+                # supply real decisions.)
+                continue
             directive = queue.popleft()
             if directive.kind == "no_op":
                 continue  # pass priority
