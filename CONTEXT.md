@@ -48,6 +48,12 @@ Synonym for Draft Set when referring to the set of cards included in a benchmark
 
 *Avoid*: "target set" (deprecated — was ambiguous about whether it meant a single Scryfall set code or the full draft pool)
 
+**Checkpoint (MSH)**
+
+A frozen, reference-validated snapshot of the whole MSH benchmark workspace taken after a card group: the engine plus accumulated additive diffs, all card implementations so far, the audited tests in scope, and the green ledger (passing cards/tests with the RNG seeds and engine version that produced it). The unit of resume, regression attribution, and bounded per-step agent context.
+
+*Avoid*: "Output Snapshot" (runner-owned 60-second Git commits), "snapshot" alone
+
 **Contamination**
 
 When an LLM has seen target card implementations in its training data, invalidating the benchmark. Controlled via new set selection, no web access, and clean workspaces.
@@ -66,11 +72,41 @@ All cards contained in draft booster packs for a given MTG release. A Draft Set 
 
 *Avoid*: "target set" (deprecated), "set" alone (ambiguous — could mean a single Scryfall set code)
 
-**DeterministicPlayer**
+**DeterministicPlayer (SOS)**
 
-Test player driven by two explicit, separate, ordered channels: a **directive queue** (`script` — per-priority `no_op` / `perform_action` / `perform_illegal_action`, consumed each time the player holds priority under the Host-Side Driver) and a **choice script** (`choices` — the canonical answer deque the engine consumes via `choose_target` / `choose` / `choose_yes_no` / `choose_card` / `assign_damage_order` for decisions raised mid-cast / mid-resolution). Reproducible, no AI decision-making in v1; a dry queue on *either* channel fails the test (`ScriptExhaustedError`), never hangs or auto-passes. Player-initiated casts/activations carry their own targets on the directive; engine-initiated (triggered) objects pull targets/choices from the choice script.
+The V1 / SOS-workspace test player, frozen with SOS. Driven by two explicit, separate, ordered channels: a **directive queue** (`script` — per-priority `no_op` / `perform_action` / `perform_illegal_action`, consumed each time the player holds priority under the Host-Side Driver) and a **choice script** (`choices` — the canonical answer deque the engine consumes via `choose_target` / `choose` / `choose_yes_no` / `choose_card` / `assign_damage_order` for decisions raised mid-cast / mid-resolution). Reproducible, no AI decision-making in v1; a dry queue on *either* channel fails the test (`ScriptExhaustedError`), never hangs or auto-passes. Player-initiated casts/activations carry their own targets on the directive; engine-initiated (triggered) objects pull targets/choices from the choice script.
 
-*Avoid*: "test player", "mock player"
+*Avoid*: "test player", "mock player", using it unscoped — say DeterministicPlayer (SOS) or (MSH)
+
+**DeterministicPlayer (MSH)**
+
+The MSH workspace's intent-driven test player — same class name as the SOS player by decision; the two live in per-benchmark workspaces that never import each other. Holds the test's active Intents, receives structured Player Queries from the engine, routes each query to an Intent by pattern-matching on source refs, and answers by preference over Player Decisions: greedy, first option that is both intended and valid in the implementation-provided order, no search. Queries matched by no card Intent fall to the Baseline Intent; matched by neither is an explicit failure. The SOS dry-script failure mode (ScriptExhaustedError) is replaced by boundary validation plus the "no offered option satisfies the intent" signal.
+
+*Avoid*: "IntentPlayer" (rejected rename), "test player", "mock player", the SOS two-channel semantics (see DeterministicPlayer (SOS))
+
+**Game Refs**
+
+The dynamic extension of Game Symbols to all actual game objects — tokens, spells and abilities on the stack, etc. — tracked by the engine as objects are created. A Game Ref is hierarchical provenance (player / zone / card / object / ability); the object level carries the only opaque engine-minted identifier, the instance id, which tests never hardcode.
+
+*Avoid*: "EngineRef" (working name), "object id" (only one field of a ref)
+
+**Game Symbols**
+
+The immutable, benchmark-owned vocabulary of Player Decision kinds and attribute values (the "blessed vocabulary"). Closed: tested agents cannot extend it; additions are benchmark-version events.
+
+*Avoid*: "symbol" alone (collides with MTG mana symbols), "symbol set"
+
+**Intent**
+
+A test-scoped Player Query handler with an explicit lifecycle (`start_intent` → actions → `end_intent`, where its postcondition is checked). Answers whatever Player Queries an implementation raises by preference over Player Decisions — greedy, first intended-and-valid option, no search. Multiple Intents may be active; an always-active Baseline Intent supplies defaults for system-level queries. Audited-test-only — the engine is never intent-driven.
+
+*Avoid*: "goal" / "policy" (rejected names), "answer script" (the V1 FIFO model this replaces)
+
+**Modifiers**
+
+Refinements riding on a Player Decision (spend restrictions, snow, doesn't-empty, …). Invisible to satisfaction matching; read only by engine predicates (e.g. spend-time checks) and audit assertions. Tested agents may add private Modifiers; Modifiers asserted on by audited tests must use canonical names.
+
+*Avoid*: "tags" (working name)
 
 **Output Snapshot**
 
@@ -83,6 +119,18 @@ Periodic runner-captured copy of the Workspace during an Agent Container run, ro
 A benchmark run whose purpose is to validate that the orchestration pipeline works end-to-end (workspace staging, container launch, result harvesting, evaluation). Not intended to produce meaningful scores — audited tests are not required. Precedes scored benchmark runs.
 
 *Avoid*: "test run" (ambiguous), "dry run" (has a different meaning — `--dry-run` flag)
+
+**Player Decision**
+
+The immutable data struct representing one unit of choice offered in a Player Query: kind + attrs + Modifiers + an optional Game Ref. Pure data with zero behavior; satisfaction is subset matching on kind and attrs (a specific decision satisfies a more general one). Number decisions satisfy by exact equality.
+
+*Avoid*: "Symbol" (working name), "option" alone (an option is a Player Decision inside a Query's options tuple)
+
+**Player Query**
+
+A question an engine raises to a player: source (set of Player Decisions identifying what raised it), human-readable prompt, an ordered options tuple of Player Decisions (the implementation-provided order is part of the contract), and min/max counts. `min=0` marks a legally declinable query.
+
+*Avoid*: "Question" (working name), "prompt" alone (one field of a query)
 
 **Replay Validation**
 
