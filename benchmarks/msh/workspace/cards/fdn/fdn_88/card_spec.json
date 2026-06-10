@@ -1,0 +1,17 @@
+{
+  "name": "Goblin Negotiation",
+  "mana_cost": "{X}{R}{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "Goblin Negotiation deals X damage to target creature. Create a number of 1/1 red Goblin creature tokens equal to the amount of excess damage dealt to that creature this way.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "88",
+  "complexity_tier": "medium"
+}
