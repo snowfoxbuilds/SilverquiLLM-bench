@@ -1,3 +1,3 @@
-{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wmg9u229/tests.py::TestLandDrop::test_played_as_the_one_land_per_turn"}
-{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wmg9u229/tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature"}
-{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wmg9u229/tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3wxgd07n/tests.py::TestLandDrop::test_played_as_the_one_land_per_turn"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3wxgd07n/tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3wxgd07n/tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup"}

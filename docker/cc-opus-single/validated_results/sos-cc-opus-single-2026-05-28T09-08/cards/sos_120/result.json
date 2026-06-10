@@ -1,15 +1,14 @@
 {
   "card_id": "sos_120",
   "card_name": "Improvisation Capstone",
-  "tests_passed": 2,
-  "tests_failed": 4,
+  "tests_passed": 3,
+  "tests_failed": 3,
   "tests_total": 6,
-  "pass_rate": 0.3333333333333333,
+  "pass_rate": 0.5,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_ilyeozak/tests.py::TestCastBehaviour::test_cast_exiles_until_mv_threshold_and_self_exiles",
-    "FAILED ../../../../tmp/eval_sos_ilyeozak/tests.py::TestCastBehaviour::test_exiled_card_may_be_cast_for_free",
-    "FAILED ../../../../tmp/eval_sos_ilyeozak/tests.py::TestCastBehaviour::test_exiled_card_cast_may_be_declined",
-    "FAILED ../../../../tmp/eval_sos_ilyeozak/tests.py::TestParadigmRecurrence::test_paradigm_recurrence_casts_copy_from_exile"
+    "FAILED ../../../../tmp/eval_sos_ns8bk96e/tests.py::TestCastBehaviour::test_cast_exiles_until_mv_threshold_and_self_exiles",
+    "FAILED ../../../../tmp/eval_sos_ns8bk96e/tests.py::TestCastBehaviour::test_exiled_card_cast_may_be_declined",
+    "FAILED ../../../../tmp/eval_sos_ns8bk96e/tests.py::TestParadigmRecurrence::test_paradigm_recurrence_casts_copy_from_exile"
   ],
   "skipped": false,
   "test_nodes": [
@@ -23,7 +22,7 @@
     },
     {
       "test_node": "tests.py::TestCastBehaviour::test_exiled_card_may_be_cast_for_free",
-      "outcome": "fail"
+      "outcome": "pass"
     },
     {
       "test_node": "tests.py::TestCastBehaviour::test_exiled_card_cast_may_be_declined",

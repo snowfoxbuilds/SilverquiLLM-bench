@@ -6,9 +6,9 @@
   "tests_total": 9,
   "pass_rate": 0.6666666666666666,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_d2ckydad/tests.py::TestMinusOne::test_minus_one_targeted_player_discards",
-    "FAILED ../../../../tmp/eval_sos_d2ckydad/tests.py::TestMinusTwo::test_minus_two_returns_creature_from_graveyard",
-    "FAILED ../../../../tmp/eval_sos_d2ckydad/tests.py::TestUltimate::test_ultimate_skips_turns_per_seeded_coin_flips"
+    "FAILED ../../../../tmp/eval_sos_wy7adyrb/tests.py::TestMinusOne::test_minus_one_targeted_player_discards",
+    "FAILED ../../../../tmp/eval_sos_wy7adyrb/tests.py::TestMinusTwo::test_minus_two_returns_creature_from_graveyard",
+    "FAILED ../../../../tmp/eval_sos_wy7adyrb/tests.py::TestUltimate::test_ultimate_skips_turns_per_seeded_coin_flips"
   ],
   "skipped": false,
   "test_nodes": [

@@ -1,1 +1,1 @@
-{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iqd8wud8/tests.py::TestOpponentUpkeepTrigger::test_opponent_upkeep_discard_to_draw_accepted"}
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f02b8oir/tests.py::TestOpponentUpkeepTrigger::test_opponent_upkeep_discard_to_draw_accepted"}

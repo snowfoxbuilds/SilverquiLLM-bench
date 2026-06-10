@@ -1,22 +1,21 @@
 {
   "card_id": "sos_257",
   "card_name": "Great Hall of the Biblioplex",
-  "tests_passed": 2,
-  "tests_failed": 11,
+  "tests_passed": 3,
+  "tests_failed": 10,
   "tests_total": 13,
-  "pass_rate": 0.15384615384615385,
+  "pass_rate": 0.23076923076923078,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_yfgxl05w/tests.py::TestManaAbilities::test_first_ability_adds_colorless",
-    "FAILED ../../../../tmp/eval_sos_yfgxl05w/tests.py::TestManaAbilities::test_second_ability_costs_life_and_taps",
-    "FAILED ../../../../tmp/eval_sos_yfgxl05w/tests.py::TestManaAbilities::test_restricted_mana_pays_an_instant",
-    "FAILED ../../../../tmp/eval_sos_yfgxl05w/tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature",
-    "FAILED ../../../../tmp/eval_sos_yfgxl05w/tests.py::TestAnimation::test_animation_makes_a_2_4_wizard_that_is_still_a_land",
-    "FAILED ../../../../tmp/eval_sos_yfgxl05w/tests.py::TestAnimation::test_animation_requires_five_mana",
-    "FAILED ../../../../tmp/eval_sos_yfgxl05w/tests.py::TestAnimation::test_reanimation_is_a_gated_noop",
-    "FAILED ../../../../tmp/eval_sos_yfgxl05w/tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup",
-    "FAILED ../../../../tmp/eval_sos_yfgxl05w/tests.py::TestSpellCastBoost::test_opponent_spell_does_not_boost",
-    "FAILED ../../../../tmp/eval_sos_yfgxl05w/tests.py::TestSpellCastBoost::test_two_spells_stack_boosts",
-    "FAILED ../../../../tmp/eval_sos_yfgxl05w/tests.py::TestSpellCastBoost::test_no_boost_when_not_animated"
+    "FAILED ../../../../tmp/eval_sos_ir890z03/tests.py::TestManaAbilities::test_first_ability_adds_colorless",
+    "FAILED ../../../../tmp/eval_sos_ir890z03/tests.py::TestManaAbilities::test_second_ability_costs_life_and_taps",
+    "FAILED ../../../../tmp/eval_sos_ir890z03/tests.py::TestManaAbilities::test_restricted_mana_pays_an_instant",
+    "FAILED ../../../../tmp/eval_sos_ir890z03/tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature",
+    "FAILED ../../../../tmp/eval_sos_ir890z03/tests.py::TestAnimation::test_animation_makes_a_2_4_wizard_that_is_still_a_land",
+    "FAILED ../../../../tmp/eval_sos_ir890z03/tests.py::TestAnimation::test_animation_requires_five_mana",
+    "FAILED ../../../../tmp/eval_sos_ir890z03/tests.py::TestAnimation::test_reanimation_is_a_gated_noop",
+    "FAILED ../../../../tmp/eval_sos_ir890z03/tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup",
+    "FAILED ../../../../tmp/eval_sos_ir890z03/tests.py::TestSpellCastBoost::test_opponent_spell_does_not_boost",
+    "FAILED ../../../../tmp/eval_sos_ir890z03/tests.py::TestSpellCastBoost::test_two_spells_stack_boosts"
   ],
   "skipped": false,
   "test_nodes": [
@@ -70,8 +69,8 @@
     },
     {
       "test_node": "tests.py::TestSpellCastBoost::test_no_boost_when_not_animated",
-      "outcome": "fail"
+      "outcome": "pass"
     }
   ],
-  "tests_hash": "7e6f37a904d34f874a4e0f264a86d03fde6b89e026ccf26e4a913db6fe4541fd"
+  "tests_hash": "6ccce63542b08dea7c92bc8e318946a30f64edce26574d36d9e0c5e2d7fc9200"
 }

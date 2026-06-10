@@ -6,8 +6,8 @@
   "tests_total": 13,
   "pass_rate": 0.8461538461538461,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_vta9rvaz/tests.py::TestLandDrop::test_played_as_the_one_land_per_turn",
-    "FAILED ../../../../tmp/eval_sos_vta9rvaz/tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup"
+    "FAILED ../../../../tmp/eval_sos_v7mevs1x/tests.py::TestLandDrop::test_played_as_the_one_land_per_turn",
+    "FAILED ../../../../tmp/eval_sos_v7mevs1x/tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup"
   ],
   "skipped": false,
   "test_nodes": [
@@ -64,5 +64,5 @@
       "outcome": "pass"
     }
   ],
-  "tests_hash": "7e6f37a904d34f874a4e0f264a86d03fde6b89e026ccf26e4a913db6fe4541fd"
+  "tests_hash": "6ccce63542b08dea7c92bc8e318946a30f64edce26574d36d9e0c5e2d7fc9200"
 }

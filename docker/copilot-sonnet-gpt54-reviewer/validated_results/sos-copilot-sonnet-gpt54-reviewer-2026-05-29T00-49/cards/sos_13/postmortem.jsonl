@@ -1,6 +1,6 @@
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8mqbqt5t/tests.py::TestIdentity::test_card_identity"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8mqbqt5t/tests.py::TestETBToken::test_etb_creates_inkling_for_target_player"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8mqbqt5t/tests.py::TestETBToken::test_etb_token_can_be_given_to_self"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8mqbqt5t/tests.py::TestPreparedBackFace::test_prepared_back_face_exiles_creature_and_grants_life"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8mqbqt5t/tests.py::TestPreparedBackFace::test_not_prepared_when_creature_counts_equal"}
-{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8mqbqt5t/tests.py::TestPreparedBackFace::test_prepared_consumed_after_back_face_cast"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5rjxwjjb/tests.py::TestIdentity::test_card_identity"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5rjxwjjb/tests.py::TestETBToken::test_etb_creates_inkling_for_target_player"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5rjxwjjb/tests.py::TestETBToken::test_etb_token_can_be_given_to_self"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5rjxwjjb/tests.py::TestPreparedBackFace::test_prepared_back_face_exiles_creature_and_grants_life"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5rjxwjjb/tests.py::TestPreparedBackFace::test_not_prepared_when_creature_counts_equal"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5rjxwjjb/tests.py::TestPreparedBackFace::test_prepared_consumed_after_back_face_cast"}

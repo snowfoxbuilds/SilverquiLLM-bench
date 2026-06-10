@@ -6,7 +6,7 @@
   "tests_total": 6,
   "pass_rate": 0.8333333333333334,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_xgop7q13/tests.py::TestCasualty::test_casualty_paid_copies_the_spell"
+    "FAILED ../../../../tmp/eval_sos_bwk302yw/tests.py::TestCasualty::test_casualty_paid_copies_the_spell"
   ],
   "skipped": false,
   "test_nodes": [

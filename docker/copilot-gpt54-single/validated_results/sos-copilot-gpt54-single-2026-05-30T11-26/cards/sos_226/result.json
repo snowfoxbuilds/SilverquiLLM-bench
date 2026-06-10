@@ -6,8 +6,8 @@
   "tests_total": 6,
   "pass_rate": 0.6666666666666666,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_duhm86xf/tests.py::TestCasualty::test_casualty_paid_copies_the_spell",
-    "FAILED ../../../../tmp/eval_sos_duhm86xf/tests.py::TestCasualty::test_zero_power_creature_is_not_a_legal_casualty_sacrifice"
+    "FAILED ../../../../tmp/eval_sos_akmyybez/tests.py::TestCasualty::test_casualty_paid_copies_the_spell",
+    "FAILED ../../../../tmp/eval_sos_akmyybez/tests.py::TestCasualty::test_zero_power_creature_is_not_a_legal_casualty_sacrifice"
   ],
   "skipped": false,
   "test_nodes": [

@@ -6,17 +6,17 @@
   "tests_total": 13,
   "pass_rate": 0.15384615384615385,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_j4wyhhq9/tests.py::TestLandDrop::test_played_as_the_one_land_per_turn",
-    "FAILED ../../../../tmp/eval_sos_j4wyhhq9/tests.py::TestManaAbilities::test_first_ability_adds_colorless",
-    "FAILED ../../../../tmp/eval_sos_j4wyhhq9/tests.py::TestManaAbilities::test_second_ability_costs_life_and_taps",
-    "FAILED ../../../../tmp/eval_sos_j4wyhhq9/tests.py::TestManaAbilities::test_restricted_mana_pays_an_instant",
-    "FAILED ../../../../tmp/eval_sos_j4wyhhq9/tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature",
-    "FAILED ../../../../tmp/eval_sos_j4wyhhq9/tests.py::TestAnimation::test_animation_makes_a_2_4_wizard_that_is_still_a_land",
-    "FAILED ../../../../tmp/eval_sos_j4wyhhq9/tests.py::TestAnimation::test_animation_requires_five_mana",
-    "FAILED ../../../../tmp/eval_sos_j4wyhhq9/tests.py::TestAnimation::test_reanimation_is_a_gated_noop",
-    "FAILED ../../../../tmp/eval_sos_j4wyhhq9/tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup",
-    "FAILED ../../../../tmp/eval_sos_j4wyhhq9/tests.py::TestSpellCastBoost::test_opponent_spell_does_not_boost",
-    "FAILED ../../../../tmp/eval_sos_j4wyhhq9/tests.py::TestSpellCastBoost::test_two_spells_stack_boosts"
+    "FAILED ../../../../tmp/eval_sos_i_kjcc_r/tests.py::TestLandDrop::test_played_as_the_one_land_per_turn",
+    "FAILED ../../../../tmp/eval_sos_i_kjcc_r/tests.py::TestManaAbilities::test_first_ability_adds_colorless",
+    "FAILED ../../../../tmp/eval_sos_i_kjcc_r/tests.py::TestManaAbilities::test_second_ability_costs_life_and_taps",
+    "FAILED ../../../../tmp/eval_sos_i_kjcc_r/tests.py::TestManaAbilities::test_restricted_mana_pays_an_instant",
+    "FAILED ../../../../tmp/eval_sos_i_kjcc_r/tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature",
+    "FAILED ../../../../tmp/eval_sos_i_kjcc_r/tests.py::TestAnimation::test_animation_makes_a_2_4_wizard_that_is_still_a_land",
+    "FAILED ../../../../tmp/eval_sos_i_kjcc_r/tests.py::TestAnimation::test_animation_requires_five_mana",
+    "FAILED ../../../../tmp/eval_sos_i_kjcc_r/tests.py::TestAnimation::test_reanimation_is_a_gated_noop",
+    "FAILED ../../../../tmp/eval_sos_i_kjcc_r/tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup",
+    "FAILED ../../../../tmp/eval_sos_i_kjcc_r/tests.py::TestSpellCastBoost::test_opponent_spell_does_not_boost",
+    "FAILED ../../../../tmp/eval_sos_i_kjcc_r/tests.py::TestSpellCastBoost::test_two_spells_stack_boosts"
   ],
   "skipped": false,
   "test_nodes": [
@@ -73,5 +73,5 @@
       "outcome": "pass"
     }
   ],
-  "tests_hash": "7e6f37a904d34f874a4e0f264a86d03fde6b89e026ccf26e4a913db6fe4541fd"
+  "tests_hash": "6ccce63542b08dea7c92bc8e318946a30f64edce26574d36d9e0c5e2d7fc9200"
 }

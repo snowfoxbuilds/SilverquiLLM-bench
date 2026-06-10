@@ -1,3 +1,3 @@
-{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zfajnofe/tests.py::TestCastBehaviour::test_cast_exiles_until_mv_threshold_and_self_exiles"}
-{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zfajnofe/tests.py::TestCastBehaviour::test_exiled_card_may_be_cast_for_free"}
-{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zfajnofe/tests.py::TestParadigmRecurrence::test_paradigm_recurrence_casts_copy_from_exile"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xu_4x67z/tests.py::TestCastBehaviour::test_cast_exiles_until_mv_threshold_and_self_exiles"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xu_4x67z/tests.py::TestCastBehaviour::test_exiled_card_may_be_cast_for_free"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xu_4x67z/tests.py::TestParadigmRecurrence::test_paradigm_recurrence_casts_copy_from_exile"}

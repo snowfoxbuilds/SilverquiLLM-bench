@@ -6,10 +6,10 @@
   "tests_total": 9,
   "pass_rate": 0.5555555555555556,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_1b2vzegn/tests.py::TestMinusOne::test_minus_one_targeted_player_discards",
-    "FAILED ../../../../tmp/eval_sos_1b2vzegn/tests.py::TestMinusTwo::test_minus_two_returns_creature_from_graveyard",
-    "FAILED ../../../../tmp/eval_sos_1b2vzegn/tests.py::TestUltimate::test_ultimate_skips_turns_per_seeded_coin_flips",
-    "FAILED ../../../../tmp/eval_sos_1b2vzegn/tests.py::TestLoyaltyLegality::test_planeswalker_dies_at_zero_loyalty"
+    "FAILED ../../../../tmp/eval_sos_9px5jsbo/tests.py::TestMinusOne::test_minus_one_targeted_player_discards",
+    "FAILED ../../../../tmp/eval_sos_9px5jsbo/tests.py::TestMinusTwo::test_minus_two_returns_creature_from_graveyard",
+    "FAILED ../../../../tmp/eval_sos_9px5jsbo/tests.py::TestUltimate::test_ultimate_skips_turns_per_seeded_coin_flips",
+    "FAILED ../../../../tmp/eval_sos_9px5jsbo/tests.py::TestLoyaltyLegality::test_planeswalker_dies_at_zero_loyalty"
   ],
   "skipped": false,
   "test_nodes": [

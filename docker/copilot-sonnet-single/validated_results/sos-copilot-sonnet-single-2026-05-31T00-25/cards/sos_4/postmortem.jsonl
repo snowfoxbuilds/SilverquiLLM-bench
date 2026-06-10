@@ -1,2 +1,2 @@
-{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2qpi44ze/tests.py::TestOneColorResolution::test_one_color_draw_damage_life"}
-{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2qpi44ze/tests.py::TestFiveColorResolution::test_five_colors_full_effect"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_k3kp95b4/tests.py::TestOneColorResolution::test_one_color_draw_damage_life"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_k3kp95b4/tests.py::TestFiveColorResolution::test_five_colors_full_effect"}

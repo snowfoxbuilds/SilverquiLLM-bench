@@ -6,8 +6,8 @@
   "tests_total": 9,
   "pass_rate": 0.7777777777777778,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_e_a2bztk/tests.py::TestRefund::test_no_refund_when_countered_spell_was_cast_for_free",
-    "FAILED ../../../../tmp/eval_sos_e_a2bztk/tests.py::TestFizzle::test_fizzle_when_target_already_countered"
+    "FAILED ../../../../tmp/eval_sos_lg0dkrbt/tests.py::TestRefund::test_no_refund_when_countered_spell_was_cast_for_free",
+    "FAILED ../../../../tmp/eval_sos_lg0dkrbt/tests.py::TestFizzle::test_fizzle_when_target_already_countered"
   ],
   "skipped": false,
   "test_nodes": [

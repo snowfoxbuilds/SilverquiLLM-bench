@@ -5,10 +5,10 @@
     "timestamp": "2026-06-04T03:35:41Z",
     "card_count": 10,
     "timeout_seconds": 360000,
-    "harness_version": "5ae441a1b9444208ff05fab8fbf1287003273244"
+    "harness_version": "3000051aa17391f6487166a8342e9e68e9521ce2"
   },
   "sos_card_correctness": {
-    "audited_pass_rate": 0.6386,
+    "audited_pass_rate": 0.6506,
     "card_pass_rate": 0.3,
     "cards_completed": 10,
     "cards_no_output": 0,
@@ -34,7 +34,7 @@
       "collector_number": "sos_120",
       "card_name": "",
       "status": "completed",
-      "audited_passed": 4,
+      "audited_passed": 5,
       "audited_total": 6
     },
     {

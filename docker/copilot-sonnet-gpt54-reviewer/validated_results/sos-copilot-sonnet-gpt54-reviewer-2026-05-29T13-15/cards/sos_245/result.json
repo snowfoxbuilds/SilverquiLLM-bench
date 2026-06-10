@@ -6,9 +6,9 @@
   "tests_total": 10,
   "pass_rate": 0.7,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_f4c12d6i/tests.py::TestOwnAffinity::test_own_affinity_reduces_cost_by_creature_count",
-    "FAILED ../../../../tmp/eval_sos_f4c12d6i/tests.py::TestOwnAffinity::test_own_affinity_reduction_is_not_one_more",
-    "FAILED ../../../../tmp/eval_sos_f4c12d6i/tests.py::TestOwnAffinity::test_own_affinity_clamps_at_generic_portion"
+    "FAILED ../../../../tmp/eval_sos_eqxfs0t1/tests.py::TestOwnAffinity::test_own_affinity_reduces_cost_by_creature_count",
+    "FAILED ../../../../tmp/eval_sos_eqxfs0t1/tests.py::TestOwnAffinity::test_own_affinity_reduction_is_not_one_more",
+    "FAILED ../../../../tmp/eval_sos_eqxfs0t1/tests.py::TestOwnAffinity::test_own_affinity_clamps_at_generic_portion"
   ],
   "skipped": false,
   "test_nodes": [

@@ -6,7 +6,7 @@
   "tests_total": 9,
   "pass_rate": 0.8888888888888888,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_6oj89csp/tests.py::TestMiracle::test_miracle_cast_on_first_draw"
+    "FAILED ../../../../tmp/eval_sos_uqr8r0nx/tests.py::TestMiracle::test_miracle_cast_on_first_draw"
   ],
   "skipped": false,
   "test_nodes": [

@@ -1,2 +1,2 @@
-{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vta9rvaz/tests.py::TestLandDrop::test_played_as_the_one_land_per_turn"}
-{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vta9rvaz/tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_v7mevs1x/tests.py::TestLandDrop::test_played_as_the_one_land_per_turn"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_v7mevs1x/tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup"}

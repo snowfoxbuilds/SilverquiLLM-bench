@@ -1,13 +1,12 @@
 {
   "card_id": "sos_120",
   "card_name": "Improvisation Capstone",
-  "tests_passed": 4,
-  "tests_failed": 2,
+  "tests_passed": 5,
+  "tests_failed": 1,
   "tests_total": 6,
-  "pass_rate": 0.6666666666666666,
+  "pass_rate": 0.8333333333333334,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_8azu5v6f/tests.py::TestCastBehaviour::test_exiled_card_may_be_cast_for_free",
-    "FAILED ../../../../tmp/eval_sos_8azu5v6f/tests.py::TestParadigmRecurrence::test_paradigm_recurrence_casts_copy_from_exile"
+    "FAILED ../../../../tmp/eval_sos_ws_81fiy/tests.py::TestParadigmRecurrence::test_paradigm_recurrence_casts_copy_from_exile"
   ],
   "skipped": false,
   "test_nodes": [
@@ -21,7 +20,7 @@
     },
     {
       "test_node": "tests.py::TestCastBehaviour::test_exiled_card_may_be_cast_for_free",
-      "outcome": "fail"
+      "outcome": "pass"
     },
     {
       "test_node": "tests.py::TestCastBehaviour::test_exiled_card_cast_may_be_declined",

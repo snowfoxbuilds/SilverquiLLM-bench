@@ -1,2 +1,2 @@
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e_a2bztk/tests.py::TestRefund::test_no_refund_when_countered_spell_was_cast_for_free"}
-{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e_a2bztk/tests.py::TestFizzle::test_fizzle_when_target_already_countered"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_lg0dkrbt/tests.py::TestRefund::test_no_refund_when_countered_spell_was_cast_for_free"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_lg0dkrbt/tests.py::TestFizzle::test_fizzle_when_target_already_countered"}

@@ -6,9 +6,9 @@
   "tests_total": 9,
   "pass_rate": 0.6666666666666666,
   "errors": [
-    "FAILED ../../../../tmp/eval_sos_x4um3k_3/tests.py::TestMiracle::test_miracle_cast_on_first_draw",
-    "FAILED ../../../../tmp/eval_sos_x4um3k_3/tests.py::TestOpponentUpkeepTrigger::test_opponent_upkeep_discard_to_draw_accepted",
-    "FAILED ../../../../tmp/eval_sos_x4um3k_3/tests.py::TestOpponentUpkeepTrigger::test_opponent_upkeep_discard_declined"
+    "FAILED ../../../../tmp/eval_sos_pz135yvr/tests.py::TestMiracle::test_miracle_cast_on_first_draw",
+    "FAILED ../../../../tmp/eval_sos_pz135yvr/tests.py::TestOpponentUpkeepTrigger::test_opponent_upkeep_discard_to_draw_accepted",
+    "FAILED ../../../../tmp/eval_sos_pz135yvr/tests.py::TestOpponentUpkeepTrigger::test_opponent_upkeep_discard_declined"
   ],
   "skipped": false,
   "test_nodes": [

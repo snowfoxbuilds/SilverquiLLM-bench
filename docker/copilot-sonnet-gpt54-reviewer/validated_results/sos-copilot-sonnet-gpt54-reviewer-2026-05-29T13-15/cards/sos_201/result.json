@@ -1,13 +1,11 @@
 {
   "card_id": "sos_201",
   "card_name": "Lorehold, the Historian",
-  "tests_passed": 8,
-  "tests_failed": 1,
+  "tests_passed": 9,
+  "tests_failed": 0,
   "tests_total": 9,
-  "pass_rate": 0.8888888888888888,
-  "errors": [
-    "FAILED ../../../../tmp/eval_sos_zgbyhvgz/tests.py::TestMiracle::test_miracle_cast_on_first_draw"
-  ],
+  "pass_rate": 1.0,
+  "errors": [],
   "skipped": false,
   "test_nodes": [
     {
@@ -16,7 +14,7 @@
     },
     {
       "test_node": "tests.py::TestMiracle::test_miracle_cast_on_first_draw",
-      "outcome": "fail"
+      "outcome": "pass"
     },
     {
       "test_node": "tests.py::TestMiracle::test_miracle_offer_may_be_declined",

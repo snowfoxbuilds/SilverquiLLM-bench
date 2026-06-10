@@ -1,13 +1,11 @@
 {
   "card_id": "sos_226",
   "card_name": "Silverquill, the Disputant",
-  "tests_passed": 5,
-  "tests_failed": 1,
+  "tests_passed": 6,
+  "tests_failed": 0,
   "tests_total": 6,
-  "pass_rate": 0.8333333333333334,
-  "errors": [
-    "FAILED ../../../../tmp/eval_sos_qtxvq8y9/tests.py::TestCasualty::test_casualty_paid_copies_the_spell"
-  ],
+  "pass_rate": 1.0,
+  "errors": [],
   "skipped": false,
   "test_nodes": [
     {
@@ -16,7 +14,7 @@
     },
     {
       "test_node": "tests.py::TestCasualty::test_casualty_paid_copies_the_spell",
-      "outcome": "fail"
+      "outcome": "pass"
     },
     {
       "test_node": "tests.py::TestCasualty::test_casualty_may_be_declined",

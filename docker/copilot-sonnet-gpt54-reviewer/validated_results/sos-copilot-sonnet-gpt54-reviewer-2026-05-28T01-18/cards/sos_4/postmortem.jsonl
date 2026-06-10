@@ -1,4 +1,4 @@
-{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5dvn2xnu/tests.py::TestOneColorResolution::test_one_color_draw_damage_life"}
-{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5dvn2xnu/tests.py::TestFiveColorResolution::test_five_colors_full_effect"}
-{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5dvn2xnu/tests.py::TestZeroColorDiscriminator::test_zero_colors_no_effect"}
-{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5dvn2xnu/tests.py::TestCastLegality::test_insufficient_mana_cast_rejected"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__fcrjhot/tests.py::TestOneColorResolution::test_one_color_draw_damage_life"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__fcrjhot/tests.py::TestFiveColorResolution::test_five_colors_full_effect"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__fcrjhot/tests.py::TestZeroColorDiscriminator::test_zero_colors_no_effect"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__fcrjhot/tests.py::TestCastLegality::test_insufficient_mana_cast_rejected"}

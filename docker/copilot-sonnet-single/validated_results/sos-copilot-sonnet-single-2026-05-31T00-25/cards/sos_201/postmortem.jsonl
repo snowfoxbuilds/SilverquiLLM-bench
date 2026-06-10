@@ -1,3 +1,3 @@
-{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x4um3k_3/tests.py::TestMiracle::test_miracle_cast_on_first_draw"}
-{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x4um3k_3/tests.py::TestOpponentUpkeepTrigger::test_opponent_upkeep_discard_to_draw_accepted"}
-{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x4um3k_3/tests.py::TestOpponentUpkeepTrigger::test_opponent_upkeep_discard_declined"}
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pz135yvr/tests.py::TestMiracle::test_miracle_cast_on_first_draw"}
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pz135yvr/tests.py::TestOpponentUpkeepTrigger::test_opponent_upkeep_discard_to_draw_accepted"}
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pz135yvr/tests.py::TestOpponentUpkeepTrigger::test_opponent_upkeep_discard_declined"}

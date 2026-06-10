@@ -1,2 +1,2 @@
-{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_q21g_6ug/tests.py::TestUltimate::test_ultimate_skips_turns_per_seeded_coin_flips"}
-{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_q21g_6ug/tests.py::TestLoyaltyLegality::test_planeswalker_dies_at_zero_loyalty"}
+{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_eqh1b2vs/tests.py::TestUltimate::test_ultimate_skips_turns_per_seeded_coin_flips"}
+{"collector_number": "sos_97", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_eqh1b2vs/tests.py::TestLoyaltyLegality::test_planeswalker_dies_at_zero_loyalty"}
