@@ -217,7 +217,8 @@ class TestAnimation:
         set_player(game, 1, DeterministicPlayer("P1", script=[no_op()]))
         priority_loop(game)
 
-        assert_power_toughness(game, hall, 0, 0)
+        # A non-creature land has no power/toughness to assert; the gate is
+        # simply that the illegal activation left it a non-creature.
         assert CardType.CREATURE not in hall.card_types
         assert_mana_pool(game, 0, {ManaType.COLORLESS: 4})
 
@@ -322,4 +323,5 @@ class TestSpellCastBoost:
         priority_loop(game)
 
         assert_in_zone(game, 0, Zone.GRAVEYARD, "Quick Fix")
-        assert_power_toughness(game, hall, 0, 0)
+        # No animation → still a non-creature land (no power/toughness to boost).
+        assert CardType.CREATURE not in hall.card_types
