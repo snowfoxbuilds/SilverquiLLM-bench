@@ -1,0 +1,52 @@
+{
+  "collector_number": "sos_57",
+  "tests_passed": 6,
+  "tests_failed": 3,
+  "tests_total": 9,
+  "pass_rate": 0.6666666666666666,
+  "errors": [
+    "FAILED ../../../tmp/eval_sos_w_9hno8y/tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase",
+    "FAILED ../../../tmp/eval_sos_w_9hno8y/tests.py::TestRefund::test_refund_amount_tracks_opponents_spell_cost",
+    "FAILED ../../../tmp/eval_sos_w_9hno8y/tests.py::TestFizzle::test_fizzle_when_target_already_countered"
+  ],
+  "skipped": false,
+  "test_nodes": [
+    {
+      "test_node": "tests.py::TestIdentity::test_card_identity",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCounter::test_counters_target_spell",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCounter::test_insufficient_mana_cast_rejected",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRefund::test_refund_amount_tracks_opponents_spell_cost",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestRefund::test_no_refund_without_wizard",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestRefund::test_no_refund_when_countered_spell_was_cast_for_free",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestRefund::test_non_wizard_creature_does_not_enable_refund",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestFizzle::test_fizzle_when_target_already_countered",
+      "outcome": "fail"
+    }
+  ],
+  "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a"
+}

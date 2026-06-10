@@ -1,0 +1,414 @@
+diff -ruN a/casting.py b/casting.py
+--- a/casting.py	2026-06-06 01:38:40.453279662 +0000
++++ b/casting.py	2026-06-10 08:15:10.645225030 +0000
+@@ -104,6 +104,21 @@
+     # Restore previous controller in case the caller doesn't want a
+     # side-effect (get_cost_reduction is a query, not a mutation).
+     card.controller = prev_controller
++
++    # E3: aggregate cost reductions contributed by the caster's battlefield
++    # permanents (e.g. "your instant and sorcery spells cost {1} less per
++    # creature").  Only instants and sorceries benefit.  Each such permanent
++    # exposes ``spell_cost_reduction(self, game, spell) -> int``.
++    if card.card_types & {CardType.SORCERY, CardType.INSTANT}:
++        for perm in game.get_battlefield(controller).get_all():
++            hook = getattr(perm, "spell_cost_reduction", None)
++            if hook is None:
++                continue
++            try:
++                raw += hook(game, card)
++            except Exception:
++                pass
++
+     generic = card.mana_cost.generic if card.mana_cost else 0
+     return max(0, min(raw, generic))
+ 
+@@ -215,18 +230,25 @@
+     reduction = get_cost_reduction(game, card, player)
+     effective_cost = _apply_cost_reduction(card.mana_cost, reduction) if reduction > 0 else card.mana_cost
+ 
+-    if not player.mana_pool.can_pay(effective_cost):
++    # Instant/sorcery-only mana (e.g. Great Hall of the Biblioplex) may only
++    # pay for instant/sorcery spells.
++    restricted_ok = bool(card.card_types & {CardType.INSTANT, CardType.SORCERY})
++    if not player.mana_pool.can_pay(effective_cost, restricted_ok=restricted_ok):
+         # Rollback: move card from stack zone back to hand
+         stack_zone.remove(card)
+         hand.add(card)
+         raise CastingError(f"Cannot cast {card.name!r} — insufficient mana")
+ 
+     # TODO: Phase 3 — support player choice for generic mana payment to optimize Converge color count
+-    player.mana_pool.pay(effective_cost)
++    player.mana_pool.pay(effective_cost, restricted_ok=restricted_ok)
+ 
+     # Store colors of mana spent on the card for mechanics like Converge
+     # that care about the colors used to cast the spell.
+     card.colors_spent = list(player.mana_pool.last_payment_colors)  # type: ignore[attr-defined]
++    # Store the amount of mana spent (the effective, post-reduction mana value)
++    # for mechanics like Mana Sculpt that refer to "the amount of mana spent to
++    # cast that spell".  X is not tracked here (treated as 0 by cmc).
++    card.mana_spent = effective_cost.cmc  # type: ignore[attr-defined]
+ 
+     # 7. Call on_cast hook
+     card.on_cast(game)
+@@ -245,6 +267,20 @@
+     stack_obj.on_resolve = _on_resolve
+     game.stack.push(stack_obj)
+ 
++    # Fire the "you cast a spell" trigger now that the spell is on the stack.
++    # Cast triggers go on top of the just-cast spell and resolve first, which
++    # is correct MTG behaviour.  Free casts (cast_spell_free) and spell copies
++    # (copy_spell) deliberately do NOT route through here, so they correctly do
++    # not re-fire this event.
++    from engine.events import SpellCastTriggeredEvent
++
++    game.trigger_manager.fire_event(
++        game,
++        SpellCastTriggeredEvent(
++            spell=stack_obj, card=card, controller=player, player=player
++        ),
++    )
++
+ 
+ # ------------------------------------------------------------------
+ # Cast spell without paying mana cost (free-cast from any zone)
+@@ -406,8 +442,14 @@
+         # trigger/replacement-effect registration and ENTERS_BATTLEFIELD event.
+         move_to_zone(game, card, Zone.STACK, Zone.BATTLEFIELD)
+     else:
+-        # Instant/sorcery: move from stack to graveyard via move_to_zone.
+-        move_to_zone(game, card, Zone.STACK, Zone.GRAVEYARD)
++        # Instant/sorcery: normally moves from stack to graveyard.  A spell may
++        # be flagged ``_exile_on_resolve`` (e.g. by The Dawning Archaic's "if
++        # that spell would be put into your graveyard, exile it instead") to be
++        # exiled on resolution instead.  Card-local limitation: only the
++        # resolution path is redirected (not countering), which covers the
++        # cards in this set.
++        dest = Zone.EXILE if getattr(card, "_exile_on_resolve", False) else Zone.GRAVEYARD
++        move_to_zone(game, card, Zone.STACK, dest)
+ 
+ 
+ # ------------------------------------------------------------------
+diff -ruN a/combat.py b/combat.py
+--- a/combat.py	2026-06-06 01:38:40.453279662 +0000
++++ b/combat.py	2026-06-10 07:57:13.487932681 +0000
+@@ -241,6 +241,7 @@
+         chosen = [chosen]
+ 
+     # Validate and register attackers
++    declared: list[Any] = []
+     for attacker in chosen:
+         if attacker not in eligible:
+             continue
+@@ -256,6 +257,20 @@
+         if Keyword.VIGILANCE not in kw:
+             attacker.is_tapped = True
+ 
++        declared.append(attacker)
++
++    # Fire "whenever ~ attacks" triggers once all attackers are declared
++    # (MTG 508.2 — attack triggers fire after the declare-attackers step's
++    # attackers are chosen).  Previously this event was never fired, so cards
++    # that register on AttacksTriggeredEvent (e.g. The Dawning Archaic, Etali)
++    # never triggered through the real combat path.
++    from engine.events import AttacksTriggeredEvent
++
++    for attacker in declared:
++        game.trigger_manager.fire_event(
++            game, AttacksTriggeredEvent(creature=attacker, attacker=attacker)
++        )
++
+ 
+ def declare_blockers_step(game: GameState) -> None:
+     """Declare blockers step: defending player assigns blockers.
+diff -ruN a/events.py b/events.py
+--- a/events.py	2026-06-06 01:38:40.453279662 +0000
++++ b/events.py	2026-06-10 07:49:01.343096424 +0000
+@@ -72,6 +72,11 @@
+ 
+ 
+ @dataclass
++class BeginningOfPrecombatMainTriggeredEvent(TriggeredEvent):
++    pass
++
++
++@dataclass
+ class BeginningOfCombatTriggeredEvent(TriggeredEvent):
+     pass
+ 
+diff -ruN a/game_state.py b/game_state.py
+--- a/game_state.py	2026-06-06 01:38:40.453279662 +0000
++++ b/game_state.py	2026-06-10 08:36:11.331456265 +0000
+@@ -2,6 +2,7 @@
+ 
+ from __future__ import annotations
+ 
++import random
+ from typing import Any
+ 
+ from engine.combat import CombatState
+@@ -72,6 +73,10 @@
+         self.combat_state: CombatState = CombatState()
+         self.is_game_over: bool = False
+         self.winner: Player | None = None
++        # Seeded RNG for coin flips and other randomness (deterministic in
++        # tests via ``game.rng = random.Random(seed)``).  Used by e.g. Ral
++        # Zarek's coin-flip ultimate.
++        self.rng: random.Random = random.Random()
+         # ENGINE LIMITATION: Extra turns queue (FIFO of player seat indices).
+         # Complex interactions ('skip your next turn', multiple extra turns
+         # from different sources) are not fully handled.
+@@ -147,21 +152,45 @@
+         else:
+             # End of turn — wrap around.
+             self.turn_number += 1
+-            if self.extra_turns:
+-                # ENGINE LIMITATION: Extra turns queue (FIFO). Pop the
+-                # next player seat index; that player gets the next turn.
+-                # Normal rotation is NOT advanced — extra turns are
+-                # inserted before the normal next turn.
+-                self.active_player_index = self.extra_turns.pop(0)
+-            else:
+-                self.active_player_index = self._normal_next_index
+-                self._normal_next_index = 1 - self._normal_next_index
++            # Walk the turn schedule, skipping any scheduled turn whose player
++            # must skip it (e.g. from Ral Zarek's ultimate).  Each skipped slot
++            # is consumed and we advance to the next slot in turn order, so the
++            # other player effectively takes consecutive turns.
++            guard = 0
++            while True:
++                guard += 1
++                if self.extra_turns:
++                    # ENGINE LIMITATION: Extra turns queue (FIFO). Pop the next
++                    # player seat index; normal rotation is NOT advanced.
++                    would_be = self.extra_turns.pop(0)
++                else:
++                    would_be = self._normal_next_index
++                    self._normal_next_index = 1 - self._normal_next_index
++                if getattr(self.players[would_be], "skip_turns", 0) > 0 and guard < 1000:
++                    self.players[would_be].skip_turns -= 1
++                    continue
++                break
++            self.active_player_index = would_be
+             self.priority_player_index = self.active_player_index
+             self.phase = _TURN_SEQUENCE[0][0]
+             self.step = _TURN_SEQUENCE[0][1]
+ 
+         self.empty_mana_pools()
+ 
++        # Fire the beginning-of-precombat-main trigger here — the single
++        # chokepoint every phase transition passes through — so it behaves
++        # identically whether a turn runs normally or the state is advanced
++        # directly (e.g. test_utils.advance_to_phase).  Fired AFTER
++        # empty_mana_pools() so any mana a handler adds survives into the main
++        # phase.  Handlers identify "your main phase" by checking the active
++        # player.
++        if self.phase == Phase.PRECOMBAT_MAIN:
++            from engine.events import BeginningOfPrecombatMainTriggeredEvent
++
++            self.trigger_manager.fire_event(
++                self, BeginningOfPrecombatMainTriggeredEvent()
++            )
++
+     def empty_mana_pools(self) -> None:
+         """Empty all players' mana pools — called on each phase/step transition."""
+         for player in self.players:
+diff -ruN a/mana.py b/mana.py
+--- a/mana.py	2026-06-06 01:38:40.453279662 +0000
++++ b/mana.py	2026-06-10 08:09:33.936407738 +0000
+@@ -23,6 +23,10 @@
+ 
+     def __init__(self) -> None:
+         self._pool: dict[ManaType, int] = {mt: 0 for mt in ManaType}
++        # Subset of ``_pool`` flagged "instant/sorcery only" (e.g. Great Hall of
++        # the Biblioplex's second mana ability).  ``_restricted[T]`` mana of
++        # type T may only pay for instant/sorcery spells.  Always <= _pool[T].
++        self._restricted: dict[ManaType, int] = {mt: 0 for mt in ManaType}
+         self._last_payment_colors: list[Color] = []
+ 
+     # ------------------------------------------------------------------
+@@ -40,10 +44,38 @@
+             raise ValueError(f"Cannot add negative mana: {amount}")
+         self._pool[mana_type] = self._pool.get(mana_type, 0) + amount
+ 
++    def add_restricted(self, mana_type: ManaType, amount: int = 1) -> None:
++        """Add mana that may only be spent to cast an instant or sorcery spell.
++
++        The mana is added to the pool like normal mana but is also tracked in
++        ``_restricted`` so that :meth:`can_pay` / :meth:`pay` exclude it when
++        paying for anything other than an instant or sorcery (callers pass
++        ``restricted_ok=True`` for instant/sorcery casts).
++        """
++        if amount < 0:
++            raise ValueError(f"Cannot add negative mana: {amount}")
++        self._pool[mana_type] = self._pool.get(mana_type, 0) + amount
++        self._restricted[mana_type] = self._restricted.get(mana_type, 0) + amount
++
++    def _usable_pool(self, restricted_ok: bool) -> dict[ManaType, int]:
++        """Return the mana available to a payment.
++
++        When *restricted_ok* is ``True`` the full pool is available; otherwise
++        instant/sorcery-only mana is excluded.
++        """
++        if restricted_ok:
++            return dict(self._pool)
++        return {
++            mt: self._pool.get(mt, 0) - self._restricted.get(mt, 0)
++            for mt in self._pool
++        }
++
+     def empty(self) -> None:
+         """Clear the pool — happens at phase/step transitions."""
+         for mt in self._pool:
+             self._pool[mt] = 0
++        for mt in self._restricted:
++            self._restricted[mt] = 0
+ 
+     def total(self) -> int:
+         """Return the total amount of mana in the pool across all types."""
+@@ -67,7 +99,7 @@
+     # Cost payment
+     # ------------------------------------------------------------------
+ 
+-    def can_pay(self, cost: ManaCost) -> bool:
++    def can_pay(self, cost: ManaCost, *, restricted_ok: bool = False) -> bool:
+         """Check whether the pool can satisfy *cost*.
+ 
+         Generic mana can be paid by any type.  X is treated as 0 for
+@@ -75,10 +107,17 @@
+         Hybrid symbols can be paid with either option; this method uses
+         backtracking to find a valid assignment.
+ 
++        Parameters:
++            cost: The mana cost to check.
++            restricted_ok: When ``True``, instant/sorcery-only mana (added via
++                :meth:`add_restricted`) is counted as available.  Callers paying
++                for an instant or sorcery pass ``True``; everything else uses the
++                default so restricted mana is excluded.
++
+         Returns:
+             True if the pool has enough mana to pay the cost.
+         """
+-        remaining: dict[ManaType, int] = dict(self._pool)
++        remaining: dict[ManaType, int] = self._usable_pool(restricted_ok)
+ 
+         # Pay colored/colorless pips first.
+         for mana_type, count in cost.pips.items():
+@@ -95,7 +134,13 @@
+         # Then check generic — sum of all remaining mana must cover it.
+         return sum(remaining.values()) >= cost.generic
+ 
+-    def pay(self, cost: ManaCost, choices: dict[ManaType, int] | None = None) -> bool:
++    def pay(
++        self,
++        cost: ManaCost,
++        choices: dict[ManaType, int] | None = None,
++        *,
++        restricted_ok: bool = False,
++    ) -> bool:
+         """Deduct mana from the pool to pay *cost*.
+ 
+         Parameters:
+@@ -104,15 +149,19 @@
+                 If ``None``, auto-pay greedily: pay colored pips first,
+                 then hybrid symbols, then generic using colorless first,
+                 then excess colored.
++            restricted_ok: When ``True``, instant/sorcery-only mana may be
++                spent (see :meth:`add_restricted`).  Unrestricted mana is spent
++                first, so restricted mana is preserved when possible.
+ 
+         Returns:
+             True if payment succeeded, False if the pool has insufficient mana.
+         """
+-        if not self.can_pay(cost):
++        if not self.can_pay(cost, restricted_ok=restricted_ok):
+             return False
+ 
+-        # Work on a copy so we can roll back on failure.
+-        working: dict[ManaType, int] = dict(self._pool)
++        # Work on a copy of the *usable* pool so we can roll back on failure.
++        usable: dict[ManaType, int] = self._usable_pool(restricted_ok)
++        working: dict[ManaType, int] = dict(usable)
+ 
+         # 1. Pay colored/colorless pips.
+         for mana_type, count in cost.pips.items():
+@@ -153,14 +202,22 @@
+                 return False  # pragma: no cover – should not happen after can_pay
+ 
+         # Commit the payment.
+-        # Compute colors of mana spent by comparing old pool to new working pool.
++        # Compute colors of mana spent by comparing the usable pool to the
++        # working pool after deductions.
+         colors_spent: set[Color] = set()
+-        for mt, old_amount in self._pool.items():
++        for mt, old_amount in usable.items():
+             new_amount = working.get(mt, 0)
+             if new_amount < old_amount and mt in _MANA_TO_COLOR:
+                 colors_spent.add(_MANA_TO_COLOR[mt])
+         self._last_payment_colors = sorted(colors_spent, key=lambda c: c.value)
+-        self._pool = working
++
++        # Reconcile back to the real pool: deduct what was actually spent and
++        # keep restricted mana consistent (restricted is spent only after
++        # unrestricted, so it is preserved when possible).
++        for mt in self._pool:
++            spent = usable.get(mt, 0) - working.get(mt, 0)
++            self._pool[mt] = self._pool.get(mt, 0) - spent
++            self._restricted[mt] = min(self._restricted.get(mt, 0), self._pool[mt])
+         return True
+ 
+     @staticmethod
+diff -ruN a/player.py b/player.py
+--- a/player.py	2026-06-06 01:38:40.453279662 +0000
++++ b/player.py	2026-06-10 08:33:52.407091201 +0000
+@@ -35,6 +35,9 @@
+         self.has_lost: bool = False
+         self.land_plays_remaining: int = 1
+         self.drawn_from_empty_library: bool = False
++        # Number of this player's upcoming turns to skip (e.g. from Ral Zarek's
++        # ultimate).  Decremented by GameState.advance_phase.
++        self.skip_turns: int = 0
+ 
+     @abstractmethod
+     def choose_target(self, options: Any, requirement: Any) -> Any:
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/abilities.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/abilities.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/abilities.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/abilities.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/basic_lands.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/basic_lands.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/card.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/card.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/card.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/card.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/casting.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/casting.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/casting.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/casting.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/combat.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/combat.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/combat.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/combat.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/continuous_effects.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/continuous_effects.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/continuous_effects.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/continuous_effects.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/creatures.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/creatures.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/creatures.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/creatures.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/events.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/events.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/events.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/events.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/game.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/game.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game_state.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/game_state.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game_state.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/game_state.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/__init__.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/__init__.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/__init__.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/__init__.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/mana.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/mana.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/mana.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/mana.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/player.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/player.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/player.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/player.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/protection.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/protection.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/protection.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/protection.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/replacement_effects.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/replacement_effects.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/replacement_effects.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/replacement_effects.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/stack.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/stack.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/stack.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/stack.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/state_based_actions.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/state_based_actions.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/state_based_actions.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/state_based_actions.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/triggers.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/triggers.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/triggers.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/triggers.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/turn.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/turn.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/turn.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/turn.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/types.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/types.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/types.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/types.cpython-312.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/zones.cpython-311.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/zones.cpython-311.pyc differ
+Binary files /mnt/bench/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/zones.cpython-312.pyc and /tmp/silverquillm_run_fjb7fhcc/workspace/engine/__pycache__/zones.cpython-312.pyc differ
