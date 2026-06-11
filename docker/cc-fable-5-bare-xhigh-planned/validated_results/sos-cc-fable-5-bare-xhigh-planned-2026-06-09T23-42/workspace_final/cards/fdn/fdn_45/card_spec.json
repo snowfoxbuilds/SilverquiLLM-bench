@@ -1,0 +1,19 @@
+{
+  "name": "Kiora, the Rising Tide",
+  "mana_cost": "{2}{U}",
+  "type_line": "Legendary Creature — Merfolk Noble",
+  "oracle_text": "When Kiora enters, draw two cards, then discard two cards.\nThreshold — Whenever Kiora attacks, if there are seven or more cards in your graveyard, you may create Scion of the Deep, a legendary 8/8 blue Octopus creature token.",
+  "power": "3",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Threshold"
+  ],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "45",
+  "complexity_tier": "medium"
+}

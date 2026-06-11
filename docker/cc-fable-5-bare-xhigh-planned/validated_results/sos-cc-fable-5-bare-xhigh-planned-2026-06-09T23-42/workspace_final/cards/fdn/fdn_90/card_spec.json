@@ -1,0 +1,17 @@
+{
+  "name": "Incinerating Blast",
+  "mana_cost": "{4}{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "Incinerating Blast deals 6 damage to target creature.\nYou may discard a card. If you do, draw a card.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "90",
+  "complexity_tier": "medium"
+}

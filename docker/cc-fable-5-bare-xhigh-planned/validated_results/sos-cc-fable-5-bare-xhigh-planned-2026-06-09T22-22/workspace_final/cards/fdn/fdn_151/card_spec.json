@@ -1,0 +1,17 @@
+{
+  "name": "Aetherize",
+  "mana_cost": "{3}{U}",
+  "type_line": "Instant",
+  "oracle_text": "Return all attacking creatures to their owner's hand.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "151",
+  "complexity_tier": "simple"
+}

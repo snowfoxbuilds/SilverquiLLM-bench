@@ -1,0 +1,19 @@
+{
+  "name": "Self-Reflection",
+  "mana_cost": "{4}{U}{U}",
+  "type_line": "Sorcery",
+  "oracle_text": "Create a token that's a copy of target creature you control.\nFlashback {3}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Flashback"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "163",
+  "complexity_tier": "medium"
+}

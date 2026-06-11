@@ -1,0 +1,17 @@
+{
+  "name": "Skyknight Squire",
+  "mana_cost": "{1}{W}",
+  "type_line": "Creature — Cat Scout",
+  "oracle_text": "Whenever another creature you control enters, put a +1/+1 counter on this creature.\nAs long as this creature has three or more +1/+1 counters on it, it has flying and is a Knight in addition to its other types.",
+  "power": "1",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "23",
+  "complexity_tier": "medium"
+}

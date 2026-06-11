@@ -1,0 +1,19 @@
+{
+  "name": "Blanchwood Armor",
+  "mana_cost": "{2}{G}",
+  "type_line": "Enchantment — Aura",
+  "oracle_text": "Enchant creature\nEnchanted creature gets +1/+1 for each Forest you control.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Enchant"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "213",
+  "complexity_tier": "medium"
+}

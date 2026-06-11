@@ -1,0 +1,17 @@
+{
+  "name": "Exsanguinate",
+  "mana_cost": "{X}{B}{B}",
+  "type_line": "Sorcery",
+  "oracle_text": "Each opponent loses X life. You gain life equal to the life lost this way.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "173",
+  "complexity_tier": "medium"
+}

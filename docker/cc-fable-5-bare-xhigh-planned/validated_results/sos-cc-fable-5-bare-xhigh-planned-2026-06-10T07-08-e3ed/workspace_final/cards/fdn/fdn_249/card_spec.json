@@ -1,0 +1,18 @@
+{
+  "name": "Adventuring Gear",
+  "mana_cost": "{1}",
+  "type_line": "Artifact — Equipment",
+  "oracle_text": "Landfall — Whenever a land you control enters, equipped creature gets +2/+2 until end of turn.\nEquip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [],
+  "keywords": [
+    "Equip",
+    "Landfall"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "249",
+  "complexity_tier": "medium"
+}

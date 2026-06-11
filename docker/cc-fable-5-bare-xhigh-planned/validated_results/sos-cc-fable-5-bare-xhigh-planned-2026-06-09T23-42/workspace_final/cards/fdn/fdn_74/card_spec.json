@@ -1,0 +1,17 @@
+{
+  "name": "Vampire Gourmand",
+  "mana_cost": "{1}{B}",
+  "type_line": "Creature — Vampire",
+  "oracle_text": "Whenever this creature attacks, you may sacrifice another creature. If you do, draw a card and this creature can't be blocked this turn.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "74",
+  "complexity_tier": "medium"
+}

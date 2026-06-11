@@ -1,0 +1,15 @@
+{
+  "name": "Plains",
+  "mana_cost": "",
+  "type_line": "Basic Land — Plains",
+  "oracle_text": "({T}: Add {W}.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "272",
+  "complexity_tier": "simple"
+}

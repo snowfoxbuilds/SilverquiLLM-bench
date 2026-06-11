@@ -1,0 +1,19 @@
+{
+  "name": "Dazzling Angel",
+  "mana_cost": "{2}{W}",
+  "type_line": "Creature — Angel",
+  "oracle_text": "Flying\nWhenever another creature you control enters, you gain 1 life.",
+  "power": "2",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Flying"
+  ],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "9",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,111 @@
+{
+  "docker_image": "silverquillm-cc-opus-48-bare-xhigh-planned:latest",
+  "run_metadata": {
+    "image": "silverquillm-cc-opus-48-bare-xhigh-planned:latest",
+    "timestamp": "2026-06-10T17:25:37Z",
+    "card_count": 10,
+    "timeout_seconds": 360000,
+    "harness_version": "a503e3937661e327cb79e7fe1856dac469d754b8"
+  },
+  "sos_card_correctness": {
+    "audited_pass_rate": 0.8313,
+    "card_pass_rate": 0.3,
+    "cards_completed": 10,
+    "cards_no_output": 0,
+    "cards_timed_out": 0
+  },
+  "fdn_regression": {
+    "fdn_test_pass_rate": 1.0,
+    "fdn_card_pass_rate": 0.6364
+  },
+  "engine_regression": {
+    "engine_test_pass_rate": 1.0,
+    "engine_churn_lines": 160
+  },
+  "per_card": [
+    {
+      "collector_number": "sos_1",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_120",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 5,
+      "audited_total": 6
+    },
+    {
+      "collector_number": "sos_13",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 1,
+      "audited_total": 6
+    },
+    {
+      "collector_number": "sos_201",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_226",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 6
+    },
+    {
+      "collector_number": "sos_245",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_257",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 12,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_4",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 5,
+      "audited_total": 5
+    },
+    {
+      "collector_number": "sos_57",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_97",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 9
+    }
+  ],
+  "run_status": "completed",
+  "wall_clock_seconds": 3021.543,
+  "card_filter": [
+    "1",
+    "4",
+    "13",
+    "57",
+    "97",
+    "120",
+    "201",
+    "226",
+    "245",
+    "257"
+  ]
+}

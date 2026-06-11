@@ -1,0 +1,18 @@
+{
+  "name": "Fiendish Panda",
+  "mana_cost": "{2}{W}{B}",
+  "type_line": "Creature — Bear Demon",
+  "oracle_text": "Whenever you gain life, put a +1/+1 counter on this creature.\nWhen this creature dies, return another target non-Bear creature card with mana value less than or equal to this creature's power from your graveyard to the battlefield.",
+  "power": "3",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "B",
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "120",
+  "complexity_tier": "medium"
+}

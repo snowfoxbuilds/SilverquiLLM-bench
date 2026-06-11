@@ -1,0 +1,17 @@
+{
+  "name": "Nessian Hornbeetle",
+  "mana_cost": "{1}{G}",
+  "type_line": "Creature — Insect",
+  "oracle_text": "At the beginning of combat on your turn, if you control another creature with power 4 or greater, put a +1/+1 counter on this creature.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "229",
+  "complexity_tier": "medium"
+}

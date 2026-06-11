@@ -20,7 +20,7 @@ EXCLUDE_TOP_LEVEL = {"workspace_final", "snapshots"}
 # Junk to skip anywhere in the tree.
 IGNORE_PATTERNS = shutil.ignore_patterns("__pycache__", "*.pyc", ".git", ".DS_Store")
 
-TIMESTAMP_RE = re.compile(r"(\d{4}-\d{2}-\d{2}T\d{2}-\d{2})$")
+TIMESTAMP_RE = re.compile(r"(\d{4}-\d{2}-\d{2}T\d{2}-\d{2})(?:-[0-9a-z]+)?$")
 
 def run_timestamp(run_name: str) -> str | None:
     """Extract the trailing UTC timestamp from a run name.
@@ -64,9 +64,14 @@ def check_run(run_dir: Path, audited: set[str]) -> str | None:
     except (OSError, json.JSONDecodeError) as exc:
         return f"unreadable run_summary.json ({exc})"
 
-    # Filtered (--cards) runs are not eligible for validation.
-    if summary.get("card_filter"):
-        return f"filtered run (card_filter={summary['card_filter']})"
+    # A filtered (--cards) run is fine as long as its filter covers every
+    # audited card; partial runs that omit audited cards are not eligible.
+    card_filter = summary.get("card_filter")
+    if card_filter:
+        filtered = {normalize_card_id(c) for c in card_filter}
+        uncovered = sorted(audited - filtered, key=int)
+        if uncovered:
+            return f"filtered run omits audited cards: {', '.join(uncovered)}"
 
     status_path = run_dir / "status.json"
     if not status_path.exists():

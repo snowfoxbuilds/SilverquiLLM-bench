@@ -1,0 +1,19 @@
+{
+  "name": "Vampire Soulcaller",
+  "mana_cost": "{4}{B}",
+  "type_line": "Creature — Vampire Warlock",
+  "oracle_text": "Flying\nThis creature can't block.\nWhen this creature enters, return target creature card from your graveyard to your hand.",
+  "power": "3",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Flying"
+  ],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "75",
+  "complexity_tier": "medium"
+}

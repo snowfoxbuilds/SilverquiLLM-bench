@@ -1,0 +1,17 @@
+{
+  "name": "Squad Rallier",
+  "mana_cost": "{3}{W}",
+  "type_line": "Creature — Human Scout",
+  "oracle_text": "{2}{W}: Look at the top four cards of your library. You may reveal a creature card with power 2 or less from among them and put it into your hand. Put the rest on the bottom of your library in a random order.",
+  "power": "3",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "24",
+  "complexity_tier": "medium"
+}
