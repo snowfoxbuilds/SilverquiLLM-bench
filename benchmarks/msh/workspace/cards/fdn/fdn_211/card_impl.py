@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.types import CardType, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
@@ -54,7 +55,7 @@ class AffectionateIndrik(Creature):
             return
 
         try:
-            target = controller.choose(targets, "creature to fight")
+            target = choose_object(game, controller, targets, "creature to fight", source_card=self)
         except Exception:
             target = targets[0]
 

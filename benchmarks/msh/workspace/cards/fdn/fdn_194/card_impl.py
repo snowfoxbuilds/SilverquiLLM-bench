@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import query_yes_no
 from engine.types import CardType, ManaCost, Zone
 from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
@@ -54,7 +55,7 @@ class EtaliPrimalStorm(Creature):
             castable = [c for c in exiled_cards if CardType.LAND not in getattr(c, 'card_types', set())]
             for card in castable:
                 try:
-                    if ctrl.choose_yes_no(f"Cast {getattr(card, 'name', 'card')} without paying its mana cost?"):
+                    if query_yes_no(game, ctrl, f"Cast {getattr(card, 'name', 'card')} without paying its mana cost?", source_card=source):
                         # Use the proper cast pipeline — spell goes on the
                         # stack and can be responded to (e.g. countered).
                         cast_spell_free(game, ctrl, card, Zone.EXILE)

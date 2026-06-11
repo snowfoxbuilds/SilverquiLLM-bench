@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import ArtifactCreature, Creature
+from engine.card_queries import choose_object
 from engine.types import CardType, Keyword, ManaCost, Supertype, Zone
 from engine.events import CreatureDiesTriggeredEvent, EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
@@ -57,7 +58,7 @@ class SolemnSimulacrum(ArtifactCreature):
             if len(basics) == 1:
                 chosen = basics[0]
             else:
-                chosen = controller.choose_card(basics, 'Choose a basic land to put onto the battlefield')
+                chosen = choose_object(game, controller, basics, 'Choose a basic land to put onto the battlefield', source_card=source)
             library.remove(chosen)
             chosen.controller = controller
             chosen.is_tapped = True

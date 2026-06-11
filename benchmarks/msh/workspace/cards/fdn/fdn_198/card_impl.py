@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import query_yes_no
 from engine.types import CardType, Keyword, ManaCost, Zone
 from engine.events import BeginningOfCombatTriggeredEvent
 if TYPE_CHECKING:
@@ -57,7 +58,7 @@ class FlamewakePhoenix(Creature):
             if ctrl is None:
                 return
             try:
-                if not ctrl.choose_yes_no('Pay {R} to return Flamewake Phoenix from graveyard?'):
+                if not query_yes_no(game, ctrl, 'Pay {R} to return Flamewake Phoenix from graveyard?', source_card=source):
                     return
             except Exception:
                 return

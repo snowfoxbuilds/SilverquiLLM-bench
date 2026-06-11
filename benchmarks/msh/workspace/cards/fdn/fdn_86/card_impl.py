@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Instant
+from engine.card_queries import choose_object
 from engine.types import CardType, ManaCost, TargetRequirement, Zone
 from engine.events import CreatureDiesTriggeredEvent
 if TYPE_CHECKING:
@@ -48,7 +49,7 @@ class FieryAnnihilation(Instant):
             if attached:
                 if controller is not None:
                     try:
-                        equip = controller.choose_card(attached, 'Equipment to exile')
+                        equip = choose_object(game, controller, attached, 'Equipment to exile', source_card=self)
                     except Exception:
                         equip = attached[0]
                 else:

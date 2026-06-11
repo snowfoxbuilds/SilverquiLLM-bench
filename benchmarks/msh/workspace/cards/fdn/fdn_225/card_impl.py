@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Sorcery
+from engine.card_queries import choose_object
 from engine.types import CardType, ManaCost, Zone
 
 if TYPE_CHECKING:
@@ -62,7 +63,7 @@ class GrowFromTheAshes(Sorcery):
                 break
 
             try:
-                chosen = controller.choose_card(basics, "basic land to search for")
+                chosen = choose_object(game, controller, basics, "basic land to search for", source_card=self)
             except Exception:
                 chosen = basics[0]
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Enchantment
+from engine.card_queries import choose_object
 from engine.types import CardType, ManaCost, Zone
 from engine.events import BeginningOfUpkeepTriggeredEvent
 if TYPE_CHECKING:
@@ -50,7 +51,7 @@ class ExtravagantReplication(Enchantment):
             if not candidates:
                 return
             try:
-                chosen = ctrl.choose_card(candidates, 'Choose a nonland permanent to copy')
+                chosen = choose_object(game, ctrl, candidates, 'Choose a nonland permanent to copy', source_card=source)
             except Exception:
                 chosen = candidates[0] if candidates else None
             if chosen is None:

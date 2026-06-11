@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.types import Keyword, ManaCost
 from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
@@ -52,7 +53,7 @@ class DrakusethMawOfFlames(Creature):
             if not all_targets:
                 return
             try:
-                target1 = ctrl.choose_card(all_targets, 'Choose a target for 4 damage')
+                target1 = choose_object(game, ctrl, all_targets, 'Choose a target for 4 damage', source_card=source)
             except Exception:
                 target1 = all_targets[0]
             if target1 is not None:
@@ -62,7 +63,7 @@ class DrakusethMawOfFlames(Creature):
                 if not remaining:
                     break
                 try:
-                    target = ctrl.choose_card(remaining, f'Choose target {i + 1} for 3 damage (optional)')
+                    target = choose_object(game, ctrl, remaining, f'Choose target {i + 1} for 3 damage (optional)', source_card=source, optional=True)
                 except Exception:
                     break
                 if target is not None:

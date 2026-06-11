@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.types import CardType, Keyword, ManaCost, Zone
 from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
@@ -35,10 +36,7 @@ class RuneScarredDemon(Creature):
         candidates = library.get_all()
         if not candidates:
             return
-        try:
-            chosen = controller.choose_card(candidates, 'Choose a card to put into your hand')
-        except Exception:
-            chosen = candidates[0] if candidates else None
+        chosen = choose_object(game, controller, candidates, 'Choose a card to put into your hand', source_card=self)
         if chosen is None:
             return
         library.remove(chosen)

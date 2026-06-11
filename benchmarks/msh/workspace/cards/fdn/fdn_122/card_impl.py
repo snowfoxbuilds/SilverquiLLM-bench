@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import choose_mode, choose_object
 from engine.types import CardType, Keyword, ManaCost, Zone
 from engine.events import EndStepTriggeredEvent, SpellCastTriggeredEvent
 if TYPE_CHECKING:
@@ -60,14 +61,14 @@ class KykarZephyrAwakener(Creature):
             mode_choice = None
             if candidates:
                 try:
-                    mode_choice = ctrl.choose(['flicker', 'token'], 'Choose mode for Kykar trigger')
+                    mode_choice = choose_mode(game, ctrl, ['flicker', 'token'], 'Choose mode for Kykar trigger', source_card=source)
                 except Exception:
                     mode_choice = 'token'
             else:
                 mode_choice = 'token'
             if mode_choice == 'flicker' and candidates:
                 try:
-                    chosen = ctrl.choose_card(candidates, 'creature to exile and return at end step')
+                    chosen = choose_object(game, ctrl, candidates, 'creature to exile and return at end step', source_card=source)
                 except Exception:
                     chosen = candidates[0]
                 if chosen is not None:

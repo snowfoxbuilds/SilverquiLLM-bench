@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.types import CardType, ManaCost, Zone
 
 if TYPE_CHECKING:
@@ -59,10 +60,7 @@ class SoulShackledZombie(Creature):
         exiled_count = 0
 
         # Choose up to two from a single graveyard
-        try:
-            first = controller.choose_card(all_gy_cards, "card to exile from graveyard")
-        except Exception:
-            first = all_gy_cards[0] if all_gy_cards else None
+        first = choose_object(game, controller, all_gy_cards, "card to exile from graveyard", source_card=self, optional=True)
 
         if first is None:
             return
@@ -78,10 +76,7 @@ class SoulShackledZombie(Creature):
             gy = owner.zones[Zone.GRAVEYARD]
             remaining = gy.get_all()
             if remaining:
-                try:
-                    second = controller.choose_card(remaining, "second card to exile")
-                except Exception:
-                    second = None
+                second = choose_object(game, controller, remaining, "second card to exile", source_card=self, optional=True)
                 if second is not None:
                     if CardType.CREATURE in getattr(second, "card_types", set()):
                         exiled_creature = True

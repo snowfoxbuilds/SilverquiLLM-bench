@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature, Instant
+from engine.card_queries import choose_object
 from engine.types import Keyword, ManaCost
 
 if TYPE_CHECKING:
@@ -47,7 +48,7 @@ class FaebloomTrick(Instant):
                     targets.append(obj)
         if not targets:
             return []
-        chosen = controller.choose_target(targets, "creature an opponent controls") if hasattr(controller, "choose_target") else targets[0]
+        chosen = choose_object(game, controller, targets, "creature an opponent controls", source_card=self)
         return [chosen] if chosen else []
 
     def on_resolve(self, game: "GameState") -> None:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
 from engine.types import Keyword, ManaCost, Zone
 from engine.events import AttacksTriggeredEvent
@@ -48,7 +49,7 @@ class DreadwingScavenger(Creature):
         hand = list(controller.zones[Zone.HAND].get_all())
         if hand:
             try:
-                chosen = controller.choose_card(hand, 'card to discard')
+                chosen = choose_object(game, controller, hand, 'card to discard', source_card=self)
             except Exception:
                 chosen = hand[0]
             if chosen is not None:
@@ -72,7 +73,7 @@ class DreadwingScavenger(Creature):
             hand = list(ctrl.zones[Zone.HAND].get_all())
             if hand:
                 try:
-                    chosen = ctrl.choose_card(hand, 'card to discard')
+                    chosen = choose_object(game, ctrl, hand, 'card to discard', source_card=source)
                 except Exception:
                     chosen = hand[0]
                 if chosen is not None:

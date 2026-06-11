@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.types import CardType, Keyword, ManaCost, Zone
 from engine.events import AttacksTriggeredEvent, EndOfTurnTriggeredEvent
 if TYPE_CHECKING:
@@ -46,7 +47,7 @@ class SphinxOfForgottenLore(Creature):
             if not eligible:
                 return
             try:
-                chosen = ctrl.choose_card(eligible, 'Choose an instant or sorcery card to gain flashback')
+                chosen = choose_object(game, ctrl, eligible, 'Choose an instant or sorcery card to gain flashback', source_card=source)
             except Exception:
                 chosen = eligible[0] if eligible else None
             if chosen is not None:

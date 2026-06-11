@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import ActivatedAbility, Creature
+from engine.card_queries import choose_object
 from engine.types import CardType, Keyword, ManaCost, Zone
 from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
@@ -58,7 +59,7 @@ class ZulAshurLichLord(Creature):
             if not zombies:
                 return
             try:
-                chosen = controller.choose_card(zombies, 'Zombie creature to cast from graveyard')
+                chosen = choose_object(game, controller, zombies, 'Zombie creature to cast from graveyard', source_card=source)
             except Exception:
                 chosen = zombies[0] if zombies else None
             if chosen is not None:

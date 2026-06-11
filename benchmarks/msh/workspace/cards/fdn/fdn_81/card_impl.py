@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature, LoyaltyAbility, Planeswalker
+from engine.card_queries import choose_object
 from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
 from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
@@ -50,10 +51,7 @@ class ChandraFlameshaper(Planeswalker):
                     exile_zone.add(card)
                     exiled_cards.append(card)
             if exiled_cards:
-                try:
-                    chosen = controller.choose_card(exiled_cards, 'Choose one exiled card to play this turn')
-                except Exception:
-                    chosen = exiled_cards[0]
+                chosen = choose_object(game, controller, exiled_cards, 'Choose one exiled card to play this turn', source_card=pw)
                 if chosen is not None and chosen in exiled_cards:
                     chosen._playable_this_turn = True
                     chosen._playable_by = controller
@@ -85,20 +83,15 @@ class ChandraFlameshaper(Planeswalker):
         def _minus4(game: Any) -> None:
             """Deal 8 damage divided among targets."""
             from engine.game import deal_damage
-            damage_assignments = getattr(pw, '_damage_assignments', None)
-            if damage_assignments:
-                for target, amount in damage_assignments:
-                    deal_damage(game, pw, target, amount)
-                return
-            targets = getattr(pw, '_resolve_targets', None)
+            # Targets resolved by the engine (the engine sets ``chosen_targets``
+            # at resolve time). The exact damage split is not reconstructable
+            # here without the old private poke, so distribute 8 evenly across
+            # the chosen targets in order.
+            targets = getattr(pw, 'chosen_targets', []) or []
             if targets and len(targets) > 0:
                 damage_per = 8 // len(targets)
                 remainder = 8 % len(targets)
                 for i, t in enumerate(targets):
                     dmg = damage_per + (1 if i < remainder else 0)
                     deal_damage(game, pw, t, dmg)
-            else:
-                target = getattr(pw, '_resolve_target', None)
-                if target is not None:
-                    deal_damage(game, pw, target, 8)
         return [LoyaltyAbility(loyalty_cost=+2, effect=_plus2, description='+2: Add {R}{R}{R}. Exile top 3, choose one to play this turn.'), LoyaltyAbility(loyalty_cost=+1, effect=_plus1, description='+1: Create a hasty token copy of target creature (sacrifice at end step).'), LoyaltyAbility(loyalty_cost=-4, effect=_minus4, description='−4: Deal 8 damage divided among target creatures and/or planeswalkers.')]

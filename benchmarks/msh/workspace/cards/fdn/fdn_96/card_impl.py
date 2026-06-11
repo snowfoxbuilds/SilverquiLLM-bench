@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.types import ManaCost, Zone
 
 if TYPE_CHECKING:
@@ -76,7 +77,7 @@ class StrongboxRaider(Creature):
 
         # Choose one
         try:
-            chosen = controller.choose_card(exiled, "card to play until end of next turn")
+            chosen = choose_object(game, controller, exiled, "card to play until end of next turn", source_card=self)
         except Exception:
             chosen = exiled[0]
 

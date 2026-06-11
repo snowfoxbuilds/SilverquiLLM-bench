@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
+from engine.card_queries import query_yes_no
 from engine.continuous_effects import (
     ContinuousEffect,
     DURATION_PERMANENT,
@@ -61,8 +62,10 @@ class CephalidInkmage(Creature):
         # Surveil 3: look at top 3 cards (top is end of list)
         top_cards = cards[-min(3, len(cards)):]
         for card in reversed(top_cards):
-            put_in_gy = controller.choose_yes_no(
-                f"Surveil: Put {getattr(card, 'name', 'card')} into your graveyard?"
+            put_in_gy = query_yes_no(
+                game, controller,
+                f"Surveil: Put {getattr(card, 'name', 'card')} into your graveyard?",
+                source_card=self,
             )
             if put_in_gy:
                 library.remove(card)

@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.types import CardType, ManaCost, Zone
 from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
@@ -43,7 +44,7 @@ class VampireGourmand(Creature):
             if not candidates:
                 return
             try:
-                chosen = controller.choose_card(candidates, 'sacrifice a creature for draw + unblockable')
+                chosen = choose_object(game, controller, candidates, 'sacrifice a creature for draw + unblockable', source_card=source, optional=True)
             except Exception:
                 chosen = candidates[0] if candidates else None
             if chosen is None:

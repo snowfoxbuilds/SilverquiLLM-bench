@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import ActivatedAbility, Creature
+from engine.card_queries import choose_object
 from engine.types import Keyword, ManaCost, Zone
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -55,7 +56,7 @@ class TinybonesBaubleBurglar(Creature):
                 hand_cards = hand.get_all()
                 if hand_cards:
                     try:
-                        chosen = player.choose_card(hand_cards, 'discard a card')
+                        chosen = choose_object(game, player, hand_cards, 'discard a card', source_card=source)
                     except Exception:
                         chosen = hand_cards[0]
                     if chosen is not None:

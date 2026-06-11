@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Sorcery
+from engine.card_queries import choose_object
 from engine.types import CardType, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
@@ -76,7 +77,7 @@ class MacabreWaltz(Sorcery):
         hand_cards = hand.get_all()
         if hand_cards:
             try:
-                to_discard = controller.choose_card(hand_cards, "Choose a card to discard")
+                to_discard = choose_object(game, controller, hand_cards, "Choose a card to discard", source_card=self)
             except Exception:
                 to_discard = hand_cards[-1]
             discard(game, controller, to_discard)

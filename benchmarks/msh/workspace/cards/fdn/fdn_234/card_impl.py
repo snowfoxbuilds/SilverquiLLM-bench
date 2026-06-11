@@ -3,6 +3,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature, LoyaltyAbility, Planeswalker
+from engine.card_queries import choose_object
 from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -72,8 +73,8 @@ class VivienReid(Planeswalker):
             found = None
             if eligible:
                 try:
-                    chosen = controller.choose_card(
-                        eligible, "You may reveal a creature or land card"
+                    chosen = choose_object(
+                        game, controller, eligible, "You may reveal a creature or land card", source_card=pw, optional=True
                     )
                 except Exception:
                     # Fallback: pick the first eligible card

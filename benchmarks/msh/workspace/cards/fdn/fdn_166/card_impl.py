@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Instant
+from engine.card_queries import choose_object
 from engine.types import ManaCost, Zone
 
 if TYPE_CHECKING:
@@ -65,8 +66,8 @@ class TimeStop(Instant):
             while len(hand_cards) > max_hand:
                 from engine.game import discard
                 try:
-                    chosen = active.choose_card(
-                        hand_cards, "Discard down to hand size"
+                    chosen = choose_object(
+                        game, active, hand_cards, "Discard down to hand size", source_card=self
                     )
                 except Exception:
                     chosen = hand_cards[-1]

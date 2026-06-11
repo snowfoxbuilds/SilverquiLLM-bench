@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
 from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
 from engine.events import AttacksTriggeredEvent
@@ -46,7 +47,7 @@ class BattlesongBerserker(Creature):
             if not candidates:
                 return
             try:
-                chosen = ctrl.choose_card(candidates, 'creature to get +1/+0 and menace')
+                chosen = choose_object(game, ctrl, candidates, 'creature to get +1/+0 and menace', source_card=source)
             except Exception:
                 chosen = candidates[0]
             if chosen is None:

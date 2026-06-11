@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import ActivatedAbility, Artifact, Creature, Enchantment, Instant, ManaAbility, Sorcery
+from engine.card_queries import choose_object
 from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, DURATION_PERMANENT, Layer, SubLayer
 from engine.types import CardType, Color, HybridManaSymbol, Keyword, ManaCost, ManaType, Supertype, Zone
 from engine.events import EntersBattlefieldTriggeredEvent
@@ -128,12 +129,9 @@ class FiendArtisan(Creature):
             library = controller.zones[Zone.LIBRARY]
             candidates = [c for c in library.get_all() if CardType.CREATURE in getattr(c, 'card_types', set()) and _get_mana_value(c) <= x_value]
             if candidates:
-                chosen = candidates[0]
-                if hasattr(controller, 'choose_card'):
-                    try:
-                        chosen = controller.choose_card(candidates, f'Search for creature with MV ≤ {x_value}')
-                    except Exception:
-                        chosen = candidates[0]
+                chosen = choose_object(game, controller, candidates, f'Search for creature with MV ≤ {x_value}', source_card=source)
+                if chosen is None:
+                    chosen = candidates[0]
                 library.remove(chosen)
                 chosen.owner = chosen.owner or controller
                 chosen.controller = controller

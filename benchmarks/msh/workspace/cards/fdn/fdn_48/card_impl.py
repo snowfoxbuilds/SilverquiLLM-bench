@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Instant
+from engine.card_queries import choose_object
 from engine.types import ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
@@ -125,8 +126,8 @@ class Refute(Instant):
         cards_in_hand = list(hand.get_all())
         if cards_in_hand:
             try:
-                chosen = controller.choose_card(
-                    cards_in_hand, "Choose a card to discard"
+                chosen = choose_object(
+                    game, controller, cards_in_hand, "Choose a card to discard", source_card=self
                 )
             except Exception:
                 chosen = cards_in_hand[0] if cards_in_hand else None

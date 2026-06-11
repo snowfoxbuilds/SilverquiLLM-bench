@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Instant
+from engine.card_queries import query_yes_no
 from engine.types import CardType, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
@@ -73,11 +74,12 @@ class UnchartedVoyage(Instant):
                         bf.remove(target)
                         break
                 # Owner chooses top or bottom
-                put_on_top = True
-                if hasattr(owner, "choose_yes_no"):
-                    put_on_top = owner.choose_yes_no(
-                        f"Put {getattr(target, 'name', 'creature')} on top of library? (No = bottom)"
-                    )
+                put_on_top = query_yes_no(
+                    game,
+                    owner,
+                    f"Put {getattr(target, 'name', 'creature')} on top of library? (No = bottom)",
+                    source_card=self,
+                )
                 library = owner.zones[Zone.LIBRARY]
                 if put_on_top:
                     # Top of library is end of list
@@ -91,8 +93,11 @@ class UnchartedVoyage(Instant):
         lib_cards = list(library.get_all())
         if lib_cards:
             top_card = lib_cards[-1]  # Top is end of list
-            put_in_gy = controller.choose_yes_no(
-                f"Surveil: Put {getattr(top_card, 'name', 'card')} into your graveyard?"
+            put_in_gy = query_yes_no(
+                game,
+                controller,
+                f"Surveil: Put {getattr(top_card, 'name', 'card')} into your graveyard?",
+                source_card=self,
             )
             if put_in_gy:
                 library.remove(top_card)

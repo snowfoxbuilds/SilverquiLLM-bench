@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Sorcery
+from engine.card_queries import choose_object
 from engine.types import CardType, ManaCost, Zone
 
 if TYPE_CHECKING:
@@ -73,14 +74,17 @@ class GenesisWave(Sorcery):
         # Oracle: "You may put any number of permanent cards...onto the
         # battlefield."  Ask the controller's agent to choose which
         # eligible permanents to keep; default to all if no agent.
-        chosen = eligible
-        if hasattr(controller, "choose_cards"):
-            chosen = controller.choose_cards(
-                eligible,
-                min_count=0,
-                max_count=len(eligible),
-                prompt="Choose permanent cards to put onto the battlefield.",
-            )
+        # "You may put any number" — a multi-select Player Query (min 0).
+        chosen = choose_object(
+            game,
+            controller,
+            eligible,
+            "Choose permanent cards to put onto the battlefield.",
+            source_card=self,
+            min=0,
+            max=len(eligible),
+            optional=True,
+        ) if eligible else []
 
         # Put chosen onto battlefield
         put_onto_bf: set[int] = set()

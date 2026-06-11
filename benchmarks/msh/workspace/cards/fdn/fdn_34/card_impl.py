@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
+from engine.card_queries import choose_object, query_yes_no
 from engine.types import Keyword, ManaCost, Zone
 
 if TYPE_CHECKING:
@@ -58,14 +59,18 @@ class CuratorOfDestinies(Creature):
 
         # Controller separates into two piles.
         # ENGINE LIMITATION: The engine doesn't have a "separate into piles"
-        # UI action. We use choose_card() to let the controller pick cards
+        # UI action. We raise a Player Query to let the controller pick cards
         # for pile A (face-up); the rest go to pile B (face-down).
         pile_a: list[Any] = []
         remaining = list(top_cards)
         while remaining:
-            chosen = controller.choose_card(
+            chosen = choose_object(
+                game,
+                controller,
                 remaining,
                 "Choose a card for the face-up pile (or None to stop)",
+                source_card=self,
+                optional=True,
             )
             if chosen is None or chosen not in remaining:
                 break
@@ -83,8 +88,11 @@ class CuratorOfDestinies(Creature):
             opponent = controller
 
         # Opponent chooses: True = pile A (face-up) goes to hand
-        choose_a = opponent.choose_yes_no(
-            "Choose: Yes = face-up pile to hand, No = face-down pile to hand"
+        choose_a = query_yes_no(
+            game,
+            opponent,
+            "Choose: Yes = face-up pile to hand, No = face-down pile to hand",
+            source_card=self,
         )
         if choose_a:
             hand_pile = pile_a

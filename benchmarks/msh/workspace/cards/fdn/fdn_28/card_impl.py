@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import query_yes_no
 from engine.types import CardType, Keyword, ManaCost
 from engine.events import GainsLifeTriggeredEvent
 if TYPE_CHECKING:
@@ -56,7 +57,7 @@ class VanguardSeraph(Creature):
             if not cards:
                 return
             top_card = cards[-1]
-            put_in_gy = ctrl.choose_yes_no(f"Surveil 1: Put {getattr(top_card, 'name', 'card')} into your graveyard?")
+            put_in_gy = query_yes_no(game, ctrl, f"Surveil 1: Put {getattr(top_card, 'name', 'card')} into your graveyard?", source_card=source)
             if put_in_gy:
                 library.remove(top_card)
                 ctrl.zones[Zone.GRAVEYARD].add(top_card)
