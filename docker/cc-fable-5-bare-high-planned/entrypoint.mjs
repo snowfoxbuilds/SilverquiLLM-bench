@@ -44,7 +44,7 @@ const prompt = [
   "Your task and prepared execution plan are in /workspace/TODO.md and /workspace/CONTEXT.md.",
 ].join("\n");
 
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "claude-fable-5";
 
 log(`Starting claude code session (${MODEL}, effort high)`);
 

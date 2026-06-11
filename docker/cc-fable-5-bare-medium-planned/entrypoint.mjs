@@ -44,11 +44,11 @@ const prompt = [
   "Your task and prepared execution plan are in /workspace/TODO.md and /workspace/CONTEXT.md.",
 ].join("\n");
 
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "claude-fable-5";
 
-log(`Starting claude code session (${MODEL}, effort high)`);
+log(`Starting claude code session (${MODEL}, effort medium)`);
 
-claudeProc = spawn("claude", ["-p", prompt, "--dangerously-skip-permissions", "--model", MODEL, "--effort", "high", "--verbose", "--output-format", "stream-json"], {
+claudeProc = spawn("claude", ["-p", prompt, "--dangerously-skip-permissions", "--model", MODEL, "--effort", "medium", "--verbose", "--output-format", "stream-json"], {
   cwd: "/workspace",
   env: process.env,
 });
