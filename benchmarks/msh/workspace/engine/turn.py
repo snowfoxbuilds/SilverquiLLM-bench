@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -87,8 +86,8 @@ def _do_cleanup_step(game: GameState) -> None:
 
     The cleanup step executes the following actions in order:
 
-    1. Active player discards down to maximum hand size (7) using
-       :meth:`Player.choose_card`.
+    1. Active player discards down to maximum hand size (7) via a
+       Player Query (one OBJECT query per discard).
     2. Remove all "until end of turn" continuous effects via
        :meth:`EffectManager.remove_expired`, then reapply remaining
        effects for a consistent game state.
@@ -101,32 +100,20 @@ def _do_cleanup_step(game: GameState) -> None:
        them (give priority, resolve stack) and perform another cleanup step.
     """
     from engine.game import discard as _discard
-    from engine.player import ScriptExhaustedError
     from engine.state_based_actions import resolve_state_based_actions
 
-    # --- Step 1: Discard to hand size ---
+    # --- Step 1: Discard to hand size (a Player Query) ---
     active = game.active_player
     hand = active.zones[Zone.HAND]
     while len(hand) > MAX_HAND_SIZE:
         cards_in_hand = hand.get_all()
         if not cards_in_hand:
             break  # safety guard
-        try:
-            chosen = active.choose_card(cards_in_hand, "discard to hand size")
-        except (ScriptExhaustedError, NotImplementedError) as exc:
-            # Player implementation doesn't support choose_card or script
-            # was exhausted.  Discard deterministically from end.
-            chosen = cards_in_hand[-1]
-            exc_name = type(exc).__name__
-            warnings.warn(
-                f"{exc_name} during cleanup discard for {active.name}; "
-                f"auto-discarding {chosen.name}"
-            )
+        chosen = _choose_discard(game, active, cards_in_hand)
         if chosen is not None and hand.contains(chosen):
             _discard(game, active, chosen)
         else:
-            # If choose_card returns something invalid, discard the last card
-            # to avoid an infinite loop.
+            # Defensive: discard the last card to avoid an infinite loop.
             _discard(game, active, cards_in_hand[-1])
 
     # --- Step 2: Remove "until end of turn" continuous effects ---
@@ -215,3 +202,23 @@ def run_turn(game: GameState) -> None:
 
         # Advance to the next phase/step (or to next turn).
         game.advance_phase()
+
+
+def _choose_discard(game: "GameState", player: object, cards: list) -> object:
+    """Raise an OBJECT Player Query for a cleanup discard; map back to the card."""
+    from engine.queries import PlayerQuery, ask
+    from engine.refs_registry import object_options
+
+    seat = game.refs.seat_of(player)
+    options, by_decision = object_options(
+        game.refs, ((c, "hand", seat) for c in cards)
+    )
+    query = PlayerQuery(
+        source=(game.refs.player_decision(player, seat=seat),),
+        prompt="discard to hand size",
+        options=options,
+        min=1,
+        max=1,
+    )
+    answer = ask(player, query)
+    return by_decision[answer.selected[0]]

@@ -47,6 +47,96 @@ class CastingError(Exception):
 
 
 # ------------------------------------------------------------------
+# Targeting — Player Query construction (generalizes TargetRequirement.filter_fn)
+# ------------------------------------------------------------------
+
+
+def _safe_filter(filter_fn: Any, obj: Any) -> bool:
+    """Evaluate a lazy target ``filter_fn`` defensively (illegal → excluded)."""
+    try:
+        return bool(filter_fn(obj))
+    except Exception:
+        return False
+
+
+def _seat_of(game: GameState, player: Any) -> int | None:
+    for seat, candidate in enumerate(game.players):
+        if candidate is player:
+            return seat
+    return None
+
+
+def _candidate_decision(game: GameState, candidate: Any, zone: Any) -> Any:
+    """Build the OBJECT/PLAYER decision for a legal target candidate."""
+    if any(candidate is p for p in game.players):
+        return game.refs.player_decision(candidate, seat=_seat_of(game, candidate))
+    controller = getattr(candidate, "controller", None)
+    return game.refs.object_decision(
+        candidate,
+        zone=getattr(zone, "value", zone) if zone is not None else "battlefield",
+        controller_seat=_seat_of(game, controller) if controller is not None else None,
+    )
+
+
+def _source_decision(game: GameState, card: Any) -> Any:
+    """The OBJECT decision for the spell/ability raising a query (routing source)."""
+    controller = getattr(card, "controller", None)
+    return game.refs.object_decision(
+        card,
+        zone="stack",
+        controller_seat=_seat_of(game, controller) if controller is not None else None,
+    )
+
+
+def _query_target(game: GameState, player: Player, card: CardImpl, spec: Any) -> Any:
+    """Raise a Player Query for one target spec; return the chosen game object.
+
+    The engine enumerates the legal option set (objects in ``spec.zone`` across
+    both players, plus the players themselves), offers only those, and maps the
+    Answer back to the game object via the Game Refs registry. A required spec
+    with no legal target raises :class:`CastingError`.
+    """
+    from engine.queries import PlayerQuery, ask
+
+    filter_fn = getattr(spec, "filter_fn", None)
+    zone = getattr(spec, "zone", None)
+
+    candidates: list[Any] = []
+    if zone is not None:
+        for p in game.players:
+            if zone in p.zones:
+                candidates.extend(p.zones[zone].get_all())
+    candidates.extend(game.players)
+
+    options: list[Any] = []
+    by_decision: dict[Any, Any] = {}
+    for candidate in candidates:
+        if filter_fn is not None and not _safe_filter(filter_fn, candidate):
+            continue
+        decision = _candidate_decision(game, candidate, zone)
+        if decision in by_decision:
+            continue
+        options.append(decision)
+        by_decision[decision] = candidate
+
+    if not options:
+        raise CastingError(
+            f"Cannot cast {card.name!r} — no legal target for "
+            f"{getattr(spec, 'description', 'target')!r}"
+        )
+
+    query = PlayerQuery(
+        source=(_source_decision(game, card),),
+        prompt=getattr(spec, "description", "choose target"),
+        options=tuple(options),
+        min=1,
+        max=1,
+    )
+    answer = ask(player, query)
+    return by_decision[answer.selected[0]]
+
+
+# ------------------------------------------------------------------
 # Timing helpers
 # ------------------------------------------------------------------
 
@@ -176,7 +266,7 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     chosen_targets: list[Any] = []
     if target_specs:
         for spec in target_specs:
-            target = player.choose_target(target_specs, spec)
+            target = _query_target(game, player, card, spec)
             # Validate against filter_fn if the spec provides one
             filter_fn = getattr(spec, "filter_fn", None)
             if filter_fn is not None and target is not None:
@@ -328,7 +418,7 @@ def cast_spell_free(
         chosen_targets: list[Any] = []
         if target_specs:
             for spec in target_specs:
-                target = player.choose_target(target_specs, spec)
+                target = _query_target(game, player, card, spec)
                 # Validate against filter_fn if the spec provides one
                 filter_fn = getattr(spec, "filter_fn", None)
                 if filter_fn is not None and target is not None:

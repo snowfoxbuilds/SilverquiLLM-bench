@@ -9,7 +9,8 @@ outcome.  Key design differences from triggers:
 - **Self-replacement prevention**: each effect applies at most once per
   event to avoid infinite loops.
 - **Player choice**: when multiple replacements apply to the same event,
-  the affected player chooses the order via ``Player.choose``.
+  the affected player chooses the order via a Player Query (an ABILITY
+  decision carrying the index into the matching list).
 - **Subtype matching**: a replacement registered for a parent event class
   (e.g. ``MoveToGraveyardReplacementEvent``) fires for any subtype
   (e.g. ``CreatureDiesReplacementEvent``).
@@ -107,7 +108,10 @@ class ReplacementManager:
                 chosen = matching[0]
             else:
                 affected = self._get_affected_player(game, event)
-                chosen = affected.choose(matching, "Choose replacement effect order")
+                if affected is None:
+                    chosen = matching[0]
+                else:
+                    chosen = _choose_replacement_order(game, affected, matching)
 
             applied.add(id(chosen))
             event = chosen.replacement(game, event)
@@ -163,3 +167,27 @@ class ReplacementManager:
         if controller is not None:
             return controller
         return game.active_player
+
+
+def _choose_replacement_order(game: object, player: object, matching: list) -> object:
+    """Raise a Player Query to pick the next replacement effect to apply.
+
+    Replacement effects are not game objects, so they are offered as ABILITY
+    decisions carrying an ``index`` into ``matching``; the Answer's index maps
+    back to the chosen effect. Routed to the player's Baseline Intent in tests
+    (empty source — a system-level query).
+    """
+    from engine.decisions import Decision
+    from engine.queries import PlayerQuery, ask
+
+    options = tuple(Decision.ability(index=i) for i in range(len(matching)))
+    query = PlayerQuery(
+        source=(),
+        prompt="Choose replacement effect to apply next",
+        options=options,
+        min=1,
+        max=1,
+    )
+    answer = ask(player, query)
+    idx = dict(answer.selected[0].attrs)["index"]
+    return matching[idx]

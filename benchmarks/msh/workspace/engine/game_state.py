@@ -7,6 +7,7 @@ from typing import Any
 from engine.combat import CombatState
 from engine.continuous_effects import EffectManager
 from engine.player import Player
+from engine.refs_registry import GameRefsRegistry
 from engine.replacement_effects import ReplacementManager
 from engine.stack import Stack
 from engine.triggers import TriggerManager
@@ -60,6 +61,12 @@ class GameState:
             raise ValueError("GameState supports exactly 2 players")
 
         self.players: list[Player] = players
+        # Game Refs registry: engine-owned instance-id minting + the
+        # decision↔object correlation used to map a raised query's options back
+        # to game objects when the player answers.
+        self.refs: GameRefsRegistry = GameRefsRegistry()
+        for seat, player in enumerate(players):
+            self.refs.register_player(player, seat)
         self.active_player_index: int = 0
         self.priority_player_index: int = 0
         self.phase: Phase = Phase.BEGINNING

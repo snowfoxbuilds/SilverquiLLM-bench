@@ -85,6 +85,20 @@ def validate_query(query: PlayerQuery) -> None:
         seen.add(opt)
 
 
+def ask(player: object, query: PlayerQuery) -> Answer:
+    """Route a query to a player through the boundary validator.
+
+    The single choke point for every engine→player interaction: the query is
+    boundary-validated (engine-fault on failure) *before* it reaches the player,
+    and the returned Answer is validated (test-fault on failure) before the
+    engine applies it.
+    """
+    validate_query(query)
+    answer = player.answer(query)  # type: ignore[attr-defined]
+    validate_answer(query, answer)
+    return answer
+
+
 def validate_answer(query: PlayerQuery, answer: Answer) -> None:
     """Validate an Answer against its query (test-fault on failure)."""
     selected = answer.selected
