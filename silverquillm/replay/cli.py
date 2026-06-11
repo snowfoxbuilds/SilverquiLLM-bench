@@ -24,6 +24,32 @@ from silverquillm.replay.validation import (
 )
 
 
+def _select_benchmark_engine(benchmark_id: str) -> None:
+    """Put a benchmark's workspace engine on sys.path.
+
+    Resolves ``benchmarks/<id>/config.json`` (confirming the id) and prepends
+    ``benchmarks/<id>/workspace`` to ``sys.path`` so the executor's flat
+    ``from engine.X import ...`` imports bind to that benchmark's engine. SOS
+    resolves to the frozen V1 engine (scripted player); MSH to the Player Query
+    engine (intent player) — keeping SOS replay validation unchanged.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    config_path = repo_root / "benchmarks" / benchmark_id / "config.json"
+    if not config_path.exists():
+        raise click.ClickException(
+            f"No benchmark config at {config_path} (unknown benchmark {benchmark_id!r})"
+        )
+    config = json.loads(config_path.read_text())
+    if config.get("id") not in (benchmark_id, None):
+        raise click.ClickException(
+            f"config.json id {config.get('id')!r} != requested benchmark {benchmark_id!r}"
+        )
+    workspace = repo_root / "benchmarks" / benchmark_id / "workspace"
+    if not workspace.is_dir():
+        raise click.ClickException(f"No workspace dir at {workspace}")
+    sys.path.insert(0, str(workspace))
+
+
 def _make_verbose_callback():
     """Return a callback for per-step verbose output."""
     def callback(step_index: int, snapshot_id: int, action_desc: str, result_desc: str) -> None:
@@ -173,18 +199,30 @@ def _aggregate_reports(
     default=False,
     help="Halt at first mismatch for debugging.",
 )
+@click.option(
+    "--benchmark",
+    default=None,
+    help=(
+        "Benchmark id (e.g. 'msh' or 'sos'). Selects which workspace engine the "
+        "executor imports by resolving benchmarks/<id>/config.json and putting "
+        "benchmarks/<id>/workspace on sys.path."
+    ),
+)
 def validate(
     replay_path: str,
     card_filter: str | None,
     verbose: bool,
     report_path: str | None,
     stop_on_divergence: bool,
+    benchmark: str | None,
 ) -> None:
     """Validate replay files against the engine.
 
     REPLAY_PATH can be a single JSON replay file or a directory of replay
     JSON files.
     """
+    if benchmark:
+        _select_benchmark_engine(benchmark)
     path = Path(replay_path)
     if not path.exists():
         raise click.ClickException(f"Path not found: {replay_path}")

@@ -31,6 +31,29 @@ class DivergenceType(enum.Enum):
     ILLEGAL_ACTION = "ILLEGAL_ACTION"
     STATE_MISMATCH = "STATE_MISMATCH"
     ENGINE_ERROR = "ENGINE_ERROR"
+    # MSH Player Query protocol (intent-driven seat): a query that no
+    # replay-derived intent could answer, and an engine-side boundary-validation
+    # failure. Both are recorded divergences — never a crash of the run.
+    QUERY_UNANSWERED = "QUERY_UNANSWERED"
+    PROTOCOL_ERROR = "PROTOCOL_ERROR"
+
+
+def classify_step_exception(exc: BaseException) -> "DivergenceType":
+    """Classify an exception raised while executing a replay step.
+
+    Engine-agnostic — matches on class names in the MRO so this shared code need
+    not import the MSH-only exception classes:
+      - a ``ProtocolError`` (engine boundary-validation failure) -> PROTOCOL_ERROR
+      - an ``UnmatchedQueryError`` (no replay-derived intent matched) -> QUERY_UNANSWERED
+      - anything else -> ENGINE_ERROR
+    An unanswerable query is thus a recorded divergence, never a crash.
+    """
+    mro_names = {cls.__name__ for cls in type(exc).__mro__}
+    if "ProtocolError" in mro_names:
+        return DivergenceType.PROTOCOL_ERROR
+    if "UnmatchedQueryError" in mro_names:
+        return DivergenceType.QUERY_UNANSWERED
+    return DivergenceType.ENGINE_ERROR
 
 
 # ---------------------------------------------------------------------------
@@ -181,14 +204,14 @@ class ValidatingExecutor:
         try:
             result = self.executor.execute_step(prev_snapshot, curr_snapshot)
         except Exception as exc:
-            # ENGINE_ERROR: unhandled exception
+            div_type = classify_step_exception(exc)
             action = (
                 curr_snapshot.actions[0] if curr_snapshot.actions else None
             )
             grp_ids = [action.grp_id] if action and action.grp_id else []
             div = Divergence(
                 game_state_id=curr_snapshot.game_state_id,
-                divergence_type=DivergenceType.ENGINE_ERROR,
+                divergence_type=div_type,
                 description=f"Engine raised {type(exc).__name__}: {exc}",
                 expected_state=self._snapshot_state_summary(curr_snapshot),
                 actual_state=None,

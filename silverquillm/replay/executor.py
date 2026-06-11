@@ -25,6 +25,32 @@ from silverquillm.replay.types import (
 logger = logging.getLogger(__name__)
 
 
+def _make_replay_player(name: str, life: int) -> Any:
+    """Create a DeterministicPlayer for whichever workspace engine is on sys.path.
+
+    Benchmark-parameterized: the frozen SOS (V1) engine has a scripted
+    ``engine.player.DeterministicPlayer`` (replay drives its actions, not a
+    script); the MSH engine has the intent-based ``engine.intent_player.
+    DeterministicPlayer``, which gets a permissive Baseline Intent so any query
+    the replay raises is answered in GRE-observed (first-offered) order rather
+    than crashing. A genuinely unanswerable query surfaces as a
+    ``QUERY_UNANSWERED`` divergence, not an exception.
+    """
+    try:
+        from engine.intent_player import DeterministicPlayer as _IntentPlayer
+        from engine.intent_player import Intent
+        from engine.decisions import GameRef
+
+        player = _IntentPlayer(name=name, life=life)
+        player.set_baseline(Intent(pattern=GameRef(), preferences=()))
+        return player
+    except ImportError:
+        # Frozen SOS engine — V1 scripted player (replay drives actions).
+        from engine.player import DeterministicPlayer as _V1Player
+
+        return _V1Player(name=name, script=[], life=life)
+
+
 # ---------------------------------------------------------------------------
 # State comparison result
 # ---------------------------------------------------------------------------
@@ -160,13 +186,11 @@ class ReplayExecutor:
                 raise ValueError("No snapshots in replay")
             snapshot = self.replay.snapshots[0]
 
-        from engine.player import DeterministicPlayer
-
-        # Create engine players
+        # Create engine players (benchmark-parameterized: the V1 SOS engine has
+        # a scripted DeterministicPlayer; the MSH engine has the intent-based one).
         for seat_id, player_info in snapshot.players.items():
-            player = DeterministicPlayer(
+            player = _make_replay_player(
                 name=f"Player_{seat_id}",
-                script=[],  # Replay drives actions, not scripts
                 life=player_info.life_total,
             )
             self.players[seat_id] = player
