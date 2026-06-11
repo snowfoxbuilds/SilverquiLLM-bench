@@ -1,8 +1,8 @@
-# Directory Summary — `benchmarks/sos/workspace/tests/engine/`
+# Directory Summary — `benchmarks/msh/workspace/engine_tests/`
 
 ## Purpose
 
-Unit tests for all engine modules in `benchmarks/sos/workspace/engine/`. One test file per engine module, covering types, zones, players, mana, cards, casting, stack, combat, triggers, abilities, continuous effects, replacement effects, state-based actions, protection, game state, extra turns, lazy target evaluation, chosen_targets refactor, and the game loop. ~1,140+ test functions.
+Unit tests for all engine modules in `benchmarks/msh/workspace/engine/`. One test file per engine module, covering types, zones, players, mana, cards, casting, stack, combat, triggers, abilities, continuous effects, replacement effects, state-based actions, protection, game state, extra turns, lazy target evaluation, chosen_targets refactor, and the game loop. ~1,140+ test functions.
 
 ## Key Files
 
@@ -20,6 +20,9 @@ Unit tests for all engine modules in `benchmarks/sos/workspace/engine/`. One tes
 | `test_extra_turns.py` | Extra turns FIFO queue, granting, ordering, normal turn order resumption. |
 | `test_stack.py` | StackObject, Stack LIFO, priority_loop, SBA checking. |
 | `test_casting.py` | cast_spell, play_land, mana payment, target selection, auto-registration, cost reduction integration, filter_fn validation at cast time. |
+| `test_cast_spell_free.py` | cast_spell_free — casting without paying mana costs via the stack. |
+| `test_protocol_choices.py` / `test_protocol_targeting.py` | Protocol conversion of the V1 choice sites: ordering/discard/legend-rule queries, and targeting as Player Queries offering only legal options. |
+| `test_intent_test_utils.py` | Smoke tests: the rewritten test_utils drives the engine through the intent-based DeterministicPlayer. |
 | `test_cost_reduction.py` | Cost reduction clamping, application, cast_spell integration. |
 | `test_combat.py` | Declare attackers/blockers, combat damage, first strike, double strike, trample, lifelink, deathtouch, flying/reach, menace, vigilance, protection blocking/damage checks. |
 | `test_protection.py` | 34 tests covering DEBT mnemonic (Damage, Enchanting/Equipping, Blocking, Targeting), protection from colors/types. |
@@ -38,5 +41,5 @@ Unit tests for all engine modules in `benchmarks/sos/workspace/engine/`. One tes
 
 ## Dependencies
 
-- `tests/test_utils.py` — Shared test helpers.
+- `test_utils.py` — Shared test helpers (workspace root).
 - `engine/` — All engine modules under test.

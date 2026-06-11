@@ -141,3 +141,46 @@ class TestTranscript:
         object_queries = p.transcript.queries(kind=DecisionKind.OBJECT)
         assert len(object_queries) == 1
         assert any(("color", "R") in opt.attrs for opt in object_queries[-1].options)
+
+
+class TestPreferenceMiss:
+    def test_card_intent_with_no_matching_preference_is_flagged(self):
+        # A routed card intent whose preferences select nothing on a min>0
+        # query falls back to first-offered fill — flagged in the transcript
+        # as a probable wrong option set or typo'd preference.
+        p = DeterministicPlayer("P0")
+        p.start_intent("strike", Intent(
+            pattern=GameRef(card=frozenset({("name", "Bushwhack")})),
+            preferences=(Decision.obj(color="B"),),  # not offered
+        ))
+        ans = p.answer(_query("Bushwhack", [_obj_option(1, color="R")]))
+        assert ans.selected == (_obj_option(1, color="R"),)  # filled, not chosen
+        assert p.transcript.all()[-1].preference_miss is True
+
+    def test_card_intent_with_matching_preference_is_not_flagged(self):
+        p = DeterministicPlayer("P0")
+        p.start_intent("strike", Intent(
+            pattern=GameRef(card=frozenset({("name", "Bushwhack")})),
+            preferences=(Decision.obj(color="R"),),
+        ))
+        p.answer(_query("Bushwhack", [_obj_option(1, color="R")]))
+        assert p.transcript.all()[-1].preference_miss is False
+
+    def test_baseline_fill_is_never_flagged(self):
+        # First-offered fill is the baseline's job, not a miss.
+        p = DeterministicPlayer("P0")
+        p.set_baseline(Intent(pattern=GameRef(), preferences=()))
+        p.answer(_query("C", [Decision.yes(), Decision.no()]))
+        assert p.transcript.all()[-1].preference_miss is False
+
+    def test_decline_on_min_zero_is_not_flagged(self):
+        # min == 0 with no preference match is a legal decline, not a miss.
+        p = DeterministicPlayer("P0")
+        p.start_intent("strike", Intent(
+            pattern=GameRef(card=frozenset({("name", "Bushwhack")})),
+            preferences=(Decision.obj(color="B"),),
+        ))
+        ans = p.answer(_query("Bushwhack", [_obj_option(1, color="R")],
+                              min=0, max=1))
+        assert ans.selected == ()
+        assert p.transcript.all()[-1].preference_miss is False

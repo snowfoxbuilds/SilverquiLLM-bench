@@ -4,9 +4,17 @@ card implementations use instead of the deleted V1 ``player.choose_*`` methods.
 
 from __future__ import annotations
 
+import pytest
+
 from engine.card import Creature
-from engine.card_queries import choose_color, choose_mode, choose_object, query_yes_no
-from engine.decisions import Decision, GameRef
+from engine.card_queries import (
+    choose_color,
+    choose_mode,
+    choose_number,
+    choose_object,
+    query_yes_no,
+)
+from engine.decisions import Decision, GameRef, InvalidOptionsError
 from engine.game_state import GameState
 from engine.intent_player import DeterministicPlayer, Intent
 from engine.types import ManaCost, Zone
@@ -71,15 +79,24 @@ class TestChooseObject:
         assert isinstance(chosen, list)
         assert chosen == [bear, elk]
 
-    def test_no_candidates_returns_empty_or_none(self):
+    def test_no_candidates_declinable_returns_empty_or_none(self):
         game = _game()
         p0 = game.players[0]
         p0.set_baseline(Intent(pattern=GameRef(), preferences=()))
-        # max == 1 → None
-        assert choose_object(game, p0, [], "nothing") is None
-        # max > 1 → []
+        # optional, max == 1 → None
+        assert choose_object(game, p0, [], "nothing", optional=True) is None
+        # optional, max > 1 → []
         assert choose_object(game, p0, [], "nothing", min=0, max=2,
                              optional=True) == []
+
+    def test_no_candidates_required_is_an_engine_fault(self):
+        # Empty options with min > 0 is the protocol's engine-fault signal;
+        # the helper must raise it, not weaken the query to a None return.
+        game = _game()
+        p0 = game.players[0]
+        p0.set_baseline(Intent(pattern=GameRef(), preferences=()))
+        with pytest.raises(InvalidOptionsError):
+            choose_object(game, p0, [], "nothing")
 
 
 class TestChooseYesNo:
@@ -100,6 +117,22 @@ class TestChooseMode:
                                preferences=(Decision.mode("token"),)))
         chosen = choose_mode(game, p0, ["flicker", "token"], "choose mode")
         assert chosen == "token"
+
+
+class TestChooseNumber:
+    def test_returns_preferred_number(self):
+        game = _game()
+        p0 = game.players[0]
+        p0.set_baseline(Intent(pattern=GameRef(),
+                               preferences=(Decision.number(5),)))
+        assert choose_number(game, p0, 1, 7, "pick a number") == 5
+
+    def test_baseline_without_preference_picks_lowest(self):
+        # Options are offered ascending, so first-offered fill picks ``lo``.
+        game = _game()
+        p0 = game.players[0]
+        p0.set_baseline(Intent(pattern=GameRef(), preferences=()))
+        assert choose_number(game, p0, 2, 6, "pick a number") == 2
 
 
 class TestChooseColor:

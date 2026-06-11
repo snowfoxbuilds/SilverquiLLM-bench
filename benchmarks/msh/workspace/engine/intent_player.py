@@ -48,10 +48,17 @@ class Intent:
 
 @dataclass
 class QueryRecord:
-    """One logged query and the answer the player gave (``None`` if it raised)."""
+    """One logged query and the answer the player gave (``None`` if it raised).
+
+    ``preference_miss`` is True when a routed *card* intent had preferences but
+    none selected any offered option on a ``min > 0`` query — the answer was a
+    pure first-offered fill. That usually means a wrong option set or a typo'd
+    preference; audits can assert no record has it set.
+    """
 
     query: PlayerQuery
     answer: Answer | None = None
+    preference_miss: bool = False
 
     @property
     def options(self) -> tuple[PlayerDecision, ...]:
@@ -140,12 +147,23 @@ class DeterministicPlayer(Player):
 
     def answer(self, query: PlayerQuery) -> Answer:
         record = self.transcript._record(query)
-        intent = self._route(query)
-        answer = _answer_with_intent(intent, query)
+        intent, is_card_intent = self._route(query)
+        answer, preferred_hits = _answer_with_intent(intent, query)
+        if (
+            is_card_intent
+            and intent.preferences
+            and preferred_hits == 0
+            and query.min > 0
+        ):
+            # A routed card intent answered purely by first-offered fill —
+            # probable wrong option set or typo'd preference. Flagged in the
+            # transcript so audits can catch it; not a hard failure.
+            record.preference_miss = True
         record.answer = answer
         return answer
 
-    def _route(self, query: PlayerQuery) -> Intent:
+    def _route(self, query: PlayerQuery) -> tuple[Intent, bool]:
+        """Return the routed intent and whether it is a card intent."""
         matched = [
             intent
             for intent in self._intents.values()
@@ -156,9 +174,9 @@ class DeterministicPlayer(Player):
                 f"{len(matched)} active intents matched query {query.prompt!r}"
             )
         if len(matched) == 1:
-            return matched[0]
+            return matched[0], True
         if self._baseline is not None:
-            return self._baseline
+            return self._baseline, False
         raise UnmatchedQueryError(
             f"no card intent and no baseline matched query {query.prompt!r}"
         )
@@ -172,7 +190,7 @@ def _intent_matches(intent: Intent, query: PlayerQuery) -> bool:
     return False
 
 
-def _answer_with_intent(intent: Intent, query: PlayerQuery) -> Answer:
+def _answer_with_intent(intent: Intent, query: PlayerQuery) -> tuple[Answer, int]:
     """Preference-major greedy selection, then fill to ``min`` in option order.
 
     Each preference selects the first not-yet-selected offered option that
@@ -181,6 +199,10 @@ def _answer_with_intent(intent: Intent, query: PlayerQuery) -> Answer:
     preference list, or a system query with no preferences), the remaining
     options fill in implementation order. ``min == 0`` with no preference match
     yields a decline.
+
+    Returns the Answer and the number of options selected by preference (as
+    opposed to fill), so the caller can flag a card intent whose preferences
+    matched nothing.
     """
     selected: list[PlayerDecision] = []
     remaining = list(query.options)
@@ -193,8 +215,9 @@ def _answer_with_intent(intent: Intent, query: PlayerQuery) -> Answer:
                 selected.append(option)
                 remaining.remove(option)
                 break
+    preferred_hits = len(selected)
 
     while len(selected) < query.min and remaining:
         selected.append(remaining.pop(0))
 
-    return Answer(selected=tuple(selected))
+    return Answer(selected=tuple(selected)), preferred_hits

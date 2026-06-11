@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from engine.decisions import Decision, GameRef
+from engine.decisions import Decision, GameRef, InvalidOptionsError
 from engine.queries import PlayerQuery, ask
 from engine.refs_registry import object_options
 from engine.types import Zone
@@ -58,12 +58,14 @@ def choose_object(
         for c in cands
     ]
     options, by_decision = object_options(game.refs, items)
-    if not options:
-        return None if max == 1 else []
     lo = 0 if optional else min
+    if not options:
+        if lo > 0:
+            # Engine-fault: a card raised a required choice with nothing to
+            # choose — the impl should have skipped the query, not weakened it.
+            raise InvalidOptionsError("empty options with min > 0")
+        return None if max == 1 else []
     hi = max if max <= len(options) else len(options)
-    if lo > hi:
-        lo = hi
     query = PlayerQuery(
         source=_source(source_card),
         prompt=prompt,
@@ -76,6 +78,32 @@ def choose_object(
     if max == 1:
         return chosen[0] if chosen else None
     return chosen
+
+
+def choose_number(
+    game: Any,
+    player: Any,
+    lo: int,
+    hi: int,
+    prompt: str,
+    *,
+    source_card: Any = None,
+) -> int:
+    """Raise a NUMBER Player Query over the range ``[lo, hi]``; return the choice.
+
+    Options are offered in ascending order (the implementation-provided stable
+    order), so a baseline first-offered answer picks ``lo``.
+    """
+    options = tuple(Decision.number(n) for n in range(lo, hi + 1))
+    query = PlayerQuery(
+        source=_source(source_card),
+        prompt=prompt,
+        options=options,
+        min=1,
+        max=1,
+    )
+    answer = ask(player, query)
+    return dict(answer.selected[0].attrs)["value"]
 
 
 def query_yes_no(game: Any, player: Any, prompt: str, *, source_card: Any = None) -> bool:

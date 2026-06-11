@@ -81,17 +81,25 @@ class ChandraFlameshaper(Planeswalker):
             game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_eot_condition, effect=_eot_effect, source=token, controller=controller))
 
         def _minus4(game: Any) -> None:
-            """Deal 8 damage divided among targets."""
+            """Deal 8 damage divided as the controller chooses among targets."""
+            from engine.card_queries import choose_number
             from engine.game import deal_damage
             # Targets resolved by the engine (the engine sets ``chosen_targets``
-            # at resolve time). The exact damage split is not reconstructable
-            # here without the old private poke, so distribute 8 evenly across
-            # the chosen targets in order.
+            # at resolve time). "Divided as you choose" is a player choice: each
+            # target except the last gets a NUMBER Player Query (every remaining
+            # target must receive at least 1), and the last target takes the
+            # forced remainder. A single target takes all 8 with no query.
             targets = getattr(pw, 'chosen_targets', []) or []
-            if targets and len(targets) > 0:
-                damage_per = 8 // len(targets)
-                remainder = 8 % len(targets)
-                for i, t in enumerate(targets):
-                    dmg = damage_per + (1 if i < remainder else 0)
-                    deal_damage(game, pw, t, dmg)
+            controller = pw.controller
+            if not targets or controller is None:
+                return
+            remaining = 8
+            for i, t in enumerate(targets):
+                left_after = len(targets) - i - 1
+                if left_after == 0:
+                    dmg = remaining
+                else:
+                    dmg = choose_number(game, controller, 1, remaining - left_after, f"damage to {getattr(t, 'name', 'target')} ({remaining} of 8 left to divide)", source_card=pw)
+                deal_damage(game, pw, t, dmg)
+                remaining -= dmg
         return [LoyaltyAbility(loyalty_cost=+2, effect=_plus2, description='+2: Add {R}{R}{R}. Exile top 3, choose one to play this turn.'), LoyaltyAbility(loyalty_cost=+1, effect=_plus1, description='+1: Create a hasty token copy of target creature (sacrifice at end step).'), LoyaltyAbility(loyalty_cost=-4, effect=_minus4, description='−4: Deal 8 damage divided among target creatures and/or planeswalkers.')]

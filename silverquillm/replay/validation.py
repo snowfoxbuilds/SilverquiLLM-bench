@@ -38,20 +38,27 @@ class DivergenceType(enum.Enum):
     PROTOCOL_ERROR = "PROTOCOL_ERROR"
 
 
+# Module-qualified names of the MSH protocol exceptions (engine/decisions.py).
+# Qualified matching keeps this shared code import-free while ruling out a
+# same-named third-party exception classifying as a protocol failure.
+_PROTOCOL_ERROR_QUALNAME = ("engine.decisions", "ProtocolError")
+_UNMATCHED_QUERY_QUALNAME = ("engine.decisions", "UnmatchedQueryError")
+
+
 def classify_step_exception(exc: BaseException) -> "DivergenceType":
     """Classify an exception raised while executing a replay step.
 
-    Engine-agnostic — matches on class names in the MRO so this shared code need
-    not import the MSH-only exception classes:
-      - a ``ProtocolError`` (engine boundary-validation failure) -> PROTOCOL_ERROR
-      - an ``UnmatchedQueryError`` (no replay-derived intent matched) -> QUERY_UNANSWERED
-      - anything else -> ENGINE_ERROR
+    Engine-agnostic — matches on module-qualified class names in the MRO so
+    this shared code need not import the MSH-only exception classes:
+      - ``engine.decisions.ProtocolError`` (boundary-validation failure) -> PROTOCOL_ERROR
+      - ``engine.decisions.UnmatchedQueryError`` (no intent matched) -> QUERY_UNANSWERED
+      - anything else (including a same-named foreign class) -> ENGINE_ERROR
     An unanswerable query is thus a recorded divergence, never a crash.
     """
-    mro_names = {cls.__name__ for cls in type(exc).__mro__}
-    if "ProtocolError" in mro_names:
+    mro_qualnames = {(cls.__module__, cls.__name__) for cls in type(exc).__mro__}
+    if _PROTOCOL_ERROR_QUALNAME in mro_qualnames:
         return DivergenceType.PROTOCOL_ERROR
-    if "UnmatchedQueryError" in mro_names:
+    if _UNMATCHED_QUERY_QUALNAME in mro_qualnames:
         return DivergenceType.QUERY_UNANSWERED
     return DivergenceType.ENGINE_ERROR
 

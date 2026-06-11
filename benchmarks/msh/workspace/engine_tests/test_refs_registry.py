@@ -35,6 +35,18 @@ class TestInstanceIdMinting:
         in_gy = reg.instance_id(o, "graveyard")
         assert on_bf != in_gy
 
+    def test_zone_round_trip_mints_fresh_id(self):
+        # battlefield -> exile -> battlefield is three stints, three ids: a
+        # flickered creature is a new object, not the pre-flicker one.
+        reg = GameRefsRegistry()
+        o = _Obj("bear")
+        first_bf = reg.instance_id(o, "battlefield")
+        in_exile = reg.instance_id(o, "exile")
+        second_bf = reg.instance_id(o, "battlefield")
+        assert len({first_bf, in_exile, second_bf}) == 3
+        # Within the new stint the id is stable.
+        assert reg.instance_id(o, "battlefield") == second_bf
+
     def test_ids_are_not_test_authored(self):
         # The id is opaque/engine-minted; the test cannot predict it beyond
         # uniqueness/stability. We only assert it is hashable.

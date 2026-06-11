@@ -1,9 +1,10 @@
 """Game Refs registry — engine-owned instance-id minting and ref assembly.
 
-Mints one opaque instance id per game object (a zone change yields a new
-object, so the same Python object in a new zone re-mints). Instance ids are
-never test-authored; tests bind to them only dynamically, at action time, via
-the object provenance carried on a raised query.
+Mints one opaque instance id per game object *stint* (a zone change yields a
+new object, so the same Python object re-mints on every zone arrival — even
+when returning to a zone it occupied before, as with a flickered creature).
+Instance ids are never test-authored; tests bind to them only dynamically, at
+action time, via the object provenance carried on a raised query.
 """
 
 from __future__ import annotations
@@ -115,28 +116,36 @@ def _zone_token(zone: Any) -> Hashable:
 
 
 class GameRefsRegistry:
-    """Mints opaque instance ids keyed by (object identity, zone).
+    """Mints one opaque instance id per game object *stint* in a zone.
 
-    A zone change yields a new object: the same object queried in a different
-    zone gets a fresh id. Ids are sequential ints — opaque to tests, which can
-    only observe stability/uniqueness, never predict a value.
+    A zone change yields a new object: every observed zone arrival re-mints,
+    including a return to a previously occupied zone (battlefield → exile →
+    battlefield is three stints, three ids). Within a stint the id is stable.
+    Ids are sequential ints — opaque to tests, which can only observe
+    stability/uniqueness, never predict a value.
     """
 
     def __init__(self) -> None:
-        self._ids: dict[tuple[int, Hashable], int] = {}
+        # object identity -> (last observed zone token, current stint id)
+        self._current: dict[int, tuple[Hashable, int]] = {}
         self._retain: list[Any] = []  # keep objects alive so id() is not reused
         self._obj_by_id: dict[int, Any] = {}  # instance id -> game object
         self._player_by_seat: dict[int, Any] = {}  # seat -> engine Player
         self._counter: int = 0
 
     def instance_id(self, obj: Any, zone: Any) -> int:
-        """Return the opaque instance id for ``obj`` as of ``zone``."""
-        key = (id(obj), _zone_token(zone))
-        existing = self._ids.get(key)
-        if existing is not None:
-            return existing
+        """Return the opaque instance id for ``obj``'s current stint in ``zone``.
+
+        Call sites always pass the object's *current* zone, so observing the
+        object in a zone other than its last-seen one is a zone arrival and
+        mints a fresh id — monotonic, never a cache hit for a revisited zone.
+        """
+        ztoken = _zone_token(zone)
+        current = self._current.get(id(obj))
+        if current is not None and current[0] == ztoken:
+            return current[1]
         self._counter += 1
-        self._ids[key] = self._counter
+        self._current[id(obj)] = (ztoken, self._counter)
         self._obj_by_id[self._counter] = obj
         self._retain.append(obj)
         return self._counter

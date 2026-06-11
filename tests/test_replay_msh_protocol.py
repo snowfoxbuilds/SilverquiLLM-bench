@@ -20,9 +20,11 @@ class TestNewDivergenceTypes:
 
 
 class TestClassifyStepException:
+    # Classification matches module-qualified names in the MRO, so the fakes
+    # carry the MSH engine module — no import of MSH-only classes needed here.
     def test_protocol_error_family_maps_to_protocol_error(self):
         class ProtocolError(Exception):
-            pass
+            __module__ = "engine.decisions"
 
         class MalformedAttrsError(ProtocolError):
             pass
@@ -38,12 +40,20 @@ class TestClassifyStepException:
             pass
 
         class UnmatchedQueryError(IntentError):
-            pass
+            __module__ = "engine.decisions"
 
         assert (
             classify_step_exception(UnmatchedQueryError())
             is DivergenceType.QUERY_UNANSWERED
         )
+
+    def test_same_named_foreign_class_is_not_a_protocol_error(self):
+        # A third-party exception that merely shares the name must classify
+        # as ENGINE_ERROR — only engine.decisions.ProtocolError qualifies.
+        class ProtocolError(Exception):
+            pass  # __module__ is this test module, not engine.decisions
+
+        assert classify_step_exception(ProtocolError()) is DivergenceType.ENGINE_ERROR
 
     def test_other_exceptions_map_to_engine_error(self):
         assert classify_step_exception(ValueError("x")) is DivergenceType.ENGINE_ERROR
