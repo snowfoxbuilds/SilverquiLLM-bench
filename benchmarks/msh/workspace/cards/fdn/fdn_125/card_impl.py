@@ -47,10 +47,7 @@ class WardensOfTheCycle(Creature):
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return
-            try:
-                mode = choose_mode(game, ctrl, ['gain_life', 'draw_card'], 'Choose: gain 2 life or draw a card and lose 1 life', source_card=source)
-            except Exception:
-                mode = 'gain_life'
+            mode = choose_mode(game, ctrl, ['gain_life', 'draw_card'], 'Choose: gain 2 life or draw a card and lose 1 life', source_card=source)
             if mode == 'draw_card':
                 draw_card(game, ctrl)
                 ctrl.life -= 1

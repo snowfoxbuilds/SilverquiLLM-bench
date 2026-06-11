@@ -65,12 +65,9 @@ class TimeStop(Instant):
             hand_cards = list(hand.get_all())
             while len(hand_cards) > max_hand:
                 from engine.game import discard
-                try:
-                    chosen = choose_object(
-                        game, active, hand_cards, "Discard down to hand size", source_card=self
-                    )
-                except Exception:
-                    chosen = hand_cards[-1]
+                chosen = choose_object(
+                    game, active, hand_cards, "Discard down to hand size", source_card=self
+                )
                 if chosen is not None:
                     discard(game, active, chosen)
                     hand_cards.remove(chosen)

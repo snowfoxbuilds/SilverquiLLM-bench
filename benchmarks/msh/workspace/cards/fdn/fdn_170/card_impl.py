@@ -49,10 +49,7 @@ class BurglarRat(Creature):
                 hand = game.get_hand(player)
                 hand_cards = hand.get_all()
                 if hand_cards:
-                    try:
-                        to_discard = choose_object(game, player, hand_cards, 'card to discard', source_card=source)
-                    except Exception:
-                        to_discard = hand_cards[-1]
+                    to_discard = choose_object(game, player, hand_cards, 'card to discard', source_card=source)
                     discard(game, player, to_discard)
         controller = getattr(self, 'controller', None) or game.active_player
         game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller))

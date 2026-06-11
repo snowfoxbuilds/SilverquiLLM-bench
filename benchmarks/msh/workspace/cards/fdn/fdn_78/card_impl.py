@@ -46,10 +46,7 @@ class BattlesongBerserker(Creature):
             candidates = [c for c in bf.get_all() if CardType.CREATURE in getattr(c, 'card_types', set())]
             if not candidates:
                 return
-            try:
-                chosen = choose_object(game, ctrl, candidates, 'creature to get +1/+0 and menace', source_card=source)
-            except Exception:
-                chosen = candidates[0]
+            chosen = choose_object(game, ctrl, candidates, 'creature to get +1/+0 and menace', source_card=source)
             if chosen is None:
                 return
 

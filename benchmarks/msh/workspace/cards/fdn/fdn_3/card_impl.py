@@ -57,10 +57,7 @@ class ArmasaurGuide(Creature):
                 candidates = [c for c in battlefield.get_all() if CardType.CREATURE in getattr(c, 'card_types', set())]
                 if not candidates:
                     return
-                try:
-                    target = choose_object(game, ctrl, candidates, 'target creature for +1/+1 counter', source_card=source)
-                except Exception:
-                    target = candidates[0]
+                target = choose_object(game, ctrl, candidates, 'target creature for +1/+1 counter', source_card=source)
             if target is None:
                 return
             add_counter(game, target, '+1/+1', 1)

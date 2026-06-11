@@ -50,10 +50,7 @@ class ExtravagantReplication(Enchantment):
                     candidates.append(obj)
             if not candidates:
                 return
-            try:
-                chosen = choose_object(game, ctrl, candidates, 'Choose a nonland permanent to copy', source_card=source)
-            except Exception:
-                chosen = candidates[0] if candidates else None
+            chosen = choose_object(game, ctrl, candidates, 'Choose a nonland permanent to copy', source_card=source)
             if chosen is None:
                 return
             import copy

@@ -125,11 +125,8 @@ class Refute(Instant):
         hand = controller.zones[Zone.HAND]
         cards_in_hand = list(hand.get_all())
         if cards_in_hand:
-            try:
-                chosen = choose_object(
-                    game, controller, cards_in_hand, "Choose a card to discard", source_card=self
-                )
-            except Exception:
-                chosen = cards_in_hand[0] if cards_in_hand else None
+            chosen = choose_object(
+                game, controller, cards_in_hand, "Choose a card to discard", source_card=self
+            )
             if chosen is not None:
                 discard(game, controller, chosen)

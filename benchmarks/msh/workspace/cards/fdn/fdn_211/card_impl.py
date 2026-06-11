@@ -54,11 +54,7 @@ class AffectionateIndrik(Creature):
         if not targets:
             return
 
-        try:
-            target = choose_object(game, controller, targets, "creature to fight", source_card=self)
-        except Exception:
-            target = targets[0]
-
+        target = choose_object(game, controller, targets, "creature to fight", source_card=self)
         if target is None:
             return
 

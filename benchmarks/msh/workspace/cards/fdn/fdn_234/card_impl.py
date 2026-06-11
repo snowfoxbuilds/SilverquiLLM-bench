@@ -72,13 +72,9 @@ class VivienReid(Planeswalker):
             # Let the controller choose one (optional — "you may")
             found = None
             if eligible:
-                try:
-                    chosen = choose_object(
-                        game, controller, eligible, "You may reveal a creature or land card", source_card=pw, optional=True
-                    )
-                except Exception:
-                    # Fallback: pick the first eligible card
-                    chosen = eligible[0]
+                chosen = choose_object(
+                    game, controller, eligible, "You may reveal a creature or land card", source_card=pw, optional=True
+                )
                 # Controller may decline (None means no choice)
                 if chosen is not None and chosen in eligible:
                     found = chosen

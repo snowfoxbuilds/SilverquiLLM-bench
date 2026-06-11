@@ -66,9 +66,6 @@ class BlasphemousEdict(Sorcery):
                 ]
                 if not creatures:
                     break
-                try:
-                    chosen = choose_object(game, player, creatures, "sacrifice a creature", source_card=self)
-                except Exception:
-                    chosen = creatures[-1] if creatures else None
+                chosen = choose_object(game, player, creatures, "sacrifice a creature", source_card=self)
                 if chosen is not None:
                     sacrifice(game, player, chosen)

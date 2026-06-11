@@ -42,10 +42,8 @@ class FrenziedGoblin(Creature):
                 return
             if not query_yes_no(game, ctrl, 'Pay {R} to make a creature unable to block?', source_card=source):
                 return
-            try:
-                ctrl.mana_pool.pay(ManaCost.parse('{R}'))
-            except Exception:
-                return
+            if not ctrl.mana_pool.pay(ManaCost.parse('{R}')):
+                return  # insufficient mana -- pay() returns False, never raises
             all_creatures: list = []
             for player in game.players:
                 for perm in game.get_battlefield(player).get_all():

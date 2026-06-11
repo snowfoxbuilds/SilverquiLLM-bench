@@ -62,11 +62,7 @@ class GrowFromTheAshes(Sorcery):
             if not basics:
                 break
 
-            try:
-                chosen = choose_object(game, controller, basics, "basic land to search for", source_card=self)
-            except Exception:
-                chosen = basics[0]
-
+            chosen = choose_object(game, controller, basics, "basic land to search for", source_card=self)
             if chosen is not None:
                 chosen.controller = controller
                 move_to_zone(game, chosen, Zone.LIBRARY, Zone.BATTLEFIELD)

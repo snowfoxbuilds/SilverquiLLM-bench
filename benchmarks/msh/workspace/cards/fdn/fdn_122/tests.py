@@ -10,9 +10,11 @@ observes the exile stint.
 
 from __future__ import annotations
 
+import pytest
+
 from cards.fdn.fdn_122.card_impl import KykarZephyrAwakener
 from engine.card import Creature, Instant
-from engine.decisions import Decision, GameRef
+from engine.decisions import Decision, GameRef, UnmatchedQueryError
 from engine.events import EndStepTriggeredEvent, SpellCastTriggeredEvent
 from engine.intent_player import Intent
 from engine.types import ManaCost, Zone
@@ -86,6 +88,23 @@ class TestKykarFlicker:
         # the registry's stint-minting must cover).
         post_flicker = game.refs.instance_id(bear, "battlefield")
         assert post_flicker != pre_flicker
+
+    def test_unanswered_query_is_a_hard_failure_not_a_token(self) -> None:
+        # Fault attribution: with no intent and no baseline, the trigger's
+        # MODE query must surface as UnmatchedQueryError (test-fault) — never
+        # silently become "make a token" the way the deleted V1-era
+        # try/except-Exception fallback made it.
+        from engine.stack import priority_loop
+
+        game, p1, kykar, bear = _flicker_setup()
+        spell = Instant(name="Some Instant", owner=p1, controller=p1)
+        game.trigger_manager.fire_event(
+            game, SpellCastTriggeredEvent(spell=spell, player=p1)
+        )
+        with pytest.raises(UnmatchedQueryError):
+            priority_loop(game)
+        bf = p1.zones[Zone.BATTLEFIELD].get_all()
+        assert not any(getattr(c, "name", "") == "Spirit" for c in bf)
 
     def test_token_mode_creates_spirit_and_no_flicker(self) -> None:
         game, p1, kykar, bear = _flicker_setup()

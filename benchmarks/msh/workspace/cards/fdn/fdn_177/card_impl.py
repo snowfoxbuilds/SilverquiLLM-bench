@@ -76,8 +76,5 @@ class MacabreWaltz(Sorcery):
         hand = game.get_hand(controller)
         hand_cards = hand.get_all()
         if hand_cards:
-            try:
-                to_discard = choose_object(game, controller, hand_cards, "Choose a card to discard", source_card=self)
-            except Exception:
-                to_discard = hand_cards[-1]
+            to_discard = choose_object(game, controller, hand_cards, "Choose a card to discard", source_card=self)
             discard(game, controller, to_discard)

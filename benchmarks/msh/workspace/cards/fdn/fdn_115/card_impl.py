@@ -68,10 +68,7 @@ class AleshaWhoLaughsAtFate(Creature):
             candidates = [c for c in graveyard.get_all() if CardType.CREATURE in getattr(c, 'card_types', set()) and getattr(c, 'mana_cost', None) is not None and (c.mana_cost.cmc <= power)]
             if not candidates:
                 return
-            try:
-                chosen = choose_object(game, ctrl, candidates, 'creature card to return from graveyard', source_card=source)
-            except Exception:
-                chosen = candidates[0]
+            chosen = choose_object(game, ctrl, candidates, 'creature card to return from graveyard', source_card=source)
             if chosen is None:
                 return
             chosen.controller = ctrl

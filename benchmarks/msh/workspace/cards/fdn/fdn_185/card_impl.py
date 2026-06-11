@@ -59,10 +59,7 @@ class StromkirkBloodthief(Creature):
                         vampires.append(perm)
             if not vampires:
                 return
-            try:
-                target = choose_object(game, ctrl, vampires, 'Choose a Vampire to put a +1/+1 counter on', source_card=source)
-            except Exception:
-                target = vampires[0]
+            target = choose_object(game, ctrl, vampires, 'Choose a Vampire to put a +1/+1 counter on', source_card=source)
             if target is not None:
                 add_counter(game, target, '+1/+1', 1)
                 if hasattr(target, '_base_plus_one_counters'):

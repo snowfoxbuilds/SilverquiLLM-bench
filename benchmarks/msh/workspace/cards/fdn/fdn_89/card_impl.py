@@ -69,10 +69,6 @@ class GorehornRaider(Creature):
         if not targets:
             return
 
-        try:
-            chosen = choose_object(game, controller, targets, "target for 2 damage", source_card=self)
-        except Exception:
-            chosen = targets[0]
-
+        chosen = choose_object(game, controller, targets, "target for 2 damage", source_card=self)
         if chosen is not None:
             deal_damage(game, self, chosen, 2)

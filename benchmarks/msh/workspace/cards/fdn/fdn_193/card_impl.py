@@ -52,20 +52,14 @@ class DrakusethMawOfFlames(Creature):
                         all_targets.append(perm)
             if not all_targets:
                 return
-            try:
-                target1 = choose_object(game, ctrl, all_targets, 'Choose a target for 4 damage', source_card=source)
-            except Exception:
-                target1 = all_targets[0]
+            target1 = choose_object(game, ctrl, all_targets, 'Choose a target for 4 damage', source_card=source)
             if target1 is not None:
                 deal_damage(game, source, target1, 4)
             remaining = [t for t in all_targets if t is not target1]
             for i in range(2):
                 if not remaining:
                     break
-                try:
-                    target = choose_object(game, ctrl, remaining, f'Choose target {i + 1} for 3 damage (optional)', source_card=source, optional=True)
-                except Exception:
-                    break
+                target = choose_object(game, ctrl, remaining, f'Choose target {i + 1} for 3 damage (optional)', source_card=source, optional=True)
                 if target is not None:
                     deal_damage(game, source, target, 3)
                     remaining = [t for t in remaining if t is not target]

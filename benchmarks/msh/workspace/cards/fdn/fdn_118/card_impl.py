@@ -48,10 +48,7 @@ class DreadwingScavenger(Creature):
         draw_card(game, controller)
         hand = list(controller.zones[Zone.HAND].get_all())
         if hand:
-            try:
-                chosen = choose_object(game, controller, hand, 'card to discard', source_card=self)
-            except Exception:
-                chosen = hand[0]
+            chosen = choose_object(game, controller, hand, 'card to discard', source_card=self)
             if chosen is not None:
                 discard(game, controller, chosen)
 
@@ -72,10 +69,7 @@ class DreadwingScavenger(Creature):
             draw_card(game, ctrl)
             hand = list(ctrl.zones[Zone.HAND].get_all())
             if hand:
-                try:
-                    chosen = choose_object(game, ctrl, hand, 'card to discard', source_card=source)
-                except Exception:
-                    chosen = hand[0]
+                chosen = choose_object(game, ctrl, hand, 'card to discard', source_card=source)
                 if chosen is not None:
                     discard(game, ctrl, chosen)
         game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller))

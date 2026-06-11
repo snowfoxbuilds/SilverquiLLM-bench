@@ -55,10 +55,7 @@ class TinybonesBaubleBurglar(Creature):
                 hand = game.get_hand(player)
                 hand_cards = hand.get_all()
                 if hand_cards:
-                    try:
-                        chosen = choose_object(game, player, hand_cards, 'discard a card', source_card=source)
-                    except Exception:
-                        chosen = hand_cards[0]
+                    chosen = choose_object(game, player, hand_cards, 'discard a card', source_card=source)
                     if chosen is not None:
                         discard(game, player, chosen)
                         gy = player.zones[Zone.GRAVEYARD]

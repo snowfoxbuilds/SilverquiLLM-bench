@@ -48,10 +48,7 @@ class HighSocietyHunter(Creature):
             candidates = [c for c in battlefield.get_all() if CardType.CREATURE in getattr(c, 'card_types', set()) and c is not source]
             if not candidates:
                 return
-            try:
-                chosen = choose_object(game, controller, candidates, 'sacrifice a creature for +1/+1 counter', source_card=source, optional=True)
-            except Exception:
-                chosen = None
+            chosen = choose_object(game, controller, candidates, 'sacrifice a creature for +1/+1 counter', source_card=source, optional=True)
             if chosen is None:
                 return
             sacrifice(game, controller, chosen)

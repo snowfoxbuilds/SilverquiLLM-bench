@@ -47,10 +47,7 @@ class AshrootAnimist(Creature):
             candidates = [c for c in bf.get_all() if CardType.CREATURE in getattr(c, 'card_types', set()) and c is not source]
             if not candidates:
                 return
-            try:
-                chosen = choose_object(game, ctrl, candidates, 'creature to get +X/+X and trample', source_card=source)
-            except Exception:
-                chosen = candidates[0]
+            chosen = choose_object(game, ctrl, candidates, 'creature to get +X/+X and trample', source_card=source)
             if chosen is None:
                 return
             power_val = getattr(source, 'power', getattr(source, 'base_power', 4))

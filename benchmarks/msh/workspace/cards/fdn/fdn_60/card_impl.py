@@ -60,11 +60,7 @@ class GutlessPlunderer(Creature):
             return
 
         # Choose one to keep on top (optional)
-        try:
-            chosen = choose_object(game, controller, top_three, "card to keep on top of library", source_card=self, optional=True)
-        except Exception:
-            chosen = top_three[0] if top_three else None
-
+        chosen = choose_object(game, controller, top_three, "card to keep on top of library", source_card=self, optional=True)
         # Move the rest to graveyard
         for card in top_three:
             if card is chosen:

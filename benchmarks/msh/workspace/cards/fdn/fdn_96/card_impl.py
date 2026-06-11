@@ -76,11 +76,7 @@ class StrongboxRaider(Creature):
             return
 
         # Choose one
-        try:
-            chosen = choose_object(game, controller, exiled, "card to play until end of next turn", source_card=self)
-        except Exception:
-            chosen = exiled[0]
-
+        chosen = choose_object(game, controller, exiled, "card to play until end of next turn", source_card=self)
         if chosen is not None:
             # ENGINE LIMITATION: "You may play that card until end of your
             # next turn" not fully implementable without play-permission system.
