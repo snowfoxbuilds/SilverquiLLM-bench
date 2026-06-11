@@ -27,9 +27,10 @@ from engine.continuous_effects import (
     Layer,
     SubLayer,
 )
+from engine.decisions import Decision, GameRef
 from engine.game_state import GameState
 from engine.mana import ManaPool
-from engine.player import DeterministicPlayer
+from engine.intent_player import DeterministicPlayer, Intent
 from engine.turn import _do_cleanup_step, MAX_HAND_SIZE
 from engine.types import CardType, Keyword, ManaType, Phase, Step, Zone
 
@@ -59,13 +60,10 @@ def _make_creature(
     )
 
 
-def _make_game(
-    p1_script: list | None = None,
-    p2_script: list | None = None,
-) -> tuple[GameState, DeterministicPlayer, DeterministicPlayer]:
+def _make_game() -> tuple[GameState, DeterministicPlayer, DeterministicPlayer]:
     """Create a bare game state for cleanup tests."""
-    p1 = DeterministicPlayer("Alice", p1_script or [])
-    p2 = DeterministicPlayer("Bob", p2_script or [])
+    p1 = DeterministicPlayer("Alice", life=20)
+    p2 = DeterministicPlayer("Bob", life=20)
     game = GameState([p1, p2])
     return game, p1, p2
 
@@ -78,10 +76,20 @@ def _place_on_battlefield(game: GameState, player: DeterministicPlayer, obj) -> 
 
 
 def _place_in_hand(game: GameState, player: DeterministicPlayer, obj) -> None:
-    """Place a card in a player's hand, setting ownership."""
+    """Place a card in a player's hand, setting ownership and an instance_id.
+
+    The engine-minted ``instance_id`` lets a test reference a specific card in a
+    discard Intent preference (``Decision.obj(instance=obj.instance_id)``).
+    """
     obj.owner = player
     obj.controller = player
     player.zones[Zone.HAND].add(obj)
+    obj.instance_id = game.refs.instance_id(obj, Zone.HAND.value)
+
+
+def _discard_first_baseline(player: DeterministicPlayer) -> None:
+    """Set an empty-preferences Baseline Intent: discard the first offered card."""
+    player.set_baseline(Intent(pattern=GameRef(), preferences=()))
 
 
 # ===========================================================================
@@ -95,8 +103,9 @@ class TestDiscardToHandSize:
     def test_discard_from_8_to_7(self) -> None:
         """Player with 8 cards in hand discards 1 to reach 7."""
         cards = [_make_card(f"Card_{i}") for i in range(8)]
-        # Script: choose the first card in the list for discard
-        game, p1, p2 = _make_game(p1_script=[cards[0]])
+        game, p1, p2 = _make_game()
+        # Baseline Intent answers the discard Player Query (first offered card).
+        _discard_first_baseline(p1)
         for card in cards:
             _place_in_hand(game, p1, card)
 
@@ -107,8 +116,8 @@ class TestDiscardToHandSize:
     def test_discard_from_10_to_7(self) -> None:
         """Player with 10 cards in hand discards 3 to reach 7."""
         cards = [_make_card(f"Card_{i}") for i in range(10)]
-        # Need to script 3 discard choices
-        game, p1, p2 = _make_game(p1_script=[cards[0], cards[1], cards[2]])
+        game, p1, p2 = _make_game()
+        _discard_first_baseline(p1)
         for card in cards:
             _place_in_hand(game, p1, card)
 
@@ -119,9 +128,14 @@ class TestDiscardToHandSize:
     def test_discarded_cards_go_to_graveyard(self) -> None:
         """Discarded cards during cleanup go to the player's graveyard."""
         cards = [_make_card(f"Card_{i}") for i in range(8)]
-        game, p1, p2 = _make_game(p1_script=[cards[0]])
+        game, p1, p2 = _make_game()
         for card in cards:
             _place_in_hand(game, p1, card)
+        # Direct the discard at a specific card via its engine-minted instance.
+        p1.set_baseline(Intent(
+            pattern=GameRef(),
+            preferences=(Decision.obj(instance=cards[0].instance_id),),
+        ))
 
         _do_cleanup_step(game)
 
@@ -164,12 +178,16 @@ class TestDiscardToHandSize:
         assert len(p2.zones[Zone.HAND]) == 9
 
     def test_chosen_card_is_the_one_discarded(self) -> None:
-        """The specific card returned by choose_card is discarded."""
+        """The specific card named by the discard Intent is the one discarded."""
         cards = [_make_card(f"Card_{i}") for i in range(8)]
-        # Player chooses to discard the last card
-        game, p1, p2 = _make_game(p1_script=[cards[7]])
+        game, p1, p2 = _make_game()
         for card in cards:
             _place_in_hand(game, p1, card)
+        # Intent prefers the last card by its instance_id.
+        p1.set_baseline(Intent(
+            pattern=GameRef(),
+            preferences=(Decision.obj(instance=cards[7].instance_id),),
+        ))
 
         _do_cleanup_step(game)
 
@@ -605,7 +623,8 @@ class TestCleanupIntegration:
         """
         # Create 8 cards in hand for P1
         cards = [_make_card(f"Card_{i}") for i in range(8)]
-        game, p1, p2 = _make_game(p1_script=[cards[0]])
+        game, p1, p2 = _make_game()
+        _discard_first_baseline(p1)
         for card in cards:
             _place_in_hand(game, p1, card)
 
@@ -727,10 +746,8 @@ class TestReCleanupLoop:
         )
         game.stack.push(trigger)
 
-        # Both players need to pass priority for the stack to resolve.
-        # P1 passes, P2 passes → trigger resolves.
-        p1._script.extend(["pass"])
-        p2._script.extend(["pass"])
+        # priority_loop auto-passes (directive-driven action layer), so both
+        # players pass and the trigger resolves without any scripted choices.
 
         # Place a creature with damage to verify re-cleanup clears it
         creature = _make_creature("Bear", 2, 3)
@@ -761,64 +778,32 @@ class TestReCleanupLoop:
 
 
 # ===========================================================================
-# DeterministicPlayer discard fallback
+# Discard down to hand size (Intent-driven)
 # ===========================================================================
 
 
-class TestDeterministicPlayerDiscard:
-    """Tests verifying that cleanup discard works when DeterministicPlayer's
-    script is exhausted — the fallback should discard from the end of hand."""
+class TestDiscardLargeHands:
+    """Discard always reaches max hand size, driven by a Baseline Intent."""
 
-    def test_discard_without_script_falls_back_to_last_card(self) -> None:
-        """Player with 9 cards and NO scripted choices still discards to 7.
-
-        When choose_card raises ScriptExhaustedError, the cleanup code
-        falls back to discarding the last card in hand deterministically.
-        """
+    def test_discard_9_to_7_with_baseline(self) -> None:
+        """Player with 9 cards discards 2 to reach 7 via the Baseline Intent."""
         cards = [_make_card(f"Card_{i}") for i in range(9)]
-        # Empty script — choose_card will raise ScriptExhaustedError
-        game, p1, p2 = _make_game(p1_script=[])
+        game, p1, p2 = _make_game()
+        _discard_first_baseline(p1)
         for card in cards:
             _place_in_hand(game, p1, card)
 
         _do_cleanup_step(game)
 
         assert len(p1.zones[Zone.HAND]) == MAX_HAND_SIZE
-
-    def test_discard_fallback_sends_cards_to_graveyard(self) -> None:
-        """Deterministic fallback discards go to graveyard, not lost."""
-        cards = [_make_card(f"Card_{i}") for i in range(9)]
-        game, p1, p2 = _make_game(p1_script=[])
-        for card in cards:
-            _place_in_hand(game, p1, card)
-
-        _do_cleanup_step(game)
-
         # 2 cards should be in graveyard (9 - 7 = 2)
         assert len(p1.zones[Zone.GRAVEYARD]) == 2
 
-    def test_discard_partial_script_then_fallback(self) -> None:
-        """Player with 10 cards and only 1 scripted choice: first discard uses
-        the script, remaining 2 use the deterministic fallback."""
-        cards = [_make_card(f"Card_{i}") for i in range(10)]
-        # Script has only 1 choice (for the first discard)
-        game, p1, p2 = _make_game(p1_script=[cards[0]])
-        for card in cards:
-            _place_in_hand(game, p1, card)
-
-        _do_cleanup_step(game)
-
-        # Should still end up at 7 cards
-        assert len(p1.zones[Zone.HAND]) == MAX_HAND_SIZE
-        # The scripted choice (cards[0]) should be in graveyard
-        assert p1.zones[Zone.GRAVEYARD].contains(cards[0])
-        # Total discards = 3
-        assert len(p1.zones[Zone.GRAVEYARD]) == 3
-
-    def test_discard_large_hand_without_script(self) -> None:
-        """Player with 15 cards and no script discards 8 cards to reach 7."""
+    def test_discard_large_hand_with_baseline(self) -> None:
+        """Player with 15 cards discards 8 cards to reach 7."""
         cards = [_make_card(f"Card_{i}") for i in range(15)]
-        game, p1, p2 = _make_game(p1_script=[])
+        game, p1, p2 = _make_game()
+        _discard_first_baseline(p1)
         for card in cards:
             _place_in_hand(game, p1, card)
 

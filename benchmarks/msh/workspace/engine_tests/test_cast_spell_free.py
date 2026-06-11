@@ -20,7 +20,7 @@ from engine.card import (
 )
 from engine.casting import cast_spell_free
 from engine.game_state import GameState
-from engine.player import DeterministicPlayer
+from engine.intent_player import DeterministicPlayer
 from engine.stack import StackObject
 from engine.types import CardType, ManaCost, ManaType, Phase, Zone
 
@@ -31,13 +31,11 @@ from engine.types import CardType, ManaCost, ManaType, Phase, Zone
 
 def _make_game(
     *,
-    p1_script: list | None = None,
-    p2_script: list | None = None,
     phase: Phase = Phase.PRECOMBAT_MAIN,
 ) -> GameState:
     """Create a minimal 2-player GameState at the specified phase."""
-    p1 = DeterministicPlayer("Alice", p1_script or [])
-    p2 = DeterministicPlayer("Bob", p2_script or [])
+    p1 = DeterministicPlayer("Alice")
+    p2 = DeterministicPlayer("Bob")
     game = GameState([p1, p2])
     game.phase = phase
     return game

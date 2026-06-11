@@ -19,7 +19,7 @@ import pytest
 
 from engine.game_state import GameState
 from engine.mana import ManaPool
-from engine.player import DeterministicPlayer
+from engine.intent_player import DeterministicPlayer
 from engine.turn import run_turn
 from engine.types import ManaType, Phase, Step, Zone
 from engine.zones import ZoneContainer
@@ -30,8 +30,8 @@ from engine.zones import ZoneContainer
 # ---------------------------------------------------------------------------
 def _make_game() -> GameState:
     """Create a standard 2-player GameState for testing."""
-    p1 = DeterministicPlayer("Alice", [])
-    p2 = DeterministicPlayer("Bob", [])
+    p1 = DeterministicPlayer("Alice")
+    p2 = DeterministicPlayer("Bob")
     return GameState([p1, p2])
 
 
@@ -71,7 +71,7 @@ class TestGameStateConstruction:
 
     def test_requires_at_least_two_players(self) -> None:
         """GameState should raise ValueError if fewer than 2 players are provided."""
-        p1 = DeterministicPlayer("Alice", [])
+        p1 = DeterministicPlayer("Alice")
         with pytest.raises(ValueError, match="at least 2"):
             GameState([p1])
 

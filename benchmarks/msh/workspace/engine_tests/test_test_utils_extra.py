@@ -17,7 +17,8 @@ from __future__ import annotations
 import pytest
 
 from engine.card import CardImpl, Creature, Instant, Sorcery
-from engine.player import DeterministicPlayer
+from engine.decisions import GameRef
+from engine.intent_player import DeterministicPlayer, Intent
 from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Zone
 
 from test_utils import (
@@ -93,13 +94,6 @@ class TestCreateGameExtra:
         game = create_game()
         for p in game.players:
             assert isinstance(p, DeterministicPlayer)
-
-    def test_scripts_default_to_empty(self) -> None:
-        """When no scripts argument is passed, players should have 0 remaining choices."""
-        game = create_game()
-        for p in game.players:
-            assert isinstance(p, DeterministicPlayer)
-            assert p.remaining_choices == 0
 
 
 # ===================================================================
@@ -443,11 +437,13 @@ class TestDeclareBlockersExtra:
         set_board_state(game, 1, battlefield=[blocker1, blocker2])
         game.active_player_index = 0
 
-        # Script the active player for damage ordering
+        # When an attacker is multi-blocked the engine raises a damage-order
+        # Player Query to the attacker's controller (p0). A Baseline Intent
+        # with no preferences answers it by taking the offered blockers in
+        # implementation order.
         p0 = game.players[0]
         assert isinstance(p0, DeterministicPlayer)
-        # Pre-script the damage ordering choice that combat will ask for
-        p0._script.appendleft([blocker1, blocker2])
+        p0.set_baseline(Intent(pattern=GameRef()))
 
         declare_attackers(game, ["Attacker"])
         advance_to_phase(game, Phase.COMBAT, Step.DECLARE_BLOCKERS)

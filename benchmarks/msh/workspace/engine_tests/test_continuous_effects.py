@@ -36,7 +36,7 @@ from engine.continuous_effects import (
     SubLayer,
 )
 from engine.game_state import GameState
-from engine.player import DeterministicPlayer
+from engine.intent_player import DeterministicPlayer
 from engine.types import CardType, Keyword
 
 
@@ -49,8 +49,8 @@ from engine.types import CardType, Keyword
 def players() -> list[DeterministicPlayer]:
     """Create two DeterministicPlayers."""
     return [
-        DeterministicPlayer("Alice", script=[]),
-        DeterministicPlayer("Bob", script=[]),
+        DeterministicPlayer("Alice"),
+        DeterministicPlayer("Bob"),
     ]
 
 

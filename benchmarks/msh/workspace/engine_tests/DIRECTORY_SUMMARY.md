@@ -11,7 +11,8 @@ Unit tests for all engine modules in `benchmarks/sos/workspace/engine/`. One tes
 | `__init__.py` | Package init. |
 | `test_types.py` | Enums (Color, ManaType, Zone, Phase, Keyword, etc.), ManaCost parsing and CMC. |
 | `test_zones.py` | ZoneContainer operations, identity-based lookups, move_zone. |
-| `test_player.py` | Player ABC, DeterministicPlayer scripted choices, ScriptExhaustedError. |
+| `test_intent_player.py` | The intent-based `DeterministicPlayer` (MSH): pattern routing, preference answering, Baseline Intent, ambiguity/unmatched errors, decline, ordering queries, postconditions, the query transcript. |
+| `test_decisions.py` / `test_queries.py` / `test_refs_registry.py` / `test_card_queries.py` | Player Decision data layer (`satisfies`, smart constructors, exception hierarchy), Player Query + boundary/answer validation, Game Refs registry, and the card-facing query helpers. |
 | `test_mana.py` | ManaPool — add, pay, can_pay, auto-pay generic, last_payment_colors (Converge). |
 | `test_hybrid_mana.py` | Hybrid mana symbol parsing (`{W/U}`, `{R/G}`, etc.), `can_pay()`/`pay()` with backtracking hybrid resolution. |
 | `test_card.py` | GameObject IDs, CardImpl hook methods, Creature/Instant/Sorcery/Enchantment/Artifact/Planeswalker subclasses, Mode, ActivatedAbility, LoyaltyAbility, cost_reduction hook. |

@@ -26,17 +26,33 @@ from __future__ import annotations
 from types import SimpleNamespace
 import pytest
 from engine.game_state import GameState
-from engine.player import DeterministicPlayer
+from engine.intent_player import DeterministicPlayer, Intent
+from engine.decisions import Decision, GameRef
 from engine.state_based_actions import check_state_based_actions, resolve_state_based_actions
 from engine.triggers import TriggerRegistration
 from engine.types import CardType, Supertype, Zone
 from engine.events import CreatureDiesTriggeredEvent, LeavesBattlefieldTriggeredEvent
 
-def _make_game(p1_script: list | None=None, p2_script: list | None=None, p1_life: int=20, p2_life: int=20) -> GameState:
-    """Create a 2-player GameState with optional scripts and life totals."""
-    p1 = DeterministicPlayer('Alice', p1_script or [], life=p1_life)
-    p2 = DeterministicPlayer('Bob', p2_script or [], life=p2_life)
+def _make_game(p1_life: int=20, p2_life: int=20) -> GameState:
+    """Create a 2-player GameState with the given life totals."""
+    p1 = DeterministicPlayer('Alice', life=p1_life)
+    p2 = DeterministicPlayer('Bob', life=p2_life)
     return GameState([p1, p2])
+
+
+def _prefer_keep(game: GameState, player_idx: int, keep: object) -> None:
+    """Set a Baseline Intent on a player so the legend-rule OBJECT query keeps
+    ``keep`` (referenced by its engine-minted battlefield instance id)."""
+    iid = game.refs.instance_id(keep, 'battlefield')
+    game.players[player_idx].set_baseline(
+        Intent(pattern=GameRef(), preferences=(Decision.obj(instance=iid),))
+    )
+
+
+def _baseline_keep_first(game: GameState, player_idx: int) -> None:
+    """Set an empty Baseline Intent so a system/legend-rule query keeps the
+    first offered option (or declines when min == 0)."""
+    game.players[player_idx].set_baseline(Intent(pattern=GameRef(), preferences=()))
 
 def _make_creature(name: str='Bear', toughness: int=2, damage_marked: int=0, supertypes: set | None=None, is_token: bool=False, keywords: object | None=None, plus_one_counters: int=0, minus_one_counters: int=0) -> SimpleNamespace:
     """Create a minimal mock creature with the attributes SBAs check via duck typing."""
@@ -250,9 +266,10 @@ class TestLegendRule:
         """Two legendaries with same name → player chooses one, the other goes to graveyard."""
         legend1 = _make_legendary(name='Thalia')
         legend2 = _make_legendary(name='Thalia')
-        game = _make_game(p1_script=[legend1])
+        game = _make_game()
         _battlefield(game, 0).add(legend1)
         _battlefield(game, 0).add(legend2)
+        _prefer_keep(game, 0, legend1)
         result = check_state_based_actions(game)
         assert result is True
         assert _battlefield(game, 0).contains(legend1)
@@ -263,9 +280,10 @@ class TestLegendRule:
         """Player can choose the second legendary to keep; first goes to graveyard."""
         legend1 = _make_legendary(name='Thalia')
         legend2 = _make_legendary(name='Thalia')
-        game = _make_game(p1_script=[legend2])
+        game = _make_game()
         _battlefield(game, 0).add(legend1)
         _battlefield(game, 0).add(legend2)
+        _prefer_keep(game, 0, legend2)
         check_state_based_actions(game)
         assert not _battlefield(game, 0).contains(legend1)
         assert _battlefield(game, 0).contains(legend2)
@@ -295,10 +313,11 @@ class TestLegendRule:
         legend1 = _make_legendary(name='Thalia')
         legend2 = _make_legendary(name='Thalia')
         legend3 = _make_legendary(name='Thalia')
-        game = _make_game(p1_script=[legend2])
+        game = _make_game()
         _battlefield(game, 0).add(legend1)
         _battlefield(game, 0).add(legend2)
         _battlefield(game, 0).add(legend3)
+        _prefer_keep(game, 0, legend2)
         check_state_based_actions(game)
         assert not _battlefield(game, 0).contains(legend1)
         assert _battlefield(game, 0).contains(legend2)
@@ -566,10 +585,11 @@ class TestMultipleSBAs:
         legend1 = _make_legendary(name='Thalia')
         legend2 = _make_legendary(name='Thalia')
         fragile = _make_creature(name='Weakling', toughness=0)
-        game = _make_game(p1_script=[legend1])
+        game = _make_game()
         _battlefield(game, 0).add(legend1)
         _battlefield(game, 0).add(legend2)
         _battlefield(game, 0).add(fragile)
+        _prefer_keep(game, 0, legend1)
         check_state_based_actions(game)
         assert _battlefield(game, 0).contains(legend1)
         assert not _battlefield(game, 0).contains(legend2)
@@ -723,15 +743,14 @@ class TestSBATriggerQueueing:
     def test_non_creature_permanent_fires_leaves_but_not_dies(self) -> None:
         """A non-creature permanent removed via SBAs (e.g., legend rule) should
         fire LEAVES_BATTLEFIELD but NOT CREATURE_DIES."""
-        game = _make_game(p1_script=['keep_first'])
+        game = _make_game()
         ench1 = SimpleNamespace(name='Legendary Enchantment', supertypes={Supertype.LEGENDARY}, is_token=False, card_types={CardType.ENCHANTMENT})
         ench2 = SimpleNamespace(name='Legendary Enchantment', supertypes={Supertype.LEGENDARY}, is_token=False, card_types={CardType.ENCHANTMENT})
         ench1.owner = game.players[0]
         ench2.owner = game.players[0]
         _battlefield(game, 0).add(ench1)
         _battlefield(game, 0).add(ench2)
-        game.players[0]._script.clear()
-        game.players[0]._script.append(ench1)
+        _prefer_keep(game, 0, ench1)
         creature_dies_fired = []
         leaves_fired = []
         observer = SimpleNamespace(name='Observer')

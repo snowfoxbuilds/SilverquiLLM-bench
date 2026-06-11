@@ -41,7 +41,7 @@ from engine.card import (
     Sorcery,
 )
 from engine.game_state import GameState
-from engine.player import DeterministicPlayer
+from engine.intent_player import DeterministicPlayer
 from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype
 
 
@@ -56,14 +56,14 @@ def _reset_game_object_id() -> None:
 
 
 def _make_player(name: str = "TestPlayer") -> DeterministicPlayer:
-    """Create a DeterministicPlayer with an empty script."""
-    return DeterministicPlayer(name, script=[])
+    """Create a DeterministicPlayer."""
+    return DeterministicPlayer(name)
 
 
 def _make_game() -> GameState:
     """Create a minimal 2-player GameState for method calls that require it."""
-    p1 = DeterministicPlayer("P1", script=["pass"] * 50)
-    p2 = DeterministicPlayer("P2", script=["pass"] * 50)
+    p1 = DeterministicPlayer("P1")
+    p2 = DeterministicPlayer("P2")
     return GameState([p1, p2])
 
 

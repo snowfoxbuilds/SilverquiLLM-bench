@@ -32,8 +32,9 @@ from engine.casting import (
     is_sorcery_speed,
     play_land,
 )
+from engine.decisions import Decision, GameRef
 from engine.game_state import GameState
-from engine.player import DeterministicPlayer
+from engine.intent_player import DeterministicPlayer, Intent
 from engine.stack import StackObject
 from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step
 
@@ -44,14 +45,12 @@ from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step
 
 def _make_game(
     *,
-    p1_script: list | None = None,
-    p2_script: list | None = None,
     phase: Phase = Phase.PRECOMBAT_MAIN,
     step: Step | None = None,
 ) -> GameState:
     """Create a minimal 2-player GameState at the specified phase/step."""
-    p1 = DeterministicPlayer("Alice", p1_script or [])
-    p2 = DeterministicPlayer("Bob", p2_script or [])
+    p1 = DeterministicPlayer("Alice")
+    p2 = DeterministicPlayer("Bob")
     game = GameState([p1, p2])
     game.phase = phase
     game.step = step
@@ -928,18 +927,55 @@ class TestCastResolveIntegration:
         assert game.get_battlefield(player).contains(bear)
 
     def test_cast_with_targets_passes_to_stack_object(self):
-        """Targets chosen during casting are stored in the StackObject."""
+        """Targets chosen during casting are stored in the StackObject.
+
+        The engine raises a target Player Query when casting a targeted spell;
+        an Intent on the caster prefers a specific battlefield creature, and
+        the chosen target is stored on the StackObject (not the card).
+        """
+        from engine.types import TargetRequirement, Zone
 
         class TargetedBolt(Instant):
             def get_targets(self, game: GameState):
-                return ["spec_a"]
+                return [
+                    TargetRequirement(
+                        filter_fn=lambda obj: CardType.CREATURE
+                        in getattr(obj, "card_types", set()),
+                        description="target creature",
+                        zone=Zone.BATTLEFIELD,
+                    )
+                ]
 
-        game = _make_game(p1_script=["target_creature"])
+        game = _make_game()
         player = game.players[0]
+        # A real, targetable creature the spell can be aimed at.
+        target_creature = Creature(
+            name="Target Creature",
+            mana_cost=ManaCost(pips={ManaType.GREEN: 1}),
+            base_power=2,
+            base_toughness=2,
+        )
+        bf = game.players[1].zones[Zone.BATTLEFIELD]
+        target_creature.owner = game.players[1]
+        target_creature.controller = game.players[1]
+        bf.add(target_creature)
+        target_creature.instance_id = game.refs.instance_id(
+            target_creature, Zone.BATTLEFIELD.value
+        )
+
         card = TargetedBolt(name="Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
         _add_to_hand(game, 0, card)
         _add_mana(player, ManaType.RED, 1)
 
+        player.start_intent(
+            "bolt",
+            Intent(
+                pattern=GameRef(card=frozenset({("name", "Bolt")})),
+                preferences=(Decision.obj(instance=target_creature.instance_id),),
+            ),
+        )
         cast_spell(game, player, card)
+        player.end_intent("bolt")
+
         top = game.stack.peek()
-        assert top.targets == ["target_creature"]
+        assert top.targets == [target_creature]
