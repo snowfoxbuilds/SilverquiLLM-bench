@@ -1,0 +1,9 @@
+{"collector_number": "sos_17", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__ml0trhk/tests.py::TestGroupProjectBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_17", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__ml0trhk/tests.py::TestGroupProjectBasicProperties::test_colors"}
+{"collector_number": "sos_17", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__ml0trhk/tests.py::TestGroupProjectAbilities::test_flashback_cost_attribute"}
+{"collector_number": "sos_17", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__ml0trhk/tests.py::TestGroupProjectAbilities::test_flashback_exiles_after_resolution"}
+{"collector_number": "sos_17", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__ml0trhk/tests.py::TestGroupProjectAbilities::test_flashback_removes_from_graveyard"}
+{"collector_number": "sos_17", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__ml0trhk/tests.py::TestGroupProjectAbilities::test_creates_token"}
+{"collector_number": "sos_17", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__ml0trhk/tests.py::TestGroupProjectEdgeCases::test_may_choice_optional"}
+{"collector_number": "sos_17", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__ml0trhk/tests.py::TestGroupProjectInteractions::test_flashback_not_from_hand"}
+{"collector_number": "sos_17", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__ml0trhk/tests.py::TestGroupProjectInteractions::test_does_not_affect_non_targets"}

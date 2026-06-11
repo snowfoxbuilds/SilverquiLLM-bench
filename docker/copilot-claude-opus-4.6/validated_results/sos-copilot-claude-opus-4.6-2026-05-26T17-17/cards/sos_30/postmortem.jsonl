@@ -1,0 +1,4 @@
+{"collector_number": "sos_30", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_j2hf0j94/tests.py::TestRestorationSeminarBasicProperties::test_colors"}
+{"collector_number": "sos_30", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_j2hf0j94/tests.py::TestRestorationSeminarAbilities::test_resolution_exiles_target"}
+{"collector_number": "sos_30", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_j2hf0j94/tests.py::TestRestorationSeminarEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_30", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_j2hf0j94/tests.py::TestRestorationSeminarInteractions::test_spell_to_graveyard_after_resolution"}

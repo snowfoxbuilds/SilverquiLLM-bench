@@ -1,0 +1,6 @@
+{"collector_number": "sos_137", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_z3rix3aq/tests.py::TestZealousLorecasterBasicProperties::test_is_creature"}
+{"collector_number": "sos_137", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_z3rix3aq/tests.py::TestZealousLorecasterBasicProperties::test_colors"}
+{"collector_number": "sos_137", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_z3rix3aq/tests.py::TestZealousLorecasterAbilities::test_returns_from_graveyard"}
+{"collector_number": "sos_137", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_z3rix3aq/tests.py::TestZealousLorecasterEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_137", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_z3rix3aq/tests.py::TestZealousLorecasterInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_137", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_z3rix3aq/tests.py::TestZealousLorecasterInteractions::test_coexists_with_other_creatures"}

@@ -1,0 +1,7 @@
+{"collector_number": "sos_230", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ot7ggc2b/tests.py::TestSpiritMascotBasicProperties::test_is_creature"}
+{"collector_number": "sos_230", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ot7ggc2b/tests.py::TestSpiritMascotBasicProperties::test_card_type"}
+{"collector_number": "sos_230", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ot7ggc2b/tests.py::TestSpiritMascotBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_230", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ot7ggc2b/tests.py::TestSpiritMascotBasicProperties::test_colors"}
+{"collector_number": "sos_230", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ot7ggc2b/tests.py::TestSpiritMascotBasicProperties::test_power"}
+{"collector_number": "sos_230", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ot7ggc2b/tests.py::TestSpiritMascotBasicProperties::test_toughness"}
+{"collector_number": "sos_230", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ot7ggc2b/tests.py::TestSpiritMascotAbilities::test_counter_trigger"}

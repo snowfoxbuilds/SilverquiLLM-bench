@@ -1,0 +1,6 @@
+{"collector_number": "sos_142", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nnbb2mlb/tests.py::TestChelonianTackleBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_142", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nnbb2mlb/tests.py::TestChelonianTackleBasicProperties::test_colors"}
+{"collector_number": "sos_142", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nnbb2mlb/tests.py::TestChelonianTackleAbilities::test_pump_effect"}
+{"collector_number": "sos_142", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nnbb2mlb/tests.py::TestChelonianTackleEdgeCases::test_targets_only_own_permanents"}
+{"collector_number": "sos_142", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nnbb2mlb/tests.py::TestChelonianTackleInteractions::test_get_targets_finds_own_creatures"}
+{"collector_number": "sos_142", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nnbb2mlb/tests.py::TestChelonianTackleInteractions::test_does_not_affect_non_targets"}

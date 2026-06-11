@@ -1,0 +1,8 @@
+{"collector_number": "sos_139", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ymmflfim/tests.py::TestAdditiveEvolutionBasicProperties::test_is_enchantment"}
+{"collector_number": "sos_139", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ymmflfim/tests.py::TestAdditiveEvolutionBasicProperties::test_colors"}
+{"collector_number": "sos_139", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ymmflfim/tests.py::TestAdditiveEvolutionAbilities::test_creates_token"}
+{"collector_number": "sos_139", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ymmflfim/tests.py::TestAdditiveEvolutionAbilities::test_adds_plus_counter"}
+{"collector_number": "sos_139", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ymmflfim/tests.py::TestAdditiveEvolutionAbilities::test_grants_vigilance"}
+{"collector_number": "sos_139", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ymmflfim/tests.py::TestAdditiveEvolutionEdgeCases::test_targets_only_own_permanents"}
+{"collector_number": "sos_139", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ymmflfim/tests.py::TestAdditiveEvolutionInteractions::test_get_targets_finds_own_creatures"}
+{"collector_number": "sos_139", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ymmflfim/tests.py::TestAdditiveEvolutionInteractions::test_does_not_affect_non_targets"}

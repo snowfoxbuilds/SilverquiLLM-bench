@@ -1,0 +1,3 @@
+{"collector_number": "sos_106", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bxkzaoax/tests.py::TestAncestralAngerBasicProperties::test_colors"}
+{"collector_number": "sos_106", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bxkzaoax/tests.py::TestAncestralAngerAbilities::test_draws_cards"}
+{"collector_number": "sos_106", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bxkzaoax/tests.py::TestAncestralAngerAbilities::test_grants_trample"}

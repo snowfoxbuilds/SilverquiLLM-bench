@@ -1,0 +1,4 @@
+{"collector_number": "sos_50", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dlfqtfl1/tests.py::TestFractalAnomalyBasicProperties::test_is_instant"}
+{"collector_number": "sos_50", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dlfqtfl1/tests.py::TestFractalAnomalyBasicProperties::test_colors"}
+{"collector_number": "sos_50", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dlfqtfl1/tests.py::TestFractalAnomalyAbilities::test_on_resolve_token_has_counters_based_on_drawn_cards"}
+{"collector_number": "sos_50", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dlfqtfl1/tests.py::TestFractalAnomalyAbilities::test_on_resolve_creates_tokens"}

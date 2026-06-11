@@ -1,0 +1,5 @@
+{"collector_number": "sos_244", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_00obrwbt/tests.py::TestWitherbloomCharmBasicProperties::test_colors"}
+{"collector_number": "sos_244", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_00obrwbt/tests.py::TestWitherbloomCharmAbilities::test_resolution_removes_creatures"}
+{"collector_number": "sos_244", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_00obrwbt/tests.py::TestWitherbloomCharmEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_244", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_00obrwbt/tests.py::TestWitherbloomCharmInteractions::test_targets_valid_objects"}
+{"collector_number": "sos_244", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_00obrwbt/tests.py::TestWitherbloomCharmInteractions::test_spell_to_graveyard_after_resolution"}

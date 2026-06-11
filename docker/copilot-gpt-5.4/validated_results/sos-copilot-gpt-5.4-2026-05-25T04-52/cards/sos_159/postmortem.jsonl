@@ -1,0 +1,7 @@
+{"collector_number": "sos_159", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tw9gd985/tests.py::TestShopkeepersBaneBasicProperties::test_is_creature"}
+{"collector_number": "sos_159", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tw9gd985/tests.py::TestShopkeepersBaneBasicProperties::test_colors"}
+{"collector_number": "sos_159", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tw9gd985/tests.py::TestShopkeepersBaneBasicProperties::test_has_trample_keyword"}
+{"collector_number": "sos_159", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tw9gd985/tests.py::TestShopkeepersBaneAbilities::test_gains_life"}
+{"collector_number": "sos_159", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tw9gd985/tests.py::TestShopkeepersBaneEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_159", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tw9gd985/tests.py::TestShopkeepersBaneInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_159", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tw9gd985/tests.py::TestShopkeepersBaneInteractions::test_coexists_with_other_creatures"}

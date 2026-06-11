@@ -1,0 +1,8 @@
+{"collector_number": "sos_146", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cadbls71/tests.py::TestEmilVastlandsRoamerBasicProperties::test_is_creature"}
+{"collector_number": "sos_146", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cadbls71/tests.py::TestEmilVastlandsRoamerBasicProperties::test_colors"}
+{"collector_number": "sos_146", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cadbls71/tests.py::TestEmilVastlandsRoamerAbilities::test_creates_token"}
+{"collector_number": "sos_146", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cadbls71/tests.py::TestEmilVastlandsRoamerAbilities::test_adds_plus_counter"}
+{"collector_number": "sos_146", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cadbls71/tests.py::TestEmilVastlandsRoamerAbilities::test_has_activated_ability"}
+{"collector_number": "sos_146", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cadbls71/tests.py::TestEmilVastlandsRoamerEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_146", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cadbls71/tests.py::TestEmilVastlandsRoamerInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_146", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cadbls71/tests.py::TestEmilVastlandsRoamerInteractions::test_coexists_with_other_creatures"}

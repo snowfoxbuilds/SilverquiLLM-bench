@@ -1,0 +1,10 @@
+{"collector_number": "sos_166", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_odq_42ct/tests.py::TestVastlandsScavengerBindToLifeBasicProperties::test_is_creature"}
+{"collector_number": "sos_166", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_odq_42ct/tests.py::TestVastlandsScavengerBindToLifeBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_166", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_odq_42ct/tests.py::TestVastlandsScavengerBindToLifeBasicProperties::test_colors"}
+{"collector_number": "sos_166", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_odq_42ct/tests.py::TestVastlandsScavengerBindToLifeAbilities::test_has_prepared"}
+{"collector_number": "sos_166", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_odq_42ct/tests.py::TestVastlandsScavengerBindToLifeAbilities::test_has_deathtouch"}
+{"collector_number": "sos_166", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_odq_42ct/tests.py::TestVastlandsScavengerBindToLifeAbilities::test_etb_trigger_callable"}
+{"collector_number": "sos_166", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_odq_42ct/tests.py::TestVastlandsScavengerBindToLifeEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_166", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_odq_42ct/tests.py::TestVastlandsScavengerBindToLifeEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_166", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_odq_42ct/tests.py::TestVastlandsScavengerBindToLifeInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_166", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_odq_42ct/tests.py::TestVastlandsScavengerBindToLifeInteractions::test_coexists_with_other_permanents"}

@@ -1,0 +1,6 @@
+{"collector_number": "sos_104", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0nimu5t5/tests.py::TestWanderOffBasicProperties::test_is_instant"}
+{"collector_number": "sos_104", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0nimu5t5/tests.py::TestWanderOffBasicProperties::test_colors"}
+{"collector_number": "sos_104", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0nimu5t5/tests.py::TestWanderOffAbilities::test_exiles_target"}
+{"collector_number": "sos_104", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0nimu5t5/tests.py::TestWanderOffEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_104", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0nimu5t5/tests.py::TestWanderOffInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_104", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0nimu5t5/tests.py::TestWanderOffInteractions::test_does_not_affect_non_targets"}

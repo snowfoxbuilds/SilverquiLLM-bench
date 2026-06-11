@@ -1,0 +1,7 @@
+{"collector_number": "sos_138", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pm4i1zbz/tests.py::TestAberrantManawurmBasicProperties::test_is_creature"}
+{"collector_number": "sos_138", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pm4i1zbz/tests.py::TestAberrantManawurmBasicProperties::test_colors"}
+{"collector_number": "sos_138", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pm4i1zbz/tests.py::TestAberrantManawurmBasicProperties::test_has_trample_keyword"}
+{"collector_number": "sos_138", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pm4i1zbz/tests.py::TestAberrantManawurmAbilities::test_on_resolve_changes_state"}
+{"collector_number": "sos_138", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pm4i1zbz/tests.py::TestAberrantManawurmEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_138", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pm4i1zbz/tests.py::TestAberrantManawurmInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_138", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pm4i1zbz/tests.py::TestAberrantManawurmInteractions::test_coexists_with_other_creatures"}

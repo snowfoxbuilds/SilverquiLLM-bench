@@ -1,0 +1,5 @@
+{"collector_number": "sos_49", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_harp755p/tests.py::TestFlowStateBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_49", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_harp755p/tests.py::TestFlowStateBasicProperties::test_colors"}
+{"collector_number": "sos_49", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_harp755p/tests.py::TestFlowStateEdgeCases::test_resolution_with_empty_board"}
+{"collector_number": "sos_49", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_harp755p/tests.py::TestFlowStateInteractions::test_spell_to_graveyard_after_resolution"}
+{"collector_number": "sos_49", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_harp755p/tests.py::TestFlowStateInteractions::test_coexists_with_other_permanents"}

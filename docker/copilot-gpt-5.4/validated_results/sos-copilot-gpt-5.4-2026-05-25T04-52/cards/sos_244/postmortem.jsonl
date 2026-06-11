@@ -1,0 +1,9 @@
+{"collector_number": "sos_244", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_n9rbggnl/tests.py::TestWitherbloomCharmBasicProperties::test_is_instant"}
+{"collector_number": "sos_244", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_n9rbggnl/tests.py::TestWitherbloomCharmBasicProperties::test_card_types"}
+{"collector_number": "sos_244", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_n9rbggnl/tests.py::TestWitherbloomCharmBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_244", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_n9rbggnl/tests.py::TestWitherbloomCharmBasicProperties::test_colors"}
+{"collector_number": "sos_244", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_n9rbggnl/tests.py::TestWitherbloomCharmAbilities::test_resolution_removes_creatures"}
+{"collector_number": "sos_244", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_n9rbggnl/tests.py::TestWitherbloomCharmEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_244", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_n9rbggnl/tests.py::TestWitherbloomCharmEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_244", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_n9rbggnl/tests.py::TestWitherbloomCharmInteractions::test_targets_valid_objects"}
+{"collector_number": "sos_244", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_n9rbggnl/tests.py::TestWitherbloomCharmInteractions::test_spell_to_graveyard_after_resolution"}

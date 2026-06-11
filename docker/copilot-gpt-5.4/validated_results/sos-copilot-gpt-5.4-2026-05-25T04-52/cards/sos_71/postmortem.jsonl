@@ -1,0 +1,6 @@
+{"collector_number": "sos_71", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_k3q9uy0u/tests.py::TestWisdomOfAgesBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_71", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_k3q9uy0u/tests.py::TestWisdomOfAgesBasicProperties::test_colors"}
+{"collector_number": "sos_71", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_k3q9uy0u/tests.py::TestWisdomOfAgesAbilities::test_returns_from_graveyard"}
+{"collector_number": "sos_71", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_k3q9uy0u/tests.py::TestWisdomOfAgesEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_71", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_k3q9uy0u/tests.py::TestWisdomOfAgesInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_71", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_k3q9uy0u/tests.py::TestWisdomOfAgesInteractions::test_does_not_affect_non_targets"}

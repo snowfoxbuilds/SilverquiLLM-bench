@@ -1,0 +1,2 @@
+{"collector_number": "sos_253", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_n4eymamd/tests.py::TestDeathcapGladeBasicProperties::test_colors"}
+{"collector_number": "sos_253", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_n4eymamd/tests.py::TestDeathcapGladeAbilities::test_has_activated_ability"}

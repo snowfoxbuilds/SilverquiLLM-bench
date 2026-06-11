@@ -1,0 +1,2 @@
+{"collector_number": "sos_224", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xvi4zm4z/tests.py::TestScoldingAdministratorBasicProperties::test_colors"}
+{"collector_number": "sos_224", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xvi4zm4z/tests.py::TestScoldingAdministratorInteractions::test_counters_survive_end_of_turn"}

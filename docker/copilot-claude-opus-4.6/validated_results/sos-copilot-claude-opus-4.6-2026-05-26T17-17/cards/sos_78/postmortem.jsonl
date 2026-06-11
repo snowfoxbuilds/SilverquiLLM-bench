@@ -1,0 +1,3 @@
+{"collector_number": "sos_78", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2zq3npsj/tests.py::TestDecorumDissertationBasicProperties::test_colors"}
+{"collector_number": "sos_78", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2zq3npsj/tests.py::TestDecorumDissertationAbilities::test_draws_cards"}
+{"collector_number": "sos_78", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2zq3npsj/tests.py::TestDecorumDissertationAbilities::test_causes_life_loss"}

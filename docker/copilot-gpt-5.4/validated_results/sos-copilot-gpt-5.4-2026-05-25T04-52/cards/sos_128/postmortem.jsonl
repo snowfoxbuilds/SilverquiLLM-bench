@@ -1,0 +1,9 @@
+{"collector_number": "sos_128", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rt6i117m/tests.py::TestRubbleRouserBasicProperties::test_is_creature"}
+{"collector_number": "sos_128", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rt6i117m/tests.py::TestRubbleRouserBasicProperties::test_colors"}
+{"collector_number": "sos_128", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rt6i117m/tests.py::TestRubbleRouserAbilities::test_draws_cards"}
+{"collector_number": "sos_128", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rt6i117m/tests.py::TestRubbleRouserAbilities::test_causes_discard"}
+{"collector_number": "sos_128", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rt6i117m/tests.py::TestRubbleRouserAbilities::test_deals_damage"}
+{"collector_number": "sos_128", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rt6i117m/tests.py::TestRubbleRouserAbilities::test_has_activated_ability"}
+{"collector_number": "sos_128", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rt6i117m/tests.py::TestRubbleRouserEdgeCases::test_may_choice_optional"}
+{"collector_number": "sos_128", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rt6i117m/tests.py::TestRubbleRouserInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_128", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rt6i117m/tests.py::TestRubbleRouserInteractions::test_coexists_with_other_creatures"}

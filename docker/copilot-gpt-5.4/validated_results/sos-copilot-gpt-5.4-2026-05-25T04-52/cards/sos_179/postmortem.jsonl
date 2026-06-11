@@ -1,0 +1,9 @@
+{"collector_number": "sos_179", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_y5nyd4j5/tests.py::TestCauldronOfEssenceBasicProperties::test_is_artifact"}
+{"collector_number": "sos_179", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_y5nyd4j5/tests.py::TestCauldronOfEssenceBasicProperties::test_colors"}
+{"collector_number": "sos_179", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_y5nyd4j5/tests.py::TestCauldronOfEssenceAbilities::test_gains_life"}
+{"collector_number": "sos_179", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_y5nyd4j5/tests.py::TestCauldronOfEssenceAbilities::test_causes_life_loss"}
+{"collector_number": "sos_179", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_y5nyd4j5/tests.py::TestCauldronOfEssenceAbilities::test_has_activated_ability"}
+{"collector_number": "sos_179", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_y5nyd4j5/tests.py::TestCauldronOfEssenceAbilities::test_returns_from_graveyard"}
+{"collector_number": "sos_179", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_y5nyd4j5/tests.py::TestCauldronOfEssenceEdgeCases::test_targets_only_own_permanents"}
+{"collector_number": "sos_179", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_y5nyd4j5/tests.py::TestCauldronOfEssenceInteractions::test_get_targets_finds_own_creatures"}
+{"collector_number": "sos_179", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_y5nyd4j5/tests.py::TestCauldronOfEssenceInteractions::test_does_not_affect_non_targets"}

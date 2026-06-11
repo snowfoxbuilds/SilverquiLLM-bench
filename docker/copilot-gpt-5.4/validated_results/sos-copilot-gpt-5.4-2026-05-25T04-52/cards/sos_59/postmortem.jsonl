@@ -1,0 +1,6 @@
+{"collector_number": "sos_59", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ia4y1c4k/tests.py::TestMatterbendingMageBasicProperties::test_is_creature"}
+{"collector_number": "sos_59", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ia4y1c4k/tests.py::TestMatterbendingMageBasicProperties::test_colors"}
+{"collector_number": "sos_59", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ia4y1c4k/tests.py::TestMatterbendingMageAbilities::test_bounces_target"}
+{"collector_number": "sos_59", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ia4y1c4k/tests.py::TestMatterbendingMageEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_59", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ia4y1c4k/tests.py::TestMatterbendingMageInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_59", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ia4y1c4k/tests.py::TestMatterbendingMageInteractions::test_coexists_with_other_creatures"}

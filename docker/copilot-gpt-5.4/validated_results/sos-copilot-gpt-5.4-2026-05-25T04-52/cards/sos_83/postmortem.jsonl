@@ -1,0 +1,8 @@
+{"collector_number": "sos_83", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3oymb3a_/tests.py::TestFoolishFateBasicProperties::test_is_instant"}
+{"collector_number": "sos_83", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3oymb3a_/tests.py::TestFoolishFateBasicProperties::test_colors"}
+{"collector_number": "sos_83", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3oymb3a_/tests.py::TestFoolishFateAbilities::test_destroys_target"}
+{"collector_number": "sos_83", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3oymb3a_/tests.py::TestFoolishFateAbilities::test_gains_life"}
+{"collector_number": "sos_83", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3oymb3a_/tests.py::TestFoolishFateAbilities::test_causes_life_loss"}
+{"collector_number": "sos_83", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3oymb3a_/tests.py::TestFoolishFateEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_83", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3oymb3a_/tests.py::TestFoolishFateInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_83", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3oymb3a_/tests.py::TestFoolishFateInteractions::test_does_not_affect_non_targets"}

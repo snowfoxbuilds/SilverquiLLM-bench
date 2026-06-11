@@ -1,0 +1,3 @@
+{"collector_number": "sos_38", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_adrfuk0t/tests.py::TestBanishingBetrayalBasicProperties::test_colors"}
+{"collector_number": "sos_38", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_adrfuk0t/tests.py::TestBanishingBetrayalAbilities::test_bounces_target"}
+{"collector_number": "sos_38", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_adrfuk0t/tests.py::TestBanishingBetrayalAbilities::test_returns_from_graveyard"}

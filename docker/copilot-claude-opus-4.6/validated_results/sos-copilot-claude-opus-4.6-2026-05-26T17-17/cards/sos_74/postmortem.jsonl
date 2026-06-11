@@ -1,0 +1,4 @@
+{"collector_number": "sos_74", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_12jxe59w/tests.py::TestArnynDeathbloomBotanistBasicProperties::test_colors"}
+{"collector_number": "sos_74", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_12jxe59w/tests.py::TestArnynDeathbloomBotanistAbilities::test_gains_life"}
+{"collector_number": "sos_74", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_12jxe59w/tests.py::TestArnynDeathbloomBotanistAbilities::test_causes_life_loss"}
+{"collector_number": "sos_74", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_12jxe59w/tests.py::TestArnynDeathbloomBotanistInteractions::test_get_targets_finds_own_creatures"}

@@ -1,0 +1,9 @@
+{"collector_number": "sos_211", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w4w1r1io/tests.py::TestPrismariCharmBasicProperties::test_is_instant"}
+{"collector_number": "sos_211", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w4w1r1io/tests.py::TestPrismariCharmBasicProperties::test_card_types"}
+{"collector_number": "sos_211", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w4w1r1io/tests.py::TestPrismariCharmBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_211", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w4w1r1io/tests.py::TestPrismariCharmBasicProperties::test_colors"}
+{"collector_number": "sos_211", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w4w1r1io/tests.py::TestPrismariCharmAbilities::test_resolution_deals_damage"}
+{"collector_number": "sos_211", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w4w1r1io/tests.py::TestPrismariCharmEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_211", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w4w1r1io/tests.py::TestPrismariCharmEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_211", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w4w1r1io/tests.py::TestPrismariCharmInteractions::test_targets_valid_objects"}
+{"collector_number": "sos_211", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w4w1r1io/tests.py::TestPrismariCharmInteractions::test_spell_to_graveyard_after_resolution"}

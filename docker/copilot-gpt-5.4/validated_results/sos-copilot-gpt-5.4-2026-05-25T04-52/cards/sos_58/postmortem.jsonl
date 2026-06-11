@@ -1,0 +1,6 @@
+{"collector_number": "sos_58", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xdxlmw0v/tests.py::TestMathemagicsBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_58", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xdxlmw0v/tests.py::TestMathemagicsBasicProperties::test_colors"}
+{"collector_number": "sos_58", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xdxlmw0v/tests.py::TestMathemagicsAbilities::test_draws_cards"}
+{"collector_number": "sos_58", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xdxlmw0v/tests.py::TestMathemagicsEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_58", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xdxlmw0v/tests.py::TestMathemagicsInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_58", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xdxlmw0v/tests.py::TestMathemagicsInteractions::test_does_not_affect_non_targets"}

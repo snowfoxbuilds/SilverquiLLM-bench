@@ -1,0 +1,4 @@
+{"collector_number": "sos_172", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pfl2qr3g/tests.py::TestAppliedGeometryBasicProperties::test_colors"}
+{"collector_number": "sos_172", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pfl2qr3g/tests.py::TestAppliedGeometryAbilities::test_creates_token"}
+{"collector_number": "sos_172", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pfl2qr3g/tests.py::TestAppliedGeometryAbilities::test_adds_plus_counter"}
+{"collector_number": "sos_172", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pfl2qr3g/tests.py::TestAppliedGeometryEdgeCases::test_targets_only_own_permanents"}

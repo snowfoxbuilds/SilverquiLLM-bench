@@ -1,0 +1,11 @@
+{"collector_number": "sos_9", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iztsap3d/tests.py::TestDaydreamBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_9", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iztsap3d/tests.py::TestDaydreamBasicProperties::test_colors"}
+{"collector_number": "sos_9", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iztsap3d/tests.py::TestDaydreamAbilities::test_flashback_cost_attribute"}
+{"collector_number": "sos_9", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iztsap3d/tests.py::TestDaydreamAbilities::test_flashback_exiles_after_resolution"}
+{"collector_number": "sos_9", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iztsap3d/tests.py::TestDaydreamAbilities::test_flashback_removes_from_graveyard"}
+{"collector_number": "sos_9", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iztsap3d/tests.py::TestDaydreamAbilities::test_adds_plus_counter"}
+{"collector_number": "sos_9", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iztsap3d/tests.py::TestDaydreamAbilities::test_exiles_target"}
+{"collector_number": "sos_9", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iztsap3d/tests.py::TestDaydreamAbilities::test_flicker_returns_to_battlefield"}
+{"collector_number": "sos_9", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iztsap3d/tests.py::TestDaydreamEdgeCases::test_targets_only_own_permanents"}
+{"collector_number": "sos_9", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iztsap3d/tests.py::TestDaydreamInteractions::test_get_targets_finds_own_creatures"}
+{"collector_number": "sos_9", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iztsap3d/tests.py::TestDaydreamInteractions::test_does_not_affect_non_targets"}

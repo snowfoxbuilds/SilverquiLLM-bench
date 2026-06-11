@@ -1,0 +1,7 @@
+{"collector_number": "sos_261", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_sv9yv8p7/tests.py::TestSkycoachWaypointBasicProperties::test_is_land"}
+{"collector_number": "sos_261", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_sv9yv8p7/tests.py::TestSkycoachWaypointBasicProperties::test_card_types"}
+{"collector_number": "sos_261", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_sv9yv8p7/tests.py::TestSkycoachWaypointBasicProperties::test_colorless"}
+{"collector_number": "sos_261", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_sv9yv8p7/tests.py::TestSkycoachWaypointAbilities::test_has_prepared"}
+{"collector_number": "sos_261", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_sv9yv8p7/tests.py::TestSkycoachWaypointEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_261", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_sv9yv8p7/tests.py::TestSkycoachWaypointInteractions::test_targets_valid_objects"}
+{"collector_number": "sos_261", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_sv9yv8p7/tests.py::TestSkycoachWaypointInteractions::test_spell_to_graveyard_after_resolution"}

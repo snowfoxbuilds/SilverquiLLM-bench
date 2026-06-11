@@ -1,0 +1,4 @@
+{"collector_number": "sos_145", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_es622avy/tests.py::TestEmeritusOfAbundanceRegrowthBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_145", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_es622avy/tests.py::TestEmeritusOfAbundanceRegrowthBasicProperties::test_colors"}
+{"collector_number": "sos_145", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_es622avy/tests.py::TestEmeritusOfAbundanceRegrowthAbilities::test_etb_trigger_callable"}
+{"collector_number": "sos_145", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_es622avy/tests.py::TestEmeritusOfAbundanceRegrowthEdgeCases::test_mana_cost_matches_spec"}

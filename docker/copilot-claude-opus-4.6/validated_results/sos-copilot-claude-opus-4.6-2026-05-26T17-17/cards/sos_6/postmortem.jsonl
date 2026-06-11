@@ -1,0 +1,3 @@
+{"collector_number": "sos_6", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_op9o63hq/tests.py::TestAjanisResponseBasicProperties::test_colors"}
+{"collector_number": "sos_6", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_op9o63hq/tests.py::TestAjanisResponseAbilities::test_destroys_target"}
+{"collector_number": "sos_6", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_op9o63hq/tests.py::TestAjanisResponseAbilities::test_cost_reduction_applies"}

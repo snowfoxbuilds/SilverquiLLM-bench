@@ -1,0 +1,2 @@
+{"collector_number": "sos_60", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ra269iqg/tests.py::TestMuseSeekerBasicProperties::test_colors"}
+{"collector_number": "sos_60", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ra269iqg/tests.py::TestMuseSeekerAbilities::test_opus_trigger_implemented"}

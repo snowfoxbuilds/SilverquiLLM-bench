@@ -1,0 +1,3 @@
+{"collector_number": "sos_65", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_doc3usgu/tests.py::TestQuickStudyBasicProperties::test_is_instant"}
+{"collector_number": "sos_65", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_doc3usgu/tests.py::TestQuickStudyBasicProperties::test_colors"}
+{"collector_number": "sos_65", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_doc3usgu/tests.py::TestQuickStudyAbilities::test_on_resolve_draws_cards"}

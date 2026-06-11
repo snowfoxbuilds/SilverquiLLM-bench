@@ -1,0 +1,4 @@
+{"collector_number": "sos_262", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f2_ahn_t/tests.py::TestSpectacleSummitBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_262", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f2_ahn_t/tests.py::TestSpectacleSummitBasicProperties::test_colorless"}
+{"collector_number": "sos_262", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f2_ahn_t/tests.py::TestSpectacleSummitEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_262", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f2_ahn_t/tests.py::TestSpectacleSummitInteractions::test_spell_to_graveyard_after_resolution"}

@@ -1,0 +1,7 @@
+{"collector_number": "sos_45", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nfex2p9n/tests.py::TestEmeritusOfIdeationAncestralRecallBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_45", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nfex2p9n/tests.py::TestEmeritusOfIdeationAncestralRecallBasicProperties::test_colors"}
+{"collector_number": "sos_45", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nfex2p9n/tests.py::TestEmeritusOfIdeationAncestralRecallAbilities::test_has_prepared"}
+{"collector_number": "sos_45", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nfex2p9n/tests.py::TestEmeritusOfIdeationAncestralRecallAbilities::test_etb_trigger_callable"}
+{"collector_number": "sos_45", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nfex2p9n/tests.py::TestEmeritusOfIdeationAncestralRecallAbilities::test_attack_trigger_uses_graveyard"}
+{"collector_number": "sos_45", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nfex2p9n/tests.py::TestEmeritusOfIdeationAncestralRecallEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_45", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nfex2p9n/tests.py::TestEmeritusOfIdeationAncestralRecallInteractions::test_exile_from_graveyard_interaction"}

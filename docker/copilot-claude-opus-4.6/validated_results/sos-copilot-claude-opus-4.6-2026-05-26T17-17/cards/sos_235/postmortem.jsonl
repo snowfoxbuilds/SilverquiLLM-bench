@@ -1,0 +1,3 @@
+{"collector_number": "sos_235", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ay2pac2a/tests.py::TestStressDreamBasicProperties::test_colors"}
+{"collector_number": "sos_235", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ay2pac2a/tests.py::TestStressDreamAbilities::test_deals_damage"}
+{"collector_number": "sos_235", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ay2pac2a/tests.py::TestStressDreamInteractions::test_get_targets_finds_creatures"}

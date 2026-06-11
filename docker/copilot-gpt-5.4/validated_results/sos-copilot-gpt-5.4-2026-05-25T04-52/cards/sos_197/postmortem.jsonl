@@ -1,0 +1,8 @@
+{"collector_number": "sos_197", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dcgjsa29/tests.py::TestKilliansConfidenceBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_197", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dcgjsa29/tests.py::TestKilliansConfidenceBasicProperties::test_colors"}
+{"collector_number": "sos_197", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dcgjsa29/tests.py::TestKilliansConfidenceAbilities::test_draws_cards"}
+{"collector_number": "sos_197", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dcgjsa29/tests.py::TestKilliansConfidenceAbilities::test_pump_effect"}
+{"collector_number": "sos_197", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dcgjsa29/tests.py::TestKilliansConfidenceAbilities::test_returns_from_graveyard"}
+{"collector_number": "sos_197", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dcgjsa29/tests.py::TestKilliansConfidenceEdgeCases::test_targets_only_own_permanents"}
+{"collector_number": "sos_197", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dcgjsa29/tests.py::TestKilliansConfidenceInteractions::test_get_targets_finds_own_creatures"}
+{"collector_number": "sos_197", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dcgjsa29/tests.py::TestKilliansConfidenceInteractions::test_does_not_affect_non_targets"}

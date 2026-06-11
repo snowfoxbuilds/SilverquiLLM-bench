@@ -1,0 +1,2 @@
+{"collector_number": "sos_69", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s2xgmibq/tests.py::TestTesterOfTheTangentialBasicProperties::test_colors"}
+{"collector_number": "sos_69", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s2xgmibq/tests.py::TestTesterOfTheTangentialInteractions::test_counters_survive_end_of_turn"}

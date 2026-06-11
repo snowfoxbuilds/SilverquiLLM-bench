@@ -1,0 +1,9 @@
+{"collector_number": "sos_213", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gk8onejj/tests.py::TestProctorsGazeBasicProperties::test_is_instant"}
+{"collector_number": "sos_213", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gk8onejj/tests.py::TestProctorsGazeBasicProperties::test_card_types"}
+{"collector_number": "sos_213", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gk8onejj/tests.py::TestProctorsGazeBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_213", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gk8onejj/tests.py::TestProctorsGazeBasicProperties::test_colors"}
+{"collector_number": "sos_213", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gk8onejj/tests.py::TestProctorsGazeAbilities::test_bounces_target"}
+{"collector_number": "sos_213", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gk8onejj/tests.py::TestProctorsGazeAbilities::test_search_library"}
+{"collector_number": "sos_213", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gk8onejj/tests.py::TestProctorsGazeEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_213", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gk8onejj/tests.py::TestProctorsGazeInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_213", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gk8onejj/tests.py::TestProctorsGazeInteractions::test_does_not_affect_non_targets"}

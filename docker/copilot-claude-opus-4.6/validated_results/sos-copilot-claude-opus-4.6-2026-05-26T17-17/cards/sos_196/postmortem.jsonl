@@ -1,0 +1,4 @@
+{"collector_number": "sos_196", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5geo9aoa/tests.py::TestInklingMascotBasicProperties::test_colors"}
+{"collector_number": "sos_196", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5geo9aoa/tests.py::TestInklingMascotAbilities::test_repartee_produces_effect"}
+{"collector_number": "sos_196", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5geo9aoa/tests.py::TestInklingMascotAbilities::test_grants_flying"}
+{"collector_number": "sos_196", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5geo9aoa/tests.py::TestInklingMascotInteractions::test_get_targets_finds_creatures"}

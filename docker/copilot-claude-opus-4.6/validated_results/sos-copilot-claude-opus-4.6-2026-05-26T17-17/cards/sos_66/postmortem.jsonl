@@ -1,0 +1,2 @@
+{"collector_number": "sos_66", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_49hujwoq/tests.py::TestRunBehindBasicProperties::test_colors"}
+{"collector_number": "sos_66", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_49hujwoq/tests.py::TestRunBehindAbilities::test_cost_reduction_applies"}

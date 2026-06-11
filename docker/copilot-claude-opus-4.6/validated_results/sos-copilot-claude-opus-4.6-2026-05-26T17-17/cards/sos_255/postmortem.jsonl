@@ -1,0 +1,2 @@
+{"collector_number": "sos_255", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_hfpfb1nw/tests.py::TestFieldsOfStrifeBasicProperties::test_colorless"}
+{"collector_number": "sos_255", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_hfpfb1nw/tests.py::TestFieldsOfStrifeInteractions::test_spell_to_graveyard_after_resolution"}

@@ -1,0 +1,7 @@
+{"collector_number": "sos_41", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g1g6jsbe/tests.py::TestChaseInspirationBasicProperties::test_is_instant"}
+{"collector_number": "sos_41", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g1g6jsbe/tests.py::TestChaseInspirationBasicProperties::test_colors"}
+{"collector_number": "sos_41", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g1g6jsbe/tests.py::TestChaseInspirationAbilities::test_pump_effect"}
+{"collector_number": "sos_41", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g1g6jsbe/tests.py::TestChaseInspirationAbilities::test_grants_hexproof"}
+{"collector_number": "sos_41", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g1g6jsbe/tests.py::TestChaseInspirationEdgeCases::test_targets_only_own_permanents"}
+{"collector_number": "sos_41", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g1g6jsbe/tests.py::TestChaseInspirationInteractions::test_get_targets_finds_own_creatures"}
+{"collector_number": "sos_41", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g1g6jsbe/tests.py::TestChaseInspirationInteractions::test_does_not_affect_non_targets"}

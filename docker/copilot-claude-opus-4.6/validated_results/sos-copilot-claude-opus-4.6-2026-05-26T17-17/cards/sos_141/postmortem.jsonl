@@ -1,0 +1,3 @@
+{"collector_number": "sos_141", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9v2s3h84/tests.py::TestBurrogBarrageBasicProperties::test_colors"}
+{"collector_number": "sos_141", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9v2s3h84/tests.py::TestBurrogBarrageAbilities::test_pump_effect"}
+{"collector_number": "sos_141", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9v2s3h84/tests.py::TestBurrogBarrageInteractions::test_get_targets_finds_own_creatures"}

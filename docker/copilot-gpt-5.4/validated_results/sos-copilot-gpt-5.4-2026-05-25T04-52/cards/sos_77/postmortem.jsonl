@@ -1,0 +1,8 @@
+{"collector_number": "sos_77", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vsikxb8z/tests.py::TestCostOfBrillianceBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_77", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vsikxb8z/tests.py::TestCostOfBrillianceBasicProperties::test_colors"}
+{"collector_number": "sos_77", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vsikxb8z/tests.py::TestCostOfBrillianceAbilities::test_adds_plus_counter"}
+{"collector_number": "sos_77", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vsikxb8z/tests.py::TestCostOfBrillianceAbilities::test_draws_cards"}
+{"collector_number": "sos_77", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vsikxb8z/tests.py::TestCostOfBrillianceAbilities::test_causes_life_loss"}
+{"collector_number": "sos_77", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vsikxb8z/tests.py::TestCostOfBrillianceEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_77", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vsikxb8z/tests.py::TestCostOfBrillianceInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_77", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vsikxb8z/tests.py::TestCostOfBrillianceInteractions::test_does_not_affect_non_targets"}

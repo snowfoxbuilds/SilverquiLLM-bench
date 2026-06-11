@@ -1,0 +1,5 @@
+{"collector_number": "sos_73", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_b2ekg74v/tests.py::TestArcaneOmensBasicProperties::test_colors"}
+{"collector_number": "sos_73", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_b2ekg74v/tests.py::TestArcaneOmensAbilities::test_has_converge"}
+{"collector_number": "sos_73", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_b2ekg74v/tests.py::TestArcaneOmensEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_73", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_b2ekg74v/tests.py::TestArcaneOmensInteractions::test_targets_valid_objects"}
+{"collector_number": "sos_73", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_b2ekg74v/tests.py::TestArcaneOmensInteractions::test_spell_to_graveyard_after_resolution"}

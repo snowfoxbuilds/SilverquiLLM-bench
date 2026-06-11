@@ -1,0 +1,8 @@
+{"collector_number": "sos_164", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_l_axlc0o/tests.py::TestThornfistStrikerBasicProperties::test_is_creature"}
+{"collector_number": "sos_164", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_l_axlc0o/tests.py::TestThornfistStrikerBasicProperties::test_colors"}
+{"collector_number": "sos_164", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_l_axlc0o/tests.py::TestThornfistStrikerBasicProperties::test_has_ward_keyword"}
+{"collector_number": "sos_164", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_l_axlc0o/tests.py::TestThornfistStrikerAbilities::test_pump_effect"}
+{"collector_number": "sos_164", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_l_axlc0o/tests.py::TestThornfistStrikerAbilities::test_gains_life"}
+{"collector_number": "sos_164", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_l_axlc0o/tests.py::TestThornfistStrikerEdgeCases::test_targets_only_own_permanents"}
+{"collector_number": "sos_164", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_l_axlc0o/tests.py::TestThornfistStrikerInteractions::test_get_targets_finds_own_creatures"}
+{"collector_number": "sos_164", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_l_axlc0o/tests.py::TestThornfistStrikerInteractions::test_coexists_with_other_creatures"}

@@ -1,0 +1,2 @@
+{"collector_number": "sos_159", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p4doz47i/tests.py::TestShopkeepersBaneBasicProperties::test_colors"}
+{"collector_number": "sos_159", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p4doz47i/tests.py::TestShopkeepersBaneAbilities::test_gains_life"}

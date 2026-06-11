@@ -1,0 +1,2 @@
+{"collector_number": "sos_192", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_759iendq/tests.py::TestGrappleWithDeathBasicProperties::test_colors"}
+{"collector_number": "sos_192", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_759iendq/tests.py::TestGrappleWithDeathAbilities::test_destroys_target"}

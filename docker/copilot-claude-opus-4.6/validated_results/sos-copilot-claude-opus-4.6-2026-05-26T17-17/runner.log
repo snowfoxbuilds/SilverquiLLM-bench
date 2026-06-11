@@ -1,0 +1,11 @@
+2026-05-26T17:17:17+00:00 Starting Resume Leg: sos-copilot-claude-opus-4.6-2026-05-26T17-17
+2026-05-26T17:17:17+00:00 Resuming from:       sos-copilot-claude-opus-4.6-2026-05-26T05-16
+2026-05-26T17:17:17+00:00 Image:               silverquillm-copilot-claude-opus-4.6:latest
+2026-05-26T17:17:17+00:00 Timeout:             360000s
+2026-05-26T17:17:17+00:00 Workspace staged at: /tmp/silverquillm_resume_v1wfasp9/workspace
+2026-05-26T17:17:17+00:00 Running container: sqm-sos-copilot-claude-opus-4.6-2026-05-26T17-17
+2026-05-26T19:24:47+00:00 Harvesting results...
+2026-05-26T19:24:47+00:00 Results saved to: /home/sean/repos/SilverquiLLM-bench/docker/copilot-claude-opus-4.6/results/sos-copilot-claude-opus-4.6-2026-05-26T17-17
+2026-05-26T19:26:10+00:00 Evaluation complete: 271 SOS cards scored
+2026-05-26T19:26:10+00:00 Run summary written to: /home/sean/repos/SilverquiLLM-bench/docker/copilot-claude-opus-4.6/results/sos-copilot-claude-opus-4.6-2026-05-26T17-17/run_summary.json
+2026-05-26T19:26:10+00:00 Resume Leg complete: sos-copilot-claude-opus-4.6-2026-05-26T17-17

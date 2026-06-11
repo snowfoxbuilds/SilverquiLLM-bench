@@ -1,0 +1,9 @@
+{"collector_number": "sos_23", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w2w05l0h/tests.py::TestJoinedResearchersSecretRendezvousBasicProperties::test_is_creature"}
+{"collector_number": "sos_23", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w2w05l0h/tests.py::TestJoinedResearchersSecretRendezvousBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_23", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w2w05l0h/tests.py::TestJoinedResearchersSecretRendezvousBasicProperties::test_colors"}
+{"collector_number": "sos_23", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w2w05l0h/tests.py::TestJoinedResearchersSecretRendezvousAbilities::test_has_first_strike"}
+{"collector_number": "sos_23", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w2w05l0h/tests.py::TestJoinedResearchersSecretRendezvousAbilities::test_has_prepared"}
+{"collector_number": "sos_23", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w2w05l0h/tests.py::TestJoinedResearchersSecretRendezvousEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_23", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w2w05l0h/tests.py::TestJoinedResearchersSecretRendezvousEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_23", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w2w05l0h/tests.py::TestJoinedResearchersSecretRendezvousInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_23", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w2w05l0h/tests.py::TestJoinedResearchersSecretRendezvousInteractions::test_coexists_with_other_permanents"}

@@ -1,0 +1,2 @@
+{"collector_number": "sos_51", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_r191qm7f/tests.py::TestFractalizeBasicProperties::test_colors"}
+{"collector_number": "sos_51", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_r191qm7f/tests.py::TestFractalizeAbilities::test_on_resolve_changes_state"}

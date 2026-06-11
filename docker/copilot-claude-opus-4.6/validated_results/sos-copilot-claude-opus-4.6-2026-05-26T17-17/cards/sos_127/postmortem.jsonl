@@ -1,0 +1,2 @@
+{"collector_number": "sos_127", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fn01e3l4/tests.py::TestRearingEmbermareBasicProperties::test_colors"}
+{"collector_number": "sos_127", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fn01e3l4/tests.py::TestRearingEmbermareAbilities::test_on_resolve_changes_state"}

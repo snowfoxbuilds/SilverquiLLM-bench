@@ -1,0 +1,6 @@
+{"collector_number": "sos_160", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_i12aw6sv/tests.py::TestSlumberingTrudgeBasicProperties::test_is_creature"}
+{"collector_number": "sos_160", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_i12aw6sv/tests.py::TestSlumberingTrudgeBasicProperties::test_colors"}
+{"collector_number": "sos_160", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_i12aw6sv/tests.py::TestSlumberingTrudgeAbilities::test_etb_trigger_callable"}
+{"collector_number": "sos_160", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_i12aw6sv/tests.py::TestSlumberingTrudgeEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_160", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_i12aw6sv/tests.py::TestSlumberingTrudgeInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_160", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_i12aw6sv/tests.py::TestSlumberingTrudgeInteractions::test_coexists_with_other_permanents"}

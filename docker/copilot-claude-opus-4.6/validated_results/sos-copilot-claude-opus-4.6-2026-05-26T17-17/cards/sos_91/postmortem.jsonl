@@ -1,0 +1,4 @@
+{"collector_number": "sos_91", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ukjzw89m/tests.py::TestMoseoVeinsNewDeanBasicProperties::test_colors"}
+{"collector_number": "sos_91", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ukjzw89m/tests.py::TestMoseoVeinsNewDeanAbilities::test_has_infusion"}
+{"collector_number": "sos_91", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ukjzw89m/tests.py::TestMoseoVeinsNewDeanAbilities::test_etb_creates_tokens"}
+{"collector_number": "sos_91", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ukjzw89m/tests.py::TestMoseoVeinsNewDeanAbilities::test_attack_trigger_uses_graveyard"}

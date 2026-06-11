@@ -1,0 +1,6 @@
+{"collector_number": "sos_53", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8nz0w1z4/tests.py::TestHomesicknessBasicProperties::test_is_instant"}
+{"collector_number": "sos_53", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8nz0w1z4/tests.py::TestHomesicknessBasicProperties::test_colors"}
+{"collector_number": "sos_53", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8nz0w1z4/tests.py::TestHomesicknessAbilities::test_resolution_draws_cards"}
+{"collector_number": "sos_53", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8nz0w1z4/tests.py::TestHomesicknessEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_53", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8nz0w1z4/tests.py::TestHomesicknessInteractions::test_targets_valid_objects"}
+{"collector_number": "sos_53", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8nz0w1z4/tests.py::TestHomesicknessInteractions::test_spell_to_graveyard_after_resolution"}

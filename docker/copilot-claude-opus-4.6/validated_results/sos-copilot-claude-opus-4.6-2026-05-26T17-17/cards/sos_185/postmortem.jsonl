@@ -1,0 +1,2 @@
+{"collector_number": "sos_185", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p8s3__us/tests.py::TestElementalMascotBasicProperties::test_colors"}
+{"collector_number": "sos_185", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p8s3__us/tests.py::TestElementalMascotAbilities::test_has_opus"}

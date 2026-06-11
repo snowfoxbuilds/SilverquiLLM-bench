@@ -1,0 +1,7 @@
+{"collector_number": "sos_90", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jpjk_kkv/tests.py::TestMelancholicPoetBasicProperties::test_colors"}
+{"collector_number": "sos_90", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jpjk_kkv/tests.py::TestMelancholicPoetAbilities::test_repartee_registers_trigger"}
+{"collector_number": "sos_90", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jpjk_kkv/tests.py::TestMelancholicPoetAbilities::test_repartee_requires_creature_target"}
+{"collector_number": "sos_90", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jpjk_kkv/tests.py::TestMelancholicPoetAbilities::test_repartee_produces_effect"}
+{"collector_number": "sos_90", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jpjk_kkv/tests.py::TestMelancholicPoetAbilities::test_gains_life"}
+{"collector_number": "sos_90", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jpjk_kkv/tests.py::TestMelancholicPoetAbilities::test_causes_life_loss"}
+{"collector_number": "sos_90", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jpjk_kkv/tests.py::TestMelancholicPoetInteractions::test_get_targets_finds_creatures"}

@@ -1,0 +1,4 @@
+{"collector_number": "sos_146", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3w2w4y9p/tests.py::TestEmilVastlandsRoamerBasicProperties::test_colors"}
+{"collector_number": "sos_146", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3w2w4y9p/tests.py::TestEmilVastlandsRoamerAbilities::test_creates_token"}
+{"collector_number": "sos_146", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3w2w4y9p/tests.py::TestEmilVastlandsRoamerAbilities::test_adds_plus_counter"}
+{"collector_number": "sos_146", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3w2w4y9p/tests.py::TestEmilVastlandsRoamerAbilities::test_has_activated_ability"}

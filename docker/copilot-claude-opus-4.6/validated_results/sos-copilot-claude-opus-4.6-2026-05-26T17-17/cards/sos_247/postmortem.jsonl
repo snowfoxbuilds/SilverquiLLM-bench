@@ -1,0 +1,3 @@
+{"collector_number": "sos_247", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e_m645hq/tests.py::TestBiblioplexTomekeeperBasicProperties::test_colorless"}
+{"collector_number": "sos_247", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e_m645hq/tests.py::TestBiblioplexTomekeeperAbilities::test_has_prepared"}
+{"collector_number": "sos_247", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e_m645hq/tests.py::TestBiblioplexTomekeeperAbilities::test_etb_trigger_callable"}

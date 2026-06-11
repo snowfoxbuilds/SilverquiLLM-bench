@@ -1,0 +1,2 @@
+{"collector_number": "sos_48", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2mcx9yr3/tests.py::TestExhibitionTidecallerBasicProperties::test_colors"}
+{"collector_number": "sos_48", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2mcx9yr3/tests.py::TestExhibitionTidecallerAbilities::test_has_opus"}

@@ -1,0 +1,8 @@
+{"collector_number": "sos_31", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c2csojd7/tests.py::TestShatteredAcolyteBasicProperties::test_is_creature"}
+{"collector_number": "sos_31", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c2csojd7/tests.py::TestShatteredAcolyteBasicProperties::test_colors"}
+{"collector_number": "sos_31", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c2csojd7/tests.py::TestShatteredAcolyteBasicProperties::test_has_lifelink_keyword"}
+{"collector_number": "sos_31", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c2csojd7/tests.py::TestShatteredAcolyteAbilities::test_destroys_target"}
+{"collector_number": "sos_31", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c2csojd7/tests.py::TestShatteredAcolyteAbilities::test_has_activated_ability"}
+{"collector_number": "sos_31", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c2csojd7/tests.py::TestShatteredAcolyteEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_31", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c2csojd7/tests.py::TestShatteredAcolyteInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_31", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c2csojd7/tests.py::TestShatteredAcolyteInteractions::test_coexists_with_other_creatures"}

@@ -1,0 +1,2 @@
+{"collector_number": "sos_37", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_hxtlgpmb/tests.py::TestSummonedDromedaryBasicProperties::test_colors"}
+{"collector_number": "sos_37", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_hxtlgpmb/tests.py::TestSummonedDromedaryAbilities::test_returns_from_graveyard"}

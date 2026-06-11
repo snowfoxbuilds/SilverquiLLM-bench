@@ -1,0 +1,1086 @@
+{
+  "sos_1": {
+    "status": "completed",
+    "card_name": "The Dawning Archaic"
+  },
+  "sos_10": {
+    "status": "completed",
+    "card_name": "Dig Site Inventory"
+  },
+  "sos_100": {
+    "status": "completed",
+    "card_name": "Send in the Pest"
+  },
+  "sos_101": {
+    "status": "completed",
+    "card_name": "Sneering Shadewriter"
+  },
+  "sos_102": {
+    "status": "completed",
+    "card_name": "Tragedy Feaster"
+  },
+  "sos_103": {
+    "status": "completed",
+    "card_name": "Ulna Alley Shopkeep"
+  },
+  "sos_104": {
+    "status": "completed",
+    "card_name": "Wander Off"
+  },
+  "sos_105": {
+    "status": "completed",
+    "card_name": "Withering Curse"
+  },
+  "sos_106": {
+    "status": "completed",
+    "card_name": "Ancestral Anger"
+  },
+  "sos_107": {
+    "status": "completed",
+    "card_name": "Archaic's Agony"
+  },
+  "sos_108": {
+    "status": "completed",
+    "card_name": "Artistic Process"
+  },
+  "sos_109": {
+    "status": "completed",
+    "card_name": "Blazing Firesinger // Seething Song"
+  },
+  "sos_11": {
+    "status": "completed",
+    "card_name": "Eager Glyphmage"
+  },
+  "sos_110": {
+    "status": "completed",
+    "card_name": "Charging Strifeknight"
+  },
+  "sos_111": {
+    "status": "completed",
+    "card_name": "Choreographed Sparks"
+  },
+  "sos_112": {
+    "status": "completed",
+    "card_name": "Duel Tactics"
+  },
+  "sos_113": {
+    "status": "completed",
+    "card_name": "Emeritus of Conflict // Lightning Bolt"
+  },
+  "sos_114": {
+    "status": "completed",
+    "card_name": "Expressive Firedancer"
+  },
+  "sos_115": {
+    "status": "completed",
+    "card_name": "Flashback"
+  },
+  "sos_116": {
+    "status": "completed",
+    "card_name": "Garrison Excavator"
+  },
+  "sos_117": {
+    "status": "completed",
+    "card_name": "Goblin Glasswright // Craft with Pride"
+  },
+  "sos_118": {
+    "status": "completed",
+    "card_name": "Heated Argument"
+  },
+  "sos_119": {
+    "status": "completed",
+    "card_name": "Impractical Joke"
+  },
+  "sos_12": {
+    "status": "completed",
+    "card_name": "Elite Interceptor // Rejoinder"
+  },
+  "sos_120": {
+    "status": "completed",
+    "card_name": "Improvisation Capstone"
+  },
+  "sos_121": {
+    "status": "completed",
+    "card_name": "Living History"
+  },
+  "sos_122": {
+    "status": "completed",
+    "card_name": "Maelstrom Artisan // Rocket Volley"
+  },
+  "sos_123": {
+    "status": "completed",
+    "card_name": "Magmablood Archaic"
+  },
+  "sos_124": {
+    "status": "completed",
+    "card_name": "Mica, Reader of Ruins"
+  },
+  "sos_125": {
+    "status": "completed",
+    "card_name": "Molten-Core Maestro"
+  },
+  "sos_126": {
+    "status": "completed",
+    "card_name": "Pigment Wrangler // Striking Palette"
+  },
+  "sos_127": {
+    "status": "completed",
+    "card_name": "Rearing Embermare"
+  },
+  "sos_128": {
+    "status": "completed",
+    "card_name": "Rubble Rouser"
+  },
+  "sos_129": {
+    "status": "completed",
+    "card_name": "Seize the Spoils"
+  },
+  "sos_13": {
+    "status": "completed",
+    "card_name": "Emeritus of Truce // Swords to Plowshares"
+  },
+  "sos_130": {
+    "status": "completed",
+    "card_name": "Steal the Show"
+  },
+  "sos_131": {
+    "status": "completed",
+    "card_name": "Strife Scholar // Awaken the Ages"
+  },
+  "sos_132": {
+    "status": "completed",
+    "card_name": "Tablet of Discovery"
+  },
+  "sos_133": {
+    "status": "completed",
+    "card_name": "Tackle Artist"
+  },
+  "sos_134": {
+    "status": "completed",
+    "card_name": "Thunderdrum Soloist"
+  },
+  "sos_135": {
+    "status": "completed",
+    "card_name": "Tome Blast"
+  },
+  "sos_136": {
+    "status": "completed",
+    "card_name": "Unsubtle Mockery"
+  },
+  "sos_137": {
+    "status": "completed",
+    "card_name": "Zealous Lorecaster"
+  },
+  "sos_138": {
+    "status": "completed",
+    "card_name": "Aberrant Manawurm"
+  },
+  "sos_139": {
+    "status": "completed",
+    "card_name": "Additive Evolution"
+  },
+  "sos_14": {
+    "status": "completed",
+    "card_name": "Ennis, Debate Moderator"
+  },
+  "sos_140": {
+    "status": "completed",
+    "card_name": "Ambitious Augmenter"
+  },
+  "sos_141": {
+    "status": "completed",
+    "card_name": "Burrog Barrage"
+  },
+  "sos_142": {
+    "status": "completed",
+    "card_name": "Chelonian Tackle"
+  },
+  "sos_143": {
+    "status": "completed",
+    "card_name": "Comforting Counsel"
+  },
+  "sos_144": {
+    "status": "completed",
+    "card_name": "Efflorescence"
+  },
+  "sos_145": {
+    "status": "completed",
+    "card_name": "Emeritus of Abundance // Regrowth"
+  },
+  "sos_146": {
+    "status": "completed",
+    "card_name": "Emil, Vastlands Roamer"
+  },
+  "sos_147": {
+    "status": "completed",
+    "card_name": "Environmental Scientist"
+  },
+  "sos_148": {
+    "status": "completed",
+    "card_name": "Follow the Lumarets"
+  },
+  "sos_149": {
+    "status": "completed",
+    "card_name": "Germination Practicum"
+  },
+  "sos_15": {
+    "status": "completed",
+    "card_name": "Erode"
+  },
+  "sos_150": {
+    "status": "completed",
+    "card_name": "Glorious Decay"
+  },
+  "sos_151": {
+    "status": "completed",
+    "card_name": "Hungry Graffalon"
+  },
+  "sos_152": {
+    "status": "completed",
+    "card_name": "Infirmary Healer // Stream of Life"
+  },
+  "sos_153": {
+    "status": "completed",
+    "card_name": "Lumaret's Favor"
+  },
+  "sos_154": {
+    "status": "completed",
+    "card_name": "Mindful Biomancer"
+  },
+  "sos_155": {
+    "status": "completed",
+    "card_name": "Noxious Newt"
+  },
+  "sos_156": {
+    "status": "completed",
+    "card_name": "Oracle's Restoration"
+  },
+  "sos_157": {
+    "status": "completed",
+    "card_name": "Pestbrood Sloth"
+  },
+  "sos_158": {
+    "status": "completed",
+    "card_name": "Planar Engineering"
+  },
+  "sos_159": {
+    "status": "completed",
+    "card_name": "Shopkeeper's Bane"
+  },
+  "sos_16": {
+    "status": "completed",
+    "card_name": "Graduation Day"
+  },
+  "sos_160": {
+    "status": "completed",
+    "card_name": "Slumbering Trudge"
+  },
+  "sos_161": {
+    "status": "completed",
+    "card_name": "Snarl Song"
+  },
+  "sos_162": {
+    "status": "completed",
+    "card_name": "Studious First-Year // Rampant Growth"
+  },
+  "sos_163": {
+    "status": "completed",
+    "card_name": "Tenured Concocter"
+  },
+  "sos_164": {
+    "status": "completed",
+    "card_name": "Thornfist Striker"
+  },
+  "sos_165": {
+    "status": "completed",
+    "card_name": "Topiary Lecturer"
+  },
+  "sos_166": {
+    "status": "completed",
+    "card_name": "Vastlands Scavenger // Bind to Life"
+  },
+  "sos_167": {
+    "status": "completed",
+    "card_name": "Wild Hypothesis"
+  },
+  "sos_168": {
+    "status": "completed",
+    "card_name": "Wildgrowth Archaic"
+  },
+  "sos_169": {
+    "status": "completed",
+    "card_name": "Zimone's Experiment"
+  },
+  "sos_17": {
+    "status": "completed",
+    "card_name": "Group Project"
+  },
+  "sos_170": {
+    "status": "completed",
+    "card_name": "Abigale, Poet Laureate // Heroic Stanza"
+  },
+  "sos_171": {
+    "status": "completed",
+    "card_name": "Abstract Paintmage"
+  },
+  "sos_172": {
+    "status": "completed",
+    "card_name": "Applied Geometry"
+  },
+  "sos_173": {
+    "status": "completed",
+    "card_name": "Ark of Hunger"
+  },
+  "sos_174": {
+    "status": "completed",
+    "card_name": "Aziza, Mage Tower Captain"
+  },
+  "sos_175": {
+    "status": "completed",
+    "card_name": "Berta, Wise Extrapolator"
+  },
+  "sos_176": {
+    "status": "completed",
+    "card_name": "Blech, Loafing Pest"
+  },
+  "sos_177": {
+    "status": "completed",
+    "card_name": "Bogwater Lumaret"
+  },
+  "sos_178": {
+    "status": "completed",
+    "card_name": "Borrowed Knowledge"
+  },
+  "sos_179": {
+    "status": "completed",
+    "card_name": "Cauldron of Essence"
+  },
+  "sos_18": {
+    "status": "completed",
+    "card_name": "Harsh Annotation"
+  },
+  "sos_180": {
+    "status": "completed",
+    "card_name": "Colorstorm Stallion"
+  },
+  "sos_181": {
+    "status": "completed",
+    "card_name": "Colossus of the Blood Age"
+  },
+  "sos_182": {
+    "status": "completed",
+    "card_name": "Conciliator's Duelist"
+  },
+  "sos_183": {
+    "status": "completed",
+    "card_name": "Cuboid Colony"
+  },
+  "sos_184": {
+    "status": "completed",
+    "card_name": "Dina's Guidance"
+  },
+  "sos_185": {
+    "status": "completed",
+    "card_name": "Elemental Mascot"
+  },
+  "sos_186": {
+    "status": "completed",
+    "card_name": "Embrace the Paradox"
+  },
+  "sos_187": {
+    "status": "completed",
+    "card_name": "Essenceknit Scholar"
+  },
+  "sos_188": {
+    "status": "completed",
+    "card_name": "Fix What's Broken"
+  },
+  "sos_189": {
+    "status": "completed",
+    "card_name": "Fractal Mascot"
+  },
+  "sos_19": {
+    "status": "completed",
+    "card_name": "Honorbound Page // Forum's Favor"
+  },
+  "sos_190": {
+    "status": "completed",
+    "card_name": "Fractal Tender"
+  },
+  "sos_191": {
+    "status": "completed",
+    "card_name": "Geometer's Arthropod"
+  },
+  "sos_192": {
+    "status": "completed",
+    "card_name": "Grapple with Death"
+  },
+  "sos_193": {
+    "status": "completed",
+    "card_name": "Growth Curve"
+  },
+  "sos_194": {
+    "status": "completed",
+    "card_name": "Hardened Academic"
+  },
+  "sos_195": {
+    "status": "completed",
+    "card_name": "Imperious Inkmage"
+  },
+  "sos_196": {
+    "status": "completed",
+    "card_name": "Inkling Mascot"
+  },
+  "sos_197": {
+    "status": "completed",
+    "card_name": "Killian's Confidence"
+  },
+  "sos_198": {
+    "status": "completed",
+    "card_name": "Kirol, History Buff // Pack a Punch"
+  },
+  "sos_199": {
+    "status": "completed",
+    "card_name": "Lluwen, Exchange Student // Pest Friend"
+  },
+  "sos_2": {
+    "status": "completed",
+    "card_name": "Rancorous Archaic"
+  },
+  "sos_20": {
+    "status": "completed",
+    "card_name": "Informed Inkwright"
+  },
+  "sos_200": {
+    "status": "completed",
+    "card_name": "Lorehold Charm"
+  },
+  "sos_201": {
+    "status": "completed",
+    "card_name": "Lorehold, the Historian"
+  },
+  "sos_202": {
+    "status": "completed",
+    "card_name": "Mind into Matter"
+  },
+  "sos_203": {
+    "status": "completed",
+    "card_name": "Mind Roots"
+  },
+  "sos_204": {
+    "status": "completed",
+    "card_name": "Molten Note"
+  },
+  "sos_205": {
+    "status": "completed",
+    "card_name": "Moment of Reckoning"
+  },
+  "sos_206": {
+    "status": "completed",
+    "card_name": "Nita, Forum Conciliator"
+  },
+  "sos_207": {
+    "status": "completed",
+    "card_name": "Old-Growth Educator"
+  },
+  "sos_208": {
+    "status": "completed",
+    "card_name": "Paradox Surveyor"
+  },
+  "sos_209": {
+    "status": "completed",
+    "card_name": "Pest Mascot"
+  },
+  "sos_21": {
+    "status": "completed",
+    "card_name": "Inkshape Demonstrator"
+  },
+  "sos_210": {
+    "status": "completed",
+    "card_name": "Practiced Scrollsmith"
+  },
+  "sos_211": {
+    "status": "completed",
+    "card_name": "Prismari Charm"
+  },
+  "sos_212": {
+    "status": "completed",
+    "card_name": "Prismari, the Inspiration"
+  },
+  "sos_213": {
+    "status": "completed",
+    "card_name": "Proctor's Gaze"
+  },
+  "sos_214": {
+    "status": "completed",
+    "card_name": "Professor Dellian Fel"
+  },
+  "sos_215": {
+    "status": "completed",
+    "card_name": "Pterafractyl"
+  },
+  "sos_216": {
+    "status": "completed",
+    "card_name": "Pursue the Past"
+  },
+  "sos_217": {
+    "status": "completed",
+    "card_name": "Quandrix Charm"
+  },
+  "sos_218": {
+    "status": "completed",
+    "card_name": "Quandrix, the Proof"
+  },
+  "sos_219": {
+    "status": "completed",
+    "card_name": "Rapturous Moment"
+  },
+  "sos_22": {
+    "status": "completed",
+    "card_name": "Interjection"
+  },
+  "sos_220": {
+    "status": "completed",
+    "card_name": "Render Speechless"
+  },
+  "sos_221": {
+    "status": "completed",
+    "card_name": "Resonating Lute"
+  },
+  "sos_222": {
+    "status": "completed",
+    "card_name": "Root Manipulation"
+  },
+  "sos_223": {
+    "status": "completed",
+    "card_name": "Sanar, Unfinished Genius // Wild Idea"
+  },
+  "sos_224": {
+    "status": "completed",
+    "card_name": "Scolding Administrator"
+  },
+  "sos_225": {
+    "status": "completed",
+    "card_name": "Silverquill Charm"
+  },
+  "sos_226": {
+    "status": "completed",
+    "card_name": "Silverquill, the Disputant"
+  },
+  "sos_227": {
+    "status": "completed",
+    "card_name": "Snooping Page"
+  },
+  "sos_228": {
+    "status": "completed",
+    "card_name": "Social Snub"
+  },
+  "sos_229": {
+    "status": "completed",
+    "card_name": "Spectacular Skywhale"
+  },
+  "sos_23": {
+    "status": "completed",
+    "card_name": "Joined Researchers // Secret Rendezvous"
+  },
+  "sos_230": {
+    "status": "completed",
+    "card_name": "Spirit Mascot"
+  },
+  "sos_231": {
+    "status": "completed",
+    "card_name": "Splatter Technique"
+  },
+  "sos_232": {
+    "status": "completed",
+    "card_name": "Stadium Tidalmage"
+  },
+  "sos_233": {
+    "status": "completed",
+    "card_name": "Startled Relic Sloth"
+  },
+  "sos_234": {
+    "status": "completed",
+    "card_name": "Stirring Honormancer"
+  },
+  "sos_235": {
+    "status": "completed",
+    "card_name": "Stress Dream"
+  },
+  "sos_236": {
+    "status": "completed",
+    "card_name": "Suspend Aggression"
+  },
+  "sos_237": {
+    "status": "completed",
+    "card_name": "Tam, Observant Sequencer // Deep Sight"
+  },
+  "sos_238": {
+    "status": "completed",
+    "card_name": "Teacher's Pest"
+  },
+  "sos_239": {
+    "status": "completed",
+    "card_name": "Traumatic Critique"
+  },
+  "sos_24": {
+    "status": "completed",
+    "card_name": "Owlin Historian"
+  },
+  "sos_240": {
+    "status": "completed",
+    "card_name": "Vibrant Outburst"
+  },
+  "sos_241": {
+    "status": "completed",
+    "card_name": "Vicious Rivalry"
+  },
+  "sos_242": {
+    "status": "completed",
+    "card_name": "Visionary's Dance"
+  },
+  "sos_243": {
+    "status": "completed",
+    "card_name": "Wilt in the Heat"
+  },
+  "sos_244": {
+    "status": "completed",
+    "card_name": "Witherbloom Charm"
+  },
+  "sos_245": {
+    "status": "completed",
+    "card_name": "Witherbloom, the Balancer"
+  },
+  "sos_246": {
+    "status": "completed",
+    "card_name": "Zaffai and the Tempests"
+  },
+  "sos_247": {
+    "status": "completed",
+    "card_name": "Biblioplex Tomekeeper"
+  },
+  "sos_248": {
+    "status": "completed",
+    "card_name": "Diary of Dreams"
+  },
+  "sos_249": {
+    "status": "completed",
+    "card_name": "Mage Tower Referee"
+  },
+  "sos_25": {
+    "status": "completed",
+    "card_name": "Practiced Offense"
+  },
+  "sos_250": {
+    "status": "completed",
+    "card_name": "Page, Loose Leaf"
+  },
+  "sos_251": {
+    "status": "completed",
+    "card_name": "Potioner's Trove"
+  },
+  "sos_252": {
+    "status": "completed",
+    "card_name": "Strixhaven Skycoach"
+  },
+  "sos_253": {
+    "status": "completed",
+    "card_name": "Deathcap Glade"
+  },
+  "sos_254": {
+    "status": "completed",
+    "card_name": "Dreamroot Cascade"
+  },
+  "sos_255": {
+    "status": "completed",
+    "card_name": "Fields of Strife"
+  },
+  "sos_256": {
+    "status": "completed",
+    "card_name": "Forum of Amity"
+  },
+  "sos_257": {
+    "status": "completed",
+    "card_name": "Great Hall of the Biblioplex"
+  },
+  "sos_258": {
+    "status": "completed",
+    "card_name": "Paradox Gardens"
+  },
+  "sos_259": {
+    "status": "completed",
+    "card_name": "Petrified Hamlet"
+  },
+  "sos_26": {
+    "status": "completed",
+    "card_name": "Primary Research"
+  },
+  "sos_260": {
+    "status": "completed",
+    "card_name": "Shattered Sanctum"
+  },
+  "sos_261": {
+    "status": "completed",
+    "card_name": "Skycoach Waypoint"
+  },
+  "sos_262": {
+    "status": "completed",
+    "card_name": "Spectacle Summit"
+  },
+  "sos_263": {
+    "status": "completed",
+    "card_name": "Stormcarved Coast"
+  },
+  "sos_264": {
+    "status": "completed",
+    "card_name": "Sundown Pass"
+  },
+  "sos_265": {
+    "status": "completed",
+    "card_name": "Terramorphic Expanse"
+  },
+  "sos_266": {
+    "status": "completed",
+    "card_name": "Titan's Grave"
+  },
+  "sos_267": {
+    "status": "completed",
+    "card_name": "Plains"
+  },
+  "sos_268": {
+    "status": "completed",
+    "card_name": "Island"
+  },
+  "sos_269": {
+    "status": "completed",
+    "card_name": "Swamp"
+  },
+  "sos_27": {
+    "status": "completed",
+    "card_name": "Quill-Blade Laureate // Twofold Intent"
+  },
+  "sos_270": {
+    "status": "completed",
+    "card_name": "Mountain"
+  },
+  "sos_271": {
+    "status": "completed",
+    "card_name": "Forest"
+  },
+  "sos_28": {
+    "status": "completed",
+    "card_name": "Rapier Wit"
+  },
+  "sos_29": {
+    "status": "completed",
+    "card_name": "Rehearsed Debater"
+  },
+  "sos_3": {
+    "status": "completed",
+    "card_name": "Sundering Archaic"
+  },
+  "sos_30": {
+    "status": "completed",
+    "card_name": "Restoration Seminar"
+  },
+  "sos_31": {
+    "status": "completed",
+    "card_name": "Shattered Acolyte"
+  },
+  "sos_32": {
+    "status": "completed",
+    "card_name": "Soaring Stoneglider"
+  },
+  "sos_33": {
+    "status": "completed",
+    "card_name": "Spiritcall Enthusiast // Scrollboost"
+  },
+  "sos_34": {
+    "status": "completed",
+    "card_name": "Stand Up for Yourself"
+  },
+  "sos_35": {
+    "status": "completed",
+    "card_name": "Stirring Hopesinger"
+  },
+  "sos_36": {
+    "status": "completed",
+    "card_name": "Stone Docent"
+  },
+  "sos_37": {
+    "status": "completed",
+    "card_name": "Summoned Dromedary"
+  },
+  "sos_38": {
+    "status": "completed",
+    "card_name": "Banishing Betrayal"
+  },
+  "sos_39": {
+    "status": "completed",
+    "card_name": "Brush Off"
+  },
+  "sos_4": {
+    "status": "completed",
+    "card_name": "Together as One"
+  },
+  "sos_40": {
+    "status": "completed",
+    "card_name": "Campus Composer // Aqueous Aria"
+  },
+  "sos_41": {
+    "status": "completed",
+    "card_name": "Chase Inspiration"
+  },
+  "sos_42": {
+    "status": "completed",
+    "card_name": "Deluge Virtuoso"
+  },
+  "sos_43": {
+    "status": "completed",
+    "card_name": "Divergent Equation"
+  },
+  "sos_44": {
+    "status": "completed",
+    "card_name": "Echocasting Symposium"
+  },
+  "sos_45": {
+    "status": "completed",
+    "card_name": "Emeritus of Ideation // Ancestral Recall"
+  },
+  "sos_46": {
+    "status": "completed",
+    "card_name": "Encouraging Aviator // Jump"
+  },
+  "sos_47": {
+    "status": "completed",
+    "card_name": "Essence Scatter"
+  },
+  "sos_48": {
+    "status": "completed",
+    "card_name": "Exhibition Tidecaller"
+  },
+  "sos_49": {
+    "status": "completed",
+    "card_name": "Flow State"
+  },
+  "sos_5": {
+    "status": "completed",
+    "card_name": "Transcendent Archaic"
+  },
+  "sos_50": {
+    "status": "completed",
+    "card_name": "Fractal Anomaly"
+  },
+  "sos_51": {
+    "status": "completed",
+    "card_name": "Fractalize"
+  },
+  "sos_52": {
+    "status": "completed",
+    "card_name": "Harmonized Trio // Brainstorm"
+  },
+  "sos_53": {
+    "status": "completed",
+    "card_name": "Homesickness"
+  },
+  "sos_54": {
+    "status": "completed",
+    "card_name": "Hydro-Channeler"
+  },
+  "sos_55": {
+    "status": "completed",
+    "card_name": "Jadzi, Steward of Fate // Oracle's Gift"
+  },
+  "sos_56": {
+    "status": "completed",
+    "card_name": "Landscape Painter // Vibrant Idea"
+  },
+  "sos_57": {
+    "status": "completed",
+    "card_name": "Mana Sculpt"
+  },
+  "sos_58": {
+    "status": "completed",
+    "card_name": "Mathemagics"
+  },
+  "sos_59": {
+    "status": "completed",
+    "card_name": "Matterbending Mage"
+  },
+  "sos_6": {
+    "status": "completed",
+    "card_name": "Ajani's Response"
+  },
+  "sos_60": {
+    "status": "completed",
+    "card_name": "Muse Seeker"
+  },
+  "sos_61": {
+    "status": "completed",
+    "card_name": "Muse's Encouragement"
+  },
+  "sos_62": {
+    "status": "completed",
+    "card_name": "Orysa, Tide Choreographer"
+  },
+  "sos_63": {
+    "status": "completed",
+    "card_name": "Pensive Professor"
+  },
+  "sos_64": {
+    "status": "completed",
+    "card_name": "Procrastinate"
+  },
+  "sos_65": {
+    "status": "completed",
+    "card_name": "Quick Study"
+  },
+  "sos_66": {
+    "status": "completed",
+    "card_name": "Run Behind"
+  },
+  "sos_67": {
+    "status": "completed",
+    "card_name": "Skycoach Conductor // All Aboard"
+  },
+  "sos_68": {
+    "status": "completed",
+    "card_name": "Spellbook Seeker // Careful Study"
+  },
+  "sos_69": {
+    "status": "completed",
+    "card_name": "Tester of the Tangential"
+  },
+  "sos_7": {
+    "status": "completed",
+    "card_name": "Antiquities on the Loose"
+  },
+  "sos_70": {
+    "status": "completed",
+    "card_name": "Textbook Tabulator"
+  },
+  "sos_71": {
+    "status": "completed",
+    "card_name": "Wisdom of Ages"
+  },
+  "sos_72": {
+    "status": "completed",
+    "card_name": "Adventurous Eater // Have a Bite"
+  },
+  "sos_73": {
+    "status": "completed",
+    "card_name": "Arcane Omens"
+  },
+  "sos_74": {
+    "status": "completed",
+    "card_name": "Arnyn, Deathbloom Botanist"
+  },
+  "sos_75": {
+    "status": "completed",
+    "card_name": "Burrog Banemaker"
+  },
+  "sos_76": {
+    "status": "completed",
+    "card_name": "Cheerful Osteomancer // Raise Dead"
+  },
+  "sos_77": {
+    "status": "completed",
+    "card_name": "Cost of Brilliance"
+  },
+  "sos_78": {
+    "status": "completed",
+    "card_name": "Decorum Dissertation"
+  },
+  "sos_79": {
+    "status": "completed",
+    "card_name": "Dissection Practice"
+  },
+  "sos_8": {
+    "status": "completed",
+    "card_name": "Ascendant Dustspeaker"
+  },
+  "sos_80": {
+    "status": "completed",
+    "card_name": "Emeritus of Woe // Demonic Tutor"
+  },
+  "sos_81": {
+    "status": "completed",
+    "card_name": "End of the Hunt"
+  },
+  "sos_82": {
+    "status": "completed",
+    "card_name": "Eternal Student"
+  },
+  "sos_83": {
+    "status": "completed",
+    "card_name": "Foolish Fate"
+  },
+  "sos_84": {
+    "status": "completed",
+    "card_name": "Forum Necroscribe"
+  },
+  "sos_85": {
+    "status": "completed",
+    "card_name": "Grave Researcher // Reanimate"
+  },
+  "sos_86": {
+    "status": "completed",
+    "card_name": "Last Gasp"
+  },
+  "sos_87": {
+    "status": "completed",
+    "card_name": "Lecturing Scornmage"
+  },
+  "sos_88": {
+    "status": "completed",
+    "card_name": "Leech Collector // Bloodletting"
+  },
+  "sos_89": {
+    "status": "completed",
+    "card_name": "Masterful Flourish"
+  },
+  "sos_9": {
+    "status": "completed",
+    "card_name": "Daydream"
+  },
+  "sos_90": {
+    "status": "completed",
+    "card_name": "Melancholic Poet"
+  },
+  "sos_91": {
+    "status": "completed",
+    "card_name": "Moseo, Vein's New Dean"
+  },
+  "sos_92": {
+    "status": "completed",
+    "card_name": "Poisoner's Apprentice"
+  },
+  "sos_93": {
+    "status": "completed",
+    "card_name": "Postmortem Professor"
+  },
+  "sos_94": {
+    "status": "completed",
+    "card_name": "Pox Plague"
+  },
+  "sos_95": {
+    "status": "completed",
+    "card_name": "Pull from the Grave"
+  },
+  "sos_96": {
+    "status": "completed",
+    "card_name": "Rabid Attack"
+  },
+  "sos_97": {
+    "status": "completed",
+    "card_name": "Ral Zarek, Guest Lecturer"
+  },
+  "sos_98": {
+    "status": "completed",
+    "card_name": "Scathing Shadelock // Venomous Words"
+  },
+  "sos_99": {
+    "status": "completed",
+    "card_name": "Scheming Silvertongue // Sign in Blood"
+  }
+}

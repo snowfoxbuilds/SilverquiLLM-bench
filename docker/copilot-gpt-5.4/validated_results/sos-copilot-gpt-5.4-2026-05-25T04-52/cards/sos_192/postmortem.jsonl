@@ -1,0 +1,7 @@
+{"collector_number": "sos_192", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_niawjw39/tests.py::TestGrappleWithDeathBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_192", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_niawjw39/tests.py::TestGrappleWithDeathBasicProperties::test_colors"}
+{"collector_number": "sos_192", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_niawjw39/tests.py::TestGrappleWithDeathAbilities::test_destroys_target"}
+{"collector_number": "sos_192", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_niawjw39/tests.py::TestGrappleWithDeathAbilities::test_gains_life"}
+{"collector_number": "sos_192", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_niawjw39/tests.py::TestGrappleWithDeathEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_192", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_niawjw39/tests.py::TestGrappleWithDeathInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_192", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_niawjw39/tests.py::TestGrappleWithDeathInteractions::test_does_not_affect_non_targets"}

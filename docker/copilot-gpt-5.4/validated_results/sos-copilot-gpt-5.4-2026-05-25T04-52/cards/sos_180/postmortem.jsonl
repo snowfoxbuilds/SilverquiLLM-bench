@@ -1,0 +1,10 @@
+{"collector_number": "sos_180", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gc4zkluk/tests.py::TestColorstormStallionBasicProperties::test_is_creature"}
+{"collector_number": "sos_180", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gc4zkluk/tests.py::TestColorstormStallionBasicProperties::test_colors"}
+{"collector_number": "sos_180", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gc4zkluk/tests.py::TestColorstormStallionAbilities::test_has_haste"}
+{"collector_number": "sos_180", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gc4zkluk/tests.py::TestColorstormStallionAbilities::test_has_ward"}
+{"collector_number": "sos_180", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gc4zkluk/tests.py::TestColorstormStallionAbilities::test_has_opus"}
+{"collector_number": "sos_180", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gc4zkluk/tests.py::TestColorstormStallionAbilities::test_opus_trigger_implemented"}
+{"collector_number": "sos_180", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gc4zkluk/tests.py::TestColorstormStallionEdgeCases::test_opus_no_trigger_without_spell"}
+{"collector_number": "sos_180", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gc4zkluk/tests.py::TestColorstormStallionInteractions::test_counters_survive_end_of_turn"}
+{"collector_number": "sos_180", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gc4zkluk/tests.py::TestColorstormStallionInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_180", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gc4zkluk/tests.py::TestColorstormStallionInteractions::test_tokens_appear_on_battlefield"}

@@ -1,0 +1,2 @@
+{"collector_number": "sos_151", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s98zrekd/tests.py::TestHungryGraffalonBasicProperties::test_colors"}
+{"collector_number": "sos_151", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s98zrekd/tests.py::TestHungryGraffalonAbilities::test_adds_plus_counter"}

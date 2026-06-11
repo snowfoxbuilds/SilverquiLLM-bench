@@ -1,0 +1,10 @@
+{"collector_number": "sos_196", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qfm1jlkc/tests.py::TestInklingMascotBasicProperties::test_is_creature"}
+{"collector_number": "sos_196", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qfm1jlkc/tests.py::TestInklingMascotBasicProperties::test_colors"}
+{"collector_number": "sos_196", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qfm1jlkc/tests.py::TestInklingMascotAbilities::test_repartee_registers_trigger"}
+{"collector_number": "sos_196", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qfm1jlkc/tests.py::TestInklingMascotAbilities::test_repartee_requires_creature_target"}
+{"collector_number": "sos_196", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qfm1jlkc/tests.py::TestInklingMascotAbilities::test_repartee_produces_effect"}
+{"collector_number": "sos_196", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qfm1jlkc/tests.py::TestInklingMascotAbilities::test_grants_flying"}
+{"collector_number": "sos_196", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qfm1jlkc/tests.py::TestInklingMascotAbilities::test_surveil_effect"}
+{"collector_number": "sos_196", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qfm1jlkc/tests.py::TestInklingMascotEdgeCases::test_may_choice_optional"}
+{"collector_number": "sos_196", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qfm1jlkc/tests.py::TestInklingMascotInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_196", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qfm1jlkc/tests.py::TestInklingMascotInteractions::test_coexists_with_other_creatures"}

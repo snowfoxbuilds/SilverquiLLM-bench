@@ -1,0 +1,3 @@
+{"collector_number": "sos_31", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2t47xnae/tests.py::TestShatteredAcolyteBasicProperties::test_colors"}
+{"collector_number": "sos_31", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2t47xnae/tests.py::TestShatteredAcolyteAbilities::test_destroys_target"}
+{"collector_number": "sos_31", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2t47xnae/tests.py::TestShatteredAcolyteInteractions::test_get_targets_finds_creatures"}

@@ -1,0 +1,10 @@
+{"collector_number": "sos_131", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9xksgkx5/tests.py::TestStrifeScholarAwakenTheAgesBasicProperties::test_is_creature"}
+{"collector_number": "sos_131", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9xksgkx5/tests.py::TestStrifeScholarAwakenTheAgesBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_131", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9xksgkx5/tests.py::TestStrifeScholarAwakenTheAgesBasicProperties::test_colors"}
+{"collector_number": "sos_131", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9xksgkx5/tests.py::TestStrifeScholarAwakenTheAgesAbilities::test_has_prepared"}
+{"collector_number": "sos_131", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9xksgkx5/tests.py::TestStrifeScholarAwakenTheAgesAbilities::test_has_ward"}
+{"collector_number": "sos_131", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9xksgkx5/tests.py::TestStrifeScholarAwakenTheAgesAbilities::test_etb_trigger_callable"}
+{"collector_number": "sos_131", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9xksgkx5/tests.py::TestStrifeScholarAwakenTheAgesEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_131", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9xksgkx5/tests.py::TestStrifeScholarAwakenTheAgesEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_131", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9xksgkx5/tests.py::TestStrifeScholarAwakenTheAgesInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_131", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9xksgkx5/tests.py::TestStrifeScholarAwakenTheAgesInteractions::test_coexists_with_other_permanents"}

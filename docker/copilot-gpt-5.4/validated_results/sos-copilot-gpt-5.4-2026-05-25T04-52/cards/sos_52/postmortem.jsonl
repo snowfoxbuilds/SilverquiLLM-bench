@@ -1,0 +1,8 @@
+{"collector_number": "sos_52", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nc5y7rex/tests.py::TestHarmonizedTrioBrainstormBasicProperties::test_is_creature"}
+{"collector_number": "sos_52", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nc5y7rex/tests.py::TestHarmonizedTrioBrainstormBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_52", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nc5y7rex/tests.py::TestHarmonizedTrioBrainstormBasicProperties::test_colors"}
+{"collector_number": "sos_52", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nc5y7rex/tests.py::TestHarmonizedTrioBrainstormAbilities::test_has_prepared"}
+{"collector_number": "sos_52", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nc5y7rex/tests.py::TestHarmonizedTrioBrainstormEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_52", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nc5y7rex/tests.py::TestHarmonizedTrioBrainstormEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_52", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nc5y7rex/tests.py::TestHarmonizedTrioBrainstormInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_52", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nc5y7rex/tests.py::TestHarmonizedTrioBrainstormInteractions::test_coexists_with_other_permanents"}

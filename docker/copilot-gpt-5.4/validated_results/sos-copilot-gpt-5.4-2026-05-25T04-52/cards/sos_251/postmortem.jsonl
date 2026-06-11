@@ -1,0 +1,9 @@
+{"collector_number": "sos_251", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f0yyo_we/tests.py::TestPotionersTroveBasicProperties::test_is_artifact"}
+{"collector_number": "sos_251", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f0yyo_we/tests.py::TestPotionersTroveBasicProperties::test_card_types"}
+{"collector_number": "sos_251", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f0yyo_we/tests.py::TestPotionersTroveBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_251", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f0yyo_we/tests.py::TestPotionersTroveBasicProperties::test_colors"}
+{"collector_number": "sos_251", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f0yyo_we/tests.py::TestPotionersTroveAbilities::test_gains_life"}
+{"collector_number": "sos_251", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f0yyo_we/tests.py::TestPotionersTroveAbilities::test_has_activated_ability"}
+{"collector_number": "sos_251", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f0yyo_we/tests.py::TestPotionersTroveEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_251", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f0yyo_we/tests.py::TestPotionersTroveInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_251", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f0yyo_we/tests.py::TestPotionersTroveInteractions::test_does_not_affect_non_targets"}

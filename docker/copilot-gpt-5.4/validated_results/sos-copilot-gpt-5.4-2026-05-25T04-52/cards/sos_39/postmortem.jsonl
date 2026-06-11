@@ -1,0 +1,7 @@
+{"collector_number": "sos_39", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_03tbjix2/tests.py::TestBrushOffBasicProperties::test_is_instant"}
+{"collector_number": "sos_39", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_03tbjix2/tests.py::TestBrushOffBasicProperties::test_colors"}
+{"collector_number": "sos_39", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_03tbjix2/tests.py::TestBrushOffAbilities::test_counters_spell"}
+{"collector_number": "sos_39", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_03tbjix2/tests.py::TestBrushOffAbilities::test_cost_reduction_applies"}
+{"collector_number": "sos_39", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_03tbjix2/tests.py::TestBrushOffEdgeCases::test_no_reduction_when_condition_unmet"}
+{"collector_number": "sos_39", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_03tbjix2/tests.py::TestBrushOffInteractions::test_get_targets_finds_stack_spells"}
+{"collector_number": "sos_39", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_03tbjix2/tests.py::TestBrushOffInteractions::test_does_not_affect_non_targets"}

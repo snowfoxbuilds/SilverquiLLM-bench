@@ -1,0 +1,4 @@
+{"collector_number": "sos_39", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mft1v_hd/tests.py::TestBrushOffBasicProperties::test_colors"}
+{"collector_number": "sos_39", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mft1v_hd/tests.py::TestBrushOffAbilities::test_counters_spell"}
+{"collector_number": "sos_39", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mft1v_hd/tests.py::TestBrushOffAbilities::test_cost_reduction_applies"}
+{"collector_number": "sos_39", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mft1v_hd/tests.py::TestBrushOffInteractions::test_get_targets_finds_stack_spells"}

@@ -1,0 +1,6 @@
+{"collector_number": "sos_14", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e52j3zjd/tests.py::TestEnnisDebateModeratorBasicProperties::test_is_creature"}
+{"collector_number": "sos_14", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e52j3zjd/tests.py::TestEnnisDebateModeratorBasicProperties::test_colors"}
+{"collector_number": "sos_14", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e52j3zjd/tests.py::TestEnnisDebateModeratorAbilities::test_etb_exiles_target"}
+{"collector_number": "sos_14", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e52j3zjd/tests.py::TestEnnisDebateModeratorEdgeCases::test_fizzle_no_targets_creature_stays"}
+{"collector_number": "sos_14", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e52j3zjd/tests.py::TestEnnisDebateModeratorInteractions::test_counters_survive_end_of_turn"}
+{"collector_number": "sos_14", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e52j3zjd/tests.py::TestEnnisDebateModeratorInteractions::test_combat_with_opponent"}

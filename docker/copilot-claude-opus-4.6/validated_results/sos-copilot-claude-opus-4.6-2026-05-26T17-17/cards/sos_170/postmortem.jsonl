@@ -1,0 +1,4 @@
+{"collector_number": "sos_170", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_umjb1rct/tests.py::TestAbigalePoetLaureateHeroicStanzaBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_170", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_umjb1rct/tests.py::TestAbigalePoetLaureateHeroicStanzaBasicProperties::test_colors"}
+{"collector_number": "sos_170", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_umjb1rct/tests.py::TestAbigalePoetLaureateHeroicStanzaAbilities::test_has_prepared"}
+{"collector_number": "sos_170", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_umjb1rct/tests.py::TestAbigalePoetLaureateHeroicStanzaEdgeCases::test_mana_cost_matches_spec"}

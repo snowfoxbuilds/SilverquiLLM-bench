@@ -1,0 +1,8 @@
+{"collector_number": "sos_156", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_r9mskix6/tests.py::TestOraclesRestorationBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_156", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_r9mskix6/tests.py::TestOraclesRestorationBasicProperties::test_colors"}
+{"collector_number": "sos_156", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_r9mskix6/tests.py::TestOraclesRestorationAbilities::test_draws_cards"}
+{"collector_number": "sos_156", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_r9mskix6/tests.py::TestOraclesRestorationAbilities::test_pump_effect"}
+{"collector_number": "sos_156", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_r9mskix6/tests.py::TestOraclesRestorationAbilities::test_gains_life"}
+{"collector_number": "sos_156", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_r9mskix6/tests.py::TestOraclesRestorationEdgeCases::test_targets_only_own_permanents"}
+{"collector_number": "sos_156", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_r9mskix6/tests.py::TestOraclesRestorationInteractions::test_get_targets_finds_own_creatures"}
+{"collector_number": "sos_156", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_r9mskix6/tests.py::TestOraclesRestorationInteractions::test_does_not_affect_non_targets"}

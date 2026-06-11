@@ -1,0 +1,8 @@
+{"collector_number": "sos_16", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dbrfdlx5/tests.py::TestGraduationDayBasicProperties::test_is_enchantment"}
+{"collector_number": "sos_16", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dbrfdlx5/tests.py::TestGraduationDayBasicProperties::test_colors"}
+{"collector_number": "sos_16", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dbrfdlx5/tests.py::TestGraduationDayAbilities::test_repartee_registers_trigger"}
+{"collector_number": "sos_16", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dbrfdlx5/tests.py::TestGraduationDayAbilities::test_repartee_requires_creature_target"}
+{"collector_number": "sos_16", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dbrfdlx5/tests.py::TestGraduationDayAbilities::test_repartee_adds_counter"}
+{"collector_number": "sos_16", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dbrfdlx5/tests.py::TestGraduationDayEdgeCases::test_targets_only_own_permanents"}
+{"collector_number": "sos_16", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dbrfdlx5/tests.py::TestGraduationDayInteractions::test_get_targets_finds_own_creatures"}
+{"collector_number": "sos_16", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dbrfdlx5/tests.py::TestGraduationDayInteractions::test_does_not_affect_non_targets"}

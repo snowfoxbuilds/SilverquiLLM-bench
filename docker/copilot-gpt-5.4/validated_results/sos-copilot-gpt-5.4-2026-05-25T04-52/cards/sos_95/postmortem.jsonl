@@ -1,0 +1,7 @@
+{"collector_number": "sos_95", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p4c_b_4w/tests.py::TestPullFromTheGraveBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_95", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p4c_b_4w/tests.py::TestPullFromTheGraveBasicProperties::test_colors"}
+{"collector_number": "sos_95", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p4c_b_4w/tests.py::TestPullFromTheGraveAbilities::test_gains_life"}
+{"collector_number": "sos_95", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p4c_b_4w/tests.py::TestPullFromTheGraveAbilities::test_returns_from_graveyard"}
+{"collector_number": "sos_95", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p4c_b_4w/tests.py::TestPullFromTheGraveEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_95", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p4c_b_4w/tests.py::TestPullFromTheGraveInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_95", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p4c_b_4w/tests.py::TestPullFromTheGraveInteractions::test_does_not_affect_non_targets"}

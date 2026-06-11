@@ -1,0 +1,8 @@
+{"collector_number": "sos_87", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vph7o3uq/tests.py::TestLecturingScornmageBasicProperties::test_is_creature"}
+{"collector_number": "sos_87", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vph7o3uq/tests.py::TestLecturingScornmageBasicProperties::test_colors"}
+{"collector_number": "sos_87", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vph7o3uq/tests.py::TestLecturingScornmageAbilities::test_repartee_registers_trigger"}
+{"collector_number": "sos_87", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vph7o3uq/tests.py::TestLecturingScornmageAbilities::test_repartee_requires_creature_target"}
+{"collector_number": "sos_87", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vph7o3uq/tests.py::TestLecturingScornmageAbilities::test_repartee_adds_counter"}
+{"collector_number": "sos_87", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vph7o3uq/tests.py::TestLecturingScornmageEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_87", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vph7o3uq/tests.py::TestLecturingScornmageInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_87", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vph7o3uq/tests.py::TestLecturingScornmageInteractions::test_coexists_with_other_creatures"}

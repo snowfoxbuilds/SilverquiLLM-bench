@@ -1,0 +1,2 @@
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3xfy7prj/tests.py::TestGreatHallOfTheBiblioplexBasicProperties::test_colorless"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3xfy7prj/tests.py::TestGreatHallOfTheBiblioplexInteractions::test_spell_to_graveyard_after_resolution"}

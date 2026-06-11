@@ -1,0 +1,3 @@
+{"collector_number": "sos_7", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ua1bwvxe/tests.py::TestAntiquitiesOnTheLooseBasicProperties::test_colors"}
+{"collector_number": "sos_7", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ua1bwvxe/tests.py::TestAntiquitiesOnTheLooseAbilities::test_resolution_exiles_target"}
+{"collector_number": "sos_7", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ua1bwvxe/tests.py::TestAntiquitiesOnTheLooseInteractions::test_spell_to_graveyard_after_resolution"}

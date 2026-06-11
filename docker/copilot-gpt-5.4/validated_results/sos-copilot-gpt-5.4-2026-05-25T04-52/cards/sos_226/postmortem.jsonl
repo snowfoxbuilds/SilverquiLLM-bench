@@ -1,0 +1,12 @@
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oalifnzf/tests.py::TestSilverquillTheDisputantBasicProperties::test_is_creature"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oalifnzf/tests.py::TestSilverquillTheDisputantBasicProperties::test_card_types"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oalifnzf/tests.py::TestSilverquillTheDisputantBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oalifnzf/tests.py::TestSilverquillTheDisputantBasicProperties::test_colors"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oalifnzf/tests.py::TestSilverquillTheDisputantBasicProperties::test_power"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oalifnzf/tests.py::TestSilverquillTheDisputantBasicProperties::test_toughness"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oalifnzf/tests.py::TestSilverquillTheDisputantBasicProperties::test_has_flying_keyword"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oalifnzf/tests.py::TestSilverquillTheDisputantBasicProperties::test_has_vigilance_keyword"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oalifnzf/tests.py::TestSilverquillTheDisputantAbilities::test_on_resolve_changes_state"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oalifnzf/tests.py::TestSilverquillTheDisputantEdgeCases::test_power_targeting_restriction"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oalifnzf/tests.py::TestSilverquillTheDisputantInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oalifnzf/tests.py::TestSilverquillTheDisputantInteractions::test_coexists_with_other_creatures"}

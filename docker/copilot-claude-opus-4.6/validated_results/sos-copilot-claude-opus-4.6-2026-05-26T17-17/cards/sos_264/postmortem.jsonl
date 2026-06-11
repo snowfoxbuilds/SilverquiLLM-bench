@@ -1,0 +1,2 @@
+{"collector_number": "sos_264", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8t2wiasg/tests.py::TestSundownPassBasicProperties::test_colors"}
+{"collector_number": "sos_264", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8t2wiasg/tests.py::TestSundownPassAbilities::test_has_activated_ability"}

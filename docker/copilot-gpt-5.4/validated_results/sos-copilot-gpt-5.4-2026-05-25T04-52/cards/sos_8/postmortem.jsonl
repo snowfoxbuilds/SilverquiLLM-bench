@@ -1,0 +1,8 @@
+{"collector_number": "sos_8", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6actlwe5/tests.py::TestAscendantDustspeakerBasicProperties::test_is_creature"}
+{"collector_number": "sos_8", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6actlwe5/tests.py::TestAscendantDustspeakerBasicProperties::test_colors"}
+{"collector_number": "sos_8", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6actlwe5/tests.py::TestAscendantDustspeakerAbilities::test_has_flying"}
+{"collector_number": "sos_8", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6actlwe5/tests.py::TestAscendantDustspeakerAbilities::test_etb_exiles_target"}
+{"collector_number": "sos_8", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6actlwe5/tests.py::TestAscendantDustspeakerEdgeCases::test_fizzle_no_targets_creature_stays"}
+{"collector_number": "sos_8", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6actlwe5/tests.py::TestAscendantDustspeakerInteractions::test_exile_from_graveyard_interaction"}
+{"collector_number": "sos_8", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6actlwe5/tests.py::TestAscendantDustspeakerInteractions::test_counters_survive_end_of_turn"}
+{"collector_number": "sos_8", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6actlwe5/tests.py::TestAscendantDustspeakerInteractions::test_combat_with_opponent"}

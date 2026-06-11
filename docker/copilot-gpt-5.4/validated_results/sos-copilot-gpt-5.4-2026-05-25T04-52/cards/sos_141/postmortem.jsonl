@@ -1,0 +1,6 @@
+{"collector_number": "sos_141", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ppnmfhkq/tests.py::TestBurrogBarrageBasicProperties::test_is_instant"}
+{"collector_number": "sos_141", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ppnmfhkq/tests.py::TestBurrogBarrageBasicProperties::test_colors"}
+{"collector_number": "sos_141", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ppnmfhkq/tests.py::TestBurrogBarrageAbilities::test_pump_effect"}
+{"collector_number": "sos_141", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ppnmfhkq/tests.py::TestBurrogBarrageEdgeCases::test_targets_only_own_permanents"}
+{"collector_number": "sos_141", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ppnmfhkq/tests.py::TestBurrogBarrageInteractions::test_get_targets_finds_own_creatures"}
+{"collector_number": "sos_141", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ppnmfhkq/tests.py::TestBurrogBarrageInteractions::test_does_not_affect_non_targets"}

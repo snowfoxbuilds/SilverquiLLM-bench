@@ -1,0 +1,3 @@
+{"collector_number": "sos_93", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2cnszprf/tests.py::TestPostmortemProfessorBasicProperties::test_colors"}
+{"collector_number": "sos_93", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2cnszprf/tests.py::TestPostmortemProfessorAbilities::test_attack_trigger_uses_graveyard"}
+{"collector_number": "sos_93", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2cnszprf/tests.py::TestPostmortemProfessorInteractions::test_exile_from_graveyard_interaction"}

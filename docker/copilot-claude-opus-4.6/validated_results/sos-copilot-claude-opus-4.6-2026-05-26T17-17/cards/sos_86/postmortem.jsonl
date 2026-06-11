@@ -1,0 +1,2 @@
+{"collector_number": "sos_86", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2vz2saj_/tests.py::TestLastGaspBasicProperties::test_colors"}
+{"collector_number": "sos_86", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2vz2saj_/tests.py::TestLastGaspAbilities::test_on_resolve_changes_state"}

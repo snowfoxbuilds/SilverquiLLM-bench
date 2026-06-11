@@ -1,0 +1,8 @@
+{"collector_number": "sos_133", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8niq8_tv/tests.py::TestTackleArtistBasicProperties::test_is_creature"}
+{"collector_number": "sos_133", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8niq8_tv/tests.py::TestTackleArtistBasicProperties::test_colors"}
+{"collector_number": "sos_133", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8niq8_tv/tests.py::TestTackleArtistAbilities::test_has_trample"}
+{"collector_number": "sos_133", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8niq8_tv/tests.py::TestTackleArtistAbilities::test_has_opus"}
+{"collector_number": "sos_133", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8niq8_tv/tests.py::TestTackleArtistAbilities::test_opus_trigger_implemented"}
+{"collector_number": "sos_133", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8niq8_tv/tests.py::TestTackleArtistEdgeCases::test_opus_no_trigger_without_spell"}
+{"collector_number": "sos_133", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8niq8_tv/tests.py::TestTackleArtistInteractions::test_counters_survive_end_of_turn"}
+{"collector_number": "sos_133", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8niq8_tv/tests.py::TestTackleArtistInteractions::test_combat_with_opponent"}

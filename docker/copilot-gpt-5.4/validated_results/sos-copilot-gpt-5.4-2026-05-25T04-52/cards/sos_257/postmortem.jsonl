@@ -1,0 +1,6 @@
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__py373aa/tests.py::TestGreatHallOfTheBiblioplexBasicProperties::test_is_land"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__py373aa/tests.py::TestGreatHallOfTheBiblioplexBasicProperties::test_card_types"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__py373aa/tests.py::TestGreatHallOfTheBiblioplexBasicProperties::test_colorless"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__py373aa/tests.py::TestGreatHallOfTheBiblioplexEdgeCases::test_resolution_with_empty_board"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__py373aa/tests.py::TestGreatHallOfTheBiblioplexInteractions::test_spell_to_graveyard_after_resolution"}
+{"collector_number": "sos_257", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__py373aa/tests.py::TestGreatHallOfTheBiblioplexInteractions::test_coexists_with_other_permanents"}

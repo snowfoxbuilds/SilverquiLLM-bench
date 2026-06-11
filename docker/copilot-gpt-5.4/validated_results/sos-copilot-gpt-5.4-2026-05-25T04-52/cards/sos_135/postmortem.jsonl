@@ -1,0 +1,9 @@
+{"collector_number": "sos_135", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p_jibvfg/tests.py::TestTomeBlastBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_135", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p_jibvfg/tests.py::TestTomeBlastBasicProperties::test_colors"}
+{"collector_number": "sos_135", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p_jibvfg/tests.py::TestTomeBlastAbilities::test_flashback_cost_attribute"}
+{"collector_number": "sos_135", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p_jibvfg/tests.py::TestTomeBlastAbilities::test_flashback_exiles_after_resolution"}
+{"collector_number": "sos_135", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p_jibvfg/tests.py::TestTomeBlastAbilities::test_flashback_removes_from_graveyard"}
+{"collector_number": "sos_135", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p_jibvfg/tests.py::TestTomeBlastAbilities::test_deals_damage"}
+{"collector_number": "sos_135", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p_jibvfg/tests.py::TestTomeBlastEdgeCases::test_may_choice_optional"}
+{"collector_number": "sos_135", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p_jibvfg/tests.py::TestTomeBlastInteractions::test_flashback_not_from_hand"}
+{"collector_number": "sos_135", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p_jibvfg/tests.py::TestTomeBlastInteractions::test_does_not_affect_non_targets"}

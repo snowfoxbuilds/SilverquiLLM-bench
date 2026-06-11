@@ -1,0 +1,3 @@
+{"collector_number": "sos_265", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p0syz5dx/tests.py::TestTerramorphicExpanseBasicProperties::test_is_land"}
+{"collector_number": "sos_265", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p0syz5dx/tests.py::TestTerramorphicExpanseBasicProperties::test_card_type"}
+{"collector_number": "sos_265", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_p0syz5dx/tests.py::TestTerramorphicExpanseAbilities::test_has_activated_ability"}

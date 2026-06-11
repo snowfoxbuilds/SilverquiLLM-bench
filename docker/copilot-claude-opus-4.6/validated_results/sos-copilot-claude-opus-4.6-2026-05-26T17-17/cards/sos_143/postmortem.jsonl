@@ -1,0 +1,3 @@
+{"collector_number": "sos_143", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s2tj96ah/tests.py::TestComfortingCounselBasicProperties::test_colors"}
+{"collector_number": "sos_143", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s2tj96ah/tests.py::TestComfortingCounselAbilities::test_pump_effect"}
+{"collector_number": "sos_143", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s2tj96ah/tests.py::TestComfortingCounselAbilities::test_gains_life"}

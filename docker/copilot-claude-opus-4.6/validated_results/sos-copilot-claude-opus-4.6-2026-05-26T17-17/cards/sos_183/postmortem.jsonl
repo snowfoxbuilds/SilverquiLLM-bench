@@ -1,0 +1,2 @@
+{"collector_number": "sos_183", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_b_d9m2mf/tests.py::TestCuboidColonyBasicProperties::test_colors"}
+{"collector_number": "sos_183", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_b_d9m2mf/tests.py::TestCuboidColonyInteractions::test_counters_survive_end_of_turn"}

@@ -1,0 +1,3 @@
+{"collector_number": "sos_149", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2q3kz58y/tests.py::TestGerminationPracticumBasicProperties::test_colors"}
+{"collector_number": "sos_149", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2q3kz58y/tests.py::TestGerminationPracticumAbilities::test_resolution_exiles_target"}
+{"collector_number": "sos_149", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2q3kz58y/tests.py::TestGerminationPracticumInteractions::test_spell_to_graveyard_after_resolution"}

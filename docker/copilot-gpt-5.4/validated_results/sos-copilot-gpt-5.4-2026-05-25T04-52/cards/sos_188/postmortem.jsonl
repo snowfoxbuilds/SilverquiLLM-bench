@@ -1,0 +1,7 @@
+{"collector_number": "sos_188", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2fendclq/tests.py::TestFixWhatsBrokenBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_188", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2fendclq/tests.py::TestFixWhatsBrokenBasicProperties::test_colors"}
+{"collector_number": "sos_188", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2fendclq/tests.py::TestFixWhatsBrokenAbilities::test_additional_cost_declared"}
+{"collector_number": "sos_188", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2fendclq/tests.py::TestFixWhatsBrokenAbilities::test_returns_from_graveyard"}
+{"collector_number": "sos_188", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2fendclq/tests.py::TestFixWhatsBrokenEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_188", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2fendclq/tests.py::TestFixWhatsBrokenInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_188", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2fendclq/tests.py::TestFixWhatsBrokenInteractions::test_does_not_affect_non_targets"}

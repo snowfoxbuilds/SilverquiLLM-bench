@@ -1,0 +1,7 @@
+{"collector_number": "sos_78", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_z3cn9_fk/tests.py::TestDecorumDissertationBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_78", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_z3cn9_fk/tests.py::TestDecorumDissertationBasicProperties::test_colors"}
+{"collector_number": "sos_78", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_z3cn9_fk/tests.py::TestDecorumDissertationAbilities::test_draws_cards"}
+{"collector_number": "sos_78", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_z3cn9_fk/tests.py::TestDecorumDissertationAbilities::test_causes_life_loss"}
+{"collector_number": "sos_78", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_z3cn9_fk/tests.py::TestDecorumDissertationEdgeCases::test_may_choice_optional"}
+{"collector_number": "sos_78", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_z3cn9_fk/tests.py::TestDecorumDissertationInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_78", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_z3cn9_fk/tests.py::TestDecorumDissertationInteractions::test_does_not_affect_non_targets"}

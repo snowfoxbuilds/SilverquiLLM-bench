@@ -1,0 +1,2 @@
+{"collector_number": "sos_181", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c84zq3f_/tests.py::TestColossusOfTheBloodAgeBasicProperties::test_colors"}
+{"collector_number": "sos_181", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c84zq3f_/tests.py::TestColossusOfTheBloodAgeAbilities::test_causes_discard"}

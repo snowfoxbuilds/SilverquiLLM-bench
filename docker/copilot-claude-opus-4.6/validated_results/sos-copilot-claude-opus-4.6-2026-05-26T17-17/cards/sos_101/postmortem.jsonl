@@ -1,0 +1,3 @@
+{"collector_number": "sos_101", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_uqbgnhqb/tests.py::TestSneeringShadewriterBasicProperties::test_colors"}
+{"collector_number": "sos_101", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_uqbgnhqb/tests.py::TestSneeringShadewriterAbilities::test_gains_life"}
+{"collector_number": "sos_101", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_uqbgnhqb/tests.py::TestSneeringShadewriterAbilities::test_causes_life_loss"}

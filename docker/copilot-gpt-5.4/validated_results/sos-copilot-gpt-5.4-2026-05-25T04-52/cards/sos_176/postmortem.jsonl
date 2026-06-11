@@ -1,0 +1,3 @@
+{"collector_number": "sos_176", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_88_8958g/tests.py::TestBlechLoafingPestBasicProperties::test_is_creature"}
+{"collector_number": "sos_176", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_88_8958g/tests.py::TestBlechLoafingPestBasicProperties::test_colors"}
+{"collector_number": "sos_176", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_88_8958g/tests.py::TestBlechLoafingPestAbilities::test_counter_trigger"}

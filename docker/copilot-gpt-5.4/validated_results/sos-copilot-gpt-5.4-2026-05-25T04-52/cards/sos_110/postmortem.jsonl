@@ -1,0 +1,9 @@
+{"collector_number": "sos_110", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vpi7gn70/tests.py::TestChargingStrifeknightBasicProperties::test_is_creature"}
+{"collector_number": "sos_110", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vpi7gn70/tests.py::TestChargingStrifeknightBasicProperties::test_colors"}
+{"collector_number": "sos_110", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vpi7gn70/tests.py::TestChargingStrifeknightBasicProperties::test_has_haste_keyword"}
+{"collector_number": "sos_110", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vpi7gn70/tests.py::TestChargingStrifeknightAbilities::test_draws_cards"}
+{"collector_number": "sos_110", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vpi7gn70/tests.py::TestChargingStrifeknightAbilities::test_causes_discard"}
+{"collector_number": "sos_110", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vpi7gn70/tests.py::TestChargingStrifeknightAbilities::test_has_activated_ability"}
+{"collector_number": "sos_110", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vpi7gn70/tests.py::TestChargingStrifeknightEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_110", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vpi7gn70/tests.py::TestChargingStrifeknightInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_110", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vpi7gn70/tests.py::TestChargingStrifeknightInteractions::test_coexists_with_other_creatures"}

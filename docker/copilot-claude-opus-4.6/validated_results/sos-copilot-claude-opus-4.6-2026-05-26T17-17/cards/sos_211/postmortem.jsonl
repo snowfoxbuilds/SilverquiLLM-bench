@@ -1,0 +1,4 @@
+{"collector_number": "sos_211", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x_2rx6pp/tests.py::TestPrismariCharmBasicProperties::test_colors"}
+{"collector_number": "sos_211", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x_2rx6pp/tests.py::TestPrismariCharmAbilities::test_resolution_deals_damage"}
+{"collector_number": "sos_211", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x_2rx6pp/tests.py::TestPrismariCharmEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_211", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x_2rx6pp/tests.py::TestPrismariCharmInteractions::test_spell_to_graveyard_after_resolution"}

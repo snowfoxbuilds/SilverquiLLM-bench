@@ -1,0 +1,5 @@
+{"collector_number": "sos_111", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_j4se423p/tests.py::TestChoreographedSparksBasicProperties::test_colors"}
+{"collector_number": "sos_111", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_j4se423p/tests.py::TestChoreographedSparksEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_111", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_j4se423p/tests.py::TestChoreographedSparksInteractions::test_targets_valid_objects"}
+{"collector_number": "sos_111", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_j4se423p/tests.py::TestChoreographedSparksInteractions::test_spell_to_graveyard_after_resolution"}
+{"collector_number": "sos_111", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_j4se423p/tests.py::TestChoreographedSparksInteractions::test_tokens_appear_on_battlefield"}

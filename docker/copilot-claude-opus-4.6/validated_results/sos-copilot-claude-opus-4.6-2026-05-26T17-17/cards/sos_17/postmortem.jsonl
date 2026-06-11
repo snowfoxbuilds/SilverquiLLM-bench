@@ -1,0 +1,4 @@
+{"collector_number": "sos_17", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tb5m001v/tests.py::TestGroupProjectBasicProperties::test_colors"}
+{"collector_number": "sos_17", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tb5m001v/tests.py::TestGroupProjectAbilities::test_flashback_cost_attribute"}
+{"collector_number": "sos_17", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tb5m001v/tests.py::TestGroupProjectAbilities::test_flashback_exiles_after_resolution"}
+{"collector_number": "sos_17", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tb5m001v/tests.py::TestGroupProjectAbilities::test_flashback_removes_from_graveyard"}

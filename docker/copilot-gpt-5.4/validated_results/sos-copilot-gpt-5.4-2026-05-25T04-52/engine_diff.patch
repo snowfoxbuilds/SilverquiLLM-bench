@@ -1,0 +1,4321 @@
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/abilities.py /tmp/silverquillm_run_imhr8630/workspace/engine/abilities.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/abilities.py	2026-05-25 16:43:11.728292087 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/abilities.py	2026-05-25 15:43:33.399898282 +0000
+@@ -19,12 +19,13 @@
+ from dataclasses import dataclass, field
+ from typing import TYPE_CHECKING, Any, Callable
+ 
+-from engine.casting import is_sorcery_speed
+-from engine.stack import StackObject
++from benchmarks.sos.workspace.engine.casting import _fire_becomes_target_events, is_sorcery_speed
++from benchmarks.sos.workspace.engine.types import ManaCost
++from benchmarks.sos.workspace.engine.stack import StackObject
+ 
+ if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-    from engine.player import Player
++    from benchmarks.sos.workspace.engine.game_state import GameState
++    from benchmarks.sos.workspace.engine.player import Player
+ 
+ 
+ class AbilityError(Exception):
+@@ -62,6 +63,8 @@
+     effect: Callable[..., None]
+     is_mana_ability: bool = False
+     description: str = ""
++    targets: list[Any] = field(default_factory=list)
++    target_requirements: list[Any] = field(default_factory=list)
+ 
+ 
+ @dataclass
+@@ -88,6 +91,8 @@
+     loyalty_cost: int = 0
+     effect: Callable[..., None] = field(default=lambda _game: None)
+     description: str = ""
++    targets: list[Any] = field(default_factory=list)
++    target_requirements: list[Any] = field(default_factory=list)
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -208,24 +213,39 @@
+             "Cannot activate ability — source's activated abilities are suppressed"
+         )
+ 
+-    # 2. Pay costs
++    # 2. Validate targets before paying costs.
++    _validate_ability_targets(ability)
++
++    # 3. Pay costs
+     cost_paid = ability.cost(game, ability.source)
+     if not cost_paid:
+         raise AbilityError("Cannot activate ability — cost could not be paid")
+ 
+-    # 3. Resolve or push
++    # 4. Resolve or push
+     if ability.is_mana_ability:
+         # Mana abilities resolve immediately without using the stack.
++        if ability.targets:
++            ability.source.chosen_targets = list(ability.targets)  # type: ignore[attr-defined]
+         ability.effect(game)
+     else:
+         # Push to stack for resolution.
++        stack_targets = list(ability.targets)
++
++        def _on_resolve(g: GameState) -> None:
++            if stack_targets:
++                ability.source.chosen_targets = list(stack_targets)  # type: ignore[attr-defined]
++            ability.effect(g)
++
+         stack_obj = StackObject(
+             source=ability.source,
+             controller=player,
+-            on_resolve=ability.effect,
++            targets=stack_targets,
++            on_resolve=_on_resolve,
+             is_mana_ability=False,
+         )
+         game.stack.push(stack_obj)
++        _fire_becomes_target_events(game, player, ability.source, stack_obj, stack_targets)
++        _queue_ward_ability_triggers(game, player, ability.source, stack_obj, stack_targets)
+ 
+ 
+ def _activate_loyalty_ability(
+@@ -242,14 +262,17 @@
+             "Cannot activate loyalty ability — sorcery-speed timing not met"
+         )
+ 
+-    # 2. Once-per-turn restriction.
++    # 2. Validate targets before paying costs.
++    _validate_ability_targets(ability)
++
++    # 3. Once-per-turn restriction.
+     turn_number = getattr(game, "turn_number", 0)
+     if _has_activated_loyalty_this_turn(source, turn_number):
+         raise AbilityError(
+             "Cannot activate loyalty ability — already activated this turn"
+         )
+ 
+-    # 3. Pay loyalty cost.
++    # 4. Pay loyalty cost.
+     current_loyalty = getattr(source, "loyalty", 0)
+     new_loyalty = current_loyalty + ability.loyalty_cost
+     if new_loyalty < 0:
+@@ -259,14 +282,120 @@
+         )
+     source.loyalty = new_loyalty
+ 
+-    # 4. Mark as activated this turn.
++    # 5. Mark as activated this turn.
+     _mark_loyalty_activated(source, turn_number)
+ 
+-    # 5. Push to stack.
++    # 6. Push to stack.
++    stack_targets = list(ability.targets)
++
++    def _on_resolve(g: GameState) -> None:
++        if stack_targets:
++            source.chosen_targets = list(stack_targets)  # type: ignore[attr-defined]
++        ability.effect(g)
++
+     stack_obj = StackObject(
+         source=source,
+         controller=player,
+-        on_resolve=ability.effect,
++        targets=stack_targets,
++        on_resolve=_on_resolve,
+         is_mana_ability=False,
+     )
+     game.stack.push(stack_obj)
++    _fire_becomes_target_events(game, player, source, stack_obj, stack_targets)
++    _queue_ward_ability_triggers(game, player, source, stack_obj, stack_targets)
++
++
++def _validate_ability_targets(
++    ability: ActivatedAbilityInstance | LoyaltyAbilityInstance,
++) -> None:
++    """Raise ``AbilityError`` if any chosen target for *ability* is illegal."""
++    from benchmarks.sos.workspace.engine.protection import get_illegal_target_reason
++
++    target_requirements = list(getattr(ability, "target_requirements", []))
++    chosen_targets = list(getattr(ability, "targets", []))
++    for index, target in enumerate(chosen_targets):
++        if target is None:
++            continue
++        if index < len(target_requirements):
++            filter_fn = getattr(target_requirements[index], "filter_fn", None)
++            if filter_fn is not None and not filter_fn(target):
++                raise AbilityError(
++                    "Cannot activate ability — chosen target does not satisfy filter"
++                )
++        reason = get_illegal_target_reason(target, ability.source)
++        if reason == "hexproof":
++            raise AbilityError("Cannot activate ability — target has hexproof")
++        if reason == "protection":
++            raise AbilityError(
++                "Cannot activate ability — target has protection from this ability"
++            )
++
++
++def _queue_ward_ability_triggers(
++    game: GameState,
++    player: Any,
++    source: Any,
++    stack_obj: StackObject,
++    chosen_targets: list[Any],
++) -> None:
++    """Queue ward checks for targeted activated or loyalty abilities."""
++    for target in chosen_targets:
++        ward_cost_getter = getattr(target, "get_ward_cost", None)
++        if not callable(ward_cost_getter):
++            continue
++        ward_cost = ward_cost_getter()
++        if ward_cost is None:
++            continue
++        target_controller = getattr(target, "controller", None)
++        if target_controller is None or target_controller is player:
++            continue
++
++        def _ward_resolve(
++            g: GameState,
++            *,
++            taxed_player: Any = player,
++            taxed_source: Any = source,
++            taxed_stack_obj: StackObject = stack_obj,
++            cost: Any = ward_cost,
++        ) -> None:
++            if not g.stack.contains(taxed_stack_obj):
++                return
++
++            paid = False
++            if isinstance(cost, ManaCost):
++                can_pay = taxed_player.mana_pool.can_pay(cost)
++                pay_cost = False
++                if can_pay:
++                    pay_cost = taxed_player.choose_yes_no(
++                        f"Pay ward cost {cost} for {getattr(taxed_source, 'name', 'ability')}?"
++                    )
++                if can_pay and pay_cost:
++                    taxed_player.mana_pool.pay(cost)
++                    paid = True
++            elif isinstance(cost, int):
++                can_pay_life = taxed_player.life >= cost
++                pay_cost = False
++                if can_pay_life:
++                    pay_cost = taxed_player.choose_yes_no(
++                        f"Pay ward cost {cost} life for {getattr(taxed_source, 'name', 'ability')}?"
++                    )
++                if can_pay_life and pay_cost:
++                    taxed_player.life -= cost
++                    paid = True
++            elif callable(cost):
++                paid = bool(cost(g, taxed_player, taxed_source, taxed_stack_obj))
++
++            if paid:
++                taxed_source.last_ward_outcome = "paid"  # type: ignore[attr-defined]
++                return
++
++            g.stack.remove(taxed_stack_obj)
++            taxed_source.last_ward_outcome = "countered"  # type: ignore[attr-defined]
++
++        game.stack.push(
++            StackObject(
++                source=target,
++                controller=target_controller,
++                on_resolve=_ward_resolve,
++            )
++        )
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/basic_lands.py /tmp/silverquillm_run_imhr8630/workspace/engine/basic_lands.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/basic_lands.py	2026-05-25 16:43:11.728292087 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/basic_lands.py	2026-05-25 04:23:31.882982590 +0000
+@@ -15,14 +15,14 @@
+ 
+ from typing import TYPE_CHECKING, Any
+ 
+-from engine.card import Land, ManaAbility
+-from engine.types import ManaType, Supertype
++from benchmarks.sos.workspace.engine.card import Land, ManaAbility
++from benchmarks.sos.workspace.engine.types import ManaType, Supertype
+ 
+ if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-    from engine.player import Player
++    from benchmarks.sos.workspace.engine.game_state import GameState
++    from benchmarks.sos.workspace.engine.player import Player
+ 
+-    from cards.registry import CardRegistry
++    from benchmarks.sos.workspace.cards.registry import CardRegistry
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -199,7 +199,7 @@
+     :class:`~cards.registry.CardMetadata` reflecting its type line, colors,
+     and lack of mana cost.
+     """
+-    from cards.registry import CardMetadata
++    from benchmarks.sos.workspace.cards.registry import CardMetadata
+ 
+     _BASIC_LANDS: list[tuple[str, type[Land], str]] = [
+         ("Plains", Plains, "W"),
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/card.py /tmp/silverquillm_run_imhr8630/workspace/engine/card.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/card.py	2026-05-25 16:43:11.728292087 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/card.py	2026-05-25 17:59:44.225657955 +0000
+@@ -17,11 +17,11 @@
+ from dataclasses import dataclass
+ from typing import TYPE_CHECKING, Any, Callable
+ 
+-from engine.types import CardType, Keyword, ManaCost, Supertype
++from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Supertype
+ 
+ if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-    from engine.player import Player
++    from benchmarks.sos.workspace.engine.game_state import GameState
++    from benchmarks.sos.workspace.engine.player import Player
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -123,6 +123,7 @@
+         self.object_id: int = GameObject._next_id
+         GameObject._next_id += 1
+         self.owner: Player | None = owner
++        self.original_owner: Player | None = owner
+         self.controller: Player | None = controller if controller is not None else owner
+ 
+     @classmethod
+@@ -173,7 +174,26 @@
+         self.rules_text: str = rules_text
+         # Snapshot original characteristics for continuous-effect reset.
+         self._original_card_types: frozenset[CardType] = frozenset(self.card_types)
++        self._original_subtypes: frozenset[str] = frozenset(self.subtypes)
++        self._original_supertypes: frozenset[Supertype] = frozenset(self.supertypes)
+         self._original_keywords: Keyword = self.keywords
++        self._has_original_colors_attr: bool = hasattr(self, "colors")
++        self._original_colors: set[Any] | None = (
++            set(getattr(self, "colors"))
++            if self._has_original_colors_attr and getattr(self, "colors") is not None
++            else None
++        )
++        # Prepared-state contract for SOS cards that can grant a spell copy
++        # while prepared. Cards opt in by overriding
++        # create_prepared_spell_copy().
++        self.is_prepared: bool = False
++        self.ward_cost: ManaCost | None = None
++        self._counters: dict[str, int] = {}
++
++    @property
++    def counters(self) -> dict[str, int]:
++        """Return non-P/T counters on this object."""
++        return self._counters
+ 
+     # ------------------------------------------------------------------
+     # Continuous-effect reset support
+@@ -186,7 +206,26 @@
+         so that the recalculation is idempotent.
+         """
+         self.card_types = set(self._original_card_types)
++        self.subtypes = set(self._original_subtypes)
++        self.supertypes = set(self._original_supertypes)
+         self.keywords = self._original_keywords
++        if self._has_original_colors_attr:
++            self.colors = set(self._original_colors or [])
++        elif hasattr(self, "colors"):
++            delattr(self, "colors")
++
++    def snapshot_current_characteristics(self) -> None:
++        """Refresh the reset baseline to the object's current characteristics."""
++        self._original_card_types = frozenset(self.card_types)
++        self._original_subtypes = frozenset(self.subtypes)
++        self._original_supertypes = frozenset(self.supertypes)
++        self._original_keywords = self.keywords
++        self._has_original_colors_attr = hasattr(self, "colors")
++        self._original_colors = (
++            set(getattr(self, "colors"))
++            if self._has_original_colors_attr and getattr(self, "colors") is not None
++            else None
++        )
+ 
+     # ------------------------------------------------------------------
+     # Hook methods — override in subclasses / card definitions
+@@ -234,6 +273,16 @@
+         """Return activated abilities this card provides."""
+         return []
+ 
++    def get_mana_abilities(self) -> list[ManaAbility]:
++        """Return mana abilities this card provides."""
++        return []
++
++    def get_ward_cost(self) -> ManaCost | None:
++        """Return this permanent's ward tax, if any."""
++        if Keyword.WARD not in self.keywords:
++            return None
++        return self.ward_cost
++
+     def get_modes(self) -> list[Mode]:
+         """Return available modes for modal spells/abilities.
+ 
+@@ -241,6 +290,124 @@
+         """
+         return []
+ 
++    def get_granted_miracle_cost(self, game: GameState, card: CardImpl) -> ManaCost | None:  # noqa: ARG002
++        """Return a miracle cost this permanent grants to *card*, if any."""
++        return None
++
++    def get_miracle_cost(self, game: GameState) -> ManaCost | None:
++        """Return this card's current miracle cost, including battlefield grants."""
++        intrinsic_cost = getattr(self, "miracle_cost", None)
++        if intrinsic_cost is not None:
++            return intrinsic_cost
++
++        controller = self.controller if self.controller is not None else self.owner
++        if controller is None:
++            return None
++        if not game.get_hand(controller).contains(self):
++            return None
++
++        for permanent in game.get_battlefield(controller).get_all():
++            grant_miracle_cost = getattr(permanent, "get_granted_miracle_cost", None)
++            if not callable(grant_miracle_cost):
++                continue
++            granted_cost = grant_miracle_cost(game, self)
++            if granted_cost is not None:
++                return granted_cost
++        return None
++
++    def create_prepared_spell_copy(self) -> CardImpl | None:
++        """Return a fresh spell-copy object for this card's prepared state.
++
++        The default implementation indicates that the card has no prepared
++        spell and therefore cannot become prepared.
++        """
++        return None
++
++    def can_be_prepared(self) -> bool:
++        """Return ``True`` if this card supports the prepared mechanic."""
++        return type(self).create_prepared_spell_copy is not CardImpl.create_prepared_spell_copy
++
++    def become_prepared(self) -> bool:
++        """Enter the prepared state if this card has a prepared spell.
++
++        Returns ``True`` only when the designation was newly gained.
++        """
++        if self.is_prepared or not self.can_be_prepared():
++            return False
++        self.is_prepared = True
++        return True
++
++    def become_unprepared(self) -> None:
++        """Leave the prepared state."""
++        self.is_prepared = False
++
++    def is_on_battlefield(self, game: GameState) -> bool:
++        """Return ``True`` if this permanent is currently on the battlefield."""
++        return any(game.get_battlefield(player).contains(self) for player in game.players)
++
++    def cast_prepared_spell_copy(
++        self,
++        game: GameState,
++        player: Player | None = None,
++    ) -> Any:
++        """Cast this card's prepared spell copy and consume preparedness.
++
++        Cards use the following prepared-state contract:
++
++        - ``become_prepared()`` marks the card prepared.
++        - ``become_unprepared()`` clears the state.
++        - ``create_prepared_spell_copy()`` returns the spell to cast.
++        - calling this method successfully casts that copy and unprepares the
++          source card.
++        """
++        from benchmarks.sos.workspace.engine.casting import (
++            CastingError,
++            can_cast_at_instant_speed,
++            cast_spell_copy,
++            is_sorcery_speed,
++        )
++
++        if not self.is_prepared:
++            raise CastingError(f"Cannot cast prepared spell for {self.name!r} — card is not prepared")
++        if not self.is_on_battlefield(game):
++            raise CastingError(
++                f"Cannot cast prepared spell for {self.name!r} — card is not on the battlefield"
++            )
++
++        controller = self.controller
++        if controller is None:
++            raise CastingError(
++                f"Cannot cast prepared spell for {self.name!r} — no controlling player"
++            )
++        if player is not None and player is not controller:
++            raise CastingError(
++                f"Cannot cast prepared spell for {self.name!r} — only its controller may cast it"
++            )
++        caster = controller
++
++        spell_copy = self.create_prepared_spell_copy()
++        if spell_copy is None:
++            raise CastingError(f"Cannot cast prepared spell for {self.name!r} — no prepared spell")
++
++        initial_setup_sandbox = game.is_fresh_setup_sandbox(caster)
++        if (
++            not can_cast_at_instant_speed(spell_copy)
++            and not is_sorcery_speed(game, caster)
++            and not initial_setup_sandbox
++        ):
++            raise CastingError(
++                f"Cannot cast prepared spell for {self.name!r} — sorcery-speed timing not met"
++            )
++        if initial_setup_sandbox:
++            game.mark_fresh_setup_sandbox_used()
++
++        spell_copy.owner = getattr(self, "owner", caster)
++        spell_copy.controller = caster
++        spell_copy.prepared_source = self  # type: ignore[attr-defined]
++        result = cast_spell_copy(game, caster, spell_copy)
++        self.become_unprepared()
++        return result
++
+ 
+ # ---------------------------------------------------------------------------
+ # Creature
+@@ -329,7 +496,7 @@
+     @property
+     def counters(self) -> dict[str, int]:
+         """Return a dict-like view of counters on this creature."""
+-        result: dict[str, int] = {}
++        result: dict[str, int] = dict(self._counters)
+         if self.plus_one_counters > 0:
+             result["+1/+1"] = self.plus_one_counters
+         if self.minus_one_counters > 0:
+@@ -467,11 +634,24 @@
+         super().__init__(**kwargs)
+         self.starting_loyalty: int = starting_loyalty
+         self.loyalty: int = starting_loyalty
++        self.loyalty_lost_this_turn: int = 0
++        self.last_loyalty_loss_amount: int = 0
+ 
+     def get_loyalty_abilities(self) -> list[LoyaltyAbility]:
+         """Return the planeswalker's loyalty abilities."""
+         return []
+ 
++    def lose_loyalty(self, amount: int) -> int:
++        """Remove up to *amount* loyalty and return how much was actually lost."""
++        if amount <= 0:
++            self.last_loyalty_loss_amount = 0
++            return 0
++        lost = min(self.loyalty, amount)
++        self.loyalty = max(0, self.loyalty - amount)
++        self.loyalty_lost_this_turn += lost
++        self.last_loyalty_loss_amount = lost
++        return lost
++
+ 
+ # ---------------------------------------------------------------------------
+ # Land
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/casting.py /tmp/silverquillm_run_imhr8630/workspace/engine/casting.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/casting.py	2026-05-25 16:43:11.728292087 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/casting.py	2026-05-25 18:25:21.977837609 +0000
+@@ -21,16 +21,24 @@
+ 
+ from __future__ import annotations
+ 
++import copy
+ from typing import TYPE_CHECKING, Any
+ 
+-from engine.card import CardImpl
+-from engine.stack import StackObject
+-from engine.types import CardType, Keyword, ManaCost, Phase, Zone
+-from engine.zones import move_zone
++from benchmarks.sos.workspace.engine.card import CardImpl
++from benchmarks.sos.workspace.engine.events import (
++    BecomesTargetTriggeredEvent,
++    GraveyardLeavesTriggeredEvent,
++    SpellCastTriggeredEvent,
++)
++from benchmarks.sos.workspace.engine.game_state import ParadigmSchedule, SpellCastRecord
++from benchmarks.sos.workspace.engine.mana import ManaSpendContext
++from benchmarks.sos.workspace.engine.stack import StackObject
++from benchmarks.sos.workspace.engine.types import CardType, Keyword, ManaCost, Phase, Zone
++from benchmarks.sos.workspace.engine.zones import move_to_zone
+ 
+ if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-    from engine.player import Player
++    from benchmarks.sos.workspace.engine.game_state import GameState
++    from benchmarks.sos.workspace.engine.player import Player
+ 
+ 
+ # Card types that represent permanents — these go to the battlefield on resolve.
+@@ -46,6 +54,90 @@
+     """Raised when a spell cast or land play is illegal."""
+ 
+ 
++def _record_spell_cast_this_turn(game: GameState, player: Player, card: CardImpl) -> None:
++    """Record one committed cast with a turn-local serial for recast-aware checks."""
++    cast_serial = getattr(game, "spell_cast_serial", 0) + 1
++    game.spell_cast_serial = cast_serial
++    card._cast_turn_serial = cast_serial  # type: ignore[attr-defined]
++    game.spells_cast_this_turn.append(
++        SpellCastRecord(player=player, card=card, cast_serial=cast_serial)
++    )
++
++
++def _normalize_chosen_targets(card: CardImpl, spec: Any, chosen: Any) -> list[Any]:
++    """Expand a single target choice into the concrete chosen-target list."""
++    max_targets = getattr(spec, "max_targets", 1)
++    min_targets = getattr(spec, "min_targets", 1)
++    distinct_targets = bool(getattr(spec, "distinct_targets", False))
++
++    if max_targets <= 1:
++        chosen_targets = [] if chosen is None else [chosen]
++    elif chosen is None:
++        chosen_targets = []
++    elif isinstance(chosen, (list, tuple)):
++        chosen_targets = list(chosen)
++    else:
++        chosen_targets = [chosen]
++
++    if len(chosen_targets) < min_targets:
++        raise CastingError(
++            f"Cannot cast {card.name!r} — not enough targets chosen for "
++            f"{getattr(spec, 'description', '')}"
++        )
++    if len(chosen_targets) > max_targets:
++        raise CastingError(
++            f"Cannot cast {card.name!r} — too many targets chosen for "
++            f"{getattr(spec, 'description', '')}"
++        )
++    if distinct_targets:
++        seen: set[int] = set()
++        for target in chosen_targets:
++            target_id = id(target)
++            if target_id in seen:
++                raise CastingError(
++                    f"Cannot cast {card.name!r} — duplicate targets chosen for "
++                    f"{getattr(spec, 'description', '')}"
++                )
++            seen.add(target_id)
++    return chosen_targets
++
++
++def _choose_targets(
++    game: GameState,
++    player: Player,
++    card: CardImpl,
++    target_specs: list[Any],
++) -> list[Any]:
++    """Choose and validate targets for *card*."""
++    chosen_targets: list[Any] = []
++    if target_specs:
++        for spec in target_specs:
++            chosen = player.choose_target(target_specs, spec)
++            expanded_targets = _normalize_chosen_targets(card, spec, chosen)
++            filter_fn = getattr(spec, "filter_fn", None)
++            for target in expanded_targets:
++                if filter_fn is not None and target is not None and not filter_fn(target):
++                    raise CastingError(
++                        f"Cannot cast {card.name!r} — chosen target does not "
++                        f"satisfy filter: {getattr(spec, 'description', '')}"
++                    )
++            chosen_targets.extend(expanded_targets)
++
++    from benchmarks.sos.workspace.engine.protection import get_illegal_target_reason
++
++    for target in chosen_targets:
++        reason = get_illegal_target_reason(target, card)
++        if reason == "hexproof":
++            raise CastingError(
++                f"Cannot cast {card.name!r} — target has hexproof"
++            )
++        if reason == "protection":
++            raise CastingError(
++                f"Cannot cast {card.name!r} — target has protection from this spell"
++            )
++    return chosen_targets
++
++
+ # ------------------------------------------------------------------
+ # Timing helpers
+ # ------------------------------------------------------------------
+@@ -119,12 +211,378 @@
+     )
+ 
+ 
++def _combine_costs(base: ManaCost, extra: ManaCost) -> ManaCost:
++    """Return a new :class:`ManaCost` representing *base* plus *extra*."""
++    pips = dict(base.pips)
++    for mana_type, count in extra.pips.items():
++        pips[mana_type] = pips.get(mana_type, 0) + count
++    return ManaCost(
++        generic=base.generic + extra.generic,
++        pips=pips,
++        x_count=base.x_count + extra.x_count,
++        hybrid=list(base.hybrid) + list(extra.hybrid),
++    )
++
++
++def _cost_payable_by_any_mana_type(cost: ManaCost, card: CardImpl) -> ManaCost:
++    """Return a version of *cost* whose full payment may be made with any mana type."""
++    x_value = max(0, int(getattr(card, "x_value", 0)))
++    total = cost.generic + sum(cost.pips.values()) + sum(
++        symbol.mana_value for symbol in cost.hybrid
++    ) + (cost.x_count * x_value)
++    return ManaCost(generic=total)
++
++
++def _queue_ward_triggers(
++    game: GameState,
++    caster: Player,
++    spell: CardImpl,
++    stack_obj: StackObject,
++    chosen_targets: list[Any],
++) -> None:
++    """Queue ward triggers for any targeted permanents with ward."""
++    for target in chosen_targets:
++        ward_cost_getter = getattr(target, "get_ward_cost", None)
++        if not callable(ward_cost_getter):
++            continue
++        ward_cost = ward_cost_getter()
++        if ward_cost is None:
++            continue
++        target_controller = getattr(target, "controller", None)
++        if target_controller is None or target_controller is caster:
++            continue
++
++        def _ward_resolve(
++            g: GameState,
++            *,
++            taxed_player: Player = caster,
++            taxed_spell: CardImpl = spell,
++            taxed_stack_obj: StackObject = stack_obj,
++            cost: Any = ward_cost,
++        ) -> None:
++            if not g.stack.contains(taxed_stack_obj):
++                return
++
++            paid = False
++            if isinstance(cost, ManaCost):
++                can_pay = taxed_player.mana_pool.can_pay(cost)
++                pay_cost = False
++                if can_pay:
++                    pay_cost = taxed_player.choose_yes_no(
++                        f"Pay ward cost {cost} for {taxed_spell.name}?"
++                    )
++                if can_pay and pay_cost:
++                    taxed_player.mana_pool.pay(cost)
++                    paid = True
++            elif isinstance(cost, int):
++                can_pay_life = taxed_player.life >= cost
++                pay_cost = False
++                if can_pay_life:
++                    pay_cost = taxed_player.choose_yes_no(
++                        f"Pay ward cost {cost} life for {taxed_spell.name}?"
++                    )
++                if can_pay_life and pay_cost:
++                    taxed_player.life -= cost
++                    paid = True
++            elif callable(cost):
++                paid = bool(cost(g, taxed_player, taxed_spell, taxed_stack_obj))
++
++            if paid:
++                taxed_spell.last_ward_outcome = "paid"  # type: ignore[attr-defined]
++                return
++            g.stack.remove(taxed_stack_obj)
++            taxed_spell.last_ward_outcome = "countered"  # type: ignore[attr-defined]
++            destination = Zone.EXILE if taxed_stack_obj.exile_on_resolve else Zone.GRAVEYARD
++            move_to_zone(g, taxed_spell, Zone.STACK, destination)
++
++        game.stack.push(
++            StackObject(
++                source=target,
++                controller=target_controller,
++                on_resolve=_ward_resolve,
++            )
++        )
++
++
++def _fire_becomes_target_events(
++    game: GameState,
++    controller: Player,
++    source: Any,
++    stack_obj: StackObject,
++    chosen_targets: list[Any],
++) -> None:
++    """Fire one target event for each distinct chosen target."""
++    seen: set[int] = set()
++    for target in chosen_targets:
++        if target is None:
++            continue
++        target_id = getattr(target, "object_id", id(target))
++        if target_id in seen:
++            continue
++        seen.add(target_id)
++        game.trigger_manager.fire_event(
++            game,
++            BecomesTargetTriggeredEvent(
++                target=target,
++                source=source,
++                controller=controller,
++                stack_object=stack_obj,
++            ),
++        )
++
++
++def _get_mana_spent_amount(cost: ManaCost, card: CardImpl) -> int:
++        """Return the total mana spent to pay *cost* for *card*."""
++        return (
++            cost.generic
++            + sum(cost.pips.values())
++            + len(cost.hybrid)
++            + (cost.x_count * getattr(card, "x_value", 0))
++        )
++
++
++def _fire_graveyard_leaves_cast_event(
++    game: GameState,
++    source_player: Player,
++    card: CardImpl,
++) -> None:
++    """Fire the graveyard-leaves event for a spell that was successfully cast."""
++    try:
++        player_index = game.players.index(source_player)
++    except ValueError:
++        player_index = None
++    if player_index is not None:
++        game.cards_left_graveyards_this_turn.setdefault(player_index, []).append(card)
++    game.trigger_manager.fire_event(
++        game,
++        GraveyardLeavesTriggeredEvent(
++            player=source_player,
++            cards=[card],
++            destination=Zone.STACK,
++        ),
++    )
++
++
++def schedule_paradigm(game: GameState, player: Player, card: CardImpl) -> bool:
++    """Schedule *card* for future paradigm copy casts for *player*."""
++    try:
++        player_index = game.players.index(player)
++    except ValueError:
++        return False
++
++    for schedule in game.paradigm_schedules:
++        if schedule.player_index == player_index and schedule.card is card:
++            return False
++
++    game.paradigm_schedules.append(
++        ParadigmSchedule(
++            player_index=player_index,
++            card_name=card.name,
++            card=card,
++            created_turn_number=game.turn_number,
++            created_action_serial=game.paradigm_phase_action_serial,
++        )
++    )
++    return True
++
++
++def get_scheduled_paradigm_cards(game: GameState, player: Player) -> list[CardImpl]:
++    """Return the exiled paradigm cards that *player* may copy in future turns."""
++    try:
++        player_index = game.players.index(player)
++    except ValueError:
++        return []
++    return [schedule.card for schedule in game.paradigm_schedules if schedule.player_index == player_index]
++
++
++def _record_paradigm_phase_action(game: GameState, card: CardImpl) -> None:
++    """Advance the paradigm timing marker after a non-paradigm game action."""
++    if getattr(card, "is_paradigm_copy", False):
++        return
++    game.paradigm_phase_action_serial += 1
++
++
++def _run_on_cast_to_stack_hook(game: GameState, card: CardImpl, stack_obj: StackObject) -> None:
++    """Run any card-local hook that needs the created stack object."""
++    hook = getattr(card, "on_cast_to_stack", None)
++    if callable(hook):
++        hook(game, stack_obj)
++
++
++def _find_exile_source(
++    game: GameState,
++    card: CardImpl,
++) -> tuple[Player | None, Any | None]:
++    """Return the player/zone pair currently holding *card* in exile."""
++    for zone_player in game.players:
++        exile = zone_player.zones[Zone.EXILE]
++        if exile.contains(card):
++            return zone_player, exile
++    return None, None
++
++
++def _find_graveyard_source(
++    game: GameState,
++    card: CardImpl,
++) -> tuple[Player | None, Any | None]:
++    """Return the player/zone pair currently holding *card* in a graveyard."""
++    for zone_player in game.players:
++        graveyard = zone_player.zones[Zone.GRAVEYARD]
++        if graveyard.contains(card):
++            return zone_player, graveyard
++    return None, None
++
++
++def _require_exile_play_permission(
++    game: GameState,
++    player: Player,
++    card: CardImpl,
++) -> None:
++    """Raise if *player* lacks permission to play *card* from exile."""
++    if not game.can_player_play_exiled_card(player, card):
++        raise CastingError(
++            f"Cannot play {card.name!r} from exile — no play permission"
++        )
++
++
++def _require_graveyard_play_permission(
++    game: GameState,
++    player: Player,
++    card: CardImpl,
++) -> None:
++    """Raise if *player* lacks permission to play *card* from graveyard."""
++    if not game.can_player_play_graveyard_card(player, card):
++        raise CastingError(
++            f"Cannot play {card.name!r} from graveyard — no play permission"
++        )
++
++
++def _get_paradigm_schedule(
++    game: GameState,
++    player: Player,
++    card: CardImpl,
++) -> ParadigmSchedule | None:
++    """Return the stored paradigm schedule for *card* controlled by *player*."""
++    try:
++        player_index = game.players.index(player)
++    except ValueError:
++        return None
++    for schedule in game.paradigm_schedules:
++        if schedule.player_index == player_index and schedule.card is card:
++            return schedule
++    return None
++
++
++def can_cast_paradigm_copy(game: GameState, player: Player, card: CardImpl) -> bool:
++    """Return ``True`` if *player* may cast a paradigm copy of *card* now."""
++    if player is not game.active_player:
++        return False
++    if game.phase != Phase.PRECOMBAT_MAIN or game.step is not None:
++        return False
++    if not game.stack.is_empty():
++        return False
++    schedule = _get_paradigm_schedule(game, player, card)
++    if schedule is None:
++        return False
++    if not game.get_exile(player).contains(card):
++        return False
++    try:
++        player_index = game.players.index(player)
++    except ValueError:
++        return False
++    if (
++        schedule.last_cast_turn_number == game.turn_number
++        and schedule.last_cast_active_player_index == game.active_player_index
++        and game.paradigm_window_turn_number == game.turn_number
++        and game.paradigm_window_player_index == player_index
++    ):
++        return False
++
++    has_beginning_window = (
++        game.paradigm_window_turn_number == game.turn_number
++        and game.paradigm_window_player_index == player_index
++        and game.paradigm_window_action_serial == game.paradigm_phase_action_serial
++    )
++    same_phase_new_schedule = (
++        schedule.created_turn_number == game.turn_number
++        and schedule.player_index == player_index
++        and schedule.created_action_serial == game.paradigm_phase_action_serial
++        and (
++            game.paradigm_window_turn_number != game.turn_number
++            or game.paradigm_window_player_index != player_index
++            or schedule.created_action_serial == game.paradigm_window_action_serial + 1
++        )
++    )
++    return has_beginning_window or same_phase_new_schedule
++
++
++def get_miracle_cost(game: GameState, player: Player, card: CardImpl) -> ManaCost | None:
++    """Return the miracle cost *player* may currently use to cast *card*."""
++    hand = game.get_hand(player)
++    if not hand.contains(card):
++        return None
++    get_card_miracle_cost = getattr(card, "get_miracle_cost", None)
++    if not callable(get_card_miracle_cost):
++        return None
++    return get_card_miracle_cost(game)
++
++
++def can_cast_for_miracle(game: GameState, player: Player, card: CardImpl) -> bool:
++    """Return whether *player* may cast *card* for its miracle cost now."""
++    miracle_cost = get_miracle_cost(game, player, card)
++    if miracle_cost is None:
++        return False
++    return game.can_cast_for_miracle(player, card)
++
++
++def cast_spell_for_miracle(game: GameState, player: Player, card: CardImpl) -> None:
++    """Cast *card* from hand for its miracle cost, bypassing normal timing."""
++    miracle_cost = get_miracle_cost(game, player, card)
++    if miracle_cost is None or not game.can_cast_for_miracle(player, card):
++        raise CastingError(f"Cannot cast {card.name!r} for miracle")
++    cast_spell(
++        game,
++        player,
++        card,
++        from_zone=Zone.HAND,
++        alternative_cost=miracle_cost,
++        ignore_timing=True,
++    )
++
++
++def cast_paradigm_copy(game: GameState, player: Player, card: CardImpl) -> StackObject:
++    """Cast a paradigm copy of an exiled *card* without paying its mana cost."""
++    if not can_cast_paradigm_copy(game, player, card):
++        raise CastingError(f"Cannot cast paradigm copy for {card.name!r}")
++
++    spell_copy = copy.copy(card)
++    spell_copy.owner = player
++    spell_copy.controller = player
++    spell_copy.paradigm_source = card  # type: ignore[attr-defined]
++    spell_copy.is_paradigm_copy = True  # type: ignore[attr-defined]
++    stack_obj = cast_spell_copy(game, player, spell_copy)
++    schedule = _get_paradigm_schedule(game, player, card)
++    if schedule is not None:
++        schedule.last_cast_turn_number = game.turn_number
++        schedule.last_cast_active_player_index = game.active_player_index
++    return stack_obj
++
++
+ # ------------------------------------------------------------------
+ # Cast spell
+ # ------------------------------------------------------------------
+ 
+-def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
+-    """Cast *card* from *player*'s hand.
++def cast_spell(
++    game: GameState,
++    player: Player,
++    card: CardImpl,
++    *,
++    from_zone: Zone = Zone.HAND,
++    alternative_cost: ManaCost | None = None,
++    exile_on_resolve: bool | None = None,
++    ignore_timing: bool = False,
++) -> None:
++    """Cast *card* from *from_zone*, paying mana through the normal pipeline.
+ 
+     Pipeline
+     --------
+@@ -132,8 +590,8 @@
+        whenever the player has priority; everything else requires
+        sorcery-speed timing.
+     2. **can_cast** — ask the card whether it can legally be cast.
+-    3. **Hand check** — the card must be in the player's hand.
+-    4. **Move hand → stack zone** — remove the card from the hand and
++    3. **Source-zone check** — the card must be in *from_zone*.
++    4. **Move source zone → stack zone** — remove the card from the source zone and
+        place it into the player's stack zone.
+     5. **Choose targets** — if the card specifies targets (via
+        :meth:`CardImpl.get_targets`), the player is asked to choose.
+@@ -148,23 +606,76 @@
+         CastingError: If any legality check fails.
+     """
+     # 1. Timing
+-    if not can_cast_at_instant_speed(card) and not is_sorcery_speed(game, player):
++    initial_setup_sandbox = game.is_fresh_setup_sandbox(player)
++    if (
++        not ignore_timing
++        and not can_cast_at_instant_speed(card)
++        and not is_sorcery_speed(game, player)
++        and not initial_setup_sandbox
++    ):
+         raise CastingError(
+             f"Cannot cast {card.name!r} — sorcery-speed timing not met"
+         )
++    if initial_setup_sandbox:
++        game.mark_fresh_setup_sandbox_used()
+ 
+     # 2. can_cast
+     if not card.can_cast(game):
+         raise CastingError(f"Cannot cast {card.name!r} — can_cast returned False")
+ 
+-    # 3. Hand check
+-    hand = game.get_hand(player)
+-    if not hand.contains(card):
+-        raise CastingError(f"Cannot cast {card.name!r} — card not in hand")
++    # 3. Source-zone check
++    source_player = player
++    source_zone = player.zones[from_zone]
++    if from_zone == Zone.EXILE:
++        source_player, source_zone = _find_exile_source(game, card)
++        if source_zone is None or source_player is None:
++            raise CastingError(
++                f"Cannot cast {card.name!r} — card not found in {from_zone.name}"
++            )
++        _require_exile_play_permission(game, player, card)
++    elif from_zone == Zone.GRAVEYARD:
++        source_player, source_zone = _find_graveyard_source(game, card)
++        if source_zone is None or source_player is None or source_player is not player:
++            raise CastingError(
++                f"Cannot cast {card.name!r} — card not found in {from_zone.name}"
++            )
++    elif not source_zone.contains(card):
++        if from_zone == Zone.HAND:
++            raise CastingError(f"Cannot cast {card.name!r} — card not in hand")
++        raise CastingError(
++            f"Cannot cast {card.name!r} — card not found in {from_zone.name}"
++        )
+ 
+-    # 4. Move card from hand to stack zone
++    has_graveyard_play_permission = False
++    cast_with_any_mana_type = from_zone == Zone.EXILE and bool(
++        getattr(card, "_cast_with_any_mana_as_any_type", False)
++    )
++    forced_exile_on_resolve = from_zone == Zone.EXILE and bool(
++        getattr(card, "_exile_after_exile_cast", False)
++    )
++    if from_zone == Zone.GRAVEYARD:
++        has_graveyard_play_permission = game.can_player_play_graveyard_card(player, card)
++        if alternative_cost is None and not has_graveyard_play_permission:
++            flashback_cost = getattr(card, "flashback_cost", None)
++            if flashback_cost is not None:
++                alternative_cost = flashback_cost
++                if exile_on_resolve is None:
++                    exile_on_resolve = True
++            else:
++                _require_graveyard_play_permission(game, player, card)
++    if exile_on_resolve is None:
++        exile_on_resolve = bool(getattr(card, "always_exile_on_resolve", False)) or forced_exile_on_resolve
++
++    additional_mana_cost = ManaCost()
++    get_additional_cast_cost = getattr(card, "get_additional_cast_cost", None)
++    if callable(get_additional_cast_cost):
++        quoted_cost = get_additional_cast_cost(game, player, from_zone)
++        if quoted_cost is not None:
++            additional_mana_cost = quoted_cost
++
++    # 4. Move card from source zone to stack zone
+     stack_zone = player.zones[Zone.STACK]
+-    hand.remove(card)
++    source_zone.remove(card)
+     stack_zone.add(card)
+ 
+     # Clear any stale colors_spent from a prior cast before new payment.
+@@ -172,35 +683,13 @@
+         del card.colors_spent
+ 
+     # 5. Choose targets
+-    target_specs = card.get_targets(game)
+-    chosen_targets: list[Any] = []
+-    if target_specs:
+-        for spec in target_specs:
+-            target = player.choose_target(target_specs, spec)
+-            # Validate against filter_fn if the spec provides one
+-            filter_fn = getattr(spec, "filter_fn", None)
+-            if filter_fn is not None and target is not None:
+-                if not filter_fn(target):
+-                    stack_zone.remove(card)
+-                    hand.add(card)
+-                    raise CastingError(
+-                        f"Cannot cast {card.name!r} — chosen target does not "
+-                        f"satisfy filter: {getattr(spec, 'description', '')}"
+-                    )
+-            chosen_targets.append(target)
+-
+-    # 5b. Protection check — reject targets that have protection from this
+-    #     spell (the T in DEBT).
+-    from engine.protection import has_protection_from
+-
+-    for target in chosen_targets:
+-        if has_protection_from(target, card):
+-            # Rollback: move card from stack zone back to hand
+-            stack_zone.remove(card)
+-            hand.add(card)
+-            raise CastingError(
+-                f"Cannot cast {card.name!r} — target has protection from this spell"
+-            )
++    try:
++        target_specs = card.get_targets(game)
++        chosen_targets = _choose_targets(game, player, card, target_specs)
++    except Exception:
++        stack_zone.remove(card)
++        source_zone.add(card)
++        raise
+ 
+     # Targets are stored on the StackObject (not the card) and passed
+     # through the resolve pipeline via on_resolve(game, targets=...).
+@@ -212,31 +701,60 @@
+     # explicit controller assignment.
+     if card.controller is None:
+         card.controller = player
++    card._casting_targets = list(chosen_targets)
++    mana_cost = alternative_cost if alternative_cost is not None else card.mana_cost
++    get_cast_cost = getattr(card, "get_cast_cost", None)
++    if callable(get_cast_cost):
++        overridden_cost = get_cast_cost(game, player, from_zone, mana_cost)
++        if overridden_cost is not None:
++            mana_cost = overridden_cost
+     reduction = get_cost_reduction(game, card, player)
+-    effective_cost = _apply_cost_reduction(card.mana_cost, reduction) if reduction > 0 else card.mana_cost
++    effective_cost = _apply_cost_reduction(mana_cost, reduction) if reduction > 0 else mana_cost
++    if additional_mana_cost.generic or additional_mana_cost.pips or additional_mana_cost.hybrid:
++        effective_cost = _combine_costs(effective_cost, additional_mana_cost)
++    if cast_with_any_mana_type:
++        effective_cost = _cost_payable_by_any_mana_type(effective_cost, card)
++    mana_spend_context = ManaSpendContext(
++        reason="cast_spell",
++        card=card,
++        player=player,
++        from_zone=from_zone,
++    )
+ 
+-    if not player.mana_pool.can_pay(effective_cost):
++    if not player.mana_pool.can_pay(effective_cost, spending_context=mana_spend_context):
+         # Rollback: move card from stack zone back to hand
+         stack_zone.remove(card)
+-        hand.add(card)
++        source_zone.add(card)
++        if hasattr(card, "_casting_targets"):
++            del card._casting_targets
+         raise CastingError(f"Cannot cast {card.name!r} — insufficient mana")
+ 
+     # TODO: Phase 3 — support player choice for generic mana payment to optimize Converge color count
+-    player.mana_pool.pay(effective_cost)
++    player.mana_pool.pay(effective_cost, spending_context=mana_spend_context)
++
++    pay_additional_cast_costs = getattr(card, "pay_additional_cast_costs", None)
++    if callable(pay_additional_cast_costs):
++        pay_additional_cast_costs(game, player, from_zone)
+ 
+     # Store colors of mana spent on the card for mechanics like Converge
+     # that care about the colors used to cast the spell.
+     card.colors_spent = list(player.mana_pool.last_payment_colors)  # type: ignore[attr-defined]
++    card.mana_spent = player.mana_pool.last_payment_amount  # type: ignore[attr-defined]
++
++    card.cast_from_zone = from_zone  # type: ignore[attr-defined]
++    card.was_cast_from_graveyard = from_zone == Zone.GRAVEYARD  # type: ignore[attr-defined]
+ 
+     # 7. Call on_cast hook
+     card.on_cast(game)
+-
+     # 8. Build on_resolve callback and push StackObject
+     stack_obj = StackObject(
+         source=card,
+         controller=player,
+         targets=chosen_targets,
+         on_resolve=lambda g: None,  # replaced below
++        exile_on_resolve=exile_on_resolve,
++        cast_from_zone=from_zone,
++        is_spell=True,
+     )
+ 
+     def _on_resolve(g: GameState) -> None:
+@@ -244,6 +762,20 @@
+ 
+     stack_obj.on_resolve = _on_resolve
+     game.stack.push(stack_obj)
++    _run_on_cast_to_stack_hook(game, card, stack_obj)
++    game.note_zone_change(card, from_zone, Zone.STACK)
++    _record_paradigm_phase_action(game, card)
++    if from_zone == Zone.GRAVEYARD:
++        _fire_graveyard_leaves_cast_event(game, source_player, card)
++    _record_spell_cast_this_turn(game, player, card)
++    game.trigger_manager.fire_event(
++        game,
++        SpellCastTriggeredEvent(spell=card, player=player, card=card, controller=player),
++    )
++    _fire_becomes_target_events(game, player, card, stack_obj, chosen_targets)
++    _queue_ward_triggers(game, player, card, stack_obj, chosen_targets)
++    if hasattr(card, "_casting_targets"):
++        del card._casting_targets
+ 
+ 
+ # ------------------------------------------------------------------
+@@ -256,6 +788,8 @@
+     player: Player,
+     card: CardImpl,
+     from_zone: Zone,
++    *,
++    exile_on_resolve: bool = False,
+ ) -> None:
+     """Cast *card* without paying its mana cost, using the stack.
+ 
+@@ -275,7 +809,9 @@
+        graveyard).
+ 
+     No timing check or mana payment is performed.  The spell goes on the
+-    stack and can be responded to normally (e.g. countered).
++    stack and can be responded to normally (e.g. countered).  When
++    ``exile_on_resolve`` is ``True``, a nonpermanent spell is exiled as it
++    finishes resolving instead of going to the graveyard (flashback-style).
+ 
+     If targeting or other post-move checks fail, the card is rolled back
+     to its source zone.
+@@ -290,18 +826,23 @@
+         CastingError: If the card cannot be found in *from_zone* or
+             legality checks fail.
+     """
+-    from engine.zones import move_to_zone
++    from benchmarks.sos.workspace.engine.zones import move_to_zone
++
++    exile_on_resolve = exile_on_resolve or bool(getattr(card, "always_exile_on_resolve", False))
+ 
+     # Ensure controller is set
+     card.controller = player
+     if card.owner is None:
+         card.owner = player
++    if hasattr(card, "colors_spent"):
++        del card.colors_spent
+ 
+     # 1. can_cast legality (same as cast_spell but skipping mana/timing)
+     if not card.can_cast(game):
+         raise CastingError(f"Cannot cast {card.name!r} — can_cast returned False")
+ 
+     # 2. Locate card in source zone
++    source_player = player
+     source_zone_container = player.zones[from_zone]
+     if not source_zone_container.contains(card):
+         # Try to find the card in any player's zone
+@@ -309,6 +850,7 @@
+         for p in game.players:
+             z = p.zones[from_zone]
+             if z.contains(card):
++                source_player = p
+                 source_zone_container = z
+                 break
+ 
+@@ -325,34 +867,18 @@
+     # 3. Choose targets (with rollback on failure)
+     try:
+         target_specs = card.get_targets(game)
+-        chosen_targets: list[Any] = []
+-        if target_specs:
+-            for spec in target_specs:
+-                target = player.choose_target(target_specs, spec)
+-                # Validate against filter_fn if the spec provides one
+-                filter_fn = getattr(spec, "filter_fn", None)
+-                if filter_fn is not None and target is not None:
+-                    if not filter_fn(target):
+-                        raise CastingError(
+-                            f"Cannot cast {card.name!r} — chosen target does not "
+-                            f"satisfy filter: {getattr(spec, 'description', '')}"
+-                        )
+-                chosen_targets.append(target)
+-
+-        # Protection check — reject targets that have protection from this spell
+-        from engine.protection import has_protection_from
+-
+-        for target in chosen_targets:
+-            if has_protection_from(target, card):
+-                raise CastingError(
+-                    f"Cannot cast {card.name!r} — target has protection from this spell"
+-                )
++        chosen_targets = _choose_targets(game, player, card, target_specs)
+     except Exception as exc:
+         # Rollback: move card from stack zone back to source zone
+         stack_zone.remove(card)
+         source_zone_container.add(card)
+         raise CastingError(str(exc)) from exc
+ 
++    card._casting_targets = list(chosen_targets)  # type: ignore[attr-defined]
++    card.cast_from_zone = from_zone  # type: ignore[attr-defined]
++    card.was_cast_from_graveyard = from_zone == Zone.GRAVEYARD  # type: ignore[attr-defined]
++    card.mana_spent = 0  # type: ignore[attr-defined]
++
+     # 4. Call on_cast hook
+     card.on_cast(game)
+ 
+@@ -362,6 +888,9 @@
+         controller=player,
+         targets=chosen_targets,
+         on_resolve=lambda g: None,  # replaced below
++        exile_on_resolve=exile_on_resolve,
++        cast_from_zone=from_zone,
++        is_spell=True,
+     )
+ 
+     def _on_resolve(g: GameState) -> None:
+@@ -369,6 +898,83 @@
+ 
+     stack_obj.on_resolve = _on_resolve
+     game.stack.push(stack_obj)
++    _run_on_cast_to_stack_hook(game, card, stack_obj)
++    game.note_zone_change(card, from_zone, Zone.STACK)
++    _record_paradigm_phase_action(game, card)
++    if from_zone == Zone.GRAVEYARD:
++        _fire_graveyard_leaves_cast_event(game, source_player, card)
++    _record_spell_cast_this_turn(game, player, card)
++    game.trigger_manager.fire_event(
++        game,
++        SpellCastTriggeredEvent(spell=card, player=player, card=card, controller=player),
++    )
++    _fire_becomes_target_events(game, player, card, stack_obj, chosen_targets)
++    _queue_ward_triggers(game, player, card, stack_obj, chosen_targets)
++    if hasattr(card, "_casting_targets"):
++        del card._casting_targets
++
++
++# ------------------------------------------------------------------
++# Cast spell copy (not from a zone)
++# ------------------------------------------------------------------
++
++
++def cast_spell_copy(
++    game: GameState,
++    player: Player,
++    card: CardImpl,
++) -> StackObject:
++    """Cast a spell copy that does not exist in a zone.
++
++    This is used by SOS prepared cards, which grant permission to cast a copy
++    of a secondary spell while the source creature is prepared. The copy uses
++    normal target selection and stack interaction, but it is not moved to any
++    zone before or after resolution.
++    """
++    card.controller = player
++    if card.owner is None:
++        card.owner = player
++
++    if not card.can_cast(game):
++        raise CastingError(f"Cannot cast {card.name!r} — can_cast returned False")
++
++    target_specs = card.get_targets(game)
++    chosen_targets = _choose_targets(game, player, card, target_specs)
++
++    card._casting_targets = list(chosen_targets)  # type: ignore[attr-defined]
++    card.cast_from_zone = None  # type: ignore[attr-defined]
++    card.was_cast_from_graveyard = False  # type: ignore[attr-defined]
++    card.mana_spent = 0  # type: ignore[attr-defined]
++
++    card.on_cast(game)
++
++    stack_obj = StackObject(
++        source=card,
++        controller=player,
++        targets=chosen_targets,
++        on_resolve=lambda g: None,
++        is_spell=True,
++    )
++
++    def _on_resolve(g: GameState) -> None:
++        if chosen_targets is not None:
++            card.chosen_targets = chosen_targets  # type: ignore[attr-defined]
++        card.on_resolve(g)
++
++    stack_obj.on_resolve = _on_resolve
++    game.stack.push(stack_obj)
++    _run_on_cast_to_stack_hook(game, card, stack_obj)
++    _record_paradigm_phase_action(game, card)
++    _record_spell_cast_this_turn(game, player, card)
++    game.trigger_manager.fire_event(
++        game,
++        SpellCastTriggeredEvent(spell=card, player=player, card=card, controller=player),
++    )
++    _fire_becomes_target_events(game, player, card, stack_obj, chosen_targets)
++    _queue_ward_triggers(game, player, card, stack_obj, chosen_targets)
++    if hasattr(card, "_casting_targets"):
++        del card._casting_targets
++    return stack_obj
+ 
+ 
+ # ------------------------------------------------------------------
+@@ -390,7 +996,7 @@
+        registration and the ETB event).
+     4. Otherwise (instant / sorcery), move it to the owner's graveyard.
+     """
+-    from engine.zones import move_to_zone
++    from benchmarks.sos.workspace.engine.zones import move_to_zone
+ 
+     # Read targets from the StackObject — the single source of truth.
+     # Set chosen_targets on the card just before resolution so that
+@@ -398,6 +1004,8 @@
+     targets = stack_obj.targets
+     if targets is not None:
+         card.chosen_targets = targets  # type: ignore[attr-defined]
++    card.cast_from_zone = stack_obj.cast_from_zone  # type: ignore[attr-defined]
++    card.was_cast_from_graveyard = stack_obj.cast_from_zone == Zone.GRAVEYARD  # type: ignore[attr-defined]
+ 
+     card.on_resolve(game)
+ 
+@@ -406,8 +1014,14 @@
+         # trigger/replacement-effect registration and ENTERS_BATTLEFIELD event.
+         move_to_zone(game, card, Zone.STACK, Zone.BATTLEFIELD)
+     else:
+-        # Instant/sorcery: move from stack to graveyard via move_to_zone.
+-        move_to_zone(game, card, Zone.STACK, Zone.GRAVEYARD)
++        # Instant/sorcery: move from stack to graveyard unless a flashback-style
++        # effect instructs the engine to exile it instead.
++        destination = Zone.EXILE if stack_obj.exile_on_resolve else Zone.GRAVEYARD
++        if getattr(card, "paradigm_enabled", False) and not getattr(card, "is_paradigm_copy", False):
++            destination = Zone.EXILE
++        move_to_zone(game, card, Zone.STACK, destination)
++        if destination == Zone.EXILE and getattr(card, "paradigm_enabled", False):
++            schedule_paradigm(game, player, card)
+ 
+ 
+ # ------------------------------------------------------------------
+@@ -451,12 +1065,24 @@
+             f"Cannot play land {land_card.name!r} — no land plays remaining"
+         )
+ 
+-    # Card must be in hand
++    # Card must be in hand, or explicitly playable from exile / graveyard.
+     hand = game.get_hand(player)
+-    if not hand.contains(land_card):
+-        raise CastingError(
+-            f"Cannot play land {land_card.name!r} — card not in hand"
+-        )
++    source_zone = Zone.HAND
++    if hand.contains(land_card):
++        source_player = player
++    else:
++        source_player, exile = _find_exile_source(game, land_card)
++        if exile is not None and source_player is not None:
++            _require_exile_play_permission(game, player, land_card)
++            source_zone = Zone.EXILE
++        else:
++            source_player, graveyard = _find_graveyard_source(game, land_card)
++            if graveyard is None or source_player is None or source_player is not player:
++                raise CastingError(
++                    f"Cannot play land {land_card.name!r} — card not in hand"
++                )
++            _require_graveyard_play_permission(game, player, land_card)
++            source_zone = Zone.GRAVEYARD
+ 
+     # Ensure owner/controller are set so move_to_zone routes correctly.
+     if land_card.owner is None:
+@@ -465,11 +1091,12 @@
+ 
+     # Move from hand to battlefield via move_to_zone, which fires
+     # ENTERS_BATTLEFIELD and registers triggers/replacement effects.
+-    from engine.zones import move_to_zone
+-    move_to_zone(game, land_card, Zone.HAND, Zone.BATTLEFIELD)
++    from benchmarks.sos.workspace.engine.zones import move_to_zone
++    move_to_zone(game, land_card, source_zone, Zone.BATTLEFIELD)
+ 
+     # Decrement land plays
+     player.land_plays_remaining -= 1
++    game.paradigm_phase_action_serial += 1
+ 
+ 
+ def resolve_top(game: GameState) -> None:
+@@ -480,7 +1107,7 @@
+     """
+     if game.stack.is_empty():
+         return
+-    from engine.state_based_actions import resolve_state_based_actions
++    from benchmarks.sos.workspace.engine.state_based_actions import resolve_state_based_actions
+ 
+     obj = game.stack.pop()
+     obj.on_resolve(game)
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/combat.py /tmp/silverquillm_run_imhr8630/workspace/engine/combat.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/combat.py	2026-05-25 16:43:11.728292087 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/combat.py	2026-05-25 12:59:12.087385915 +0000
+@@ -27,11 +27,11 @@
+ from dataclasses import dataclass, field
+ from typing import TYPE_CHECKING, Any
+ 
+-from engine.types import Keyword
++from benchmarks.sos.workspace.engine.types import Keyword
+ 
+ if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-    from engine.player import Player
++    from benchmarks.sos.workspace.engine.game_state import GameState
++    from benchmarks.sos.workspace.engine.player import Player
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -127,7 +127,7 @@
+             return False
+ 
+     # Protection check — attacker with protection from blocker can't be blocked
+-    from engine.protection import has_protection_from
++    from benchmarks.sos.workspace.engine.protection import has_protection_from
+ 
+     if has_protection_from(attacker, blocker):
+         return False
+@@ -170,9 +170,9 @@
+         return
+ 
+     # Protection prevents damage (D in DEBT).
+-    from engine.protection import has_protection_from
++    from benchmarks.sos.workspace.engine.protection import has_protection_from
+ 
+-    if has_protection_from(target, source):
++    if not game.is_damage_prevention_locked() and has_protection_from(target, source):
+         return
+ 
+     # Record damage assignment
+@@ -192,6 +192,9 @@
+         source_kw_dt = getattr(source, "keywords", Keyword(0))
+         if Keyword.DEATHTOUCH in source_kw_dt:
+             target.dealt_deathtouch_damage = True
++    elif hasattr(target, "loyalty"):
++        from benchmarks.sos.workspace.engine.game import deal_damage_to_planeswalker
++        deal_damage_to_planeswalker(game, source, target, amount, is_combat=True)
+ 
+     # Lifelink: controller gains life equal to damage dealt
+     source_kw = getattr(source, "keywords", Keyword(0))
+@@ -221,7 +224,7 @@
+     defending = game.non_active_player
+ 
+     # Gather legal attackers from the active player's battlefield
+-    from engine.types import Zone
++    from benchmarks.sos.workspace.engine.types import Zone
+     bf = active.zones[Zone.BATTLEFIELD]
+     eligible = [
+         c for c in bf.get_all()
+@@ -241,6 +244,8 @@
+         chosen = [chosen]
+ 
+     # Validate and register attackers
++    from benchmarks.sos.workspace.engine.events import AttacksTriggeredEvent
++
+     for attacker in chosen:
+         if attacker not in eligible:
+             continue
+@@ -256,6 +261,11 @@
+         if Keyword.VIGILANCE not in kw:
+             attacker.is_tapped = True
+ 
++        game.trigger_manager.fire_event(
++            game,
++            AttacksTriggeredEvent(creature=attacker, attacker=attacker),
++        )
++
+ 
+ def declare_blockers_step(game: GameState) -> None:
+     """Declare blockers step: defending player assigns blockers.
+@@ -282,7 +292,7 @@
+     defending = game.non_active_player
+     active = game.active_player
+ 
+-    from engine.types import Zone
++    from benchmarks.sos.workspace.engine.types import Zone
+     bf_defending = defending.zones[Zone.BATTLEFIELD]
+     eligible_blockers = [
+         c for c in bf_defending.get_all()
+@@ -371,7 +381,7 @@
+     Parameters:
+         game: The current game state.
+     """
+-    from engine.state_based_actions import resolve_state_based_actions
++    from benchmarks.sos.workspace.engine.state_based_actions import resolve_state_based_actions
+ 
+     combat = game.combat_state
+ 
+@@ -425,7 +435,7 @@
+     the battlefield (e.g. killed by first-strike damage and removed by
+     SBAs) are skipped.
+     """
+-    from engine.types import Zone
++    from benchmarks.sos.workspace.engine.types import Zone
+ 
+     # Track which blockers have already dealt their damage this sub-step
+     # (blockers only deal damage once even if blocking multiple attackers)
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/continuous_effects.py /tmp/silverquillm_run_imhr8630/workspace/engine/continuous_effects.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/continuous_effects.py	2026-05-25 16:43:11.729292098 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/continuous_effects.py	2026-05-25 11:37:18.375550469 +0000
+@@ -18,7 +18,7 @@
+ from typing import TYPE_CHECKING, Any, Callable
+ 
+ if TYPE_CHECKING:
+-    from engine.game_state import GameState
++    from benchmarks.sos.workspace.engine.game_state import GameState
+ 
+ 
+ class Layer(enum.IntEnum):
+@@ -84,6 +84,7 @@
+     apply: Callable[..., Any] = field(default=lambda _game: None)
+     timestamp: int = 0
+     duration: int = DURATION_PERMANENT
++    on_expire: Callable[..., Any] | None = None
+ 
+     def _sort_key(self) -> tuple[int, int, int]:
+         """Return a sort key: (layer, sublayer-ordinal, timestamp).
+@@ -172,9 +173,13 @@
+                 remaining.append(eff)
+             elif eff.duration == DURATION_END_OF_TURN:
+                 # End-of-turn effects are swept away.
++                if eff.on_expire is not None:
++                    eff.on_expire(game)
+                 continue
+             elif game.turn_number > eff.duration:
+                 # Turn-numbered expiry.
++                if eff.on_expire is not None:
++                    eff.on_expire(game)
+                 continue
+             else:
+                 remaining.append(eff)
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/creatures.py /tmp/silverquillm_run_imhr8630/workspace/engine/creatures.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/creatures.py	2026-05-25 16:43:11.729292098 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/creatures.py	2026-05-25 04:23:31.883982600 +0000
+@@ -4,8 +4,8 @@
+ 
+ from typing import Any
+ 
+-from engine.card import Creature
+-from engine.types import Keyword, ManaCost
++from benchmarks.sos.workspace.engine.card import Creature
++from benchmarks.sos.workspace.engine.types import Keyword, ManaCost
+ 
+ 
+ def make_vanilla(
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/events.py /tmp/silverquillm_run_imhr8630/workspace/engine/events.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/events.py	2026-05-25 04:23:31.883982600 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/events.py	2026-05-25 15:43:33.321897332 +0000
+@@ -12,9 +12,11 @@
+ 
+ from __future__ import annotations
+ 
+-from dataclasses import dataclass
++from dataclasses import dataclass, field
+ from typing import Any
+ 
++from benchmarks.sos.workspace.engine.types import Phase, Zone
++
+ 
+ # ---------------------------------------------------------------------------
+ # Triggered events
+@@ -67,6 +69,43 @@
+ 
+ 
+ @dataclass
++class CardsRevealedTriggeredEvent(TriggeredEvent):
++    player: Any = None
++    cards: list[Any] = field(default_factory=list)
++    source: Any = None
++    reason: str = ""
++
++
++@dataclass
++class CardsLookedAtTriggeredEvent(TriggeredEvent):
++    player: Any = None
++    cards: list[Any] = field(default_factory=list)
++    source: Any = None
++    reason: str = ""
++
++
++@dataclass
++class LibraryShuffledTriggeredEvent(TriggeredEvent):
++    player: Any = None
++    zone: Zone = Zone.LIBRARY
++    before: list[Any] = field(default_factory=list)
++    after: list[Any] = field(default_factory=list)
++    source: Any = None
++    reason: str = ""
++    used_queued_order: bool = False
++
++
++@dataclass
++class CardsPutOnBottomOfLibraryTriggeredEvent(TriggeredEvent):
++    player: Any = None
++    cards: list[Any] = field(default_factory=list)
++    ordered_cards: list[Any] = field(default_factory=list)
++    source: Any = None
++    reason: str = ""
++    used_queued_order: bool = False
++
++
++@dataclass
+ class BeginningOfUpkeepTriggeredEvent(TriggeredEvent):
+     pass
+ 
+@@ -77,6 +116,37 @@
+ 
+ 
+ @dataclass
++class BeginningOfMainPhaseTriggeredEvent(TriggeredEvent):
++    player: Any = None
++    phase: Phase | None = None
++    is_precombat: bool = False
++    is_postcombat: bool = False
++
++    def __post_init__(self) -> None:
++        if self.phase is None:
++            if self.is_precombat and not self.is_postcombat:
++                self.phase = Phase.PRECOMBAT_MAIN
++            elif self.is_postcombat and not self.is_precombat:
++                self.phase = Phase.POSTCOMBAT_MAIN
++        if self.phase == Phase.PRECOMBAT_MAIN:
++            self.is_precombat = True
++            self.is_postcombat = False
++        elif self.phase == Phase.POSTCOMBAT_MAIN:
++            self.is_postcombat = True
++            self.is_precombat = False
++
++
++@dataclass
++class BeginningOfFirstMainPhaseTriggeredEvent(BeginningOfMainPhaseTriggeredEvent):
++    player: Any = None
++
++    def __post_init__(self) -> None:
++        if self.phase is None:
++            self.phase = Phase.PRECOMBAT_MAIN
++        super().__post_init__()
++
++
++@dataclass
+ class EndOfTurnTriggeredEvent(TriggeredEvent):
+     pass
+ 
+@@ -102,6 +172,14 @@
+ 
+ 
+ @dataclass
++class BecomesTargetTriggeredEvent(TriggeredEvent):
++    target: Any = None
++    source: Any = None
++    controller: Any = None
++    stack_object: Any = None
++
++
++@dataclass
+ class AttacksTriggeredEvent(TriggeredEvent):
+     creature: Any = None
+     attacker: Any = None
+@@ -119,6 +197,13 @@
+     amount: int = 0
+ 
+ 
++@dataclass
++class GraveyardLeavesTriggeredEvent(TriggeredEvent):
++    player: Any = None
++    cards: list[Any] = field(default_factory=list)
++    destination: Any = None
++
++
+ # ---------------------------------------------------------------------------
+ # Replacement events
+ # ---------------------------------------------------------------------------
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/game.py /tmp/silverquillm_run_imhr8630/workspace/engine/game.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/game.py	2026-05-25 16:43:11.729292098 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/game.py	2026-05-25 17:59:55.845783405 +0000
+@@ -15,24 +15,29 @@
+ 
+ from typing import TYPE_CHECKING, Any
+ 
+-from engine.events import (
++from benchmarks.sos.workspace.engine.events import (
++    CardsLookedAtTriggeredEvent,
++    CardsPutOnBottomOfLibraryTriggeredEvent,
++    CardsRevealedTriggeredEvent,
++    CounterAddedTriggeredEvent,
+     CreatureDiesReplacementEvent,
+     DealsDamageTriggeredEvent,
+     DrawsCardTriggeredEvent,
+     EntersBattlefieldTriggeredEvent,
+     GainsLifeTriggeredEvent,
++    LibraryShuffledTriggeredEvent,
+     LosesLifeTriggeredEvent,
+     PermanentDestroyedReplacementEvent,
+     SacrificeReplacementEvent,
+ )
+-from engine.game_state import GameState
+-from engine.turn import run_turn
+-from engine.types import Zone
+-from engine.zones import move_to_zone
++from benchmarks.sos.workspace.engine.game_state import GameState
++from benchmarks.sos.workspace.engine.turn import run_turn
++from benchmarks.sos.workspace.engine.types import Zone
++from benchmarks.sos.workspace.engine.zones import move_to_zone
+ 
+ if TYPE_CHECKING:
+-    from engine.card import CardImpl, Creature
+-    from engine.player import Player
++    from benchmarks.sos.workspace.engine.card import CardImpl, Creature
++    from benchmarks.sos.workspace.engine.player import Player
+ 
+ 
+ # Maximum number of turns before the game is considered a draw.
+@@ -89,13 +94,13 @@
+         card.controller = player2
+         library2.add(card)
+ 
+-    # 3. Shuffle libraries
+-    library1.shuffle()
+-    library2.shuffle()
+-
+     # Build the game state
+     game = GameState([player1, player2])
+ 
++    # 3. Shuffle libraries
++    shuffle_library(game, player1, reason="opening game setup")
++    shuffle_library(game, player2, reason="opening game setup")
++
+     # 4. Draw 7 cards each
+     for _ in range(7):
+         draw_card(game, player1)
+@@ -113,6 +118,48 @@
+ # Common helper actions
+ # ---------------------------------------------------------------------------
+ 
++def make_damage_unpreventable_this_turn(game: GameState) -> None:
++    """Public helper for effects that say damage can't be prevented this turn."""
++    game.make_damage_unpreventable_this_turn()
++
++
++def is_damage_prevention_locked(game: GameState) -> bool:
++    """Return whether damage prevention is currently locked out for the turn."""
++    return game.is_damage_prevention_locked()
++
++
++def deal_damage_to_planeswalker(
++    game: GameState,
++    source: Any,
++    target: Any,
++    amount: int,
++    *,
++    is_combat: bool = False,
++) -> int:
++    """Deal damage to *target* planeswalker and return loyalty actually lost."""
++    if amount <= 0:
++        return 0
++    if hasattr(target, "lose_loyalty"):
++        lost = target.lose_loyalty(amount)
++    else:
++        current_loyalty = max(0, int(getattr(target, "loyalty", 0)))
++        lost = min(current_loyalty, amount)
++        target.loyalty = max(0, current_loyalty - amount)
++        target.loyalty_lost_this_turn = getattr(target, "loyalty_lost_this_turn", 0) + lost
++        target.last_loyalty_loss_amount = lost
++    game.trigger_manager.fire_event(
++        game,
++        DealsDamageTriggeredEvent(
++            source=source,
++            target=target,
++            amount=amount,
++            is_combat=is_combat,
++            combat=is_combat,
++        ),
++    )
++    return lost
++
++
+ def deal_damage(game: GameState, source: Any, target: Any, amount: int) -> None:
+     """Deal *amount* damage from *source* to *target*.
+ 
+@@ -131,11 +178,11 @@
+     if amount <= 0:
+         return
+ 
+-    from engine.protection import has_protection_from
+-    from engine.types import Keyword
++    from benchmarks.sos.workspace.engine.protection import has_protection_from
++    from benchmarks.sos.workspace.engine.types import Keyword
+ 
+     # Protection prevents damage from sources with the protected-from quality.
+-    if has_protection_from(target, source):
++    if not game.is_damage_prevention_locked() and has_protection_from(target, source):
+         return
+ 
+     if hasattr(target, "life"):
+@@ -165,6 +212,8 @@
+             game,
+             DealsDamageTriggeredEvent(source=source, target=target, amount=amount),
+         )
++    elif hasattr(target, "loyalty"):
++        deal_damage_to_planeswalker(game, source, target, amount)
+ 
+     # Lifelink: controller of source gains life equal to damage dealt
+     source_kw = getattr(source, "keywords", Keyword(0))
+@@ -184,7 +233,7 @@
+         game: The current game state.
+         permanent: The permanent to destroy.
+     """
+-    from engine.types import Keyword
++    from benchmarks.sos.workspace.engine.types import Keyword
+ 
+     # Indestructible permanents cannot be destroyed
+     kw = getattr(permanent, "keywords", Keyword(0))
+@@ -206,7 +255,7 @@
+     if not bf.contains(permanent):
+         return
+ 
+-    from engine.types import CardType
++    from benchmarks.sos.workspace.engine.types import CardType
+ 
+     card_types = getattr(permanent, "card_types", set())
+     is_creature = CardType.CREATURE in card_types
+@@ -320,10 +369,8 @@
+     hand = player.zones[Zone.HAND]
+     hand.add(card)
+ 
+-    # Track cards drawn this turn
+-    if not hasattr(player, "cards_drawn_this_turn"):
+-        player.cards_drawn_this_turn = 0
+-    player.cards_drawn_this_turn += 1
++    # Track cards drawn this turn and the first card drawn for miracle-like checks.
++    game.note_card_drawn(player, card)
+ 
+     # Fire trigger (only if game has a trigger_manager — may not during setup)
+     if hasattr(game, "trigger_manager"):
+@@ -335,6 +382,127 @@
+     return card
+ 
+ 
++def reveal_cards(
++    game: GameState,
++    player: Player,
++    cards: list[Any],
++    *,
++    source: Any | None = None,
++    reason: str = "",
++) -> list[Any]:
++    """Record and fire a public reveal for *cards*."""
++    revealed_cards = list(cards)
++    game.record_reveal(player, revealed_cards, source=source, reason=reason)
++    game.trigger_manager.fire_event(
++        game,
++        CardsRevealedTriggeredEvent(
++            player=player,
++            cards=revealed_cards,
++            source=source,
++            reason=reason,
++        ),
++    )
++    return revealed_cards
++
++
++def look_at_cards(
++    game: GameState,
++    player: Player,
++    cards: list[Any],
++    *,
++    source: Any | None = None,
++    reason: str = "",
++) -> list[Any]:
++    """Record and fire an observable look action for *cards*."""
++    looked_at_cards = list(cards)
++    game.record_look(player, looked_at_cards, source=source, reason=reason)
++    game.trigger_manager.fire_event(
++        game,
++        CardsLookedAtTriggeredEvent(
++            player=player,
++            cards=looked_at_cards,
++            source=source,
++            reason=reason,
++        ),
++    )
++    return looked_at_cards
++
++
++def shuffle_library(
++    game: GameState,
++    player: Player,
++    *,
++    source: Any | None = None,
++    reason: str = "",
++) -> list[Any]:
++    """Shuffle *player*'s library with public tracking and optional determinism."""
++    library = game.get_library(player)
++    before = library.get_all()
++    after = game.choose_shuffle_order(
++        player,
++        before,
++        zone=Zone.LIBRARY,
++        source=source,
++        reason=reason,
++    )
++    for card in before:
++        if library.contains(card):
++            library.remove(card)
++    for card in after:
++        library.add(card)
++    history = game.shuffle_history[-1] if game.shuffle_history else None
++    game.trigger_manager.fire_event(
++        game,
++        LibraryShuffledTriggeredEvent(
++            player=player,
++            zone=Zone.LIBRARY,
++            before=before,
++            after=after,
++            source=source,
++            reason=reason,
++            used_queued_order=bool(history.used_queued_order) if history is not None else False,
++        ),
++    )
++    return after
++
++
++def put_cards_on_bottom_in_random_order(
++    game: GameState,
++    player: Player,
++    cards: list[Any],
++    *,
++    source: Any | None = None,
++    reason: str = "",
++) -> list[Any]:
++    """Put *cards* on the bottom of *player*'s library in a tracked random order."""
++    cards_to_place = list(cards)
++    ordered_cards = game.choose_bottom_order(
++        player,
++        cards_to_place,
++        source=source,
++        reason=reason,
++    )
++    library = game.get_library(player)
++    for card in cards_to_place:
++        if library.contains(card):
++            library.remove(card)
++    for card in reversed(ordered_cards):
++        library.add(card, position="bottom")
++    history = game.bottom_order_history[-1] if game.bottom_order_history else None
++    game.trigger_manager.fire_event(
++        game,
++        CardsPutOnBottomOfLibraryTriggeredEvent(
++            player=player,
++            cards=cards_to_place,
++            ordered_cards=ordered_cards,
++            source=source,
++            reason=reason,
++            used_queued_order=bool(history.used_queued_order) if history is not None else False,
++        ),
++    )
++    return ordered_cards
++
++
+ def discard(game: GameState, player: Player, card: Any) -> None:
+     """Discard *card* from *player*'s hand to the owner's graveyard.
+ 
+@@ -384,6 +552,21 @@
+         token.register_replacement_effects(game)
+ 
+ 
++def flip_coin(game: GameState, player: Player | None = None) -> bool:
++    """Flip a coin, honoring queued deterministic results on *game*."""
++    return game.flip_coin(player)
++
++
++def flip_coins(game: GameState, count: int, player: Player | None = None) -> list[bool]:
++    """Flip *count* coins, honoring queued deterministic results on *game*."""
++    return game.flip_coins(count, player)
++
++
++def skip_next_turns(game: GameState, player: Player, count: int = 1) -> None:
++    """Make *player* skip their next ``count`` turns."""
++    game.skip_next_turns(player, count)
++
++
+ def add_counter(
+     game: GameState,
+     permanent: Any,
+@@ -408,15 +591,33 @@
+ 
+     if counter_type == "+1/+1" and hasattr(permanent, "plus_one_counters"):
+         permanent.plus_one_counters += amount
++        if hasattr(permanent, "_base_plus_one_counters"):
++            permanent._base_plus_one_counters = permanent.plus_one_counters
+     elif counter_type == "-1/-1" and hasattr(permanent, "minus_one_counters"):
+         permanent.minus_one_counters += amount
++        if hasattr(permanent, "_base_minus_one_counters"):
++            permanent._base_minus_one_counters = permanent.minus_one_counters
+     elif counter_type == "loyalty" and hasattr(permanent, "loyalty"):
+         permanent.loyalty += amount
+     else:
+-        # Generic counter storage
+-        if not hasattr(permanent, "counters"):
+-            permanent.counters = {}
+-        permanent.counters[counter_type] = permanent.counters.get(counter_type, 0) + amount
++        counters = getattr(permanent, "_counters", None)
++        if isinstance(counters, dict):
++            counters[counter_type] = counters.get(counter_type, 0) + amount
++        else:
++            visible_counters = getattr(permanent, "counters", None)
++            if isinstance(visible_counters, dict):
++                visible_counters[counter_type] = visible_counters.get(counter_type, 0) + amount
++            else:
++                permanent.counters = {counter_type: amount}
++
++    game.trigger_manager.fire_event(
++        game,
++        CounterAddedTriggeredEvent(
++            permanent=permanent,
++            counter_type=counter_type,
++            amount=amount,
++        ),
++    )
+ 
+ 
+ def remove_counter(
+@@ -440,15 +641,26 @@
+ 
+     if counter_type == "+1/+1" and hasattr(permanent, "plus_one_counters"):
+         permanent.plus_one_counters = max(0, permanent.plus_one_counters - amount)
++        if hasattr(permanent, "_base_plus_one_counters"):
++            permanent._base_plus_one_counters = permanent.plus_one_counters
+     elif counter_type == "-1/-1" and hasattr(permanent, "minus_one_counters"):
+         permanent.minus_one_counters = max(0, permanent.minus_one_counters - amount)
++        if hasattr(permanent, "_base_minus_one_counters"):
++            permanent._base_minus_one_counters = permanent.minus_one_counters
+     elif counter_type == "loyalty" and hasattr(permanent, "loyalty"):
+         permanent.loyalty = max(0, permanent.loyalty - amount)
+     else:
+-        if hasattr(permanent, "counters") and counter_type in permanent.counters:
+-            permanent.counters[counter_type] = max(
+-                0, permanent.counters[counter_type] - amount
+-            )
++        counters = getattr(permanent, "_counters", None)
++        if isinstance(counters, dict) and counter_type in counters:
++            counters[counter_type] = max(0, counters[counter_type] - amount)
++            if counters[counter_type] == 0:
++                del counters[counter_type]
++        else:
++            visible_counters = getattr(permanent, "counters", None)
++            if isinstance(visible_counters, dict) and counter_type in visible_counters:
++                visible_counters[counter_type] = max(0, visible_counters[counter_type] - amount)
++                if visible_counters[counter_type] == 0:
++                    del visible_counters[counter_type]
+ 
+ 
+ def tap(game: GameState, permanent: Any) -> None:
+@@ -462,15 +674,37 @@
+         permanent.is_tapped = True
+ 
+ 
+-def untap(game: GameState, permanent: Any) -> None:
+-    """Untap *permanent* — set ``is_tapped = False``.
++def untap(game: GameState, permanent: Any) -> bool:
++    """Attempt to untap *permanent*.
++
++    If the permanent is tapped and has a stun counter, remove one stun counter
++    instead and leave it tapped.
+ 
+     Parameters:
+         game: The current game state.
+         permanent: The permanent to untap.
++
++    Returns:
++        ``True`` if the permanent became untapped, ``False`` otherwise.
+     """
+-    if hasattr(permanent, "is_tapped"):
+-        permanent.is_tapped = False
++    if not hasattr(permanent, "is_tapped") or not permanent.is_tapped:
++        return False
++
++    stun_counters = 0
++    counters = getattr(permanent, "_counters", None)
++    if isinstance(counters, dict):
++        stun_counters = counters.get("stun", 0)
++    stun_counters = max(stun_counters, getattr(permanent, "stun_counters", 0))
++
++    if stun_counters > 0:
++        if isinstance(counters, dict) and counters.get("stun", 0) > 0:
++            remove_counter(game, permanent, "stun")
++        elif getattr(permanent, "stun_counters", 0) > 0:
++            permanent.stun_counters = max(0, permanent.stun_counters - 1)
++        return False
++
++    permanent.is_tapped = False
++    return True
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -495,7 +729,7 @@
+         The winning player, or ``None`` if the game ended in a draw (or
+         hit the turn limit).
+     """
+-    from engine.state_based_actions import resolve_state_based_actions
++    from benchmarks.sos.workspace.engine.state_based_actions import resolve_state_based_actions
+ 
+     while not game.is_game_over and game.turn_number <= MAX_TURNS:
+         # Check SBAs before the turn (catches pre-existing conditions)
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/game_state.py /tmp/silverquillm_run_imhr8630/workspace/engine/game_state.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/game_state.py	2026-05-25 16:43:11.729292098 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/game_state.py	2026-05-25 18:26:08.296296396 +0000
+@@ -2,16 +2,123 @@
+ 
+ from __future__ import annotations
+ 
++from dataclasses import dataclass
++import random
+ from typing import Any
+ 
+-from engine.combat import CombatState
+-from engine.continuous_effects import EffectManager
+-from engine.player import Player
+-from engine.replacement_effects import ReplacementManager
+-from engine.stack import Stack
+-from engine.triggers import TriggerManager
+-from engine.types import Phase, Step, Zone
+-from engine.zones import ZoneContainer
++from benchmarks.sos.workspace.engine.combat import CombatState
++from benchmarks.sos.workspace.engine.continuous_effects import EffectManager
++from benchmarks.sos.workspace.engine.player import Player
++from benchmarks.sos.workspace.engine.replacement_effects import ReplacementManager
++from benchmarks.sos.workspace.engine.stack import Stack
++from benchmarks.sos.workspace.engine.triggers import TriggerManager
++from benchmarks.sos.workspace.engine.types import Phase, Step, Zone
++from benchmarks.sos.workspace.engine.zones import ZoneContainer
++
++
++@dataclass
++class ParadigmSchedule:
++    """Tracks an exiled paradigm card that can generate recurring spell copies."""
++
++    player_index: int
++    card_name: str
++    card: Any
++    created_turn_number: int = 0
++    created_action_serial: int = 0
++    last_cast_turn_number: int | None = None
++    last_cast_active_player_index: int | None = None
++
++
++@dataclass
++class ExilePlayPermission:
++    """Tracks a temporary permission to play a specific exiled card."""
++
++    player_index: int
++    card: Any
++    source: Any | None = None
++    zone: Zone = Zone.EXILE
++    granted_turn_number: int = 0
++    expires_after_player_turn: int | None = None
++
++
++@dataclass
++class GraveyardPlayPermission:
++    """Tracks a temporary permission to play a specific graveyard card."""
++
++    player_index: int
++    card: Any
++    source: Any | None = None
++    zone: Zone = Zone.GRAVEYARD
++    granted_turn_number: int = 0
++    expires_after_turn_number: int | None = None
++
++
++@dataclass
++class SpellCastRecord:
++    """Tracks one committed spell cast within the current turn."""
++
++    player: Any
++    card: Any
++    cast_serial: int
++
++
++@dataclass
++class MiracleWindow:
++    """Tracks the short-lived timing window for a miracle cast."""
++
++    player_index: int
++    card: Any
++    turn_number: int
++    phase: Phase
++    step: Step | None
++    action_serial: int
++
++
++@dataclass
++class ZoneBoundAttributeOverride:
++    """Tracks a temporary attribute override that only applies in one zone."""
++
++    card: Any
++    zone: Zone
++    attr_name: str
++    source: Any | None = None
++    previous_had_attr: bool = False
++    previous_value: Any = None
++
++
++@dataclass
++class HiddenCardObservation:
++    """Public record of a hidden-information observation that became observable."""
++
++    player_index: int
++    cards: list[Any]
++    source: Any | None = None
++    reason: str = ""
++
++
++@dataclass
++class ShuffleRecord:
++    """Public record of a tracked shuffle."""
++
++    player_index: int
++    zone: Zone
++    before: list[Any]
++    after: list[Any]
++    source: Any | None = None
++    reason: str = ""
++    used_queued_order: bool = False
++
++
++@dataclass
++class BottomPlacementRecord:
++    """Public record of a tracked bottom-of-library ordering."""
++
++    player_index: int
++    cards: list[Any]
++    ordered_cards: list[Any]
++    source: Any | None = None
++    reason: str = ""
++    used_queued_order: bool = False
+ 
+ # Ordered list of (Phase, Step | None) representing a full MTG turn.
+ _TURN_SEQUENCE: list[tuple[Phase, Step | None]] = [
+@@ -81,6 +188,45 @@
+         # normal rotation.  When extras are exhausted the game picks up
+         # from _normal_next_index.
+         self._normal_next_index: int = 1
++        # Turn-scoped bookkeeping for cards put into exile.
++        self.cards_exiled_this_turn: list[Any] = []
++        self.creatures_died_this_turn: list[Any] = []
++        self.creature_died_this_turn: bool = False
++        self.cards_left_graveyards_this_turn: dict[int, list[Any]] = {0: [], 1: []}
++        self.spells_cast_this_turn: list[SpellCastRecord] = []
++        self.spell_cast_serial: int = 0
++        self.paradigm_schedules: list[ParadigmSchedule] = []
++        self.paradigm_phase_action_serial: int = 0
++        self.paradigm_window_turn_number: int | None = None
++        self.paradigm_window_player_index: int | None = None
++        self.paradigm_window_action_serial: int = 0
++        self._fresh_setup_sandbox: bool = True
++        self.coin_flip_results: list[Any] = []
++        self.coin_flip_history: list[bool] = []
++        self.skipped_turns: dict[int, int] = {index: 0 for index in range(len(players))}
++        self.skipped_turn_history: list[int] = []
++        self.player_turn_counts: dict[int, int] = {index: 0 for index in range(len(players))}
++        self.player_turn_counts[self.active_player_index] = 1
++        self.exile_play_permissions: list[ExilePlayPermission] = []
++        self.graveyard_play_permissions: list[GraveyardPlayPermission] = []
++        self.zone_bound_attribute_overrides: list[ZoneBoundAttributeOverride] = []
++        self.damage_cant_be_prevented: bool = False
++        self.reveal_history: list[HiddenCardObservation] = []
++        self.look_history: list[HiddenCardObservation] = []
++        self.shuffle_history: list[ShuffleRecord] = []
++        self.bottom_order_history: list[BottomPlacementRecord] = []
++        self._queued_shuffle_orders: list[list[Any]] = []
++        self._queued_bottom_orders: list[list[Any]] = []
++        self.miracle_windows: dict[int, MiracleWindow | None] = {
++            index: None for index in range(len(players))
++        }
++
++    @staticmethod
++    def _clear_exile_cast_temporary_attributes(card: Any) -> None:
++        """Remove temporary exile-cast helper attributes from *card*."""
++        for attr_name in ("_playable_until_next_turn", "_cast_with_any_mana_as_any_type", "_exile_after_exile_cast"):
++            if hasattr(card, attr_name):
++                setattr(card, attr_name, False)
+ 
+     # ------------------------------------------------------------------
+     # Player properties
+@@ -125,6 +271,565 @@
+         """Return the exile zone for *player*."""
+         return player.zones[Zone.EXILE]
+ 
++    def is_fresh_setup_sandbox(self, player: Player) -> bool:
++        """Return whether the neutral fresh-create_game sandbox is still active."""
++        return (
++            self._fresh_setup_sandbox
++            and self.turn_number == 1
++            and self.active_player is player
++            and self.phase == Phase.BEGINNING
++            and self.step == Step.UNTAP
++            and self.stack.is_empty()
++        )
++
++    def mark_fresh_setup_sandbox_used(self) -> None:
++        """Disable the fresh-create_game timing compatibility sandbox."""
++        self._fresh_setup_sandbox = False
++
++    def queue_coin_flips(self, *results: Any) -> None:
++        """Queue deterministic coin-flip results for future flips.
++
++        Each queued result may be a bool or a string such as ``"heads"`` or
++        ``"tails"``.
++        """
++        self.coin_flip_results.extend(results)
++
++    def flip_coin(self, player: Player | None = None) -> bool:  # noqa: ARG002
++        """Flip a coin, using queued deterministic results when available."""
++        if self.coin_flip_results:
++            raw_result = self.coin_flip_results.pop(0)
++            if isinstance(raw_result, str):
++                normalized = raw_result.strip().lower()
++                result = normalized in {"heads", "head", "h", "true", "1"}
++            else:
++                result = bool(raw_result)
++        else:
++            result = bool(random.getrandbits(1))
++        self.coin_flip_history.append(result)
++        return result
++
++    def flip_coins(self, count: int, player: Player | None = None) -> list[bool]:
++        """Flip *count* coins and return the ordered results."""
++        if count <= 0:
++            return []
++        return [self.flip_coin(player) for _ in range(count)]
++
++    def skip_next_turns(self, player: Player, count: int = 1) -> None:
++        """Mark *player* to skip their next ``count`` turns."""
++        if count <= 0:
++            return
++        player_index = self.players.index(player)
++        self.skipped_turns[player_index] = self.skipped_turns.get(player_index, 0) + count
++
++    def get_skipped_turns(self, player: Player) -> int:
++        """Return how many upcoming turns *player* will skip."""
++        player_index = self.players.index(player)
++        return self.skipped_turns.get(player_index, 0)
++
++    def grant_exile_play_permission_until_end_of_next_turn(
++        self,
++        player: Player,
++        card: Any,
++        *,
++        source: Any | None = None,
++    ) -> ExilePlayPermission:
++        """Grant *player* permission to play *card* from exile until end of next turn."""
++        player_index = self.players.index(player)
++        permission = ExilePlayPermission(
++            player_index=player_index,
++            card=card,
++            source=source,
++            granted_turn_number=self.turn_number,
++            expires_after_player_turn=self.player_turn_counts[player_index] + 1,
++        )
++        self.exile_play_permissions.append(permission)
++        return permission
++
++    def grant_exile_play_permission_until_end_of_turn(
++        self,
++        player: Player,
++        card: Any,
++        *,
++        source: Any | None = None,
++    ) -> ExilePlayPermission:
++        """Grant *player* permission to play *card* from exile this turn only."""
++        player_index = self.players.index(player)
++        permission = ExilePlayPermission(
++            player_index=player_index,
++            card=card,
++            source=source,
++            granted_turn_number=self.turn_number,
++            expires_after_player_turn=self.player_turn_counts[player_index],
++        )
++        self.exile_play_permissions.append(permission)
++        return permission
++
++    def revoke_exile_play_permissions_for_card(self, card: Any) -> int:
++        """Remove all exile-play permissions currently tied to *card*."""
++        before = len(self.exile_play_permissions)
++        self.exile_play_permissions = [
++            perm for perm in self.exile_play_permissions if perm.card is not card
++        ]
++        self._clear_exile_cast_temporary_attributes(card)
++        return before - len(self.exile_play_permissions)
++
++    def grant_graveyard_play_permission_until_end_of_turn(
++        self,
++        player: Player,
++        card: Any,
++        *,
++        source: Any | None = None,
++    ) -> GraveyardPlayPermission:
++        """Grant *player* permission to play *card* from their graveyard this turn."""
++        player_index = self.players.index(player)
++        permission = GraveyardPlayPermission(
++            player_index=player_index,
++            card=card,
++            source=source,
++            granted_turn_number=self.turn_number,
++            expires_after_turn_number=self.turn_number,
++        )
++        setattr(card, "_playable_from_graveyard_this_turn", True)
++        self.graveyard_play_permissions.append(permission)
++        return permission
++
++    def revoke_graveyard_play_permissions_for_card(self, card: Any) -> int:
++        """Remove all graveyard-play permissions currently tied to *card*."""
++        before = len(self.graveyard_play_permissions)
++        self.graveyard_play_permissions = [
++            perm for perm in self.graveyard_play_permissions if perm.card is not card
++        ]
++        if hasattr(card, "_playable_from_graveyard_this_turn"):
++            card._playable_from_graveyard_this_turn = False
++        return before - len(self.graveyard_play_permissions)
++
++    def grant_zone_bound_attribute_override(
++        self,
++        card: Any,
++        *,
++        zone: Zone,
++        attr_name: str,
++        value: Any,
++        source: Any | None = None,
++    ) -> ZoneBoundAttributeOverride:
++        """Temporarily set ``card.attr_name`` while *card* remains in *zone*."""
++        for override in list(self.zone_bound_attribute_overrides):
++            if (
++                override.card is card
++                and override.zone == zone
++                and override.attr_name == attr_name
++            ):
++                self.expire_zone_bound_attribute_override(override)
++
++        override = ZoneBoundAttributeOverride(
++            card=card,
++            zone=zone,
++            attr_name=attr_name,
++            source=source,
++            previous_had_attr=hasattr(card, attr_name),
++            previous_value=getattr(card, attr_name, None),
++        )
++        setattr(card, attr_name, value)
++        self.zone_bound_attribute_overrides.append(override)
++        return override
++
++    def expire_zone_bound_attribute_override(
++        self,
++        override: ZoneBoundAttributeOverride,
++    ) -> bool:
++        """Remove a previously granted zone-bound attribute override."""
++        for index, existing in enumerate(self.zone_bound_attribute_overrides):
++            if existing is not override:
++                continue
++            self.zone_bound_attribute_overrides.pop(index)
++            if existing.previous_had_attr:
++                setattr(existing.card, existing.attr_name, existing.previous_value)
++            elif hasattr(existing.card, existing.attr_name):
++                delattr(existing.card, existing.attr_name)
++            return True
++        return False
++
++    def note_zone_change(self, card: Any, from_zone: Zone, to_zone: Zone) -> None:
++        """Update zone-change bookkeeping that other game systems depend on."""
++        if from_zone == Zone.EXILE and to_zone != Zone.EXILE:
++            self.revoke_exile_play_permissions_for_card(card)
++            self._clear_exile_cast_temporary_attributes(card)
++        if from_zone == Zone.GRAVEYARD and to_zone != Zone.GRAVEYARD:
++            self.revoke_graveyard_play_permissions_for_card(card)
++        if from_zone == Zone.HAND and to_zone != Zone.HAND:
++            for player in self.players:
++                if getattr(player, "first_card_drawn_this_turn", None) is card:
++                    player.first_card_drawn_this_turn = None
++        for player_index, miracle_window in list(self.miracle_windows.items()):
++            if miracle_window is not None and miracle_window.card is card and to_zone != Zone.HAND:
++                self.miracle_windows[player_index] = None
++        if from_zone != to_zone:
++            for override in list(self.zone_bound_attribute_overrides):
++                if override.card is card and override.zone == from_zone and to_zone != override.zone:
++                    self.expire_zone_bound_attribute_override(override)
++
++    def note_card_drawn(self, player: Player, card: Any) -> None:
++        """Record per-turn draw bookkeeping for *player* and *card*."""
++        try:
++            player_index = self.players.index(player)
++        except ValueError:
++            player_index = None
++        if player_index is not None:
++            self.miracle_windows[player_index] = None
++        if not hasattr(player, "cards_drawn_this_turn"):
++            player.cards_drawn_this_turn = 0
++        player.cards_drawn_this_turn += 1
++        if player.cards_drawn_this_turn == 1:
++            player.first_card_drawn_this_turn = card
++            get_miracle_cost = getattr(card, "get_miracle_cost", None)
++            miracle_cost = get_miracle_cost(self) if callable(get_miracle_cost) else None
++            if miracle_cost is not None and player_index is not None:
++                self.miracle_windows[player_index] = MiracleWindow(
++                    player_index=player_index,
++                    card=card,
++                    turn_number=self.turn_number,
++                    phase=self.phase,
++                    step=self.step,
++                    action_serial=self.paradigm_phase_action_serial,
++                )
++
++    def is_first_card_drawn_this_turn(self, player: Player, card: Any) -> bool:
++        """Return whether *card* is still the tracked first card drawn this turn."""
++        return getattr(player, "first_card_drawn_this_turn", None) is card
++
++    def can_cast_for_miracle(self, player: Player, card: Any) -> bool:
++        """Return whether *card* is still within its tracked miracle window."""
++        if not self.is_first_card_drawn_this_turn(player, card):
++            return False
++        try:
++            player_index = self.players.index(player)
++        except ValueError:
++            return False
++        miracle_window = self.miracle_windows.get(player_index)
++        if miracle_window is None or miracle_window.card is not card:
++            return False
++        is_valid = (
++            miracle_window.turn_number == self.turn_number
++            and miracle_window.phase == self.phase
++            and miracle_window.step == self.step
++            and miracle_window.action_serial == self.paradigm_phase_action_serial
++            and player.zones[Zone.HAND].contains(card)
++        )
++        if not is_valid:
++            self.miracle_windows[player_index] = None
++        return is_valid
++
++    def make_damage_unpreventable_this_turn(self) -> None:
++        """Lock out all damage prevention for the rest of the current turn."""
++        self.damage_cant_be_prevented = True
++
++    def is_damage_prevention_locked(self) -> bool:
++        """Return whether damage prevention is locked out this turn."""
++        return self.damage_cant_be_prevented
++
++    def record_reveal(
++        self,
++        player: Player,
++        cards: list[Any],
++        *,
++        source: Any | None = None,
++        reason: str = "",
++    ) -> HiddenCardObservation:
++        """Append a public reveal record and return it."""
++        record = HiddenCardObservation(
++            player_index=self.players.index(player),
++            cards=list(cards),
++            source=source,
++            reason=reason,
++        )
++        self.reveal_history.append(record)
++        return record
++
++    def record_look(
++        self,
++        player: Player,
++        cards: list[Any],
++        *,
++        source: Any | None = None,
++        reason: str = "",
++    ) -> HiddenCardObservation:
++        """Append a public look record and return it."""
++        record = HiddenCardObservation(
++            player_index=self.players.index(player),
++            cards=list(cards),
++            source=source,
++            reason=reason,
++        )
++        self.look_history.append(record)
++        return record
++
++    def queue_shuffle_order(self, *cards: Any) -> None:
++        """Queue one deterministic order for the next tracked shuffle."""
++        self._queued_shuffle_orders.append(self._normalize_queued_order(cards))
++
++    def queue_bottom_order(self, *cards: Any) -> None:
++        """Queue one deterministic order for the next tracked bottom placement."""
++        self._queued_bottom_orders.append(self._normalize_queued_order(cards))
++
++    def choose_shuffle_order(
++        self,
++        player: Player,
++        cards: list[Any],
++        *,
++        zone: Zone = Zone.LIBRARY,
++        source: Any | None = None,
++        reason: str = "",
++    ) -> list[Any]:
++        """Return a tracked shuffle order, honoring any queued deterministic order."""
++        ordered_cards, used_queued_order = self._choose_tracked_order(cards, self._queued_shuffle_orders)
++        self.shuffle_history.append(
++            ShuffleRecord(
++                player_index=self.players.index(player),
++                zone=zone,
++                before=list(cards),
++                after=list(ordered_cards),
++                source=source,
++                reason=reason,
++                used_queued_order=used_queued_order,
++            )
++        )
++        return ordered_cards
++
++    def choose_bottom_order(
++        self,
++        player: Player,
++        cards: list[Any],
++        *,
++        source: Any | None = None,
++        reason: str = "",
++    ) -> list[Any]:
++        """Return a tracked bottom ordering, honoring any queued deterministic order."""
++        ordered_cards, used_queued_order = self._choose_tracked_order(cards, self._queued_bottom_orders)
++        self.bottom_order_history.append(
++            BottomPlacementRecord(
++                player_index=self.players.index(player),
++                cards=list(cards),
++                ordered_cards=list(ordered_cards),
++                source=source,
++                reason=reason,
++                used_queued_order=used_queued_order,
++            )
++        )
++        return ordered_cards
++
++    def get_exile_play_permissions(
++        self,
++        *,
++        player: Player | None = None,
++        card: Any | None = None,
++    ) -> list[ExilePlayPermission]:
++        """Return currently active exile-play permissions matching the filters."""
++        self._prune_expired_exile_play_permissions()
++        permissions = self.exile_play_permissions
++        if player is not None:
++            player_index = self.players.index(player)
++            permissions = [perm for perm in permissions if perm.player_index == player_index]
++        if card is not None:
++            permissions = [perm for perm in permissions if perm.card is card]
++        return list(permissions)
++
++    def can_player_play_exiled_card(self, player: Player, card: Any) -> bool:
++        """Return whether *player* currently has explicit permission to play *card* from exile."""
++        player_index = self.players.index(player)
++        self._prune_expired_exile_play_permissions()
++        return any(
++            perm.player_index == player_index and perm.card is card
++            for perm in self.exile_play_permissions
++        )
++
++    def get_graveyard_play_permissions(
++        self,
++        *,
++        player: Player | None = None,
++        card: Any | None = None,
++    ) -> list[GraveyardPlayPermission]:
++        """Return currently active graveyard-play permissions matching the filters."""
++        self._prune_expired_graveyard_play_permissions()
++        permissions = self.graveyard_play_permissions
++        if player is not None:
++            player_index = self.players.index(player)
++            permissions = [perm for perm in permissions if perm.player_index == player_index]
++        if card is not None:
++            permissions = [perm for perm in permissions if perm.card is card]
++        return list(permissions)
++
++    def can_player_play_graveyard_card(self, player: Player, card: Any) -> bool:
++        """Return whether *player* currently has explicit permission to play *card* from graveyard."""
++        player_index = self.players.index(player)
++        self._prune_expired_graveyard_play_permissions()
++        return any(
++            perm.player_index == player_index and perm.card is card
++            for perm in self.graveyard_play_permissions
++        )
++
++    def _prune_expired_exile_play_permissions(self) -> int:
++        """Remove any exile-play permissions that have already expired."""
++        before = len(self.exile_play_permissions)
++        expired_cards = {
++            perm.card
++            for perm in self.exile_play_permissions
++            if (
++                (
++                    perm.expires_after_player_turn is not None
++                    and self.player_turn_counts.get(perm.player_index, 0) > perm.expires_after_player_turn
++                )
++                or not self._object_is_in_zone(perm.card, perm.zone)
++            )
++        }
++        self.exile_play_permissions = [
++            perm
++            for perm in self.exile_play_permissions
++            if not (
++                (
++                    perm.expires_after_player_turn is not None
++                    and self.player_turn_counts.get(perm.player_index, 0) > perm.expires_after_player_turn
++                )
++                or not self._object_is_in_zone(perm.card, perm.zone)
++            )
++        ]
++        for card in expired_cards:
++            self._clear_exile_cast_temporary_attributes(card)
++        return before - len(self.exile_play_permissions)
++
++    def _prune_expired_graveyard_play_permissions(self) -> int:
++        """Remove any graveyard-play permissions that have already expired."""
++        before = len(self.graveyard_play_permissions)
++        expired_cards = {
++            perm.card
++            for perm in self.graveyard_play_permissions
++            if (
++                (
++                    perm.expires_after_turn_number is not None
++                    and self.turn_number > perm.expires_after_turn_number
++                )
++                or not self._object_is_in_zone(perm.card, perm.zone)
++            )
++        }
++        self.graveyard_play_permissions = [
++            perm
++            for perm in self.graveyard_play_permissions
++            if not (
++                (
++                    perm.expires_after_turn_number is not None
++                    and self.turn_number > perm.expires_after_turn_number
++                )
++                or not self._object_is_in_zone(perm.card, perm.zone)
++            )
++        ]
++        for card in expired_cards:
++            if hasattr(card, "_playable_from_graveyard_this_turn"):
++                card._playable_from_graveyard_this_turn = False
++        return before - len(self.graveyard_play_permissions)
++
++    def _expire_exile_play_permissions_for_turn_end(self, player_index: int) -> None:
++        """Expire permissions that last through the just-finished turn for *player_index*."""
++        expired_cards = {
++            perm.card
++            for perm in self.exile_play_permissions
++            if (
++                (
++                    perm.player_index == player_index
++                    and perm.expires_after_player_turn is not None
++                    and self.player_turn_counts.get(player_index, 0) >= perm.expires_after_player_turn
++                )
++                or not self._object_is_in_zone(perm.card, perm.zone)
++            )
++        }
++        self.exile_play_permissions = [
++            perm
++            for perm in self.exile_play_permissions
++            if not (
++                (
++                    perm.player_index == player_index
++                    and perm.expires_after_player_turn is not None
++                    and self.player_turn_counts.get(player_index, 0) >= perm.expires_after_player_turn
++                )
++                or not self._object_is_in_zone(perm.card, perm.zone)
++            )
++        ]
++        for card in expired_cards:
++            self._clear_exile_cast_temporary_attributes(card)
++
++    def _expire_graveyard_play_permissions_for_turn_end(self) -> None:
++        """Expire graveyard-play permissions that last through the current turn."""
++        expired_cards = {
++            perm.card
++            for perm in self.graveyard_play_permissions
++            if (
++                (
++                    perm.expires_after_turn_number is not None
++                    and self.turn_number >= perm.expires_after_turn_number
++                )
++                or not self._object_is_in_zone(perm.card, perm.zone)
++            )
++        }
++        self.graveyard_play_permissions = [
++            perm
++            for perm in self.graveyard_play_permissions
++            if not (
++                (
++                    perm.expires_after_turn_number is not None
++                    and self.turn_number >= perm.expires_after_turn_number
++                )
++                or not self._object_is_in_zone(perm.card, perm.zone)
++            )
++        ]
++        for card in expired_cards:
++            if hasattr(card, "_playable_from_graveyard_this_turn"):
++                card._playable_from_graveyard_this_turn = False
++
++    def _object_is_in_zone(self, card: Any, zone: Zone) -> bool:
++        """Return whether *card* is still present in *zone* for any player."""
++        return any(player.zones[zone].contains(card) for player in self.players)
++
++    @staticmethod
++    def _normalize_queued_order(cards: tuple[Any, ...]) -> list[Any]:
++        """Normalize queued-order arguments so callers may pass a list or varargs."""
++        if len(cards) == 1 and isinstance(cards[0], (list, tuple)):
++            return list(cards[0])
++        return list(cards)
++
++    @staticmethod
++    def _is_identity_permutation(candidate: list[Any], cards: list[Any]) -> bool:
++        """Return whether *candidate* is the same multiset of objects as *cards*."""
++        if len(candidate) != len(cards):
++            return False
++        remaining = list(cards)
++        for chosen in candidate:
++            for index, existing in enumerate(remaining):
++                if existing is chosen:
++                    del remaining[index]
++                    break
++            else:
++                return False
++        return not remaining
++
++    def _choose_tracked_order(
++        self,
++        cards: list[Any],
++        queued_orders: list[list[Any]],
++    ) -> tuple[list[Any], bool]:
++        """Return a queued deterministic permutation or a freshly randomized one."""
++        ordered_cards = list(cards)
++        if queued_orders:
++            queued = list(queued_orders.pop(0))
++            if len(ordered_cards) <= 1:
++                if not self._is_identity_permutation(queued, ordered_cards):
++                    raise ValueError("Queued deterministic order does not match the available cards")
++                return ordered_cards, True
++            if not self._is_identity_permutation(queued, ordered_cards):
++                raise ValueError("Queued deterministic order does not match the available cards")
++            return queued, True
++        if len(ordered_cards) <= 1:
++            return ordered_cards, False
++        random.shuffle(ordered_cards)
++        return ordered_cards, False
++
+     # ------------------------------------------------------------------
+     # Phase/step progression
+     # ------------------------------------------------------------------
+@@ -136,6 +841,7 @@
+         active player swaps (2-player assumption).  Mana pools are
+         emptied on every transition.
+         """
++        self._fresh_setup_sandbox = False
+         current = (self.phase, self.step)
+         idx = _TURN_SEQUENCE.index(current)
+ 
+@@ -146,16 +852,40 @@
+             self.step = next_step
+         else:
+             # End of turn — wrap around.
++            current_active_player_index = self.active_player_index
++            self._expire_exile_play_permissions_for_turn_end(current_active_player_index)
++            self._expire_graveyard_play_permissions_for_turn_end()
+             self.turn_number += 1
+-            if self.extra_turns:
+-                # ENGINE LIMITATION: Extra turns queue (FIFO). Pop the
+-                # next player seat index; that player gets the next turn.
+-                # Normal rotation is NOT advanced — extra turns are
+-                # inserted before the normal next turn.
+-                self.active_player_index = self.extra_turns.pop(0)
+-            else:
+-                self.active_player_index = self._normal_next_index
+-                self._normal_next_index = 1 - self._normal_next_index
++            self.cards_exiled_this_turn = []
++            self.creatures_died_this_turn = []
++            self.creature_died_this_turn = False
++            self.cards_left_graveyards_this_turn = {0: [], 1: []}
++            self.spells_cast_this_turn = []
++            self.spell_cast_serial = 0
++            for player in self.players:
++                player.cards_drawn_this_turn = 0
++                player.first_card_drawn_this_turn = None
++            for player_index in self.miracle_windows:
++                self.miracle_windows[player_index] = None
++            while True:
++                if self.extra_turns:
++                    # ENGINE LIMITATION: Extra turns queue (FIFO). Pop the
++                    # next player seat index; that player gets the next turn.
++                    # Normal rotation is NOT advanced — extra turns are
++                    # inserted before the normal next turn.
++                    next_active_player_index = self.extra_turns.pop(0)
++                else:
++                    next_active_player_index = self._normal_next_index
++                    self._normal_next_index = 1 - self._normal_next_index
++                if self.skipped_turns.get(next_active_player_index, 0) <= 0:
++                    self.active_player_index = next_active_player_index
++                    self.player_turn_counts[self.active_player_index] = (
++                        self.player_turn_counts.get(self.active_player_index, 0) + 1
++                    )
++                    break
++                self.skipped_turns[next_active_player_index] -= 1
++                self.skipped_turn_history.append(next_active_player_index)
++                self.turn_number += 1
+             self.priority_player_index = self.active_player_index
+             self.phase = _TURN_SEQUENCE[0][0]
+             self.step = _TURN_SEQUENCE[0][1]
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/mana.py /tmp/silverquillm_run_imhr8630/workspace/engine/mana.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/mana.py	2026-05-25 16:43:11.729292098 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/mana.py	2026-05-25 13:12:16.067292930 +0000
+@@ -2,7 +2,10 @@
+ 
+ from __future__ import annotations
+ 
+-from engine.types import Color, HybridManaSymbol, ManaCost, ManaType
++from dataclasses import dataclass
++from typing import Any, Callable
++
++from benchmarks.sos.workspace.engine.types import CardType, Color, HybridManaSymbol, ManaCost, ManaType, Zone
+ 
+ # Map colored ManaTypes to their corresponding Color enum values.
+ _MANA_TO_COLOR: dict[ManaType, Color] = {
+@@ -23,13 +26,20 @@
+ 
+     def __init__(self) -> None:
+         self._pool: dict[ManaType, int] = {mt: 0 for mt in ManaType}
++        self._restricted_mana: list[_RestrictedMana] = []
+         self._last_payment_colors: list[Color] = []
++        self._last_payment_amount: int = 0
+ 
+     # ------------------------------------------------------------------
+     # Basic operations
+     # ------------------------------------------------------------------
+ 
+-    def add(self, mana_type: ManaType, amount: int = 1) -> None:
++    def add(
++        self,
++        mana_type: ManaType,
++        amount: int = 1,
++        restriction: ManaRestriction | None = None,
++    ) -> None:
+         """Add *amount* mana of the given type to the pool.
+ 
+         Parameters:
+@@ -38,20 +48,31 @@
+         """
+         if amount < 0:
+             raise ValueError(f"Cannot add negative mana: {amount}")
+-        self._pool[mana_type] = self._pool.get(mana_type, 0) + amount
++        if restriction is None:
++            self._pool[mana_type] = self._pool.get(mana_type, 0) + amount
++            return
++        for _ in range(amount):
++            self._restricted_mana.append(
++                _RestrictedMana(mana_type=mana_type, restriction=restriction)
++            )
+ 
+     def empty(self) -> None:
+         """Clear the pool — happens at phase/step transitions."""
+         for mt in self._pool:
+             self._pool[mt] = 0
++        self._restricted_mana.clear()
++        self._last_payment_amount = 0
+ 
+     def total(self) -> int:
+         """Return the total amount of mana in the pool across all types."""
+-        return sum(self._pool.values())
++        return sum(self._pool.values()) + len(self._restricted_mana)
+ 
+     def get(self, mana_type: ManaType) -> int:
+         """Return the amount of a specific mana type in the pool."""
+-        return self._pool.get(mana_type, 0)
++        restricted_count = sum(
++            1 for mana in self._restricted_mana if mana.mana_type is mana_type
++        )
++        return self._pool.get(mana_type, 0) + restricted_count
+ 
+     @property
+     def last_payment_colors(self) -> list[Color]:
+@@ -63,11 +84,20 @@
+         """
+         return list(self._last_payment_colors)
+ 
++    @property
++    def last_payment_amount(self) -> int:
++        """Return the number of mana spent in the last successful payment."""
++        return self._last_payment_amount
++
+     # ------------------------------------------------------------------
+     # Cost payment
+     # ------------------------------------------------------------------
+ 
+-    def can_pay(self, cost: ManaCost) -> bool:
++    def can_pay(
++        self,
++        cost: ManaCost,
++        spending_context: ManaSpendContext | None = None,
++    ) -> bool:
+         """Check whether the pool can satisfy *cost*.
+ 
+         Generic mana can be paid by any type.  X is treated as 0 for
+@@ -78,24 +108,18 @@
+         Returns:
+             True if the pool has enough mana to pay the cost.
+         """
+-        remaining: dict[ManaType, int] = dict(self._pool)
+-
+-        # Pay colored/colorless pips first.
+-        for mana_type, count in cost.pips.items():
+-            if remaining.get(mana_type, 0) < count:
+-                return False
+-            remaining[mana_type] = remaining.get(mana_type, 0) - count
+-
+-        # Solve hybrid symbols with backtracking.
+-        if cost.hybrid:
+-            if not self._can_pay_hybrid(remaining, list(cost.hybrid), 0, cost.generic):
+-                return False
+-            return True
+-
+-        # Then check generic — sum of all remaining mana must cover it.
+-        return sum(remaining.values()) >= cost.generic
+-
+-    def pay(self, cost: ManaCost, choices: dict[ManaType, int] | None = None) -> bool:
++        return self._build_payment_plan(
++            cost,
++            choices=None,
++            spending_context=spending_context,
++        ) is not None
++
++    def pay(
++        self,
++        cost: ManaCost,
++        choices: dict[ManaType, int] | None = None,
++        spending_context: ManaSpendContext | None = None,
++    ) -> bool:
+         """Deduct mana from the pool to pay *cost*.
+ 
+         Parameters:
+@@ -108,143 +132,269 @@
+         Returns:
+             True if payment succeeded, False if the pool has insufficient mana.
+         """
+-        if not self.can_pay(cost):
++        payment_plan = self._build_payment_plan(
++            cost,
++            choices=choices,
++            spending_context=spending_context,
++        )
++        if payment_plan is None:
+             return False
+ 
+-        # Work on a copy so we can roll back on failure.
+-        working: dict[ManaType, int] = dict(self._pool)
+-
+-        # 1. Pay colored/colorless pips.
+-        for mana_type, count in cost.pips.items():
+-            working[mana_type] -= count
++        colors_spent: set[Color] = set()
++        unrestricted_spent: dict[ManaType, int] = {mt: 0 for mt in ManaType}
++        restricted_indexes_to_remove: list[int] = []
++        for unit in payment_plan:
++            if unit.mana_type in _MANA_TO_COLOR:
++                colors_spent.add(_MANA_TO_COLOR[unit.mana_type])
++            if unit.restricted_index is None:
++                unrestricted_spent[unit.mana_type] += 1
++            else:
++                restricted_indexes_to_remove.append(unit.restricted_index)
+ 
+-        # 2. When explicit generic choices are provided, reserve that mana
+-        #    *before* solving hybrids so the solver doesn't steal it.
+-        generic_remaining = cost.generic
+-        if generic_remaining > 0 and choices is not None:
+-            # Reject negative choice amounts — they would create mana.
+-            if any(v < 0 for v in choices.values()):
+-                return False
+-            # Validate choices sum to generic cost.
+-            if sum(choices.values()) != generic_remaining:
+-                return False
+-            for mana_type, amount in choices.items():
+-                if working.get(mana_type, 0) < amount:
+-                    return False
+-                working[mana_type] -= amount
+-
+-        # 3. Pay hybrid symbols using backtracking to find a valid assignment.
+-        #    Generic choices (if any) have already been reserved above,
+-        #    so _solve_hybrid sees only the genuinely available mana.
+-        if cost.hybrid:
+-            generic_for_solver = generic_remaining if choices is None else 0
+-            hybrid_assignment = self._solve_hybrid(
+-                working, list(cost.hybrid), 0, generic_for_solver,
+-            )
+-            if hybrid_assignment is None:
+-                return False  # pragma: no cover – should not happen after can_pay
+-            for mt in hybrid_assignment:
+-                working[mt] = working.get(mt, 0) - 1
+-
+-        # 4. Pay generic cost (auto-pay path — choices already deducted above).
+-        if generic_remaining > 0 and choices is None:
+-            generic_remaining = self._auto_pay_generic(working, generic_remaining)
+-            if generic_remaining > 0:
+-                return False  # pragma: no cover – should not happen after can_pay
++        for mana_type, amount in unrestricted_spent.items():
++            if amount <= 0:
++                continue
++            self._pool[mana_type] -= amount
++        for restricted_index in sorted(restricted_indexes_to_remove, reverse=True):
++            del self._restricted_mana[restricted_index]
+ 
+-        # Commit the payment.
+-        # Compute colors of mana spent by comparing old pool to new working pool.
+-        colors_spent: set[Color] = set()
+-        for mt, old_amount in self._pool.items():
+-            new_amount = working.get(mt, 0)
+-            if new_amount < old_amount and mt in _MANA_TO_COLOR:
++        for mt, amount in unrestricted_spent.items():
++            if amount > 0 and mt in _MANA_TO_COLOR:
+                 colors_spent.add(_MANA_TO_COLOR[mt])
+         self._last_payment_colors = sorted(colors_spent, key=lambda c: c.value)
+-        self._pool = working
++        self._last_payment_amount = len(payment_plan)
+         return True
+ 
+-    @staticmethod
+-    def _can_pay_hybrid(
+-        remaining: dict[ManaType, int],
+-        hybrids: list[HybridManaSymbol],
+-        idx: int,
+-        generic: int,
+-    ) -> bool:
+-        """Recursively check if hybrid symbols + generic can be satisfied.
++    def _build_payment_plan(
++        self,
++        cost: ManaCost,
++        choices: dict[ManaType, int] | None,
++        spending_context: ManaSpendContext | None,
++    ) -> list[_AvailableMana] | None:
++        available = self._get_available_mana(spending_context)
++        pip_payment, available = self._spend_specific_pips(available, cost.pips)
++        if pip_payment is None or available is None:
++            return None
+ 
+-        Uses backtracking: for each hybrid symbol, try option_a then option_b.
+-        After all hybrids are assigned, check that remaining mana covers generic.
+-        """
+-        if idx >= len(hybrids):
+-            return sum(remaining.values()) >= generic
++        payment_plan: list[_AvailableMana] = list(pip_payment)
++        generic_remaining = cost.generic
+ 
+-        sym = hybrids[idx]
+-        for option in (sym.option_a, sym.option_b):
+-            if remaining.get(option, 0) > 0:
+-                remaining[option] -= 1
+-                if ManaPool._can_pay_hybrid(remaining, hybrids, idx + 1, generic):
+-                    remaining[option] += 1
+-                    return True
+-                remaining[option] += 1
+-        return False
++        if generic_remaining > 0 and choices is not None:
++            if any(amount < 0 for amount in choices.values()):
++                return None
++            if sum(choices.values()) != generic_remaining:
++                return None
++            reserved = self._select_exact_types(available, choices)
++            if reserved is None:
++                return None
++            payment_plan.extend(reserved)
++            available = self._remove_units(available, reserved)
++            generic_remaining = 0
++
++        hybrid_payment = self._solve_hybrid(available, list(cost.hybrid), 0)
++        if hybrid_payment is None:
++            return None
++        payment_plan.extend(hybrid_payment)
++        available = self._remove_units(available, hybrid_payment)
++
++        generic_payment = self._auto_pay_generic(available, generic_remaining)
++        if generic_payment is None:
++            return None
++        payment_plan.extend(generic_payment)
++        return payment_plan
++
++    def _get_available_mana(
++        self,
++        spending_context: ManaSpendContext | None,
++    ) -> list[_AvailableMana]:
++        available: list[_AvailableMana] = []
++        for mana_type, count in self._pool.items():
++            for _ in range(count):
++                available.append(
++                    _AvailableMana(
++                        mana_type=mana_type,
++                        restriction=None,
++                        restricted_index=None,
++                    )
++                )
++        for index, mana in enumerate(self._restricted_mana):
++            if mana.restriction.allows(spending_context):
++                available.append(
++                    _AvailableMana(
++                        mana_type=mana.mana_type,
++                        restriction=mana.restriction,
++                        restricted_index=index,
++                    )
++                )
++        return available
++
++    def _spend_specific_pips(
++        self,
++        available: list[_AvailableMana],
++        pips: dict[ManaType, int],
++    ) -> tuple[list[_AvailableMana] | None, list[_AvailableMana] | None]:
++        remaining = list(available)
++        selected: list[_AvailableMana] = []
++        for mana_type, count in pips.items():
++            units = self._select_units(remaining, mana_type, count)
++            if units is None:
++                return None, None
++            selected.extend(units)
++            remaining = self._remove_units(remaining, units)
++        return selected, remaining
+ 
+-    @staticmethod
+     def _solve_hybrid(
+-        remaining: dict[ManaType, int],
++        self,
++        available: list[_AvailableMana],
+         hybrids: list[HybridManaSymbol],
+         idx: int,
+-        generic: int,
+-    ) -> list[ManaType] | None:
+-        """Find a valid assignment for hybrid symbols.
+-
+-        Returns a list of ManaType choices (one per hybrid symbol) or None
+-        if no valid assignment exists.
+-        """
++    ) -> list[_AvailableMana] | None:
+         if idx >= len(hybrids):
+-            if sum(remaining.values()) >= generic:
+-                return []
+-            return None
++            return []
+ 
+-        sym = hybrids[idx]
+-        for option in (sym.option_a, sym.option_b):
+-            if remaining.get(option, 0) > 0:
+-                remaining[option] -= 1
+-                result = ManaPool._solve_hybrid(remaining, hybrids, idx + 1, generic)
+-                if result is not None:
+-                    remaining[option] += 1
+-                    return [option] + result
+-                remaining[option] += 1
++        symbol = hybrids[idx]
++        options: list[list[_AvailableMana]] = []
++        if symbol.generic_option > 0:
++            generic_payment = self._auto_pay_generic(available, symbol.generic_option)
++            if generic_payment is not None:
++                options.append(generic_payment)
++            colored_payment = self._select_units(available, symbol.option_b, 1)
++            if colored_payment is not None:
++                options.append(colored_payment)
++        else:
++            for option in (symbol.option_a, symbol.option_b):
++                selected = self._select_units(available, option, 1)
++                if selected is not None:
++                    options.append(selected)
++        for selected in options:
++            remaining = self._remove_units(available, selected)
++            later = self._solve_hybrid(remaining, hybrids, idx + 1)
++            if later is not None:
++                return selected + later
+         return None
+ 
+-    @staticmethod
+-    def _auto_pay_generic(working: dict[ManaType, int], amount: int) -> int:
+-        """Deduct *amount* generic mana from *working*, preferring colorless.
++    def _auto_pay_generic(
++        self,
++        available: list[_AvailableMana],
++        amount: int,
++    ) -> list[_AvailableMana] | None:
++        if amount <= 0:
++            return []
+ 
+-        Returns the remaining unpaid generic amount (0 on success).
+-        """
+-        # Pay with colorless first.
+-        if working.get(ManaType.COLORLESS, 0) > 0:
+-            take = min(working[ManaType.COLORLESS], amount)
+-            working[ManaType.COLORLESS] -= take
+-            amount -= take
+-
+-        # Then pay with each colored type in enum order.
+-        for mt in ManaType:
+-            if mt is ManaType.COLORLESS:
+-                continue
++        selected: list[_AvailableMana] = []
++        remaining = list(available)
++
++        for mana_type in (ManaType.COLORLESS, ManaType.WHITE, ManaType.BLUE, ManaType.BLACK, ManaType.RED, ManaType.GREEN):
+             if amount <= 0:
+                 break
+-            if working.get(mt, 0) > 0:
+-                take = min(working[mt], amount)
+-                working[mt] -= take
+-                amount -= take
++            candidates = [
++                unit for unit in remaining if unit.mana_type is mana_type
++            ]
++            candidates.sort(key=lambda unit: unit.restricted_index is None)
++            for unit in candidates:
++                if amount <= 0:
++                    break
++                selected.append(unit)
++                remaining.remove(unit)
++                amount -= 1
++
++        if amount > 0:
++            return None
++        return selected
+ 
+-        return amount
++    def _select_exact_types(
++        self,
++        available: list[_AvailableMana],
++        required: dict[ManaType, int],
++    ) -> list[_AvailableMana] | None:
++        selected: list[_AvailableMana] = []
++        remaining = list(available)
++        for mana_type, count in required.items():
++            units = self._select_units(remaining, mana_type, count)
++            if units is None:
++                return None
++            selected.extend(units)
++            remaining = self._remove_units(remaining, units)
++        return selected
++
++    def _select_units(
++        self,
++        available: list[_AvailableMana],
++        mana_type: ManaType,
++        count: int,
++    ) -> list[_AvailableMana] | None:
++        matches = [unit for unit in available if unit.mana_type is mana_type]
++        matches.sort(key=lambda unit: unit.restricted_index is None)
++        if len(matches) < count:
++            return None
++        return matches[:count]
++
++    @staticmethod
++    def _remove_units(
++        available: list[_AvailableMana],
++        spent: list[_AvailableMana],
++    ) -> list[_AvailableMana]:
++        remaining = list(available)
++        for unit in spent:
++            remaining.remove(unit)
++        return remaining
+ 
+     # ------------------------------------------------------------------
+     # Dunder helpers
+     # ------------------------------------------------------------------
+ 
+     def __repr__(self) -> str:
+-        non_zero = {mt.name: v for mt, v in self._pool.items() if v > 0}
++        non_zero = {mt.name: self.get(mt) for mt in ManaType if self.get(mt) > 0}
+         return f"ManaPool({non_zero})"
++
++
++@dataclass(frozen=True)
++class ManaSpendContext:
++    """Describes what a mana payment is being used for."""
++
++    reason: str
++    card: Any | None = None
++    player: Any | None = None
++    from_zone: Zone | None = None
++
++
++@dataclass(frozen=True)
++class ManaRestriction:
++    """Predicate-based restriction for spendable mana."""
++
++    description: str
++    predicate: Callable[[ManaSpendContext | None], bool]
++
++    def allows(self, context: ManaSpendContext | None) -> bool:
++        """Return whether mana with this restriction can be spent now."""
++        return self.predicate(context)
++
++
++@dataclass(frozen=True)
++class _RestrictedMana:
++    mana_type: ManaType
++    restriction: ManaRestriction
++
++
++@dataclass(frozen=True)
++class _AvailableMana:
++    mana_type: ManaType
++    restriction: ManaRestriction | None
++    restricted_index: int | None
++
++
++def instant_or_sorcery_spell_only_restriction() -> ManaRestriction:
++    """Return the SOS restriction for mana spendable only on instants/sorceries."""
++
++    return ManaRestriction(
++        description="Spend this mana only to cast an instant or sorcery spell.",
++        predicate=lambda context: (
++            context is not None
++            and context.reason == "cast_spell"
++            and context.card is not None
++            and bool(
++                getattr(context.card, "card_types", set())
++                & {CardType.INSTANT, CardType.SORCERY}
++            )
++        ),
++    )
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/player.py /tmp/silverquillm_run_imhr8630/workspace/engine/player.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/player.py	2026-05-25 16:43:11.729292098 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/player.py	2026-05-25 10:01:38.321672922 +0000
+@@ -6,8 +6,8 @@
+ from collections import deque
+ from typing import Any
+ 
+-from engine.mana import ManaPool
+-from engine.zones import Zones
++from benchmarks.sos.workspace.engine.mana import ManaPool
++from benchmarks.sos.workspace.engine.zones import Zones
+ 
+ 
+ class ScriptExhaustedError(Exception):
+@@ -35,6 +35,26 @@
+         self.has_lost: bool = False
+         self.land_plays_remaining: int = 1
+         self.drawn_from_empty_library: bool = False
++        self._legacy_no_maximum_hand_size: bool = False
++        self._no_maximum_hand_size_sources: set[object] = set()
++
++    @property
++    def no_maximum_hand_size(self) -> bool:
++        """Return whether this player currently has no maximum hand size."""
++        return self._legacy_no_maximum_hand_size or bool(self._no_maximum_hand_size_sources)
++
++    @no_maximum_hand_size.setter
++    def no_maximum_hand_size(self, value: bool) -> None:
++        """Compatibility setter for legacy direct boolean writes."""
++        self._legacy_no_maximum_hand_size = bool(value)
++
++    def grant_no_maximum_hand_size(self, source: object) -> None:
++        """Register a no-maximum-hand-size effect from *source*."""
++        self._no_maximum_hand_size_sources.add(source)
++
++    def revoke_no_maximum_hand_size(self, source: object) -> None:
++        """Remove a previously registered no-maximum-hand-size effect."""
++        self._no_maximum_hand_size_sources.discard(source)
+ 
+     @abstractmethod
+     def choose_target(self, options: Any, requirement: Any) -> Any:
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/protection.py /tmp/silverquillm_run_imhr8630/workspace/engine/protection.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/protection.py	2026-05-25 16:43:11.729292098 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/protection.py	2026-05-25 07:56:48.346251734 +0000
+@@ -16,7 +16,7 @@
+ from dataclasses import dataclass, field
+ from typing import TYPE_CHECKING, Any, Callable
+ 
+-from engine.types import Color, ManaType
++from benchmarks.sos.workspace.engine.types import Color, Keyword, ManaType
+ 
+ if TYPE_CHECKING:
+     pass
+@@ -135,6 +135,54 @@
+     return False
+ 
+ 
++def has_hexproof(obj: Any) -> bool:
++    """Return ``True`` if *obj* currently has hexproof."""
++    return bool(getattr(obj, "keywords", Keyword(0)) & Keyword.HEXPROOF)
++
++
++def is_illegal_target_due_to_hexproof(target: Any, source: Any) -> bool:
++    """Return ``True`` if *target* can't be targeted by *source* due to hexproof.
++
++    Hexproof prevents spells and abilities controlled by an object's opponents
++    from targeting it. The *source* may be either the spell/ability object
++    itself or any object exposing a ``controller`` attribute.
++    """
++    if not has_hexproof(target):
++        return False
++
++    source_controller = getattr(source, "controller", None)
++    if source_controller is None:
++        return False
++
++    target_controller = getattr(target, "controller", None)
++    if target_controller is None and hasattr(target, "zones"):
++        target_controller = target
++    if target_controller is None:
++        target_controller = getattr(target, "owner", None)
++    if target_controller is None:
++        return False
++
++    return source_controller is not target_controller
++
++
++def get_illegal_target_reason(target: Any, source: Any) -> str | None:
++    """Return the first targeting restriction that makes *target* illegal.
++
++    This is a public targeting-legality surface for callers that need to
++    enforce target restrictions uniformly across spells and abilities.
++    """
++    if is_illegal_target_due_to_hexproof(target, source):
++        return "hexproof"
++    if _is_illegal_target_due_to_protection(target, source):
++        return "protection"
++    return None
++
++
++def is_illegal_target(target: Any, source: Any) -> bool:
++    """Return ``True`` if *target* is illegal for *source* to target."""
++    return get_illegal_target_reason(target, source) is not None
++
++
+ def _is_illegal_target_due_to_protection(target: Any, source: Any) -> bool:
+     """Return ``True`` if *target* cannot be targeted by *source* due to protection."""
+     return has_protection_from(target, source)
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/abilities.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/abilities.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/abilities.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/abilities.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/basic_lands.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/basic_lands.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/basic_lands.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/basic_lands.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/card.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/card.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/card.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/card.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/casting.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/casting.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/casting.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/casting.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/combat.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/combat.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/combat.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/combat.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/continuous_effects.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/continuous_effects.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/continuous_effects.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/continuous_effects.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/creatures.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/creatures.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/creatures.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/creatures.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/events.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/events.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/events.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/events.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/game.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/game.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game_state.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/game_state.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/game_state.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/game_state.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/__init__.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/__init__.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/__init__.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/__init__.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/mana.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/mana.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/mana.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/mana.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/player.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/player.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/player.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/player.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/protection.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/protection.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/protection.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/protection.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/replacement_effects.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/replacement_effects.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/replacement_effects.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/replacement_effects.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/stack.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/stack.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/stack.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/stack.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/state_based_actions.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/state_based_actions.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/state_based_actions.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/state_based_actions.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/triggers.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/triggers.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/triggers.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/triggers.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/turn.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/turn.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/turn.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/turn.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/types.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/types.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/types.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/types.cpython-312.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/zones.cpython-311.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/zones.cpython-311.pyc differ
+Binary files /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/__pycache__/zones.cpython-312.pyc and /tmp/silverquillm_run_imhr8630/workspace/engine/__pycache__/zones.cpython-312.pyc differ
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/replacement_effects.py /tmp/silverquillm_run_imhr8630/workspace/engine/replacement_effects.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/replacement_effects.py	2026-05-25 16:43:11.729292098 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/replacement_effects.py	2026-05-25 04:23:31.883982600 +0000
+@@ -26,11 +26,11 @@
+ from dataclasses import dataclass
+ from typing import TYPE_CHECKING, Any, Callable
+ 
+-from engine.events import ReplacementEvent
++from benchmarks.sos.workspace.engine.events import ReplacementEvent
+ 
+ if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-    from engine.player import Player
++    from benchmarks.sos.workspace.engine.game_state import GameState
++    from benchmarks.sos.workspace.engine.player import Player
+ 
+ 
+ @dataclass
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/stack.py /tmp/silverquillm_run_imhr8630/workspace/engine/stack.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/stack.py	2026-05-25 16:43:11.729292098 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/stack.py	2026-05-25 07:37:27.525547506 +0000
+@@ -6,9 +6,15 @@
+ from dataclasses import dataclass, field
+ from typing import TYPE_CHECKING, Any, Callable
+ 
++from benchmarks.sos.workspace.engine.types import Zone
++
+ if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-    from engine.player import Player
++    from benchmarks.sos.workspace.engine.game_state import GameState
++    from benchmarks.sos.workspace.engine.player import Player
++
++
++def _noop_stack_resolve(_game: GameState) -> None:
++    """Default no-op resolver used for manually-constructed spell stack objects."""
+ 
+ 
+ @dataclass
+@@ -26,8 +32,27 @@
+     source: Any
+     controller: Player
+     targets: list[Any] = field(default_factory=list)
+-    on_resolve: Callable[[GameState], None] = field(default=lambda _game: None)
++    on_resolve: Callable[[GameState], None] = field(default=_noop_stack_resolve)
+     is_mana_ability: bool = False
++    exile_on_resolve: bool = False
++    cast_from_zone: Zone | None = None
++    is_spell: bool | None = None
++
++    def __post_init__(self) -> None:
++        """Infer whether this stack object represents a spell when omitted."""
++        if self.is_spell is not None:
++            return
++        controller_zones = getattr(self.controller, "zones", None)
++        try:
++            stack_zone = controller_zones[Zone.STACK] if controller_zones is not None else None
++        except Exception:
++            stack_zone = None
++        if stack_zone is not None and stack_zone.contains(self.source):
++            self.is_spell = True
++            return
++        self.is_spell = bool(
++            self.on_resolve is _noop_stack_resolve and hasattr(self.source, "card_types")
++        )
+ 
+ 
+ class Stack:
+@@ -56,6 +81,18 @@
+         """Return the top object without removing it, or ``None`` if empty."""
+         return self._items[-1] if self._items else None
+ 
++    def remove(self, obj: StackObject) -> bool:
++        """Remove *obj* from the stack by identity."""
++        for index, item in enumerate(self._items):
++            if item is obj:
++                del self._items[index]
++                return True
++        return False
++
++    def contains(self, obj: StackObject) -> bool:
++        """Return ``True`` if *obj* is currently on the stack."""
++        return any(item is obj for item in self._items)
++
+     def __len__(self) -> int:
+         """Return the number of objects on the stack."""
+         return len(self._items)
+@@ -102,6 +139,7 @@
+         source=copied_card,
+         controller=controller,
+         targets=targets,
++        is_spell=True,
+     )
+ 
+     def _copy_resolve(g: GameState) -> None:
+@@ -122,7 +160,7 @@
+     :func:`~engine.state_based_actions.check_state_based_actions` directly
+     from :mod:`engine.state_based_actions`.
+     """
+-    from engine.state_based_actions import resolve_state_based_actions
++    from benchmarks.sos.workspace.engine.state_based_actions import resolve_state_based_actions
+ 
+     resolve_state_based_actions(game)
+ 
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/state_based_actions.py /tmp/silverquillm_run_imhr8630/workspace/engine/state_based_actions.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/state_based_actions.py	2026-05-25 16:43:11.729292098 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/state_based_actions.py	2026-05-25 12:46:01.759670589 +0000
+@@ -13,13 +13,13 @@
+ from collections import defaultdict
+ from typing import TYPE_CHECKING, Any
+ 
+-from engine.events import CreatureDiesReplacementEvent
+-from engine.types import CardType, Supertype, Zone
+-from engine.zones import ZoneContainer
++from benchmarks.sos.workspace.engine.events import CreatureDiesReplacementEvent
++from benchmarks.sos.workspace.engine.types import CardType, Supertype, Zone
++from benchmarks.sos.workspace.engine.zones import ZoneContainer
+ 
+ if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-    from engine.player import Player
++    from benchmarks.sos.workspace.engine.game_state import GameState
++    from benchmarks.sos.workspace.engine.player import Player
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -44,7 +44,7 @@
+     replacement effects, event firing (``LEAVES_BATTLEFIELD``,
+     ``CREATURE_DIES``), and trigger/effect unregistration.
+     """
+-    from engine.zones import move_to_zone
++    from benchmarks.sos.workspace.engine.zones import move_to_zone
+ 
+     bf = _battlefield(game, player)
+     if bf.contains(obj):
+@@ -123,7 +123,7 @@
+ 
+             # Skip indestructible creatures
+             if hasattr(obj, "keywords"):
+-                from engine.types import Keyword
++                from benchmarks.sos.workspace.engine.types import Keyword
+ 
+                 if Keyword.INDESTRUCTIBLE in obj.keywords:
+                     continue
+@@ -144,6 +144,22 @@
+     return action_taken
+ 
+ 
++def _sba_planeswalker_zero_loyalty(game: GameState) -> bool:
++    """A planeswalker with zero loyalty is put into its owner's graveyard."""
++    action_taken = False
++    to_remove: list[tuple[Player, Any]] = []
++    for player in game.players:
++        for obj in _battlefield(game, player).get_all():
++            if CardType.PLANESWALKER in getattr(obj, "card_types", set()) and getattr(obj, "loyalty", 0) <= 0:
++                to_remove.append((player, obj))
++    for player, obj in to_remove:
++        from benchmarks.sos.workspace.engine.zones import move_to_zone
++
++        move_to_zone(game, obj, Zone.BATTLEFIELD, Zone.GRAVEYARD)
++        action_taken = True
++    return action_taken
++
++
+ def _sba_draw_from_empty_library(game: GameState) -> bool:
+     """A player who attempted to draw from an empty library loses the game."""
+     action_taken = False
+@@ -219,7 +235,7 @@
+     attached = getattr(obj, "attached_to", None)
+     if attached is None:
+         return False
+-    from engine.protection import has_protection_from
++    from benchmarks.sos.workspace.engine.protection import has_protection_from
+     return has_protection_from(attached, obj)
+ 
+ 
+@@ -306,6 +322,8 @@
+     action_taken = _sba_creature_zero_toughness(game) or action_taken
+     # Creature with lethal damage → destroyed
+     action_taken = _sba_creature_lethal_damage(game) or action_taken
++    # Planeswalker with zero loyalty → graveyard
++    action_taken = _sba_planeswalker_zero_loyalty(game) or action_taken
+     # Player who drew from empty library loses
+     action_taken = _sba_draw_from_empty_library(game) or action_taken
+     # Legend rule
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/triggers.py /tmp/silverquillm_run_imhr8630/workspace/engine/triggers.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/triggers.py	2026-05-25 16:43:11.729292098 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/triggers.py	2026-05-25 15:50:04.223577537 +0000
+@@ -15,12 +15,12 @@
+ from dataclasses import dataclass, field
+ from typing import TYPE_CHECKING, Any, Callable
+ 
+-from engine.events import TriggeredEvent
+-from engine.stack import StackObject
++from benchmarks.sos.workspace.engine.events import TriggeredEvent
++from benchmarks.sos.workspace.engine.stack import StackObject
+ 
+ if TYPE_CHECKING:
+-    from engine.game_state import GameState
+-    from engine.player import Player
++    from benchmarks.sos.workspace.engine.game_state import GameState
++    from benchmarks.sos.workspace.engine.player import Player
+ 
+ 
+ @dataclass
+@@ -46,6 +46,7 @@
+     effect: Callable[..., None]
+     source: Any
+     controller: Player
++    create_stack_object: Callable[..., StackObject | None] | None = None
+ 
+ 
+ class TriggerManager:
+@@ -91,6 +92,18 @@
+         1. Active player's matching triggers (in registration order).
+         2. Non-active player's matching triggers (in registration order).
+         """
++        from benchmarks.sos.workspace.engine.events import BeginningOfFirstMainPhaseTriggeredEvent
++
++        if isinstance(event, BeginningOfFirstMainPhaseTriggeredEvent):
++            player = event.player if getattr(event, "player", None) is not None else game.active_player
++            try:
++                player_index = game.players.index(player)
++            except ValueError:
++                player_index = game.active_player_index
++            game.paradigm_window_turn_number = game.turn_number
++            game.paradigm_window_player_index = player_index
++            game.paradigm_window_action_serial = game.paradigm_phase_action_serial
++
+         matching: list[TriggerRegistration] = []
+         for trigger in self._triggers:
+             if not isinstance(event, trigger.event_type):
+@@ -116,12 +129,37 @@
+         ordered = active_triggers + non_active_triggers
+ 
+         for trigger in ordered:
+-            stack_obj = StackObject(
+-                source=trigger.source,
+-                controller=trigger.controller,
+-                on_resolve=trigger.effect,
+-            )
++            if trigger.create_stack_object is not None:
++                stack_obj = trigger.create_stack_object(game, event)
++                if stack_obj is None:
++                    continue
++            else:
++                stack_obj = StackObject(
++                    source=trigger.source,
++                    controller=trigger.controller,
++                    on_resolve=trigger.effect,
++                )
+             game.stack.push(stack_obj)
++            chosen_targets = list(getattr(stack_obj, "targets", []))
++            if not chosen_targets:
++                continue
++            from benchmarks.sos.workspace.engine.abilities import _queue_ward_ability_triggers
++            from benchmarks.sos.workspace.engine.casting import _fire_becomes_target_events
++
++            _fire_becomes_target_events(
++                game,
++                stack_obj.controller,
++                stack_obj.source,
++                stack_obj,
++                chosen_targets,
++            )
++            _queue_ward_ability_triggers(
++                game,
++                stack_obj.controller,
++                stack_obj.source,
++                stack_obj,
++                chosen_targets,
++            )
+ 
+     def get_triggers(self) -> list[TriggerRegistration]:
+         """Return a shallow copy of all registered triggers."""
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/turn.py /tmp/silverquillm_run_imhr8630/workspace/engine/turn.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/turn.py	2026-05-25 16:43:11.729292098 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/turn.py	2026-05-25 12:59:12.090385945 +0000
+@@ -6,10 +6,10 @@
+ from typing import TYPE_CHECKING
+ 
+ if TYPE_CHECKING:
+-    from engine.game_state import GameState
++    from benchmarks.sos.workspace.engine.game_state import GameState
+ 
+-from engine.stack import priority_loop
+-from engine.types import Phase, Step, Zone
++from benchmarks.sos.workspace.engine.stack import priority_loop
++from benchmarks.sos.workspace.engine.types import Phase, Step, Zone
+ 
+ 
+ # Maximum hand size — players discard down to this during cleanup.
+@@ -30,11 +30,12 @@
+     Per MTG rules, the active player untaps all permanents they control
+     during their untap step. Summoning sickness is also cleared at this point.
+     """
++    from benchmarks.sos.workspace.engine.game import untap
++
+     active = game.active_player
+     bf = active.zones[Zone.BATTLEFIELD]
+     for obj in bf.get_all():
+-        if hasattr(obj, "is_tapped"):
+-            obj.is_tapped = False
++        untap(game, obj)
+         if hasattr(obj, "summoning_sick"):
+             obj.summoning_sick = False
+ 
+@@ -53,7 +54,7 @@
+     if game.turn_number == 1 and game.active_player_index == 0:
+         return
+ 
+-    from engine.game import draw_card
++    from benchmarks.sos.workspace.engine.game import draw_card
+ 
+     draw_card(game, game.active_player)
+ 
+@@ -65,7 +66,7 @@
+         game: The current game state.
+         step: The combat step to execute.
+     """
+-    from engine.combat import (
++    from benchmarks.sos.workspace.engine.combat import (
+         combat_damage_step,
+         declare_attackers_step,
+         declare_blockers_step,
+@@ -100,14 +101,15 @@
+     7. If triggers fired during cleanup (e.g. from discarding), process
+        them (give priority, resolve stack) and perform another cleanup step.
+     """
+-    from engine.game import discard as _discard
+-    from engine.player import ScriptExhaustedError
+-    from engine.state_based_actions import resolve_state_based_actions
++    from benchmarks.sos.workspace.engine.game import discard as _discard
++    from benchmarks.sos.workspace.engine.player import ScriptExhaustedError
++    from benchmarks.sos.workspace.engine.state_based_actions import resolve_state_based_actions
+ 
+     # --- Step 1: Discard to hand size ---
+     active = game.active_player
+     hand = active.zones[Zone.HAND]
+-    while len(hand) > MAX_HAND_SIZE:
++    max_hand_size = float("inf") if getattr(active, "no_maximum_hand_size", False) else MAX_HAND_SIZE
++    while len(hand) > max_hand_size:
+         cards_in_hand = hand.get_all()
+         if not cards_in_hand:
+             break  # safety guard
+@@ -141,6 +143,10 @@
+         for obj in bf.get_all():
+             if hasattr(obj, "damage_marked"):
+                 obj.damage_marked = 0
++            if hasattr(obj, "loyalty_lost_this_turn"):
++                obj.loyalty_lost_this_turn = 0
++            if hasattr(obj, "last_loyalty_loss_amount"):
++                obj.last_loyalty_loss_amount = 0
+ 
+     # --- Step 4: Clear combat flags ---
+     for player in game.players:
+@@ -158,6 +164,7 @@
+ 
+     # --- Step 5: Empty mana pools ---
+     game.empty_mana_pools()
++    game.damage_cant_be_prevented = False
+ 
+     # --- Step 6: Check state-based actions ---
+     sba_happened = resolve_state_based_actions(game)
+@@ -200,10 +207,25 @@
+         if current == (Phase.BEGINNING, Step.UNTAP):
+             _do_untap_step(game)
+         elif current == (Phase.BEGINNING, Step.UPKEEP):
+-            from engine.events import BeginningOfUpkeepTriggeredEvent
++            from benchmarks.sos.workspace.engine.events import BeginningOfUpkeepTriggeredEvent
+             game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+         elif current == (Phase.BEGINNING, Step.DRAW):
+             _do_draw_step(game)
++        elif current == (Phase.PRECOMBAT_MAIN, None):
++            from benchmarks.sos.workspace.engine.events import BeginningOfFirstMainPhaseTriggeredEvent
++            game.trigger_manager.fire_event(
++                game,
++                BeginningOfFirstMainPhaseTriggeredEvent(player=game.active_player),
++            )
++        elif current == (Phase.POSTCOMBAT_MAIN, None):
++            from benchmarks.sos.workspace.engine.events import BeginningOfMainPhaseTriggeredEvent
++            game.trigger_manager.fire_event(
++                game,
++                BeginningOfMainPhaseTriggeredEvent(
++                    player=game.active_player,
++                    phase=Phase.POSTCOMBAT_MAIN,
++                ),
++            )
+         elif game.phase == Phase.COMBAT and game.step is not None:
+             _do_combat_step(game, game.step)
+         elif current == (Phase.ENDING, Step.CLEANUP):
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/types.py /tmp/silverquillm_run_imhr8630/workspace/engine/types.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/types.py	2026-05-25 04:23:31.883982600 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/types.py	2026-05-25 13:24:41.634115678 +0000
+@@ -128,20 +128,58 @@
+ # Regex to tokenize a mana cost string like "{2}{W}{U}" or "{X}{X}{R}"
+ _MANA_TOKEN_RE = re.compile(r"\{([^}]+)\}")
+ 
+-# Regex to detect hybrid mana tokens like "B/G", "W/U", etc.
+-_HYBRID_RE = re.compile(r"^([WUBRGC])/([WUBRGC])$")
++# Regex to detect hybrid mana tokens like "B/G", "W/U", or "2/R".
++_HYBRID_RE = re.compile(r"^([WUBRGC]|2)/([WUBRGC])$")
+ 
+ 
+ @dataclass(frozen=True)
+ class HybridManaSymbol:
+-    """A hybrid mana symbol that can be paid with either of two colors.
++    """A hybrid mana symbol.
+ 
+-    For example, ``{B/G}`` is represented as
+-    ``HybridManaSymbol(option_a=ManaType.BLACK, option_b=ManaType.GREEN)``.
++    Normal hybrid symbols such as ``{B/G}`` use ``option_a`` and ``option_b``.
++    Two-or-color hybrids such as ``{2/R}`` use ``generic_option=2`` and
++    ``option_b=ManaType.RED`` while leaving ``option_a`` empty so dataclass
++    equality, repr, and serialization preserve the printed shape cleanly.
+     """
+ 
+-    option_a: ManaType
+-    option_b: ManaType
++    option_a: ManaType | None = None
++    option_b: ManaType | None = None
++    generic_option: int = 0
++
++    def __post_init__(self) -> None:
++        """Validate the symbol's shape."""
++        if self.option_b is None:
++            raise ValueError("Hybrid mana symbols require option_b")
++        if self.generic_option < 0:
++            raise ValueError("Hybrid mana generic option cannot be negative")
++        if self.generic_option not in (0, 2):
++            raise ValueError(
++                "Hybrid mana generic option must be 0 for colored hybrids or 2 for two-or-color hybrids"
++            )
++        if self.generic_option == 0 and self.option_a is None:
++            raise ValueError("Colored hybrid mana symbols require option_a")
++        if self.generic_option > 0 and self.option_a is not None:
++            raise ValueError(
++                "Two-or-color hybrid mana symbols should omit option_a for canonical representation"
++            )
++
++    @property
++    def mana_value(self) -> int:
++        """Return this symbol's mana value."""
++        if self.generic_option > 0:
++            return self.generic_option
++        return 1
++
++    @property
++    def is_two_generic_hybrid(self) -> bool:
++        """Return whether this symbol is of the ``{2/COLOR}`` form."""
++        return self.generic_option == 2
++
++    def __str__(self) -> str:
++        """Return the canonical printed form of this hybrid symbol."""
++        if self.generic_option > 0:
++            return f"{{{self.generic_option}/{self.option_b.value}}}"
++        return f"{{{self.option_a.value}/{self.option_b.value}}}"
+ 
+ 
+ @dataclass(frozen=True)
+@@ -166,7 +204,9 @@
+ 
+         Each hybrid symbol contributes 1 to the CMC.
+         """
+-        return self.generic + sum(self.pips.values()) + len(self.hybrid)
++        return self.generic + sum(self.pips.values()) + sum(
++            symbol.mana_value for symbol in self.hybrid
++        )
+ 
+     @classmethod
+     def parse(cls, cost_str: str) -> ManaCost:
+@@ -209,13 +249,31 @@
+                 hybrid_match = _HYBRID_RE.match(upper)
+                 if hybrid_match:
+                     a_str, b_str = hybrid_match.group(1), hybrid_match.group(2)
+-                    if a_str not in _PIP_MAP or b_str not in _PIP_MAP:
++                    if b_str not in _PIP_MAP:
+                         raise ValueError(
+                             f"Unrecognised mana symbol {token!r} in cost string {cost_str!r}"
+                         )
++                    generic_option = 0
++                    option_a: ManaType
++                    if a_str in _PIP_MAP:
++                        option_a = _PIP_MAP[a_str]
++                    else:
++                        try:
++                            generic_option = int(a_str)
++                        except ValueError:
++                            raise ValueError(
++                                f"Unrecognised mana symbol {token!r} in cost string {cost_str!r}"
++                            ) from None
++                        if generic_option <= 0:
++                            raise ValueError(
++                                f"Unrecognised mana symbol {token!r} in cost string {cost_str!r}"
++                            )
++                        option_a = None
+                     hybrid.append(
+                         HybridManaSymbol(
+-                            option_a=_PIP_MAP[a_str], option_b=_PIP_MAP[b_str]
++                            option_a=option_a,
++                            option_b=_PIP_MAP[b_str],
++                            generic_option=generic_option,
+                         )
+                     )
+                 else:
+@@ -234,6 +292,24 @@
+ 
+         return cls(generic=generic, pips=pips, x_count=x_count, hybrid=hybrid)
+ 
++    def __str__(self) -> str:
++        """Return the canonical printed form of this mana cost."""
++        tokens: list[str] = []
++        if self.generic > 0:
++            tokens.append(f"{{{self.generic}}}")
++        tokens.extend("{X}" for _ in range(self.x_count))
++        for mana_type in (
++            ManaType.WHITE,
++            ManaType.BLUE,
++            ManaType.BLACK,
++            ManaType.RED,
++            ManaType.GREEN,
++            ManaType.COLORLESS,
++        ):
++            tokens.extend(f"{{{mana_type.value}}}" for _ in range(self.pips.get(mana_type, 0)))
++        tokens.extend(str(symbol) for symbol in self.hybrid)
++        return "".join(tokens)
++
+ 
+ @dataclass
+ class TargetRequirement:
+diff -ruN /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/zones.py /tmp/silverquillm_run_imhr8630/workspace/engine/zones.py
+--- /home/sean/repos/SilverquiLLM-bench/benchmarks/sos/workspace/engine/zones.py	2026-05-25 16:43:11.729292098 +0000
++++ /tmp/silverquillm_run_imhr8630/workspace/engine/zones.py	2026-05-25 12:14:46.058557815 +0000
+@@ -5,10 +5,10 @@
+ import random
+ from typing import TYPE_CHECKING, Any
+ 
+-from engine.types import CardType, Zone
++from benchmarks.sos.workspace.engine.types import CardType, Zone
+ 
+ if TYPE_CHECKING:
+-    from engine.game_state import GameState
++    from benchmarks.sos.workspace.engine.game_state import GameState
+ 
+ 
+ class IllegalMoveError(Exception):
+@@ -219,9 +219,10 @@
+             no replacement effects are consulted (useful for simple
+             moves like casting resolution or exile-from-graveyard).
+     """
+-    from engine.events import (
++    from benchmarks.sos.workspace.engine.events import (
+         CreatureDiesTriggeredEvent,
+         EntersBattlefieldTriggeredEvent,
++        GraveyardLeavesTriggeredEvent,
+         LeavesBattlefieldTriggeredEvent,
+     )
+ 
+@@ -277,9 +278,27 @@
+         dest_player = owner
+ 
+     dest_player.zones[dest_zone].add(card)
++    game.note_zone_change(card, from_zone, dest_zone)
++    if dest_zone == Zone.EXILE:
++        game.cards_exiled_this_turn.append(card)
++    if from_zone == Zone.GRAVEYARD and dest_zone != Zone.GRAVEYARD:
++        for player_index, player in enumerate(game.players):
++            if player is source_player:
++                game.cards_left_graveyards_this_turn.setdefault(player_index, []).append(card)
++                break
++        game.trigger_manager.fire_event(
++            game,
++            GraveyardLeavesTriggeredEvent(
++                player=source_player,
++                cards=[card],
++                destination=dest_zone,
++            ),
++        )
+ 
+     # --- Leaving battlefield hooks ---
+     if leaving_battlefield:
++        if hasattr(card, "become_unprepared"):
++            card.become_unprepared()
+         card_types = getattr(card, "card_types", set())
+         is_creature = CardType.CREATURE in card_types
+ 
+@@ -289,12 +308,16 @@
+             LeavesBattlefieldTriggeredEvent(permanent=card, controller=controller),
+         )
+         if is_creature and dest_zone == Zone.GRAVEYARD:
++            game.creatures_died_this_turn.append(card)
++            game.creature_died_this_turn = True
+             game.trigger_manager.fire_event(
+                 game,
+                 CreatureDiesTriggeredEvent(creature=card, controller=controller, owner=owner),
+             )
+ 
+         # Now unregister triggers and replacement effects.
++        if hasattr(card, "unregister_triggers"):
++            card.unregister_triggers(game)
+         game.trigger_manager.unregister(card)
+         game.replacement_manager.unregister(card)
+ 
+@@ -311,8 +334,13 @@
+                 controller=controller if controller is not None else owner,
+             ),
+         )
+-        if hasattr(card, "register_triggers"):
+-            card.register_triggers(game)
++        setattr(card, "_registering_after_enter_battlefield", True)
++        try:
++            if hasattr(card, "register_triggers"):
++                card.register_triggers(game)
++        finally:
++            if hasattr(card, "_registering_after_enter_battlefield"):
++                delattr(card, "_registering_after_enter_battlefield")
+         if hasattr(card, "register_replacement_effects"):
+             card.register_replacement_effects(game)
+ 

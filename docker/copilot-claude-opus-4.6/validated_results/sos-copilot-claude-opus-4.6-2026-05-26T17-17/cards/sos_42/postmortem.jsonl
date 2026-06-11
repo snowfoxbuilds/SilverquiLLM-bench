@@ -1,0 +1,4 @@
+{"collector_number": "sos_42", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__3s59maa/tests.py::TestDelugeVirtuosoBasicProperties::test_colors"}
+{"collector_number": "sos_42", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__3s59maa/tests.py::TestDelugeVirtuosoAbilities::test_has_opus"}
+{"collector_number": "sos_42", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__3s59maa/tests.py::TestDelugeVirtuosoAbilities::test_etb_taps_target"}
+{"collector_number": "sos_42", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__3s59maa/tests.py::TestDelugeVirtuosoInteractions::test_counters_survive_end_of_turn"}

@@ -1,0 +1,6 @@
+{"collector_number": "sos_66", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mnftogzp/tests.py::TestRunBehindBasicProperties::test_is_instant"}
+{"collector_number": "sos_66", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mnftogzp/tests.py::TestRunBehindBasicProperties::test_colors"}
+{"collector_number": "sos_66", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mnftogzp/tests.py::TestRunBehindAbilities::test_cost_reduction_applies"}
+{"collector_number": "sos_66", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mnftogzp/tests.py::TestRunBehindEdgeCases::test_no_reduction_when_condition_unmet"}
+{"collector_number": "sos_66", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mnftogzp/tests.py::TestRunBehindInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_66", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mnftogzp/tests.py::TestRunBehindInteractions::test_does_not_affect_non_targets"}

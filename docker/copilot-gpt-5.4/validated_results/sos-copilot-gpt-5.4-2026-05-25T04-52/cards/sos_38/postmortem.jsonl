@@ -1,0 +1,8 @@
+{"collector_number": "sos_38", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fy6vcj94/tests.py::TestBanishingBetrayalBasicProperties::test_is_instant"}
+{"collector_number": "sos_38", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fy6vcj94/tests.py::TestBanishingBetrayalBasicProperties::test_colors"}
+{"collector_number": "sos_38", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fy6vcj94/tests.py::TestBanishingBetrayalAbilities::test_bounces_target"}
+{"collector_number": "sos_38", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fy6vcj94/tests.py::TestBanishingBetrayalAbilities::test_surveil_effect"}
+{"collector_number": "sos_38", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fy6vcj94/tests.py::TestBanishingBetrayalAbilities::test_returns_from_graveyard"}
+{"collector_number": "sos_38", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fy6vcj94/tests.py::TestBanishingBetrayalEdgeCases::test_may_choice_optional"}
+{"collector_number": "sos_38", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fy6vcj94/tests.py::TestBanishingBetrayalInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_38", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fy6vcj94/tests.py::TestBanishingBetrayalInteractions::test_does_not_affect_non_targets"}

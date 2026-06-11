@@ -1,0 +1,4 @@
+{"collector_number": "sos_52", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_v74f74du/tests.py::TestHarmonizedTrioBrainstormBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_52", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_v74f74du/tests.py::TestHarmonizedTrioBrainstormBasicProperties::test_colors"}
+{"collector_number": "sos_52", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_v74f74du/tests.py::TestHarmonizedTrioBrainstormAbilities::test_has_prepared"}
+{"collector_number": "sos_52", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_v74f74du/tests.py::TestHarmonizedTrioBrainstormEdgeCases::test_mana_cost_matches_spec"}

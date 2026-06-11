@@ -1,0 +1,3 @@
+{"collector_number": "sos_34", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_sy6zdty4/tests.py::TestStandUpForYourselfBasicProperties::test_colors"}
+{"collector_number": "sos_34", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_sy6zdty4/tests.py::TestStandUpForYourselfAbilities::test_destroys_target"}
+{"collector_number": "sos_34", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_sy6zdty4/tests.py::TestStandUpForYourselfEdgeCases::test_power_targeting_restriction"}

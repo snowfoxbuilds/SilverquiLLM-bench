@@ -1,0 +1,8 @@
+{"collector_number": "sos_235", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5hymi_ru/tests.py::TestStressDreamBasicProperties::test_is_instant"}
+{"collector_number": "sos_235", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5hymi_ru/tests.py::TestStressDreamBasicProperties::test_card_types"}
+{"collector_number": "sos_235", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5hymi_ru/tests.py::TestStressDreamBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_235", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5hymi_ru/tests.py::TestStressDreamBasicProperties::test_colors"}
+{"collector_number": "sos_235", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5hymi_ru/tests.py::TestStressDreamAbilities::test_deals_damage"}
+{"collector_number": "sos_235", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5hymi_ru/tests.py::TestStressDreamEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_235", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5hymi_ru/tests.py::TestStressDreamInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_235", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5hymi_ru/tests.py::TestStressDreamInteractions::test_does_not_affect_non_targets"}

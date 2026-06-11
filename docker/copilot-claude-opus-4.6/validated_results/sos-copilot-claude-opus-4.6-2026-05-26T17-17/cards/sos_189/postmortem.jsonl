@@ -1,0 +1,2 @@
+{"collector_number": "sos_189", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zocs7_uc/tests.py::TestFractalMascotBasicProperties::test_colors"}
+{"collector_number": "sos_189", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zocs7_uc/tests.py::TestFractalMascotAbilities::test_etb_taps_target"}

@@ -1,0 +1,14 @@
+{"collector_number": "sos_212", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bzg69450/tests.py::TestPrismariTheInspirationBasicProperties::test_is_creature"}
+{"collector_number": "sos_212", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bzg69450/tests.py::TestPrismariTheInspirationBasicProperties::test_name"}
+{"collector_number": "sos_212", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bzg69450/tests.py::TestPrismariTheInspirationBasicProperties::test_card_types"}
+{"collector_number": "sos_212", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bzg69450/tests.py::TestPrismariTheInspirationBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_212", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bzg69450/tests.py::TestPrismariTheInspirationBasicProperties::test_colors"}
+{"collector_number": "sos_212", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bzg69450/tests.py::TestPrismariTheInspirationBasicProperties::test_power"}
+{"collector_number": "sos_212", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bzg69450/tests.py::TestPrismariTheInspirationBasicProperties::test_toughness"}
+{"collector_number": "sos_212", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bzg69450/tests.py::TestPrismariTheInspirationAbilities::test_has_flying"}
+{"collector_number": "sos_212", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bzg69450/tests.py::TestPrismariTheInspirationAbilities::test_has_ward"}
+{"collector_number": "sos_212", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bzg69450/tests.py::TestPrismariTheInspirationEdgeCases::test_fizzle_no_targets_creature_stays"}
+{"collector_number": "sos_212", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bzg69450/tests.py::TestPrismariTheInspirationEdgeCases::test_instances_have_independent_state"}
+{"collector_number": "sos_212", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bzg69450/tests.py::TestPrismariTheInspirationEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_212", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bzg69450/tests.py::TestPrismariTheInspirationInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_212", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bzg69450/tests.py::TestPrismariTheInspirationInteractions::test_coexists_with_other_permanents"}

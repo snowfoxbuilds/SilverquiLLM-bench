@@ -1,0 +1,7 @@
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_urlgazn4/tests.py::TestLoreholdTheHistorianBasicProperties::test_is_creature"}
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_urlgazn4/tests.py::TestLoreholdTheHistorianBasicProperties::test_colors"}
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_urlgazn4/tests.py::TestLoreholdTheHistorianAbilities::test_has_flying"}
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_urlgazn4/tests.py::TestLoreholdTheHistorianAbilities::test_has_haste"}
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_urlgazn4/tests.py::TestLoreholdTheHistorianEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_urlgazn4/tests.py::TestLoreholdTheHistorianInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_201", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_urlgazn4/tests.py::TestLoreholdTheHistorianInteractions::test_coexists_with_other_permanents"}

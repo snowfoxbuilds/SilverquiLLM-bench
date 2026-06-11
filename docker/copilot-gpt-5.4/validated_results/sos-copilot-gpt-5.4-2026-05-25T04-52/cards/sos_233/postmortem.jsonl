@@ -1,0 +1,12 @@
+{"collector_number": "sos_233", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_djkifha0/tests.py::TestStartledRelicSlothBasicProperties::test_is_creature"}
+{"collector_number": "sos_233", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_djkifha0/tests.py::TestStartledRelicSlothBasicProperties::test_card_types"}
+{"collector_number": "sos_233", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_djkifha0/tests.py::TestStartledRelicSlothBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_233", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_djkifha0/tests.py::TestStartledRelicSlothBasicProperties::test_colors"}
+{"collector_number": "sos_233", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_djkifha0/tests.py::TestStartledRelicSlothBasicProperties::test_power"}
+{"collector_number": "sos_233", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_djkifha0/tests.py::TestStartledRelicSlothBasicProperties::test_toughness"}
+{"collector_number": "sos_233", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_djkifha0/tests.py::TestStartledRelicSlothBasicProperties::test_has_lifelink_keyword"}
+{"collector_number": "sos_233", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_djkifha0/tests.py::TestStartledRelicSlothBasicProperties::test_has_trample_keyword"}
+{"collector_number": "sos_233", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_djkifha0/tests.py::TestStartledRelicSlothAbilities::test_on_resolve_changes_state"}
+{"collector_number": "sos_233", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_djkifha0/tests.py::TestStartledRelicSlothEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_233", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_djkifha0/tests.py::TestStartledRelicSlothInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_233", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_djkifha0/tests.py::TestStartledRelicSlothInteractions::test_coexists_with_other_creatures"}

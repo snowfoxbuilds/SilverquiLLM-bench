@@ -1,0 +1,7 @@
+{"collector_number": "sos_63", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_idawufta/tests.py::TestPensiveProfessorBasicProperties::test_is_creature"}
+{"collector_number": "sos_63", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_idawufta/tests.py::TestPensiveProfessorBasicProperties::test_colors"}
+{"collector_number": "sos_63", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_idawufta/tests.py::TestPensiveProfessorAbilities::test_adds_plus_counter"}
+{"collector_number": "sos_63", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_idawufta/tests.py::TestPensiveProfessorAbilities::test_draws_cards"}
+{"collector_number": "sos_63", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_idawufta/tests.py::TestPensiveProfessorEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_63", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_idawufta/tests.py::TestPensiveProfessorInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_63", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_idawufta/tests.py::TestPensiveProfessorInteractions::test_coexists_with_other_creatures"}

@@ -1,0 +1,13 @@
+{"collector_number": "sos_216", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wcejds_o/tests.py::TestPursueThePastBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_216", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wcejds_o/tests.py::TestPursueThePastBasicProperties::test_card_types"}
+{"collector_number": "sos_216", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wcejds_o/tests.py::TestPursueThePastBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_216", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wcejds_o/tests.py::TestPursueThePastBasicProperties::test_colors"}
+{"collector_number": "sos_216", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wcejds_o/tests.py::TestPursueThePastAbilities::test_flashback_cost_attribute"}
+{"collector_number": "sos_216", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wcejds_o/tests.py::TestPursueThePastAbilities::test_flashback_exiles_after_resolution"}
+{"collector_number": "sos_216", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wcejds_o/tests.py::TestPursueThePastAbilities::test_flashback_removes_from_graveyard"}
+{"collector_number": "sos_216", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wcejds_o/tests.py::TestPursueThePastAbilities::test_draws_cards"}
+{"collector_number": "sos_216", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wcejds_o/tests.py::TestPursueThePastAbilities::test_causes_discard"}
+{"collector_number": "sos_216", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wcejds_o/tests.py::TestPursueThePastAbilities::test_gains_life"}
+{"collector_number": "sos_216", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wcejds_o/tests.py::TestPursueThePastEdgeCases::test_may_choice_optional"}
+{"collector_number": "sos_216", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wcejds_o/tests.py::TestPursueThePastInteractions::test_flashback_not_from_hand"}
+{"collector_number": "sos_216", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wcejds_o/tests.py::TestPursueThePastInteractions::test_does_not_affect_non_targets"}

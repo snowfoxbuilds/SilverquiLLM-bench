@@ -1,0 +1,6 @@
+{"collector_number": "sos_262", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nf_xpcqi/tests.py::TestSpectacleSummitBasicProperties::test_is_land"}
+{"collector_number": "sos_262", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nf_xpcqi/tests.py::TestSpectacleSummitBasicProperties::test_card_types"}
+{"collector_number": "sos_262", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nf_xpcqi/tests.py::TestSpectacleSummitBasicProperties::test_colorless"}
+{"collector_number": "sos_262", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nf_xpcqi/tests.py::TestSpectacleSummitEdgeCases::test_resolution_with_empty_board"}
+{"collector_number": "sos_262", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nf_xpcqi/tests.py::TestSpectacleSummitInteractions::test_spell_to_graveyard_after_resolution"}
+{"collector_number": "sos_262", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nf_xpcqi/tests.py::TestSpectacleSummitInteractions::test_coexists_with_other_permanents"}

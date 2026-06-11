@@ -1,0 +1,6 @@
+{"collector_number": "sos_149", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xncxtf6c/tests.py::TestGerminationPracticumBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_149", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xncxtf6c/tests.py::TestGerminationPracticumBasicProperties::test_colors"}
+{"collector_number": "sos_149", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xncxtf6c/tests.py::TestGerminationPracticumAbilities::test_resolution_exiles_target"}
+{"collector_number": "sos_149", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xncxtf6c/tests.py::TestGerminationPracticumEdgeCases::test_resolution_with_empty_board"}
+{"collector_number": "sos_149", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xncxtf6c/tests.py::TestGerminationPracticumInteractions::test_spell_to_graveyard_after_resolution"}
+{"collector_number": "sos_149", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xncxtf6c/tests.py::TestGerminationPracticumInteractions::test_coexists_with_other_permanents"}

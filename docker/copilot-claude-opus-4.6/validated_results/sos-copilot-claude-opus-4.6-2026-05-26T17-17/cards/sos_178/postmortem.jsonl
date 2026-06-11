@@ -1,0 +1,5 @@
+{"collector_number": "sos_178", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_548c6b6g/tests.py::TestBorrowedKnowledgeBasicProperties::test_colors"}
+{"collector_number": "sos_178", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_548c6b6g/tests.py::TestBorrowedKnowledgeAbilities::test_resolution_draws_cards"}
+{"collector_number": "sos_178", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_548c6b6g/tests.py::TestBorrowedKnowledgeEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_178", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_548c6b6g/tests.py::TestBorrowedKnowledgeInteractions::test_targets_valid_objects"}
+{"collector_number": "sos_178", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_548c6b6g/tests.py::TestBorrowedKnowledgeInteractions::test_spell_to_graveyard_after_resolution"}

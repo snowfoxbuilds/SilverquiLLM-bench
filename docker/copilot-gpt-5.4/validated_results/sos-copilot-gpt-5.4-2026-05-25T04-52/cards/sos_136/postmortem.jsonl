@@ -1,0 +1,7 @@
+{"collector_number": "sos_136", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_st4okgs8/tests.py::TestUnsubtleMockeryBasicProperties::test_is_instant"}
+{"collector_number": "sos_136", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_st4okgs8/tests.py::TestUnsubtleMockeryBasicProperties::test_colors"}
+{"collector_number": "sos_136", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_st4okgs8/tests.py::TestUnsubtleMockeryAbilities::test_deals_damage"}
+{"collector_number": "sos_136", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_st4okgs8/tests.py::TestUnsubtleMockeryAbilities::test_surveil_effect"}
+{"collector_number": "sos_136", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_st4okgs8/tests.py::TestUnsubtleMockeryEdgeCases::test_may_choice_optional"}
+{"collector_number": "sos_136", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_st4okgs8/tests.py::TestUnsubtleMockeryInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_136", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_st4okgs8/tests.py::TestUnsubtleMockeryInteractions::test_does_not_affect_non_targets"}

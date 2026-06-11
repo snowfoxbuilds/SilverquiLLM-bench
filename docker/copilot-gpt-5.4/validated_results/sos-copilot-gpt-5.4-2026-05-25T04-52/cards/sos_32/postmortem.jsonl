@@ -1,0 +1,8 @@
+{"collector_number": "sos_32", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_1tfseu1d/tests.py::TestSoaringStonegliderBasicProperties::test_is_creature"}
+{"collector_number": "sos_32", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_1tfseu1d/tests.py::TestSoaringStonegliderBasicProperties::test_colors"}
+{"collector_number": "sos_32", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_1tfseu1d/tests.py::TestSoaringStonegliderBasicProperties::test_has_flying_keyword"}
+{"collector_number": "sos_32", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_1tfseu1d/tests.py::TestSoaringStonegliderBasicProperties::test_has_vigilance_keyword"}
+{"collector_number": "sos_32", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_1tfseu1d/tests.py::TestSoaringStonegliderAbilities::test_additional_cost_declared"}
+{"collector_number": "sos_32", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_1tfseu1d/tests.py::TestSoaringStonegliderEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_32", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_1tfseu1d/tests.py::TestSoaringStonegliderInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_32", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_1tfseu1d/tests.py::TestSoaringStonegliderInteractions::test_coexists_with_other_creatures"}

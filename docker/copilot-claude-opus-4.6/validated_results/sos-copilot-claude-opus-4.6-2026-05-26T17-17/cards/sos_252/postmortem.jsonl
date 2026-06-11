@@ -1,0 +1,2 @@
+{"collector_number": "sos_252", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wtnu3ik7/tests.py::TestStrixhavenSkycoachBasicProperties::test_colorless"}
+{"collector_number": "sos_252", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wtnu3ik7/tests.py::TestStrixhavenSkycoachInteractions::test_spell_to_graveyard_after_resolution"}

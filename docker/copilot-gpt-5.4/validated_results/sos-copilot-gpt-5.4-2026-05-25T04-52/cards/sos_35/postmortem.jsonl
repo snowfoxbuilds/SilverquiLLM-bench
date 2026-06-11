@@ -1,0 +1,10 @@
+{"collector_number": "sos_35", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5xrp4djz/tests.py::TestStirringHopesingerBasicProperties::test_is_creature"}
+{"collector_number": "sos_35", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5xrp4djz/tests.py::TestStirringHopesingerBasicProperties::test_colors"}
+{"collector_number": "sos_35", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5xrp4djz/tests.py::TestStirringHopesingerBasicProperties::test_has_flying_keyword"}
+{"collector_number": "sos_35", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5xrp4djz/tests.py::TestStirringHopesingerBasicProperties::test_has_lifelink_keyword"}
+{"collector_number": "sos_35", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5xrp4djz/tests.py::TestStirringHopesingerAbilities::test_repartee_registers_trigger"}
+{"collector_number": "sos_35", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5xrp4djz/tests.py::TestStirringHopesingerAbilities::test_repartee_requires_creature_target"}
+{"collector_number": "sos_35", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5xrp4djz/tests.py::TestStirringHopesingerAbilities::test_repartee_adds_counter"}
+{"collector_number": "sos_35", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5xrp4djz/tests.py::TestStirringHopesingerEdgeCases::test_targets_only_own_permanents"}
+{"collector_number": "sos_35", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5xrp4djz/tests.py::TestStirringHopesingerInteractions::test_get_targets_finds_own_creatures"}
+{"collector_number": "sos_35", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5xrp4djz/tests.py::TestStirringHopesingerInteractions::test_coexists_with_other_creatures"}

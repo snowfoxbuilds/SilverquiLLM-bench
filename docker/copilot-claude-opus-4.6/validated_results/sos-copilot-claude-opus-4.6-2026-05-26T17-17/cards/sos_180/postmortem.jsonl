@@ -1,0 +1,4 @@
+{"collector_number": "sos_180", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ughpade2/tests.py::TestColorstormStallionBasicProperties::test_colors"}
+{"collector_number": "sos_180", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ughpade2/tests.py::TestColorstormStallionAbilities::test_has_opus"}
+{"collector_number": "sos_180", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ughpade2/tests.py::TestColorstormStallionInteractions::test_counters_survive_end_of_turn"}
+{"collector_number": "sos_180", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ughpade2/tests.py::TestColorstormStallionInteractions::test_tokens_appear_on_battlefield"}

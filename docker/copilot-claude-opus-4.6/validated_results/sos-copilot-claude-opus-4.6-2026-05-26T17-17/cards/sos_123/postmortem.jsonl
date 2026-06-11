@@ -1,0 +1,8 @@
+{"collector_number": "sos_123", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7q8pek60/tests.py::TestMagmabloodArchaicBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_123", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7q8pek60/tests.py::TestMagmabloodArchaicBasicProperties::test_colors"}
+{"collector_number": "sos_123", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7q8pek60/tests.py::TestMagmabloodArchaicAbilities::test_has_converge"}
+{"collector_number": "sos_123", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7q8pek60/tests.py::TestMagmabloodArchaicAbilities::test_etb_adds_counters"}
+{"collector_number": "sos_123", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7q8pek60/tests.py::TestMagmabloodArchaicAbilities::test_converge_adds_counters"}
+{"collector_number": "sos_123", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7q8pek60/tests.py::TestMagmabloodArchaicEdgeCases::test_converge_five_colors_maximum"}
+{"collector_number": "sos_123", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7q8pek60/tests.py::TestMagmabloodArchaicEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_123", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7q8pek60/tests.py::TestMagmabloodArchaicInteractions::test_counters_survive_end_of_turn"}

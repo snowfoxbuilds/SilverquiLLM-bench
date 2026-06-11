@@ -1,0 +1,3 @@
+{"collector_number": "sos_5", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8dceu595/tests.py::TestTranscendentArchaicBasicProperties::test_colorless"}
+{"collector_number": "sos_5", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8dceu595/tests.py::TestTranscendentArchaicAbilities::test_has_converge"}
+{"collector_number": "sos_5", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8dceu595/tests.py::TestTranscendentArchaicAbilities::test_etb_draws_cards"}

@@ -1,0 +1,8 @@
+{"collector_number": "sos_134", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pbnsnivu/tests.py::TestThunderdrumSoloistBasicProperties::test_is_creature"}
+{"collector_number": "sos_134", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pbnsnivu/tests.py::TestThunderdrumSoloistBasicProperties::test_colors"}
+{"collector_number": "sos_134", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pbnsnivu/tests.py::TestThunderdrumSoloistAbilities::test_has_reach"}
+{"collector_number": "sos_134", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pbnsnivu/tests.py::TestThunderdrumSoloistAbilities::test_has_opus"}
+{"collector_number": "sos_134", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pbnsnivu/tests.py::TestThunderdrumSoloistAbilities::test_opus_trigger_implemented"}
+{"collector_number": "sos_134", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pbnsnivu/tests.py::TestThunderdrumSoloistEdgeCases::test_opus_no_trigger_without_spell"}
+{"collector_number": "sos_134", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pbnsnivu/tests.py::TestThunderdrumSoloistInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_134", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pbnsnivu/tests.py::TestThunderdrumSoloistInteractions::test_coexists_with_other_permanents"}

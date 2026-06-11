@@ -1,0 +1,5 @@
+{"collector_number": "sos_243", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rnfl6xbb/tests.py::TestWiltInTheHeatBasicProperties::test_colors"}
+{"collector_number": "sos_243", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rnfl6xbb/tests.py::TestWiltInTheHeatAbilities::test_resolution_deals_damage"}
+{"collector_number": "sos_243", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rnfl6xbb/tests.py::TestWiltInTheHeatEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_243", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rnfl6xbb/tests.py::TestWiltInTheHeatInteractions::test_targets_valid_objects"}
+{"collector_number": "sos_243", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rnfl6xbb/tests.py::TestWiltInTheHeatInteractions::test_spell_to_graveyard_after_resolution"}

@@ -1,0 +1,4 @@
+{"collector_number": "sos_256", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ufskyxmf/tests.py::TestForumOfAmityBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_256", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ufskyxmf/tests.py::TestForumOfAmityBasicProperties::test_colorless"}
+{"collector_number": "sos_256", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ufskyxmf/tests.py::TestForumOfAmityEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_256", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ufskyxmf/tests.py::TestForumOfAmityInteractions::test_spell_to_graveyard_after_resolution"}

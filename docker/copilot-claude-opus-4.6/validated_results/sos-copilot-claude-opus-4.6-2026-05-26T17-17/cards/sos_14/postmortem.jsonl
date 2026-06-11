@@ -1,0 +1,3 @@
+{"collector_number": "sos_14", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_d9xml4vp/tests.py::TestEnnisDebateModeratorBasicProperties::test_colors"}
+{"collector_number": "sos_14", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_d9xml4vp/tests.py::TestEnnisDebateModeratorAbilities::test_etb_exiles_target"}
+{"collector_number": "sos_14", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_d9xml4vp/tests.py::TestEnnisDebateModeratorInteractions::test_counters_survive_end_of_turn"}

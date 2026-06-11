@@ -1,0 +1,6 @@
+{"collector_number": "sos_43", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_1qalot1p/tests.py::TestDivergentEquationBasicProperties::test_is_instant"}
+{"collector_number": "sos_43", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_1qalot1p/tests.py::TestDivergentEquationBasicProperties::test_colors"}
+{"collector_number": "sos_43", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_1qalot1p/tests.py::TestDivergentEquationAbilities::test_returns_from_graveyard"}
+{"collector_number": "sos_43", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_1qalot1p/tests.py::TestDivergentEquationEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_43", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_1qalot1p/tests.py::TestDivergentEquationInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_43", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_1qalot1p/tests.py::TestDivergentEquationInteractions::test_does_not_affect_non_targets"}

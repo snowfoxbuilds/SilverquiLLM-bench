@@ -1,0 +1,6 @@
+{"collector_number": "sos_47", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4w022wwh/tests.py::TestEssenceScatterBasicProperties::test_is_instant"}
+{"collector_number": "sos_47", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4w022wwh/tests.py::TestEssenceScatterBasicProperties::test_colors"}
+{"collector_number": "sos_47", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4w022wwh/tests.py::TestEssenceScatterAbilities::test_counters_spell"}
+{"collector_number": "sos_47", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4w022wwh/tests.py::TestEssenceScatterEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_47", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4w022wwh/tests.py::TestEssenceScatterInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_47", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4w022wwh/tests.py::TestEssenceScatterInteractions::test_does_not_affect_non_targets"}

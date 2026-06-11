@@ -1,0 +1,2 @@
+{"collector_number": "sos_11", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fqb490vj/tests.py::TestEagerGlyphmageBasicProperties::test_colors"}
+{"collector_number": "sos_11", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fqb490vj/tests.py::TestEagerGlyphmageAbilities::test_etb_creates_token"}

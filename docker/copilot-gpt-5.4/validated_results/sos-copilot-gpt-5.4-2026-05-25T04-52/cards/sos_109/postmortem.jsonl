@@ -1,0 +1,9 @@
+{"collector_number": "sos_109", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ho9z2l2u/tests.py::TestBlazingFiresingerSeethingSongBasicProperties::test_is_creature"}
+{"collector_number": "sos_109", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ho9z2l2u/tests.py::TestBlazingFiresingerSeethingSongBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_109", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ho9z2l2u/tests.py::TestBlazingFiresingerSeethingSongBasicProperties::test_colors"}
+{"collector_number": "sos_109", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ho9z2l2u/tests.py::TestBlazingFiresingerSeethingSongAbilities::test_has_prepared"}
+{"collector_number": "sos_109", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ho9z2l2u/tests.py::TestBlazingFiresingerSeethingSongAbilities::test_etb_trigger_callable"}
+{"collector_number": "sos_109", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ho9z2l2u/tests.py::TestBlazingFiresingerSeethingSongEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_109", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ho9z2l2u/tests.py::TestBlazingFiresingerSeethingSongEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_109", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ho9z2l2u/tests.py::TestBlazingFiresingerSeethingSongInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_109", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ho9z2l2u/tests.py::TestBlazingFiresingerSeethingSongInteractions::test_coexists_with_other_permanents"}

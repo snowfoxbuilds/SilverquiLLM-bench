@@ -1,0 +1,5 @@
+{"collector_number": "sos_214", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__h2xhm5c/tests.py::TestProfessorDellianFelBasicProperties::test_colors"}
+{"collector_number": "sos_214", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__h2xhm5c/tests.py::TestProfessorDellianFelAbilities::test_resolution_removes_creatures"}
+{"collector_number": "sos_214", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__h2xhm5c/tests.py::TestProfessorDellianFelEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_214", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__h2xhm5c/tests.py::TestProfessorDellianFelInteractions::test_targets_valid_objects"}
+{"collector_number": "sos_214", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__h2xhm5c/tests.py::TestProfessorDellianFelInteractions::test_spell_to_graveyard_after_resolution"}

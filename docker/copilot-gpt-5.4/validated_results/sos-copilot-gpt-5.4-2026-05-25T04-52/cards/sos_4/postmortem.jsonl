@@ -1,0 +1,10 @@
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yfb5v5zf/tests.py::TestTogetherAsOneBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yfb5v5zf/tests.py::TestTogetherAsOneBasicProperties::test_colorless"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yfb5v5zf/tests.py::TestTogetherAsOneAbilities::test_has_converge"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yfb5v5zf/tests.py::TestTogetherAsOneAbilities::test_converge_scaling"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yfb5v5zf/tests.py::TestTogetherAsOneAbilities::test_resolution_deals_damage"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yfb5v5zf/tests.py::TestTogetherAsOneEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yfb5v5zf/tests.py::TestTogetherAsOneEdgeCases::test_converge_zero_colors_no_bonus"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yfb5v5zf/tests.py::TestTogetherAsOneEdgeCases::test_converge_five_colors_maximum"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yfb5v5zf/tests.py::TestTogetherAsOneInteractions::test_targets_valid_objects"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yfb5v5zf/tests.py::TestTogetherAsOneInteractions::test_spell_to_graveyard_after_resolution"}

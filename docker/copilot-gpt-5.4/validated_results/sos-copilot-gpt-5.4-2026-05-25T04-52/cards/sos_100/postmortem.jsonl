@@ -1,0 +1,4 @@
+{"collector_number": "sos_100", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dctxx7yl/tests.py::TestSendInThePestBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_100", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dctxx7yl/tests.py::TestSendInThePestBasicProperties::test_colors"}
+{"collector_number": "sos_100", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dctxx7yl/tests.py::TestSendInThePestAbilities::test_on_resolve_creates_tokens"}
+{"collector_number": "sos_100", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_dctxx7yl/tests.py::TestSendInThePestAbilities::test_on_resolve_causes_discard"}

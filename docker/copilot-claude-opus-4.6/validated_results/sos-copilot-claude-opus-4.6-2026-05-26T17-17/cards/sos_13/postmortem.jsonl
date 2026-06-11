@@ -1,0 +1,5 @@
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iya2ro1f/tests.py::TestEmeritusOfTruceSwordsToPlowsharesBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iya2ro1f/tests.py::TestEmeritusOfTruceSwordsToPlowsharesBasicProperties::test_colors"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iya2ro1f/tests.py::TestEmeritusOfTruceSwordsToPlowsharesAbilities::test_has_prepared"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iya2ro1f/tests.py::TestEmeritusOfTruceSwordsToPlowsharesAbilities::test_etb_creates_tokens"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iya2ro1f/tests.py::TestEmeritusOfTruceSwordsToPlowsharesEdgeCases::test_mana_cost_matches_spec"}

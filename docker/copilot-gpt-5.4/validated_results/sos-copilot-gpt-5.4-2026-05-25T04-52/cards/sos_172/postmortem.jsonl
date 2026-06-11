@@ -1,0 +1,7 @@
+{"collector_number": "sos_172", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_j46uimx2/tests.py::TestAppliedGeometryBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_172", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_j46uimx2/tests.py::TestAppliedGeometryBasicProperties::test_colors"}
+{"collector_number": "sos_172", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_j46uimx2/tests.py::TestAppliedGeometryAbilities::test_creates_token"}
+{"collector_number": "sos_172", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_j46uimx2/tests.py::TestAppliedGeometryAbilities::test_adds_plus_counter"}
+{"collector_number": "sos_172", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_j46uimx2/tests.py::TestAppliedGeometryEdgeCases::test_targets_only_own_permanents"}
+{"collector_number": "sos_172", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_j46uimx2/tests.py::TestAppliedGeometryInteractions::test_get_targets_finds_own_creatures"}
+{"collector_number": "sos_172", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_j46uimx2/tests.py::TestAppliedGeometryInteractions::test_does_not_affect_non_targets"}

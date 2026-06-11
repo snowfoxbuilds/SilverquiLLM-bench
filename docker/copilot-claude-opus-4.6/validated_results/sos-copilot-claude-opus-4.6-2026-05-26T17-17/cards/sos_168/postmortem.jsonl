@@ -1,0 +1,8 @@
+{"collector_number": "sos_168", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_hxe2zf2c/tests.py::TestWildgrowthArchaicBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_168", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_hxe2zf2c/tests.py::TestWildgrowthArchaicBasicProperties::test_colors"}
+{"collector_number": "sos_168", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_hxe2zf2c/tests.py::TestWildgrowthArchaicAbilities::test_has_converge"}
+{"collector_number": "sos_168", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_hxe2zf2c/tests.py::TestWildgrowthArchaicAbilities::test_etb_adds_counters"}
+{"collector_number": "sos_168", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_hxe2zf2c/tests.py::TestWildgrowthArchaicAbilities::test_converge_adds_counters"}
+{"collector_number": "sos_168", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_hxe2zf2c/tests.py::TestWildgrowthArchaicEdgeCases::test_converge_five_colors_maximum"}
+{"collector_number": "sos_168", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_hxe2zf2c/tests.py::TestWildgrowthArchaicEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_168", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_hxe2zf2c/tests.py::TestWildgrowthArchaicInteractions::test_counters_survive_end_of_turn"}

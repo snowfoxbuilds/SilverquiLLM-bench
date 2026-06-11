@@ -1,0 +1,2 @@
+{"collector_number": "sos_191", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_n3hgtl_x/tests.py::TestGeometersArthropodBasicProperties::test_colors"}
+{"collector_number": "sos_191", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_n3hgtl_x/tests.py::TestGeometersArthropodAbilities::test_has_cast_trigger"}

@@ -1,0 +1,3 @@
+{"collector_number": "sos_231", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zq9_u1sp/tests.py::TestSplatterTechniqueBasicProperties::test_colors"}
+{"collector_number": "sos_231", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zq9_u1sp/tests.py::TestSplatterTechniqueAbilities::test_resolution_deals_damage"}
+{"collector_number": "sos_231", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zq9_u1sp/tests.py::TestSplatterTechniqueInteractions::test_spell_to_graveyard_after_resolution"}

@@ -1,0 +1,5 @@
+{"collector_number": "sos_107", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7wh2uhxp/tests.py::TestArchaicsAgonyBasicProperties::test_colors"}
+{"collector_number": "sos_107", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7wh2uhxp/tests.py::TestArchaicsAgonyAbilities::test_has_converge"}
+{"collector_number": "sos_107", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7wh2uhxp/tests.py::TestArchaicsAgonyAbilities::test_resolution_deals_damage"}
+{"collector_number": "sos_107", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7wh2uhxp/tests.py::TestArchaicsAgonyEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_107", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7wh2uhxp/tests.py::TestArchaicsAgonyInteractions::test_spell_to_graveyard_after_resolution"}

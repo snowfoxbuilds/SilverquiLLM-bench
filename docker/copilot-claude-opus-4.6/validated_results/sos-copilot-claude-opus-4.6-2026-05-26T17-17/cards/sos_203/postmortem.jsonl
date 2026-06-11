@@ -1,0 +1,2 @@
+{"collector_number": "sos_203", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_i5bktws0/tests.py::TestMindRootsBasicProperties::test_colors"}
+{"collector_number": "sos_203", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_i5bktws0/tests.py::TestMindRootsAbilities::test_causes_discard"}

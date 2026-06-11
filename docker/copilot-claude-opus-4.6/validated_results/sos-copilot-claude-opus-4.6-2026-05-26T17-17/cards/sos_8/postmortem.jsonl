@@ -1,0 +1,4 @@
+{"collector_number": "sos_8", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5_kkz_ad/tests.py::TestAscendantDustspeakerBasicProperties::test_colors"}
+{"collector_number": "sos_8", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5_kkz_ad/tests.py::TestAscendantDustspeakerAbilities::test_etb_exiles_target"}
+{"collector_number": "sos_8", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5_kkz_ad/tests.py::TestAscendantDustspeakerInteractions::test_exile_from_graveyard_interaction"}
+{"collector_number": "sos_8", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5_kkz_ad/tests.py::TestAscendantDustspeakerInteractions::test_counters_survive_end_of_turn"}

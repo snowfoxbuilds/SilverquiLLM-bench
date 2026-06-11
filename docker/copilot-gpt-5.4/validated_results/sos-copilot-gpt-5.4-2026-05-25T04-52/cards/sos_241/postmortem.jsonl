@@ -1,0 +1,8 @@
+{"collector_number": "sos_241", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_aj_zroaq/tests.py::TestViciousRivalryBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_241", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_aj_zroaq/tests.py::TestViciousRivalryBasicProperties::test_card_types"}
+{"collector_number": "sos_241", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_aj_zroaq/tests.py::TestViciousRivalryBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_241", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_aj_zroaq/tests.py::TestViciousRivalryBasicProperties::test_colors"}
+{"collector_number": "sos_241", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_aj_zroaq/tests.py::TestViciousRivalryAbilities::test_additional_cost_declared"}
+{"collector_number": "sos_241", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_aj_zroaq/tests.py::TestViciousRivalryEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_241", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_aj_zroaq/tests.py::TestViciousRivalryInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_241", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_aj_zroaq/tests.py::TestViciousRivalryInteractions::test_does_not_affect_non_targets"}

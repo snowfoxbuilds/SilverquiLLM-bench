@@ -1,0 +1,4 @@
+{"collector_number": "sos_96", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ah520qok/tests.py::TestRabidAttackBasicProperties::test_colors"}
+{"collector_number": "sos_96", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ah520qok/tests.py::TestRabidAttackAbilities::test_draws_cards"}
+{"collector_number": "sos_96", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ah520qok/tests.py::TestRabidAttackAbilities::test_pump_effect"}
+{"collector_number": "sos_96", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ah520qok/tests.py::TestRabidAttackInteractions::test_get_targets_finds_own_creatures"}

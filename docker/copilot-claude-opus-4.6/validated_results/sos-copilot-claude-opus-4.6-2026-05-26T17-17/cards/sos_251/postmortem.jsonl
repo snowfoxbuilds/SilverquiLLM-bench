@@ -1,0 +1,2 @@
+{"collector_number": "sos_251", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_arcdjn0c/tests.py::TestPotionersTroveBasicProperties::test_colors"}
+{"collector_number": "sos_251", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_arcdjn0c/tests.py::TestPotionersTroveAbilities::test_gains_life"}

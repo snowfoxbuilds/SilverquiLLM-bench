@@ -1,0 +1,6 @@
+{"collector_number": "sos_7", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4wisw5du/tests.py::TestAntiquitiesOnTheLooseBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_7", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4wisw5du/tests.py::TestAntiquitiesOnTheLooseBasicProperties::test_colors"}
+{"collector_number": "sos_7", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4wisw5du/tests.py::TestAntiquitiesOnTheLooseAbilities::test_resolution_exiles_target"}
+{"collector_number": "sos_7", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4wisw5du/tests.py::TestAntiquitiesOnTheLooseEdgeCases::test_resolution_with_empty_board"}
+{"collector_number": "sos_7", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4wisw5du/tests.py::TestAntiquitiesOnTheLooseInteractions::test_spell_to_graveyard_after_resolution"}
+{"collector_number": "sos_7", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4wisw5du/tests.py::TestAntiquitiesOnTheLooseInteractions::test_tokens_appear_on_battlefield"}

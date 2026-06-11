@@ -1,0 +1,7 @@
+{"collector_number": "sos_44", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h9jvo_lx/tests.py::TestEchocastingSymposiumBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_44", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h9jvo_lx/tests.py::TestEchocastingSymposiumBasicProperties::test_colors"}
+{"collector_number": "sos_44", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h9jvo_lx/tests.py::TestEchocastingSymposiumAbilities::test_resolution_exiles_target"}
+{"collector_number": "sos_44", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h9jvo_lx/tests.py::TestEchocastingSymposiumEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_44", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h9jvo_lx/tests.py::TestEchocastingSymposiumInteractions::test_targets_valid_objects"}
+{"collector_number": "sos_44", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h9jvo_lx/tests.py::TestEchocastingSymposiumInteractions::test_spell_to_graveyard_after_resolution"}
+{"collector_number": "sos_44", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h9jvo_lx/tests.py::TestEchocastingSymposiumInteractions::test_tokens_appear_on_battlefield"}

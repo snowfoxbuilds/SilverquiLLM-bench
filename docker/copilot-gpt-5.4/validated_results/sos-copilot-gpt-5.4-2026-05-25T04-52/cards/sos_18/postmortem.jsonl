@@ -1,0 +1,8 @@
+{"collector_number": "sos_18", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qd6wz8_0/tests.py::TestHarshAnnotationBasicProperties::test_is_instant"}
+{"collector_number": "sos_18", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qd6wz8_0/tests.py::TestHarshAnnotationBasicProperties::test_colors"}
+{"collector_number": "sos_18", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qd6wz8_0/tests.py::TestHarshAnnotationAbilities::test_destroys_target_creature"}
+{"collector_number": "sos_18", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qd6wz8_0/tests.py::TestHarshAnnotationAbilities::test_token_for_destroyed_creatures_controller"}
+{"collector_number": "sos_18", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qd6wz8_0/tests.py::TestHarshAnnotationAbilities::test_creates_token"}
+{"collector_number": "sos_18", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qd6wz8_0/tests.py::TestHarshAnnotationEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_18", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qd6wz8_0/tests.py::TestHarshAnnotationInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_18", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qd6wz8_0/tests.py::TestHarshAnnotationInteractions::test_does_not_affect_non_targets"}

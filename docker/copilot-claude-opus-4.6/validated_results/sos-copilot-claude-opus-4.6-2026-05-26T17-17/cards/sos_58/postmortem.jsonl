@@ -1,0 +1,2 @@
+{"collector_number": "sos_58", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3wzwnkfg/tests.py::TestMathemagicsBasicProperties::test_colors"}
+{"collector_number": "sos_58", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3wzwnkfg/tests.py::TestMathemagicsAbilities::test_draws_cards"}

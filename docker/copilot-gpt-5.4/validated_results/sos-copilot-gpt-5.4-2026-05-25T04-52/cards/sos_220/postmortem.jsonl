@@ -1,0 +1,9 @@
+{"collector_number": "sos_220", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5rveifyc/tests.py::TestRenderSpeechlessBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_220", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5rveifyc/tests.py::TestRenderSpeechlessBasicProperties::test_card_types"}
+{"collector_number": "sos_220", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5rveifyc/tests.py::TestRenderSpeechlessBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_220", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5rveifyc/tests.py::TestRenderSpeechlessBasicProperties::test_colors"}
+{"collector_number": "sos_220", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5rveifyc/tests.py::TestRenderSpeechlessAbilities::test_adds_plus_counter"}
+{"collector_number": "sos_220", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5rveifyc/tests.py::TestRenderSpeechlessAbilities::test_causes_discard"}
+{"collector_number": "sos_220", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5rveifyc/tests.py::TestRenderSpeechlessEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_220", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5rveifyc/tests.py::TestRenderSpeechlessInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_220", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5rveifyc/tests.py::TestRenderSpeechlessInteractions::test_does_not_affect_non_targets"}

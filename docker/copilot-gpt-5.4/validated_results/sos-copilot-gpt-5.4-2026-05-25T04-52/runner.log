@@ -1,0 +1,10 @@
+2026-05-25T04:52:47+00:00 Starting run: sos-copilot-gpt-5.4-2026-05-25T04-52
+2026-05-25T04:52:47+00:00 Image: silverquillm-copilot-gpt-5.4:latest
+2026-05-25T04:52:47+00:00 Timeout: 360000s
+2026-05-25T04:52:47+00:00 Workspace staged at: /tmp/silverquillm_run_imhr8630/workspace
+2026-05-25T04:52:47+00:00 Running container: sqm-sos-copilot-gpt-5.4-2026-05-25T04-52
+2026-05-25T18:35:05+00:00 Harvesting results...
+2026-05-25T18:35:05+00:00 Results saved to: /home/sean/repos/SilverquiLLM-bench/docker/copilot-gpt-5.4/results/sos-copilot-gpt-5.4-2026-05-25T04-52
+2026-05-25T18:36:39+00:00 Evaluation complete: 271 SOS cards scored
+2026-05-25T18:36:39+00:00 Run summary written to: /home/sean/repos/SilverquiLLM-bench/docker/copilot-gpt-5.4/results/sos-copilot-gpt-5.4-2026-05-25T04-52/run_summary.json
+2026-05-25T18:36:39+00:00 Run complete: sos-copilot-gpt-5.4-2026-05-25T04-52

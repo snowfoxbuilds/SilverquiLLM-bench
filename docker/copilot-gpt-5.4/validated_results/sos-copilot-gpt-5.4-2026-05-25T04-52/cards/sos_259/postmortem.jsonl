@@ -1,0 +1,6 @@
+{"collector_number": "sos_259", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9su0vk9x/tests.py::TestPetrifiedHamletBasicProperties::test_is_land"}
+{"collector_number": "sos_259", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9su0vk9x/tests.py::TestPetrifiedHamletBasicProperties::test_card_types"}
+{"collector_number": "sos_259", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9su0vk9x/tests.py::TestPetrifiedHamletBasicProperties::test_colorless"}
+{"collector_number": "sos_259", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9su0vk9x/tests.py::TestPetrifiedHamletEdgeCases::test_resolution_with_empty_board"}
+{"collector_number": "sos_259", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9su0vk9x/tests.py::TestPetrifiedHamletInteractions::test_spell_to_graveyard_after_resolution"}
+{"collector_number": "sos_259", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9su0vk9x/tests.py::TestPetrifiedHamletInteractions::test_coexists_with_other_permanents"}

@@ -1,0 +1,2 @@
+{"collector_number": "sos_133", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bdof8rmn/tests.py::TestTackleArtistBasicProperties::test_colors"}
+{"collector_number": "sos_133", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bdof8rmn/tests.py::TestTackleArtistInteractions::test_counters_survive_end_of_turn"}

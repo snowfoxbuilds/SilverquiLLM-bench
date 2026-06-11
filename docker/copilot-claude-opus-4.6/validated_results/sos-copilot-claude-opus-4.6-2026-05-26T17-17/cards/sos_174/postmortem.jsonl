@@ -1,0 +1,3 @@
+{"collector_number": "sos_174", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_r89f427_/tests.py::TestAzizaMageTowerCaptainBasicProperties::test_colors"}
+{"collector_number": "sos_174", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_r89f427_/tests.py::TestAzizaMageTowerCaptainAbilities::test_on_resolve_changes_state"}
+{"collector_number": "sos_174", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_r89f427_/tests.py::TestAzizaMageTowerCaptainInteractions::test_get_targets_finds_own_creatures"}

@@ -1,0 +1,6 @@
+{"collector_number": "sos_206", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9e19wrcm/tests.py::TestNitaForumConciliatorBasicProperties::test_is_creature"}
+{"collector_number": "sos_206", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9e19wrcm/tests.py::TestNitaForumConciliatorBasicProperties::test_colors"}
+{"collector_number": "sos_206", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9e19wrcm/tests.py::TestNitaForumConciliatorEdgeCases::test_fizzle_no_targets_creature_stays"}
+{"collector_number": "sos_206", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9e19wrcm/tests.py::TestNitaForumConciliatorInteractions::test_exile_from_graveyard_interaction"}
+{"collector_number": "sos_206", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9e19wrcm/tests.py::TestNitaForumConciliatorInteractions::test_counters_survive_end_of_turn"}
+{"collector_number": "sos_206", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9e19wrcm/tests.py::TestNitaForumConciliatorInteractions::test_combat_with_opponent"}

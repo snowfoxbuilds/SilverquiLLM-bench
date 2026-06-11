@@ -1,0 +1,2 @@
+{"collector_number": "sos_266", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tyortyet/tests.py::TestTitansGraveBasicProperties::test_colorless"}
+{"collector_number": "sos_266", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tyortyet/tests.py::TestTitansGraveInteractions::test_spell_to_graveyard_after_resolution"}

@@ -1,0 +1,8 @@
+{"collector_number": "sos_101", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_k07drymj/tests.py::TestSneeringShadewriterBasicProperties::test_is_creature"}
+{"collector_number": "sos_101", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_k07drymj/tests.py::TestSneeringShadewriterBasicProperties::test_colors"}
+{"collector_number": "sos_101", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_k07drymj/tests.py::TestSneeringShadewriterBasicProperties::test_has_flying_keyword"}
+{"collector_number": "sos_101", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_k07drymj/tests.py::TestSneeringShadewriterAbilities::test_gains_life"}
+{"collector_number": "sos_101", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_k07drymj/tests.py::TestSneeringShadewriterAbilities::test_causes_life_loss"}
+{"collector_number": "sos_101", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_k07drymj/tests.py::TestSneeringShadewriterEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_101", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_k07drymj/tests.py::TestSneeringShadewriterInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_101", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_k07drymj/tests.py::TestSneeringShadewriterInteractions::test_coexists_with_other_creatures"}
