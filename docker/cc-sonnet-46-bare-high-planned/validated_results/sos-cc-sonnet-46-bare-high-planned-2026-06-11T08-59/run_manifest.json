@@ -1,0 +1,18 @@
+{
+  "timeout_seconds": 360000,
+  "deadline_utc": "2026-06-15T12:59:43Z",
+  "docker_image": "silverquillm-cc-sonnet-46-bare-high-planned:latest",
+  "card_filter": [
+    "1",
+    "4",
+    "13",
+    "57",
+    "97",
+    "120",
+    "201",
+    "226",
+    "245",
+    "257"
+  ],
+  "benchmark_set": "sos"
+}

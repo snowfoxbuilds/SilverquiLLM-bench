@@ -1,0 +1,21 @@
+2026-06-11T06:47:38+00:00 Starting run: sos-cc-sonnet-46-bare-high-planned-2026-06-11T06-47-ad2b
+2026-06-11T06:47:38+00:00 Image: silverquillm-cc-sonnet-46-bare-high-planned:latest
+2026-06-11T06:47:38+00:00 Timeout: 360000s
+2026-06-11T06:47:38+00:00 Workspace staged at: /tmp/silverquillm_run_16k655g5/workspace
+2026-06-11T06:47:39+00:00 Running container: sqm-sos-cc-sonnet-46-bare-high-planned-2026-06-11T06-47-ad2b
+2026-06-11T07:48:40+00:00 Harvesting results...
+2026-06-11T07:48:41+00:00 Results saved to: /mnt/bench/SilverquiLLM-bench/docker/cc-sonnet-46-bare-high-planned/results/sos-cc-sonnet-46-bare-high-planned-2026-06-11T06-47-ad2b
+2026-06-11T07:48:41+00:00 Token usage:
+Agent  Model              Msgs  Input  Cache rd    Cache wr  Output
+-----  -----------------  ----  -----  ----------  --------  ------
+main   claude-sonnet-4-6  550   558    53,139,889  898,099   15,687
+-----  -----------------  ----  -----  ----------  --------  ------
+TOTAL                     550   558    53,139,889  898,099   15,687
+
+Cost (USD) by model — summed across agent sessions:
+  claude-haiku-4-5-20251001           $0.0005
+  claude-sonnet-4-6                   $13.5872
+  TOTAL                               $13.5878
+2026-06-11T07:49:54+00:00 Evaluation complete: 10 SOS cards scored
+2026-06-11T07:49:54+00:00 Run summary written to: /mnt/bench/SilverquiLLM-bench/docker/cc-sonnet-46-bare-high-planned/results/sos-cc-sonnet-46-bare-high-planned-2026-06-11T06-47-ad2b/run_summary.json
+2026-06-11T07:49:54+00:00 Run complete: sos-cc-sonnet-46-bare-high-planned-2026-06-11T06-47-ad2b

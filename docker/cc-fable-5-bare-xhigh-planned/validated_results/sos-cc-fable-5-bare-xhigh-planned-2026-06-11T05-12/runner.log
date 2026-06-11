@@ -1,0 +1,21 @@
+2026-06-11T05:12:23+00:00 Starting run: sos-cc-fable-5-bare-xhigh-planned-2026-06-11T05-12
+2026-06-11T05:12:23+00:00 Image: silverquillm-cc-fable-5-bare-xhigh-planned:latest
+2026-06-11T05:12:23+00:00 Timeout: 360000s
+2026-06-11T05:12:23+00:00 Workspace staged at: /tmp/silverquillm_run_i9pb5ftm/workspace
+2026-06-11T05:12:23+00:00 Running container: sqm-sos-cc-fable-5-bare-xhigh-planned-2026-06-11T05-12
+2026-06-11T06:03:29+00:00 Harvesting results...
+2026-06-11T06:03:30+00:00 Results saved to: /mnt/bench/SilverquiLLM-bench/docker/cc-fable-5-bare-xhigh-planned/results/sos-cc-fable-5-bare-xhigh-planned-2026-06-11T05-12
+2026-06-11T06:03:30+00:00 Token usage:
+Agent  Model           Msgs  Input   Cache rd    Cache wr  Output
+-----  --------------  ----  ------  ----------  --------  ------
+main   claude-fable-5  332   13,376  68,464,494  691,907   6,819 
+-----  --------------  ----  ------  ----------  --------  ------
+TOTAL                  332   13,376  68,464,494  691,907   6,819 
+
+Cost (USD) by model — summed across agent sessions:
+  claude-fable-5                      $51.9422
+  claude-haiku-4-5-20251001           $0.0005
+  TOTAL                               $51.9428
+2026-06-11T06:04:42+00:00 Evaluation complete: 10 SOS cards scored
+2026-06-11T06:04:42+00:00 Run summary written to: /mnt/bench/SilverquiLLM-bench/docker/cc-fable-5-bare-xhigh-planned/results/sos-cc-fable-5-bare-xhigh-planned-2026-06-11T05-12/run_summary.json
+2026-06-11T06:04:42+00:00 Run complete: sos-cc-fable-5-bare-xhigh-planned-2026-06-11T05-12
