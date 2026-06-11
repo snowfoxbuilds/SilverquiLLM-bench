@@ -2,17 +2,22 @@
 
 ## Task
 
-You are implementing SOS card implementations. Each card's implementation class
+You are implementing MSH card implementations. Each card's implementation class
 must be placed in its assigned file:
 
 ```
-cards/sos/{card_id}/card_impl.py
+cards/msh/{card_id}/card_impl.py
 ```
+
+Card choices go through the **Player Query / Player Decision** protocol: an
+implementation that needs a choice raises a Player Query through the engine's
+query machinery (it never calls a player `choose_*` method — there is none).
+Tests answer those queries with **Intents** (see `test_utils.md`).
 
 ## Hard Rules
 
 1. **Card location invariant** — Each card's canonical implementation class must
-   remain in `cards/sos/{card_id}/card_impl.py`. Do not move or rename card
+   remain in `cards/msh/{card_id}/card_impl.py`. Do not move or rename card
    directories.
 
 2. **Staged-test integrity** — Treat `engine_tests/` as read-only: do not
@@ -22,7 +27,7 @@ cards/sos/{card_id}/card_impl.py
    verification and learning only; the runner uses its own authoritative copies
    for grading. Editing them — including adding new files — will not change
    your score, it will only mislead you about whether your engine changes are
-   correct. Your own SOS tests belong at `cards/sos/sos_<N>/tests.py`.
+   correct. Your own MSH tests belong at `cards/msh/msh_<N>/tests.py`.
 
 3. **Additive-only engine modifications** — You may add new methods, classes,
    helpers, and files inside `engine/`. You may modify the bodies of existing
@@ -46,7 +51,7 @@ This discovers:
 - Per-card FDN reference tests at `cards/fdn/fdn_{collector_number}/tests.py`.
   Only a handful of FDN cards ship with a `tests.py` — see `PROJECT_MAP.md`
   for the canonical list, and use them as illustrative per-card test examples.
-- Per-card SOS tests you write at `cards/sos/sos_{collector_number}/tests.py`.
+- Per-card MSH tests you write at `cards/msh/msh_{collector_number}/tests.py`.
 
 The workspace `pytest.ini` configures `python_files = test_*.py tests.py` for
 discovery of all three patterns and sets a per-test timeout (5 minutes).
@@ -54,10 +59,12 @@ discovery of all three patterns and sets a per-test timeout (5 minutes).
 Standard imports inside per-card tests:
 
 ```python
-from cards.sos.sos_<N>.card_impl import <ClassName>
+from cards.msh.msh_<N>.card_impl import <ClassName>
 from engine.card import Creature, Instant                  # or whichever base
 from engine.types import CardType, Keyword, ManaCost, ManaType, Zone
-from test_utils import create_game, set_board_state
+from engine.intent_player import Intent
+from engine.decisions import Decision, GameRef, DecisionKind
+from test_utils import create_game, set_board_state, put_on_battlefield, cast_spell
 ```
 
 ## Engine Extension Scope
