@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.types import Keyword, ManaCost, Zone
 
 if TYPE_CHECKING:
@@ -59,11 +60,7 @@ class GutlessPlunderer(Creature):
             return
 
         # Choose one to keep on top (optional)
-        try:
-            chosen = controller.choose_card(top_three, "card to keep on top of library")
-        except Exception:
-            chosen = top_three[0] if top_three else None
-
+        chosen = choose_object(game, controller, top_three, "card to keep on top of library", source_card=self, optional=True)
         # Move the rest to graveyard
         for card in top_three:
             if card is chosen:

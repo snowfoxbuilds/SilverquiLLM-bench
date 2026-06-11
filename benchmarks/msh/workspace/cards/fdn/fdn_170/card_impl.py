@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import ArtifactCreature, Creature
+from engine.card_queries import choose_object
 from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
 from engine.types import CardType, Keyword, ManaCost, Zone
 from engine.events import EntersBattlefieldTriggeredEvent
@@ -48,10 +49,7 @@ class BurglarRat(Creature):
                 hand = game.get_hand(player)
                 hand_cards = hand.get_all()
                 if hand_cards:
-                    try:
-                        to_discard = player.choose_card(hand_cards)
-                    except Exception:
-                        to_discard = hand_cards[-1]
+                    to_discard = choose_object(game, player, hand_cards, 'card to discard', source_card=source)
                     discard(game, player, to_discard)
         controller = getattr(self, 'controller', None) or game.active_player
         game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller))

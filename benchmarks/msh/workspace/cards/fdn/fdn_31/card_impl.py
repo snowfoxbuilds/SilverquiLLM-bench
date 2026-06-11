@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.types import ManaCost, Zone
 
 if TYPE_CHECKING:
@@ -51,7 +52,7 @@ class BigfinBouncer(Creature):
         if not targets:
             return []
         # Controller chooses one target
-        chosen = controller.choose_target(targets, "creature an opponent controls") if hasattr(controller, "choose_target") else targets[0]
+        chosen = choose_object(game, controller, targets, "creature an opponent controls", source_card=self)
         return [chosen] if chosen else []
 
     def on_resolve(self, game: "GameState") -> None:

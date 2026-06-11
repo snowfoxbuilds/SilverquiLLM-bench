@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import choose_mode, choose_object
 from engine.types import CardType, Keyword, ManaCost, Zone
 from engine.events import EndStepTriggeredEvent, SpellCastTriggeredEvent
 if TYPE_CHECKING:
@@ -59,17 +60,11 @@ class KykarZephyrAwakener(Creature):
             candidates = [c for c in bf.get_all() if CardType.CREATURE in getattr(c, 'card_types', set()) and c is not source]
             mode_choice = None
             if candidates:
-                try:
-                    mode_choice = ctrl.choose(['flicker', 'token'], 'Choose mode for Kykar trigger')
-                except Exception:
-                    mode_choice = 'token'
+                mode_choice = choose_mode(game, ctrl, ['flicker', 'token'], 'Choose mode for Kykar trigger', source_card=source)
             else:
                 mode_choice = 'token'
             if mode_choice == 'flicker' and candidates:
-                try:
-                    chosen = ctrl.choose_card(candidates, 'creature to exile and return at end step')
-                except Exception:
-                    chosen = candidates[0]
+                chosen = choose_object(game, ctrl, candidates, 'creature to exile and return at end step', source_card=source)
                 if chosen is not None:
                     move_to_zone(game, chosen, Zone.BATTLEFIELD, Zone.EXILE)
                     _exiled_card = chosen

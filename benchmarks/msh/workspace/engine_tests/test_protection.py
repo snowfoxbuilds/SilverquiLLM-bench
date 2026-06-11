@@ -21,7 +21,7 @@ import pytest
 from engine.card import Aura, Creature, Instant, Sorcery
 from engine.game import deal_damage
 from engine.game_state import GameState
-from engine.player import DeterministicPlayer as Player
+from engine.intent_player import DeterministicPlayer as Player
 from engine.protection import (
     ProtectionAbility,
     get_colors,
@@ -44,8 +44,8 @@ from engine.types import Color, ManaCost, ManaType, Zone
 @pytest.fixture()
 def two_player_game():
     """Create a minimal two-player game state."""
-    p1 = Player("Alice", [])
-    p2 = Player("Bob", [])
+    p1 = Player("Alice")
+    p2 = Player("Bob")
     game = GameState([p1, p2])
     return game, p1, p2
 

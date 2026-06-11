@@ -142,32 +142,13 @@ def _handle_priority(game: GameState, player: Player) -> bool:
     Returns ``True`` if the player passed priority, ``False`` if they
     took an action (in which case the priority loop restarts).
 
-    When the stack is non-empty, the player is always asked via
-    :meth:`Player.choose` so they can respond.  When the stack is empty
-    and no legal actions exist, the player auto-passes.
+    Priority is *action-layer* and directive-driven: the engine never elicits a
+    proactive priority action from the player through a Player Query. Spells and
+    abilities are cast/activated imperatively (by a test or the replay
+    executor), not via a priority choice, so the player simply passes priority
+    here. Only the *choice* layer (targets, modes, ordering, …) is query-driven.
     """
-    actions = _get_legal_actions(game, player)
-
-    # Auto-pass when there is nothing to respond to and no actions.
-    if not actions and game.stack.is_empty():
-        return True
-
-    options = actions + ["pass"]
-    choice = player.choose(options, "priority: choose action or pass")
-
-    if choice == "pass":
-        return True
-
-    # Mana abilities resolve immediately without using the stack.
-    if isinstance(choice, StackObject) and choice.is_mana_ability:
-        choice.on_resolve(game)
-        return False
-
-    # Regular spell / ability — push onto the stack.
-    if isinstance(choice, StackObject):
-        game.stack.push(choice)
-
-    return False
+    return True
 
 
 def priority_loop(game: GameState) -> None:
@@ -191,9 +172,12 @@ def priority_loop(game: GameState) -> None:
     :pyattr:`GameState.priority_player` always reflects who currently
     holds priority.
 
-    Player decisions come from :meth:`Player.choose`.  When no legal
-    actions exist and the stack is empty, the player auto-passes without
-    being asked.
+    Priority is action-layer and directive-driven: the engine never
+    elicits a proactive priority action via a Player Query — the player
+    simply passes priority here (see :func:`_handle_priority`). Spells
+    and abilities are cast/activated imperatively by callers (tests or a
+    replay executor), and the *choice* layer (targets, modes, ordering,
+    …) is the only query-driven surface.
     """
     while True:
         # Active player receives priority at the start of each

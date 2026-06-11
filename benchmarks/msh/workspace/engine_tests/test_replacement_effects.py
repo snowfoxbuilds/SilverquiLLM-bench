@@ -21,8 +21,9 @@ from dataclasses import dataclass
 from typing import Any
 import pytest
 from engine.card import CardImpl, Creature
+from engine.decisions import Decision, GameRef
 from engine.game_state import GameState
-from engine.player import DeterministicPlayer
+from engine.intent_player import DeterministicPlayer, Intent
 from engine.replacement_effects import ReplacementEffect, ReplacementManager
 from engine.types import CardType, Zone
 from engine.events import AddCounterReplacementEvent, CreateTokenReplacementEvent, CreatureDiesReplacementEvent, MoveToGraveyardReplacementEvent, ReplacementEvent
@@ -46,8 +47,18 @@ class _XEvent(ReplacementEvent):
 
 @pytest.fixture()
 def players() -> list[DeterministicPlayer]:
-    """Create two DeterministicPlayers."""
-    return [DeterministicPlayer('Alice', script=[]), DeterministicPlayer('Bob', script=[])]
+    """Create two DeterministicPlayers, each with a Baseline Intent.
+
+    The replacement-order Player Query (raised when 2+ effects match) is a
+    system-level query with an empty source: it is answered by the player's
+    Baseline Intent, which (with empty preferences) picks the first offered
+    option (``index 0``).
+    """
+    p1 = DeterministicPlayer('Alice')
+    p2 = DeterministicPlayer('Bob')
+    for p in (p1, p2):
+        p.set_baseline(Intent(pattern=GameRef()))
+    return [p1, p2]
 
 @pytest.fixture()
 def game(players: list[DeterministicPlayer]) -> GameState:
@@ -73,7 +84,7 @@ class TestReplacementEffectDataclass:
     def test_construction_with_all_fields(self) -> None:
         """ReplacementEffect should store event_type, source, condition, replacement, controller."""
         source = object()
-        controller = DeterministicPlayer('Alice', script=[])
+        controller = DeterministicPlayer('Alice')
         condition = lambda g, e: True
         replacement = lambda g, e: e
         effect = ReplacementEffect(event_type=CreatureDiesReplacementEvent, source=source, condition=condition, replacement=replacement, controller=controller)
@@ -281,17 +292,19 @@ class TestMultipleReplacements:
         manager.register(ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=repl_a))
         manager.register(ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=repl_b))
         alice = game.players[0]
-        alice._script.extend([None])
-        effects = manager.get_effects()
-        alice._script.clear()
-        alice._script.append(effects[0])
         result = manager.apply(game, _XEvent(player=alice, a=False, b=False))
         assert result.a is True
         assert result.b is True
         assert len(applied_order) == 2
 
     def test_player_chooses_order_when_multiple_match(self, game: GameState, manager: ReplacementManager) -> None:
-        """When multiple replacements match, the affected player chooses the order."""
+        """When multiple replacements match, the affected player chooses the order.
+
+        The replacement-order query offers one ABILITY decision per matching
+        effect, carrying an ``index`` into the (registration-ordered) matching
+        list. The affected player's Baseline Intent picks the order: here Alice
+        prefers ``index 1`` first, so ``repl_second`` applies before ``repl_first``.
+        """
         applied_order: list[str] = []
 
         def repl_first(g: Any, event: dict[str, Any]) -> dict[str, Any]:
@@ -308,8 +321,12 @@ class TestMultipleReplacements:
         manager.register(eff1)
         manager.register(eff2)
         alice = game.players[0]
-        alice._script.clear()
-        alice._script.append(eff2)
+        # Force a specific pick order via the Baseline Intent: prefer index 1
+        # (eff2 / 'second') first, then index 0 fills to reach min.
+        alice.set_baseline(Intent(
+            pattern=GameRef(),
+            preferences=(Decision.ability(index=1), Decision.ability(index=0)),
+        ))
         result = manager.apply(game, _XEvent(player=alice))
         assert applied_order == ['second', 'first']
 
@@ -344,8 +361,6 @@ class TestSelfReplacementPrevention:
         manager.register(eff_a)
         manager.register(eff_b)
         alice = game.players[0]
-        alice._script.clear()
-        alice._script.append(eff_a)
         manager.apply(game, _XEvent(player=alice))
         assert counts['a'] == 1
         assert counts['b'] == 1
@@ -511,41 +526,66 @@ class TestAffectedPlayerDetermination:
     """When multiple replacements match, affected player is determined from event_data."""
 
     def test_affected_player_from_event_data_player_key(self, game: GameState, manager: ReplacementManager) -> None:
-        """If event_data has 'player' key, that player chooses order."""
+        """If event_data has 'player' key, that player chooses order.
+
+        Alice's Baseline Intent prefers ``index 1`` first, so the resulting order
+        (``['B', 'A']``) proves the event's ``player`` (Alice) answered the query.
+        """
         applied_order: list[str] = []
         eff_a = ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=lambda g, event: (applied_order.append('A'), event)[1])
         eff_b = ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=lambda g, event: (applied_order.append('B'), event)[1])
         manager.register(eff_a)
         manager.register(eff_b)
         alice = game.players[0]
-        alice._script.clear()
-        alice._script.append(eff_b)
+        alice.set_baseline(Intent(
+            pattern=GameRef(),
+            preferences=(Decision.ability(index=1), Decision.ability(index=0)),
+        ))
         manager.apply(game, _XEvent(player=alice))
         assert applied_order == ['B', 'A']
 
     def test_affected_player_from_event_data_controller_key(self, game: GameState, manager: ReplacementManager) -> None:
-        """If event_data has 'controller' key (no 'player'), that controller chooses."""
+        """If event_data has 'controller' key (no 'player'), that controller chooses.
+
+        Bob's Baseline Intent prefers ``index 0`` first while Alice's prefers
+        ``index 1``; the resulting order (``['A', 'B']``) proves the event's
+        ``controller`` (Bob) — not Alice — answered the query.
+        """
         applied_order: list[str] = []
         eff_a = ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=lambda g, event: (applied_order.append('A'), event)[1])
         eff_b = ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=lambda g, event: (applied_order.append('B'), event)[1])
         manager.register(eff_a)
         manager.register(eff_b)
+        alice = game.players[0]
         bob = game.players[1]
-        bob._script.clear()
-        bob._script.append(eff_a)
+        alice.set_baseline(Intent(
+            pattern=GameRef(),
+            preferences=(Decision.ability(index=1), Decision.ability(index=0)),
+        ))
+        bob.set_baseline(Intent(
+            pattern=GameRef(),
+            preferences=(Decision.ability(index=0), Decision.ability(index=1)),
+        ))
         manager.apply(game, _XEvent(controller=bob))
         assert applied_order == ['A', 'B']
 
     def test_affected_player_falls_back_to_active_player(self, game: GameState, manager: ReplacementManager) -> None:
-        """If event_data has neither 'player' nor 'controller', active player chooses."""
+        """If event_data has neither 'player' nor 'controller', active player chooses.
+
+        The active player's Baseline Intent prefers ``index 1`` first; the
+        resulting order (``['B', 'A']``) proves the active player answered the
+        fallback query.
+        """
         applied_order: list[str] = []
         eff_a = ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=lambda g, event: (applied_order.append('A'), event)[1])
         eff_b = ReplacementEffect(event_type=_XEvent, source=object(), condition=None, replacement=lambda g, event: (applied_order.append('B'), event)[1])
         manager.register(eff_a)
         manager.register(eff_b)
         active = game.active_player
-        active._script.clear()
-        active._script.append(eff_b)
+        active.set_baseline(Intent(
+            pattern=GameRef(),
+            preferences=(Decision.ability(index=1), Decision.ability(index=0)),
+        ))
         manager.apply(game, _XEvent(value=42))
         assert applied_order == ['B', 'A']
 

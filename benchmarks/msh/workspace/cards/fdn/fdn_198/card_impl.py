@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import query_yes_no
 from engine.types import CardType, Keyword, ManaCost, Zone
 from engine.events import BeginningOfCombatTriggeredEvent
 if TYPE_CHECKING:
@@ -56,15 +57,10 @@ class FlamewakePhoenix(Creature):
             ctrl = getattr(source, 'controller', None) or getattr(source, 'owner', None)
             if ctrl is None:
                 return
-            try:
-                if not ctrl.choose_yes_no('Pay {R} to return Flamewake Phoenix from graveyard?'):
-                    return
-            except Exception:
+            if not query_yes_no(game, ctrl, 'Pay {R} to return Flamewake Phoenix from graveyard?', source_card=source):
                 return
-            try:
-                ctrl.mana_pool.pay(ManaCost.parse('{R}'))
-            except Exception:
-                return
+            if not ctrl.mana_pool.pay(ManaCost.parse('{R}')):
+                return  # insufficient mana -- pay() returns False, never raises
             move_to_zone(game, source, Zone.GRAVEYARD, Zone.BATTLEFIELD)
             source.controller = ctrl
         game.trigger_manager.register(TriggerRegistration(event_type=BeginningOfCombatTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

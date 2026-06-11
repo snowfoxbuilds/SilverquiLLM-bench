@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import choose_mode
 from engine.types import ManaCost
 from engine.events import EndStepTriggeredEvent, GainsLifeTriggeredEvent
 if TYPE_CHECKING:
@@ -46,10 +47,7 @@ class WardensOfTheCycle(Creature):
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return
-            try:
-                mode = ctrl.choose(['gain_life', 'draw_card'], 'Choose: gain 2 life or draw a card and lose 1 life')
-            except Exception:
-                mode = 'gain_life'
+            mode = choose_mode(game, ctrl, ['gain_life', 'draw_card'], 'Choose: gain 2 life or draw a card and lose 1 life', source_card=source)
             if mode == 'draw_card':
                 draw_card(game, ctrl)
                 ctrl.life -= 1

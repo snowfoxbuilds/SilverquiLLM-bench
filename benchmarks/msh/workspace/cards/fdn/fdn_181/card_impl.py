@@ -3,6 +3,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Instant, Sorcery
+from engine.card_queries import choose_object
 from engine.continuous_effects import (
     ContinuousEffect,
     DURATION_END_OF_TURN,
@@ -77,6 +78,6 @@ class Pilfer(Sorcery):
         if not nonland_cards:
             return
 
-        chosen = controller.choose_card(nonland_cards, "Choose a nonland card to discard")
+        chosen = choose_object(game, controller, nonland_cards, "Choose a nonland card to discard", source_card=self)
         if chosen is not None:
             discard(game, target, chosen)

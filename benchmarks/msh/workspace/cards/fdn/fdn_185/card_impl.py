@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.types import ManaCost
 from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
@@ -58,10 +59,7 @@ class StromkirkBloodthief(Creature):
                         vampires.append(perm)
             if not vampires:
                 return
-            try:
-                target = ctrl.choose_card(vampires, 'Choose a Vampire to put a +1/+1 counter on')
-            except Exception:
-                target = vampires[0]
+            target = choose_object(game, ctrl, vampires, 'Choose a Vampire to put a +1/+1 counter on', source_card=source)
             if target is not None:
                 add_counter(game, target, '+1/+1', 1)
                 if hasattr(target, '_base_plus_one_counters'):

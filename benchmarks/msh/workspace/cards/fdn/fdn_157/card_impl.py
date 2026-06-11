@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
+from engine.card_queries import query_yes_no
 from engine.types import Keyword, ManaCost, Zone
 
 if TYPE_CHECKING:
@@ -43,8 +44,11 @@ class LightshellDuo(Creature):
             return
         top_cards = cards[-min(2, len(cards)):]
         for card in reversed(top_cards):
-            put_in_gy = controller.choose_yes_no(
-                f"Surveil: Put {getattr(card, 'name', 'card')} into your graveyard?"
+            put_in_gy = query_yes_no(
+                game,
+                controller,
+                f"Surveil: Put {getattr(card, 'name', 'card')} into your graveyard?",
+                source_card=self,
             )
             if put_in_gy:
                 library.remove(card)

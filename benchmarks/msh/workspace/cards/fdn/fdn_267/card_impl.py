@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Land, ManaAbility
+from engine.card_queries import choose_color, choose_mode
 from engine.types import ManaCost, ManaType
 
 if TYPE_CHECKING:
@@ -55,9 +56,12 @@ class SecludedCourtyard(Land):
                 "Cleric", "Shaman", "Druid", "Spirit", "Demon",
                 "Bird", "Cat", "Dog", "Dinosaur", "Sliver",
             ]
-            choice = controller.choose(
+            choice = choose_mode(
+                game,
+                controller,
                 creature_types,
                 "Choose a creature type for Secluded Courtyard",
+                source_card=self,
             )
             self.chosen_creature_type = choice
 
@@ -87,10 +91,15 @@ class SecludedCourtyard(Land):
                     ManaType.WHITE, ManaType.BLUE, ManaType.BLACK,
                     ManaType.RED, ManaType.GREEN,
                 ]
-                chosen_color = controller.choose(
-                    color_options,
+                _by_letter = {c.value: c for c in color_options}
+                chosen_letter = choose_color(
+                    game,
+                    controller,
                     "Choose a color of mana to produce",
+                    colors=tuple(_by_letter),
+                    source_card=source,
                 )
+                chosen_color = _by_letter[chosen_letter]
                 controller.mana_pool.add(chosen_color, 1)
 
         return [

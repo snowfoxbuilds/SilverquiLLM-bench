@@ -17,17 +17,17 @@ from __future__ import annotations
 import pytest
 
 from engine.game_state import GameState
-from engine.player import DeterministicPlayer
+from engine.intent_player import DeterministicPlayer
 from engine.stack import Stack, StackObject, check_state_based_actions, priority_loop
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def _make_game(p1_script: list | None = None, p2_script: list | None = None) -> GameState:
-    """Create a 2-player GameState with optional scripts for DeterministicPlayers."""
-    p1 = DeterministicPlayer("Alice", p1_script or [])
-    p2 = DeterministicPlayer("Bob", p2_script or [])
+def _make_game() -> GameState:
+    """Create a 2-player GameState with intent-based DeterministicPlayers."""
+    p1 = DeterministicPlayer("Alice", life=20)
+    p2 = DeterministicPlayer("Bob", life=20)
     return GameState([p1, p2])
 
 
@@ -234,18 +234,10 @@ class TestPriorityLoopEmptyStack:
     """priority_loop should return immediately when both players auto-pass with empty stack."""
 
     def test_returns_immediately_with_empty_stack(self) -> None:
-        """With empty stack and empty scripts, priority_loop returns immediately (advances phase)."""
+        """With an empty stack, priority_loop returns immediately (advances phase)."""
         game = _make_game()
         priority_loop(game)  # Should not raise or loop forever
         assert game.stack.is_empty()
-
-    def test_does_not_consume_player_choices(self) -> None:
-        """With empty stack, auto-pass means choose() is never called — scripts untouched."""
-        game = _make_game(p1_script=["pass"], p2_script=["pass"])
-        priority_loop(game)
-        # Scripts should be untouched — choose() was never called
-        assert game.players[0].remaining_choices == 1
-        assert game.players[1].remaining_choices == 1
 
 
 # ===========================================================================
@@ -257,7 +249,7 @@ class TestPriorityLoopResolution:
     def test_single_object_resolved(self) -> None:
         """A single object on the stack should have its on_resolve called."""
         resolved: list[str] = []
-        game = _make_game(p1_script=["pass"], p2_script=["pass"])
+        game = _make_game()
         game.stack.push(
             StackObject(
                 source="A",
@@ -271,7 +263,7 @@ class TestPriorityLoopResolution:
     def test_two_objects_lifo_order(self) -> None:
         """Two objects should resolve in LIFO order (last pushed = first resolved)."""
         resolved: list[str] = []
-        game = _make_game(p1_script=["pass", "pass"], p2_script=["pass", "pass"])
+        game = _make_game()
         game.stack.push(
             StackObject(source="A", controller=game.active_player, on_resolve=_make_resolver("A", resolved))
         )
@@ -284,7 +276,7 @@ class TestPriorityLoopResolution:
     def test_three_objects_lifo_order(self) -> None:
         """Three objects should resolve in LIFO order: Z, Y, X."""
         resolved: list[str] = []
-        game = _make_game(p1_script=["pass"] * 3, p2_script=["pass"] * 3)
+        game = _make_game()
         for label in ["X", "Y", "Z"]:
             game.stack.push(
                 StackObject(
@@ -298,7 +290,7 @@ class TestPriorityLoopResolution:
 
     def test_stack_empty_after_full_resolution(self) -> None:
         """After priority_loop completes all resolutions, the stack should be empty."""
-        game = _make_game(p1_script=["pass"], p2_script=["pass"])
+        game = _make_game()
         game.stack.push(StackObject(source="A", controller=game.active_player))
         priority_loop(game)
         assert game.stack.is_empty()
@@ -306,7 +298,7 @@ class TestPriorityLoopResolution:
     def test_on_resolve_receives_game_state(self) -> None:
         """on_resolve callback should receive the GameState as its argument."""
         received: list = []
-        game = _make_game(p1_script=["pass"], p2_script=["pass"])
+        game = _make_game()
         game.stack.push(
             StackObject(
                 source="test",
@@ -320,7 +312,7 @@ class TestPriorityLoopResolution:
 
     def test_on_resolve_side_effect_persists(self) -> None:
         """on_resolve should be able to mutate game state (e.g., change life total)."""
-        game = _make_game(p1_script=["pass"], p2_script=["pass"])
+        game = _make_game()
         original_life = game.active_player.life
 
         def bolt_resolve(g):
@@ -334,66 +326,41 @@ class TestPriorityLoopResolution:
 
 
 # ===========================================================================
-# priority_loop — priority passing with DeterministicPlayer scripts
+# priority_loop — multi-object resolution ordering
 # ===========================================================================
-class TestPriorityPassing:
-    """Test priority passing behavior: active player first, then non-active."""
+class TestPriorityMultiObjectResolution:
+    """Multiple stacked objects resolve top-down across resolution rounds.
 
-    def test_active_player_asked_first(self) -> None:
-        """Active player should be asked for a choice before non-active player."""
-        asked: list[str] = []
+    Priority is now directive-driven (``priority_loop`` auto-passes; the player
+    is never queried for a priority action), so these verify resolution order
+    rather than the deleted priority-choice scripting.
+    """
 
-        class TrackingPlayer(DeterministicPlayer):
-            def choose(self, options, description):
-                asked.append(self.name)
-                return super().choose(options, description)
-
-        p1 = TrackingPlayer("Alice", ["pass"])
-        p2 = TrackingPlayer("Bob", ["pass"])
-        game = GameState([p1, p2])
-        game.stack.push(StackObject(source="X", controller=p1))
+    def test_two_objects_resolve_top_then_bottom(self) -> None:
+        """Two stacked objects resolve in LIFO order: top (B) then bottom (A)."""
+        resolved: list[str] = []
+        game = _make_game()
+        game.stack.push(
+            StackObject(source="A", controller=game.active_player, on_resolve=_make_resolver("A", resolved))
+        )
+        game.stack.push(
+            StackObject(source="B", controller=game.active_player, on_resolve=_make_resolver("B", resolved))
+        )
         priority_loop(game)
-        assert asked[0] == "Alice"
-        assert asked[1] == "Bob"
+        assert resolved == ["B", "A"]
+        assert game.stack.is_empty()
 
-    def test_both_players_asked_per_resolution_round(self) -> None:
-        """Each round of resolution requires both players to pass — two objects means two rounds."""
-        asked_count = {"Alice": 0, "Bob": 0}
-
-        class CountingPlayer(DeterministicPlayer):
-            def choose(self, options, description):
-                asked_count[self.name] += 1
-                return super().choose(options, description)
-
-        p1 = CountingPlayer("Alice", ["pass"] * 2)
-        p2 = CountingPlayer("Bob", ["pass"] * 2)
-        game = GameState([p1, p2])
-        game.stack.push(StackObject(source="A", controller=p1))
-        game.stack.push(StackObject(source="B", controller=p1))
+    def test_full_stack_drains_in_lifo_order(self) -> None:
+        """priority_loop resolves every stacked object, top-down, until empty."""
+        resolved: list[str] = []
+        game = _make_game()
+        for label in ["A", "B", "C"]:
+            game.stack.push(
+                StackObject(source=label, controller=game.active_player, on_resolve=_make_resolver(label, resolved))
+            )
         priority_loop(game)
-        assert asked_count["Alice"] == 2
-        assert asked_count["Bob"] == 2
-
-    def test_active_player_gets_priority_again_after_resolution(self) -> None:
-        """After resolving top of stack, active player should get priority again (not NAP)."""
-        asked: list[str] = []
-
-        class TrackingPlayer(DeterministicPlayer):
-            def choose(self, options, description):
-                asked.append(self.name)
-                return super().choose(options, description)
-
-        p1 = TrackingPlayer("Alice", ["pass"] * 2)
-        p2 = TrackingPlayer("Bob", ["pass"] * 2)
-        game = GameState([p1, p2])
-        game.stack.push(StackObject(source="A", controller=p1))
-        game.stack.push(StackObject(source="B", controller=p1))
-        priority_loop(game)
-        # Round 1: Alice, Bob → resolve B
-        # Round 2: Alice, Bob → resolve A
-        # Round 3: auto-pass (empty stack)
-        # So the sequence must be Alice, Bob, Alice, Bob
-        assert asked == ["Alice", "Bob", "Alice", "Bob"]
+        assert resolved == ["C", "B", "A"]
+        assert game.stack.is_empty()
 
 
 # ===========================================================================

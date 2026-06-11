@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import choose_object, query_yes_no
 from engine.types import Keyword, ManaCost, Supertype, Zone
 from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
@@ -42,10 +43,7 @@ class KioraTheRisingTide(Creature):
             cards_in_hand = list(hand.get_all())
             if not cards_in_hand:
                 break
-            try:
-                chosen = controller.choose_card(cards_in_hand, 'Choose a card to discard')
-            except Exception:
-                chosen = cards_in_hand[0] if cards_in_hand else None
+            chosen = choose_object(game, controller, cards_in_hand, 'Choose a card to discard', source_card=self)
             if chosen is not None:
                 discard(game, controller, chosen)
 
@@ -70,9 +68,7 @@ class KioraTheRisingTide(Creature):
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return
-            create_scion = True
-            if hasattr(ctrl, 'choose_yes_no'):
-                create_scion = ctrl.choose_yes_no('Create Scion of the Deep token?')
+            create_scion = query_yes_no(game, ctrl, 'Create Scion of the Deep token?', source_card=source)
             if create_scion:
                 token = Creature(name='Scion of the Deep', supertypes={Supertype.LEGENDARY}, subtypes={'Octopus'}, base_power=8, base_toughness=8)
                 create_token(game, ctrl, token)

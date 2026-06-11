@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.types import ManaCost, Zone
 
 if TYPE_CHECKING:
@@ -75,11 +76,7 @@ class StrongboxRaider(Creature):
             return
 
         # Choose one
-        try:
-            chosen = controller.choose_card(exiled, "card to play until end of next turn")
-        except Exception:
-            chosen = exiled[0]
-
+        chosen = choose_object(game, controller, exiled, "card to play until end of next turn", source_card=self)
         if chosen is not None:
             # ENGINE LIMITATION: "You may play that card until end of your
             # next turn" not fully implementable without play-permission system.

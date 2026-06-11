@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.types import ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
@@ -68,10 +69,6 @@ class GorehornRaider(Creature):
         if not targets:
             return
 
-        try:
-            chosen = controller.choose_card(targets, "target for 2 damage")
-        except Exception:
-            chosen = targets[0]
-
+        chosen = choose_object(game, controller, targets, "target for 2 damage", source_card=self)
         if chosen is not None:
             deal_damage(game, self, chosen, 2)

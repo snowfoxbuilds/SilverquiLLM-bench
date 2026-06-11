@@ -1,17 +1,22 @@
-"""Player interface and deterministic test player implementation."""
+"""Player interface for the MSH Player Query protocol.
+
+The ``Player`` ABC exposes a single entry point — ``answer(query) -> Answer`` —
+the engine's native interaction surface for the *choice* layer. There is no V1
+``choose_*`` surface and no ``ScriptExhaustedError``: an answer that no offered
+option satisfies is a test-authoring failure (``IntentError`` family), and a
+malformed/unanswerable query is an engine failure (``ProtocolError`` family).
+
+The concrete intent-based ``DeterministicPlayer`` lives in
+``engine/intent_player.py`` (and is re-exported from ``engine/__init__.py``).
+"""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections import deque
-from typing import Any
 
 from engine.mana import ManaPool
+from engine.queries import Answer, PlayerQuery
 from engine.zones import Zones
-
-
-class ScriptExhaustedError(Exception):
-    """Raised when a DeterministicPlayer's script runs out of predetermined answers."""
 
 
 class Player(ABC):
@@ -21,10 +26,11 @@ class Player(ABC):
         name: The player's display name.
         life: Current life total (default 20).
         zones: Per-player zone containers.
-        mana_pool: The player's mana pool (forward ref; initialized to None until ManaPool is implemented).
+        mana_pool: The player's mana pool.
         has_lost: Whether this player has lost the game.
         land_plays_remaining: Number of land plays remaining this turn.
-        drawn_from_empty_library: Whether this player attempted to draw from an empty library.
+        drawn_from_empty_library: Whether this player attempted to draw from an
+            empty library.
     """
 
     def __init__(self, name: str, life: int = 20) -> None:
@@ -37,109 +43,18 @@ class Player(ABC):
         self.drawn_from_empty_library: bool = False
 
     @abstractmethod
-    def choose_target(self, options: Any, requirement: Any) -> Any:
-        """Choose a target from the available options given a requirement.
+    def answer(self, query: PlayerQuery) -> Answer:
+        """Answer a Player Query.
 
         Parameters:
-            options: The available targets to choose from.
-            requirement: The targeting requirement to satisfy.
+            query: The Player Query raised by the engine (already
+                boundary-validated). Its ``options`` are the legal choices in
+                implementation-provided stable order; ``min``/``max`` bound the
+                selection; ``min == 0`` means legally declinable.
 
         Returns:
-            The chosen target.
+            An :class:`~engine.queries.Answer` whose ``selected`` is between
+            ``min`` and ``max`` of the offered options (``Answer(())`` to
+            decline when ``min == 0``). The engine validates the answer before
+            applying it.
         """
-
-    @abstractmethod
-    def choose(self, options: Any, description: str) -> Any:
-        """Choose from a list of options.
-
-        Parameters:
-            options: The available choices.
-            description: Human-readable description of the choice.
-
-        Returns:
-            The chosen option.
-        """
-
-    @abstractmethod
-    def choose_yes_no(self, prompt: str) -> bool:
-        """Make a yes/no decision.
-
-        Parameters:
-            prompt: Human-readable prompt for the decision.
-
-        Returns:
-            True for yes, False for no.
-        """
-
-    @abstractmethod
-    def assign_damage_order(self, attackers_or_blockers: Any) -> list[Any]:
-        """Assign a damage ordering to attackers or blockers.
-
-        Parameters:
-            attackers_or_blockers: The creatures to order.
-
-        Returns:
-            An ordered list representing the damage assignment order.
-        """
-
-    @abstractmethod
-    def choose_card(self, cards: Any, description: str) -> Any:
-        """Choose a card from a collection.
-
-        Parameters:
-            cards: The available cards to choose from.
-            description: Human-readable description of why a card is being chosen.
-
-        Returns:
-            The chosen card.
-        """
-
-
-class DeterministicPlayer(Player):
-    """A scripted player for testing that returns predetermined answers.
-
-    Each abstract method call pops the next answer from the front of the
-    script queue. Raises :class:`ScriptExhaustedError` if the script is empty
-    when a choice is requested.
-    """
-
-    def __init__(self, name: str, script: list[Any], life: int = 20) -> None:
-        super().__init__(name, life)
-        self._script: deque[Any] = deque(script)
-
-    def _pop(self) -> Any:
-        """Pop the next scripted answer from the queue.
-
-        Raises:
-            ScriptExhaustedError: If the script has no remaining answers.
-        """
-        if not self._script:
-            raise ScriptExhaustedError(
-                f"Player {self.name!r} script exhausted — no more predetermined answers"
-            )
-        return self._script.popleft()
-
-    @property
-    def remaining_choices(self) -> int:
-        """Return the number of scripted answers remaining."""
-        return len(self._script)
-
-    def choose_target(self, options: Any, requirement: Any) -> Any:
-        """Return the next scripted target choice."""
-        return self._pop()
-
-    def choose(self, options: Any, description: str) -> Any:
-        """Return the next scripted choice."""
-        return self._pop()
-
-    def choose_yes_no(self, prompt: str) -> bool:
-        """Return the next scripted yes/no decision."""
-        return self._pop()
-
-    def assign_damage_order(self, attackers_or_blockers: Any) -> list[Any]:
-        """Return the next scripted damage ordering."""
-        return self._pop()
-
-    def choose_card(self, cards: Any, description: str) -> Any:
-        """Return the next scripted card choice."""
-        return self._pop()

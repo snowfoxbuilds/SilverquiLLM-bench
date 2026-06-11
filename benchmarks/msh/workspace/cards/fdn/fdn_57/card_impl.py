@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Sorcery
+from engine.card_queries import choose_object
 from engine.types import CardType, ManaCost, Zone
 
 if TYPE_CHECKING:
@@ -65,9 +66,6 @@ class BlasphemousEdict(Sorcery):
                 ]
                 if not creatures:
                     break
-                try:
-                    chosen = player.choose_card(creatures, "sacrifice a creature")
-                except Exception:
-                    chosen = creatures[-1] if creatures else None
+                chosen = choose_object(game, player, creatures, "sacrifice a creature", source_card=self)
                 if chosen is not None:
                     sacrifice(game, player, chosen)

@@ -44,8 +44,9 @@ from engine.game import (
     tap,
     untap,
 )
+from engine.decisions import GameRef
 from engine.game_state import GameState
-from engine.player import DeterministicPlayer
+from engine.intent_player import DeterministicPlayer, Intent
 from engine.types import CardType, Keyword, Phase, Step, Zone
 
 
@@ -81,27 +82,30 @@ def _make_deck(size: int = 20, prefix: str = "Card") -> list[CardImpl]:
 
 def _make_game(
     deck_size: int = 20,
-    p1_script: list | None = None,
-    p2_script: list | None = None,
 ) -> tuple[GameState, DeterministicPlayer, DeterministicPlayer]:
-    """Create a game with two players and simple decks via create_game."""
-    p1 = DeterministicPlayer("Alice", p1_script or [])
-    p2 = DeterministicPlayer("Bob", p2_script or [])
+    """Create a game with two players and simple decks via create_game.
+
+    Each player is given an empty-preferences Baseline Intent so that
+    system queries raised during a full turn/game (notably the cleanup
+    discard OBJECT query) are answered by taking the first offered option.
+    """
+    p1 = DeterministicPlayer("Alice")
+    p2 = DeterministicPlayer("Bob")
     deck1 = _make_deck(deck_size, "P1Card")
     deck2 = _make_deck(deck_size, "P2Card")
     game = create_game(p1, p2, deck1, deck2)
+    p1.set_baseline(Intent(pattern=GameRef()))
+    p2.set_baseline(Intent(pattern=GameRef()))
     return game, p1, p2
 
 
 def _make_bare_game(
-    p1_script: list | None = None,
-    p2_script: list | None = None,
     p1_life: int = 20,
     p2_life: int = 20,
 ) -> tuple[GameState, DeterministicPlayer, DeterministicPlayer]:
     """Create a bare GameState (no create_game) for unit-testing helpers."""
-    p1 = DeterministicPlayer("Alice", p1_script or [], life=p1_life)
-    p2 = DeterministicPlayer("Bob", p2_script or [], life=p2_life)
+    p1 = DeterministicPlayer("Alice", life=p1_life)
+    p2 = DeterministicPlayer("Bob", life=p2_life)
     game = GameState([p1, p2])
     return game, p1, p2
 
@@ -750,9 +754,9 @@ class TestIntegration:
         """Creatures on the active player's battlefield should be untapped during untap step."""
         from engine.turn import run_turn
 
-        # The combat step will ask Alice to choose attackers when she has
-        # eligible creatures. Provide [] (no attackers) so the turn completes.
-        game, p1, p2 = _make_game(deck_size=40, p1_script=[[]])
+        # priority_loop now auto-passes (no scripted attack choice needed);
+        # the turn-based untap step untaps the active player's creatures.
+        game, p1, p2 = _make_game(deck_size=40)
         creature = _make_creature("TappedBear")
         creature.owner = p1
         creature.controller = p1

@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import choose_object, query_yes_no
 from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer
 from engine.types import CardType, ManaCost
 from engine.events import AttacksTriggeredEvent
@@ -39,15 +40,10 @@ class FrenziedGoblin(Creature):
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return
-            try:
-                if not ctrl.choose_yes_no('Pay {R} to make a creature unable to block?'):
-                    return
-            except Exception:
+            if not query_yes_no(game, ctrl, 'Pay {R} to make a creature unable to block?', source_card=source):
                 return
-            try:
-                ctrl.mana_pool.pay(ManaCost.parse('{R}'))
-            except Exception:
-                return
+            if not ctrl.mana_pool.pay(ManaCost.parse('{R}')):
+                return  # insufficient mana -- pay() returns False, never raises
             all_creatures: list = []
             for player in game.players:
                 for perm in game.get_battlefield(player).get_all():
@@ -55,10 +51,7 @@ class FrenziedGoblin(Creature):
                         all_creatures.append(perm)
             if not all_creatures:
                 return
-            try:
-                target = ctrl.choose_card(all_creatures, "Choose a creature that can't block this turn")
-            except Exception:
-                target = all_creatures[0]
+            target = choose_object(game, ctrl, all_creatures, "Choose a creature that can't block this turn", source_card=source)
             if target is not None:
                 target._cant_block = True
 

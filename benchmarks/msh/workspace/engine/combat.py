@@ -205,15 +205,51 @@ def _deal_damage(
 # Combat steps
 # ---------------------------------------------------------------------------
 
-def declare_attackers_step(game: GameState) -> None:
-    """Declare attackers step: active player chooses creatures to attack with.
+def _order_blockers(
+    game: GameState, controller: Any, attacker: Any, blocker_list: list[Any]
+) -> list[Any]:
+    """Raise an ordering Player Query so ``controller`` orders blockers.
 
-    The active player is asked (via :meth:`Player.choose`) to select a set
-    of creatures to attack with.  Each chosen attacker is tapped (unless it
-    has vigilance) and its ``is_attacking`` flag is set.
+    Ordering query: ``min == max == len(options)``; the Answer's order is the
+    damage-assignment order. Maps the answer back to the blocker objects.
+    """
+    from engine.queries import PlayerQuery, ask
+    from engine.refs_registry import object_options
+
+    items = [
+        (b, "battlefield", game.refs.seat_of(getattr(b, "controller", None)))
+        for b in blocker_list
+    ]
+    options, by_decision = object_options(game.refs, items)
+    source = game.refs.object_decision(
+        attacker,
+        zone="battlefield",
+        controller_seat=game.refs.seat_of(getattr(attacker, "controller", None)),
+    )
+    query = PlayerQuery(
+        source=(source,),
+        prompt="order blockers for damage assignment",
+        options=options,
+        min=len(options),
+        max=len(options),
+    )
+    answer = ask(controller, query)
+    return [by_decision[d] for d in answer.selected]
+
+
+def declare_attackers_step(game: GameState, attackers: Any = None) -> None:
+    """Declare attackers step: register the active player's attackers.
+
+    Declaring attackers is an *action-layer* decision: it is directive-driven,
+    so the chosen attackers are passed in (``attackers`` — a list of creature
+    objects) rather than elicited through a Player Query. ``None`` means no
+    attackers are declared (autonomous play with no directive). Each registered
+    attacker is tapped (unless it has vigilance) and its ``is_attacking`` flag
+    is set.
 
     Parameters:
         game: The current game state.  ``game.combat_state`` must exist.
+        attackers: The creatures to declare as attackers, or ``None``.
     """
     combat = game.combat_state
     combat.in_combat = True
@@ -231,14 +267,8 @@ def declare_attackers_step(game: GameState) -> None:
     if not eligible:
         return
 
-    # Active player chooses which creatures to attack with
-    chosen = active.choose(eligible, "declare attackers")
-
-    # Normalize to a list
-    if chosen is None:
-        return
-    if not isinstance(chosen, list):
-        chosen = [chosen]
+    # Directive: which creatures attack (no query — action layer).
+    chosen = list(attackers) if attackers else []
 
     # Validate and register attackers
     for attacker in chosen:
@@ -257,22 +287,21 @@ def declare_attackers_step(game: GameState) -> None:
             attacker.is_tapped = True
 
 
-def declare_blockers_step(game: GameState) -> None:
-    """Declare blockers step: defending player assigns blockers.
+def declare_blockers_step(game: GameState, block_assignments: Any = None) -> None:
+    """Declare blockers step: register the defending player's blocks.
 
-    The defending player is asked (via :meth:`Player.choose`) to assign
-    blockers.  The expected format is a dict mapping blocker → attacker
-    (or blocker → list of attackers for multi-blocking scenarios), but
-    commonly blocker → attacker.
+    Declaring blockers is an *action-layer* decision: it is directive-driven, so
+    the block assignments are passed in (``block_assignments`` — a dict mapping
+    blocker → attacker, or blocker → list of attackers for multi-block) rather
+    than elicited through a Player Query. ``None`` means no blocks are declared.
 
-    After blockers are assigned:
-    - Menace check: attackers with menace must be blocked by 2+ creatures.
-    - Flying/reach check is already handled by ``_can_block``.
-    - The attacking player orders blockers for each attacker (for damage
-      assignment).
+    After blockers are registered the attacking player *does* order multi-block
+    assignments for damage — that ordering IS a Player Query (an ordering query
+    with ``min == max == len``).
 
     Parameters:
         game: The current game state.
+        block_assignments: The blocker → attacker(s) mapping, or ``None``.
     """
     combat = game.combat_state
 
@@ -292,17 +321,8 @@ def declare_blockers_step(game: GameState) -> None:
     if not eligible_blockers:
         return
 
-    # Defending player chooses block assignments
-    # Expected format: dict mapping blocker → attacker (or list of attackers)
-    block_assignments = defending.choose(
-        eligible_blockers,
-        "declare blockers",
-    )
-
-    if block_assignments is None:
-        return
-
-    if not isinstance(block_assignments, dict):
+    # Directive: blocker → attacker(s) (no query — action layer).
+    if block_assignments is None or not isinstance(block_assignments, dict):
         return
 
     # Process block assignments
@@ -349,12 +369,15 @@ def declare_blockers_step(game: GameState) -> None:
         if blocker_list:
             combat.was_blocked.add(attacker)
 
-    # Controller of each attacker orders the blockers for damage assignment
+    # Controller of each attacker orders the blockers for damage assignment.
+    # This IS a Player Query — an ordering query (min == max == len(options),
+    # the Answer's order is the damage-assignment order).
     for attacker, blocker_list in combat.attacker_blockers.items():
         if len(blocker_list) > 1:
             controller = getattr(attacker, "controller", active)
-            ordered = controller.assign_damage_order(blocker_list)
-            combat.attacker_blockers[attacker] = ordered
+            combat.attacker_blockers[attacker] = _order_blockers(
+                game, controller, attacker, blocker_list
+            )
 
 
 def combat_damage_step(game: GameState) -> None:

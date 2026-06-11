@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Enchantment
+from engine.card_queries import choose_object, query_yes_no
 from engine.types import CardType, ManaCost
 from engine.events import SpellCastTriggeredEvent
 if TYPE_CHECKING:
@@ -77,8 +78,11 @@ class ThousandYearStorm(Enchantment):
             for _ in range(copies_to_make):
                 new_targets: list[Any] | None = None
                 if original_so.targets:
-                    if ctrl.choose_yes_no(
-                        f"Choose new targets for copy of {original_so.source.name}?"
+                    if query_yes_no(
+                        game,
+                        ctrl,
+                        f"Choose new targets for copy of {original_so.source.name}?",
+                        source_card=source,
                     ):
                         requirements = getattr(
                             original_so.source, 'get_targets', lambda _: []
@@ -93,7 +97,7 @@ class ThousandYearStorm(Enchantment):
                                 if req.filter_fn(p):
                                     legal.append(p)
                             if legal:
-                                chosen = ctrl.choose_target(legal, req)
+                                chosen = choose_object(game, ctrl, legal, getattr(req, 'description', 'choose target'), source_card=source)
                                 new_targets.append(chosen)
                 copy_obj = copy_spell(game, original_so, ctrl, new_targets)
                 game.stack.push(copy_obj)

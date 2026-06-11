@@ -22,7 +22,7 @@ from __future__ import annotations
 import pytest
 from engine.card import CardImpl, Creature
 from engine.game_state import GameState
-from engine.player import DeterministicPlayer
+from engine.intent_player import DeterministicPlayer
 from engine.stack import StackObject
 from engine.triggers import TriggerManager, TriggerRegistration
 from engine.types import Zone
@@ -31,7 +31,7 @@ from engine.events import AttacksTriggeredEvent, BeginningOfUpkeepTriggeredEvent
 @pytest.fixture()
 def players() -> list[DeterministicPlayer]:
     """Create two DeterministicPlayers."""
-    return [DeterministicPlayer('Alice', script=[]), DeterministicPlayer('Bob', script=[])]
+    return [DeterministicPlayer('Alice'), DeterministicPlayer('Bob')]
 
 @pytest.fixture()
 def game(players: list[DeterministicPlayer]) -> GameState:

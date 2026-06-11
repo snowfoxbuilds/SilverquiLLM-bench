@@ -14,7 +14,7 @@ import pytest
 
 from engine.card import Creature, Instant
 from engine.game_state import GameState
-from engine.player import DeterministicPlayer
+from engine.intent_player import DeterministicPlayer
 from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
 
 
@@ -24,8 +24,8 @@ from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
 
 def _make_game() -> GameState:
     """Create a minimal 2-player GameState."""
-    p1 = DeterministicPlayer("Alice", [])
-    p2 = DeterministicPlayer("Bob", [])
+    p1 = DeterministicPlayer("Alice")
+    p2 = DeterministicPlayer("Bob")
     game = GameState([p1, p2])
     return game
 

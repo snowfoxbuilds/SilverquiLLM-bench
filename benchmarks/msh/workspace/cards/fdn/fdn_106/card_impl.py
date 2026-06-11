@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import ActivatedAbility, Creature
+from engine.card_queries import choose_object
 from engine.types import CardType, ManaCost, Zone
 from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
@@ -59,7 +60,6 @@ class LootExuberantExplorer(Creature):
         def _effect(game: Any) -> None:
             import random
             from engine.game import create_token, move_to_zone
-            from engine.player import ScriptExhaustedError
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return
@@ -74,10 +74,7 @@ class LootExuberantExplorer(Creature):
             eligible = [c for c in top_cards if CardType.CREATURE in getattr(c, 'card_types', set()) and getattr(c, 'mana_cost', ManaCost()).cmc <= land_count]
             chosen = None
             if eligible:
-                try:
-                    chosen = ctrl.choose_card(eligible, 'creature to put onto the battlefield')
-                except ScriptExhaustedError:
-                    pass
+                chosen = choose_object(game, ctrl, eligible, 'creature to put onto the battlefield', source_card=source, optional=True)
             rest = [c for c in top_cards if c is not chosen]
             if chosen is not None:
                 chosen.owner = ctrl

@@ -24,7 +24,7 @@ from engine.casting import (
     cast_spell,
 )
 from engine.game_state import GameState
-from engine.player import DeterministicPlayer
+from engine.intent_player import DeterministicPlayer
 from engine.types import CardType, ManaCost, ManaType, Phase, Step
 
 
@@ -37,8 +37,8 @@ def _make_game(
     phase: Phase = Phase.PRECOMBAT_MAIN,
     step: Step | None = None,
 ) -> GameState:
-    p1 = DeterministicPlayer("P1", life=20, script=[])
-    p2 = DeterministicPlayer("P2", life=20, script=[])
+    p1 = DeterministicPlayer("P1", life=20)
+    p2 = DeterministicPlayer("P2", life=20)
     game = GameState(players=[p1, p2])
     game.phase = phase
     if step is not None:

@@ -115,8 +115,17 @@ class TestDivergenceType:
     def test_has_engine_error(self) -> None:
         assert DivergenceType.ENGINE_ERROR.value == "ENGINE_ERROR"
 
-    def test_exactly_four_members(self) -> None:
-        assert len(DivergenceType) == 4
+    def test_has_query_unanswered(self) -> None:
+        # MSH Player Query protocol: no replay-derived intent matched a query.
+        assert DivergenceType.QUERY_UNANSWERED.value == "QUERY_UNANSWERED"
+
+    def test_has_protocol_error(self) -> None:
+        # MSH Player Query protocol: engine-side boundary-validation failure.
+        assert DivergenceType.PROTOCOL_ERROR.value == "PROTOCOL_ERROR"
+
+    def test_exactly_six_members(self) -> None:
+        # Four V1 divergence types + the two MSH Player Query types.
+        assert len(DivergenceType) == 6
 
 
 # ---------------------------------------------------------------------------

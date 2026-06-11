@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.types import Keyword, ManaCost, Zone
 from engine.events import AttacksTriggeredEvent, EndStepTriggeredEvent
 if TYPE_CHECKING:
@@ -67,10 +68,7 @@ class AleshaWhoLaughsAtFate(Creature):
             candidates = [c for c in graveyard.get_all() if CardType.CREATURE in getattr(c, 'card_types', set()) and getattr(c, 'mana_cost', None) is not None and (c.mana_cost.cmc <= power)]
             if not candidates:
                 return
-            try:
-                chosen = ctrl.choose_card(candidates, 'creature card to return from graveyard')
-            except Exception:
-                chosen = candidates[0]
+            chosen = choose_object(game, ctrl, candidates, 'creature card to return from graveyard', source_card=source)
             if chosen is None:
                 return
             chosen.controller = ctrl

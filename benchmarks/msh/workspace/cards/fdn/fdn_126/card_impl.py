@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import ActivatedAbility, Creature
+from engine.card_queries import choose_object
 from engine.types import CardType, ManaCost, Zone
 from engine.events import BeginningOfCombatTriggeredEvent
 if TYPE_CHECKING:
@@ -54,10 +55,7 @@ class ZimoneParadoxSculptor(Creature):
                 remaining = [c for c in candidates if c not in targets_chosen]
                 if not remaining:
                     break
-                try:
-                    chosen = ctrl.choose_card(remaining, f'creature to get +1/+1 counter ({i + 1}/2)')
-                except Exception:
-                    chosen = remaining[0] if remaining else None
+                chosen = choose_object(game, ctrl, remaining, f'creature to get +1/+1 counter ({i + 1}/2)', source_card=source)
                 if chosen is not None:
                     targets_chosen.append(chosen)
             for target in targets_chosen:
@@ -82,10 +80,7 @@ class ZimoneParadoxSculptor(Creature):
                 remaining = [c for c in candidates if c not in targets_chosen]
                 if not remaining:
                     break
-                try:
-                    chosen = ctrl.choose_card(remaining, f'creature/artifact to double counters ({i + 1}/2)')
-                except Exception:
-                    chosen = remaining[0] if remaining else None
+                chosen = choose_object(game, ctrl, remaining, f'creature/artifact to double counters ({i + 1}/2)', source_card=source)
                 if chosen is not None:
                     targets_chosen.append(chosen)
             for target in targets_chosen:

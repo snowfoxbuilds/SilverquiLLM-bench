@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.types import Keyword, ManaCost
 from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
@@ -68,22 +69,16 @@ class PerforatingArtist(Creature):
                     player.life -= 3
                     continue
                 if nonland:
-                    try:
-                        chosen = player.choose_card(nonland, 'sacrifice a nonland permanent, or decline (discard / lose 3 life)')
-                        if chosen is not None:
-                            sacrifice(game, player, chosen)
-                            chose_alternative = True
-                    except Exception:
-                        pass
+                    chosen = choose_object(game, player, nonland, 'sacrifice a nonland permanent, or decline (discard / lose 3 life)', source_card=source, optional=True)
+                    if chosen is not None:
+                        sacrifice(game, player, chosen)
+                        chose_alternative = True
                 if not chose_alternative and hand:
-                    try:
-                        from engine.game import discard as _discard
-                        chosen = player.choose_card(hand, 'discard a card or lose 3 life')
-                        if chosen is not None:
-                            _discard(game, player, chosen)
-                            chose_alternative = True
-                    except Exception:
-                        pass
+                    from engine.game import discard as _discard
+                    chosen = choose_object(game, player, hand, 'discard a card or lose 3 life', source_card=source, optional=True)
+                    if chosen is not None:
+                        _discard(game, player, chosen)
+                        chose_alternative = True
                 if not chose_alternative:
                     player.life -= 3
         game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

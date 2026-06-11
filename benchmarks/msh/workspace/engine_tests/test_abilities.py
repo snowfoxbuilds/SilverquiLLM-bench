@@ -34,7 +34,7 @@ from engine.abilities import (
 from engine.card import Land, Planeswalker
 from engine.game_state import GameState
 from engine.mana import ManaPool
-from engine.player import DeterministicPlayer
+from engine.intent_player import DeterministicPlayer
 from engine.stack import StackObject
 from engine.types import ManaType, Phase, Step
 
@@ -54,14 +54,12 @@ def _reset_loyalty_tracker():
 
 def _make_game(
     *,
-    p1_script: list | None = None,
-    p2_script: list | None = None,
     phase: Phase = Phase.PRECOMBAT_MAIN,
     step: Step | None = None,
 ) -> GameState:
     """Create a minimal 2-player GameState at the specified phase/step."""
-    p1 = DeterministicPlayer("Alice", p1_script or [])
-    p2 = DeterministicPlayer("Bob", p2_script or [])
+    p1 = DeterministicPlayer("Alice")
+    p2 = DeterministicPlayer("Bob")
     game = GameState([p1, p2])
     game.phase = phase
     game.step = step
@@ -88,7 +86,7 @@ class TestActivatedAbilityInstanceConstruction:
 
     def test_fields_assigned(self):
         source = object()
-        controller = DeterministicPlayer("Alice", [])
+        controller = DeterministicPlayer("Alice")
         cost = lambda g, s: True
         effect = lambda g: None
         ability = ActivatedAbilityInstance(
@@ -108,7 +106,7 @@ class TestActivatedAbilityInstanceConstruction:
 
     def test_defaults(self):
         source = object()
-        controller = DeterministicPlayer("Alice", [])
+        controller = DeterministicPlayer("Alice")
         ability = ActivatedAbilityInstance(
             source=source,
             controller=controller,
@@ -129,7 +127,7 @@ class TestLoyaltyAbilityInstanceConstruction:
 
     def test_fields_assigned(self):
         source = object()
-        controller = DeterministicPlayer("Alice", [])
+        controller = DeterministicPlayer("Alice")
         effect = lambda g: None
         ability = LoyaltyAbilityInstance(
             source=source,
@@ -146,7 +144,7 @@ class TestLoyaltyAbilityInstanceConstruction:
 
     def test_defaults(self):
         source = object()
-        controller = DeterministicPlayer("Alice", [])
+        controller = DeterministicPlayer("Alice")
         ability = LoyaltyAbilityInstance(
             source=source,
             controller=controller,

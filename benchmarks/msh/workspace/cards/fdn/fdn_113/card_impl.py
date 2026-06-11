@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature, Enchantment
+from engine.card_queries import choose_mode, choose_object
 from engine.types import CardType, ManaCost, Zone
 from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
@@ -32,7 +33,6 @@ class SylvanScavenging(Enchantment):
 
     def register_triggers(self, game: 'GameState') -> None:
         from engine.game import add_counter, create_token
-        from engine.player import ScriptExhaustedError
         from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
@@ -60,16 +60,9 @@ class SylvanScavenging(Enchantment):
             if len(modes) == 1:
                 chosen_mode = modes[0]
             else:
-                try:
-                    chosen_mode = ctrl.choose_card(modes, 'choose mode: counter or token')
-                except ScriptExhaustedError:
-                    chosen_mode = modes[0]
+                chosen_mode = choose_mode(game, ctrl, modes, 'choose mode: counter or token', source_card=source)
             if chosen_mode == 'counter' and creatures:
-                target = None
-                try:
-                    target = ctrl.choose_card(creatures, 'creature to put +1/+1 counter on')
-                except ScriptExhaustedError:
-                    target = creatures[0]
+                target = choose_object(game, ctrl, creatures, 'creature to put +1/+1 counter on', source_card=source)
                 if target is not None and _is_on_battlefield(game, target):
                     add_counter(game, target, '+1/+1')
                     target._base_plus_one_counters = target.plus_one_counters

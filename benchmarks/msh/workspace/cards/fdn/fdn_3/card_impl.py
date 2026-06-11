@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.types import CardType, Keyword, ManaCost
 from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
@@ -56,10 +57,7 @@ class ArmasaurGuide(Creature):
                 candidates = [c for c in battlefield.get_all() if CardType.CREATURE in getattr(c, 'card_types', set())]
                 if not candidates:
                     return
-                try:
-                    target = ctrl.choose_card(candidates, 'target creature for +1/+1 counter')
-                except Exception:
-                    target = candidates[0]
+                target = choose_object(game, ctrl, candidates, 'target creature for +1/+1 counter', source_card=source)
             if target is None:
                 return
             add_counter(game, target, '+1/+1', 1)

@@ -8,25 +8,30 @@ prompt.md          — Per-run task prompt (written at stage time)
 run_manifest.json  — Per-run manifest written by the harness: `{timeout_seconds, deadline_utc}`. Harness-owned — do not edit.
 pytest.ini         — Pytest configuration for the workspace
 conftest.py        — Pytest fixtures shared across the workspace
-test_utils.py      — Shared test helpers (`create_game`, `set_board_state`, …)
-test_utils.md      — API reference for `test_utils.py`
+test_utils.py      — Shared test helpers (`create_game`, `set_board_state`, `put_on_battlefield`, `cast_spell`, …) built on the intent-based DeterministicPlayer.
+test_utils.md      — API reference for `test_utils.py` (Player Query / Intent test API)
 .gitignore         — Git ignore rules
 engine/            — Canonical game engine source. Imported as `engine`.
+                     Choice layer: `decisions.py` (Player Decisions, Game Symbols
+                     vocabulary, `satisfies`), `queries.py` (Player Query / Answer
+                     + boundary validation), `refs_registry.py` (Game Refs),
+                     `player.py` (`Player.answer`), `intent_player.py`
+                     (`DeterministicPlayer`, `Intent`, transcript).
 engine_tests/      — Engine regression tests (do not modify).
 cards/             — Card implementations.
   cards/fdn/       — Completed FDN reference cards (do not modify their tests).
-  cards/sos/       — SOS card stubs to implement.
+  cards/msh/       — MSH card stubs to implement.
 skills/            — Workspace-local skills (e.g. `grep-rulebook/SKILL.md`).
 ```
 
 ## Card paths
 
-For an SOS card with collector number `N`:
+For an MSH card with collector number `N`:
 
 ```
-cards/sos/sos_<N>/card_spec.json   — card metadata (name, mana_cost, oracle_text, P/T, keywords, …)
-cards/sos/sos_<N>/card_impl.py     — implementation stub you complete
-cards/sos/sos_<N>/tests.py         — your tests for this card (you create this)
+cards/msh/msh_<N>/card_spec.json   — card metadata (name, mana_cost, oracle_text, P/T, keywords, …)
+cards/msh/msh_<N>/card_impl.py     — implementation stub you complete
+cards/msh/msh_<N>/tests.py         — your tests for this card (you create this)
 ```
 
 For an FDN reference card:
@@ -53,8 +58,10 @@ As of the latest workspace stage, the list is: `fdn_13`, `fdn_142`, `fdn_205`, `
 The workspace root is on `sys.path`, so use bare package imports:
 
 ```python
-from cards.sos.sos_1.card_impl import TheDawningArchaic
+from cards.msh.msh_<N>.card_impl import <ClassName>
 from engine.card import CardImpl, Creature, Instant
 from engine.types import CardType, Keyword, ManaCost, ManaType, Zone
-from test_utils import create_game, set_board_state
+from engine.intent_player import Intent
+from engine.decisions import Decision, GameRef, DecisionKind
+from test_utils import create_game, set_board_state, put_on_battlefield, cast_spell
 ```

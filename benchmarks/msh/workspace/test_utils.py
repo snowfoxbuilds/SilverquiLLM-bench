@@ -17,18 +17,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.card import CardImpl, Creature
+from engine.card import CardImpl
 from engine.casting import cast_spell as _engine_cast_spell
 from engine.combat import (
-    CombatState,
     declare_attackers_step,
     declare_blockers_step,
 )
+from engine.decisions import Decision, GameRef
 from engine.game import create_game as _engine_create_game
 from engine.game_state import GameState, _TURN_SEQUENCE
-from engine.mana import ManaPool
-from engine.player import DeterministicPlayer
-from engine.stack import priority_loop
+from engine.intent_player import DeterministicPlayer, Intent
 from engine.types import ManaType, Phase, Step, Zone
 
 
@@ -72,12 +70,13 @@ def create_game(
     player2_name: str = "Player2",
     player1_life: int = 20,
     player2_life: int = 20,
-    scripts: tuple[list[Any], list[Any]] | None = None,
 ) -> GameState:
     """Create a new two-player game from card lists.
 
     This is a convenience wrapper around :func:`engine.game.create_game`
-    that automatically creates :class:`DeterministicPlayer` instances.
+    that automatically creates intent-based :class:`DeterministicPlayer`
+    instances. Choices are answered through Intents the test starts on the
+    players (see :class:`engine.intent_player.Intent`), not a positional script.
 
     Parameters:
         deck1: Cards for player 1's deck.  Defaults to empty list.
@@ -86,8 +85,6 @@ def create_game(
         player2_name: Display name for player 2.
         player1_life: Starting life for player 1.
         player2_life: Starting life for player 2.
-        scripts: Optional tuple of ``(script1, script2)`` for
-            :class:`DeterministicPlayer`.  Defaults to empty lists.
 
     Returns:
         A fully initialised :class:`GameState`.
@@ -100,15 +97,13 @@ def create_game(
     if deck2 is None:
         deck2 = []
 
-    script1: list[Any] = []
-    script2: list[Any] = []
-    if scripts is not None:
-        script1, script2 = scripts
-
-    p1 = DeterministicPlayer(player1_name, script=script1, life=player1_life)
-    p2 = DeterministicPlayer(player2_name, script=script2, life=player2_life)
+    p1 = DeterministicPlayer(player1_name, life=player1_life)
+    p2 = DeterministicPlayer(player2_name, life=player2_life)
 
     game = _engine_create_game(p1, p2, deck1, deck2)
+    # Let end_intent postconditions read the game without an explicit arg.
+    for player in game.players:
+        player.game = game
 
     # When decks are empty (the convenience default), engine.game.create_game
     # attempts to draw 7 cards from each empty library, which sets the
@@ -194,7 +189,12 @@ def _set_zone(
     zone: Zone,
     cards: list[Any],
 ) -> None:
-    """Replace a zone's contents with *cards*, assigning ownership."""
+    """Replace a zone's contents with *cards*, assigning ownership.
+
+    Each placed object is given a stable engine-minted ``instance_id`` (for the
+    zone it is placed in) so a test can reference it in an Intent preference —
+    e.g. ``Decision.obj(instance=bear.instance_id)``.
+    """
     zone_container = player.zones[zone]
     # Clear existing contents
     for obj in zone_container.get_all():
@@ -205,6 +205,7 @@ def _set_zone(
         card.owner = player
         card.controller = player
         zone_container.add(card)
+        card.instance_id = game.refs.instance_id(card, zone.value)
 
 
 # ---------------------------------------------------------------------------
@@ -230,8 +231,12 @@ def cast_spell(
         game: The game state.
         player_index: Index of the casting player (0 or 1).
         card_name: Name of the card to find in hand.
-        targets: Optional target list.  If provided, they are scripted
-            into the player's DeterministicPlayer choices.
+        targets: Optional list of game objects/players to prefer for the
+            target Player Query the engine raises during casting.  When
+            provided, a transient Intent is started on the casting player
+            that prefers each target by its engine-minted ``instance_id``
+            (objects) or seat (players); the intent is ended after
+            casting in a ``finally`` so it does not leak across calls.
 
     Raises:
         TestSetupError: If the card is not found in hand or casting fails.
@@ -279,11 +284,20 @@ def cast_spell(
             f"Cannot cast {card_name!r} — stack is not empty"
         )
 
-    # Script targets into the player's DeterministicPlayer choices so that
-    # engine.casting.cast_spell -> player.choose_target() returns them.
+    # Targets are chosen via a transient Intent: the engine raises a target
+    # Player Query during casting; the intent prefers the given targets by their
+    # engine-minted instance id (objects) or seat (players).
+    intent_name: str | None = None
     if targets and isinstance(player, DeterministicPlayer):
-        for target in reversed(targets):
-            player._script.appendleft(target)
+        prefs = tuple(_target_preference(game, t) for t in targets)
+        intent_name = f"_cast_{card_name}"
+        player.start_intent(
+            intent_name,
+            Intent(
+                pattern=GameRef(card=frozenset({("name", card_name)})),
+                preferences=prefs,
+            ),
+        )
 
     try:
         _engine_cast_spell(game, player, card)
@@ -291,8 +305,42 @@ def cast_spell(
         raise TestSetupError(
             f"Failed to cast {card_name!r}: {exc}"
         ) from exc
+    finally:
+        if intent_name is not None and intent_name in player._intents:
+            player.end_intent(intent_name)
 
     # Pass priority for both players to resolve the spell
+    _resolve_top_of_stack(game)
+
+
+def _target_preference(game: GameState, target: Any) -> Any:
+    """Build an Intent preference selecting *target* (a game object or player)."""
+    seat = game.refs.seat_of(target)
+    if seat is not None:
+        return Decision.player(seat=seat)
+    instance_id = getattr(target, "instance_id", None)
+    if instance_id is None:
+        # Best effort: mint for the battlefield (the common targeting zone).
+        instance_id = game.refs.instance_id(target, "battlefield")
+    return Decision.obj(instance=instance_id)
+
+
+def put_on_battlefield(game: GameState, player: Any, card: Any) -> Any:
+    """Place a single *card* on *player*'s battlefield; return it.
+
+    The card is given a stable engine-minted ``instance_id`` so a test can
+    reference it in an Intent preference (``Decision.obj(instance=card.instance_id)``).
+    """
+    bf = player.zones[Zone.BATTLEFIELD]
+    card.owner = player
+    card.controller = player
+    bf.add(card)
+    card.instance_id = game.refs.instance_id(card, Zone.BATTLEFIELD.value)
+    return card
+
+
+def resolve_stack(game: GameState) -> None:
+    """Resolve the entire stack (public alias for the internal resolver)."""
     _resolve_top_of_stack(game)
 
 
@@ -376,9 +424,9 @@ def declare_attackers(
     1. Advances to the Declare Attackers step if not already there.
     2. Finds creatures on the active player's battlefield matching the
        given names.
-    3. Scripts the active player's ``choose`` method to return those
-       creatures.
-    4. Calls :func:`engine.combat.declare_attackers_step`.
+    3. Calls :func:`engine.combat.declare_attackers_step` with the
+       attackers as an action-layer directive (no Player Query is
+       raised — this is the imperative action channel).
 
     Parameters:
         game: The game state.
@@ -412,16 +460,9 @@ def declare_attackers(
             )
         attackers.append(found)
 
-    # Script the active player to choose these attackers
-    if isinstance(active, DeterministicPlayer):
-        active._script.appendleft(attackers)
-    else:
-        raise TestSetupError(
-            "declare_attackers requires active player to be a DeterministicPlayer"
-        )
-
+    # Declaring attackers is an action-layer directive (not a query).
     game.combat_state.in_combat = True
-    declare_attackers_step(game)
+    declare_attackers_step(game, attackers)
 
 
 # ---------------------------------------------------------------------------
@@ -486,12 +527,7 @@ def declare_blockers(
                 )
             block_map[blocker] = attacker
 
-    # Script the defending player to choose these block assignments
-    if isinstance(defending, DeterministicPlayer):
-        defending._script.appendleft(block_map)
-    else:
-        raise TestSetupError(
-            "declare_blockers requires defending player to be a DeterministicPlayer"
-        )
-
-    declare_blockers_step(game)
+    # Declaring blockers is an action-layer directive (not a query). When an
+    # attacker is multi-blocked the engine raises a damage-order Player Query to
+    # the attacker's controller — set a Baseline Intent on that player if so.
+    declare_blockers_step(game, block_map)

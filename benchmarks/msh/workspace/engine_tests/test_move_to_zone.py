@@ -314,3 +314,31 @@ class TestMoveToZoneToken:
         recorded = _record_events(game)
         move_to_zone(game, token, Zone.BATTLEFIELD, Zone.GRAVEYARD)
         assert any((isinstance(e, CreatureDiesTriggeredEvent) for e in recorded))
+
+class TestMoveToZoneRefsInvalidation:
+    """move_to_zone breaks instance-id continuity in the Game Refs registry."""
+
+    def test_unobserved_round_trip_remints_instance_id(self) -> None:
+        # The flicker path: battlefield -> exile -> battlefield with no query
+        # ever observing the exile stint. move_to_zone itself must invalidate
+        # the stint so the post-flicker observation re-mints, not cache-hits.
+        from engine.zones import move_to_zone
+        game = create_game()
+        creature = _make_creature('FlickerTarget')
+        set_board_state(game, 0, battlefield=[creature])
+        pre_flicker = game.refs.instance_id(creature, 'battlefield')
+        move_to_zone(game, creature, Zone.BATTLEFIELD, Zone.EXILE)
+        move_to_zone(game, creature, Zone.EXILE, Zone.BATTLEFIELD)
+        post_flicker = game.refs.instance_id(creature, 'battlefield')
+        assert post_flicker != pre_flicker
+
+    def test_id_stable_when_not_moved(self) -> None:
+        # Moving one object must not disturb another object's stint.
+        from engine.zones import move_to_zone
+        game = create_game()
+        mover = _make_creature('Mover')
+        stayer = _make_creature('Stayer')
+        set_board_state(game, 0, battlefield=[mover, stayer])
+        stayer_id = game.refs.instance_id(stayer, 'battlefield')
+        move_to_zone(game, mover, Zone.BATTLEFIELD, Zone.GRAVEYARD)
+        assert game.refs.instance_id(stayer, 'battlefield') == stayer_id

@@ -15,7 +15,7 @@ from __future__ import annotations
 import pytest
 
 from engine.game_state import GameState
-from engine.player import DeterministicPlayer
+from engine.intent_player import DeterministicPlayer
 from engine.types import Phase, Step
 
 
@@ -26,8 +26,8 @@ from engine.types import Phase, Step
 
 def _make_game() -> GameState:
     """Create a minimal 2-player GameState for extra-turn tests."""
-    p0 = DeterministicPlayer("Alice", [])
-    p1 = DeterministicPlayer("Bob", [])
+    p0 = DeterministicPlayer("Alice")
+    p1 = DeterministicPlayer("Bob")
     for p in (p0, p1):
         p.life = 20
     return GameState([p0, p1])

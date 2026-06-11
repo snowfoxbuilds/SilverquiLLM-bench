@@ -36,8 +36,9 @@ from engine.combat import (
     declare_blockers_step,
     end_combat_step,
 )
+from engine.decisions import Decision, GameRef
 from engine.game_state import GameState
-from engine.player import DeterministicPlayer
+from engine.intent_player import DeterministicPlayer, Intent
 from engine.types import Keyword, Zone
 
 
@@ -76,22 +77,41 @@ def _make_creature(
 
 
 def _make_game(
-    p1_script: list | None = None,
-    p2_script: list | None = None,
     p1_life: int = 20,
     p2_life: int = 20,
 ) -> GameState:
-    """Create a 2-player GameState with optional scripts and life totals."""
-    p1 = DeterministicPlayer("Alice", p1_script or [], life=p1_life)
-    p2 = DeterministicPlayer("Bob", p2_script or [], life=p2_life)
+    """Create a 2-player GameState with given life totals.
+
+    Each player gets a Baseline Intent so any system-level Player Query the
+    engine raises (e.g. the multi-block damage-ordering query, whose source is
+    the attacker) is answered. With empty preferences the baseline orders
+    blockers in the engine-offered order; tests that need a specific order set
+    a baseline that prefers blockers by ``Decision.obj(instance=...)``.
+    """
+    p1 = DeterministicPlayer("Alice", life=p1_life)
+    p2 = DeterministicPlayer("Bob", life=p2_life)
+    for p in (p1, p2):
+        p.set_baseline(Intent(pattern=GameRef()))
     return GameState([p1, p2])
 
 
-def _place_on_battlefield(player: DeterministicPlayer, creature: Creature) -> None:
-    """Put a creature on a player's battlefield and set its controller."""
+def _place_on_battlefield(
+    player: DeterministicPlayer,
+    creature: Creature,
+    game: GameState | None = None,
+) -> None:
+    """Put a creature on a player's battlefield and set its controller.
+
+    When *game* is supplied, the creature is also given its stable engine-minted
+    ``instance_id`` for the battlefield, so a test can reference it in an Intent
+    preference (``Decision.obj(instance=creature.instance_id)``) to force a
+    damage-ordering query's answer.
+    """
     creature.controller = player
     creature.owner = player
     player.zones[Zone.BATTLEFIELD].add(creature)
+    if game is not None:
+        creature.instance_id = game.refs.instance_id(creature, Zone.BATTLEFIELD.value)
 
 
 # ---------------------------------------------------------------------------
@@ -242,10 +262,10 @@ class TestDeclareAttackers:
     def test_valid_attack_taps_creature(self) -> None:
         """A valid attacker should be tapped and registered in combat state."""
         bear = _make_creature(name="Bear", summoning_sick=False)
-        game = _make_game(p1_script=[[bear]])  # active player chooses [bear]
+        game = _make_game()
         _place_on_battlefield(game.active_player, bear)
 
-        declare_attackers_step(game)
+        declare_attackers_step(game, [bear])  # directive: bear attacks
 
         assert bear.is_tapped is True
         assert bear.is_attacking is True
@@ -255,10 +275,10 @@ class TestDeclareAttackers:
     def test_vigilance_does_not_tap(self) -> None:
         """An attacker with vigilance should NOT be tapped."""
         vig = _make_creature(name="Vigilant", keywords=Keyword.VIGILANCE, summoning_sick=False)
-        game = _make_game(p1_script=[[vig]])
+        game = _make_game()
         _place_on_battlefield(game.active_player, vig)
 
-        declare_attackers_step(game)
+        declare_attackers_step(game, [vig])
 
         assert vig.is_tapped is False
         assert vig.is_attacking is True
@@ -266,41 +286,40 @@ class TestDeclareAttackers:
     def test_summoning_sick_rejected(self) -> None:
         """A creature with summoning sickness should not be allowed to attack."""
         sick = _make_creature(name="Sick", summoning_sick=True)
-        # Player tries to choose the sick creature, but _can_attack filters it.
-        # Since the creature is not eligible, it won't appear in eligible list.
-        game = _make_game(p1_script=[])
+        game = _make_game()
         _place_on_battlefield(game.active_player, sick)
 
-        declare_attackers_step(game)
+        # Even if the directive names the sick creature, the engine filters it
+        # out because it is not an eligible attacker.
+        declare_attackers_step(game, [sick])
 
-        # Not eligible means choose was never called or nothing was chosen
         assert sick.is_attacking is False
         assert sick not in game.combat_state.attackers
 
     def test_haste_bypasses_summoning_sickness(self) -> None:
         """A creature with haste can attack even with summoning sickness."""
         haste = _make_creature(name="Hasty", summoning_sick=True, keywords=Keyword.HASTE)
-        game = _make_game(p1_script=[[haste]])
+        game = _make_game()
         _place_on_battlefield(game.active_player, haste)
 
-        declare_attackers_step(game)
+        declare_attackers_step(game, [haste])
 
         assert haste.is_attacking is True
         assert haste in game.combat_state.attackers
 
     def test_no_eligible_attackers_skips(self) -> None:
         """If no creatures are eligible, the step completes without error."""
-        game = _make_game(p1_script=[])
-        declare_attackers_step(game)
+        game = _make_game()
+        declare_attackers_step(game, None)
         assert game.combat_state.attackers == {}
 
     def test_player_chooses_none_no_attackers(self) -> None:
-        """If active player declines to attack (returns None), no attackers."""
+        """If the active player declines to attack (directive is None), no attackers."""
         bear = _make_creature(name="Bear", summoning_sick=False)
-        game = _make_game(p1_script=[None])
+        game = _make_game()
         _place_on_battlefield(game.active_player, bear)
 
-        declare_attackers_step(game)
+        declare_attackers_step(game, None)
 
         assert bear.is_attacking is False
         assert len(game.combat_state.attackers) == 0
@@ -309,11 +328,11 @@ class TestDeclareAttackers:
         """Multiple creatures can be declared as attackers."""
         bear1 = _make_creature(name="Bear1", summoning_sick=False)
         bear2 = _make_creature(name="Bear2", summoning_sick=False)
-        game = _make_game(p1_script=[[bear1, bear2]])
+        game = _make_game()
         _place_on_battlefield(game.active_player, bear1)
         _place_on_battlefield(game.active_player, bear2)
 
-        declare_attackers_step(game)
+        declare_attackers_step(game, [bear1, bear2])
 
         assert bear1.is_attacking is True
         assert bear2.is_attacking is True
@@ -322,10 +341,11 @@ class TestDeclareAttackers:
     def test_defender_not_in_eligible_list(self) -> None:
         """A creature with defender should not be in the eligible attacker list."""
         wall = _make_creature(name="Wall", keywords=Keyword.DEFENDER, summoning_sick=False)
-        game = _make_game(p1_script=[])
+        game = _make_game()
         _place_on_battlefield(game.active_player, wall)
 
-        declare_attackers_step(game)
+        # Directive names the wall, but the engine filters out defenders.
+        declare_attackers_step(game, [wall])
 
         assert wall.is_attacking is False
         assert wall not in game.combat_state.attackers
@@ -333,10 +353,11 @@ class TestDeclareAttackers:
     def test_tapped_creature_not_in_eligible_list(self) -> None:
         """A tapped creature should not be eligible to attack."""
         tapped = _make_creature(name="TappedBear", is_tapped=True, summoning_sick=False)
-        game = _make_game(p1_script=[])
+        game = _make_game()
         _place_on_battlefield(game.active_player, tapped)
 
-        declare_attackers_step(game)
+        # Directive names the tapped creature, but the engine filters it out.
+        declare_attackers_step(game, [tapped])
 
         assert tapped not in game.combat_state.attackers
 
@@ -365,12 +386,12 @@ class TestDeclareBlockers:
         attacker = _make_creature(name="Attacker", summoning_sick=False)
         blocker = _make_creature(name="Blocker", summoning_sick=False)
 
-        game = _make_game(p2_script=[{blocker: attacker}])  # defending player assigns
+        game = _make_game()
         _place_on_battlefield(game.active_player, attacker)
         _place_on_battlefield(game.non_active_player, blocker)
 
         self._setup_attack(attacker, game)
-        declare_blockers_step(game)
+        declare_blockers_step(game, {blocker: attacker})  # directive: block assignment
 
         assert blocker in game.combat_state.blockers
         assert blocker.is_blocking is True
@@ -381,12 +402,12 @@ class TestDeclareBlockers:
         flyer = _make_creature(name="Flyer", keywords=Keyword.FLYING, summoning_sick=False)
         ground = _make_creature(name="Ground", summoning_sick=False)
 
-        game = _make_game(p2_script=[{ground: flyer}])
+        game = _make_game()
         _place_on_battlefield(game.active_player, flyer)
         _place_on_battlefield(game.non_active_player, ground)
 
         self._setup_attack(flyer, game)
-        declare_blockers_step(game)
+        declare_blockers_step(game, {ground: flyer})
 
         # Block should be rejected
         assert ground not in game.combat_state.blockers
@@ -397,12 +418,12 @@ class TestDeclareBlockers:
         flyer = _make_creature(name="Flyer", keywords=Keyword.FLYING, summoning_sick=False)
         reacher = _make_creature(name="Reacher", keywords=Keyword.REACH, summoning_sick=False)
 
-        game = _make_game(p2_script=[{reacher: flyer}])
+        game = _make_game()
         _place_on_battlefield(game.active_player, flyer)
         _place_on_battlefield(game.non_active_player, reacher)
 
         self._setup_attack(flyer, game)
-        declare_blockers_step(game)
+        declare_blockers_step(game, {reacher: flyer})
 
         assert reacher in game.combat_state.blockers
         assert reacher in game.combat_state.attacker_blockers[flyer]
@@ -412,12 +433,12 @@ class TestDeclareBlockers:
         menace = _make_creature(name="Menace", keywords=Keyword.MENACE, summoning_sick=False)
         lone_blocker = _make_creature(name="LoneBlocker", summoning_sick=False)
 
-        game = _make_game(p2_script=[{lone_blocker: menace}])
+        game = _make_game()
         _place_on_battlefield(game.active_player, menace)
         _place_on_battlefield(game.non_active_player, lone_blocker)
 
         self._setup_attack(menace, game)
-        declare_blockers_step(game)
+        declare_blockers_step(game, {lone_blocker: menace})
 
         # Single blocker should be removed due to menace
         assert game.combat_state.attacker_blockers[menace] == []
@@ -429,20 +450,17 @@ class TestDeclareBlockers:
         b1 = _make_creature(name="Blocker1", summoning_sick=False)
         b2 = _make_creature(name="Blocker2", summoning_sick=False)
 
-        # Defending player assigns both blockers to the menace creature
-        game = _make_game(
-            p1_script=[],  # active player — order blockers
-            p2_script=[{b1: menace, b2: menace}],
-        )
-        # The attacking player orders blockers — provide an ordering answer
-        game.active_player._script.append([b1, b2])
-
+        game = _make_game()
         _place_on_battlefield(game.active_player, menace)
         _place_on_battlefield(game.non_active_player, b1)
         _place_on_battlefield(game.non_active_player, b2)
 
         self._setup_attack(menace, game)
-        declare_blockers_step(game)
+        # Defending player assigns both blockers to the menace creature. The
+        # attacker is multi-blocked, so the engine raises a damage-ordering
+        # Player Query to the attacker's controller (active player), answered
+        # by that player's Baseline Intent (offered order).
+        declare_blockers_step(game, {b1: menace, b2: menace})
 
         assert len(game.combat_state.attacker_blockers[menace]) == 2
 
@@ -452,16 +470,24 @@ class TestDeclareBlockers:
         b1 = _make_creature(name="B1", toughness=2, summoning_sick=False)
         b2 = _make_creature(name="B2", toughness=3, summoning_sick=False)
 
-        game = _make_game(
-            p1_script=[[b2, b1]],  # controller orders b2 first, then b1
-            p2_script=[{b1: attacker, b2: attacker}],
-        )
-        _place_on_battlefield(game.active_player, attacker)
-        _place_on_battlefield(game.non_active_player, b1)
-        _place_on_battlefield(game.non_active_player, b2)
+        game = _make_game()
+        _place_on_battlefield(game.active_player, attacker, game)
+        _place_on_battlefield(game.non_active_player, b1, game)
+        _place_on_battlefield(game.non_active_player, b2, game)
+
+        # The attacker's controller orders the blockers for damage assignment
+        # via an ordering Player Query. Force the order b2-then-b1 by setting a
+        # Baseline Intent that prefers b2's object decision first, then b1's.
+        game.active_player.set_baseline(Intent(
+            pattern=GameRef(),
+            preferences=(
+                Decision.obj(instance=b2.instance_id),
+                Decision.obj(instance=b1.instance_id),
+            ),
+        ))
 
         self._setup_attack(attacker, game)
-        declare_blockers_step(game)
+        declare_blockers_step(game, {b1: attacker, b2: attacker})
 
         # Controller ordered b2, b1
         assert game.combat_state.attacker_blockers[attacker] == [b2, b1]
@@ -469,7 +495,7 @@ class TestDeclareBlockers:
     def test_no_attackers_blockers_step_skips(self) -> None:
         """If there are no attackers, declare_blockers_step does nothing."""
         game = _make_game()
-        declare_blockers_step(game)
+        declare_blockers_step(game, None)
         assert game.combat_state.blockers == {}
 
     def test_defending_player_chooses_none_no_blockers(self) -> None:
@@ -477,12 +503,12 @@ class TestDeclareBlockers:
         attacker = _make_creature(name="Attacker", summoning_sick=False)
         blocker = _make_creature(name="Blocker", summoning_sick=False)
 
-        game = _make_game(p2_script=[None])
+        game = _make_game()
         _place_on_battlefield(game.active_player, attacker)
         _place_on_battlefield(game.non_active_player, blocker)
 
         self._setup_attack(attacker, game)
-        declare_blockers_step(game)
+        declare_blockers_step(game, None)
 
         assert game.combat_state.blockers == {}
 
@@ -772,14 +798,11 @@ class TestCombatIntegration:
     def test_full_combat_cycle_unblocked(self) -> None:
         """Full cycle: declare attacker → no blockers → damage → end combat."""
         bear = _make_creature(name="Bear", power=2, toughness=2, summoning_sick=False)
-        game = _make_game(
-            p1_script=[[bear]],  # declare attackers
-            p2_script=[None],  # no blockers
-        )
+        game = _make_game()
         _place_on_battlefield(game.active_player, bear)
 
-        declare_attackers_step(game)
-        declare_blockers_step(game)
+        declare_attackers_step(game, [bear])  # declare attacker
+        declare_blockers_step(game, None)  # no blockers
         combat_damage_step(game)
         end_combat_step(game)
 
@@ -791,15 +814,12 @@ class TestCombatIntegration:
         """Full cycle: declare attacker → blocker → mutual damage → end combat."""
         attacker = _make_creature(name="Attacker", power=3, toughness=3, summoning_sick=False)
         blocker = _make_creature(name="Blocker", power=2, toughness=2, summoning_sick=False)
-        game = _make_game(
-            p1_script=[[attacker]],
-            p2_script=[{blocker: attacker}],
-        )
+        game = _make_game()
         _place_on_battlefield(game.active_player, attacker)
         _place_on_battlefield(game.non_active_player, blocker)
 
-        declare_attackers_step(game)
-        declare_blockers_step(game)
+        declare_attackers_step(game, [attacker])
+        declare_blockers_step(game, {blocker: attacker})
         combat_damage_step(game)
 
         # Attacker dealt 3 to blocker, blocker dealt 2 to attacker
@@ -818,16 +838,13 @@ class TestCombatIntegration:
         a2 = _make_creature(name="A2", power=3, toughness=3, summoning_sick=False)
         b1 = _make_creature(name="B1", power=1, toughness=4, summoning_sick=False)
 
-        game = _make_game(
-            p1_script=[[a1, a2]],  # both attack
-            p2_script=[{b1: a1}],  # b1 blocks a1 only
-        )
+        game = _make_game()
         _place_on_battlefield(game.active_player, a1)
         _place_on_battlefield(game.active_player, a2)
         _place_on_battlefield(game.non_active_player, b1)
 
-        declare_attackers_step(game)
-        declare_blockers_step(game)
+        declare_attackers_step(game, [a1, a2])  # both attack
+        declare_blockers_step(game, {b1: a1})  # b1 blocks a1 only
         combat_damage_step(game)
 
         # a1 blocked by b1: a1 deals 2 to b1, b1 deals 1 to a1
@@ -848,17 +865,12 @@ class TestCombatIntegration:
             name="FlyBlocker", power=1, toughness=2, summoning_sick=False,
             keywords=Keyword.FLYING,
         )
-        game = _make_game(
-            p1_script=[[multi]],
-            p2_script=[{flyer_blocker: multi}],
-            p1_life=15,
-            p2_life=20,
-        )
+        game = _make_game(p1_life=15, p2_life=20)
         _place_on_battlefield(game.active_player, multi)
         _place_on_battlefield(game.non_active_player, flyer_blocker)
 
-        declare_attackers_step(game)
-        declare_blockers_step(game)
+        declare_attackers_step(game, [multi])
+        declare_blockers_step(game, {flyer_blocker: multi})
         combat_damage_step(game)
 
         # Trample: 2 to blocker (lethal), 3 to player

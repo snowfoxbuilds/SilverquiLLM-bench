@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
+from engine.card_queries import choose_object, query_yes_no
 from engine.types import CardType, ManaCost, Zone
 
 if TYPE_CHECKING:
@@ -41,7 +42,7 @@ class Micromancer(Creature):
         if controller is None:
             return
         # Optional — ask if they want to search
-        if not controller.choose_yes_no("Search your library for an instant or sorcery with mana value 1?"):
+        if not query_yes_no(game, controller, "Search your library for an instant or sorcery with mana value 1?", source_card=self):
             return
         library = controller.zones[Zone.LIBRARY]
         candidates = []
@@ -53,13 +54,13 @@ class Micromancer(Creature):
                     candidates.append(card)
         if not candidates:
             return
-        try:
-            chosen = controller.choose_card(
-                candidates,
-                "Choose an instant or sorcery card with mana value 1",
-            )
-        except Exception:
-            chosen = candidates[0] if candidates else None
+        chosen = choose_object(
+            game,
+            controller,
+            candidates,
+            "Choose an instant or sorcery card with mana value 1",
+            source_card=self,
+        )
         if chosen is None:
             return
         library.remove(chosen)

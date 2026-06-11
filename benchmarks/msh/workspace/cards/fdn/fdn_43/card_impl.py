@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Sorcery
+from engine.card_queries import choose_object
 from engine.types import CardType, ManaCost, Zone
 
 if TYPE_CHECKING:
@@ -61,13 +62,13 @@ class InspirationFromBeyond(Sorcery):
         if not eligible:
             return
 
-        try:
-            chosen = controller.choose_card(
-                eligible,
-                "Choose an instant or sorcery card to return to your hand",
-            )
-        except Exception:
-            chosen = eligible[0] if eligible else None
+        chosen = choose_object(
+            game,
+            controller,
+            eligible,
+            "Choose an instant or sorcery card to return to your hand",
+            source_card=self,
+        )
 
         if chosen is not None and chosen in list(graveyard.get_all()):
             move_to_zone(game, chosen, Zone.GRAVEYARD, Zone.HAND)

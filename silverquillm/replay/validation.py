@@ -31,6 +31,36 @@ class DivergenceType(enum.Enum):
     ILLEGAL_ACTION = "ILLEGAL_ACTION"
     STATE_MISMATCH = "STATE_MISMATCH"
     ENGINE_ERROR = "ENGINE_ERROR"
+    # MSH Player Query protocol (intent-driven seat): a query that no
+    # replay-derived intent could answer, and an engine-side boundary-validation
+    # failure. Both are recorded divergences — never a crash of the run.
+    QUERY_UNANSWERED = "QUERY_UNANSWERED"
+    PROTOCOL_ERROR = "PROTOCOL_ERROR"
+
+
+# Module-qualified names of the MSH protocol exceptions (engine/decisions.py).
+# Qualified matching keeps this shared code import-free while ruling out a
+# same-named third-party exception classifying as a protocol failure.
+_PROTOCOL_ERROR_QUALNAME = ("engine.decisions", "ProtocolError")
+_UNMATCHED_QUERY_QUALNAME = ("engine.decisions", "UnmatchedQueryError")
+
+
+def classify_step_exception(exc: BaseException) -> "DivergenceType":
+    """Classify an exception raised while executing a replay step.
+
+    Engine-agnostic — matches on module-qualified class names in the MRO so
+    this shared code need not import the MSH-only exception classes:
+      - ``engine.decisions.ProtocolError`` (boundary-validation failure) -> PROTOCOL_ERROR
+      - ``engine.decisions.UnmatchedQueryError`` (no intent matched) -> QUERY_UNANSWERED
+      - anything else (including a same-named foreign class) -> ENGINE_ERROR
+    An unanswerable query is thus a recorded divergence, never a crash.
+    """
+    mro_qualnames = {(cls.__module__, cls.__name__) for cls in type(exc).__mro__}
+    if _PROTOCOL_ERROR_QUALNAME in mro_qualnames:
+        return DivergenceType.PROTOCOL_ERROR
+    if _UNMATCHED_QUERY_QUALNAME in mro_qualnames:
+        return DivergenceType.QUERY_UNANSWERED
+    return DivergenceType.ENGINE_ERROR
 
 
 # ---------------------------------------------------------------------------
@@ -181,14 +211,14 @@ class ValidatingExecutor:
         try:
             result = self.executor.execute_step(prev_snapshot, curr_snapshot)
         except Exception as exc:
-            # ENGINE_ERROR: unhandled exception
+            div_type = classify_step_exception(exc)
             action = (
                 curr_snapshot.actions[0] if curr_snapshot.actions else None
             )
             grp_ids = [action.grp_id] if action and action.grp_id else []
             div = Divergence(
                 game_state_id=curr_snapshot.game_state_id,
-                divergence_type=DivergenceType.ENGINE_ERROR,
+                divergence_type=div_type,
                 description=f"Engine raised {type(exc).__name__}: {exc}",
                 expected_state=self._snapshot_state_summary(curr_snapshot),
                 actual_state=None,

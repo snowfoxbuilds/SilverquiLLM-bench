@@ -11,6 +11,7 @@ from engine.card import (
     ManaAbility,
     Sorcery,
 )
+from engine.card_queries import choose_object
 from engine.continuous_effects import (
     ContinuousEffect,
     DURATION_END_OF_TURN,
@@ -62,13 +63,9 @@ class GrimTutor(Sorcery):
         else:
             all_cards = library.get_all()
             if all_cards:
-                try:
-                    target_card = controller.choose_card(
-                        all_cards, "Search your library for a card"
-                    )
-                except Exception:
-                    target_card = all_cards[0]
-
+                target_card = choose_object(
+                    game, controller, all_cards, "Search your library for a card", source_card=self
+                )
         if target_card is not None and library.contains(target_card):
             library.remove(target_card)
             hand.add(target_card)

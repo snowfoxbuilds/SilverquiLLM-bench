@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.types import CardType, Keyword, ManaCost, Zone
 from engine.events import AttacksTriggeredEvent, CreatureDiesTriggeredEvent
 if TYPE_CHECKING:
@@ -47,10 +48,7 @@ class HighSocietyHunter(Creature):
             candidates = [c for c in battlefield.get_all() if CardType.CREATURE in getattr(c, 'card_types', set()) and c is not source]
             if not candidates:
                 return
-            try:
-                chosen = controller.choose_card(candidates, 'sacrifice a creature for +1/+1 counter')
-            except Exception:
-                chosen = None
+            chosen = choose_object(game, controller, candidates, 'sacrifice a creature for +1/+1 counter', source_card=source, optional=True)
             if chosen is None:
                 return
             sacrifice(game, controller, chosen)

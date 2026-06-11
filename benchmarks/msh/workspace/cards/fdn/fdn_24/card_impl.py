@@ -6,6 +6,7 @@ import random
 from typing import TYPE_CHECKING, Any
 
 from engine.card import ActivatedAbility, Creature
+from engine.card_queries import choose_object
 from engine.types import CardType, Keyword, ManaCost
 
 if TYPE_CHECKING:
@@ -82,10 +83,14 @@ class SquadRallier(Creature):
 
             chosen = None
             if eligible:
-                chosen = ctrl.choose_card(
+                chosen = choose_object(
+                    game,
+                    ctrl,
                     eligible,
                     "Choose a creature with power 2 or less to put into "
                     "your hand (or None)",
+                    source_card=source,
+                    optional=True,
                 )
 
             if chosen is not None and chosen in top_four:

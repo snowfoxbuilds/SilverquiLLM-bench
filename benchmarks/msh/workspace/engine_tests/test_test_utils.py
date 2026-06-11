@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from engine.card import CardImpl, Creature, Instant
-from engine.player import DeterministicPlayer
+from engine.intent_player import DeterministicPlayer
 from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Zone
 
 from test_utils import (
@@ -85,15 +85,6 @@ class TestCreateGame:
     def test_active_player_is_player1(self) -> None:
         game = create_game()
         assert game.active_player_index == 0
-
-    def test_scripts_passed_to_players(self) -> None:
-        game = create_game(scripts=(["a", "b"], ["c"]))
-        p1 = game.players[0]
-        p2 = game.players[1]
-        assert isinstance(p1, DeterministicPlayer)
-        assert isinstance(p2, DeterministicPlayer)
-        assert p1.remaining_choices == 2
-        assert p2.remaining_choices == 1
 
 
 # ===================================================================

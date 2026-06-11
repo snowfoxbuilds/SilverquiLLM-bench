@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.types import CardType, Keyword, ManaCost, Zone
 
 if TYPE_CHECKING:
@@ -63,10 +64,7 @@ class AbyssalHarvester(Creature):
             if not candidates:
                 return
 
-            try:
-                chosen = controller.choose_card(candidates, "creature card to exile from graveyard")
-            except Exception:
-                chosen = candidates[0] if candidates else None
+            chosen = choose_object(game, controller, candidates, "creature card to exile from graveyard", source_card=source)
 
             if chosen is None:
                 return

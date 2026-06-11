@@ -161,8 +161,8 @@ def _sba_draw_from_empty_library(game: GameState) -> bool:
 def _sba_legend_rule(game: GameState) -> bool:
     """If a player controls 2+ legendaries with the same name, they choose one to keep.
 
-    The player is asked to choose which legendary permanent to keep via
-    ``player.choose()``.  All others are moved to the graveyard.
+    The player is asked to choose which legendary permanent to keep via a
+    Player Query.  All others are moved to the graveyard.
     """
     action_taken = False
     for player in game.players:
@@ -177,13 +177,35 @@ def _sba_legend_rule(game: GameState) -> bool:
                 legendaries[obj.name].append(obj)
         for name, objs in legendaries.items():
             if len(objs) >= 2:
-                # Let the player choose which to keep
-                keep = player.choose(objs, f"legend rule: choose which {name!r} to keep")
+                # The player chooses which to keep — a Player Query.
+                keep = _choose_legend_keep(game, player, objs, name)
                 for obj in objs:
                     if obj is not keep:
                         _move_to_graveyard(game, player, obj)
                 action_taken = True
     return action_taken
+
+
+def _choose_legend_keep(
+    game: GameState, player: Any, objs: list[Any], name: str
+) -> Any:
+    """Raise an OBJECT Player Query for the legend rule; map back to the object."""
+    from engine.queries import PlayerQuery, ask
+    from engine.refs_registry import object_options
+
+    seat = game.refs.seat_of(player)
+    options, by_decision = object_options(
+        game.refs, ((o, "battlefield", seat) for o in objs)
+    )
+    query = PlayerQuery(
+        source=(game.refs.player_decision(player, seat=seat),),
+        prompt=f"legend rule: choose which {name!r} to keep",
+        options=options,
+        min=1,
+        max=1,
+    )
+    answer = ask(player, query)
+    return by_decision[answer.selected[0]]
 
 
 def _sba_token_not_on_battlefield(game: GameState) -> bool:

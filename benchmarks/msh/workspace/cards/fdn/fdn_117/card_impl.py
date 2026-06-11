@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
+from engine.card_queries import choose_object
 from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
 from engine.types import CardType, Keyword, ManaCost, Zone
 from engine.events import AttacksTriggeredEvent
@@ -46,10 +47,7 @@ class AshrootAnimist(Creature):
             candidates = [c for c in bf.get_all() if CardType.CREATURE in getattr(c, 'card_types', set()) and c is not source]
             if not candidates:
                 return
-            try:
-                chosen = ctrl.choose_card(candidates, 'creature to get +X/+X and trample')
-            except Exception:
-                chosen = candidates[0]
+            chosen = choose_object(game, ctrl, candidates, 'creature to get +X/+X and trample', source_card=source)
             if chosen is None:
                 return
             power_val = getattr(source, 'power', getattr(source, 'base_power', 4))
