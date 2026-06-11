@@ -1,86 +1,19 @@
 [
   {
-    "card": "sos_1",
-    "test_node": "tests.py::TestAttackTrigger::test_attack_trigger_casts_instant_from_graveyard_to_exile",
-    "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
-    "breadth": 10,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-48-bare-xhigh",
-      "cc-opus-48-plan-tdd-v2-xhigh",
-      "cc-opus-48-plan-tdd-xhigh",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_1",
-    "test_node": "tests.py::TestAttackTrigger::test_attack_trigger_sorcery_also_exiled",
-    "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
-    "breadth": 10,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-48-bare-xhigh",
-      "cc-opus-48-plan-tdd-v2-xhigh",
-      "cc-opus-48-plan-tdd-xhigh",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_1",
-    "test_node": "tests.py::TestAttackTrigger::test_other_spells_still_go_to_graveyard",
-    "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
-    "breadth": 10,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-48-bare-xhigh",
-      "cc-opus-48-plan-tdd-v2-xhigh",
-      "cc-opus-48-plan-tdd-xhigh",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_120",
-    "test_node": "tests.py::TestCastBehaviour::test_exiled_card_may_be_cast_for_free",
-    "tests_hash": "542db4c3c3797c5e26c1046f533ab299b36a4d7b2864b0399cf79db2424ac3bf",
-    "breadth": 10,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-48-bare-xhigh",
-      "cc-opus-48-plan-tdd-v2-xhigh",
-      "cc-opus-48-plan-tdd-xhigh",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
     "card": "sos_120",
     "test_node": "tests.py::TestParadigmRecurrence::test_paradigm_recurrence_casts_copy_from_exile",
     "tests_hash": "542db4c3c3797c5e26c1046f533ab299b36a4d7b2864b0399cf79db2424ac3bf",
-    "breadth": 10,
+    "breadth": 15,
     "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
       "cc-opus-48-bare",
+      "cc-opus-48-bare-high-planned",
       "cc-opus-48-bare-xhigh",
+      "cc-opus-48-bare-xhigh-planned",
       "cc-opus-48-plan-tdd-v2-xhigh",
       "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -92,13 +25,18 @@
   {
     "card": "sos_13",
     "test_node": "tests.py::TestETBToken::test_etb_creates_inkling_for_target_player",
-    "tests_hash": "e0c0e65c288bb61e2643f7446c8355897bbc359bf5828da255487ec3476a27e3",
-    "breadth": 10,
+    "tests_hash": "3bb30925fa5f3f2086fe81532c461ef00902004c05039e2c3e8444bc194d2091",
+    "breadth": 15,
     "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
       "cc-opus-48-bare",
+      "cc-opus-48-bare-high-planned",
       "cc-opus-48-bare-xhigh",
+      "cc-opus-48-bare-xhigh-planned",
       "cc-opus-48-plan-tdd-v2-xhigh",
       "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -110,13 +48,18 @@
   {
     "card": "sos_13",
     "test_node": "tests.py::TestETBToken::test_etb_token_can_be_given_to_self",
-    "tests_hash": "e0c0e65c288bb61e2643f7446c8355897bbc359bf5828da255487ec3476a27e3",
-    "breadth": 10,
+    "tests_hash": "3bb30925fa5f3f2086fe81532c461ef00902004c05039e2c3e8444bc194d2091",
+    "breadth": 15,
     "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
       "cc-opus-48-bare",
+      "cc-opus-48-bare-high-planned",
       "cc-opus-48-bare-xhigh",
+      "cc-opus-48-bare-xhigh-planned",
       "cc-opus-48-plan-tdd-v2-xhigh",
       "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -128,13 +71,18 @@
   {
     "card": "sos_13",
     "test_node": "tests.py::TestPreparedBackFace::test_not_prepared_when_creature_counts_equal",
-    "tests_hash": "e0c0e65c288bb61e2643f7446c8355897bbc359bf5828da255487ec3476a27e3",
-    "breadth": 10,
+    "tests_hash": "3bb30925fa5f3f2086fe81532c461ef00902004c05039e2c3e8444bc194d2091",
+    "breadth": 15,
     "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
       "cc-opus-48-bare",
+      "cc-opus-48-bare-high-planned",
       "cc-opus-48-bare-xhigh",
+      "cc-opus-48-bare-xhigh-planned",
       "cc-opus-48-plan-tdd-v2-xhigh",
       "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -146,13 +94,18 @@
   {
     "card": "sos_13",
     "test_node": "tests.py::TestPreparedBackFace::test_prepared_back_face_exiles_creature_and_grants_life",
-    "tests_hash": "e0c0e65c288bb61e2643f7446c8355897bbc359bf5828da255487ec3476a27e3",
-    "breadth": 10,
+    "tests_hash": "3bb30925fa5f3f2086fe81532c461ef00902004c05039e2c3e8444bc194d2091",
+    "breadth": 15,
     "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
       "cc-opus-48-bare",
+      "cc-opus-48-bare-high-planned",
       "cc-opus-48-bare-xhigh",
+      "cc-opus-48-bare-xhigh-planned",
       "cc-opus-48-plan-tdd-v2-xhigh",
       "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -164,103 +117,18 @@
   {
     "card": "sos_13",
     "test_node": "tests.py::TestPreparedBackFace::test_prepared_consumed_after_back_face_cast",
-    "tests_hash": "e0c0e65c288bb61e2643f7446c8355897bbc359bf5828da255487ec3476a27e3",
-    "breadth": 10,
+    "tests_hash": "3bb30925fa5f3f2086fe81532c461ef00902004c05039e2c3e8444bc194d2091",
+    "breadth": 15,
     "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
       "cc-opus-48-bare",
+      "cc-opus-48-bare-high-planned",
       "cc-opus-48-bare-xhigh",
+      "cc-opus-48-bare-xhigh-planned",
       "cc-opus-48-plan-tdd-v2-xhigh",
       "cc-opus-48-plan-tdd-xhigh",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_226",
-    "test_node": "tests.py::TestCasualty::test_casualty_paid_copies_the_spell",
-    "tests_hash": "15a392cad56286171f7c01f40ade57df0eb45e3a6649c97a42e9273d5dc2436e",
-    "breadth": 10,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-48-bare-xhigh",
-      "cc-opus-48-plan-tdd-v2-xhigh",
-      "cc-opus-48-plan-tdd-xhigh",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_257",
-    "test_node": "tests.py::TestAnimation::test_animation_requires_five_mana",
-    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
-    "breadth": 10,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-48-bare-xhigh",
-      "cc-opus-48-plan-tdd-v2-xhigh",
-      "cc-opus-48-plan-tdd-xhigh",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_257",
-    "test_node": "tests.py::TestManaAbilities::test_restricted_mana_pays_an_instant",
-    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
-    "breadth": 10,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-48-bare-xhigh",
-      "cc-opus-48-plan-tdd-v2-xhigh",
-      "cc-opus-48-plan-tdd-xhigh",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_257",
-    "test_node": "tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature",
-    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
-    "breadth": 10,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-48-bare-xhigh",
-      "cc-opus-48-plan-tdd-v2-xhigh",
-      "cc-opus-48-plan-tdd-xhigh",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_257",
-    "test_node": "tests.py::TestManaAbilities::test_second_ability_costs_life_and_taps",
-    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
-    "breadth": 10,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-48-bare-xhigh",
-      "cc-opus-48-plan-tdd-v2-xhigh",
-      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -272,13 +140,18 @@
   {
     "card": "sos_257",
     "test_node": "tests.py::TestSpellCastBoost::test_boost_on_controller_instant_and_reset_at_cleanup",
-    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
-    "breadth": 10,
+    "tests_hash": "6ccce63542b08dea7c92bc8e318946a30f64edce26574d36d9e0c5e2d7fc9200",
+    "breadth": 15,
     "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
       "cc-opus-48-bare",
+      "cc-opus-48-bare-high-planned",
       "cc-opus-48-bare-xhigh",
+      "cc-opus-48-bare-xhigh-planned",
       "cc-opus-48-plan-tdd-v2-xhigh",
       "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -291,48 +164,17 @@
     "card": "sos_57",
     "test_node": "tests.py::TestFizzle::test_fizzle_when_target_already_countered",
     "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
-    "breadth": 10,
+    "breadth": 15,
     "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
       "cc-opus-48-bare",
+      "cc-opus-48-bare-high-planned",
       "cc-opus-48-bare-xhigh",
+      "cc-opus-48-bare-xhigh-planned",
       "cc-opus-48-plan-tdd-v2-xhigh",
       "cc-opus-48-plan-tdd-xhigh",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_57",
-    "test_node": "tests.py::TestRefund::test_refund_amount_tracks_opponents_spell_cost",
-    "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
-    "breadth": 10,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-48-bare-xhigh",
-      "cc-opus-48-plan-tdd-v2-xhigh",
-      "cc-opus-48-plan-tdd-xhigh",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_57",
-    "test_node": "tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase",
-    "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
-    "breadth": 10,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-48-bare-xhigh",
-      "cc-opus-48-plan-tdd-v2-xhigh",
-      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -345,12 +187,17 @@
     "card": "sos_97",
     "test_node": "tests.py::TestLoyaltyLegality::test_planeswalker_dies_at_zero_loyalty",
     "tests_hash": "8eabfdd40c609ce59cbfafbe9b1972ddd5cf12ac546eb544445644cf7d872112",
-    "breadth": 10,
+    "breadth": 15,
     "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
       "cc-opus-48-bare",
+      "cc-opus-48-bare-high-planned",
       "cc-opus-48-bare-xhigh",
+      "cc-opus-48-bare-xhigh-planned",
       "cc-opus-48-plan-tdd-v2-xhigh",
       "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -363,46 +210,17 @@
     "card": "sos_97",
     "test_node": "tests.py::TestUltimate::test_ultimate_skips_turns_per_seeded_coin_flips",
     "tests_hash": "8eabfdd40c609ce59cbfafbe9b1972ddd5cf12ac546eb544445644cf7d872112",
-    "breadth": 10,
+    "breadth": 15,
     "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
       "cc-opus-48-bare",
+      "cc-opus-48-bare-high-planned",
       "cc-opus-48-bare-xhigh",
+      "cc-opus-48-bare-xhigh-planned",
       "cc-opus-48-plan-tdd-v2-xhigh",
       "cc-opus-48-plan-tdd-xhigh",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_257",
-    "test_node": "tests.py::TestSpellCastBoost::test_no_boost_when_not_animated",
-    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
-    "breadth": 9,
-    "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-48-bare-xhigh",
-      "cc-opus-48-plan-tdd-xhigh",
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-gpt54-single",
-      "copilot-gpt54-sonnet-reviewer",
-      "copilot-sonnet-gpt54-reviewer",
-      "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_257",
-    "test_node": "tests.py::TestSpellCastBoost::test_two_spells_stack_boosts",
-    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
-    "breadth": 9,
-    "failing_images": [
-      "cc-opus-48-bare-xhigh",
-      "cc-opus-48-plan-tdd-v2-xhigh",
-      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -415,12 +233,17 @@
     "card": "sos_97",
     "test_node": "tests.py::TestMinusOne::test_minus_one_targeted_player_discards",
     "tests_hash": "8eabfdd40c609ce59cbfafbe9b1972ddd5cf12ac546eb544445644cf7d872112",
-    "breadth": 9,
+    "breadth": 14,
     "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
       "cc-opus-48-bare",
+      "cc-opus-48-bare-high-planned",
       "cc-opus-48-bare-xhigh",
+      "cc-opus-48-bare-xhigh-planned",
       "cc-opus-48-plan-tdd-v2-xhigh",
       "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
       "cc-sonnet-single",
       "copilot-gpt54-single",
       "copilot-gpt54-sonnet-reviewer",
@@ -432,12 +255,17 @@
     "card": "sos_97",
     "test_node": "tests.py::TestMinusTwo::test_minus_two_returns_creature_from_graveyard",
     "tests_hash": "8eabfdd40c609ce59cbfafbe9b1972ddd5cf12ac546eb544445644cf7d872112",
-    "breadth": 9,
+    "breadth": 14,
     "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
       "cc-opus-48-bare",
+      "cc-opus-48-bare-high-planned",
       "cc-opus-48-bare-xhigh",
+      "cc-opus-48-bare-xhigh-planned",
       "cc-opus-48-plan-tdd-v2-xhigh",
       "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
       "cc-sonnet-single",
       "copilot-gpt54-single",
       "copilot-gpt54-sonnet-reviewer",
@@ -446,13 +274,18 @@
     ]
   },
   {
-    "card": "sos_257",
-    "test_node": "tests.py::TestAnimation::test_animation_makes_a_2_4_wizard_that_is_still_a_land",
-    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
-    "breadth": 8,
+    "card": "sos_1",
+    "test_node": "tests.py::TestAttackTrigger::test_attack_trigger_casts_instant_from_graveyard_to_exile",
+    "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
+    "breadth": 13,
     "failing_images": [
+      "cc-opus-48-bare",
+      "cc-opus-48-bare-high-planned",
       "cc-opus-48-bare-xhigh",
       "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -462,13 +295,60 @@
     ]
   },
   {
-    "card": "sos_257",
-    "test_node": "tests.py::TestAnimation::test_reanimation_is_a_gated_noop",
-    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
-    "breadth": 8,
+    "card": "sos_1",
+    "test_node": "tests.py::TestAttackTrigger::test_attack_trigger_sorcery_also_exiled",
+    "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
+    "breadth": 13,
     "failing_images": [
+      "cc-opus-48-bare",
+      "cc-opus-48-bare-high-planned",
       "cc-opus-48-bare-xhigh",
       "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_1",
+    "test_node": "tests.py::TestAttackTrigger::test_other_spells_still_go_to_graveyard",
+    "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
+    "breadth": 13,
+    "failing_images": [
+      "cc-opus-48-bare",
+      "cc-opus-48-bare-high-planned",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_226",
+    "test_node": "tests.py::TestCasualty::test_casualty_paid_copies_the_spell",
+    "tests_hash": "15a392cad56286171f7c01f40ade57df0eb45e3a6649c97a42e9273d5dc2436e",
+    "breadth": 13,
+    "failing_images": [
+      "cc-opus-48-bare",
+      "cc-opus-48-bare-high-planned",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -480,12 +360,17 @@
   {
     "card": "sos_257",
     "test_node": "tests.py::TestLandDrop::test_played_as_the_one_land_per_turn",
-    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
-    "breadth": 8,
+    "tests_hash": "6ccce63542b08dea7c92bc8e318946a30f64edce26574d36d9e0c5e2d7fc9200",
+    "breadth": 13,
     "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
+      "cc-opus-48-bare-high-planned",
       "cc-opus-48-bare-xhigh",
+      "cc-opus-48-bare-xhigh-planned",
       "cc-opus-48-plan-tdd-v2-xhigh",
       "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
       "cc-opus-single",
       "copilot-gpt54-single",
       "copilot-gpt54-sonnet-reviewer",
@@ -495,12 +380,79 @@
   },
   {
     "card": "sos_257",
-    "test_node": "tests.py::TestSpellCastBoost::test_opponent_spell_does_not_boost",
-    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
-    "breadth": 8,
+    "test_node": "tests.py::TestManaAbilities::test_restricted_mana_rejected_for_a_creature",
+    "tests_hash": "6ccce63542b08dea7c92bc8e318946a30f64edce26574d36d9e0c5e2d7fc9200",
+    "breadth": 13,
     "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
+      "cc-opus-48-bare",
       "cc-opus-48-bare-xhigh",
       "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_57",
+    "test_node": "tests.py::TestRefund::test_refund_amount_tracks_opponents_spell_cost",
+    "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
+    "breadth": 13,
+    "failing_images": [
+      "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-bare-xhigh-planned",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_57",
+    "test_node": "tests.py::TestRefund::test_refund_with_wizard_at_next_main_phase",
+    "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
+    "breadth": 13,
+    "failing_images": [
+      "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-bare-xhigh-planned",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_257",
+    "test_node": "tests.py::TestSpellCastBoost::test_two_spells_stack_boosts",
+    "tests_hash": "6ccce63542b08dea7c92bc8e318946a30f64edce26574d36d9e0c5e2d7fc9200",
+    "breadth": 12,
+    "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -513,9 +465,85 @@
     "card": "sos_1",
     "test_node": "tests.py::TestAttackTrigger::test_attack_trigger_targets_only_chosen_card",
     "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
-    "breadth": 7,
+    "breadth": 11,
     "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
+      "cc-opus-48-bare-xhigh-planned",
       "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_257",
+    "test_node": "tests.py::TestAnimation::test_animation_makes_a_2_4_wizard_that_is_still_a_land",
+    "tests_hash": "6ccce63542b08dea7c92bc8e318946a30f64edce26574d36d9e0c5e2d7fc9200",
+    "breadth": 10,
+    "failing_images": [
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_257",
+    "test_node": "tests.py::TestAnimation::test_reanimation_is_a_gated_noop",
+    "tests_hash": "6ccce63542b08dea7c92bc8e318946a30f64edce26574d36d9e0c5e2d7fc9200",
+    "breadth": 10,
+    "failing_images": [
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-gpt54-sonnet-reviewer",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_257",
+    "test_node": "tests.py::TestManaAbilities::test_second_ability_costs_life_and_taps",
+    "tests_hash": "6ccce63542b08dea7c92bc8e318946a30f64edce26574d36d9e0c5e2d7fc9200",
+    "breadth": 10,
+    "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_257",
+    "test_node": "tests.py::TestSpellCastBoost::test_opponent_spell_does_not_boost",
+    "tests_hash": "6ccce63542b08dea7c92bc8e318946a30f64edce26574d36d9e0c5e2d7fc9200",
+    "breadth": 10,
+    "failing_images": [
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -527,12 +555,14 @@
   {
     "card": "sos_13",
     "test_node": "tests.py::TestIdentity::test_card_identity",
-    "tests_hash": "e0c0e65c288bb61e2643f7446c8355897bbc359bf5828da255487ec3476a27e3",
-    "breadth": 7,
+    "tests_hash": "3bb30925fa5f3f2086fe81532c461ef00902004c05039e2c3e8444bc194d2091",
+    "breadth": 9,
     "failing_images": [
+      "cc-opus-48-bare-high-planned",
       "cc-opus-48-bare-xhigh",
       "cc-opus-48-plan-tdd-v2-xhigh",
       "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single-xhigh",
       "cc-opus-single",
       "copilot-gpt54-single",
       "copilot-sonnet-gpt54-reviewer",
@@ -543,12 +573,14 @@
     "card": "sos_226",
     "test_node": "tests.py::TestCasualty::test_zero_power_creature_is_not_a_legal_casualty_sacrifice",
     "tests_hash": "15a392cad56286171f7c01f40ade57df0eb45e3a6649c97a42e9273d5dc2436e",
-    "breadth": 7,
+    "breadth": 9,
     "failing_images": [
       "cc-opus-48-bare",
+      "cc-opus-48-bare-high-planned",
       "cc-opus-48-bare-xhigh",
       "cc-opus-48-plan-tdd-v2-xhigh",
       "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single-xhigh",
       "copilot-gpt54-single",
       "copilot-gpt54-sonnet-reviewer",
       "copilot-sonnet-gpt54-reviewer"
@@ -558,8 +590,10 @@
     "card": "sos_201",
     "test_node": "tests.py::TestMiracle::test_miracle_cast_on_first_draw",
     "tests_hash": "6cde687bbec7844e13f26d159434d0adf616cee1245ce40ca3144846ca64b2f8",
-    "breadth": 6,
+    "breadth": 8,
     "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
+      "cc-opus-48-single",
       "cc-opus-single",
       "cc-sonnet-single",
       "copilot-gpt54-single",
@@ -570,12 +604,44 @@
   },
   {
     "card": "sos_257",
-    "test_node": "tests.py::TestManaAbilities::test_first_ability_adds_colorless",
-    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
-    "breadth": 6,
+    "test_node": "tests.py::TestManaAbilities::test_restricted_mana_pays_an_instant",
+    "tests_hash": "6ccce63542b08dea7c92bc8e318946a30f64edce26574d36d9e0c5e2d7fc9200",
+    "breadth": 8,
     "failing_images": [
       "cc-opus-48-bare-xhigh",
       "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-single-xhigh",
+      "cc-opus-single",
+      "cc-sonnet-single",
+      "copilot-gpt54-single",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_120",
+    "test_node": "tests.py::TestCastBehaviour::test_exiled_card_may_be_cast_for_free",
+    "tests_hash": "542db4c3c3797c5e26c1046f533ab299b36a4d7b2864b0399cf79db2424ac3bf",
+    "breadth": 7,
+    "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-single",
+      "cc-opus-48-single-xhigh",
+      "copilot-gpt54-single",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_257",
+    "test_node": "tests.py::TestAnimation::test_animation_requires_five_mana",
+    "tests_hash": "6ccce63542b08dea7c92bc8e318946a30f64edce26574d36d9e0c5e2d7fc9200",
+    "breadth": 7,
+    "failing_images": [
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-single-xhigh",
       "cc-opus-single",
       "copilot-gpt54-single",
       "copilot-sonnet-gpt54-reviewer",
@@ -583,12 +649,41 @@
     ]
   },
   {
+    "card": "sos_257",
+    "test_node": "tests.py::TestManaAbilities::test_first_ability_adds_colorless",
+    "tests_hash": "6ccce63542b08dea7c92bc8e318946a30f64edce26574d36d9e0c5e2d7fc9200",
+    "breadth": 7,
+    "failing_images": [
+      "cc-opus-48-bare-xhigh",
+      "cc-opus-48-plan-tdd-v2-xhigh",
+      "cc-opus-48-single-xhigh",
+      "cc-opus-single",
+      "copilot-gpt54-single",
+      "copilot-sonnet-gpt54-reviewer",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_201",
+    "test_node": "tests.py::TestOpponentUpkeepTrigger::test_opponent_upkeep_discard_to_draw_accepted",
+    "tests_hash": "6cde687bbec7844e13f26d159434d0adf616cee1245ce40ca3144846ca64b2f8",
+    "breadth": 5,
+    "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
+      "cc-opus-48-bare",
+      "cc-opus-48-bare-xhigh-planned",
+      "cc-opus-48-plan-tdd-xhigh",
+      "copilot-sonnet-single"
+    ]
+  },
+  {
     "card": "sos_97",
     "test_node": "tests.py::TestPlusOne::test_plus_one_surveil_keep_one_on_top",
     "tests_hash": "8eabfdd40c609ce59cbfafbe9b1972ddd5cf12ac546eb544445644cf7d872112",
-    "breadth": 4,
+    "breadth": 5,
     "failing_images": [
       "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
       "cc-opus-single",
       "copilot-sonnet-gpt54-reviewer",
       "copilot-sonnet-single"
@@ -598,22 +693,24 @@
     "card": "sos_120",
     "test_node": "tests.py::TestCastBehaviour::test_cast_exiles_until_mv_threshold_and_self_exiles",
     "tests_hash": "542db4c3c3797c5e26c1046f533ab299b36a4d7b2864b0399cf79db2424ac3bf",
-    "breadth": 3,
+    "breadth": 4,
     "failing_images": [
+      "cc-opus-48-single",
       "cc-opus-single",
       "copilot-gpt54-single",
       "copilot-sonnet-gpt54-reviewer"
     ]
   },
   {
-    "card": "sos_201",
-    "test_node": "tests.py::TestOpponentUpkeepTrigger::test_opponent_upkeep_discard_to_draw_accepted",
-    "tests_hash": "6cde687bbec7844e13f26d159434d0adf616cee1245ce40ca3144846ca64b2f8",
-    "breadth": 3,
+    "card": "sos_57",
+    "test_node": "tests.py::TestRefund::test_no_refund_when_countered_spell_was_cast_for_free",
+    "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
+    "breadth": 4,
     "failing_images": [
-      "cc-opus-48-bare",
-      "cc-opus-48-plan-tdd-xhigh",
-      "copilot-sonnet-single"
+      "cc-opus-48-bare-high-planned",
+      "cc-opus-48-single",
+      "cc-sonnet-single",
+      "copilot-sonnet-gpt54-reviewer"
     ]
   },
   {
@@ -625,6 +722,17 @@
       "cc-sonnet-single",
       "copilot-sonnet-gpt54-reviewer",
       "copilot-sonnet-single"
+    ]
+  },
+  {
+    "card": "sos_257",
+    "test_node": "tests.py::TestSpellCastBoost::test_no_boost_when_not_animated",
+    "tests_hash": "6ccce63542b08dea7c92bc8e318946a30f64edce26574d36d9e0c5e2d7fc9200",
+    "breadth": 3,
+    "failing_images": [
+      "cc-opus-48-single-xhigh",
+      "cc-opus-single",
+      "copilot-gpt54-single"
     ]
   },
   {
@@ -666,18 +774,7 @@
     "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
     "breadth": 3,
     "failing_images": [
-      "cc-opus-single",
-      "cc-sonnet-single",
-      "copilot-sonnet-gpt54-reviewer"
-    ]
-  },
-  {
-    "card": "sos_57",
-    "test_node": "tests.py::TestRefund::test_no_refund_when_countered_spell_was_cast_for_free",
-    "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
-    "breadth": 3,
-    "failing_images": [
-      "cc-opus-single",
+      "cc-opus-48-single",
       "cc-sonnet-single",
       "copilot-sonnet-gpt54-reviewer"
     ]
@@ -688,7 +785,7 @@
     "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
     "breadth": 3,
     "failing_images": [
-      "cc-opus-single",
+      "cc-opus-48-single",
       "cc-sonnet-single",
       "copilot-sonnet-gpt54-reviewer"
     ]
@@ -699,9 +796,30 @@
     "tests_hash": "be663d7335ba6f0c3f395f6485a1798b7d6dea6fa6086482a70972c99b9cce5a",
     "breadth": 3,
     "failing_images": [
-      "cc-opus-single",
+      "cc-opus-48-single",
       "cc-sonnet-single",
       "copilot-sonnet-gpt54-reviewer"
+    ]
+  },
+  {
+    "card": "sos_97",
+    "test_node": "tests.py::TestPlusOne::test_plus_one_surveil_both_to_graveyard",
+    "tests_hash": "8eabfdd40c609ce59cbfafbe9b1972ddd5cf12ac546eb544445644cf7d872112",
+    "breadth": 3,
+    "failing_images": [
+      "cc-opus-48-plan-tdd-xhigh",
+      "cc-opus-48-single",
+      "copilot-sonnet-gpt54-reviewer"
+    ]
+  },
+  {
+    "card": "sos_1",
+    "test_node": "tests.py::TestAttackTrigger::test_attack_trigger_may_be_declined",
+    "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
+    "breadth": 2,
+    "failing_images": [
+      "cc-fable-5-bare-xhigh-planned",
+      "cc-opus-48-bare-xhigh-planned"
     ]
   },
   {
@@ -717,7 +835,7 @@
   {
     "card": "sos_13",
     "test_node": "tests.py",
-    "tests_hash": "e0c0e65c288bb61e2643f7446c8355897bbc359bf5828da255487ec3476a27e3",
+    "tests_hash": "3bb30925fa5f3f2086fe81532c461ef00902004c05039e2c3e8444bc194d2091",
     "breadth": 2,
     "failing_images": [
       "copilot-gpt54-sonnet-reviewer",
@@ -732,16 +850,6 @@
     "failing_images": [
       "copilot-sonnet-gpt54-reviewer",
       "copilot-sonnet-single"
-    ]
-  },
-  {
-    "card": "sos_97",
-    "test_node": "tests.py::TestPlusOne::test_plus_one_surveil_both_to_graveyard",
-    "tests_hash": "8eabfdd40c609ce59cbfafbe9b1972ddd5cf12ac546eb544445644cf7d872112",
-    "breadth": 2,
-    "failing_images": [
-      "cc-opus-48-plan-tdd-xhigh",
-      "copilot-sonnet-gpt54-reviewer"
     ]
   },
   {
@@ -769,15 +877,6 @@
     "breadth": 1,
     "failing_images": [
       "copilot-gpt54-sonnet-reviewer"
-    ]
-  },
-  {
-    "card": "sos_201",
-    "test_node": "tests.py::TestMiracle::test_no_miracle_on_second_draw",
-    "tests_hash": "6cde687bbec7844e13f26d159434d0adf616cee1245ce40ca3144846ca64b2f8",
-    "breadth": 1,
-    "failing_images": [
-      "copilot-sonnet-single"
     ]
   },
   {
@@ -828,7 +927,7 @@
   {
     "card": "sos_257",
     "test_node": "tests.py",
-    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
+    "tests_hash": "6ccce63542b08dea7c92bc8e318946a30f64edce26574d36d9e0c5e2d7fc9200",
     "breadth": 1,
     "failing_images": [
       "copilot-gpt54-sonnet-reviewer"
@@ -890,8 +989,8 @@
   },
   {
     "card": "sos_1",
-    "test_node": "tests.py::TestAttackTrigger::test_attack_trigger_may_be_declined",
-    "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a",
+    "test_node": "__rollup__",
+    "tests_hash": null,
     "breadth": 0,
     "failing_images": []
   },
@@ -931,6 +1030,174 @@
     "failing_images": []
   },
   {
+    "card": "sos_10",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_100",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_101",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_102",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_103",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_104",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_105",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_106",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_107",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_108",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_109",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_11",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_110",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_111",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_112",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_113",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_114",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_115",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_116",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_117",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_118",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_119",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_12",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_120",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
     "card": "sos_120",
     "test_node": "tests.py::TestIdentity::test_card_identity",
     "tests_hash": "542db4c3c3797c5e26c1046f533ab299b36a4d7b2864b0399cf79db2424ac3bf",
@@ -941,6 +1208,636 @@
     "card": "sos_120",
     "test_node": "tests.py::TestParadigmRecurrence::test_paradigm_recurrence_may_be_declined",
     "tests_hash": "542db4c3c3797c5e26c1046f533ab299b36a4d7b2864b0399cf79db2424ac3bf",
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_121",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_122",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_123",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_124",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_125",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_126",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_127",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_128",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_129",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_13",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_130",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_131",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_132",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_133",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_134",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_135",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_136",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_137",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_138",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_139",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_14",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_140",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_141",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_142",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_143",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_144",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_145",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_146",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_147",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_148",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_149",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_15",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_150",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_151",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_152",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_153",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_154",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_155",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_156",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_157",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_158",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_159",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_16",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_160",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_161",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_162",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_163",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_164",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_165",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_166",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_167",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_168",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_169",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_17",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_170",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_171",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_172",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_173",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_174",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_175",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_176",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_177",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_178",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_179",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_18",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_180",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_181",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_182",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_183",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_184",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_185",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_186",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_187",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_188",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_189",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_19",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_190",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_191",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_192",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_193",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_194",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_195",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_196",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_197",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_198",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_199",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_2",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_20",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_200",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_201",
+    "test_node": "__rollup__",
+    "tests_hash": null,
     "breadth": 0,
     "failing_images": []
   },
@@ -967,6 +1864,13 @@
   },
   {
     "card": "sos_201",
+    "test_node": "tests.py::TestMiracle::test_no_miracle_on_second_draw",
+    "tests_hash": "6cde687bbec7844e13f26d159434d0adf616cee1245ce40ca3144846ca64b2f8",
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_201",
     "test_node": "tests.py::TestMiracle::test_no_miracle_without_lorehold",
     "tests_hash": "6cde687bbec7844e13f26d159434d0adf616cee1245ce40ca3144846ca64b2f8",
     "breadth": 0,
@@ -976,6 +1880,195 @@
     "card": "sos_201",
     "test_node": "tests.py::TestOpponentUpkeepTrigger::test_no_trigger_on_controllers_own_upkeep",
     "tests_hash": "6cde687bbec7844e13f26d159434d0adf616cee1245ce40ca3144846ca64b2f8",
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_202",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_203",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_204",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_205",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_206",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_207",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_208",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_209",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_21",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_210",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_211",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_212",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_213",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_214",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_215",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_216",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_217",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_218",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_219",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_22",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_220",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_221",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_222",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_223",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_224",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_225",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_226",
+    "test_node": "__rollup__",
+    "tests_hash": null,
     "breadth": 0,
     "failing_images": []
   },
@@ -1004,6 +2097,153 @@
     "card": "sos_226",
     "test_node": "tests.py::TestIdentity::test_card_identity",
     "tests_hash": "15a392cad56286171f7c01f40ade57df0eb45e3a6649c97a42e9273d5dc2436e",
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_227",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_228",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_229",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_23",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_230",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_231",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_232",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_233",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_234",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_235",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_236",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_237",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_238",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_239",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_24",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_240",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_241",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_242",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_243",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_244",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_245",
+    "test_node": "__rollup__",
+    "tests_hash": null,
     "breadth": 0,
     "failing_images": []
   },
@@ -1050,9 +2290,310 @@
     "failing_images": []
   },
   {
+    "card": "sos_246",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_247",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_248",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_249",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_25",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_250",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_251",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_252",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_253",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_254",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_255",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_256",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_257",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
     "card": "sos_257",
     "test_node": "tests.py::TestIdentity::test_card_identity",
-    "tests_hash": "5d3bb82d1767c5aac539ea480d2d23b10ade9e48655c337a6733a8cccb72cec6",
+    "tests_hash": "6ccce63542b08dea7c92bc8e318946a30f64edce26574d36d9e0c5e2d7fc9200",
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_258",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_259",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_26",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_260",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_261",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_262",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_263",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_264",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_265",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_266",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_267",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_268",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_269",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_27",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_270",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_271",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_28",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_29",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_3",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_30",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_31",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_32",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_33",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_34",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_35",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_36",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_37",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_38",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_39",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_4",
+    "test_node": "__rollup__",
+    "tests_hash": null,
     "breadth": 0,
     "failing_images": []
   },
@@ -1060,6 +2601,139 @@
     "card": "sos_4",
     "test_node": "tests.py::TestIdentity::test_card_identity",
     "tests_hash": "5c48cfcd997494e3367b7192eea5afb34c037bd17cb130c3472e5aa370abf5e0",
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_40",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_41",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_42",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_43",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_44",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_45",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_46",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_47",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_48",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_49",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_5",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_50",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_51",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_52",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_53",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_54",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_55",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_56",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_57",
+    "test_node": "__rollup__",
+    "tests_hash": null,
     "breadth": 0,
     "failing_images": []
   },
@@ -1078,9 +2752,331 @@
     "failing_images": []
   },
   {
+    "card": "sos_58",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_59",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_6",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_60",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_61",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_62",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_63",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_64",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_65",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_66",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_67",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_68",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_69",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_7",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_70",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_71",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_72",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_73",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_74",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_75",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_76",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_77",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_78",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_79",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_8",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_80",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_81",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_82",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_83",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_84",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_85",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_86",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_87",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_88",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_89",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_9",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_90",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_91",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_92",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_93",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_94",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_95",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_96",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_97",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
     "card": "sos_97",
     "test_node": "tests.py::TestIdentity::test_card_identity",
     "tests_hash": "8eabfdd40c609ce59cbfafbe9b1972ddd5cf12ac546eb544445644cf7d872112",
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_98",
+    "test_node": "__rollup__",
+    "tests_hash": null,
+    "breadth": 0,
+    "failing_images": []
+  },
+  {
+    "card": "sos_99",
+    "test_node": "__rollup__",
+    "tests_hash": null,
     "breadth": 0,
     "failing_images": []
   }
