@@ -47,6 +47,16 @@ class TestInstanceIdMinting:
         # Within the new stint the id is stable.
         assert reg.instance_id(o, "battlefield") == second_bf
 
+    def test_note_zone_change_breaks_continuity_for_unobserved_stints(self):
+        # move_to_zone calls this hook so a round trip whose middle stint is
+        # never observed by a query still re-mints on return.
+        reg = GameRefsRegistry()
+        o = _Obj("bear")
+        pre = reg.instance_id(o, "battlefield")
+        reg.note_zone_change(o)  # battlefield -> exile, never observed
+        reg.note_zone_change(o)  # exile -> battlefield, never observed
+        assert reg.instance_id(o, "battlefield") != pre
+
     def test_ids_are_not_test_authored(self):
         # The id is opaque/engine-minted; the test cannot predict it beyond
         # uniqueness/stability. We only assert it is hashable.

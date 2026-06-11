@@ -278,6 +278,12 @@ def move_to_zone(
 
     dest_player.zones[dest_zone].add(card)
 
+    # A zone change yields a new object: break instance-id continuity in the
+    # refs registry even when the new stint is never observed by a query
+    # (e.g. a flicker's exile leg). Minting stays lazy — the registry
+    # re-mints on the next observation.
+    game.refs.note_zone_change(card)
+
     # --- Leaving battlefield hooks ---
     if leaving_battlefield:
         card_types = getattr(card, "card_types", set())

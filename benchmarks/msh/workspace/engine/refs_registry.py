@@ -150,6 +150,16 @@ class GameRefsRegistry:
         self._retain.append(obj)
         return self._counter
 
+    def note_zone_change(self, obj: Any) -> None:
+        """Invalidate ``obj``'s current stint after an engine zone move.
+
+        Called by ``move_to_zone`` so an *unobserved* stint still breaks id
+        continuity: a flickered object whose exile stint no query ever sees
+        must not get its pre-flicker id back on return. Minting stays lazy —
+        the next observation re-mints.
+        """
+        self._current.pop(id(obj), None)
+
     # ------------------------------------------------------------------
     # Player registration / reverse lookup
     # ------------------------------------------------------------------
