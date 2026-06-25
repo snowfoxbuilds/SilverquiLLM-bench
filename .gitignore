@@ -25,3 +25,5 @@ venv/
 docker/*/results/
 
 aggregated_results.csv
+
+validation.json
