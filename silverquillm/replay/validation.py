@@ -226,16 +226,38 @@ class ValidatingExecutor:
                 involved_grp_ids=grp_ids,
             )
             self.divergences.append(div)
+            # Simulate mode: resync engine state to GRE truth so the failed
+            # step doesn't cascade into every later comparison.
+            if getattr(self.executor, "simulate", False):
+                try:
+                    self.executor._resync_to_snapshot(curr_snapshot)
+                except Exception:
+                    logger.exception("post-failure resync failed")
             return StepResult(
                 snapshot_id=curr_snapshot.game_state_id,
                 success=False,
             )
 
+        # Simulate mode: engine API failures are recorded divergences,
+        # never silent fallbacks.
+        engine_failures = getattr(result, "engine_failures", [])
+        for failure in engine_failures:
+            self.divergences.append(Divergence(
+                game_state_id=curr_snapshot.game_state_id,
+                divergence_type=DivergenceType.ENGINE_ERROR,
+                description=failure,
+                action=curr_snapshot.actions[0] if curr_snapshot.actions else None,
+                involved_grp_ids=[
+                    a.grp_id for a in curr_snapshot.actions if a.grp_id
+                ][:1],
+            ))
+
         # Classify mismatches from the result
         if result.mismatches:
             self._classify_mismatches(result, curr_snapshot)
-        elif not has_missing:
-            # Only count as successful if no mismatches AND no missing cards
+        elif not has_missing and not engine_failures:
+            # Only count as successful if no mismatches, missing cards,
+            # or engine failures
             self._successful += 1
 
         return result

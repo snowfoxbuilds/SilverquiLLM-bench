@@ -81,6 +81,10 @@ class StepResult:
     mismatches: list[StateMismatch] = field(default_factory=list)
     skipped: bool = False
     skip_reason: str = ""
+    # Simulate mode: engine API calls that failed and fell back to oracle
+    # mutation. Each entry becomes an ENGINE_ERROR divergence — failures are
+    # recorded, never masked.
+    engine_failures: list[str] = field(default_factory=list)
 
     @property
     def matched(self) -> bool:
@@ -205,27 +209,28 @@ class ReplayExecutor:
             )
             self.players[seat_id] = player
 
-        # Build hand contents from snapshot zones
-        seat_hands: dict[int, list[int]] = {}  # seat_id -> list of grpIds
-        seat_libraries: dict[int, list[int]] = {}  # seat_id -> list of grpIds
+        # Build hand contents from snapshot zones (GameObjects, not bare grpIds,
+        # so shells can be typed from the object's own cardTypes/subtypes)
+        seat_hands: dict[int, list[Any]] = {}  # seat_id -> list of GameObjects
+        seat_libraries: dict[int, list[Any]] = {}  # seat_id -> list of GameObjects
 
         for zone in snapshot.zones.values():
             if zone.type == "ZoneType_Hand":
-                grp_ids = []
+                objs = []
                 for iid in zone.object_instance_ids:
                     obj = snapshot.game_objects.get(iid)
                     if obj:
-                        grp_ids.append(obj.grp_id)
+                        objs.append(obj)
                         self._engine_cards[iid] = None  # placeholder
-                seat_hands[zone.owner_seat_id] = grp_ids
+                seat_hands[zone.owner_seat_id] = objs
 
             elif zone.type == "ZoneType_Library":
-                grp_ids = []
+                objs = []
                 for iid in zone.object_instance_ids:
                     obj = snapshot.game_objects.get(iid)
                     if obj:
-                        grp_ids.append(obj.grp_id)
-                seat_libraries[zone.owner_seat_id] = grp_ids
+                        objs.append(obj)
+                seat_libraries[zone.owner_seat_id] = objs
 
         # Create card instances and set up hands/libraries
         self._setup_player_zones(snapshot, seat_hands, seat_libraries)
@@ -244,15 +249,13 @@ class ReplayExecutor:
 
         for seat_id, player in self.players.items():
             # Create hand cards
-            hand_grps = seat_hands.get(seat_id, [])
-            for grp_id in hand_grps:
-                card = self._create_card(grp_id, player)
+            for obj in seat_hands.get(seat_id, []):
+                card = self._create_card_from_object(obj, player)
                 player.zones[Zone.HAND].add(card)
 
             # Create library cards
-            lib_grps = seat_libraries.get(seat_id, [])
-            for grp_id in lib_grps:
-                card = self._create_card(grp_id, player)
+            for obj in seat_libraries.get(seat_id, []):
+                card = self._create_card_from_object(obj, player)
                 player.zones[Zone.LIBRARY].add(card)
 
         # Build game state
@@ -280,6 +283,54 @@ class ReplayExecutor:
 
         # Fallback: create a basic card based on what we know
         return self._create_basic_card(grp_id, card_name, owner)
+
+    _BASIC_LAND_NAMES = {"Plains", "Island", "Swamp", "Mountain", "Forest"}
+
+    def _create_card_from_object(self, obj: Any, owner: Any) -> Any:
+        """Create an engine card for a GRE GameObject, using its typed data.
+
+        Resolves the card name via the grpId map, falling back to the
+        object's own subtypes for cards outside the map — 17lands decks use
+        arbitrary printings of basic lands, whose grpIds the FDN map doesn't
+        carry, but the GRE object still says ``SubType_Forest``. Unresolvable
+        objects become shells typed from the object's cardTypes (a Land or
+        Creature shell instead of a bare CardImpl) so tapped state, P/T, and
+        combat code treat them uniformly.
+        """
+        name = self._grp_to_name.get(obj.grp_id, "")
+        if not name and "CardType_Land" in obj.card_types:
+            for subtype in obj.subtypes:
+                basic = subtype.removeprefix("SubType_")
+                if basic in self._BASIC_LAND_NAMES:
+                    name = basic
+                    break
+
+        if name and self.registry is not None and name in self.registry:
+            try:
+                card = self.registry.create_instance(name, owner=owner)
+                card.controller = owner
+                card._grp_id = obj.grp_id
+                return card
+            except Exception:
+                pass
+
+        from engine.card import CardImpl, Creature, Land
+
+        display_name = name or f"Unknown_{obj.grp_id}"
+        if "CardType_Creature" in obj.card_types:
+            card = Creature(
+                name=display_name,
+                owner=owner,
+                controller=owner,
+                base_power=obj.power or 0,
+                base_toughness=obj.toughness or 0,
+            )
+        elif "CardType_Land" in obj.card_types:
+            card = Land(name=display_name, owner=owner, controller=owner)
+        else:
+            card = CardImpl(name=display_name, owner=owner, controller=owner)
+        card._grp_id = obj.grp_id
+        return card
 
     def _create_basic_card(self, grp_id: int, card_name: str, owner: Any) -> Any:
         """Create a basic engine card without registry."""
@@ -401,6 +452,9 @@ class ReplayExecutor:
             from silverquillm.replay.state import infer_actions
             actions = infer_actions(prev_snapshot, curr_snapshot, self.card_id_map)
 
+        if self.simulate:
+            return self._execute_step_simulate(actions, prev_snapshot, curr_snapshot, result)
+
         if not actions:
             # Phase transition only — still compare state for phase-induced changes
             result.action_type = "phase_transition"
@@ -438,6 +492,82 @@ class ReplayExecutor:
         result.success = len(result.mismatches) == 0
 
         return result
+
+    # ------------------------------------------------------------------
+    # Simulate mode: compare first, then oracle-resync
+    # ------------------------------------------------------------------
+
+    def _execute_step_simulate(
+        self,
+        actions: list[ReplayAction],
+        prev_snapshot: GameSnapshot,
+        curr_snapshot: GameSnapshot,
+        result: StepResult,
+    ) -> StepResult:
+        """Simulate-mode step: drive the engine, compare, THEN resync.
+
+        The comparison runs against whatever state the engine actually
+        reached, so divergences are real signal. Afterwards the engine is
+        oracle-corrected to the GRE snapshot so every step validates
+        independently instead of cascading one divergence forever.
+        """
+        for action in actions:
+            if action.action_type in ("combat", "phase_transition"):
+                continue  # combat driven via turn-step transitions (see _handle_turn_info)
+
+            result.action_type = action.action_type
+            result.seat_id = action.player_seat_id
+            result.card_name = action.card_name
+
+            if action.player_seat_id == self.replay.seat_id:
+                self._execute_seat1_action(action, prev_snapshot, curr_snapshot, result)
+            else:
+                self._inject_seat2_action(action, prev_snapshot, curr_snapshot, result)
+
+        if not actions:
+            result.action_type = "phase_transition"
+
+        # Honest comparison against the state the engine actually reached.
+        result.mismatches.extend(self.compare_state(curr_snapshot))
+        result.success = not result.mismatches and not result.engine_failures
+
+        # Oracle-resync to GRE truth so the next step starts clean.
+        self._resync_to_snapshot(curr_snapshot)
+
+        return result
+
+    def _resync_to_snapshot(self, snapshot: GameSnapshot) -> None:
+        """Oracle-correct engine state to the GRE snapshot (post-comparison).
+
+        Corrects everything compare_state() checks — zone contents, life
+        totals, tapped state, and P/T (via base-stat adjustment, the lever
+        that survives EffectManager.apply_all resets) — so a divergence is
+        reported exactly once and later steps validate independently.
+        """
+        self._sync_zones(snapshot)
+
+        for seat_id, snap_player in snapshot.players.items():
+            player = self.players.get(seat_id)
+            if player is not None and player.life != snap_player.life_total:
+                player.life = snap_player.life_total
+
+        for obj in snapshot.get_zone_objects("ZoneType_Battlefield"):
+            card = self._engine_cards.get(obj.instance_id)
+            if card is None:
+                continue
+            # Unconditional set: generic CardImpl shells don't define
+            # is_tapped, and a hasattr guard would leave them diverged forever.
+            card.is_tapped = obj.is_tapped
+            if obj.power is not None and hasattr(card, "base_power"):
+                delta = obj.power - getattr(card, "power", card.base_power)
+                if delta:
+                    card.base_power += delta
+                    card.modified_power = getattr(card, "modified_power", 0) + delta
+            if obj.toughness is not None and hasattr(card, "base_toughness"):
+                delta = obj.toughness - getattr(card, "toughness", card.base_toughness)
+                if delta:
+                    card.base_toughness += delta
+                    card.modified_toughness = getattr(card, "modified_toughness", 0) + delta
 
     def execute_all(self) -> list[StepResult]:
         """Execute all snapshot transitions in the replay.
@@ -642,6 +772,10 @@ class ReplayExecutor:
         except Exception as exc:
             # ENGINE LIMITATION: oracle-injected — engine timing/phase checks
             # may not match replay state; fall back to direct zone mutation.
+            if self.simulate:
+                result.engine_failures.append(
+                    f"play_land {action.card_name}: {type(exc).__name__}: {exc}"
+                )
             logger.debug(f"play_land engine API failed ({exc}), falling back to direct move")
             if hand.contains(card):
                 hand.remove(card)
@@ -741,14 +875,24 @@ class ReplayExecutor:
 
         # Use engine move_to_zone for proper trigger/replacement handling
         try:
+            from engine.events import CreatureDiesReplacementEvent
             from engine.zones import move_to_zone
             move_to_zone(
                 self.game, card, Zone.BATTLEFIELD, Zone.GRAVEYARD,
-                replacement_event_type="creature_dies",
+                replacement_event=CreatureDiesReplacementEvent(
+                    creature=card,
+                    controller=getattr(card, "controller", player),
+                    owner=getattr(card, "owner", player),
+                ),
             )
         except Exception as exc:
             # ENGINE LIMITATION: oracle-injected — move_to_zone may fail
             # if card state is inconsistent; fall back to direct mutation.
+            if self.simulate:
+                result.engine_failures.append(
+                    f"move_to_zone (creature_death) {action.card_name}: "
+                    f"{type(exc).__name__}: {exc}"
+                )
             logger.debug(f"move_to_zone failed ({exc}), falling back to direct move")
             if bf.contains(card):
                 bf.remove(card)
@@ -960,7 +1104,14 @@ class ReplayExecutor:
         source_card = self._find_ability_source(action)
 
         if not self._try_engine_ability_resolution(source_card, card_name):
-            self._apply_ability_life_fallback(card_name, curr)
+            if self.simulate:
+                # Do NOT patch life before comparison — the unhandled ability
+                # must surface as a real divergence; resync corrects state after.
+                result.engine_failures.append(
+                    f"ability_resolution unhandled for {card_name}"
+                )
+            else:
+                self._apply_ability_life_fallback(card_name, curr)
 
     def _reconcile_life_totals(self, prev: GameSnapshot, curr: GameSnapshot) -> None:
         """Apply any life total deltas not handled by the action itself.
@@ -1017,6 +1168,7 @@ class ReplayExecutor:
             snap_grp_ids: Counter[int] = Counter(
                 obj.grp_id for obj in objs if obj.grp_id != 0
             )
+            sample_obj = {obj.grp_id: obj for obj in objs if obj.grp_id != 0}
 
             # grpId multiset via engine (skip grpId=0)
             engine_cards_list = player.zones[engine_zone_enum].get_all()
@@ -1029,8 +1181,7 @@ class ReplayExecutor:
             for grp_id, snap_count in snap_grp_ids.items():
                 deficit = snap_count - engine_grp_ids.get(grp_id, 0)
                 for _ in range(deficit):
-                    card = self._create_card(grp_id, player)
-                    card._grp_id = grp_id
+                    card = self._create_card_from_object(sample_obj[grp_id], player)
                     player.zones[engine_zone_enum].add(card)
                     logger.debug(
                         "_sync_zones: injected grpId=%d into %s (seat %d)",
