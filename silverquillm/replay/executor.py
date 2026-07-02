@@ -128,6 +128,11 @@ _GRE_ZONE_TO_ENGINE: dict[str, str] = {
     "ZoneType_Stack": "stack",
 }
 
+# GRE zones with ownerSeatId == 0 are shared between both players; the engine
+# models per-player zones instead. Shared battlefield objects route to their
+# *controller's* engine zone; other shared zones (exile) route by owner.
+_SHARED_ZONE_ROUTE_BY_CONTROLLER = {"ZoneType_Battlefield"}
+
 
 # ---------------------------------------------------------------------------
 # ReplayExecutor
@@ -293,26 +298,62 @@ class ReplayExecutor:
         card._grp_id = grp_id  # Store for tracking
         return card
 
-    def _rebuild_instance_map(self, snapshot: GameSnapshot) -> None:
-        """Rebuild the GRE instanceId -> engine card mapping."""
+    def _snapshot_zone_groups(
+        self, snapshot: GameSnapshot
+    ) -> list[tuple[Any, int, str, list[Any]]]:
+        """Group a snapshot's zone objects per (engine zone, seat).
+
+        Returns ``(engine_zone, seat_id, gre_zone_type, objects)`` tuples.
+        Per-seat GRE zones (hand, library, graveyard) yield one group each.
+        Shared GRE zones (battlefield, exile, stack — ``ownerSeatId == 0``)
+        are split into one group per known player, routing each object by its
+        controller (battlefield) or owner seat, so they line up with the
+        engine's per-player zone model. Empty groups are included so callers
+        can detect engine-side excess cards.
+        """
         from engine.types import Zone
 
-        self._engine_cards.clear()
-
+        groups: list[tuple[Any, int, str, list[Any]]] = []
         for snap_zone in snapshot.zones.values():
-            zone_type_str = snap_zone.type
-            engine_zone_name = _GRE_ZONE_TO_ENGINE.get(zone_type_str)
+            engine_zone_name = _GRE_ZONE_TO_ENGINE.get(snap_zone.type)
             if engine_zone_name is None:
                 continue
-
-            seat_id = snap_zone.owner_seat_id
-            player = self.players.get(seat_id)
-            if player is None:
+            try:
+                engine_zone = Zone(engine_zone_name)
+            except ValueError:
                 continue
 
-            try:
-                engine_zone_enum = Zone(engine_zone_name)
-            except ValueError:
+            objs = [
+                obj
+                for iid in snap_zone.object_instance_ids
+                if (obj := snapshot.game_objects.get(iid)) is not None
+            ]
+            if snap_zone.owner_seat_id:
+                groups.append((engine_zone, snap_zone.owner_seat_id, snap_zone.type, objs))
+                continue
+
+            by_seat: dict[int, list[Any]] = {seat: [] for seat in self.players}
+            route_by_controller = snap_zone.type in _SHARED_ZONE_ROUTE_BY_CONTROLLER
+            for obj in objs:
+                if route_by_controller:
+                    seat = obj.controller_seat_id or obj.owner_seat_id
+                else:
+                    seat = obj.owner_seat_id or obj.controller_seat_id
+                if seat in by_seat:
+                    by_seat[seat].append(obj)
+            for seat, group in sorted(by_seat.items()):
+                groups.append((engine_zone, seat, snap_zone.type, group))
+        return groups
+
+    def _rebuild_instance_map(self, snapshot: GameSnapshot) -> None:
+        """Rebuild the GRE instanceId -> engine card mapping."""
+        self._engine_cards.clear()
+
+        for engine_zone_enum, seat_id, zone_type_str, objs in self._snapshot_zone_groups(snapshot):
+            if zone_type_str in ("ZoneType_Library", "ZoneType_Stack"):
+                continue  # hidden identities / game-level stack — nothing to correlate
+            player = self.players.get(seat_id)
+            if player is None:
                 continue
 
             engine_cards = player.zones[engine_zone_enum].get_all()
@@ -329,13 +370,10 @@ class ReplayExecutor:
                             break
                 grp_id_cards.setdefault(grp, []).append(card)
 
-            for iid in snap_zone.object_instance_ids:
-                obj = snapshot.game_objects.get(iid)
-                if obj is None:
-                    continue
+            for obj in objs:
                 candidates = grp_id_cards.get(obj.grp_id, [])
                 if candidates:
-                    self._engine_cards[iid] = candidates.pop(0)
+                    self._engine_cards[obj.instance_id] = candidates.pop(0)
 
     def execute_step(
         self,
@@ -444,8 +482,12 @@ class ReplayExecutor:
         # Zone contents
         mismatches.extend(self._compare_zones(snapshot))
 
-        # Battlefield state (tapped, P/T)
-        mismatches.extend(self._compare_battlefield(snapshot))
+        # Battlefield state (tapped, P/T) — only meaningful when the engine
+        # actually plays the game (simulate mode). In observer mode the
+        # engine never taps or modifies permanents, so comparing would just
+        # flood the report with self-inflicted mismatches.
+        if self.simulate:
+            mismatches.extend(self._compare_battlefield(snapshot))
 
         return mismatches
 
@@ -468,38 +510,23 @@ class ReplayExecutor:
 
     def _compare_zones(self, snapshot: GameSnapshot) -> list[StateMismatch]:
         """Compare zone contents by grpId."""
-        from engine.types import Zone
-
         mismatches = []
 
-        for snap_zone in snapshot.zones.values():
-            zone_type_str = snap_zone.type
-            engine_zone_name = _GRE_ZONE_TO_ENGINE.get(zone_type_str)
-            if engine_zone_name is None:
+        for engine_zone_enum, seat_id, zone_type_str, objs in self._snapshot_zone_groups(snapshot):
+            # Library: hidden identities, ordering differs.
+            # Stack: transient and game-level in the engine.
+            if zone_type_str in ("ZoneType_Library", "ZoneType_Stack"):
+                continue
+            # Opponent hand is hidden — contents unknowable.
+            if seat_id != self.replay.seat_id and zone_type_str == "ZoneType_Hand":
                 continue
 
-            # Skip library comparisons (hidden zone, ordering differs)
-            if zone_type_str == "ZoneType_Library":
-                continue
-
-            seat_id = snap_zone.owner_seat_id
             player = self.players.get(seat_id)
             if player is None:
                 continue
 
-            try:
-                engine_zone_enum = Zone(engine_zone_name)
-            except ValueError:
-                continue
+            snap_grp_ids = sorted(obj.grp_id for obj in objs)
 
-            # Get grpIds from snapshot zone
-            snap_grp_ids = sorted(
-                obj.grp_id
-                for iid in snap_zone.object_instance_ids
-                if (obj := snapshot.game_objects.get(iid)) is not None
-            )
-
-            # Get grpIds via engine zone
             engine_cards = player.zones[engine_zone_enum].get_all()
             engine_grp_ids = sorted(
                 self._card_to_grp_id(card)
@@ -507,10 +534,6 @@ class ReplayExecutor:
             )
 
             if snap_grp_ids != engine_grp_ids:
-                # Only report for non-hand zones of opponent (hand is hidden)
-                if seat_id != self.replay.seat_id and zone_type_str == "ZoneType_Hand":
-                    continue
-
                 mismatches.append(StateMismatch(
                     category="zone_contents",
                     description=f"Zone {zone_type_str} (seat {seat_id}) content mismatch",
@@ -978,37 +1001,22 @@ class ReplayExecutor:
         Compares grpId multisets per zone. Injects missing cards into the
         engine and removes excess cards. Library and Stack are skipped.
         """
-        from engine.types import Zone
-
         # Library: hidden and order-dependent, inferred via draw actions.
         # Stack: transient; engine models entries differently than GRE.
         SKIP_ZONES = {"ZoneType_Library", "ZoneType_Stack"}
 
-        for snap_zone in snapshot.zones.values():
-            zone_type_str = snap_zone.type
+        for engine_zone_enum, seat_id, zone_type_str, objs in self._snapshot_zone_groups(snapshot):
             if zone_type_str in SKIP_ZONES:
                 continue
 
-            engine_zone_name = _GRE_ZONE_TO_ENGINE.get(zone_type_str)
-            if engine_zone_name is None:
-                continue
-
-            seat_id = snap_zone.owner_seat_id
             player = self.players.get(seat_id)
             if player is None:
                 continue
 
-            try:
-                engine_zone_enum = Zone(engine_zone_name)
-            except ValueError:
-                continue
-
             # grpId multiset from snapshot (skip unknown grpId=0)
-            snap_grp_ids: Counter[int] = Counter()
-            for iid in snap_zone.object_instance_ids:
-                obj = snapshot.game_objects.get(iid)
-                if obj is not None and obj.grp_id != 0:
-                    snap_grp_ids[obj.grp_id] += 1
+            snap_grp_ids: Counter[int] = Counter(
+                obj.grp_id for obj in objs if obj.grp_id != 0
+            )
 
             # grpId multiset via engine (skip grpId=0)
             engine_cards_list = player.zones[engine_zone_enum].get_all()
