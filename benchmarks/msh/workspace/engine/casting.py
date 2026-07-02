@@ -553,6 +553,11 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
         land_card.owner = player
     land_card.controller = player
 
+    # Lands never resolve from the stack, so on_resolve is invoked here —
+    # same ordering as _resolve_spell (before the zone move) so "enters
+    # tapped" / "as this enters" effects are in place when it arrives.
+    land_card.on_resolve(game)
+
     # Move from hand to battlefield via move_to_zone, which fires
     # ENTERS_BATTLEFIELD and registers triggers/replacement effects.
     from engine.zones import move_to_zone

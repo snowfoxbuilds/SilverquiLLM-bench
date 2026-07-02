@@ -109,6 +109,8 @@ def _can_block(blocker: Any, attacker: Any) -> bool:
     Checks:
     - If the blocker is tapped it cannot block.
     - A continuous effect has set ``_cant_block`` (e.g. Pacifism).
+    - A continuous effect has set ``_cant_be_blocked`` on the attacker
+      (e.g. Rogue's Passage).
     - If the attacker has flying, the blocker must have flying or reach.
     """
     if getattr(blocker, "is_tapped", False):
@@ -116,6 +118,10 @@ def _can_block(blocker: Any, attacker: Any) -> bool:
 
     # Check for "can't block" restriction (set by continuous effects like Pacifism)
     if getattr(blocker, "_cant_block", False):
+        return False
+
+    # Check for "can't be blocked" restriction on the attacker
+    if getattr(attacker, "_cant_be_blocked", False):
         return False
 
     attacker_kw = getattr(attacker, "keywords", Keyword(0))
