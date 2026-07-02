@@ -50,6 +50,26 @@ def _select_benchmark_engine(benchmark_id: str) -> None:
     sys.path.insert(0, str(workspace))
 
 
+def _load_benchmark_registry() -> Any | None:
+    """Build a card registry from the selected workspace, if it has a loader.
+
+    The FDN Base Set is the replay-validation card pool (17lands replays are
+    FDN draft games). Workspaces that provide ``cards.loader`` (MSH) get a
+    fully populated registry so the executor exercises real card
+    implementations; the frozen SOS workspace has no loader and keeps its
+    original registry-less behavior.
+    """
+    try:
+        from cards.loader import load_set_registry  # type: ignore[import-not-found]
+    except ImportError:
+        return None
+    try:
+        return load_set_registry("fdn")
+    except Exception as exc:
+        click.echo(f"Warning: card registry load failed: {exc}", err=True)
+        return None
+
+
 def _make_verbose_callback():
     """Return a callback for per-step verbose output."""
     def callback(step_index: int, snapshot_id: int, action_desc: str, result_desc: str) -> None:
@@ -208,6 +228,17 @@ def _aggregate_reports(
         "benchmarks/<id>/workspace on sys.path."
     ),
 )
+@click.option(
+    "--simulate",
+    is_flag=True,
+    default=False,
+    help=(
+        "Drive gameplay through the engine (cast spells, fight combat, pay "
+        "mana) and compare state before resyncing, instead of the default "
+        "observer mode that oracle-syncs state. Requires a benchmark whose "
+        "engine exposes the intent-based DeterministicPlayer (msh)."
+    ),
+)
 def validate(
     replay_path: str,
     card_filter: str | None,
@@ -215,14 +246,22 @@ def validate(
     report_path: str | None,
     stop_on_divergence: bool,
     benchmark: str | None,
+    simulate: bool,
 ) -> None:
     """Validate replay files against the engine.
 
     REPLAY_PATH can be a single JSON replay file or a directory of replay
     JSON files.
     """
+    registry = None
     if benchmark:
         _select_benchmark_engine(benchmark)
+        registry = _load_benchmark_registry()
+    if simulate and registry is None:
+        raise click.ClickException(
+            "--simulate requires a --benchmark whose workspace provides "
+            "cards.loader (a populated card registry)."
+        )
     path = Path(replay_path)
     if not path.exists():
         raise click.ClickException(f"Path not found: {replay_path}")
@@ -278,6 +317,8 @@ def validate(
         executor = ReplayExecutor(
             replay=replay,
             card_id_map=card_id_map,
+            registry=registry,
+            simulate=simulate,
         )
 
         report = validate_replay(

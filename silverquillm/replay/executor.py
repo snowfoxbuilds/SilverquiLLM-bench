@@ -149,11 +149,16 @@ class ReplayExecutor:
         card_id_map: dict[int, str] | None = None,
         registry: Any | None = None,
         strict: bool = False,
+        simulate: bool = False,
     ) -> None:
         self.replay = replay
         self.card_id_map = card_id_map or {}
         self.registry = registry
         self.strict = strict
+        # Simulation mode: drive gameplay through the engine (casting, combat,
+        # mana) and compare state BEFORE resyncing. Default (False) is the
+        # original observer mode that oracle-syncs state before comparison.
+        self.simulate = simulate
 
         # Engine state (initialized from first snapshot)
         self.game: Any | None = None
