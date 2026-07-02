@@ -18,14 +18,16 @@
 | `parser.py` | 179 | High-level `parse_replay()` function. Loads card ID map, iterates raw JSON messages, delegates to `state.py` for reconstruction, produces `ReplayGame`. | `parse_replay()`, `load_card_id_map()` |
 | `executor.py` | 840 | `ReplayExecutor` — steps through `GameSnapshot` objects and validates engine behavior via state-diff comparison. Seat 1 (17lands user) gets full validation; Seat 2 (opponent) uses oracle injection. | `ReplayExecutor`, `StateMismatch`, `StepResult`, `load_card_id_map()` |
 | `validation.py` | 392 | Divergence detection and reporting. Records structured divergences when the engine can't execute a replay action or produces different state. Produces `ValidationReport` with summary statistics. | `DivergenceType`, `Divergence`, `ValidationReport`, `ValidatingExecutor`, `validate_replay()` |
-| `cli.py` | 291 | CLI `validate` subcommand — file/directory replay validation with `--cards`, `--verbose`, `--report`, `--stop-on-divergence` options. Aggregates results across multiple replay files. | `validate` (Click command) |
+| `cli.py` | ~360 | CLI `validate` subcommand — file/directory replay validation with `--cards`, `--verbose`, `--report`, `--stop-on-divergence`, `--benchmark`, `--simulate` options. Loads the workspace card registry via `cards.loader` when the benchmark provides one. Aggregates results across multiple replay files. | `validate` (Click command) |
 
 ## Architecture & Patterns
 
 - **Pipeline**: Raw JSON → `parse_replay()` → `ReplayGame` → `ReplayExecutor`/`ValidatingExecutor` → `ValidationReport`
 - **State reconstruction**: GRE messages come as Full or Diff; `apply_full_state()` builds complete snapshots, `apply_diff()` merges sparse updates into previous state.
-- **Dual-seat model**: Seat 1 (17lands user) is fully validated against engine; Seat 2 (opponent) actions are injected as oracle data since hidden information isn't available.
-- **Divergence types**: `MISSING_CARD` (card not in engine registry), `STATE_MISMATCH` (engine state differs from GRE), `ILLEGAL_ACTION` (engine rejects valid Arena action), `ENGINE_ERROR` (engine raises exception).
+- **Two execution modes**: default **observer mode** (state mirroring with pre-compare sync — the frozen SOS behavior) and **simulate mode** (`--simulate`, MSH): gameplay is driven through the engine — `cast_spell` with GRE-derived target Intents and ManaPaid-funded mana, `play_land`, engine combat from `attackState`/`blockState`, turn-structure following, draws through the library — then state is compared BEFORE an oracle resync, so each step validates independently.
+- **Dual-seat model**: Seat 1 (17lands user) is fully validated against engine; Seat 2 (opponent) actions are injected as oracle data (observer mode) or run through the engine once GRE reveals them (simulate mode).
+- **Divergence types**: `MISSING_CARD` (card not in engine registry), `STATE_MISMATCH` (engine state differs from GRE), `ILLEGAL_ACTION` (engine rejects valid Arena action), `ENGINE_ERROR` (engine raises exception / API fallback in simulate mode), `QUERY_UNANSWERED` / `PROTOCOL_ERROR` (MSH Player Query protocol failures).
+- **Diff semantics**: GRE diffs re-send **complete** objects with protobuf default-omission — `apply_diff` replaces gameObjects (a re-sent permanent without `isTapped` is untapped).
 - **ObjectTracker**: Tracks GRE `objectId` changes across zone transitions via `ObjectIdChanged` annotations.
 
 ## Developer Guide & Constraints
