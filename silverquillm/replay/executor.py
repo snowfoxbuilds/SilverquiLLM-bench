@@ -214,23 +214,24 @@ class ReplayExecutor:
         seat_hands: dict[int, list[Any]] = {}  # seat_id -> list of GameObjects
         seat_libraries: dict[int, list[Any]] = {}  # seat_id -> list of GameObjects
 
+        # Hidden objects (opponent hand, both libraries) appear in zone lists
+        # without game_objects entries — keep a None so a shell card is
+        # created and zone sizes match the GRE state.
         for zone in snapshot.zones.values():
             if zone.type == "ZoneType_Hand":
                 objs = []
                 for iid in zone.object_instance_ids:
                     obj = snapshot.game_objects.get(iid)
+                    objs.append(obj)
                     if obj:
-                        objs.append(obj)
                         self._engine_cards[iid] = None  # placeholder
                 seat_hands[zone.owner_seat_id] = objs
 
             elif zone.type == "ZoneType_Library":
-                objs = []
-                for iid in zone.object_instance_ids:
-                    obj = snapshot.game_objects.get(iid)
-                    if obj:
-                        objs.append(obj)
-                seat_libraries[zone.owner_seat_id] = objs
+                seat_libraries[zone.owner_seat_id] = [
+                    snapshot.game_objects.get(iid)
+                    for iid in zone.object_instance_ids
+                ]
 
         # Create card instances and set up hands/libraries
         self._setup_player_zones(snapshot, seat_hands, seat_libraries)
@@ -248,14 +249,21 @@ class ReplayExecutor:
         from engine.types import CardType, Zone
 
         for seat_id, player in self.players.items():
-            # Create hand cards
+            # Create hand cards (None = hidden object -> shell)
             for obj in seat_hands.get(seat_id, []):
-                card = self._create_card_from_object(obj, player)
+                if obj is not None:
+                    card = self._create_card_from_object(obj, player)
+                else:
+                    card = CardImpl(name="Unknown_0", owner=player, controller=player)
                 player.zones[Zone.HAND].add(card)
 
-            # Create library cards
+            # Create library cards (identities hidden -> shells; they are
+            # materialized when GRE reveals them on draw)
             for obj in seat_libraries.get(seat_id, []):
-                card = self._create_card_from_object(obj, player)
+                if obj is not None:
+                    card = self._create_card_from_object(obj, player)
+                else:
+                    card = CardImpl(name="Unknown_0", owner=player, controller=player)
                 player.zones[Zone.LIBRARY].add(card)
 
         # Build game state
@@ -511,9 +519,15 @@ class ReplayExecutor:
         oracle-corrected to the GRE snapshot so every step validates
         independently instead of cascading one divergence forever.
         """
+        # Draws: any hand arrival without zone-move provenance is a draw (or
+        # hidden-zone tutor) — pull it through the engine's library.
+        self._simulate_hand_draws(prev_snapshot, curr_snapshot, result)
+
         for action in actions:
-            if action.action_type in ("combat", "phase_transition"):
-                continue  # combat driven via turn-step transitions (see _handle_turn_info)
+            if action.action_type in ("combat", "phase_transition", "draw"):
+                # combat: driven via turn-step transitions (see _handle_turn_info)
+                # draw: handled by _simulate_hand_draws above
+                continue
 
             result.action_type = action.action_type
             result.seat_id = action.player_seat_id
@@ -535,6 +549,62 @@ class ReplayExecutor:
         self._resync_to_snapshot(curr_snapshot)
 
         return result
+
+    def _simulate_hand_draws(
+        self,
+        prev_snapshot: GameSnapshot,
+        curr_snapshot: GameSnapshot,
+        result: StepResult,
+    ) -> None:
+        """Draw through the engine for every unexplained hand arrival.
+
+        A new hand instance id with no ObjectIdChanged provenance came from a
+        hidden zone — for replay purposes, a draw. The engine draws a shell
+        from its library; when GRE reveals the drawn card's identity (own
+        seat), the shell is materialized into the real card so later casts
+        exercise the actual implementation.
+        """
+        from engine.game import draw_card
+        from engine.types import Zone
+        from silverquillm.replay.state import extract_object_id_changes
+
+        moved_new_ids = set(extract_object_id_changes(curr_snapshot.annotations).values())
+
+        prev_hand_iids: dict[int, set[int]] = {}
+        for zone in prev_snapshot.zones.values():
+            if zone.type == "ZoneType_Hand":
+                prev_hand_iids[zone.owner_seat_id] = set(zone.object_instance_ids)
+
+        for zone in curr_snapshot.zones.values():
+            if zone.type != "ZoneType_Hand":
+                continue
+            seat = zone.owner_seat_id
+            player = self.players.get(seat)
+            if player is None:
+                continue
+            new_iids = [
+                iid
+                for iid in zone.object_instance_ids
+                if iid not in prev_hand_iids.get(seat, set())
+                and iid not in moved_new_ids
+            ]
+            for iid in new_iids:
+                drawn = draw_card(self.game, player)
+                if drawn is None:
+                    result.engine_failures.append(
+                        f"draw (seat {seat}): engine library empty"
+                    )
+                    continue
+                obj = curr_snapshot.game_objects.get(iid)
+                if obj is not None and obj.grp_id:
+                    # Materialize the revealed identity in place of the shell.
+                    hand = player.zones[Zone.HAND]
+                    hand.remove(drawn)
+                    real = self._create_card_from_object(obj, player)
+                    hand.add(real)
+                    self._engine_cards[iid] = real
+                else:
+                    self._engine_cards[iid] = drawn
 
     def _resync_to_snapshot(self, snapshot: GameSnapshot) -> None:
         """Oracle-correct engine state to the GRE snapshot (post-comparison).
@@ -1097,6 +1167,14 @@ class ReplayExecutor:
             if action.instance_id in curr.game_objects:
                 return  # ability still on stack; handle at resolution time
 
+        if self.simulate:
+            # Outcome-validated: triggered abilities fire through the engine's
+            # own trigger system as gameplay is simulated (ETB registration
+            # happens in move_to_zone / battlefield sync). If the engine
+            # missed the effect, the state comparison reports it — patching
+            # life or force-registering triggers here would mask the signal.
+            return
+
         card_name = (
             action.card_name
             or self._grp_to_name.get(action.grp_id, f"grpId={action.grp_id}")
@@ -1104,14 +1182,7 @@ class ReplayExecutor:
         source_card = self._find_ability_source(action)
 
         if not self._try_engine_ability_resolution(source_card, card_name):
-            if self.simulate:
-                # Do NOT patch life before comparison — the unhandled ability
-                # must surface as a real divergence; resync corrects state after.
-                result.engine_failures.append(
-                    f"ability_resolution unhandled for {card_name}"
-                )
-            else:
-                self._apply_ability_life_fallback(card_name, curr)
+            self._apply_ability_life_fallback(card_name, curr)
 
     def _reconcile_life_totals(self, prev: GameSnapshot, curr: GameSnapshot) -> None:
         """Apply any life total deltas not handled by the action itself.
@@ -1177,12 +1248,21 @@ class ReplayExecutor:
                 if (gid := self._card_to_grp_id(card)) != 0
             )
 
+            is_battlefield = zone_type_str == "ZoneType_Battlefield"
+
             # Inject cards present in snapshot but missing in engine
             for grp_id, snap_count in snap_grp_ids.items():
                 deficit = snap_count - engine_grp_ids.get(grp_id, 0)
                 for _ in range(deficit):
                     card = self._create_card_from_object(sample_obj[grp_id], player)
                     player.zones[engine_zone_enum].add(card)
+                    if self.simulate and is_battlefield:
+                        # Oracle-injected permanents still participate in the
+                        # simulated game — register their triggers/effects.
+                        if hasattr(card, "register_triggers"):
+                            card.register_triggers(self.game)
+                        if hasattr(card, "register_replacement_effects"):
+                            card.register_replacement_effects(self.game)
                     logger.debug(
                         "_sync_zones: injected grpId=%d into %s (seat %d)",
                         grp_id, zone_type_str, seat_id,
@@ -1199,6 +1279,11 @@ class ReplayExecutor:
                     ]
                     for card in to_remove[:excess]:
                         player.zones[engine_zone_enum].remove(card)
+                        if self.simulate and is_battlefield and self.game is not None:
+                            # Symmetric cleanup — stale triggers must not
+                            # keep firing for a permanent GRE says is gone.
+                            self.game.trigger_manager.unregister(card)
+                            self.game.replacement_manager.unregister(card)
                         logger.debug(
                             "_sync_zones: removed grpId=%d from %s (seat %d)",
                             grp_id, zone_type_str, seat_id,
@@ -1210,13 +1295,41 @@ class ReplayExecutor:
     # Turn info / phase handling
     # ------------------------------------------------------------------
 
+    # GRE phase/step strings → engine Phase/Step enum value names.
+    # (There is no Step_Untap in GRE streams — Arena untaps implicitly at
+    # the turn boundary, so simulate mode untaps on turn-number change.)
+    _GRE_PHASE_TO_ENGINE: dict[str, str] = {
+        "Phase_Beginning": "beginning",
+        "Phase_Main1": "precombat_main",
+        "Phase_Combat": "combat",
+        "Phase_Main2": "postcombat_main",
+        "Phase_Ending": "ending",
+    }
+    _GRE_STEP_TO_ENGINE: dict[str, str] = {
+        "Step_Upkeep": "upkeep",
+        "Step_Draw": "draw",
+        "Step_BeginCombat": "begin_combat",
+        "Step_DeclareAttack": "declare_attackers",
+        "Step_DeclareBlock": "declare_blockers",
+        "Step_FirstStrikeDamage": "combat_damage",
+        "Step_CombatDamage": "combat_damage",
+        "Step_EndCombat": "end_combat",
+        "Step_End": "end",
+        "Step_Cleanup": "cleanup",
+    }
+
     def _handle_turn_info(self, prev_turn: TurnInfo, curr_turn: TurnInfo) -> None:
         """Handle phase/step transitions from turnInfo diffs."""
         if self.game is None:
             return
 
+        turn_changed = (
+            curr_turn.turn_number != prev_turn.turn_number
+            and curr_turn.turn_number > 0
+        )
+
         # Update turn number
-        if curr_turn.turn_number != prev_turn.turn_number and curr_turn.turn_number > 0:
+        if turn_changed:
             self.game.turn_number = curr_turn.turn_number
 
         # Update active player
@@ -1227,6 +1340,32 @@ class ReplayExecutor:
                 if p_seat == seat:
                     self.game.active_player_index = i
                     break
+
+        if not self.simulate:
+            return
+
+        # --- Simulate mode: follow GRE turn structure through the engine ---
+        from engine.types import Phase, Step
+
+        if turn_changed:
+            # New turn: engine untap step for the (already updated) active
+            # player — untap, clear summoning sickness, reset land plays.
+            from engine.turn import _do_untap_step
+            _do_untap_step(self.game)
+
+        phase_name = self._GRE_PHASE_TO_ENGINE.get(curr_turn.phase)
+        if phase_name is not None:
+            self.game.phase = Phase(phase_name)
+        step_name = self._GRE_STEP_TO_ENGINE.get(curr_turn.step)
+        self.game.step = Step(step_name) if step_name is not None else None
+
+        # Mana pools empty as steps and phases end. Casting pays costs
+        # atomically within a step, so emptying on every transition is safe.
+        if (curr_turn.phase, curr_turn.step) != (prev_turn.phase, prev_turn.step):
+            for player in self.players.values():
+                pool = getattr(player, "mana_pool", None)
+                if pool is not None:
+                    pool.empty()
 
     # ------------------------------------------------------------------
     # Helpers
