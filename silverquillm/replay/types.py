@@ -49,6 +49,11 @@ class GameObject:
     parent_id: int | None = None
     object_source_grp_id: int | None = None
     viewers: list[int] = field(default_factory=list)
+    # Combat state (protobuf default-omission: absent = not in combat)
+    attack_state: str = ""
+    block_state: str = ""
+    attack_target_id: int = 0  # attackInfo.targetId (defending player seat)
+    blocking_attacker_ids: list[int] = field(default_factory=list)  # blockInfo.attackerIds
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> GameObject:
@@ -75,6 +80,10 @@ class GameObject:
             parent_id=d.get("parentId"),
             object_source_grp_id=d.get("objectSourceGrpId"),
             viewers=d.get("viewers", []),
+            attack_state=d.get("attackState", ""),
+            block_state=d.get("blockState", ""),
+            attack_target_id=d.get("attackInfo", {}).get("targetId", 0),
+            blocking_attacker_ids=list(d.get("blockInfo", {}).get("attackerIds", [])),
         )
 
 

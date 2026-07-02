@@ -191,6 +191,11 @@ class ReplayExecutor:
         # from _engine_cards because the instance-map rebuild (each resync)
         # clears that dict and skips stack zones.
         self._pending_stack: dict[int, Any] = {}
+        # Combat state machine (simulate mode): one declaration, one block
+        # assignment, and one damage pass per GRE combat.
+        self._combat_active: bool = False
+        self._combat_blocks_declared: bool = False
+        self._combat_damage_done: bool = False
         # game_state_id -> snapshot list index, for bounded look-ahead.
         self._gsid_index: dict[int, int] = {}
 
@@ -542,6 +547,10 @@ class ReplayExecutor:
         # the payer's pool before any cast in this step tries to pay.
         self._apply_mana_payments(curr_snapshot, result)
 
+        # Combat: declare attackers/blocks and deal damage through the engine
+        # as the GRE stream reveals them.
+        self._simulate_combat_transitions(curr_snapshot, result)
+
         # Draws: any hand arrival without zone-move provenance is a draw (or
         # hidden-zone tutor) — pull it through the engine's library.
         self._simulate_hand_draws(prev_snapshot, curr_snapshot, result)
@@ -582,6 +591,105 @@ class ReplayExecutor:
         self._resync_to_snapshot(curr_snapshot)
 
         return result
+
+    _COMBAT_DAMAGE_STEPS = {"Step_FirstStrikeDamage", "Step_CombatDamage"}
+    _COMBAT_GRE_STEPS = {
+        "Step_BeginCombat", "Step_DeclareAttack", "Step_DeclareBlock",
+        "Step_FirstStrikeDamage", "Step_CombatDamage", "Step_EndCombat",
+    }
+
+    def _simulate_combat_transitions(self, curr_snapshot: GameSnapshot, result: StepResult) -> None:
+        """Drive engine combat from the GRE combat state on game objects.
+
+        Attackers are declared when ``attackState`` appears (engine taps
+        non-vigilance attackers), blocks when ``blockInfo`` names the blocked
+        attackers, and the engine's combat_damage_step computes damage,
+        lifelink, trample, deathtouch, and the resulting deaths at the first
+        damage step. One declaration/damage pass per GRE combat.
+        """
+        if self.game is None:
+            return
+        step = curr_snapshot.turn_info.step
+        in_combat = (
+            curr_snapshot.turn_info.phase == "Phase_Combat"
+            or step in self._COMBAT_GRE_STEPS
+        )
+
+        if self._combat_active and (step == "Step_EndCombat" or not in_combat):
+            from engine.combat import end_combat_step
+            try:
+                end_combat_step(self.game)
+            except Exception as exc:
+                result.engine_failures.append(
+                    f"end_combat_step: {type(exc).__name__}: {exc}"
+                )
+            self._combat_active = False
+            self._combat_blocks_declared = False
+            self._combat_damage_done = False
+
+        if not in_combat:
+            return
+
+        bf_objects = curr_snapshot.get_zone_objects("ZoneType_Battlefield")
+
+        if not self._combat_active:
+            # AttackState_Declared precedes the tap by one snapshot; the
+            # engine declaration (which taps) matches AttackState_Attacking.
+            attackers = [
+                card
+                for obj in bf_objects
+                if obj.attack_state == "AttackState_Attacking"
+                and (card := self._engine_cards.get(obj.instance_id)) is not None
+            ]
+            if attackers:
+                from engine.combat import declare_attackers_step
+                try:
+                    declare_attackers_step(self.game, attackers)
+                    self._combat_active = True
+                except Exception as exc:
+                    result.engine_failures.append(
+                        f"declare_attackers_step: {type(exc).__name__}: {exc}"
+                    )
+
+        if self._combat_active and not self._combat_blocks_declared:
+            assignments: dict[Any, list[Any]] = {}
+            for obj in bf_objects:
+                if not obj.blocking_attacker_ids:
+                    continue
+                blocker = self._engine_cards.get(obj.instance_id)
+                if blocker is None:
+                    continue
+                attackers_blocked = [
+                    card
+                    for aid in obj.blocking_attacker_ids
+                    if (card := self._engine_cards.get(aid)) is not None
+                ]
+                if attackers_blocked:
+                    assignments[blocker] = attackers_blocked
+            if assignments or step in self._COMBAT_DAMAGE_STEPS:
+                if assignments:
+                    from engine.combat import declare_blockers_step
+                    try:
+                        declare_blockers_step(self.game, assignments)
+                    except Exception as exc:
+                        result.engine_failures.append(
+                            f"declare_blockers_step: {type(exc).__name__}: {exc}"
+                        )
+                self._combat_blocks_declared = True
+
+        if (
+            self._combat_active
+            and not self._combat_damage_done
+            and step in self._COMBAT_DAMAGE_STEPS
+        ):
+            from engine.combat import combat_damage_step
+            try:
+                combat_damage_step(self.game)
+            except Exception as exc:
+                result.engine_failures.append(
+                    f"combat_damage_step: {type(exc).__name__}: {exc}"
+                )
+            self._combat_damage_done = True
 
     def _simulate_hand_draws(
         self,
