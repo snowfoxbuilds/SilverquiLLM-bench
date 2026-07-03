@@ -810,7 +810,14 @@ class ReplayExecutor:
     def _blocker_death_order(
         self, blocker_iids: list[int], curr_snapshot: GameSnapshot
     ) -> list[int]:
-        """Blockers ordered by observed death (first to leave first), survivors last."""
+        """Blockers ordered by observed death (first to leave first), survivors last.
+
+        Heuristic: "left the battlefield within the window" conflates combat
+        death with bounce/exile or a follow-up removal spell — acceptable
+        because the result only seeds an ordering *preference*; a wrong
+        order surfaces as an honest compare-first mismatch, not silent
+        corruption.
+        """
         start = self._gsid_index.get(curr_snapshot.game_state_id, 0)
         deaths: dict[int, int] = {}
         alive = set(blocker_iids)
@@ -1204,7 +1211,10 @@ class ReplayExecutor:
 
         player = self.players.get(action.player_seat_id)
         if player is None or self.game is None:
-            result.success = False
+            result.infra_failures.append(
+                f"cast_spell {action.card_name}: no engine player for seat "
+                f"{action.player_seat_id}"
+            )
             return
 
         card = self._take_from_hand(player, action, curr_snapshot)
@@ -1247,13 +1257,11 @@ class ReplayExecutor:
         """Resolve the engine StackObject whose source is *card*, if any."""
         if self.game is None:
             return False
-        items = self.game.stack._items
-        for i in range(len(items) - 1, -1, -1):
-            if items[i].source is card:
-                stack_obj = items.pop(i)
-                stack_obj.on_resolve(self.game)
-                return True
-        return False
+        stack_obj = self.game.stack.pop_by_source(card)
+        if stack_obj is None:
+            return False
+        stack_obj.on_resolve(self.game)
+        return True
 
     def _simulate_zone_transition(
         self,
@@ -1398,9 +1406,7 @@ class ReplayExecutor:
 
     def _stack_has_source(self, card: Any) -> bool:
         """True if the engine stack already holds an object from *card*."""
-        if self.game is None:
-            return False
-        return any(so.source is card for so in self.game.stack._items)
+        return self.game is not None and self.game.stack.has_source(card)
 
     def _try_activate_ability(
         self,
@@ -2284,9 +2290,9 @@ class ReplayExecutor:
             # engine untap step for the (already updated) active player —
             # untap, clear summoning sickness, reset land plays. Arena has
             # no visible cleanup step; the turn boundary is its moment.
-            from engine.turn import _do_untap_step
+            from engine.turn import untap_step
             self._replay_cleanup()
-            _do_untap_step(self.game)
+            untap_step(self.game)
 
         phase_name = self._GRE_PHASE_TO_ENGINE.get(curr_turn.phase)
         if phase_name is not None:
@@ -2308,35 +2314,15 @@ class ReplayExecutor:
     def _replay_cleanup(self) -> None:
         """The mechanical part of the cleanup step, at the GRE turn boundary.
 
-        Mirrors _do_cleanup_step's steps 2-5 (expire until-EOT effects,
-        clear marked damage, clear combat flags, empty pools) — without the
-        discard (GRE zone moves drive discards explicitly) and without the
-        SBA/priority loop (deaths are GRE-observed events, not for the
-        replay layer to invent at a boundary GRE shows none).
+        Runs the engine's :func:`~engine.turn.cleanup_mechanical` (rule 514
+        steps 2-5) — without the discard (GRE zone moves drive discards
+        explicitly) and without the SBA/priority loop (deaths are
+        GRE-observed events, not for the replay layer to invent at a
+        boundary GRE shows none).
         """
-        from engine.types import Zone
+        from engine.turn import cleanup_mechanical
 
-        game = self.game
-        if hasattr(game, "effect_manager"):
-            game.effect_manager.remove_expired(game)
-            game.effect_manager.apply_all(game)
-        for player in game.players:
-            for obj in player.zones[Zone.BATTLEFIELD].get_all():
-                if hasattr(obj, "damage_marked"):
-                    obj.damage_marked = 0
-                if hasattr(obj, "dealt_deathtouch_damage"):
-                    obj.dealt_deathtouch_damage = False
-                if hasattr(obj, "is_attacking"):
-                    obj.is_attacking = False
-                if hasattr(obj, "is_blocking"):
-                    obj.is_blocking = False
-            if hasattr(player, "cards_drawn_this_turn"):
-                player.cards_drawn_this_turn = 0
-        if hasattr(game, "combat_state"):
-            game.combat_state.clear()
-        if hasattr(game, "creature_died_this_turn"):
-            game.creature_died_this_turn = False
-        game.empty_mana_pools()
+        cleanup_mechanical(self.game)
 
     def _fire_step_events(self, curr_turn: TurnInfo, result: StepResult | None) -> None:
         """Fire turn-structure trigger events at GRE step boundaries.

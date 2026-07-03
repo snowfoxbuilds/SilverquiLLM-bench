@@ -1589,13 +1589,6 @@ def rescore(run_id: str, cards: str | None) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Replay validation subcommand (defined in silverquillm.replay.cli)
-# ---------------------------------------------------------------------------
-
-from silverquillm.replay.cli import validate as _replay_validate  # noqa: E402
-
-main.add_command(_replay_validate)
 
 
 if __name__ == "__main__":

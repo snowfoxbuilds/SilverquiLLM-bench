@@ -203,8 +203,9 @@ def _deal_damage(
     source_kw = getattr(source, "keywords", Keyword(0))
     if Keyword.LIFELINK in source_kw:
         controller = getattr(source, "controller", None)
-        if controller is not None and hasattr(controller, "life"):
-            controller.life += amount
+        if controller is not None:
+            from engine.game import gain_life
+            gain_life(game, controller, amount)
 
 
 # ---------------------------------------------------------------------------

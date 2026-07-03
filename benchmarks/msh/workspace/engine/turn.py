@@ -41,6 +41,51 @@ def _do_untap_step(game: GameState) -> None:
     active.land_plays_remaining = 1
 
 
+def untap_step(game: GameState) -> None:
+    """Public entry point for the untap step (see :func:`_do_untap_step`)."""
+    _do_untap_step(game)
+
+
+def cleanup_mechanical(game: GameState) -> None:
+    """The deterministic core of the cleanup step (rule 514 steps 2-5).
+
+    Expires "until end of turn" continuous effects (and reapplies the
+    rest), clears marked damage, deathtouch/combat flags, and per-turn
+    trackers (``cards_drawn_this_turn``, ``creature_died_this_turn``),
+    resets the combat state, and empties mana pools.
+
+    No discard and no SBA/priority loop — :func:`_do_cleanup_step` wraps
+    this with the interactive parts; replay validation runs only this
+    mechanical core at GRE turn boundaries (discards there are explicit
+    GRE zone moves, and deaths are GRE-observed events).
+    """
+    if hasattr(game, "effect_manager"):
+        game.effect_manager.remove_expired(game)
+        # Reapply remaining effects so the game state is consistent.
+        game.effect_manager.apply_all(game)
+
+    for player in game.players:
+        bf = player.zones[Zone.BATTLEFIELD]
+        for obj in bf.get_all():
+            if hasattr(obj, "damage_marked"):
+                obj.damage_marked = 0
+            if hasattr(obj, "dealt_deathtouch_damage"):
+                obj.dealt_deathtouch_damage = False
+            if hasattr(obj, "is_attacking"):
+                obj.is_attacking = False
+            if hasattr(obj, "is_blocking"):
+                obj.is_blocking = False
+        if hasattr(player, "cards_drawn_this_turn"):
+            player.cards_drawn_this_turn = 0
+
+    if hasattr(game, "combat_state"):
+        game.combat_state.clear()
+    if hasattr(game, "creature_died_this_turn"):
+        game.creature_died_this_turn = False
+
+    game.empty_mana_pools()
+
+
 def _do_draw_step(game: GameState) -> None:
     """Perform draw step actions: active player draws a card.
 
@@ -116,35 +161,8 @@ def _do_cleanup_step(game: GameState) -> None:
             # Defensive: discard the last card to avoid an infinite loop.
             _discard(game, active, cards_in_hand[-1])
 
-    # --- Step 2: Remove "until end of turn" continuous effects ---
-    if hasattr(game, "effect_manager"):
-        game.effect_manager.remove_expired(game)
-        # Reapply remaining effects so the game state is consistent.
-        game.effect_manager.apply_all(game)
-
-    # --- Step 3: Clear damage on all creatures ---
-    for player in game.players:
-        bf = player.zones[Zone.BATTLEFIELD]
-        for obj in bf.get_all():
-            if hasattr(obj, "damage_marked"):
-                obj.damage_marked = 0
-
-    # --- Step 4: Clear combat flags ---
-    for player in game.players:
-        bf = player.zones[Zone.BATTLEFIELD]
-        for obj in bf.get_all():
-            if hasattr(obj, "dealt_deathtouch_damage"):
-                obj.dealt_deathtouch_damage = False
-            if hasattr(obj, "is_attacking"):
-                obj.is_attacking = False
-            if hasattr(obj, "is_blocking"):
-                obj.is_blocking = False
-    # Reset the CombatState itself.
-    if hasattr(game, "combat_state"):
-        game.combat_state.clear()
-
-    # --- Step 5: Empty mana pools ---
-    game.empty_mana_pools()
+    # --- Steps 2-5: the deterministic core (shared with replay validation) ---
+    cleanup_mechanical(game)
 
     # --- Step 6: Check state-based actions ---
     sba_happened = resolve_state_based_actions(game)

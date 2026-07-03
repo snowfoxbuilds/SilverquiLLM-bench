@@ -41,12 +41,24 @@ def _is_engine_base(cls: type) -> bool:
 
 
 def _defines_card(module: object, cls: type) -> bool:
-    """True if *cls* is a card class this module defines (vs. imports)."""
+    """True if *cls* is a card class this module defines (vs. imports).
+
+    Factory-made classes (``make_vanilla``, ``make_gainlife_tapland``) carry
+    the *factory's* module name but are not attributes of that module — that
+    asymmetry is what distinguishes a product built for this card module
+    from a class merely imported out of another module.
+    """
     if cls.__module__ == module.__name__:  # type: ignore[attr-defined]
         return True
-    if cls.__module__.startswith("cards."):
+    if cls.__module__.endswith(".card_impl"):
         return False  # imported from another card's module
-    return not _is_engine_base(cls)  # factory-made (make_vanilla etc.)
+    if _is_engine_base(cls):
+        return False
+    factory_module = sys.modules.get(cls.__module__)
+    return (
+        factory_module is None
+        or getattr(factory_module, cls.__name__, None) is not cls
+    )
 
 
 def _metadata_from_spec(spec_path: Path) -> CardMetadata | None:
@@ -126,6 +138,11 @@ def load_set_registry(
                 )
                 continue
             if instance.name in registry:
+                # TODO(card-pool): fdn_15/fdn_31 (Bigfin Bouncer) and
+                # fdn_125/fdn_205 (Wardens of the Cycle) are duplicate-name
+                # slots — the squatted dirs need their real cards implemented.
+                # Until then: deterministic last-write-wins (dirs are scanned
+                # in sorted order), loudly warned.
                 logger.warning(
                     "Duplicate card name %r — %s overwrites earlier registration",
                     instance.name, module_name,
