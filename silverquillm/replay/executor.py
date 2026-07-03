@@ -137,6 +137,17 @@ _GRE_ZONE_TO_ENGINE: dict[str, str] = {
 # *controller's* engine zone; other shared zones (exile) route by owner.
 _SHARED_ZONE_ROUTE_BY_CONTROLLER = {"ZoneType_Battlefield"}
 
+# Forward-scan bound (in snapshots) for annotations Arena streams AFTER the
+# event they describe (ManaPaid funding a cast, TargetSpec naming targets).
+# Observed lag is 1-6 snapshots; 30 is a comfortable ceiling that keeps scans
+# bounded. Exactness comes from filtering on the described object's instance
+# id — never reused within a game — not from the bound itself.
+_ANNOTATION_LOOKAHEAD = 30
+
+# Forward-scan bound for observing blocker deaths after a damage step; a
+# combat's deaths resolve within its own snapshots, well inside this window.
+_DEATH_LOOKAHEAD = 12
+
 
 # ---------------------------------------------------------------------------
 # ReplayExecutor
@@ -381,20 +392,27 @@ class ReplayExecutor:
 
     def _snapshot_zone_groups(
         self, snapshot: GameSnapshot
-    ) -> list[tuple[Any, int, str, list[Any]]]:
+    ) -> list[tuple[Any, int, str, list[Any], int]]:
         """Group a snapshot's zone objects per (engine zone, seat).
 
-        Returns ``(engine_zone, seat_id, gre_zone_type, objects)`` tuples.
-        Per-seat GRE zones (hand, library, graveyard) yield one group each.
-        Shared GRE zones (battlefield, exile, stack — ``ownerSeatId == 0``)
-        are split into one group per known player, routing each object by its
-        controller (battlefield) or owner seat, so they line up with the
-        engine's per-player zone model. Empty groups are included so callers
-        can detect engine-side excess cards.
+        Returns ``(engine_zone, seat_id, gre_zone_type, objects,
+        expected_count)`` tuples. Per-seat GRE zones (hand, library,
+        graveyard) yield one group each. Shared GRE zones (battlefield,
+        exile, stack — ``ownerSeatId == 0``) are split into one group per
+        known player, routing each object by its controller (battlefield) or
+        owner seat, so they line up with the engine's per-player zone model.
+        Empty groups are included so callers can detect engine-side excess
+        cards.
+
+        ``expected_count`` is how many objects GRE says the group holds —
+        for per-seat zones the zone's id-list length (hidden objects, e.g.
+        opponent hand cards, appear as ids WITHOUT game_objects entries, so
+        ``len(objects)`` undercounts them); for shared zones, whose objects
+        are all visible, it equals ``len(objects)``.
         """
         from engine.types import Zone
 
-        groups: list[tuple[Any, int, str, list[Any]]] = []
+        groups: list[tuple[Any, int, str, list[Any], int]] = []
         for snap_zone in snapshot.zones.values():
             engine_zone_name = _GRE_ZONE_TO_ENGINE.get(snap_zone.type)
             if engine_zone_name is None:
@@ -410,7 +428,10 @@ class ReplayExecutor:
                 if (obj := snapshot.game_objects.get(iid)) is not None
             ]
             if snap_zone.owner_seat_id:
-                groups.append((engine_zone, snap_zone.owner_seat_id, snap_zone.type, objs))
+                groups.append((
+                    engine_zone, snap_zone.owner_seat_id, snap_zone.type,
+                    objs, len(snap_zone.object_instance_ids),
+                ))
                 continue
 
             by_seat: dict[int, list[Any]] = {seat: [] for seat in self.players}
@@ -423,7 +444,7 @@ class ReplayExecutor:
                 if seat in by_seat:
                     by_seat[seat].append(obj)
             for seat, group in sorted(by_seat.items()):
-                groups.append((engine_zone, seat, snap_zone.type, group))
+                groups.append((engine_zone, seat, snap_zone.type, group, len(group)))
         return groups
 
     def _rebuild_instance_map(self, snapshot: GameSnapshot) -> None:
@@ -438,7 +459,7 @@ class ReplayExecutor:
         old = dict(self._engine_cards)
         self._engine_cards.clear()
 
-        for engine_zone_enum, seat_id, zone_type_str, objs in self._snapshot_zone_groups(snapshot):
+        for engine_zone_enum, seat_id, zone_type_str, objs, expected_count in self._snapshot_zone_groups(snapshot):
             if zone_type_str in ("ZoneType_Library", "ZoneType_Stack"):
                 continue  # hidden identities / game-level stack — nothing to correlate
             player = self.players.get(seat_id)
@@ -787,7 +808,7 @@ class ReplayExecutor:
         start = self._gsid_index.get(curr_snapshot.game_state_id, 0)
         deaths: dict[int, int] = {}
         alive = set(blocker_iids)
-        for k, snap in enumerate(self.replay.snapshots[start : start + 12]):
+        for k, snap in enumerate(self.replay.snapshots[start : start + _DEATH_LOOKAHEAD]):
             if not alive:
                 break
             bf_ids = {
@@ -1025,7 +1046,7 @@ class ReplayExecutor:
         # is deleted (fast auto-resolves), and instance ids are never
         # reused within a game, so the affected-ids filter alone is exact.
         start = self._gsid_index.get(curr_snapshot.game_state_id, 0)
-        for snap in self.replay.snapshots[start : start + 30]:
+        for snap in self.replay.snapshots[start : start + _ANNOTATION_LOOKAHEAD]:
             for ann in snap.annotations:
                 if (
                     "AnnotationType_ManaPaid" in ann.type
@@ -1072,43 +1093,64 @@ class ReplayExecutor:
         curr_snapshot: GameSnapshot,
         spell_iid: int = 0,
     ) -> tuple[Any, ...]:
-        """Build intent preferences from GRE PlayerSubmittedTargets.
+        """Build intent preferences from GRE TargetSpec annotations.
 
-        Each submitted target id maps to the correlated engine object (bound
-        by the engine-minted instance id, the one dynamically-bound field) or
-        an engine player (bound by seat). A name-based preference follows each
-        instance preference as a fallback, and the greedy preference scan
-        takes the first that matches an offered option.
+        TargetSpec (a persistent annotation) is the spell-scoped record of
+        chosen targets: ``affectorId`` is the targeting spell/ability
+        instance id and ``affectedIds`` are the chosen targets (object
+        instance ids, or seat ids for player targets), with an ``index``
+        detail ordering multi-target spells. Keying on the spell id makes
+        cross-wiring with another same-seat targeted object impossible.
+        (PlayerSubmittedTargets is NOT usable here: its affectedIds name the
+        submitting spell, not the targets.)
+
+        Each target maps to the correlated engine object (bound by the
+        engine-minted instance id, the one dynamically-bound field) or an
+        engine player (bound by seat). A name-based preference follows as a
+        fallback when no engine instance id is available, and the greedy
+        preference scan takes the first that matches an offered option. No
+        TargetSpec found (or no spell id) yields no preferences — the
+        permissive baseline answers, and compare-first records any wrong
+        guess.
         """
         from engine.decisions import Decision
 
-        target_ids: list[int] = []
-        # Targets are submitted while the spell is on the stack — scan the
-        # cast snapshot, one snapshot back, then forward while it's pending.
+        if not spell_iid:
+            return ()
+
+        # TargetSpec streams a couple of snapshots after the cast event
+        # (like ManaPaid) — scan forward; it persists once present, and the
+        # affector filter is exact because instance ids are never reused.
+        entries: list[tuple[int, int]] = []  # (index, target id)
+        seen: set[int] = set()
         candidates: list[GameSnapshot] = [prev_snapshot]
         start = self._gsid_index.get(curr_snapshot.game_state_id)
         if start is not None:
-            candidates.extend(self.replay.snapshots[start : start + 30])
+            candidates.extend(
+                self.replay.snapshots[start : start + _ANNOTATION_LOOKAHEAD]
+            )
         else:
             candidates.append(curr_snapshot)
         for snap in candidates:
-            for ann in snap.annotations:
+            anns = list(snap.annotations) + list(snap.persistent_annotations.values())
+            for ann in anns:
                 if (
-                    "AnnotationType_PlayerSubmittedTargets" in ann.type
-                    and ann.affector_id == seat
+                    "AnnotationType_TargetSpec" not in ann.type
+                    or ann.affector_id != spell_iid
+                    or ann.id in seen
                 ):
-                    target_ids.extend(ann.affected_ids)
-            if target_ids:
+                    continue
+                seen.add(ann.id)
+                index = ann.details.get("index", 0)
+                if isinstance(index, list):
+                    index = index[0] if index else 0
+                for tid in ann.affected_ids:
+                    entries.append((index, tid))
+            if entries:
                 break
-            if (
-                spell_iid
-                and snap.game_state_id > curr_snapshot.game_state_id
-                and spell_iid not in snap.game_objects
-            ):
-                break  # spell left the stack — later targets belong to others
 
         preferences: list[Any] = []
-        for tid in target_ids:
+        for _, tid in sorted(entries, key=lambda e: e[0]):
             if tid in self.players:
                 preferences.append(Decision.player(seat=tid))
                 continue
@@ -1118,9 +1160,8 @@ class ReplayExecutor:
             engine_iid = self._engine_instance_id(target)
             if engine_iid is not None:
                 preferences.append(Decision.obj(instance=engine_iid))
-            name = getattr(target, "name", "")
-            if name:
-                preferences.append(Decision.obj(name=name))
+            elif getattr(target, "name", ""):
+                preferences.append(Decision.obj(name=target.name))
         return tuple(preferences)
 
     def _engine_instance_id(self, card: Any) -> int | None:
@@ -1558,7 +1599,7 @@ class ReplayExecutor:
         """Compare zone contents by grpId."""
         mismatches = []
 
-        for engine_zone_enum, seat_id, zone_type_str, objs in self._snapshot_zone_groups(snapshot):
+        for engine_zone_enum, seat_id, zone_type_str, objs, expected_count in self._snapshot_zone_groups(snapshot):
             # Library: hidden identities, ordering differs.
             # Stack: transient and game-level in the engine.
             if zone_type_str in ("ZoneType_Library", "ZoneType_Stack"):
@@ -2075,7 +2116,7 @@ class ReplayExecutor:
         # Stack: transient; engine models entries differently than GRE.
         SKIP_ZONES = {"ZoneType_Library", "ZoneType_Stack"}
 
-        for engine_zone_enum, seat_id, zone_type_str, objs in self._snapshot_zone_groups(snapshot):
+        for engine_zone_enum, seat_id, zone_type_str, objs, expected_count in self._snapshot_zone_groups(snapshot):
             if zone_type_str in SKIP_ZONES:
                 continue
 
@@ -2135,9 +2176,13 @@ class ReplayExecutor:
             # Engine-created objects without a grpId (tokens minted by
             # triggers/resolutions) can't be matched per-grpId; when the
             # engine zone holds more cards than the snapshot, they are the
-            # excess — remove them or they diverge forever.
+            # excess — remove them or they diverge forever. The comparison
+            # is against expected_count, NOT len(objs): hidden objects
+            # (opponent hand) appear in the zone id-list without
+            # game_objects entries, and their engine-side shells are
+            # legitimate residents, not overflow.
             engine_cards_list = player.zones[engine_zone_enum].get_all()
-            overflow = len(engine_cards_list) - len(objs)
+            overflow = len(engine_cards_list) - expected_count
             if overflow > 0:
                 grp0_cards = [
                     c for c in engine_cards_list if self._card_to_grp_id(c) == 0

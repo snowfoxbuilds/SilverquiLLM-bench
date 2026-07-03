@@ -81,24 +81,25 @@ class RoguesPassage(Land):
             return True
 
         def _effect(game: "GameState") -> None:
-            target = getattr(source, "_current_target", None)
-            if target is None:
-                creatures = [
-                    obj
-                    for player in game.players
-                    for obj in game.get_battlefield(player).get_all()
-                    if CardType.CREATURE in getattr(obj, "card_types", set())
-                ]
-                if not creatures:
-                    return
-                controller = source.controller or source.owner
-                target = choose_object(
-                    game,
-                    controller,
-                    creatures,
-                    "Choose target creature that can't be blocked this turn",
-                    source_card=source,
-                )
+            # The target comes from a Player Query — the protocol's native
+            # choice surface (answered by Intents in tests and by
+            # replay-derived Intents in validation).
+            creatures = [
+                obj
+                for player in game.players
+                for obj in game.get_battlefield(player).get_all()
+                if CardType.CREATURE in getattr(obj, "card_types", set())
+            ]
+            if not creatures:
+                return
+            controller = source.controller or source.owner
+            target = choose_object(
+                game,
+                controller,
+                creatures,
+                "Choose target creature that can't be blocked this turn",
+                source_card=source,
+            )
             if target is not None and _is_on_battlefield(game, target):
                 chosen = target
 
