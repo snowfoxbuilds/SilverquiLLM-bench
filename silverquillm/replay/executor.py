@@ -427,7 +427,15 @@ class ReplayExecutor:
         return groups
 
     def _rebuild_instance_map(self, snapshot: GameSnapshot) -> None:
-        """Rebuild the GRE instanceId -> engine card mapping."""
+        """Rebuild the GRE instanceId -> engine card mapping.
+
+        Prior bindings are kept when they still hold (the same engine card
+        object is still in the zone GRE puts the instance id in) — only the
+        unmatched remainder is order-matched by grpId. Without this, two
+        same-name permanents (basic lands especially) swap identities on
+        every rebuild, flapping per-object state like tapped comparisons.
+        """
+        old = dict(self._engine_cards)
         self._engine_cards.clear()
 
         for engine_zone_enum, seat_id, zone_type_str, objs in self._snapshot_zone_groups(snapshot):
@@ -437,21 +445,24 @@ class ReplayExecutor:
             if player is None:
                 continue
 
-            engine_cards = player.zones[engine_zone_enum].get_all()
+            available = player.zones[engine_zone_enum].get_all()
 
-            # Match by grpId (card name) in order
-            grp_id_cards: dict[int, list[Any]] = {}
-            for card in engine_cards:
-                grp = getattr(card, "_grp_id", 0)
-                if grp == 0:
-                    # Try to find grpId from card name
-                    for gid, name in self._grp_to_name.items():
-                        if name == card.name:
-                            grp = gid
-                            break
-                grp_id_cards.setdefault(grp, []).append(card)
-
+            # Pass 1: keep still-valid prior bindings (identity match).
+            pending: list[Any] = []
             for obj in objs:
+                bound = old.get(obj.instance_id)
+                if bound is not None and any(c is bound for c in available):
+                    self._engine_cards[obj.instance_id] = bound
+                    available = [c for c in available if c is not bound]
+                else:
+                    pending.append(obj)
+
+            # Pass 2: order-match the remainder by grpId (card name).
+            grp_id_cards: dict[int, list[Any]] = {}
+            for card in available:
+                grp_id_cards.setdefault(self._card_to_grp_id(card), []).append(card)
+
+            for obj in pending:
                 candidates = grp_id_cards.get(obj.grp_id, [])
                 if candidates:
                     self._engine_cards[obj.instance_id] = candidates.pop(0)
@@ -473,7 +484,9 @@ class ReplayExecutor:
         result = StepResult(snapshot_id=curr_snapshot.game_state_id)
 
         # Detect phase/step changes
-        self._handle_turn_info(prev_snapshot.turn_info, curr_snapshot.turn_info)
+        self._handle_turn_info(
+            prev_snapshot.turn_info, curr_snapshot.turn_info, result
+        )
 
         # Get actions from the snapshot
         actions = curr_snapshot.actions
@@ -695,12 +708,101 @@ class ReplayExecutor:
             if sub_step not in self._combat_damage_passes:
                 self._combat_damage_passes.add(sub_step)
                 from engine.combat import combat_damage_step
+                # Multi-blocker damage order: the engine raises an ordering
+                # Player Query; answer it with the replay's observed outcome
+                # (blockers that die first were assigned damage first).
+                ordering_intents = self._mint_damage_order_intents(curr_snapshot)
                 try:
                     combat_damage_step(self.game, sub_step=sub_step)
                 except Exception as exc:
                     result.engine_failures.append(
                         f"combat_damage_step: {type(exc).__name__}: {exc}"
                     )
+                finally:
+                    for player, intent_name in ordering_intents:
+                        player.end_intent(intent_name)
+
+    def _mint_damage_order_intents(
+        self, curr_snapshot: GameSnapshot
+    ) -> list[tuple[Any, str]]:
+        """Answer damage-order queries from the replay's observed outcome.
+
+        For each attacker blocked by 2+ creatures, look ahead for which
+        blockers leave the battlefield — those were assigned (lethal)
+        damage first, in death order. Mints one ordering Intent per such
+        attacker on its controller; the caller ends them after the damage
+        pass. Attackers that share a printed name are skipped (their
+        pattern-routed intents would be ambiguous); the baseline's
+        first-offered order applies there, and compare-first records any
+        resulting divergence.
+        """
+        from engine.decisions import Decision, GameRef
+        from engine.intent_player import Intent
+
+        by_attacker: dict[int, list[int]] = {}
+        for obj in curr_snapshot.get_zone_objects("ZoneType_Battlefield"):
+            for aid in obj.blocking_attacker_ids:
+                by_attacker.setdefault(aid, []).append(obj.instance_id)
+
+        multi = {a: b for a, b in by_attacker.items() if len(b) >= 2}
+        if not multi:
+            return []
+        names = [
+            getattr(self._engine_cards.get(a), "name", None) for a in multi
+        ]
+        intents: list[tuple[Any, str]] = []
+        for aid, blocker_iids in multi.items():
+            attacker = self._engine_cards.get(aid)
+            if attacker is None:
+                continue
+            if names.count(getattr(attacker, "name", None)) > 1:
+                continue  # same-name attackers — pattern would be ambiguous
+            controller = getattr(attacker, "controller", None)
+            if controller is None or not hasattr(controller, "start_intent"):
+                continue
+            preferences: list[Any] = []
+            for iid in self._blocker_death_order(blocker_iids, curr_snapshot):
+                card = self._engine_cards.get(iid)
+                if card is None:
+                    continue
+                engine_iid = self._engine_instance_id(card)
+                if engine_iid is not None:
+                    preferences.append(Decision.obj(instance=engine_iid))
+                elif getattr(card, "name", ""):
+                    preferences.append(Decision.obj(name=card.name))
+            if not preferences:
+                continue
+            intent_name = f"replay_order_{aid}"
+            controller.start_intent(intent_name, Intent(
+                pattern=GameRef(card=frozenset({("name", attacker.name)})),
+                preferences=tuple(preferences),
+            ))
+            intents.append((controller, intent_name))
+        return intents
+
+    def _blocker_death_order(
+        self, blocker_iids: list[int], curr_snapshot: GameSnapshot
+    ) -> list[int]:
+        """Blockers ordered by observed death (first to leave first), survivors last."""
+        start = self._gsid_index.get(curr_snapshot.game_state_id, 0)
+        deaths: dict[int, int] = {}
+        alive = set(blocker_iids)
+        for k, snap in enumerate(self.replay.snapshots[start : start + 12]):
+            if not alive:
+                break
+            bf_ids = {
+                iid
+                for zone in snap.zones.values()
+                if zone.type == "ZoneType_Battlefield"
+                for iid in zone.object_instance_ids
+            }
+            for iid in list(alive):
+                if iid not in bf_ids:
+                    deaths[iid] = k
+                    alive.discard(iid)
+        ordered = sorted(deaths, key=lambda i: deaths[i])
+        ordered.extend(i for i in blocker_iids if i not in deaths)
+        return ordered
 
     def _simulate_hand_draws(
         self,
@@ -918,6 +1020,10 @@ class ReplayExecutor:
         """
         if not spell_iid:
             return
+        # The window is NOT cut short when the spell leaves the stack:
+        # Arena streams payment annotations even after the paid-for object
+        # is deleted (fast auto-resolves), and instance ids are never
+        # reused within a game, so the affected-ids filter alone is exact.
         start = self._gsid_index.get(curr_snapshot.game_state_id, 0)
         for snap in self.replay.snapshots[start : start + 30]:
             for ann in snap.annotations:
@@ -928,9 +1034,6 @@ class ReplayExecutor:
                     # Credit only — the tap lands at the annotation's home
                     # snapshot, when GRE also shows the source tapped.
                     self._apply_one_mana_payment(ann, tap=False)
-            # Stop once the spell has left the stack (resolved/countered).
-            if snap.game_state_id > curr_snapshot.game_state_id and spell_iid not in snap.game_objects:
-                break
 
     def _take_from_hand(self, player: Any, action: ReplayAction, snapshot: GameSnapshot) -> Any:
         """Find the acted-on card in *player*'s engine hand, materializing it.
@@ -1024,9 +1127,11 @@ class ReplayExecutor:
         """The engine-minted instance id for *card* in its current zone."""
         if self.game is None or not hasattr(self.game, "refs"):
             return None
+        from engine.types import Zone
+
         for player in self.game.players:
-            for zone, container in player.zones.items():
-                if container.contains(card):
+            for zone in Zone:
+                if player.zones[zone].contains(card):
                     return self.game.refs.instance_id(card, zone)
         return None
 
@@ -1129,6 +1234,19 @@ class ReplayExecutor:
         if card is None:
             card = self._pending_stack.pop(action.instance_id, None) or self._engine_cards.get(action.instance_id)
 
+        if (
+            action.dest_zone == "ZoneType_Stack"
+            and action.source_zone in ("ZoneType_Graveyard", "ZoneType_Exile")
+            and card is not None
+        ):
+            # Cast from a non-hand zone (flashback and similar): a real
+            # cast, not a bare zone move — the mana was already paid via
+            # ManaPaid annotations, so the free-cast path (which skips
+            # payment but keeps legality, targeting, and resolution) is
+            # the faithful route.
+            self._simulate_noncast_zone_cast(action, prev_snapshot, curr_snapshot, card, result)
+            return
+
         if action.source_zone == "ZoneType_Stack" and card is not None:
             # Spell resolution — run the queued engine resolution if present.
             if self._resolve_stack_object_for(card):
@@ -1155,6 +1273,38 @@ class ReplayExecutor:
         if action.instance_id:
             self._engine_cards[action.instance_id] = card
 
+    def _simulate_noncast_zone_cast(
+        self,
+        action: ReplayAction,
+        prev_snapshot: GameSnapshot,
+        curr_snapshot: GameSnapshot,
+        card: Any,
+        result: StepResult,
+    ) -> None:
+        """Cast *card* from a non-hand zone (flashback etc.) via free-cast."""
+        from engine.casting import cast_spell_free
+        from engine.types import Zone
+
+        player = self.players.get(action.player_seat_id) or getattr(card, "owner", None)
+        if player is None or self.game is None:
+            return
+        src = _GRE_ZONE_TO_ENGINE.get(action.source_zone)
+        try:
+            self._with_target_intent(
+                action, prev_snapshot, curr_snapshot,
+                lambda: cast_spell_free(self.game, player, card, Zone(src)),
+            )
+        except Exception as exc:
+            result.engine_failures.append(
+                f"cast_spell_free {action.card_name} "
+                f"(from {action.source_zone}, seat {action.player_seat_id}): "
+                f"{type(exc).__name__}: {exc}"
+            )
+            return
+        if action.instance_id:
+            self._engine_cards[action.instance_id] = card
+            self._pending_stack[action.instance_id] = card
+
     def _simulate_ability_resolution(
         self,
         action: ReplayAction,
@@ -1162,20 +1312,126 @@ class ReplayExecutor:
         curr_snapshot: GameSnapshot,
         result: StepResult,
     ) -> None:
-        """Resolve a pending engine trigger when GRE resolves the ability.
+        """Drive an ability through the engine as GRE reports it.
 
-        Engine triggers push StackObjects when events fire; GRE reports the
-        resolution as this action. If the engine queued a matching trigger,
-        resolve it now — otherwise outcome validation applies: a missed
-        effect shows up in the state comparison, not as a patched value.
+        Activation: fund the ability's mana cost by look-ahead (ManaPaid
+        annotations reference the ability's instance id, like spells), then
+        — if the engine didn't already queue a matching trigger for the
+        source — activate the source's activated ability through
+        activate_ability, which pays costs (tapping the source for {T})
+        and pushes the effect onto the engine stack.
+
+        Resolution: pop and resolve the pending StackObject for the source,
+        answering its targeting queries from PlayerSubmittedTargets. A
+        missed effect shows up in the state comparison, not as a patched
+        value.
         """
         if action.action_type == "ability_activation":
+            self._apply_spell_mana_lookahead(action.instance_id, curr_snapshot)
+            source_card = self._find_ability_source(action)
+            player = self.players.get(action.player_seat_id)
+            if (
+                source_card is not None
+                and player is not None
+                and not self._stack_has_source(source_card)
+            ):
+                self._try_activate_ability(
+                    player, source_card, action, prev_snapshot, curr_snapshot, result
+                )
             if action.instance_id in curr_snapshot.game_objects:
                 return  # still on the GRE stack; resolve when it leaves
+            # created and resolved within one diff — resolve immediately
 
         source_card = self._find_ability_source(action)
         if source_card is not None:
-            self._resolve_stack_object_for(source_card)
+            self._with_target_intent(
+                action, prev_snapshot, curr_snapshot,
+                lambda: self._resolve_stack_object_for(source_card),
+            )
+
+    def _stack_has_source(self, card: Any) -> bool:
+        """True if the engine stack already holds an object from *card*."""
+        if self.game is None:
+            return False
+        return any(so.source is card for so in self.game.stack._items)
+
+    def _try_activate_ability(
+        self,
+        player: Any,
+        source_card: Any,
+        action: ReplayAction,
+        prev_snapshot: GameSnapshot,
+        curr_snapshot: GameSnapshot,
+        result: StepResult,
+    ) -> None:
+        """Activate *source_card*'s single activated ability, if unambiguous.
+
+        GRE does not say which of a card's abilities an ability object is,
+        so only the one-ability case is driven; multi-ability sources fall
+        through to the resync (recorded by state comparison, not guessed).
+        """
+        try:
+            abilities = list(source_card.get_activated_abilities() or [])
+        except Exception:
+            abilities = []
+        if len(abilities) != 1:
+            return
+        from engine.abilities import ActivatedAbilityInstance, activate_ability
+
+        instance = ActivatedAbilityInstance(
+            source=source_card,
+            controller=player,
+            cost=abilities[0].cost,
+            effect=abilities[0].effect,
+            is_mana_ability=False,
+            description=abilities[0].description,
+        )
+        name = action.card_name or getattr(source_card, "name", "?")
+        try:
+            self._with_target_intent(
+                action, prev_snapshot, curr_snapshot,
+                lambda: activate_ability(self.game, player, instance),
+            )
+        except Exception as exc:
+            result.engine_failures.append(
+                f"activate_ability {name} (seat {action.player_seat_id}): "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+    def _with_target_intent(
+        self,
+        action: ReplayAction,
+        prev_snapshot: GameSnapshot,
+        curr_snapshot: GameSnapshot,
+        thunk: Any,
+    ) -> Any:
+        """Run *thunk* with a replay-derived targeting Intent active.
+
+        Queries raised while the thunk runs (ability targets, resolution
+        choices) are answered by the acting seat's PlayerSubmittedTargets,
+        falling back to the permissive baseline when the replay recorded
+        none.
+        """
+        player = self.players.get(action.player_seat_id)
+        if player is None or not hasattr(player, "start_intent"):
+            return thunk()
+        preferences = self._derive_target_preferences(
+            action.player_seat_id, prev_snapshot, curr_snapshot,
+            spell_iid=action.instance_id,
+        )
+        if not preferences:
+            return thunk()
+        from engine.decisions import GameRef
+        from engine.intent_player import Intent
+
+        intent_name = f"replay_ability_{action.instance_id}"
+        player.start_intent(intent_name, Intent(
+            pattern=GameRef(), preferences=preferences,
+        ))
+        try:
+            return thunk()
+        finally:
+            player.end_intent(intent_name)
 
     def _resync_to_snapshot(self, snapshot: GameSnapshot) -> None:
         """Oracle-correct engine state to the GRE snapshot (post-comparison).
@@ -1671,20 +1927,23 @@ class ReplayExecutor:
                 return card
 
         if action.grp_id:
-            # Search the controller's battlefield first, then all players
+            # Search the controller's battlefield first, then all players;
+            # then graveyards — some abilities activate from there
+            # (e.g. Reassembling Skeleton).
             seats = []
             if action.player_seat_id:
                 seats.append(action.player_seat_id)
             seats.extend(s for s in self.players if s != action.player_seat_id)
-            for seat_id in seats:
-                player = self.players.get(seat_id)
-                if player is None:
-                    continue
-                card = self._find_card_by_grp_id(
-                    player.zones[Zone.BATTLEFIELD].get_all(), action.grp_id
-                )
-                if card is not None:
-                    return card
+            for zone in (Zone.BATTLEFIELD, Zone.GRAVEYARD):
+                for seat_id in seats:
+                    player = self.players.get(seat_id)
+                    if player is None:
+                        continue
+                    card = self._find_card_by_grp_id(
+                        player.zones[zone].get_all(), action.grp_id
+                    )
+                    if card is not None:
+                        return card
         return None
 
     def _try_engine_ability_resolution(self, source_card: Any, card_name: str) -> bool:
@@ -1898,10 +2157,14 @@ class ReplayExecutor:
         """Remove a card during zone sync, with trigger cleanup on battlefield."""
         player.zones[engine_zone].remove(card)
         if self.simulate and is_battlefield and self.game is not None:
-            # Symmetric cleanup — stale triggers must not keep firing for a
-            # permanent GRE says is gone.
+            # Symmetric cleanup — stale triggers and continuous effects
+            # must not keep applying for a permanent GRE says is gone.
             self.game.trigger_manager.unregister(card)
             self.game.replacement_manager.unregister(card)
+            effect_manager = getattr(self.game, "effect_manager", None)
+            if effect_manager is not None:
+                for effect in effect_manager.get_effects_by_source(card):
+                    effect_manager.remove(effect)
 
     # ------------------------------------------------------------------
     # Turn info / phase handling
@@ -1930,7 +2193,12 @@ class ReplayExecutor:
         "Step_Cleanup": "cleanup",
     }
 
-    def _handle_turn_info(self, prev_turn: TurnInfo, curr_turn: TurnInfo) -> None:
+    def _handle_turn_info(
+        self,
+        prev_turn: TurnInfo,
+        curr_turn: TurnInfo,
+        result: StepResult | None = None,
+    ) -> None:
         """Handle phase/step transitions from turnInfo diffs."""
         if self.game is None:
             return
@@ -1960,9 +2228,13 @@ class ReplayExecutor:
         from engine.types import Phase, Step
 
         if turn_changed:
-            # New turn: engine untap step for the (already updated) active
-            # player — untap, clear summoning sickness, reset land plays.
+            # New turn: cleanup for the ending turn (until-EOT effects
+            # expire, marked damage clears, combat flags reset), then the
+            # engine untap step for the (already updated) active player —
+            # untap, clear summoning sickness, reset land plays. Arena has
+            # no visible cleanup step; the turn boundary is its moment.
             from engine.turn import _do_untap_step
+            self._replay_cleanup()
             _do_untap_step(self.game)
 
         phase_name = self._GRE_PHASE_TO_ENGINE.get(curr_turn.phase)
@@ -1971,6 +2243,9 @@ class ReplayExecutor:
         step_name = self._GRE_STEP_TO_ENGINE.get(curr_turn.step)
         self.game.step = Step(step_name) if step_name is not None else None
 
+        if curr_turn.step != prev_turn.step:
+            self._fire_step_events(curr_turn, result)
+
         # Mana pools empty as steps and phases end. Casting pays costs
         # atomically within a step, so emptying on every transition is safe.
         if (curr_turn.phase, curr_turn.step) != (prev_turn.phase, prev_turn.step):
@@ -1978,6 +2253,81 @@ class ReplayExecutor:
                 pool = getattr(player, "mana_pool", None)
                 if pool is not None:
                     pool.empty()
+
+    def _replay_cleanup(self) -> None:
+        """The mechanical part of the cleanup step, at the GRE turn boundary.
+
+        Mirrors _do_cleanup_step's steps 2-5 (expire until-EOT effects,
+        clear marked damage, clear combat flags, empty pools) — without the
+        discard (GRE zone moves drive discards explicitly) and without the
+        SBA/priority loop (deaths are GRE-observed events, not for the
+        replay layer to invent at a boundary GRE shows none).
+        """
+        from engine.types import Zone
+
+        game = self.game
+        if hasattr(game, "effect_manager"):
+            game.effect_manager.remove_expired(game)
+            game.effect_manager.apply_all(game)
+        for player in game.players:
+            for obj in player.zones[Zone.BATTLEFIELD].get_all():
+                if hasattr(obj, "damage_marked"):
+                    obj.damage_marked = 0
+                if hasattr(obj, "dealt_deathtouch_damage"):
+                    obj.dealt_deathtouch_damage = False
+                if hasattr(obj, "is_attacking"):
+                    obj.is_attacking = False
+                if hasattr(obj, "is_blocking"):
+                    obj.is_blocking = False
+            if hasattr(player, "cards_drawn_this_turn"):
+                player.cards_drawn_this_turn = 0
+        if hasattr(game, "combat_state"):
+            game.combat_state.clear()
+        if hasattr(game, "creature_died_this_turn"):
+            game.creature_died_this_turn = False
+        game.empty_mana_pools()
+
+    def _fire_step_events(self, curr_turn: TurnInfo, result: StepResult | None) -> None:
+        """Fire turn-structure trigger events at GRE step boundaries.
+
+        The engine fires these from run_turn, which replay never uses — it
+        follows the GRE step sequence instead, so upkeep/begin-combat/end-
+        step triggered abilities must be fired here or they never trigger.
+        fire_event pushes matching triggers onto the engine stack; GRE's
+        ability_resolution actions (or the pre-resync flush) resolve them.
+        """
+        from engine.events import (
+            BeginningOfCombatTriggeredEvent,
+            BeginningOfUpkeepTriggeredEvent,
+            EndOfTurnTriggeredEvent,
+            EndStepTriggeredEvent,
+        )
+
+        step = curr_turn.step
+        try:
+            if step == "Step_Upkeep":
+                self.game.trigger_manager.fire_event(
+                    self.game, BeginningOfUpkeepTriggeredEvent()
+                )
+            elif step == "Step_BeginCombat":
+                self.game.trigger_manager.fire_event(
+                    self.game, BeginningOfCombatTriggeredEvent()
+                )
+            elif step == "Step_End":
+                self.game.trigger_manager.fire_event(
+                    self.game,
+                    EndStepTriggeredEvent(player=self.game.active_player),
+                )
+                self.game.trigger_manager.fire_event(
+                    self.game, EndOfTurnTriggeredEvent()
+                )
+        except Exception as exc:
+            if result is not None:
+                result.engine_failures.append(
+                    f"step event ({step}): {type(exc).__name__}: {exc}"
+                )
+            else:
+                logger.debug("step event firing failed", exc_info=True)
 
     # ------------------------------------------------------------------
     # Helpers
