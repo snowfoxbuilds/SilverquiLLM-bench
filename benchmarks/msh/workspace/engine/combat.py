@@ -386,7 +386,7 @@ def declare_blockers_step(game: GameState, block_assignments: Any = None) -> Non
             )
 
 
-def combat_damage_step(game: GameState) -> None:
+def combat_damage_step(game: GameState, *, sub_step: str | None = None) -> None:
     """Combat damage step: deal combat damage.
 
     Handles:
@@ -399,6 +399,11 @@ def combat_damage_step(game: GameState) -> None:
 
     Parameters:
         game: The current game state.
+        sub_step: ``None`` (default) runs the full step — a first-strike
+            pass when any combatant has first/double strike, then the
+            normal pass. ``"first_strike"`` or ``"normal"`` runs only that
+            pass, for callers that walk the two damage steps separately
+            (e.g. replay validation following the GRE step sequence).
     """
     from engine.state_based_actions import resolve_state_based_actions
 
@@ -422,13 +427,14 @@ def combat_damage_step(game: GameState) -> None:
     )
 
     # --- First strike damage sub-step ---
-    if has_first_strike_step:
+    if sub_step in (None, "first_strike") and has_first_strike_step:
         _assign_combat_damage(all_attackers, combat, game, is_first_strike=True)
         resolve_state_based_actions(game)
 
     # --- Normal damage sub-step ---
-    _assign_combat_damage(all_attackers, combat, game, is_first_strike=False)
-    resolve_state_based_actions(game)
+    if sub_step in (None, "normal"):
+        _assign_combat_damage(all_attackers, combat, game, is_first_strike=False)
+        resolve_state_based_actions(game)
 
 
 def _assign_combat_damage(

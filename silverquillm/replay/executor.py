@@ -192,10 +192,10 @@ class ReplayExecutor:
         # clears that dict and skips stack zones.
         self._pending_stack: dict[int, Any] = {}
         # Combat state machine (simulate mode): one declaration, one block
-        # assignment, and one damage pass per GRE combat.
+        # assignment, and one damage pass per GRE damage step per combat.
         self._combat_active: bool = False
         self._combat_blocks_declared: bool = False
-        self._combat_damage_done: bool = False
+        self._combat_damage_passes: set[str] = set()
         # game_state_id -> snapshot list index, for bounded look-ahead.
         self._gsid_index: dict[int, int] = {}
 
@@ -555,6 +555,13 @@ class ReplayExecutor:
         # hidden-zone tutor) — pull it through the engine's library.
         self._simulate_hand_draws(prev_snapshot, curr_snapshot, result)
 
+        # Hidden-origin plays (opponent casts, opponent land plays) have no
+        # pre-move object for infer_actions to see — synthesize them from the
+        # arrival side, where the card is public.
+        actions = actions + self._infer_hidden_origin_actions(
+            actions, prev_snapshot, curr_snapshot
+        )
+
         for action in actions:
             action_type = action.action_type
             if action_type in ("combat", "phase_transition", "draw"):
@@ -625,7 +632,7 @@ class ReplayExecutor:
                 )
             self._combat_active = False
             self._combat_blocks_declared = False
-            self._combat_damage_done = False
+            self._combat_damage_passes.clear()
 
         if not in_combat:
             return
@@ -677,19 +684,23 @@ class ReplayExecutor:
                         )
                 self._combat_blocks_declared = True
 
-        if (
-            self._combat_active
-            and not self._combat_damage_done
-            and step in self._COMBAT_DAMAGE_STEPS
-        ):
-            from engine.combat import combat_damage_step
-            try:
-                combat_damage_step(self.game)
-            except Exception as exc:
-                result.engine_failures.append(
-                    f"combat_damage_step: {type(exc).__name__}: {exc}"
-                )
-            self._combat_damage_done = True
+        if self._combat_active and step in self._COMBAT_DAMAGE_STEPS:
+            # Mirror the GRE damage-step sequence: the first-strike pass at
+            # Step_FirstStrikeDamage, the normal pass at Step_CombatDamage —
+            # so each snapshot compares against only the damage GRE has
+            # actually dealt. Each pass runs once per combat.
+            sub_step = (
+                "first_strike" if step == "Step_FirstStrikeDamage" else "normal"
+            )
+            if sub_step not in self._combat_damage_passes:
+                self._combat_damage_passes.add(sub_step)
+                from engine.combat import combat_damage_step
+                try:
+                    combat_damage_step(self.game, sub_step=sub_step)
+                except Exception as exc:
+                    result.engine_failures.append(
+                        f"combat_damage_step: {type(exc).__name__}: {exc}"
+                    )
 
     def _simulate_hand_draws(
         self,
@@ -697,19 +708,37 @@ class ReplayExecutor:
         curr_snapshot: GameSnapshot,
         result: StepResult,
     ) -> None:
-        """Draw through the engine for every unexplained hand arrival.
+        """Draw through the engine for every library-origin hand arrival.
 
-        A new hand instance id with no ObjectIdChanged provenance came from a
-        hidden zone — for replay purposes, a draw. The engine draws a shell
-        from its library; when GRE reveals the drawn card's identity (own
-        seat), the shell is materialized into the real card so later casts
-        exercise the actual implementation.
+        A new hand instance id is a draw when its ObjectIdChanged origin sat
+        in the library — the normal case: GRE re-mints the hidden library
+        card's id as it reaches the hand — or when it has no provenance at
+        all (hidden-zone tutors). Arrivals whose origin was a *visible* zone
+        (battlefield bounce, graveyard recursion) are zone moves, driven by
+        the zone_transition handler instead. The engine draws a shell from
+        its library; when GRE reveals the drawn card's identity (own seat),
+        the shell is materialized into the real card so later casts exercise
+        the actual implementation.
         """
         from engine.game import draw_card
         from engine.types import Zone
         from silverquillm.replay.state import extract_object_id_changes
 
-        moved_new_ids = set(extract_object_id_changes(curr_snapshot.annotations).values())
+        origin_of = {
+            new: orig
+            for orig, new in extract_object_id_changes(curr_snapshot.annotations).items()
+        }
+        prev_zone_of: dict[int, str] = {}
+        for zone in prev_snapshot.zones.values():
+            for iid in zone.object_instance_ids:
+                prev_zone_of[iid] = zone.type
+
+        def _is_draw(iid: int) -> bool:
+            orig = origin_of.get(iid)
+            if orig is None:
+                return True  # no provenance — hidden-zone arrival
+            src = prev_zone_of.get(orig)
+            return src is None or src == "ZoneType_Library"
 
         prev_hand_iids: dict[int, set[int]] = {}
         for zone in prev_snapshot.zones.values():
@@ -723,11 +752,24 @@ class ReplayExecutor:
             player = self.players.get(seat)
             if player is None:
                 continue
+            prev_ids = prev_hand_iids.get(seat, set())
+            if (
+                curr_snapshot.turn_info.turn_number == 0
+                and prev_ids
+                and not (prev_ids & set(zone.object_instance_ids))
+            ):
+                # Mulligan re-deal: the whole hand went back before the new
+                # one was dealt — return the engine hand to the library so
+                # the deal below draws a fresh hand instead of a second one.
+                hand = player.zones[Zone.HAND]
+                library = player.zones[Zone.LIBRARY]
+                for card in hand.get_all():
+                    hand.remove(card)
+                    library.add(card)
             new_iids = [
                 iid
                 for iid in zone.object_instance_ids
-                if iid not in prev_hand_iids.get(seat, set())
-                and iid not in moved_new_ids
+                if iid not in prev_ids and _is_draw(iid)
             ]
             for iid in new_iids:
                 drawn = draw_card(self.game, player)
@@ -746,6 +788,76 @@ class ReplayExecutor:
                     self._engine_cards[iid] = real
                 else:
                     self._engine_cards[iid] = drawn
+
+    def _infer_hidden_origin_actions(
+        self,
+        actions: list[ReplayAction],
+        prev_snapshot: GameSnapshot,
+        curr_snapshot: GameSnapshot,
+    ) -> list[ReplayAction]:
+        """Synthesize actions for plays whose origin object was hidden.
+
+        ``infer_actions`` only reports moves whose pre-move object exists in
+        the previous snapshot — a card cast or played from a hidden hand has
+        no such object, so the opponent's entire game is invisible to it.
+        The card itself is public the moment it arrives, so this fills the
+        gap from the arrival side: a new card on the stack is a spell_cast
+        and a new land on the battlefield is a land_play, unless an existing
+        action or a visible-zone provenance already accounts for it.
+        """
+        from silverquillm.replay.state import extract_object_id_changes
+
+        covered = {a.instance_id for a in actions if a.instance_id}
+        origin_of = {
+            new: orig
+            for orig, new in extract_object_id_changes(curr_snapshot.annotations).items()
+        }
+        prev_zone_of: dict[int, str] = {}
+        prev_ids_by_type: dict[str, set[int]] = {}
+        for zone in prev_snapshot.zones.values():
+            ids = prev_ids_by_type.setdefault(zone.type, set())
+            for iid in zone.object_instance_ids:
+                ids.add(iid)
+                prev_zone_of[iid] = zone.type
+
+        synthesized: list[ReplayAction] = []
+        turn = curr_snapshot.turn_info.turn_number
+        active = curr_snapshot.turn_info.active_player
+
+        for zone in curr_snapshot.zones.values():
+            if zone.type not in ("ZoneType_Stack", "ZoneType_Battlefield"):
+                continue
+            for iid in zone.object_instance_ids:
+                if iid in prev_ids_by_type.get(zone.type, set()) or iid in covered:
+                    continue
+                obj = curr_snapshot.game_objects.get(iid)
+                if obj is None or obj.type != "GameObjectType_Card":
+                    continue
+                # A visible-zone origin means infer_actions saw the move (or
+                # will be reconciled by resync) — only hidden origins here.
+                src_zone = prev_zone_of.get(origin_of.get(iid, -1))
+                if src_zone is not None and src_zone != "ZoneType_Hand":
+                    continue
+                seat = obj.controller_seat_id or obj.owner_seat_id
+                card_name = self._grp_to_name.get(obj.grp_id, f"Unknown_{obj.grp_id}")
+                if zone.type == "ZoneType_Stack":
+                    action_type = "spell_cast"
+                elif "CardType_Land" in obj.card_types:
+                    action_type = "land_play"
+                else:
+                    continue  # tokens/direct entries — resync reconciles
+                synthesized.append(ReplayAction(
+                    action_type=action_type,
+                    turn_number=turn,
+                    active_player=active,
+                    player_seat_id=seat,
+                    card_name=card_name,
+                    grp_id=obj.grp_id,
+                    instance_id=iid,
+                    source_zone="ZoneType_Hand",
+                    dest_zone=zone.type,
+                ))
+        return synthesized
 
     # Arena mana color enum in ManaPaid annotations (WUBRG order) →
     # engine ManaType values (single-letter tokens).
@@ -766,17 +878,26 @@ class ReplayExecutor:
                 continue
             self._apply_one_mana_payment(ann)
 
-    def _apply_one_mana_payment(self, ann: Any) -> None:
-        """Tap the paying permanent and credit its controller's pool (once)."""
+    def _apply_one_mana_payment(self, ann: Any, tap: bool = True) -> None:
+        """Credit the payer's pool (once per annotation) and tap the source.
+
+        The pool credit is deduped by annotation id — a cast's look-ahead
+        may have credited it already. The tap is NOT applied by look-ahead
+        (``tap=False``): GRE shows the land tapped only in the annotation's
+        home snapshot, so tapping early would mis-compare that snapshot and
+        the dedup would then leave the land untapped when GRE taps it. The
+        per-snapshot pass taps at exactly the GRE-observed moment.
+        """
         from engine.types import ManaType
 
-        if ann.id in self._seen_mana_payments:
-            return
         source = self._engine_cards.get(ann.affector_id)
         if source is None:
             return
+        if tap:
+            source.is_tapped = True
+        if ann.id in self._seen_mana_payments:
+            return
         self._seen_mana_payments.add(ann.id)
-        source.is_tapped = True
         controller = getattr(source, "controller", None)
         pool = getattr(controller, "mana_pool", None)
         if pool is None:
@@ -804,7 +925,9 @@ class ReplayExecutor:
                     "AnnotationType_ManaPaid" in ann.type
                     and spell_iid in ann.affected_ids
                 ):
-                    self._apply_one_mana_payment(ann)
+                    # Credit only — the tap lands at the annotation's home
+                    # snapshot, when GRE also shows the source tapped.
+                    self._apply_one_mana_payment(ann, tap=False)
             # Stop once the spell has left the stack (resolved/countered).
             if snap.game_state_id > curr_snapshot.game_state_id and spell_iid not in snap.game_objects:
                 break
