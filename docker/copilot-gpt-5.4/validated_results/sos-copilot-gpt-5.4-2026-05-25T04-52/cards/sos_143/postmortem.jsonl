@@ -1,0 +1,7 @@
+{"collector_number": "sos_143", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x494nx3c/tests.py::TestComfortingCounselBasicProperties::test_is_enchantment"}
+{"collector_number": "sos_143", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x494nx3c/tests.py::TestComfortingCounselBasicProperties::test_colors"}
+{"collector_number": "sos_143", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x494nx3c/tests.py::TestComfortingCounselAbilities::test_pump_effect"}
+{"collector_number": "sos_143", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x494nx3c/tests.py::TestComfortingCounselAbilities::test_gains_life"}
+{"collector_number": "sos_143", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x494nx3c/tests.py::TestComfortingCounselEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_143", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x494nx3c/tests.py::TestComfortingCounselInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_143", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x494nx3c/tests.py::TestComfortingCounselInteractions::test_does_not_affect_non_targets"}

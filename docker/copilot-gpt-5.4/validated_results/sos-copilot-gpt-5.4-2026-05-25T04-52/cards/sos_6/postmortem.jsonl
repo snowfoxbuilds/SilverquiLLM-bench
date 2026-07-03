@@ -1,0 +1,7 @@
+{"collector_number": "sos_6", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2ydo8q8p/tests.py::TestAjanisResponseBasicProperties::test_is_instant"}
+{"collector_number": "sos_6", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2ydo8q8p/tests.py::TestAjanisResponseBasicProperties::test_colors"}
+{"collector_number": "sos_6", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2ydo8q8p/tests.py::TestAjanisResponseAbilities::test_destroys_target"}
+{"collector_number": "sos_6", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2ydo8q8p/tests.py::TestAjanisResponseAbilities::test_cost_reduction_applies"}
+{"collector_number": "sos_6", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2ydo8q8p/tests.py::TestAjanisResponseEdgeCases::test_no_reduction_when_condition_unmet"}
+{"collector_number": "sos_6", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2ydo8q8p/tests.py::TestAjanisResponseInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_6", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2ydo8q8p/tests.py::TestAjanisResponseInteractions::test_does_not_affect_non_targets"}

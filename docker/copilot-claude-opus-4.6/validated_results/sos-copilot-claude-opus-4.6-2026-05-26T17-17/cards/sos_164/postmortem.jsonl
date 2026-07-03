@@ -1,0 +1,4 @@
+{"collector_number": "sos_164", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jch94i4r/tests.py::TestThornfistStrikerBasicProperties::test_colors"}
+{"collector_number": "sos_164", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jch94i4r/tests.py::TestThornfistStrikerAbilities::test_pump_effect"}
+{"collector_number": "sos_164", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jch94i4r/tests.py::TestThornfistStrikerAbilities::test_gains_life"}
+{"collector_number": "sos_164", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jch94i4r/tests.py::TestThornfistStrikerInteractions::test_get_targets_finds_own_creatures"}

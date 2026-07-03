@@ -1,0 +1,11 @@
+{"collector_number": "sos_84", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm7n3owl/tests.py::TestForumNecroscribeBasicProperties::test_is_creature"}
+{"collector_number": "sos_84", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm7n3owl/tests.py::TestForumNecroscribeBasicProperties::test_colors"}
+{"collector_number": "sos_84", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm7n3owl/tests.py::TestForumNecroscribeBasicProperties::test_has_ward_keyword"}
+{"collector_number": "sos_84", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm7n3owl/tests.py::TestForumNecroscribeAbilities::test_repartee_registers_trigger"}
+{"collector_number": "sos_84", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm7n3owl/tests.py::TestForumNecroscribeAbilities::test_repartee_requires_creature_target"}
+{"collector_number": "sos_84", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm7n3owl/tests.py::TestForumNecroscribeAbilities::test_repartee_produces_effect"}
+{"collector_number": "sos_84", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm7n3owl/tests.py::TestForumNecroscribeAbilities::test_causes_discard"}
+{"collector_number": "sos_84", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm7n3owl/tests.py::TestForumNecroscribeAbilities::test_returns_from_graveyard"}
+{"collector_number": "sos_84", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm7n3owl/tests.py::TestForumNecroscribeEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_84", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm7n3owl/tests.py::TestForumNecroscribeInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_84", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm7n3owl/tests.py::TestForumNecroscribeInteractions::test_coexists_with_other_creatures"}

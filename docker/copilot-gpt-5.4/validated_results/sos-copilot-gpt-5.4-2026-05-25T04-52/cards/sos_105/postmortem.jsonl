@@ -1,0 +1,8 @@
+{"collector_number": "sos_105", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5hbtmirj/tests.py::TestWitheringCurseBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_105", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5hbtmirj/tests.py::TestWitheringCurseBasicProperties::test_colors"}
+{"collector_number": "sos_105", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5hbtmirj/tests.py::TestWitheringCurseAbilities::test_has_infusion"}
+{"collector_number": "sos_105", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5hbtmirj/tests.py::TestWitheringCurseAbilities::test_resolution_removes_creatures"}
+{"collector_number": "sos_105", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5hbtmirj/tests.py::TestWitheringCurseEdgeCases::test_infusion_base_effect_without_condition"}
+{"collector_number": "sos_105", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5hbtmirj/tests.py::TestWitheringCurseEdgeCases::test_infusion_enhanced_effect_with_condition"}
+{"collector_number": "sos_105", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5hbtmirj/tests.py::TestWitheringCurseInteractions::test_affects_both_players_creatures"}
+{"collector_number": "sos_105", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5hbtmirj/tests.py::TestWitheringCurseInteractions::test_spell_to_graveyard_after_resolution"}

@@ -1,0 +1,5 @@
+{"collector_number": "sos_94", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xrgv687z/tests.py::TestPoxPlagueBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_94", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xrgv687z/tests.py::TestPoxPlagueBasicProperties::test_colors"}
+{"collector_number": "sos_94", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xrgv687z/tests.py::TestPoxPlagueAbilities::test_on_resolve_causes_discard"}
+{"collector_number": "sos_94", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xrgv687z/tests.py::TestPoxPlagueAbilities::test_on_resolve_causes_life_loss"}
+{"collector_number": "sos_94", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xrgv687z/tests.py::TestPoxPlagueAbilities::test_on_resolve_causes_sacrifice"}

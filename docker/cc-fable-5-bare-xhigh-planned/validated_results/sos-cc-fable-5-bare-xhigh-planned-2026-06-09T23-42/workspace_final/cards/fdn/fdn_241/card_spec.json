@@ -1,0 +1,18 @@
+{
+  "name": "Heroic Reinforcements",
+  "mana_cost": "{2}{R}{W}",
+  "type_line": "Sorcery",
+  "oracle_text": "Create two 1/1 white Soldier creature tokens. Until end of turn, creatures you control get +1/+1 and gain haste. (They can attack and {T} this turn.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R",
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "241",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,2 @@
+{"collector_number": "sos_132", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xdptux1w/tests.py::TestTabletOfDiscoveryBasicProperties::test_colors"}
+{"collector_number": "sos_132", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xdptux1w/tests.py::TestTabletOfDiscoveryInteractions::test_spell_to_graveyard_after_resolution"}

@@ -1,0 +1,4 @@
+{"collector_number": "sos_3", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wndcmeah/tests.py::TestSunderingArchaicBasicProperties::test_colorless"}
+{"collector_number": "sos_3", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wndcmeah/tests.py::TestSunderingArchaicAbilities::test_has_converge"}
+{"collector_number": "sos_3", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wndcmeah/tests.py::TestSunderingArchaicAbilities::test_etb_exiles_target"}
+{"collector_number": "sos_3", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wndcmeah/tests.py::TestSunderingArchaicInteractions::test_exile_from_graveyard_interaction"}

@@ -1,0 +1,3 @@
+{"collector_number": "sos_103", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_crfcf3mz/tests.py::TestUlnaAlleyShopkeepBasicProperties::test_colors"}
+{"collector_number": "sos_103", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_crfcf3mz/tests.py::TestUlnaAlleyShopkeepAbilities::test_pump_effect"}
+{"collector_number": "sos_103", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_crfcf3mz/tests.py::TestUlnaAlleyShopkeepAbilities::test_gains_life"}

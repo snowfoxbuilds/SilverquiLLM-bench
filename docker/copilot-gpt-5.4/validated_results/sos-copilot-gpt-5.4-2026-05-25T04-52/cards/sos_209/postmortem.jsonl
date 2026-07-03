@@ -1,0 +1,8 @@
+{"collector_number": "sos_209", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nkb6owd4/tests.py::TestPestMascotBasicProperties::test_is_creature"}
+{"collector_number": "sos_209", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nkb6owd4/tests.py::TestPestMascotBasicProperties::test_colors"}
+{"collector_number": "sos_209", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nkb6owd4/tests.py::TestPestMascotBasicProperties::test_has_trample_keyword"}
+{"collector_number": "sos_209", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nkb6owd4/tests.py::TestPestMascotAbilities::test_adds_plus_counter"}
+{"collector_number": "sos_209", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nkb6owd4/tests.py::TestPestMascotAbilities::test_gains_life"}
+{"collector_number": "sos_209", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nkb6owd4/tests.py::TestPestMascotEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_209", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nkb6owd4/tests.py::TestPestMascotInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_209", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nkb6owd4/tests.py::TestPestMascotInteractions::test_coexists_with_other_creatures"}

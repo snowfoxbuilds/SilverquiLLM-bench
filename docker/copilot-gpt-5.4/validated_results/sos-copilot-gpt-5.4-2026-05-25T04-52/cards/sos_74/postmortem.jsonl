@@ -1,0 +1,8 @@
+{"collector_number": "sos_74", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h1lf0m3b/tests.py::TestArnynDeathbloomBotanistBasicProperties::test_is_creature"}
+{"collector_number": "sos_74", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h1lf0m3b/tests.py::TestArnynDeathbloomBotanistBasicProperties::test_colors"}
+{"collector_number": "sos_74", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h1lf0m3b/tests.py::TestArnynDeathbloomBotanistBasicProperties::test_has_deathtouch_keyword"}
+{"collector_number": "sos_74", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h1lf0m3b/tests.py::TestArnynDeathbloomBotanistAbilities::test_gains_life"}
+{"collector_number": "sos_74", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h1lf0m3b/tests.py::TestArnynDeathbloomBotanistAbilities::test_causes_life_loss"}
+{"collector_number": "sos_74", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h1lf0m3b/tests.py::TestArnynDeathbloomBotanistEdgeCases::test_targets_only_own_permanents"}
+{"collector_number": "sos_74", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h1lf0m3b/tests.py::TestArnynDeathbloomBotanistInteractions::test_get_targets_finds_own_creatures"}
+{"collector_number": "sos_74", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h1lf0m3b/tests.py::TestArnynDeathbloomBotanistInteractions::test_coexists_with_other_creatures"}

@@ -1,0 +1,8 @@
+{"collector_number": "sos_125", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e68tfmwt/tests.py::TestMoltenCoreMaestroBasicProperties::test_is_creature"}
+{"collector_number": "sos_125", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e68tfmwt/tests.py::TestMoltenCoreMaestroBasicProperties::test_colors"}
+{"collector_number": "sos_125", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e68tfmwt/tests.py::TestMoltenCoreMaestroAbilities::test_has_menace"}
+{"collector_number": "sos_125", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e68tfmwt/tests.py::TestMoltenCoreMaestroAbilities::test_has_opus"}
+{"collector_number": "sos_125", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e68tfmwt/tests.py::TestMoltenCoreMaestroAbilities::test_opus_trigger_implemented"}
+{"collector_number": "sos_125", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e68tfmwt/tests.py::TestMoltenCoreMaestroEdgeCases::test_opus_no_trigger_without_spell"}
+{"collector_number": "sos_125", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e68tfmwt/tests.py::TestMoltenCoreMaestroInteractions::test_counters_survive_end_of_turn"}
+{"collector_number": "sos_125", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e68tfmwt/tests.py::TestMoltenCoreMaestroInteractions::test_combat_with_opponent"}

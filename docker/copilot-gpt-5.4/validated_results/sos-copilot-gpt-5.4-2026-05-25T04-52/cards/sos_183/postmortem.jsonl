@@ -1,0 +1,8 @@
+{"collector_number": "sos_183", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xilak_o2/tests.py::TestCuboidColonyBasicProperties::test_is_creature"}
+{"collector_number": "sos_183", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xilak_o2/tests.py::TestCuboidColonyBasicProperties::test_colors"}
+{"collector_number": "sos_183", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xilak_o2/tests.py::TestCuboidColonyAbilities::test_has_flying"}
+{"collector_number": "sos_183", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xilak_o2/tests.py::TestCuboidColonyAbilities::test_has_trample"}
+{"collector_number": "sos_183", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xilak_o2/tests.py::TestCuboidColonyAbilities::test_has_flash"}
+{"collector_number": "sos_183", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xilak_o2/tests.py::TestCuboidColonyEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_183", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xilak_o2/tests.py::TestCuboidColonyInteractions::test_counters_survive_end_of_turn"}
+{"collector_number": "sos_183", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xilak_o2/tests.py::TestCuboidColonyInteractions::test_combat_with_opponent"}

@@ -1,0 +1,2 @@
+{"collector_number": "sos_71", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_49kknzpj/tests.py::TestWisdomOfAgesBasicProperties::test_colors"}
+{"collector_number": "sos_71", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_49kknzpj/tests.py::TestWisdomOfAgesAbilities::test_returns_from_graveyard"}

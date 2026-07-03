@@ -1,0 +1,4 @@
+{"collector_number": "sos_152", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ogatf7k1/tests.py::TestInfirmaryHealerStreamOfLifeBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_152", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ogatf7k1/tests.py::TestInfirmaryHealerStreamOfLifeBasicProperties::test_colors"}
+{"collector_number": "sos_152", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ogatf7k1/tests.py::TestInfirmaryHealerStreamOfLifeAbilities::test_has_prepared"}
+{"collector_number": "sos_152", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ogatf7k1/tests.py::TestInfirmaryHealerStreamOfLifeEdgeCases::test_mana_cost_matches_spec"}

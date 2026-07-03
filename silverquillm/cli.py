@@ -38,6 +38,7 @@ ensure_workspace_on_path()
 
 from silverquillm.card_loader import is_template, load_all_card_specs
 from silverquillm.card_names import build_card_name_map
+from silverquillm.replay.cli import validate as _replay_validate
 from silverquillm.runner import ContainerLifecycle
 from silverquillm.token_report import render as render_token_report
 from silverquillm.workspace import (
@@ -605,6 +606,10 @@ def _generate_run_summary(
 @click.group()
 def main() -> None:
     """SilverquiLLM Benchmark Runner."""
+
+
+# Replay validation lives in its own module; expose it as `benchmark validate`.
+main.add_command(_replay_validate)
 
 
 @main.command()

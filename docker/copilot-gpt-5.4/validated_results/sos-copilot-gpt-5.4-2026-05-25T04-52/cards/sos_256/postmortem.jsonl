@@ -1,0 +1,6 @@
+{"collector_number": "sos_256", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ziujxdom/tests.py::TestForumOfAmityBasicProperties::test_is_land"}
+{"collector_number": "sos_256", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ziujxdom/tests.py::TestForumOfAmityBasicProperties::test_card_types"}
+{"collector_number": "sos_256", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ziujxdom/tests.py::TestForumOfAmityBasicProperties::test_colorless"}
+{"collector_number": "sos_256", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ziujxdom/tests.py::TestForumOfAmityEdgeCases::test_resolution_with_empty_board"}
+{"collector_number": "sos_256", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ziujxdom/tests.py::TestForumOfAmityInteractions::test_spell_to_graveyard_after_resolution"}
+{"collector_number": "sos_256", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ziujxdom/tests.py::TestForumOfAmityInteractions::test_coexists_with_other_permanents"}

@@ -1,0 +1,2 @@
+{"collector_number": "sos_259", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jyvyt4_d/tests.py::TestPetrifiedHamletBasicProperties::test_colorless"}
+{"collector_number": "sos_259", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jyvyt4_d/tests.py::TestPetrifiedHamletInteractions::test_spell_to_graveyard_after_resolution"}

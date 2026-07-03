@@ -1,0 +1,11 @@
+{"collector_number": "sos_243", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jo6y_yfp/tests.py::TestWiltInTheHeatBasicProperties::test_is_instant"}
+{"collector_number": "sos_243", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jo6y_yfp/tests.py::TestWiltInTheHeatBasicProperties::test_card_types"}
+{"collector_number": "sos_243", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jo6y_yfp/tests.py::TestWiltInTheHeatBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_243", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jo6y_yfp/tests.py::TestWiltInTheHeatBasicProperties::test_colors"}
+{"collector_number": "sos_243", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jo6y_yfp/tests.py::TestWiltInTheHeatAbilities::test_cost_reduction_implemented"}
+{"collector_number": "sos_243", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jo6y_yfp/tests.py::TestWiltInTheHeatAbilities::test_resolution_deals_damage"}
+{"collector_number": "sos_243", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jo6y_yfp/tests.py::TestWiltInTheHeatEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_243", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jo6y_yfp/tests.py::TestWiltInTheHeatEdgeCases::test_cost_reduction_floor_at_zero"}
+{"collector_number": "sos_243", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jo6y_yfp/tests.py::TestWiltInTheHeatEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_243", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jo6y_yfp/tests.py::TestWiltInTheHeatInteractions::test_targets_valid_objects"}
+{"collector_number": "sos_243", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_jo6y_yfp/tests.py::TestWiltInTheHeatInteractions::test_spell_to_graveyard_after_resolution"}

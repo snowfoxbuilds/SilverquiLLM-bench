@@ -1,0 +1,10 @@
+{"collector_number": "sos_29", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3t8y81m8/tests.py::TestRehearsedDebaterBasicProperties::test_is_creature"}
+{"collector_number": "sos_29", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3t8y81m8/tests.py::TestRehearsedDebaterBasicProperties::test_colors"}
+{"collector_number": "sos_29", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3t8y81m8/tests.py::TestRehearsedDebaterBasicProperties::test_has_vigilance_keyword"}
+{"collector_number": "sos_29", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3t8y81m8/tests.py::TestRehearsedDebaterAbilities::test_repartee_registers_trigger"}
+{"collector_number": "sos_29", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3t8y81m8/tests.py::TestRehearsedDebaterAbilities::test_repartee_requires_creature_target"}
+{"collector_number": "sos_29", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3t8y81m8/tests.py::TestRehearsedDebaterAbilities::test_repartee_produces_effect"}
+{"collector_number": "sos_29", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3t8y81m8/tests.py::TestRehearsedDebaterAbilities::test_pump_effect"}
+{"collector_number": "sos_29", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3t8y81m8/tests.py::TestRehearsedDebaterEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_29", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3t8y81m8/tests.py::TestRehearsedDebaterInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_29", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3t8y81m8/tests.py::TestRehearsedDebaterInteractions::test_coexists_with_other_creatures"}

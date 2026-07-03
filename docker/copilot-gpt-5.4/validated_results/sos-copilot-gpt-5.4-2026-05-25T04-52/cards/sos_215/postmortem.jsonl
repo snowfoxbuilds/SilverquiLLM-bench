@@ -1,0 +1,14 @@
+{"collector_number": "sos_215", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vz_pyrmi/tests.py::TestPterafractylBasicProperties::test_is_creature"}
+{"collector_number": "sos_215", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vz_pyrmi/tests.py::TestPterafractylBasicProperties::test_name"}
+{"collector_number": "sos_215", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vz_pyrmi/tests.py::TestPterafractylBasicProperties::test_card_types"}
+{"collector_number": "sos_215", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vz_pyrmi/tests.py::TestPterafractylBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_215", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vz_pyrmi/tests.py::TestPterafractylBasicProperties::test_colors"}
+{"collector_number": "sos_215", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vz_pyrmi/tests.py::TestPterafractylBasicProperties::test_power"}
+{"collector_number": "sos_215", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vz_pyrmi/tests.py::TestPterafractylBasicProperties::test_toughness"}
+{"collector_number": "sos_215", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vz_pyrmi/tests.py::TestPterafractylAbilities::test_has_flying"}
+{"collector_number": "sos_215", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vz_pyrmi/tests.py::TestPterafractylAbilities::test_etb_adds_counters"}
+{"collector_number": "sos_215", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vz_pyrmi/tests.py::TestPterafractylEdgeCases::test_instances_have_independent_state"}
+{"collector_number": "sos_215", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vz_pyrmi/tests.py::TestPterafractylEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_215", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vz_pyrmi/tests.py::TestPterafractylEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_215", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vz_pyrmi/tests.py::TestPterafractylInteractions::test_counters_survive_end_of_turn"}
+{"collector_number": "sos_215", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vz_pyrmi/tests.py::TestPterafractylInteractions::test_combat_with_opponent"}

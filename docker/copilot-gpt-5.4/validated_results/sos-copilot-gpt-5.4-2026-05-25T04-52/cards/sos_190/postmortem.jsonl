@@ -1,0 +1,7 @@
+{"collector_number": "sos_190", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_em5aj2xd/tests.py::TestFractalTenderBasicProperties::test_is_creature"}
+{"collector_number": "sos_190", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_em5aj2xd/tests.py::TestFractalTenderBasicProperties::test_colors"}
+{"collector_number": "sos_190", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_em5aj2xd/tests.py::TestFractalTenderAbilities::test_has_ward"}
+{"collector_number": "sos_190", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_em5aj2xd/tests.py::TestFractalTenderEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_190", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_em5aj2xd/tests.py::TestFractalTenderInteractions::test_counters_survive_end_of_turn"}
+{"collector_number": "sos_190", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_em5aj2xd/tests.py::TestFractalTenderInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_190", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_em5aj2xd/tests.py::TestFractalTenderInteractions::test_tokens_appear_on_battlefield"}

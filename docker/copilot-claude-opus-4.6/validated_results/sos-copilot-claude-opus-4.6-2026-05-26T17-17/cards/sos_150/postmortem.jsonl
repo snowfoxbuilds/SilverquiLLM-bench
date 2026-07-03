@@ -1,0 +1,4 @@
+{"collector_number": "sos_150", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_82hn3xze/tests.py::TestGloriousDecayBasicProperties::test_colors"}
+{"collector_number": "sos_150", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_82hn3xze/tests.py::TestGloriousDecayAbilities::test_resolution_deals_damage"}
+{"collector_number": "sos_150", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_82hn3xze/tests.py::TestGloriousDecayEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_150", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_82hn3xze/tests.py::TestGloriousDecayInteractions::test_spell_to_graveyard_after_resolution"}

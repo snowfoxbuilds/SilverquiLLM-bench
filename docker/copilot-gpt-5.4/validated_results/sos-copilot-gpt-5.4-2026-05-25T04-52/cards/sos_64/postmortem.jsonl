@@ -1,0 +1,5 @@
+{"collector_number": "sos_64", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tppr6rdt/tests.py::TestProcrastinateBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_64", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tppr6rdt/tests.py::TestProcrastinateBasicProperties::test_colors"}
+{"collector_number": "sos_64", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tppr6rdt/tests.py::TestProcrastinateEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_64", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tppr6rdt/tests.py::TestProcrastinateInteractions::test_targets_valid_objects"}
+{"collector_number": "sos_64", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tppr6rdt/tests.py::TestProcrastinateInteractions::test_spell_to_graveyard_after_resolution"}

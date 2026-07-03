@@ -1,0 +1,9 @@
+{"collector_number": "sos_170", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wfofff75/tests.py::TestAbigalePoetLaureateHeroicStanzaBasicProperties::test_is_creature"}
+{"collector_number": "sos_170", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wfofff75/tests.py::TestAbigalePoetLaureateHeroicStanzaBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_170", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wfofff75/tests.py::TestAbigalePoetLaureateHeroicStanzaBasicProperties::test_colors"}
+{"collector_number": "sos_170", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wfofff75/tests.py::TestAbigalePoetLaureateHeroicStanzaAbilities::test_has_flying"}
+{"collector_number": "sos_170", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wfofff75/tests.py::TestAbigalePoetLaureateHeroicStanzaAbilities::test_has_prepared"}
+{"collector_number": "sos_170", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wfofff75/tests.py::TestAbigalePoetLaureateHeroicStanzaEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_170", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wfofff75/tests.py::TestAbigalePoetLaureateHeroicStanzaEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_170", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wfofff75/tests.py::TestAbigalePoetLaureateHeroicStanzaInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_170", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wfofff75/tests.py::TestAbigalePoetLaureateHeroicStanzaInteractions::test_coexists_with_other_permanents"}

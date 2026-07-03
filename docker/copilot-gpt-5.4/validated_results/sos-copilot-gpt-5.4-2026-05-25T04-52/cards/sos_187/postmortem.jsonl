@@ -1,0 +1,9 @@
+{"collector_number": "sos_187", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oixu4t1i/tests.py::TestEssenceknitScholarBasicProperties::test_is_creature"}
+{"collector_number": "sos_187", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oixu4t1i/tests.py::TestEssenceknitScholarBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_187", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oixu4t1i/tests.py::TestEssenceknitScholarBasicProperties::test_colors"}
+{"collector_number": "sos_187", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oixu4t1i/tests.py::TestEssenceknitScholarAbilities::test_creates_token"}
+{"collector_number": "sos_187", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oixu4t1i/tests.py::TestEssenceknitScholarAbilities::test_draws_cards"}
+{"collector_number": "sos_187", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oixu4t1i/tests.py::TestEssenceknitScholarAbilities::test_gains_life"}
+{"collector_number": "sos_187", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oixu4t1i/tests.py::TestEssenceknitScholarEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_187", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oixu4t1i/tests.py::TestEssenceknitScholarInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_187", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oixu4t1i/tests.py::TestEssenceknitScholarInteractions::test_coexists_with_other_creatures"}

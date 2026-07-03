@@ -1,0 +1,3 @@
+{"collector_number": "sos_118", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_lqm1essv/tests.py::TestHeatedArgumentBasicProperties::test_colors"}
+{"collector_number": "sos_118", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_lqm1essv/tests.py::TestHeatedArgumentAbilities::test_deals_damage"}
+{"collector_number": "sos_118", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_lqm1essv/tests.py::TestHeatedArgumentInteractions::test_get_targets_finds_creatures"}

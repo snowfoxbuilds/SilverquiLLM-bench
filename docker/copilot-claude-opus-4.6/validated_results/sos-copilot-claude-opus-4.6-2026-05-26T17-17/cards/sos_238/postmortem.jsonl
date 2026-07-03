@@ -1,0 +1,2 @@
+{"collector_number": "sos_238", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6655o_mr/tests.py::TestTeachersPestBasicProperties::test_colors"}
+{"collector_number": "sos_238", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6655o_mr/tests.py::TestTeachersPestAbilities::test_attack_trigger_uses_graveyard"}

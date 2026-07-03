@@ -1,0 +1,3 @@
+{"collector_number": "sos_119", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_a6b7_ze_/tests.py::TestImpracticalJokeBasicProperties::test_colors"}
+{"collector_number": "sos_119", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_a6b7_ze_/tests.py::TestImpracticalJokeAbilities::test_deals_damage"}
+{"collector_number": "sos_119", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_a6b7_ze_/tests.py::TestImpracticalJokeInteractions::test_get_targets_finds_creatures"}

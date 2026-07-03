@@ -1,0 +1,4 @@
+{"collector_number": "sos_56", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4ab79zm4/tests.py::TestLandscapePainterVibrantIdeaBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_56", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4ab79zm4/tests.py::TestLandscapePainterVibrantIdeaBasicProperties::test_colors"}
+{"collector_number": "sos_56", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4ab79zm4/tests.py::TestLandscapePainterVibrantIdeaAbilities::test_etb_trigger_callable"}
+{"collector_number": "sos_56", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4ab79zm4/tests.py::TestLandscapePainterVibrantIdeaEdgeCases::test_mana_cost_matches_spec"}

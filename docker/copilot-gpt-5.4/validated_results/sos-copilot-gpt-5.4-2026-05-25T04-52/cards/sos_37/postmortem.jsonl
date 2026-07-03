@@ -1,0 +1,8 @@
+{"collector_number": "sos_37", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3ap98i49/tests.py::TestSummonedDromedaryBasicProperties::test_is_creature"}
+{"collector_number": "sos_37", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3ap98i49/tests.py::TestSummonedDromedaryBasicProperties::test_colors"}
+{"collector_number": "sos_37", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3ap98i49/tests.py::TestSummonedDromedaryBasicProperties::test_has_vigilance_keyword"}
+{"collector_number": "sos_37", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3ap98i49/tests.py::TestSummonedDromedaryAbilities::test_has_activated_ability"}
+{"collector_number": "sos_37", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3ap98i49/tests.py::TestSummonedDromedaryAbilities::test_returns_from_graveyard"}
+{"collector_number": "sos_37", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3ap98i49/tests.py::TestSummonedDromedaryEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_37", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3ap98i49/tests.py::TestSummonedDromedaryInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_37", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3ap98i49/tests.py::TestSummonedDromedaryInteractions::test_coexists_with_other_creatures"}

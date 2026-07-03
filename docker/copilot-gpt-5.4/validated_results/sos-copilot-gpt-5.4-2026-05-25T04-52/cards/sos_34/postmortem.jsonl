@@ -1,0 +1,6 @@
+{"collector_number": "sos_34", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6cg63_lg/tests.py::TestStandUpForYourselfBasicProperties::test_is_instant"}
+{"collector_number": "sos_34", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6cg63_lg/tests.py::TestStandUpForYourselfBasicProperties::test_colors"}
+{"collector_number": "sos_34", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6cg63_lg/tests.py::TestStandUpForYourselfAbilities::test_destroys_target"}
+{"collector_number": "sos_34", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6cg63_lg/tests.py::TestStandUpForYourselfEdgeCases::test_power_targeting_restriction"}
+{"collector_number": "sos_34", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6cg63_lg/tests.py::TestStandUpForYourselfInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_34", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6cg63_lg/tests.py::TestStandUpForYourselfInteractions::test_does_not_affect_non_targets"}

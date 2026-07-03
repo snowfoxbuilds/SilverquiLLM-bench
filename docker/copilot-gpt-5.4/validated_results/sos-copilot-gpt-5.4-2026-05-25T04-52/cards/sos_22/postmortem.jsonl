@@ -1,0 +1,7 @@
+{"collector_number": "sos_22", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g9tbi_l_/tests.py::TestInterjectionBasicProperties::test_is_instant"}
+{"collector_number": "sos_22", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g9tbi_l_/tests.py::TestInterjectionBasicProperties::test_colors"}
+{"collector_number": "sos_22", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g9tbi_l_/tests.py::TestInterjectionAbilities::test_pump_effect"}
+{"collector_number": "sos_22", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g9tbi_l_/tests.py::TestInterjectionAbilities::test_grants_first_strike"}
+{"collector_number": "sos_22", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g9tbi_l_/tests.py::TestInterjectionEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_22", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g9tbi_l_/tests.py::TestInterjectionInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_22", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g9tbi_l_/tests.py::TestInterjectionInteractions::test_does_not_affect_non_targets"}

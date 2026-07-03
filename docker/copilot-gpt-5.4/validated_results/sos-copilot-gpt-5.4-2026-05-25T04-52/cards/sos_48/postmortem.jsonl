@@ -1,0 +1,8 @@
+{"collector_number": "sos_48", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rhvplt65/tests.py::TestExhibitionTidecallerBasicProperties::test_is_creature"}
+{"collector_number": "sos_48", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rhvplt65/tests.py::TestExhibitionTidecallerBasicProperties::test_colors"}
+{"collector_number": "sos_48", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rhvplt65/tests.py::TestExhibitionTidecallerAbilities::test_has_opus"}
+{"collector_number": "sos_48", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rhvplt65/tests.py::TestExhibitionTidecallerAbilities::test_opus_trigger_implemented"}
+{"collector_number": "sos_48", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rhvplt65/tests.py::TestExhibitionTidecallerEdgeCases::test_fizzle_no_targets_creature_stays"}
+{"collector_number": "sos_48", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rhvplt65/tests.py::TestExhibitionTidecallerEdgeCases::test_opus_no_trigger_without_spell"}
+{"collector_number": "sos_48", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rhvplt65/tests.py::TestExhibitionTidecallerInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_48", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rhvplt65/tests.py::TestExhibitionTidecallerInteractions::test_coexists_with_other_permanents"}

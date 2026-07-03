@@ -1,0 +1,10 @@
+{"collector_number": "sos_129", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__eibg1yp/tests.py::TestSeizeTheSpoilsBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_129", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__eibg1yp/tests.py::TestSeizeTheSpoilsBasicProperties::test_colors"}
+{"collector_number": "sos_129", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__eibg1yp/tests.py::TestSeizeTheSpoilsAbilities::test_creates_token"}
+{"collector_number": "sos_129", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__eibg1yp/tests.py::TestSeizeTheSpoilsAbilities::test_draws_cards"}
+{"collector_number": "sos_129", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__eibg1yp/tests.py::TestSeizeTheSpoilsAbilities::test_causes_discard"}
+{"collector_number": "sos_129", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__eibg1yp/tests.py::TestSeizeTheSpoilsAbilities::test_additional_cost_declared"}
+{"collector_number": "sos_129", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__eibg1yp/tests.py::TestSeizeTheSpoilsAbilities::test_has_activated_ability"}
+{"collector_number": "sos_129", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__eibg1yp/tests.py::TestSeizeTheSpoilsEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_129", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__eibg1yp/tests.py::TestSeizeTheSpoilsInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_129", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__eibg1yp/tests.py::TestSeizeTheSpoilsInteractions::test_does_not_affect_non_targets"}

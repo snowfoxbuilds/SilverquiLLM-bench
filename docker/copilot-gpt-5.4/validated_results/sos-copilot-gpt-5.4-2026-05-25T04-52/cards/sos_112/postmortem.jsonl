@@ -1,0 +1,9 @@
+{"collector_number": "sos_112", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm92lep4/tests.py::TestDuelTacticsBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_112", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm92lep4/tests.py::TestDuelTacticsBasicProperties::test_colors"}
+{"collector_number": "sos_112", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm92lep4/tests.py::TestDuelTacticsAbilities::test_flashback_cost_attribute"}
+{"collector_number": "sos_112", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm92lep4/tests.py::TestDuelTacticsAbilities::test_flashback_exiles_after_resolution"}
+{"collector_number": "sos_112", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm92lep4/tests.py::TestDuelTacticsAbilities::test_flashback_removes_from_graveyard"}
+{"collector_number": "sos_112", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm92lep4/tests.py::TestDuelTacticsAbilities::test_deals_damage"}
+{"collector_number": "sos_112", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm92lep4/tests.py::TestDuelTacticsEdgeCases::test_may_choice_optional"}
+{"collector_number": "sos_112", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm92lep4/tests.py::TestDuelTacticsInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_112", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nm92lep4/tests.py::TestDuelTacticsInteractions::test_does_not_affect_non_targets"}

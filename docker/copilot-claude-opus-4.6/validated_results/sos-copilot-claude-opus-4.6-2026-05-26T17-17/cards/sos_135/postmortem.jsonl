@@ -1,0 +1,4 @@
+{"collector_number": "sos_135", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8ni8jbfc/tests.py::TestTomeBlastBasicProperties::test_colors"}
+{"collector_number": "sos_135", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8ni8jbfc/tests.py::TestTomeBlastAbilities::test_flashback_exiles_after_resolution"}
+{"collector_number": "sos_135", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8ni8jbfc/tests.py::TestTomeBlastAbilities::test_flashback_removes_from_graveyard"}
+{"collector_number": "sos_135", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8ni8jbfc/tests.py::TestTomeBlastAbilities::test_deals_damage"}

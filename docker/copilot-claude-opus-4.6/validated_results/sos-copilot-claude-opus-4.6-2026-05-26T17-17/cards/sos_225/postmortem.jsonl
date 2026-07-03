@@ -1,0 +1,5 @@
+{"collector_number": "sos_225", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_97jisibh/tests.py::TestSilverquillCharmBasicProperties::test_colors"}
+{"collector_number": "sos_225", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_97jisibh/tests.py::TestSilverquillCharmAbilities::test_resolution_exiles_target"}
+{"collector_number": "sos_225", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_97jisibh/tests.py::TestSilverquillCharmEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_225", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_97jisibh/tests.py::TestSilverquillCharmInteractions::test_targets_valid_objects"}
+{"collector_number": "sos_225", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_97jisibh/tests.py::TestSilverquillCharmInteractions::test_spell_to_graveyard_after_resolution"}

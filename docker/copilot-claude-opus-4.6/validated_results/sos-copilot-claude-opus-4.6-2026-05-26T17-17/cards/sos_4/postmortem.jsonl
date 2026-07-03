@@ -1,0 +1,5 @@
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iok_6fj1/tests.py::TestTogetherAsOneBasicProperties::test_colorless"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iok_6fj1/tests.py::TestTogetherAsOneAbilities::test_has_converge"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iok_6fj1/tests.py::TestTogetherAsOneAbilities::test_resolution_deals_damage"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iok_6fj1/tests.py::TestTogetherAsOneEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_4", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_iok_6fj1/tests.py::TestTogetherAsOneInteractions::test_spell_to_graveyard_after_resolution"}

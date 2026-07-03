@@ -1,0 +1,8 @@
+{"collector_number": "sos_157", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f1qkt5y2/tests.py::TestPestbroodSlothBasicProperties::test_is_creature"}
+{"collector_number": "sos_157", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f1qkt5y2/tests.py::TestPestbroodSlothBasicProperties::test_colors"}
+{"collector_number": "sos_157", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f1qkt5y2/tests.py::TestPestbroodSlothBasicProperties::test_has_reach_keyword"}
+{"collector_number": "sos_157", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f1qkt5y2/tests.py::TestPestbroodSlothAbilities::test_creates_token"}
+{"collector_number": "sos_157", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f1qkt5y2/tests.py::TestPestbroodSlothAbilities::test_gains_life"}
+{"collector_number": "sos_157", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f1qkt5y2/tests.py::TestPestbroodSlothEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_157", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f1qkt5y2/tests.py::TestPestbroodSlothInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_157", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f1qkt5y2/tests.py::TestPestbroodSlothInteractions::test_coexists_with_other_creatures"}

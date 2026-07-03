@@ -1,0 +1,3 @@
+{"collector_number": "sos_220", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_on4m1eka/tests.py::TestRenderSpeechlessBasicProperties::test_colors"}
+{"collector_number": "sos_220", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_on4m1eka/tests.py::TestRenderSpeechlessAbilities::test_adds_plus_counter"}
+{"collector_number": "sos_220", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_on4m1eka/tests.py::TestRenderSpeechlessAbilities::test_causes_discard"}

@@ -1,0 +1,10 @@
+{"collector_number": "sos_126", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tjhkmsi4/tests.py::TestPigmentWranglerStrikingPaletteBasicProperties::test_is_creature"}
+{"collector_number": "sos_126", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tjhkmsi4/tests.py::TestPigmentWranglerStrikingPaletteBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_126", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tjhkmsi4/tests.py::TestPigmentWranglerStrikingPaletteBasicProperties::test_colors"}
+{"collector_number": "sos_126", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tjhkmsi4/tests.py::TestPigmentWranglerStrikingPaletteAbilities::test_has_flying"}
+{"collector_number": "sos_126", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tjhkmsi4/tests.py::TestPigmentWranglerStrikingPaletteAbilities::test_has_prepared"}
+{"collector_number": "sos_126", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tjhkmsi4/tests.py::TestPigmentWranglerStrikingPaletteAbilities::test_etb_trigger_callable"}
+{"collector_number": "sos_126", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tjhkmsi4/tests.py::TestPigmentWranglerStrikingPaletteEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_126", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tjhkmsi4/tests.py::TestPigmentWranglerStrikingPaletteEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_126", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tjhkmsi4/tests.py::TestPigmentWranglerStrikingPaletteInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_126", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tjhkmsi4/tests.py::TestPigmentWranglerStrikingPaletteInteractions::test_coexists_with_other_permanents"}

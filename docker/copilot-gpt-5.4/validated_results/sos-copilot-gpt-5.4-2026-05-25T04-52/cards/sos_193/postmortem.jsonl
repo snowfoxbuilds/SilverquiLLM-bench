@@ -1,0 +1,6 @@
+{"collector_number": "sos_193", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6gvbe162/tests.py::TestGrowthCurveBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_193", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6gvbe162/tests.py::TestGrowthCurveBasicProperties::test_colors"}
+{"collector_number": "sos_193", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6gvbe162/tests.py::TestGrowthCurveAbilities::test_adds_plus_counter"}
+{"collector_number": "sos_193", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6gvbe162/tests.py::TestGrowthCurveEdgeCases::test_targets_only_own_permanents"}
+{"collector_number": "sos_193", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6gvbe162/tests.py::TestGrowthCurveInteractions::test_get_targets_finds_own_creatures"}
+{"collector_number": "sos_193", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_6gvbe162/tests.py::TestGrowthCurveInteractions::test_does_not_affect_non_targets"}

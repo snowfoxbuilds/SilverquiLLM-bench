@@ -1,0 +1,5 @@
+{"collector_number": "sos_223", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tiwbhlbx/tests.py::TestSanarUnfinishedGeniusWildIdeaBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_223", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tiwbhlbx/tests.py::TestSanarUnfinishedGeniusWildIdeaBasicProperties::test_colors"}
+{"collector_number": "sos_223", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tiwbhlbx/tests.py::TestSanarUnfinishedGeniusWildIdeaAbilities::test_etb_creates_tokens"}
+{"collector_number": "sos_223", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tiwbhlbx/tests.py::TestSanarUnfinishedGeniusWildIdeaEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_223", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tiwbhlbx/tests.py::TestSanarUnfinishedGeniusWildIdeaInteractions::test_tokens_appear_on_battlefield"}

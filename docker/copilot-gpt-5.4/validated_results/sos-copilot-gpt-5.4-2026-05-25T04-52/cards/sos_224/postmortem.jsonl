@@ -1,0 +1,14 @@
+{"collector_number": "sos_224", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x_gs839u/tests.py::TestScoldingAdministratorBasicProperties::test_is_creature"}
+{"collector_number": "sos_224", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x_gs839u/tests.py::TestScoldingAdministratorBasicProperties::test_name"}
+{"collector_number": "sos_224", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x_gs839u/tests.py::TestScoldingAdministratorBasicProperties::test_card_types"}
+{"collector_number": "sos_224", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x_gs839u/tests.py::TestScoldingAdministratorBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_224", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x_gs839u/tests.py::TestScoldingAdministratorBasicProperties::test_colors"}
+{"collector_number": "sos_224", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x_gs839u/tests.py::TestScoldingAdministratorBasicProperties::test_power"}
+{"collector_number": "sos_224", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x_gs839u/tests.py::TestScoldingAdministratorBasicProperties::test_toughness"}
+{"collector_number": "sos_224", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x_gs839u/tests.py::TestScoldingAdministratorAbilities::test_has_menace"}
+{"collector_number": "sos_224", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x_gs839u/tests.py::TestScoldingAdministratorAbilities::test_death_trigger_implemented"}
+{"collector_number": "sos_224", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x_gs839u/tests.py::TestScoldingAdministratorEdgeCases::test_fizzle_no_targets_creature_stays"}
+{"collector_number": "sos_224", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x_gs839u/tests.py::TestScoldingAdministratorEdgeCases::test_instances_have_independent_state"}
+{"collector_number": "sos_224", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x_gs839u/tests.py::TestScoldingAdministratorEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_224", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x_gs839u/tests.py::TestScoldingAdministratorInteractions::test_counters_survive_end_of_turn"}
+{"collector_number": "sos_224", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x_gs839u/tests.py::TestScoldingAdministratorInteractions::test_combat_with_opponent"}

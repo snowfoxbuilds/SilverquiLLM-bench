@@ -1,0 +1,6 @@
+{"collector_number": "sos_86", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4hw45bo9/tests.py::TestLastGaspBasicProperties::test_is_instant"}
+{"collector_number": "sos_86", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4hw45bo9/tests.py::TestLastGaspBasicProperties::test_colors"}
+{"collector_number": "sos_86", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4hw45bo9/tests.py::TestLastGaspAbilities::test_on_resolve_changes_state"}
+{"collector_number": "sos_86", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4hw45bo9/tests.py::TestLastGaspEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_86", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4hw45bo9/tests.py::TestLastGaspInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_86", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_4hw45bo9/tests.py::TestLastGaspInteractions::test_does_not_affect_non_targets"}

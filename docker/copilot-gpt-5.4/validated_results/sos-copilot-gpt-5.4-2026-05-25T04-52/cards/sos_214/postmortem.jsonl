@@ -1,0 +1,9 @@
+{"collector_number": "sos_214", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h9z41rf8/tests.py::TestProfessorDellianFelBasicProperties::test_is_planeswalker"}
+{"collector_number": "sos_214", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h9z41rf8/tests.py::TestProfessorDellianFelBasicProperties::test_card_types"}
+{"collector_number": "sos_214", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h9z41rf8/tests.py::TestProfessorDellianFelBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_214", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h9z41rf8/tests.py::TestProfessorDellianFelBasicProperties::test_colors"}
+{"collector_number": "sos_214", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h9z41rf8/tests.py::TestProfessorDellianFelAbilities::test_resolution_removes_creatures"}
+{"collector_number": "sos_214", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h9z41rf8/tests.py::TestProfessorDellianFelEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_214", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h9z41rf8/tests.py::TestProfessorDellianFelEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_214", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h9z41rf8/tests.py::TestProfessorDellianFelInteractions::test_targets_valid_objects"}
+{"collector_number": "sos_214", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_h9z41rf8/tests.py::TestProfessorDellianFelInteractions::test_spell_to_graveyard_after_resolution"}

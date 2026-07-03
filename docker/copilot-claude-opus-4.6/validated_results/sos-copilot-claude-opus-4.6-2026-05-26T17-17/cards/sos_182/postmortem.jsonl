@@ -1,0 +1,2 @@
+{"collector_number": "sos_182", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qjat0tkm/tests.py::TestConciliatorsDuelistBasicProperties::test_colors"}
+{"collector_number": "sos_182", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qjat0tkm/tests.py::TestConciliatorsDuelistAbilities::test_etb_exiles_target"}

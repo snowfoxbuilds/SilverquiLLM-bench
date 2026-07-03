@@ -1,0 +1,5 @@
+{"collector_number": "sos_144", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3emy8q8f/tests.py::TestEfflorescenceBasicProperties::test_colors"}
+{"collector_number": "sos_144", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3emy8q8f/tests.py::TestEfflorescenceAbilities::test_adds_plus_counter"}
+{"collector_number": "sos_144", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3emy8q8f/tests.py::TestEfflorescenceAbilities::test_grants_trample"}
+{"collector_number": "sos_144", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3emy8q8f/tests.py::TestEfflorescenceAbilities::test_gains_life"}
+{"collector_number": "sos_144", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3emy8q8f/tests.py::TestEfflorescenceInteractions::test_get_targets_finds_creatures"}

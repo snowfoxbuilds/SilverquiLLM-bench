@@ -1,0 +1,7 @@
+{"collector_number": "sos_200", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_uicm8izl/tests.py::TestLoreholdCharmBasicProperties::test_is_instant"}
+{"collector_number": "sos_200", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_uicm8izl/tests.py::TestLoreholdCharmBasicProperties::test_colors"}
+{"collector_number": "sos_200", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_uicm8izl/tests.py::TestLoreholdCharmAbilities::test_resolution_returns_target"}
+{"collector_number": "sos_200", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_uicm8izl/tests.py::TestLoreholdCharmEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_200", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_uicm8izl/tests.py::TestLoreholdCharmInteractions::test_targets_valid_objects"}
+{"collector_number": "sos_200", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_uicm8izl/tests.py::TestLoreholdCharmInteractions::test_spell_to_graveyard_after_resolution"}
+{"collector_number": "sos_200", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_uicm8izl/tests.py::TestLoreholdCharmInteractions::test_tokens_appear_on_battlefield"}

@@ -1,0 +1,15 @@
+{
+  "timeout_seconds": 3600,
+  "deadline_utc": "2026-06-10T08:08:25Z",
+  "docker_image": "silverquillm-cc-fable-5-bare-xhigh-planned:latest",
+  "card_filter": [
+    "1",
+    "4",
+    "13",
+    "57",
+    "97",
+    "120",
+    "201"
+  ],
+  "benchmark_set": "sos"
+}

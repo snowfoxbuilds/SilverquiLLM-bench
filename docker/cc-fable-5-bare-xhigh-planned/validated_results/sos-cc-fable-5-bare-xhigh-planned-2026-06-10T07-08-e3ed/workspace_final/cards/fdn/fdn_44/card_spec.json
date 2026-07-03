@@ -1,0 +1,17 @@
+{
+  "name": "Kaito, Cunning Infiltrator",
+  "mana_cost": "{1}{U}{U}",
+  "type_line": "Legendary Planeswalker — Kaito",
+  "oracle_text": "Whenever a creature you control deals combat damage to a player, put a loyalty counter on Kaito.\n+1: Up to one target creature you control can't be blocked this turn. Draw a card, then discard a card.\n−2: Create a 2/1 blue Ninja creature token.\n−9: You get an emblem with \"Whenever a player casts a spell, you create a 2/1 blue Ninja creature token.\"",
+  "power": null,
+  "toughness": null,
+  "loyalty": "3",
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "mythic",
+  "set_code": "fdn",
+  "collector_number": "44",
+  "complexity_tier": "complex"
+}

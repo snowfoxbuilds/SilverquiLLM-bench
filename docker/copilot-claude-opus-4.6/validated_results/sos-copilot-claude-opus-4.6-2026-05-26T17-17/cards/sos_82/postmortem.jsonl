@@ -1,0 +1,2 @@
+{"collector_number": "sos_82", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_37fljloh/tests.py::TestEternalStudentBasicProperties::test_colors"}
+{"collector_number": "sos_82", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_37fljloh/tests.py::TestEternalStudentAbilities::test_graveyard_activated_ability"}

@@ -1,0 +1,3 @@
+{"collector_number": "sos_121", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8jwplqwi/tests.py::TestLivingHistoryBasicProperties::test_colors"}
+{"collector_number": "sos_121", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8jwplqwi/tests.py::TestLivingHistoryAbilities::test_pump_effect"}
+{"collector_number": "sos_121", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8jwplqwi/tests.py::TestLivingHistoryInteractions::test_get_targets_finds_creatures"}

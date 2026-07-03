@@ -1,0 +1,3 @@
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ijr96e9z/tests.py::TestImprovisationCapstoneBasicProperties::test_colors"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ijr96e9z/tests.py::TestImprovisationCapstoneAbilities::test_resolution_exiles_target"}
+{"collector_number": "sos_120", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ijr96e9z/tests.py::TestImprovisationCapstoneInteractions::test_spell_to_graveyard_after_resolution"}

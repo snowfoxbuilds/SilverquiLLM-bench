@@ -1,0 +1,5 @@
+{"collector_number": "sos_12", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_us18apzi/tests.py::TestEliteInterceptorRejoinderBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_12", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_us18apzi/tests.py::TestEliteInterceptorRejoinderBasicProperties::test_colors"}
+{"collector_number": "sos_12", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_us18apzi/tests.py::TestEliteInterceptorRejoinderAbilities::test_has_prepared"}
+{"collector_number": "sos_12", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_us18apzi/tests.py::TestEliteInterceptorRejoinderAbilities::test_etb_trigger_callable"}
+{"collector_number": "sos_12", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_us18apzi/tests.py::TestEliteInterceptorRejoinderEdgeCases::test_mana_cost_matches_spec"}

@@ -1,0 +1,6 @@
+{"collector_number": "sos_175", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pqev_av9/tests.py::TestBertaWiseExtrapolatorBasicProperties::test_is_creature"}
+{"collector_number": "sos_175", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pqev_av9/tests.py::TestBertaWiseExtrapolatorBasicProperties::test_colors"}
+{"collector_number": "sos_175", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pqev_av9/tests.py::TestBertaWiseExtrapolatorEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_175", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pqev_av9/tests.py::TestBertaWiseExtrapolatorInteractions::test_counters_survive_end_of_turn"}
+{"collector_number": "sos_175", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pqev_av9/tests.py::TestBertaWiseExtrapolatorInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_175", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_pqev_av9/tests.py::TestBertaWiseExtrapolatorInteractions::test_tokens_appear_on_battlefield"}

@@ -1,0 +1,3 @@
+{"collector_number": "sos_64", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_j9hzee4b/tests.py::TestProcrastinateBasicProperties::test_colors"}
+{"collector_number": "sos_64", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_j9hzee4b/tests.py::TestProcrastinateEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_64", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_j9hzee4b/tests.py::TestProcrastinateInteractions::test_spell_to_graveyard_after_resolution"}

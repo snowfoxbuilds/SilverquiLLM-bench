@@ -1,0 +1,7 @@
+{"collector_number": "sos_155", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nu5zoztk/tests.py::TestNoxiousNewtBasicProperties::test_is_creature"}
+{"collector_number": "sos_155", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nu5zoztk/tests.py::TestNoxiousNewtBasicProperties::test_colors"}
+{"collector_number": "sos_155", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nu5zoztk/tests.py::TestNoxiousNewtBasicProperties::test_has_deathtouch_keyword"}
+{"collector_number": "sos_155", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nu5zoztk/tests.py::TestNoxiousNewtAbilities::test_has_activated_ability"}
+{"collector_number": "sos_155", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nu5zoztk/tests.py::TestNoxiousNewtEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_155", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nu5zoztk/tests.py::TestNoxiousNewtInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_155", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nu5zoztk/tests.py::TestNoxiousNewtInteractions::test_coexists_with_other_creatures"}

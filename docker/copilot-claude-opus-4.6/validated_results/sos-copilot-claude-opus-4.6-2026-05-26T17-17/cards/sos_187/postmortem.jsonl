@@ -1,0 +1,5 @@
+{"collector_number": "sos_187", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zx8yg0mk/tests.py::TestEssenceknitScholarBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_187", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zx8yg0mk/tests.py::TestEssenceknitScholarBasicProperties::test_colors"}
+{"collector_number": "sos_187", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zx8yg0mk/tests.py::TestEssenceknitScholarAbilities::test_creates_token"}
+{"collector_number": "sos_187", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zx8yg0mk/tests.py::TestEssenceknitScholarAbilities::test_draws_cards"}
+{"collector_number": "sos_187", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zx8yg0mk/tests.py::TestEssenceknitScholarAbilities::test_gains_life"}

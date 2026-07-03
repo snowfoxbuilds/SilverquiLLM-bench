@@ -1,0 +1,8 @@
+{"collector_number": "sos_181", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7t_oe33r/tests.py::TestColossusOfTheBloodAgeBasicProperties::test_is_creature"}
+{"collector_number": "sos_181", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7t_oe33r/tests.py::TestColossusOfTheBloodAgeBasicProperties::test_colors"}
+{"collector_number": "sos_181", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7t_oe33r/tests.py::TestColossusOfTheBloodAgeAbilities::test_causes_discard"}
+{"collector_number": "sos_181", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7t_oe33r/tests.py::TestColossusOfTheBloodAgeAbilities::test_deals_damage"}
+{"collector_number": "sos_181", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7t_oe33r/tests.py::TestColossusOfTheBloodAgeAbilities::test_gains_life"}
+{"collector_number": "sos_181", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7t_oe33r/tests.py::TestColossusOfTheBloodAgeEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_181", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7t_oe33r/tests.py::TestColossusOfTheBloodAgeInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_181", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7t_oe33r/tests.py::TestColossusOfTheBloodAgeInteractions::test_coexists_with_other_creatures"}

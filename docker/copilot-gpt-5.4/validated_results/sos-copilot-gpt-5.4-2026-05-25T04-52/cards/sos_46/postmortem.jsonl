@@ -1,0 +1,10 @@
+{"collector_number": "sos_46", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mke0u3e0/tests.py::TestEncouragingAviatorJumpBasicProperties::test_is_creature"}
+{"collector_number": "sos_46", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mke0u3e0/tests.py::TestEncouragingAviatorJumpBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_46", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mke0u3e0/tests.py::TestEncouragingAviatorJumpBasicProperties::test_colors"}
+{"collector_number": "sos_46", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mke0u3e0/tests.py::TestEncouragingAviatorJumpAbilities::test_has_flying"}
+{"collector_number": "sos_46", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mke0u3e0/tests.py::TestEncouragingAviatorJumpAbilities::test_has_prepared"}
+{"collector_number": "sos_46", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mke0u3e0/tests.py::TestEncouragingAviatorJumpAbilities::test_attack_trigger_implemented"}
+{"collector_number": "sos_46", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mke0u3e0/tests.py::TestEncouragingAviatorJumpEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_46", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mke0u3e0/tests.py::TestEncouragingAviatorJumpEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_46", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mke0u3e0/tests.py::TestEncouragingAviatorJumpInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_46", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mke0u3e0/tests.py::TestEncouragingAviatorJumpInteractions::test_coexists_with_other_permanents"}

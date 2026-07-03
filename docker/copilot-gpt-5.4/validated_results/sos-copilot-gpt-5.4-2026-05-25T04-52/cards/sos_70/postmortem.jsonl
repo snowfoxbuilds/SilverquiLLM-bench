@@ -1,0 +1,6 @@
+{"collector_number": "sos_70", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3j1uej0w/tests.py::TestTextbookTabulatorBasicProperties::test_is_creature"}
+{"collector_number": "sos_70", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3j1uej0w/tests.py::TestTextbookTabulatorBasicProperties::test_colors"}
+{"collector_number": "sos_70", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3j1uej0w/tests.py::TestTextbookTabulatorAbilities::test_etb_adds_counters"}
+{"collector_number": "sos_70", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3j1uej0w/tests.py::TestTextbookTabulatorEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_70", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3j1uej0w/tests.py::TestTextbookTabulatorInteractions::test_counters_survive_end_of_turn"}
+{"collector_number": "sos_70", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_3j1uej0w/tests.py::TestTextbookTabulatorInteractions::test_combat_with_opponent"}

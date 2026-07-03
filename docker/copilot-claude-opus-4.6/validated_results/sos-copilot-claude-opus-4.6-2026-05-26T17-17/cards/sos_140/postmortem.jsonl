@@ -1,0 +1,3 @@
+{"collector_number": "sos_140", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qva4ds1s/tests.py::TestAmbitiousAugmenterBasicProperties::test_colors"}
+{"collector_number": "sos_140", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qva4ds1s/tests.py::TestAmbitiousAugmenterInteractions::test_counters_survive_end_of_turn"}
+{"collector_number": "sos_140", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qva4ds1s/tests.py::TestAmbitiousAugmenterInteractions::test_tokens_appear_on_battlefield"}

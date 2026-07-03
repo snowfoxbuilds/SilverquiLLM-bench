@@ -1,0 +1,2 @@
+{"collector_number": "sos_167", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bglqf6ur/tests.py::TestWildHypothesisBasicProperties::test_colors"}
+{"collector_number": "sos_167", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bglqf6ur/tests.py::TestWildHypothesisAbilities::test_adds_plus_counter"}

@@ -1,0 +1,17 @@
+{
+  "name": "Omniscience",
+  "mana_cost": "{7}{U}{U}{U}",
+  "type_line": "Enchantment",
+  "oracle_text": "You may cast spells from your hand without paying their mana costs.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "mythic",
+  "set_code": "fdn",
+  "collector_number": "161",
+  "complexity_tier": "medium"
+}

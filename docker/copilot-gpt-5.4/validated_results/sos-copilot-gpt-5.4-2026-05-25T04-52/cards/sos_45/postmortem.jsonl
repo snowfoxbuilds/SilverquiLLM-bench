@@ -1,0 +1,12 @@
+{"collector_number": "sos_45", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5na2gigj/tests.py::TestEmeritusOfIdeationAncestralRecallBasicProperties::test_is_creature"}
+{"collector_number": "sos_45", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5na2gigj/tests.py::TestEmeritusOfIdeationAncestralRecallBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_45", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5na2gigj/tests.py::TestEmeritusOfIdeationAncestralRecallBasicProperties::test_colors"}
+{"collector_number": "sos_45", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5na2gigj/tests.py::TestEmeritusOfIdeationAncestralRecallAbilities::test_has_flying"}
+{"collector_number": "sos_45", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5na2gigj/tests.py::TestEmeritusOfIdeationAncestralRecallAbilities::test_has_prepared"}
+{"collector_number": "sos_45", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5na2gigj/tests.py::TestEmeritusOfIdeationAncestralRecallAbilities::test_has_ward"}
+{"collector_number": "sos_45", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5na2gigj/tests.py::TestEmeritusOfIdeationAncestralRecallAbilities::test_etb_trigger_callable"}
+{"collector_number": "sos_45", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5na2gigj/tests.py::TestEmeritusOfIdeationAncestralRecallAbilities::test_attack_trigger_uses_graveyard"}
+{"collector_number": "sos_45", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5na2gigj/tests.py::TestEmeritusOfIdeationAncestralRecallEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_45", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5na2gigj/tests.py::TestEmeritusOfIdeationAncestralRecallEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_45", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5na2gigj/tests.py::TestEmeritusOfIdeationAncestralRecallInteractions::test_exile_from_graveyard_interaction"}
+{"collector_number": "sos_45", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_5na2gigj/tests.py::TestEmeritusOfIdeationAncestralRecallInteractions::test_combat_with_opponent"}

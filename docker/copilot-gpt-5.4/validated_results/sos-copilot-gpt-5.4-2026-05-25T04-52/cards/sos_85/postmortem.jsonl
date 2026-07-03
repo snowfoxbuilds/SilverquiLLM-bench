@@ -1,0 +1,8 @@
+{"collector_number": "sos_85", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_o0x_vpkx/tests.py::TestGraveResearcherReanimateBasicProperties::test_is_creature"}
+{"collector_number": "sos_85", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_o0x_vpkx/tests.py::TestGraveResearcherReanimateBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_85", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_o0x_vpkx/tests.py::TestGraveResearcherReanimateBasicProperties::test_colors"}
+{"collector_number": "sos_85", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_o0x_vpkx/tests.py::TestGraveResearcherReanimateAbilities::test_has_prepared"}
+{"collector_number": "sos_85", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_o0x_vpkx/tests.py::TestGraveResearcherReanimateEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_85", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_o0x_vpkx/tests.py::TestGraveResearcherReanimateEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_85", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_o0x_vpkx/tests.py::TestGraveResearcherReanimateInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_85", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_o0x_vpkx/tests.py::TestGraveResearcherReanimateInteractions::test_coexists_with_other_permanents"}

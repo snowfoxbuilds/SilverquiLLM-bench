@@ -1,0 +1,8 @@
+{"collector_number": "sos_127", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_55ydo7nf/tests.py::TestRearingEmbermareBasicProperties::test_is_creature"}
+{"collector_number": "sos_127", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_55ydo7nf/tests.py::TestRearingEmbermareBasicProperties::test_colors"}
+{"collector_number": "sos_127", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_55ydo7nf/tests.py::TestRearingEmbermareBasicProperties::test_has_reach_keyword"}
+{"collector_number": "sos_127", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_55ydo7nf/tests.py::TestRearingEmbermareBasicProperties::test_has_haste_keyword"}
+{"collector_number": "sos_127", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_55ydo7nf/tests.py::TestRearingEmbermareAbilities::test_on_resolve_changes_state"}
+{"collector_number": "sos_127", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_55ydo7nf/tests.py::TestRearingEmbermareEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_127", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_55ydo7nf/tests.py::TestRearingEmbermareInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_127", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_55ydo7nf/tests.py::TestRearingEmbermareInteractions::test_coexists_with_other_creatures"}

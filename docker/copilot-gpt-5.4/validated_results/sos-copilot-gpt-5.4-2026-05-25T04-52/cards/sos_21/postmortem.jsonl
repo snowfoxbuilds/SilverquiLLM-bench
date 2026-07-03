@@ -1,0 +1,6 @@
+{"collector_number": "sos_21", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0_svrhcw/tests.py::TestInkshapeDemonstratorBasicProperties::test_is_creature"}
+{"collector_number": "sos_21", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0_svrhcw/tests.py::TestInkshapeDemonstratorBasicProperties::test_colors"}
+{"collector_number": "sos_21", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0_svrhcw/tests.py::TestInkshapeDemonstratorAbilities::test_has_ward"}
+{"collector_number": "sos_21", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0_svrhcw/tests.py::TestInkshapeDemonstratorEdgeCases::test_fizzle_no_targets_creature_stays"}
+{"collector_number": "sos_21", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0_svrhcw/tests.py::TestInkshapeDemonstratorInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_21", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0_svrhcw/tests.py::TestInkshapeDemonstratorInteractions::test_coexists_with_other_permanents"}

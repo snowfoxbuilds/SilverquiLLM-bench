@@ -1,0 +1,7 @@
+{"collector_number": "sos_61", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_u10_0_q0/tests.py::TestMusesEncouragementBasicProperties::test_is_instant"}
+{"collector_number": "sos_61", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_u10_0_q0/tests.py::TestMusesEncouragementBasicProperties::test_colors"}
+{"collector_number": "sos_61", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_u10_0_q0/tests.py::TestMusesEncouragementAbilities::test_creates_token"}
+{"collector_number": "sos_61", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_u10_0_q0/tests.py::TestMusesEncouragementAbilities::test_surveil_effect"}
+{"collector_number": "sos_61", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_u10_0_q0/tests.py::TestMusesEncouragementEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_61", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_u10_0_q0/tests.py::TestMusesEncouragementInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_61", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_u10_0_q0/tests.py::TestMusesEncouragementInteractions::test_does_not_affect_non_targets"}

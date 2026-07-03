@@ -1,0 +1,2 @@
+{"collector_number": "sos_254", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vry8zz_a/tests.py::TestDreamrootCascadeBasicProperties::test_colors"}
+{"collector_number": "sos_254", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vry8zz_a/tests.py::TestDreamrootCascadeAbilities::test_has_activated_ability"}

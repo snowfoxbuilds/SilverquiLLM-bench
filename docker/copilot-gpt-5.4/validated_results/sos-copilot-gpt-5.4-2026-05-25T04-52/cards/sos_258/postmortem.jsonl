@@ -1,0 +1,6 @@
+{"collector_number": "sos_258", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s6t2g6rf/tests.py::TestParadoxGardensBasicProperties::test_is_land"}
+{"collector_number": "sos_258", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s6t2g6rf/tests.py::TestParadoxGardensBasicProperties::test_card_types"}
+{"collector_number": "sos_258", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s6t2g6rf/tests.py::TestParadoxGardensBasicProperties::test_colorless"}
+{"collector_number": "sos_258", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s6t2g6rf/tests.py::TestParadoxGardensEdgeCases::test_resolution_with_empty_board"}
+{"collector_number": "sos_258", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s6t2g6rf/tests.py::TestParadoxGardensInteractions::test_spell_to_graveyard_after_resolution"}
+{"collector_number": "sos_258", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s6t2g6rf/tests.py::TestParadoxGardensInteractions::test_coexists_with_other_permanents"}

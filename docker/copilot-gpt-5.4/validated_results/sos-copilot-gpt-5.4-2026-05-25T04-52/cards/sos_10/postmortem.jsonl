@@ -1,0 +1,10 @@
+{"collector_number": "sos_10", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_l7fy57ry/tests.py::TestDigSiteInventoryBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_10", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_l7fy57ry/tests.py::TestDigSiteInventoryBasicProperties::test_colors"}
+{"collector_number": "sos_10", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_l7fy57ry/tests.py::TestDigSiteInventoryAbilities::test_flashback_cost_attribute"}
+{"collector_number": "sos_10", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_l7fy57ry/tests.py::TestDigSiteInventoryAbilities::test_flashback_exiles_after_resolution"}
+{"collector_number": "sos_10", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_l7fy57ry/tests.py::TestDigSiteInventoryAbilities::test_flashback_removes_from_graveyard"}
+{"collector_number": "sos_10", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_l7fy57ry/tests.py::TestDigSiteInventoryAbilities::test_adds_plus_counter"}
+{"collector_number": "sos_10", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_l7fy57ry/tests.py::TestDigSiteInventoryAbilities::test_grants_vigilance"}
+{"collector_number": "sos_10", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_l7fy57ry/tests.py::TestDigSiteInventoryEdgeCases::test_targets_only_own_permanents"}
+{"collector_number": "sos_10", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_l7fy57ry/tests.py::TestDigSiteInventoryInteractions::test_get_targets_finds_own_creatures"}
+{"collector_number": "sos_10", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_l7fy57ry/tests.py::TestDigSiteInventoryInteractions::test_does_not_affect_non_targets"}

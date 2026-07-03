@@ -1,0 +1,3 @@
+{"collector_number": "sos_208", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ujo1vspx/tests.py::TestParadoxSurveyorBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_208", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ujo1vspx/tests.py::TestParadoxSurveyorBasicProperties::test_colors"}
+{"collector_number": "sos_208", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ujo1vspx/tests.py::TestParadoxSurveyorAbilities::test_on_resolve_changes_state"}

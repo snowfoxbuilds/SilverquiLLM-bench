@@ -1,0 +1,17 @@
+{
+  "name": "Dauntless Veteran",
+  "mana_cost": "{1}{W}{W}",
+  "type_line": "Creature — Human Soldier",
+  "oracle_text": "Whenever this creature attacks, creatures you control get +1/+1 until end of turn.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "8",
+  "complexity_tier": "medium"
+}

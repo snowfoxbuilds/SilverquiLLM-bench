@@ -1,0 +1,4 @@
+{"collector_number": "sos_268", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f69wc2pj/tests.py::TestIslandBasicProperties::test_is_land"}
+{"collector_number": "sos_268", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f69wc2pj/tests.py::TestIslandBasicProperties::test_has_basic_supertype"}
+{"collector_number": "sos_268", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f69wc2pj/tests.py::TestIslandBasicProperties::test_has_land_subtype"}
+{"collector_number": "sos_268", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f69wc2pj/tests.py::TestIslandBasicProperties::test_enters_untapped"}

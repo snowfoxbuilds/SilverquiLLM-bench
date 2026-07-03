@@ -1,0 +1,5 @@
+{"collector_number": "sos_139", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tkmg4a8w/tests.py::TestAdditiveEvolutionBasicProperties::test_colors"}
+{"collector_number": "sos_139", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tkmg4a8w/tests.py::TestAdditiveEvolutionAbilities::test_creates_token"}
+{"collector_number": "sos_139", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tkmg4a8w/tests.py::TestAdditiveEvolutionAbilities::test_adds_plus_counter"}
+{"collector_number": "sos_139", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tkmg4a8w/tests.py::TestAdditiveEvolutionAbilities::test_grants_vigilance"}
+{"collector_number": "sos_139", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tkmg4a8w/tests.py::TestAdditiveEvolutionInteractions::test_get_targets_finds_own_creatures"}

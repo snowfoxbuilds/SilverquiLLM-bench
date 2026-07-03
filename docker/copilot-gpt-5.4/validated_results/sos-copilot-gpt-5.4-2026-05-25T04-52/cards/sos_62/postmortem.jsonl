@@ -1,0 +1,7 @@
+{"collector_number": "sos_62", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ogrxk_7e/tests.py::TestOrysaTideChoreographerBasicProperties::test_is_creature"}
+{"collector_number": "sos_62", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ogrxk_7e/tests.py::TestOrysaTideChoreographerBasicProperties::test_colors"}
+{"collector_number": "sos_62", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ogrxk_7e/tests.py::TestOrysaTideChoreographerAbilities::test_draws_cards"}
+{"collector_number": "sos_62", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ogrxk_7e/tests.py::TestOrysaTideChoreographerAbilities::test_cost_reduction_applies"}
+{"collector_number": "sos_62", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ogrxk_7e/tests.py::TestOrysaTideChoreographerEdgeCases::test_no_reduction_when_condition_unmet"}
+{"collector_number": "sos_62", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ogrxk_7e/tests.py::TestOrysaTideChoreographerInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_62", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ogrxk_7e/tests.py::TestOrysaTideChoreographerInteractions::test_coexists_with_other_creatures"}

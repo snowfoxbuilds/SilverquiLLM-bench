@@ -1,0 +1,2 @@
+{"collector_number": "sos_233", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_a0lcr_kj/tests.py::TestStartledRelicSlothBasicProperties::test_colors"}
+{"collector_number": "sos_233", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_a0lcr_kj/tests.py::TestStartledRelicSlothAbilities::test_on_resolve_changes_state"}

@@ -1,0 +1,3 @@
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0hu_7ix4/tests.py::TestManaSculptBasicProperties::test_colors"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0hu_7ix4/tests.py::TestManaSculptAbilities::test_counters_spell"}
+{"collector_number": "sos_57", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0hu_7ix4/tests.py::TestManaSculptInteractions::test_get_targets_finds_stack_spells"}

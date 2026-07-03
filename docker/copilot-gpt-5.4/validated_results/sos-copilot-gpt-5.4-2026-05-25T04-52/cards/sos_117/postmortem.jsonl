@@ -1,0 +1,9 @@
+{"collector_number": "sos_117", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qqckvu7v/tests.py::TestGoblinGlasswrightCraftWithPrideBasicProperties::test_is_creature"}
+{"collector_number": "sos_117", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qqckvu7v/tests.py::TestGoblinGlasswrightCraftWithPrideBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_117", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qqckvu7v/tests.py::TestGoblinGlasswrightCraftWithPrideBasicProperties::test_colors"}
+{"collector_number": "sos_117", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qqckvu7v/tests.py::TestGoblinGlasswrightCraftWithPrideAbilities::test_has_prepared"}
+{"collector_number": "sos_117", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qqckvu7v/tests.py::TestGoblinGlasswrightCraftWithPrideAbilities::test_etb_trigger_callable"}
+{"collector_number": "sos_117", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qqckvu7v/tests.py::TestGoblinGlasswrightCraftWithPrideEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_117", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qqckvu7v/tests.py::TestGoblinGlasswrightCraftWithPrideEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_117", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qqckvu7v/tests.py::TestGoblinGlasswrightCraftWithPrideInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_117", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qqckvu7v/tests.py::TestGoblinGlasswrightCraftWithPrideInteractions::test_coexists_with_other_permanents"}

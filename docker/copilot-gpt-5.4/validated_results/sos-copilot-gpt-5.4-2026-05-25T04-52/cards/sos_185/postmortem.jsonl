@@ -1,0 +1,9 @@
+{"collector_number": "sos_185", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nh5vjx2q/tests.py::TestElementalMascotBasicProperties::test_is_creature"}
+{"collector_number": "sos_185", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nh5vjx2q/tests.py::TestElementalMascotBasicProperties::test_colors"}
+{"collector_number": "sos_185", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nh5vjx2q/tests.py::TestElementalMascotAbilities::test_has_flying"}
+{"collector_number": "sos_185", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nh5vjx2q/tests.py::TestElementalMascotAbilities::test_has_vigilance"}
+{"collector_number": "sos_185", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nh5vjx2q/tests.py::TestElementalMascotAbilities::test_has_opus"}
+{"collector_number": "sos_185", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nh5vjx2q/tests.py::TestElementalMascotAbilities::test_opus_trigger_implemented"}
+{"collector_number": "sos_185", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nh5vjx2q/tests.py::TestElementalMascotEdgeCases::test_opus_no_trigger_without_spell"}
+{"collector_number": "sos_185", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nh5vjx2q/tests.py::TestElementalMascotInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_185", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_nh5vjx2q/tests.py::TestElementalMascotInteractions::test_coexists_with_other_permanents"}

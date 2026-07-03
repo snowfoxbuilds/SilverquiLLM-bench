@@ -1,0 +1,4 @@
+{"collector_number": "sos_173", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c81ouj54/tests.py::TestArkOfHungerBasicProperties::test_colors"}
+{"collector_number": "sos_173", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c81ouj54/tests.py::TestArkOfHungerAbilities::test_deals_damage"}
+{"collector_number": "sos_173", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c81ouj54/tests.py::TestArkOfHungerAbilities::test_gains_life"}
+{"collector_number": "sos_173", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c81ouj54/tests.py::TestArkOfHungerAbilities::test_mill_effect"}

@@ -1,0 +1,6 @@
+{"collector_number": "sos_15", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e68v8y29/tests.py::TestErodeBasicProperties::test_is_instant"}
+{"collector_number": "sos_15", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e68v8y29/tests.py::TestErodeBasicProperties::test_colors"}
+{"collector_number": "sos_15", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e68v8y29/tests.py::TestErodeAbilities::test_destroys_target"}
+{"collector_number": "sos_15", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e68v8y29/tests.py::TestErodeEdgeCases::test_may_choice_optional"}
+{"collector_number": "sos_15", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e68v8y29/tests.py::TestErodeInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_15", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_e68v8y29/tests.py::TestErodeInteractions::test_does_not_affect_non_targets"}

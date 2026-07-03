@@ -1,0 +1,5 @@
+{"collector_number": "sos_222", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_28s4jjzr/tests.py::TestRootManipulationBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_222", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_28s4jjzr/tests.py::TestRootManipulationBasicProperties::test_card_type"}
+{"collector_number": "sos_222", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_28s4jjzr/tests.py::TestRootManipulationBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_222", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_28s4jjzr/tests.py::TestRootManipulationBasicProperties::test_colors"}
+{"collector_number": "sos_222", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_28s4jjzr/tests.py::TestRootManipulationAbilities::test_on_resolve_grants_buff"}

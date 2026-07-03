@@ -1,0 +1,4 @@
+{"collector_number": "sos_210", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_sb3my7ts/tests.py::TestPracticedScrollsmithBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_210", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_sb3my7ts/tests.py::TestPracticedScrollsmithBasicProperties::test_colors"}
+{"collector_number": "sos_210", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_sb3my7ts/tests.py::TestPracticedScrollsmithAbilities::test_exiles_target"}
+{"collector_number": "sos_210", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_sb3my7ts/tests.py::TestPracticedScrollsmithInteractions::test_get_targets_finds_creatures"}

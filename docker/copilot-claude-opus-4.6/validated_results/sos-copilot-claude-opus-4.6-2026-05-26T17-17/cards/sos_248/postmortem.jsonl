@@ -1,0 +1,3 @@
+{"collector_number": "sos_248", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rb1_k803/tests.py::TestDiaryOfDreamsBasicProperties::test_colors"}
+{"collector_number": "sos_248", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rb1_k803/tests.py::TestDiaryOfDreamsAbilities::test_draws_cards"}
+{"collector_number": "sos_248", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rb1_k803/tests.py::TestDiaryOfDreamsAbilities::test_cost_reduction_applies"}

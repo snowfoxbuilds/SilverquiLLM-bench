@@ -1,0 +1,3 @@
+{"collector_number": "sos_166", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cfvxmp04/tests.py::TestVastlandsScavengerBindToLifeBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_166", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cfvxmp04/tests.py::TestVastlandsScavengerBindToLifeBasicProperties::test_colors"}
+{"collector_number": "sos_166", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cfvxmp04/tests.py::TestVastlandsScavengerBindToLifeEdgeCases::test_mana_cost_matches_spec"}

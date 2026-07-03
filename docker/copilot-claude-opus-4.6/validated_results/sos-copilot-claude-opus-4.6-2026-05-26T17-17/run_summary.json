@@ -1,0 +1,1929 @@
+{
+  "docker_image": "silverquillm-copilot-claude-opus-4.6:latest",
+  "run_metadata": {
+    "image": "silverquillm-copilot-claude-opus-4.6:latest",
+    "timestamp": "2026-05-26T19:26:10Z",
+    "card_count": 271,
+    "timeout_seconds": 7200,
+    "harness_version": "727d73789c6275c142f919ce67deac8bb15af751"
+  },
+  "sos_card_correctness": {
+    "audited_pass_rate": 0.733,
+    "card_pass_rate": 0.0258,
+    "cards_completed": 271,
+    "cards_no_output": 0,
+    "cards_timed_out": 0
+  },
+  "fdn_regression": {
+    "fdn_test_pass_rate": 1.0,
+    "fdn_card_pass_rate": 0.6364
+  },
+  "engine_regression": {
+    "engine_test_pass_rate": 1.0,
+    "engine_churn_lines": 1316
+  },
+  "per_card": [
+    {
+      "collector_number": "sos_1",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 13,
+      "audited_total": 16
+    },
+    {
+      "collector_number": "sos_10",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_100",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 7
+    },
+    {
+      "collector_number": "sos_101",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_102",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 15,
+      "audited_total": 17
+    },
+    {
+      "collector_number": "sos_103",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_104",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_105",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_106",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_107",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_108",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_109",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 0,
+      "audited_total": 1
+    },
+    {
+      "collector_number": "sos_11",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 8
+    },
+    {
+      "collector_number": "sos_110",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_111",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_112",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_113",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 0,
+      "audited_total": 1
+    },
+    {
+      "collector_number": "sos_114",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_115",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_116",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_117",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 0,
+      "audited_total": 1
+    },
+    {
+      "collector_number": "sos_118",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_119",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_12",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_120",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_121",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_122",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 0,
+      "audited_total": 1
+    },
+    {
+      "collector_number": "sos_123",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 18
+    },
+    {
+      "collector_number": "sos_124",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 13,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_125",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 12,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_126",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 0,
+      "audited_total": 1
+    },
+    {
+      "collector_number": "sos_127",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_128",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_129",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_13",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_130",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_131",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 12,
+      "audited_total": 16
+    },
+    {
+      "collector_number": "sos_132",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_133",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 13,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_134",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 14,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_135",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_136",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_137",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_138",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_139",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_14",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_140",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 12,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_141",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_142",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_143",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_144",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_145",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 13,
+      "audited_total": 17
+    },
+    {
+      "collector_number": "sos_146",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_147",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 8
+    },
+    {
+      "collector_number": "sos_148",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_149",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_15",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_150",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_151",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_152",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_153",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_154",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_155",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_156",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_157",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_158",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 5,
+      "audited_total": 7
+    },
+    {
+      "collector_number": "sos_159",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_16",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_160",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 13,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_161",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_162",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_163",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 15,
+      "audited_total": 17
+    },
+    {
+      "collector_number": "sos_164",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_165",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_166",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 13,
+      "audited_total": 16
+    },
+    {
+      "collector_number": "sos_167",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_168",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 18
+    },
+    {
+      "collector_number": "sos_169",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_17",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_170",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_171",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 8
+    },
+    {
+      "collector_number": "sos_172",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_173",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_174",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_175",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_176",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 8
+    },
+    {
+      "collector_number": "sos_177",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 8
+    },
+    {
+      "collector_number": "sos_178",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_179",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_18",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_180",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 13,
+      "audited_total": 17
+    },
+    {
+      "collector_number": "sos_181",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_182",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 12,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_183",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 13,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_184",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 5,
+      "audited_total": 6
+    },
+    {
+      "collector_number": "sos_185",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 14,
+      "audited_total": 16
+    },
+    {
+      "collector_number": "sos_186",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 5,
+      "audited_total": 6
+    },
+    {
+      "collector_number": "sos_187",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_188",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_189",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 12,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_19",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 16
+    },
+    {
+      "collector_number": "sos_190",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 12,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_191",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 8
+    },
+    {
+      "collector_number": "sos_192",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_193",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_194",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 12,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_195",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_196",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_197",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_198",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_199",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_2",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 12,
+      "audited_total": 18
+    },
+    {
+      "collector_number": "sos_20",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_200",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_201",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 13,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_202",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 5,
+      "audited_total": 6
+    },
+    {
+      "collector_number": "sos_203",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_204",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_205",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_206",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_207",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_208",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_209",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_21",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 13,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_210",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_211",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_212",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 13,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_213",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_214",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_215",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_216",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_217",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_218",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 14,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_219",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 7
+    },
+    {
+      "collector_number": "sos_22",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_220",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_221",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_222",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 5,
+      "audited_total": 6
+    },
+    {
+      "collector_number": "sos_223",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_224",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 12,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_225",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_226",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_227",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_228",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_229",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 12,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_23",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_230",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 8
+    },
+    {
+      "collector_number": "sos_231",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_232",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 8
+    },
+    {
+      "collector_number": "sos_233",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_234",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 8
+    },
+    {
+      "collector_number": "sos_235",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_236",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_237",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_238",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 12,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_239",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_24",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_240",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_241",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 5,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_242",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_243",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_244",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_245",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 14,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_246",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 8
+    },
+    {
+      "collector_number": "sos_247",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 12,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_248",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_249",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 7
+    },
+    {
+      "collector_number": "sos_25",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_250",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_251",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_252",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_253",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_254",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_255",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_256",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_257",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_258",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_259",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_26",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_260",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_261",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 5,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_262",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_263",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_264",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_265",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 5,
+      "audited_total": 5
+    },
+    {
+      "collector_number": "sos_266",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_267",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 5,
+      "audited_total": 5
+    },
+    {
+      "collector_number": "sos_268",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 5,
+      "audited_total": 5
+    },
+    {
+      "collector_number": "sos_269",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 5,
+      "audited_total": 5
+    },
+    {
+      "collector_number": "sos_27",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 16
+    },
+    {
+      "collector_number": "sos_270",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 5,
+      "audited_total": 5
+    },
+    {
+      "collector_number": "sos_271",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 5,
+      "audited_total": 5
+    },
+    {
+      "collector_number": "sos_28",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_29",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_3",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 13,
+      "audited_total": 17
+    },
+    {
+      "collector_number": "sos_30",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_31",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_32",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 12,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_33",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_34",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_35",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 12,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_36",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 8
+    },
+    {
+      "collector_number": "sos_37",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_38",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_39",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_4",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_40",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 16
+    },
+    {
+      "collector_number": "sos_41",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_42",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 12,
+      "audited_total": 16
+    },
+    {
+      "collector_number": "sos_43",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_44",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_45",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 18
+    },
+    {
+      "collector_number": "sos_46",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 16
+    },
+    {
+      "collector_number": "sos_47",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_48",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 13,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_49",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_5",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 14,
+      "audited_total": 17
+    },
+    {
+      "collector_number": "sos_50",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 7
+    },
+    {
+      "collector_number": "sos_51",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_52",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_53",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_54",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_55",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_56",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_57",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_58",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_59",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_6",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_60",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 12,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_61",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_62",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_63",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_64",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_65",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 5,
+      "audited_total": 6
+    },
+    {
+      "collector_number": "sos_66",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_67",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 0,
+      "audited_total": 1
+    },
+    {
+      "collector_number": "sos_68",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 0,
+      "audited_total": 1
+    },
+    {
+      "collector_number": "sos_69",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_7",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_70",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_71",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_72",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 0,
+      "audited_total": 1
+    },
+    {
+      "collector_number": "sos_73",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_74",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 9,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_75",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 10,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_76",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 0,
+      "audited_total": 1
+    },
+    {
+      "collector_number": "sos_77",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_78",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_79",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_8",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_80",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 0,
+      "audited_total": 1
+    },
+    {
+      "collector_number": "sos_81",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_82",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 8
+    },
+    {
+      "collector_number": "sos_83",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_84",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_85",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 0,
+      "audited_total": 1
+    },
+    {
+      "collector_number": "sos_86",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 9
+    },
+    {
+      "collector_number": "sos_87",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 13
+    },
+    {
+      "collector_number": "sos_88",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 0,
+      "audited_total": 1
+    },
+    {
+      "collector_number": "sos_89",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_9",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_90",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 15
+    },
+    {
+      "collector_number": "sos_91",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 15,
+      "audited_total": 19
+    },
+    {
+      "collector_number": "sos_92",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 8,
+      "audited_total": 11
+    },
+    {
+      "collector_number": "sos_93",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 11,
+      "audited_total": 14
+    },
+    {
+      "collector_number": "sos_94",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 8
+    },
+    {
+      "collector_number": "sos_95",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_96",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 6,
+      "audited_total": 10
+    },
+    {
+      "collector_number": "sos_97",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 7,
+      "audited_total": 12
+    },
+    {
+      "collector_number": "sos_98",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 0,
+      "audited_total": 1
+    },
+    {
+      "collector_number": "sos_99",
+      "card_name": "",
+      "status": "completed",
+      "audited_passed": 0,
+      "audited_total": 1
+    }
+  ],
+  "run_status": "completed",
+  "wall_clock_seconds": 7649.794,
+  "resumed_from": "sos-copilot-claude-opus-4.6-2026-05-26T05-16",
+  "resumed_image_changed": false,
+  "card_filter": null
+}

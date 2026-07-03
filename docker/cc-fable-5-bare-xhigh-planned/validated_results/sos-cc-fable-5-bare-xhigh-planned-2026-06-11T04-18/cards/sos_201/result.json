@@ -1,0 +1,50 @@
+{
+  "collector_number": "sos_201",
+  "tests_passed": 8,
+  "tests_failed": 1,
+  "tests_total": 9,
+  "pass_rate": 0.8888888888888888,
+  "errors": [
+    "FAILED ../../../tmp/eval_sos_34l5jvyk/tests.py::TestOpponentUpkeepTrigger::test_opponent_upkeep_discard_to_draw_accepted"
+  ],
+  "skipped": false,
+  "test_nodes": [
+    {
+      "test_node": "tests.py::TestIdentity::test_card_identity",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestMiracle::test_miracle_cast_on_first_draw",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestMiracle::test_miracle_offer_may_be_declined",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestMiracle::test_no_miracle_on_second_draw",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestMiracle::test_no_miracle_without_lorehold",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestMiracle::test_miracle_grant_scoped_to_controllers_hand",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestOpponentUpkeepTrigger::test_opponent_upkeep_discard_to_draw_accepted",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestOpponentUpkeepTrigger::test_opponent_upkeep_discard_declined",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestOpponentUpkeepTrigger::test_no_trigger_on_controllers_own_upkeep",
+      "outcome": "pass"
+    }
+  ],
+  "tests_hash": "6cde687bbec7844e13f26d159434d0adf616cee1245ce40ca3144846ca64b2f8"
+}

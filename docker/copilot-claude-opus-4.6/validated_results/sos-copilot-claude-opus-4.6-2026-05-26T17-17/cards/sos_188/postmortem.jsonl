@@ -1,0 +1,2 @@
+{"collector_number": "sos_188", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_55eudgh2/tests.py::TestFixWhatsBrokenBasicProperties::test_colors"}
+{"collector_number": "sos_188", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_55eudgh2/tests.py::TestFixWhatsBrokenAbilities::test_additional_cost_declared"}

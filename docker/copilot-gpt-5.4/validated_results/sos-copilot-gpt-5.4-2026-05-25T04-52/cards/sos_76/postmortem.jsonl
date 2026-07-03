@@ -1,0 +1,9 @@
+{"collector_number": "sos_76", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rw8mzhmg/tests.py::TestCheerfulOsteomancerRaiseDeadBasicProperties::test_is_creature"}
+{"collector_number": "sos_76", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rw8mzhmg/tests.py::TestCheerfulOsteomancerRaiseDeadBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_76", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rw8mzhmg/tests.py::TestCheerfulOsteomancerRaiseDeadBasicProperties::test_colors"}
+{"collector_number": "sos_76", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rw8mzhmg/tests.py::TestCheerfulOsteomancerRaiseDeadAbilities::test_has_prepared"}
+{"collector_number": "sos_76", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rw8mzhmg/tests.py::TestCheerfulOsteomancerRaiseDeadAbilities::test_etb_trigger_callable"}
+{"collector_number": "sos_76", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rw8mzhmg/tests.py::TestCheerfulOsteomancerRaiseDeadEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_76", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rw8mzhmg/tests.py::TestCheerfulOsteomancerRaiseDeadEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_76", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rw8mzhmg/tests.py::TestCheerfulOsteomancerRaiseDeadInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_76", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_rw8mzhmg/tests.py::TestCheerfulOsteomancerRaiseDeadInteractions::test_coexists_with_other_permanents"}

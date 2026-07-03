@@ -1,0 +1,8 @@
+{
+  "timeout_seconds": 360000,
+  "deadline_utc": "2026-05-30T21:17:17Z",
+  "docker_image": "silverquillm-copilot-claude-opus-4.6:latest",
+  "card_filter": null,
+  "benchmark_set": "sos",
+  "resumed_from": "sos-copilot-claude-opus-4.6-2026-05-26T05-16"
+}

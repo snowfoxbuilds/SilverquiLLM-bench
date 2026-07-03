@@ -1,0 +1,9 @@
+{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xc3dxlux/tests.py::TestTheDawningArchaicBasicProperties::test_is_creature"}
+{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xc3dxlux/tests.py::TestTheDawningArchaicBasicProperties::test_colorless"}
+{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xc3dxlux/tests.py::TestTheDawningArchaicAbilities::test_has_reach"}
+{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xc3dxlux/tests.py::TestTheDawningArchaicAbilities::test_attack_trigger_uses_graveyard"}
+{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xc3dxlux/tests.py::TestTheDawningArchaicAbilities::test_cost_reduction_implemented"}
+{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xc3dxlux/tests.py::TestTheDawningArchaicEdgeCases::test_fizzle_no_targets_creature_stays"}
+{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xc3dxlux/tests.py::TestTheDawningArchaicEdgeCases::test_cost_reduction_floor_at_zero"}
+{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xc3dxlux/tests.py::TestTheDawningArchaicInteractions::test_exile_from_graveyard_interaction"}
+{"collector_number": "sos_1", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xc3dxlux/tests.py::TestTheDawningArchaicInteractions::test_combat_with_opponent"}

@@ -1,0 +1,7 @@
+{"collector_number": "sos_153", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gn__9pb_/tests.py::TestLumaretsFavorBasicProperties::test_is_instant"}
+{"collector_number": "sos_153", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gn__9pb_/tests.py::TestLumaretsFavorBasicProperties::test_colors"}
+{"collector_number": "sos_153", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gn__9pb_/tests.py::TestLumaretsFavorAbilities::test_pump_effect"}
+{"collector_number": "sos_153", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gn__9pb_/tests.py::TestLumaretsFavorAbilities::test_gains_life"}
+{"collector_number": "sos_153", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gn__9pb_/tests.py::TestLumaretsFavorEdgeCases::test_may_choice_optional"}
+{"collector_number": "sos_153", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gn__9pb_/tests.py::TestLumaretsFavorInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_153", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gn__9pb_/tests.py::TestLumaretsFavorInteractions::test_does_not_affect_non_targets"}

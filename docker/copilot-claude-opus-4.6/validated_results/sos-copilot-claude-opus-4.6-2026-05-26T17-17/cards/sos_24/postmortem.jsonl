@@ -1,0 +1,3 @@
+{"collector_number": "sos_24", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vxmg6fan/tests.py::TestOwlinHistorianBasicProperties::test_colors"}
+{"collector_number": "sos_24", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vxmg6fan/tests.py::TestOwlinHistorianAbilities::test_etb_adds_counters"}
+{"collector_number": "sos_24", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_vxmg6fan/tests.py::TestOwlinHistorianInteractions::test_counters_survive_end_of_turn"}

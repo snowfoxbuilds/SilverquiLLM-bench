@@ -1,0 +1,18 @@
+{
+  "name": "Anthem of Champions",
+  "mana_cost": "{G}{W}",
+  "type_line": "Enchantment",
+  "oracle_text": "Creatures you control get +1/+1.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "G",
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "116",
+  "complexity_tier": "simple"
+}

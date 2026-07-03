@@ -1,0 +1,6 @@
+{"collector_number": "sos_255", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zsa92nxj/tests.py::TestFieldsOfStrifeBasicProperties::test_is_land"}
+{"collector_number": "sos_255", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zsa92nxj/tests.py::TestFieldsOfStrifeBasicProperties::test_card_types"}
+{"collector_number": "sos_255", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zsa92nxj/tests.py::TestFieldsOfStrifeBasicProperties::test_colorless"}
+{"collector_number": "sos_255", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zsa92nxj/tests.py::TestFieldsOfStrifeEdgeCases::test_resolution_with_empty_board"}
+{"collector_number": "sos_255", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zsa92nxj/tests.py::TestFieldsOfStrifeInteractions::test_spell_to_graveyard_after_resolution"}
+{"collector_number": "sos_255", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zsa92nxj/tests.py::TestFieldsOfStrifeInteractions::test_coexists_with_other_permanents"}

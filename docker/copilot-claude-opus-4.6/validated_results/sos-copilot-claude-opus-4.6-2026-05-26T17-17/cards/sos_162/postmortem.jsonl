@@ -1,0 +1,5 @@
+{"collector_number": "sos_162", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g43f1x0w/tests.py::TestStudiousFirstYearRampantGrowthBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_162", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g43f1x0w/tests.py::TestStudiousFirstYearRampantGrowthBasicProperties::test_colors"}
+{"collector_number": "sos_162", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g43f1x0w/tests.py::TestStudiousFirstYearRampantGrowthAbilities::test_has_prepared"}
+{"collector_number": "sos_162", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g43f1x0w/tests.py::TestStudiousFirstYearRampantGrowthAbilities::test_etb_trigger_callable"}
+{"collector_number": "sos_162", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_g43f1x0w/tests.py::TestStudiousFirstYearRampantGrowthEdgeCases::test_mana_cost_matches_spec"}

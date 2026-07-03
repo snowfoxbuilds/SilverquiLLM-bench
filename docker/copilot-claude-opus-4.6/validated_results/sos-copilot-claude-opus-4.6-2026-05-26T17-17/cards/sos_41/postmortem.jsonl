@@ -1,0 +1,3 @@
+{"collector_number": "sos_41", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wo8mryme/tests.py::TestChaseInspirationBasicProperties::test_colors"}
+{"collector_number": "sos_41", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wo8mryme/tests.py::TestChaseInspirationAbilities::test_grants_hexproof"}
+{"collector_number": "sos_41", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wo8mryme/tests.py::TestChaseInspirationEdgeCases::test_targets_only_own_permanents"}

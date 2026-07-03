@@ -1,0 +1,54 @@
+{
+  "collector_number": "sos_245",
+  "tests_passed": 9,
+  "tests_failed": 1,
+  "tests_total": 10,
+  "pass_rate": 0.9,
+  "errors": [
+    "FAILED ../../../tmp/eval_sos_0b897lbo/tests.py::TestIdentity::test_card_identity"
+  ],
+  "skipped": false,
+  "test_nodes": [
+    {
+      "test_node": "tests.py::TestIdentity::test_card_identity",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestOwnAffinity::test_own_affinity_reduces_cost_by_creature_count",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestOwnAffinity::test_own_affinity_reduction_is_not_one_more",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestOwnAffinity::test_own_affinity_clamps_at_generic_portion",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestGrantedAffinity::test_granted_affinity_reduces_instant_cost",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestGrantedAffinity::test_granted_affinity_reduction_is_not_one_more",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestGrantedAffinity::test_grant_does_not_apply_to_creature_spells",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestGrantedAffinity::test_grant_does_not_apply_to_opponents_spells",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCombatKeywordsByOutcome::test_flying_evades_ground_blocker_by_outcome",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCombatKeywordsByOutcome::test_deathtouch_fells_tough_blocker_by_outcome",
+      "outcome": "pass"
+    }
+  ],
+  "tests_hash": "abd06914c5996a2cdeea2c247fd6faf2ad28188918a0eb7f576e60d34ce044fb"
+}

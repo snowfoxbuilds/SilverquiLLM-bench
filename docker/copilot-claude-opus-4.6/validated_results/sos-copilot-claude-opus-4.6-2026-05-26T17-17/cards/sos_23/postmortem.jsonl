@@ -1,0 +1,4 @@
+{"collector_number": "sos_23", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gm1clti_/tests.py::TestJoinedResearchersSecretRendezvousBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_23", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gm1clti_/tests.py::TestJoinedResearchersSecretRendezvousBasicProperties::test_colors"}
+{"collector_number": "sos_23", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gm1clti_/tests.py::TestJoinedResearchersSecretRendezvousAbilities::test_has_prepared"}
+{"collector_number": "sos_23", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_gm1clti_/tests.py::TestJoinedResearchersSecretRendezvousEdgeCases::test_mana_cost_matches_spec"}

@@ -1,0 +1,7 @@
+{"collector_number": "sos_108", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ppskv_er/tests.py::TestArtisticProcessBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_108", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ppskv_er/tests.py::TestArtisticProcessBasicProperties::test_colors"}
+{"collector_number": "sos_108", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ppskv_er/tests.py::TestArtisticProcessAbilities::test_resolution_deals_damage"}
+{"collector_number": "sos_108", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ppskv_er/tests.py::TestArtisticProcessEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_108", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ppskv_er/tests.py::TestArtisticProcessInteractions::test_targets_valid_objects"}
+{"collector_number": "sos_108", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ppskv_er/tests.py::TestArtisticProcessInteractions::test_spell_to_graveyard_after_resolution"}
+{"collector_number": "sos_108", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ppskv_er/tests.py::TestArtisticProcessInteractions::test_tokens_appear_on_battlefield"}

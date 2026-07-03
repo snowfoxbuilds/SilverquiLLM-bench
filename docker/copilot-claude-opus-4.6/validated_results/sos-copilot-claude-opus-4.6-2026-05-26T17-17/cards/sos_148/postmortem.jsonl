@@ -1,0 +1,3 @@
+{"collector_number": "sos_148", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wuqm4jle/tests.py::TestFollowTheLumaretsBasicProperties::test_colors"}
+{"collector_number": "sos_148", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wuqm4jle/tests.py::TestFollowTheLumaretsAbilities::test_has_infusion"}
+{"collector_number": "sos_148", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_wuqm4jle/tests.py::TestFollowTheLumaretsInteractions::test_spell_to_graveyard_after_resolution"}

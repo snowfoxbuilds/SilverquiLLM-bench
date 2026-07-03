@@ -1,0 +1,4 @@
+{"collector_number": "sos_89", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_031_fg3o/tests.py::TestMasterfulFlourishBasicProperties::test_colors"}
+{"collector_number": "sos_89", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_031_fg3o/tests.py::TestMasterfulFlourishAbilities::test_pump_effect"}
+{"collector_number": "sos_89", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_031_fg3o/tests.py::TestMasterfulFlourishAbilities::test_grants_indestructible"}
+{"collector_number": "sos_89", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_031_fg3o/tests.py::TestMasterfulFlourishEdgeCases::test_targets_only_own_permanents"}

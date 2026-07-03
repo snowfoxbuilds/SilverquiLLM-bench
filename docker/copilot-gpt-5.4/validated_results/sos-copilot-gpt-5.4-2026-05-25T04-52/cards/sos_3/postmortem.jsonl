@@ -1,0 +1,10 @@
+{"collector_number": "sos_3", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w0y5f3m5/tests.py::TestSunderingArchaicBasicProperties::test_is_creature"}
+{"collector_number": "sos_3", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w0y5f3m5/tests.py::TestSunderingArchaicBasicProperties::test_colorless"}
+{"collector_number": "sos_3", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w0y5f3m5/tests.py::TestSunderingArchaicAbilities::test_has_converge"}
+{"collector_number": "sos_3", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w0y5f3m5/tests.py::TestSunderingArchaicAbilities::test_etb_exiles_target"}
+{"collector_number": "sos_3", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w0y5f3m5/tests.py::TestSunderingArchaicAbilities::test_converge_scaling"}
+{"collector_number": "sos_3", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w0y5f3m5/tests.py::TestSunderingArchaicEdgeCases::test_fizzle_no_targets_creature_stays"}
+{"collector_number": "sos_3", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w0y5f3m5/tests.py::TestSunderingArchaicEdgeCases::test_converge_zero_colors_no_bonus"}
+{"collector_number": "sos_3", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w0y5f3m5/tests.py::TestSunderingArchaicEdgeCases::test_converge_five_colors_maximum"}
+{"collector_number": "sos_3", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w0y5f3m5/tests.py::TestSunderingArchaicInteractions::test_exile_from_graveyard_interaction"}
+{"collector_number": "sos_3", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_w0y5f3m5/tests.py::TestSunderingArchaicInteractions::test_combat_with_opponent"}

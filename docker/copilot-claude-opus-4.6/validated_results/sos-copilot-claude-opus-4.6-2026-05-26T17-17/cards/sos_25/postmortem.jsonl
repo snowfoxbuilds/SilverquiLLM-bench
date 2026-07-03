@@ -1,0 +1,5 @@
+{"collector_number": "sos_25", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_hs1noppf/tests.py::TestPracticedOffenseBasicProperties::test_colors"}
+{"collector_number": "sos_25", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_hs1noppf/tests.py::TestPracticedOffenseAbilities::test_flashback_exiles_after_resolution"}
+{"collector_number": "sos_25", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_hs1noppf/tests.py::TestPracticedOffenseAbilities::test_flashback_removes_from_graveyard"}
+{"collector_number": "sos_25", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_hs1noppf/tests.py::TestPracticedOffenseAbilities::test_adds_plus_counter"}
+{"collector_number": "sos_25", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_hs1noppf/tests.py::TestPracticedOffenseInteractions::test_get_targets_finds_creatures"}

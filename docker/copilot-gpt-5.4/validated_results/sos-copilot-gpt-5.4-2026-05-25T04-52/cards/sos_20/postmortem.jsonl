@@ -1,0 +1,9 @@
+{"collector_number": "sos_20", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_v1u260sh/tests.py::TestInformedInkwrightBasicProperties::test_is_creature"}
+{"collector_number": "sos_20", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_v1u260sh/tests.py::TestInformedInkwrightBasicProperties::test_colors"}
+{"collector_number": "sos_20", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_v1u260sh/tests.py::TestInformedInkwrightBasicProperties::test_has_vigilance_keyword"}
+{"collector_number": "sos_20", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_v1u260sh/tests.py::TestInformedInkwrightAbilities::test_repartee_registers_trigger"}
+{"collector_number": "sos_20", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_v1u260sh/tests.py::TestInformedInkwrightAbilities::test_repartee_requires_creature_target"}
+{"collector_number": "sos_20", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_v1u260sh/tests.py::TestInformedInkwrightAbilities::test_repartee_creates_token"}
+{"collector_number": "sos_20", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_v1u260sh/tests.py::TestInformedInkwrightEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_20", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_v1u260sh/tests.py::TestInformedInkwrightInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_20", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_v1u260sh/tests.py::TestInformedInkwrightInteractions::test_coexists_with_other_creatures"}

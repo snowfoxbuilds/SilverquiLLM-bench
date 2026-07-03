@@ -1,0 +1,11 @@
+{"collector_number": "sos_91", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kr0fw9ad/tests.py::TestMoseoVeinsNewDeanBasicProperties::test_is_creature"}
+{"collector_number": "sos_91", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kr0fw9ad/tests.py::TestMoseoVeinsNewDeanBasicProperties::test_colors"}
+{"collector_number": "sos_91", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kr0fw9ad/tests.py::TestMoseoVeinsNewDeanAbilities::test_has_infusion"}
+{"collector_number": "sos_91", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kr0fw9ad/tests.py::TestMoseoVeinsNewDeanAbilities::test_has_flying"}
+{"collector_number": "sos_91", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kr0fw9ad/tests.py::TestMoseoVeinsNewDeanAbilities::test_etb_creates_tokens"}
+{"collector_number": "sos_91", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kr0fw9ad/tests.py::TestMoseoVeinsNewDeanAbilities::test_attack_trigger_uses_graveyard"}
+{"collector_number": "sos_91", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kr0fw9ad/tests.py::TestMoseoVeinsNewDeanEdgeCases::test_fizzle_no_targets_creature_stays"}
+{"collector_number": "sos_91", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kr0fw9ad/tests.py::TestMoseoVeinsNewDeanEdgeCases::test_infusion_base_effect_without_condition"}
+{"collector_number": "sos_91", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kr0fw9ad/tests.py::TestMoseoVeinsNewDeanEdgeCases::test_infusion_enhanced_effect_with_condition"}
+{"collector_number": "sos_91", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kr0fw9ad/tests.py::TestMoseoVeinsNewDeanInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_91", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_kr0fw9ad/tests.py::TestMoseoVeinsNewDeanInteractions::test_tokens_appear_on_battlefield"}

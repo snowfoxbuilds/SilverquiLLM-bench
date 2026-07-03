@@ -1,0 +1,3 @@
+{"collector_number": "sos_95", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_k82ex8qh/tests.py::TestPullFromTheGraveBasicProperties::test_colors"}
+{"collector_number": "sos_95", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_k82ex8qh/tests.py::TestPullFromTheGraveAbilities::test_returns_from_graveyard"}
+{"collector_number": "sos_95", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_k82ex8qh/tests.py::TestPullFromTheGraveInteractions::test_get_targets_finds_creatures"}

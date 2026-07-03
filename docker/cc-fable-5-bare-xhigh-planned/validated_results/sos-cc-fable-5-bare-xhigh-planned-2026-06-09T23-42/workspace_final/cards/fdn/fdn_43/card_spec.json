@@ -1,0 +1,20 @@
+{
+  "name": "Inspiration from Beyond",
+  "mana_cost": "{2}{U}",
+  "type_line": "Sorcery",
+  "oracle_text": "Mill three cards, then return an instant or sorcery card from your graveyard to your hand.\nFlashback {5}{U}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Flashback",
+    "Mill"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "43",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,3 @@
+{"collector_number": "sos_213", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bse7e74m/tests.py::TestProctorsGazeBasicProperties::test_colors"}
+{"collector_number": "sos_213", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bse7e74m/tests.py::TestProctorsGazeAbilities::test_bounces_target"}
+{"collector_number": "sos_213", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_bse7e74m/tests.py::TestProctorsGazeAbilities::test_search_library"}

@@ -1,0 +1,57 @@
+{
+  "collector_number": "sos_1",
+  "tests_passed": 6,
+  "tests_failed": 4,
+  "tests_total": 10,
+  "pass_rate": 0.6,
+  "errors": [
+    "FAILED ../../../tmp/eval_sos_rwlk3sa1/tests.py::TestAttackTrigger::test_attack_trigger_casts_instant_from_graveyard_to_exile",
+    "FAILED ../../../tmp/eval_sos_rwlk3sa1/tests.py::TestAttackTrigger::test_attack_trigger_targets_only_chosen_card",
+    "FAILED ../../../tmp/eval_sos_rwlk3sa1/tests.py::TestAttackTrigger::test_attack_trigger_sorcery_also_exiled",
+    "FAILED ../../../tmp/eval_sos_rwlk3sa1/tests.py::TestAttackTrigger::test_other_spells_still_go_to_graveyard"
+  ],
+  "skipped": false,
+  "test_nodes": [
+    {
+      "test_node": "tests.py::TestIdentity::test_card_identity",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCostReduction::test_cost_reduced_by_instants_and_sorceries_in_graveyard",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCostReduction::test_cost_reduction_is_not_one_more",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestCostReduction::test_creatures_in_graveyard_do_not_reduce",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestAttackTrigger::test_attack_trigger_casts_instant_from_graveyard_to_exile",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestAttackTrigger::test_attack_trigger_may_be_declined",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestAttackTrigger::test_attack_trigger_targets_only_chosen_card",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestAttackTrigger::test_attack_trigger_sorcery_also_exiled",
+      "outcome": "fail"
+    },
+    {
+      "test_node": "tests.py::TestAttackTrigger::test_no_trigger_without_instant_or_sorcery_in_graveyard",
+      "outcome": "pass"
+    },
+    {
+      "test_node": "tests.py::TestAttackTrigger::test_other_spells_still_go_to_graveyard",
+      "outcome": "fail"
+    }
+  ],
+  "tests_hash": "46043986ca73d45b89281125eeb1121bf3c7c179a46e45c5c1d0ff1cebcaae6a"
+}

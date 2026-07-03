@@ -1,0 +1,5 @@
+{"collector_number": "sos_20", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tkmcook1/tests.py::TestInformedInkwrightBasicProperties::test_colors"}
+{"collector_number": "sos_20", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tkmcook1/tests.py::TestInformedInkwrightAbilities::test_repartee_registers_trigger"}
+{"collector_number": "sos_20", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tkmcook1/tests.py::TestInformedInkwrightAbilities::test_repartee_requires_creature_target"}
+{"collector_number": "sos_20", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tkmcook1/tests.py::TestInformedInkwrightAbilities::test_repartee_creates_token"}
+{"collector_number": "sos_20", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_tkmcook1/tests.py::TestInformedInkwrightInteractions::test_get_targets_finds_creatures"}

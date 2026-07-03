@@ -1,0 +1,7 @@
+{"collector_number": "sos_151", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cgvs0wgw/tests.py::TestHungryGraffalonBasicProperties::test_is_creature"}
+{"collector_number": "sos_151", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cgvs0wgw/tests.py::TestHungryGraffalonBasicProperties::test_colors"}
+{"collector_number": "sos_151", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cgvs0wgw/tests.py::TestHungryGraffalonBasicProperties::test_has_reach_keyword"}
+{"collector_number": "sos_151", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cgvs0wgw/tests.py::TestHungryGraffalonAbilities::test_adds_plus_counter"}
+{"collector_number": "sos_151", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cgvs0wgw/tests.py::TestHungryGraffalonEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_151", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cgvs0wgw/tests.py::TestHungryGraffalonInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_151", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cgvs0wgw/tests.py::TestHungryGraffalonInteractions::test_coexists_with_other_creatures"}

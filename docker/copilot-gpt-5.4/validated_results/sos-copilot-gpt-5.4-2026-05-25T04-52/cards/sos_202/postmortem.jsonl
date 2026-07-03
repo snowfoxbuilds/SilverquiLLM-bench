@@ -1,0 +1,3 @@
+{"collector_number": "sos_202", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8cgoyq27/tests.py::TestMindIntoMatterBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_202", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8cgoyq27/tests.py::TestMindIntoMatterBasicProperties::test_colors"}
+{"collector_number": "sos_202", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8cgoyq27/tests.py::TestMindIntoMatterAbilities::test_on_resolve_draws_x_cards"}

@@ -1,0 +1,3 @@
+{"collector_number": "sos_26", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_un7eb214/tests.py::TestPrimaryResearchBasicProperties::test_colors"}
+{"collector_number": "sos_26", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_un7eb214/tests.py::TestPrimaryResearchAbilities::test_draws_cards"}
+{"collector_number": "sos_26", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_un7eb214/tests.py::TestPrimaryResearchAbilities::test_returns_from_graveyard"}

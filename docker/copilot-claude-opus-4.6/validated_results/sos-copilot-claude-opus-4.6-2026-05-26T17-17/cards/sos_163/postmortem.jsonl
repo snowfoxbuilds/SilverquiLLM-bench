@@ -1,0 +1,2 @@
+{"collector_number": "sos_163", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__dynjmy_/tests.py::TestTenuredConcocterBasicProperties::test_colors"}
+{"collector_number": "sos_163", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__dynjmy_/tests.py::TestTenuredConcocterAbilities::test_has_infusion"}

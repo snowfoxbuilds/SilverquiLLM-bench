@@ -1,0 +1,7 @@
+{"collector_number": "sos_114", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fr2hpk8d/tests.py::TestExpressiveFiredancerBasicProperties::test_is_creature"}
+{"collector_number": "sos_114", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fr2hpk8d/tests.py::TestExpressiveFiredancerBasicProperties::test_colors"}
+{"collector_number": "sos_114", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fr2hpk8d/tests.py::TestExpressiveFiredancerAbilities::test_has_opus"}
+{"collector_number": "sos_114", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fr2hpk8d/tests.py::TestExpressiveFiredancerAbilities::test_opus_trigger_implemented"}
+{"collector_number": "sos_114", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fr2hpk8d/tests.py::TestExpressiveFiredancerEdgeCases::test_opus_no_trigger_without_spell"}
+{"collector_number": "sos_114", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fr2hpk8d/tests.py::TestExpressiveFiredancerInteractions::test_counters_survive_end_of_turn"}
+{"collector_number": "sos_114", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fr2hpk8d/tests.py::TestExpressiveFiredancerInteractions::test_combat_with_opponent"}

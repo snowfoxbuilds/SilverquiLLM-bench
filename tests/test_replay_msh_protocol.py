@@ -5,11 +5,9 @@ PROTOCOL_ERROR divergence classification.
 
 from __future__ import annotations
 
-import sys
-
 import pytest
 
-from silverquillm.replay.cli import _select_benchmark_engine
+from silverquillm.replay.cli import _resolve_workspace
 from silverquillm.replay.validation import DivergenceType, classify_step_exception
 
 
@@ -65,14 +63,9 @@ class TestBenchmarkEngineSelection:
         import click
 
         with pytest.raises(click.ClickException):
-            _select_benchmark_engine("does_not_exist")
+            _resolve_workspace("does_not_exist", None)
 
-    def test_msh_benchmark_adds_workspace_to_path(self):
-        saved = list(sys.path)
-        try:
-            _select_benchmark_engine("msh")
-            assert any(
-                p.endswith("benchmarks/msh/workspace") for p in sys.path
-            )
-        finally:
-            sys.path[:] = saved
+    def test_msh_benchmark_resolves_workspace(self):
+        ws = _resolve_workspace("msh", None)
+        assert ws is not None
+        assert str(ws).endswith("benchmarks/msh/workspace")

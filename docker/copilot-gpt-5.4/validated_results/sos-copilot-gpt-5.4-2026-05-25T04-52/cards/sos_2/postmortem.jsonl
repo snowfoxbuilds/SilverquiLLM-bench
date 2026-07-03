@@ -1,0 +1,11 @@
+{"collector_number": "sos_2", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ddczgil4/tests.py::TestRancorousArchaicBasicProperties::test_is_creature"}
+{"collector_number": "sos_2", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ddczgil4/tests.py::TestRancorousArchaicBasicProperties::test_colorless"}
+{"collector_number": "sos_2", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ddczgil4/tests.py::TestRancorousArchaicAbilities::test_has_reach"}
+{"collector_number": "sos_2", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ddczgil4/tests.py::TestRancorousArchaicAbilities::test_has_converge"}
+{"collector_number": "sos_2", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ddczgil4/tests.py::TestRancorousArchaicAbilities::test_has_trample"}
+{"collector_number": "sos_2", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ddczgil4/tests.py::TestRancorousArchaicAbilities::test_etb_adds_counters"}
+{"collector_number": "sos_2", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ddczgil4/tests.py::TestRancorousArchaicAbilities::test_converge_adds_counters"}
+{"collector_number": "sos_2", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ddczgil4/tests.py::TestRancorousArchaicEdgeCases::test_converge_zero_colors_no_bonus"}
+{"collector_number": "sos_2", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ddczgil4/tests.py::TestRancorousArchaicEdgeCases::test_converge_five_colors_maximum"}
+{"collector_number": "sos_2", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ddczgil4/tests.py::TestRancorousArchaicInteractions::test_counters_survive_end_of_turn"}
+{"collector_number": "sos_2", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ddczgil4/tests.py::TestRancorousArchaicInteractions::test_combat_with_opponent"}

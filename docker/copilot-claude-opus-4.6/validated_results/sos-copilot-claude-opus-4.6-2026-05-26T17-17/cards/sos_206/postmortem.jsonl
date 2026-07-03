@@ -1,0 +1,3 @@
+{"collector_number": "sos_206", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x0yer5xc/tests.py::TestNitaForumConciliatorBasicProperties::test_colors"}
+{"collector_number": "sos_206", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x0yer5xc/tests.py::TestNitaForumConciliatorInteractions::test_exile_from_graveyard_interaction"}
+{"collector_number": "sos_206", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_x0yer5xc/tests.py::TestNitaForumConciliatorInteractions::test_counters_survive_end_of_turn"}

@@ -1,0 +1,2 @@
+{"collector_number": "sos_59", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f5138cqj/tests.py::TestMatterbendingMageBasicProperties::test_colors"}
+{"collector_number": "sos_59", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_f5138cqj/tests.py::TestMatterbendingMageAbilities::test_bounces_target"}

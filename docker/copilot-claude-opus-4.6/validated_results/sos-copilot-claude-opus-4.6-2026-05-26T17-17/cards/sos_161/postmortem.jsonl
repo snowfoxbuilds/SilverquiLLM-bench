@@ -1,0 +1,5 @@
+{"collector_number": "sos_161", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_foe74yuc/tests.py::TestSnarlSongBasicProperties::test_colors"}
+{"collector_number": "sos_161", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_foe74yuc/tests.py::TestSnarlSongAbilities::test_has_converge"}
+{"collector_number": "sos_161", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_foe74yuc/tests.py::TestSnarlSongAbilities::test_converge_adds_counters"}
+{"collector_number": "sos_161", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_foe74yuc/tests.py::TestSnarlSongEdgeCases::test_converge_five_colors_maximum"}
+{"collector_number": "sos_161", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_foe74yuc/tests.py::TestSnarlSongInteractions::test_spell_to_graveyard_after_resolution"}

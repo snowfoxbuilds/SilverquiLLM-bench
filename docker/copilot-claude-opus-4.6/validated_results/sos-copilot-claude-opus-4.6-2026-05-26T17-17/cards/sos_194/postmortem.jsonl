@@ -1,0 +1,2 @@
+{"collector_number": "sos_194", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ikdjn9bd/tests.py::TestHardenedAcademicBasicProperties::test_colors"}
+{"collector_number": "sos_194", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ikdjn9bd/tests.py::TestHardenedAcademicInteractions::test_counters_survive_end_of_turn"}

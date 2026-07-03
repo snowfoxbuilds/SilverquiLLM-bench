@@ -1,0 +1,4 @@
+{"collector_number": "sos_29", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_75aotydk/tests.py::TestRehearsedDebaterBasicProperties::test_colors"}
+{"collector_number": "sos_29", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_75aotydk/tests.py::TestRehearsedDebaterAbilities::test_repartee_produces_effect"}
+{"collector_number": "sos_29", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_75aotydk/tests.py::TestRehearsedDebaterAbilities::test_pump_effect"}
+{"collector_number": "sos_29", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_75aotydk/tests.py::TestRehearsedDebaterInteractions::test_get_targets_finds_creatures"}

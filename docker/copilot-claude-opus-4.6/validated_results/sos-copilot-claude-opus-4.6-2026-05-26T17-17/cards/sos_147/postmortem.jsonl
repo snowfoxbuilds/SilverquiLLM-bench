@@ -1,0 +1,2 @@
+{"collector_number": "sos_147", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_aj86_cn7/tests.py::TestEnvironmentalScientistBasicProperties::test_colors"}
+{"collector_number": "sos_147", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_aj86_cn7/tests.py::TestEnvironmentalScientistAbilities::test_etb_searches_library"}

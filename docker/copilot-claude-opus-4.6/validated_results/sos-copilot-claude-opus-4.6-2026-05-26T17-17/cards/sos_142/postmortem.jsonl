@@ -1,0 +1,2 @@
+{"collector_number": "sos_142", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zt3q82la/tests.py::TestChelonianTackleBasicProperties::test_colors"}
+{"collector_number": "sos_142", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_zt3q82la/tests.py::TestChelonianTackleInteractions::test_get_targets_finds_own_creatures"}

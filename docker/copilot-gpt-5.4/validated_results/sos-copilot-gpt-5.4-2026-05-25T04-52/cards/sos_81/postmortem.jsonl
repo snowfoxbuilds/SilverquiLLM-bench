@@ -1,0 +1,6 @@
+{"collector_number": "sos_81", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_lmzek2vh/tests.py::TestEndOfTheHuntBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_81", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_lmzek2vh/tests.py::TestEndOfTheHuntBasicProperties::test_colors"}
+{"collector_number": "sos_81", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_lmzek2vh/tests.py::TestEndOfTheHuntAbilities::test_on_resolve_changes_state"}
+{"collector_number": "sos_81", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_lmzek2vh/tests.py::TestEndOfTheHuntEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_81", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_lmzek2vh/tests.py::TestEndOfTheHuntInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_81", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_lmzek2vh/tests.py::TestEndOfTheHuntInteractions::test_does_not_affect_non_targets"}

@@ -1,0 +1,3 @@
+{"collector_number": "sos_137", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_y6bvxy6e/tests.py::TestZealousLorecasterBasicProperties::test_colors"}
+{"collector_number": "sos_137", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_y6bvxy6e/tests.py::TestZealousLorecasterAbilities::test_returns_from_graveyard"}
+{"collector_number": "sos_137", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_y6bvxy6e/tests.py::TestZealousLorecasterInteractions::test_get_targets_finds_creatures"}

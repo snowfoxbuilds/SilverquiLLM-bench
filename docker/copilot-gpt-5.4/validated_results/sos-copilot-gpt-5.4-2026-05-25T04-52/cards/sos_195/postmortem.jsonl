@@ -1,0 +1,7 @@
+{"collector_number": "sos_195", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_drfdp09o/tests.py::TestImperiousInkmageBasicProperties::test_is_creature"}
+{"collector_number": "sos_195", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_drfdp09o/tests.py::TestImperiousInkmageBasicProperties::test_colors"}
+{"collector_number": "sos_195", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_drfdp09o/tests.py::TestImperiousInkmageBasicProperties::test_has_vigilance_keyword"}
+{"collector_number": "sos_195", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_drfdp09o/tests.py::TestImperiousInkmageAbilities::test_surveil_effect"}
+{"collector_number": "sos_195", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_drfdp09o/tests.py::TestImperiousInkmageEdgeCases::test_zone_transition_graveyard"}
+{"collector_number": "sos_195", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_drfdp09o/tests.py::TestImperiousInkmageInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_195", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_drfdp09o/tests.py::TestImperiousInkmageInteractions::test_coexists_with_other_creatures"}

@@ -1,0 +1,8 @@
+{"collector_number": "sos_240", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_i0ra82b4/tests.py::TestVibrantOutburstBasicProperties::test_is_instant"}
+{"collector_number": "sos_240", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_i0ra82b4/tests.py::TestVibrantOutburstBasicProperties::test_card_types"}
+{"collector_number": "sos_240", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_i0ra82b4/tests.py::TestVibrantOutburstBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_240", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_i0ra82b4/tests.py::TestVibrantOutburstBasicProperties::test_colors"}
+{"collector_number": "sos_240", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_i0ra82b4/tests.py::TestVibrantOutburstAbilities::test_deals_damage"}
+{"collector_number": "sos_240", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_i0ra82b4/tests.py::TestVibrantOutburstEdgeCases::test_spell_resolution_on_empty_board"}
+{"collector_number": "sos_240", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_i0ra82b4/tests.py::TestVibrantOutburstInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_240", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_i0ra82b4/tests.py::TestVibrantOutburstInteractions::test_does_not_affect_non_targets"}

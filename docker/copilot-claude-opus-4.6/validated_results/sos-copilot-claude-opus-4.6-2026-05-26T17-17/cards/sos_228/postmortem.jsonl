@@ -1,0 +1,2 @@
+{"collector_number": "sos_228", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_upu1z5xu/tests.py::TestSocialSnubBasicProperties::test_colors"}
+{"collector_number": "sos_228", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_upu1z5xu/tests.py::TestSocialSnubInteractions::test_does_not_affect_non_targets"}

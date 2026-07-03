@@ -1,0 +1,4 @@
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__3y1wqo8/tests.py::TestSilverquillTheDisputantBasicProperties::test_colors"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__3y1wqo8/tests.py::TestSilverquillTheDisputantAbilities::test_on_resolve_changes_state"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__3y1wqo8/tests.py::TestSilverquillTheDisputantEdgeCases::test_power_targeting_restriction"}
+{"collector_number": "sos_226", "type": "error", "message": "FAILED ../../../../tmp/eval_sos__3y1wqo8/tests.py::TestSilverquillTheDisputantInteractions::test_get_targets_finds_creatures"}

@@ -1,0 +1,20 @@
+{
+  "name": "Rune-Sealed Wall",
+  "mana_cost": "{2}{U}",
+  "type_line": "Artifact Creature — Wall",
+  "oracle_text": "Defender\n{T}: Surveil 1. (Look at the top card of your library. You may put it into your graveyard.)",
+  "power": "0",
+  "toughness": "6",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Surveil",
+    "Defender"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "49",
+  "complexity_tier": "medium"
+}

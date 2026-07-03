@@ -1,0 +1,2 @@
+{"collector_number": "sos_116", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xf5xtvy3/tests.py::TestGarrisonExcavatorBasicProperties::test_colors"}
+{"collector_number": "sos_116", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_xf5xtvy3/tests.py::TestGarrisonExcavatorAbilities::test_creates_token"}

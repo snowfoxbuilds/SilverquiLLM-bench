@@ -1,0 +1,2 @@
+{"collector_number": "sos_232", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_624t_2am/tests.py::TestStadiumTidalmageBasicProperties::test_colors"}
+{"collector_number": "sos_232", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_624t_2am/tests.py::TestStadiumTidalmageAbilities::test_etb_draw_trigger"}

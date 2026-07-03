@@ -1,0 +1,4 @@
+{"collector_number": "sos_205", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qgfmzj2j/tests.py::TestMomentOfReckoningBasicProperties::test_colors"}
+{"collector_number": "sos_205", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qgfmzj2j/tests.py::TestMomentOfReckoningAbilities::test_resolution_removes_creatures"}
+{"collector_number": "sos_205", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qgfmzj2j/tests.py::TestMomentOfReckoningEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_205", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_qgfmzj2j/tests.py::TestMomentOfReckoningInteractions::test_spell_to_graveyard_after_resolution"}

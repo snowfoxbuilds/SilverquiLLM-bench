@@ -1,0 +1,9 @@
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c41t436a/tests.py::TestEmeritusOfTruceSwordsToPlowsharesBasicProperties::test_is_creature"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c41t436a/tests.py::TestEmeritusOfTruceSwordsToPlowsharesBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c41t436a/tests.py::TestEmeritusOfTruceSwordsToPlowsharesBasicProperties::test_colors"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c41t436a/tests.py::TestEmeritusOfTruceSwordsToPlowsharesAbilities::test_has_prepared"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c41t436a/tests.py::TestEmeritusOfTruceSwordsToPlowsharesAbilities::test_etb_creates_tokens"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c41t436a/tests.py::TestEmeritusOfTruceSwordsToPlowsharesEdgeCases::test_fizzle_no_targets_creature_stays"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c41t436a/tests.py::TestEmeritusOfTruceSwordsToPlowsharesEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c41t436a/tests.py::TestEmeritusOfTruceSwordsToPlowsharesInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_13", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c41t436a/tests.py::TestEmeritusOfTruceSwordsToPlowsharesInteractions::test_tokens_appear_on_battlefield"}

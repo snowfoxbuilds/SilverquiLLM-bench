@@ -7,7 +7,6 @@ replay validation pipeline and producing summary/report output.
 from __future__ import annotations
 
 import json
-import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -16,6 +15,8 @@ import click
 
 from silverquillm.replay.executor import ReplayExecutor, load_card_id_map
 from silverquillm.replay.parser import parse_replay
+import sys
+
 from silverquillm.replay.validation import (
     Divergence,
     DivergenceType,
@@ -23,48 +24,86 @@ from silverquillm.replay.validation import (
     validate_replay,
 )
 
+# Benchmark id -> default card-set subdir under ``cards/`` whose impls back the
+# replay. MSH replays are FDN-format, so the FDN impls are what gets exercised.
+_DEFAULT_CARD_SET = {"msh": "fdn"}
 
-def _select_benchmark_engine(benchmark_id: str) -> None:
-    """Put a benchmark's workspace engine on sys.path.
 
-    Resolves ``benchmarks/<id>/config.json`` (confirming the id) and prepends
-    ``benchmarks/<id>/workspace`` to ``sys.path`` so the executor's flat
-    ``from engine.X import ...`` imports bind to that benchmark's engine. SOS
-    resolves to the frozen V1 engine (scripted player); MSH to the Player Query
-    engine (intent player) — keeping SOS replay validation unchanged.
+def _resolve_workspace(
+    benchmark_id: str | None, workspace: str | None
+) -> Path | None:
+    """Resolve which workspace the validator imports its engine and cards from.
+
+    An explicit ``--workspace`` wins (validate any candidate workspace dir, not
+    just the in-repo one); otherwise ``--benchmark`` derives
+    ``benchmarks/<id>/workspace`` after confirming ``benchmarks/<id>/config.json``.
+    Returns the workspace ``Path`` (not yet on ``sys.path``), or ``None`` when
+    neither is given.
     """
-    repo_root = Path(__file__).resolve().parents[2]
-    config_path = repo_root / "benchmarks" / benchmark_id / "config.json"
-    if not config_path.exists():
+    if workspace:
+        ws = Path(workspace).resolve()
+        if not ws.is_dir():
+            raise click.ClickException(f"No workspace dir at {ws}")
+        return ws
+    if benchmark_id:
+        repo_root = Path(__file__).resolve().parents[2]
+        config_path = repo_root / "benchmarks" / benchmark_id / "config.json"
+        if not config_path.exists():
+            raise click.ClickException(
+                f"No benchmark config at {config_path} (unknown benchmark {benchmark_id!r})"
+            )
+        config = json.loads(config_path.read_text())
+        if config.get("id") not in (benchmark_id, None):
+            raise click.ClickException(
+                f"config.json id {config.get('id')!r} != requested benchmark {benchmark_id!r}"
+            )
+        ws = repo_root / "benchmarks" / benchmark_id / "workspace"
+        if not ws.is_dir():
+            raise click.ClickException(f"No workspace dir at {ws}")
+        return ws
+    return None
+
+
+def _resolve_card_set(
+    benchmark_id: str | None, card_set: str | None, workspace: Path
+) -> str | None:
+    """Resolve the card-set subdir whose impls populate the registry.
+
+    Explicit ``--card-set`` wins; otherwise default by benchmark (MSH → ``fdn``).
+    A ``None`` result means "no registry" — cards become generic placeholders,
+    preserving the frozen-SOS scripted-player path. The resolved set must exist
+    under ``<workspace>/cards/``.
+    """
+    resolved = card_set or _DEFAULT_CARD_SET.get(benchmark_id or "")
+    if resolved and not (workspace / "cards" / resolved).is_dir():
         raise click.ClickException(
-            f"No benchmark config at {config_path} (unknown benchmark {benchmark_id!r})"
+            f"No card set dir at {workspace / 'cards' / resolved}"
         )
-    config = json.loads(config_path.read_text())
-    if config.get("id") not in (benchmark_id, None):
-        raise click.ClickException(
-            f"config.json id {config.get('id')!r} != requested benchmark {benchmark_id!r}"
-        )
-    workspace = repo_root / "benchmarks" / benchmark_id / "workspace"
-    if not workspace.is_dir():
-        raise click.ClickException(f"No workspace dir at {workspace}")
-    sys.path.insert(0, str(workspace))
+    return resolved
 
 
-def _load_benchmark_registry() -> Any | None:
-    """Build a card registry from the selected workspace, if it has a loader.
+def _ensure_workspace_on_path(workspace: Path) -> None:
+    """Prepend *workspace* to sys.path so flat ``engine``/``cards`` imports bind there."""
+    ws = str(workspace)
+    if ws not in sys.path:
+        sys.path.insert(0, ws)
 
-    The FDN Base Set is the replay-validation card pool (17lands replays are
-    FDN draft games). Workspaces that provide ``cards.loader`` (MSH) get a
-    fully populated registry so the executor exercises real card
-    implementations; the frozen SOS workspace has no loader and keeps its
-    original registry-less behavior.
+
+def _load_workspace_registry(workspace: Path, card_set: str) -> Any | None:
+    """Build a card registry via the workspace's own ``cards.loader``.
+
+    The workspace owns its card pool (its tests and agent harnesses build the
+    same registry), so the CLI imports the loader from the workspace rather
+    than shipping a host-side one. Workspaces without ``cards.loader`` (the
+    frozen SOS workspace) get no registry, preserving their original
+    registry-less behavior.
     """
     try:
         from cards.loader import load_set_registry  # type: ignore[import-not-found]
     except ImportError:
         return None
     try:
-        return load_set_registry("fdn")
+        return load_set_registry(card_set)
     except Exception as exc:
         click.echo(f"Warning: card registry load failed: {exc}", err=True)
         return None
@@ -229,13 +268,31 @@ def _aggregate_reports(
     ),
 )
 @click.option(
+    "--workspace",
+    default=None,
+    type=click.Path(),
+    help=(
+        "Workspace dir to import the engine and card impls from. Overrides the "
+        "benchmark-derived path, so you can validate any candidate workspace."
+    ),
+)
+@click.option(
+    "--card-set",
+    default=None,
+    help=(
+        "Card-set subdir under <workspace>/cards/ whose implementations populate "
+        "the registry (default: 'fdn' for --benchmark msh). Without a registry, "
+        "every card is a generic placeholder and no card behaviour is validated."
+    ),
+)
+@click.option(
     "--simulate",
     is_flag=True,
     default=False,
     help=(
         "Drive gameplay through the engine (cast spells, fight combat, pay "
         "mana) and compare state before resyncing, instead of the default "
-        "observer mode that oracle-syncs state. Requires a benchmark whose "
+        "observer mode that oracle-syncs state. Requires a workspace whose "
         "engine exposes the intent-based DeterministicPlayer (msh)."
     ),
 )
@@ -246,6 +303,8 @@ def validate(
     report_path: str | None,
     stop_on_divergence: bool,
     benchmark: str | None,
+    workspace: str | None,
+    card_set: str | None,
     simulate: bool,
 ) -> None:
     """Validate replay files against the engine.
@@ -253,14 +312,26 @@ def validate(
     REPLAY_PATH can be a single JSON replay file or a directory of replay
     JSON files.
     """
-    registry = None
-    if benchmark:
-        _select_benchmark_engine(benchmark)
-        registry = _load_benchmark_registry()
+    # Resolve the workspace (engine + card impls) and build its card registry
+    # through the workspace's own cards.loader. The registry is what makes
+    # replay validation actually exercise the card implementations: with no
+    # registry every card is a generic placeholder and nothing diverges.
+    registry: Any | None = None
+    ws = _resolve_workspace(benchmark, workspace)
+    if ws is not None:
+        _ensure_workspace_on_path(ws)  # so the executor's engine imports bind here
+        resolved_card_set = _resolve_card_set(benchmark, card_set, ws)
+        if resolved_card_set:
+            registry = _load_workspace_registry(ws, resolved_card_set)
+            if registry is not None:
+                click.echo(
+                    f"Loaded {len(registry)} {resolved_card_set} card "
+                    f"implementations from {ws}."
+                )
     if simulate and registry is None:
         raise click.ClickException(
-            "--simulate requires a --benchmark whose workspace provides "
-            "cards.loader (a populated card registry)."
+            "--simulate requires a workspace (via --benchmark or --workspace) "
+            "that provides cards.loader (a populated card registry)."
         )
     path = Path(replay_path)
     if not path.exists():
@@ -343,6 +414,8 @@ def validate(
 
     # Build aggregate summary
     summary = _aggregate_reports(reports, card_id_map)
+    if registry is not None:
+        summary["registry"] = {"registered": len(registry)}
 
     # Print summary
     click.echo(f"\n=== Validation Summary ===")

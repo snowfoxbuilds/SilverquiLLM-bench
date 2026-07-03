@@ -1,0 +1,7 @@
+{"collector_number": "sos_89", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oj5_pr25/tests.py::TestMasterfulFlourishBasicProperties::test_is_instant"}
+{"collector_number": "sos_89", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oj5_pr25/tests.py::TestMasterfulFlourishBasicProperties::test_colors"}
+{"collector_number": "sos_89", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oj5_pr25/tests.py::TestMasterfulFlourishAbilities::test_pump_effect"}
+{"collector_number": "sos_89", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oj5_pr25/tests.py::TestMasterfulFlourishAbilities::test_grants_indestructible"}
+{"collector_number": "sos_89", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oj5_pr25/tests.py::TestMasterfulFlourishEdgeCases::test_targets_only_own_permanents"}
+{"collector_number": "sos_89", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oj5_pr25/tests.py::TestMasterfulFlourishInteractions::test_get_targets_finds_own_creatures"}
+{"collector_number": "sos_89", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_oj5_pr25/tests.py::TestMasterfulFlourishInteractions::test_does_not_affect_non_targets"}

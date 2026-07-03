@@ -1,0 +1,8 @@
+{"collector_number": "sos_204", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yn5c6j3w/tests.py::TestMoltenNoteBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_204", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yn5c6j3w/tests.py::TestMoltenNoteBasicProperties::test_colors"}
+{"collector_number": "sos_204", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yn5c6j3w/tests.py::TestMoltenNoteAbilities::test_flashback_cost_attribute"}
+{"collector_number": "sos_204", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yn5c6j3w/tests.py::TestMoltenNoteAbilities::test_flashback_exiles_after_resolution"}
+{"collector_number": "sos_204", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yn5c6j3w/tests.py::TestMoltenNoteAbilities::test_flashback_removes_from_graveyard"}
+{"collector_number": "sos_204", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yn5c6j3w/tests.py::TestMoltenNoteEdgeCases::test_targets_only_own_permanents"}
+{"collector_number": "sos_204", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yn5c6j3w/tests.py::TestMoltenNoteInteractions::test_get_targets_finds_own_creatures"}
+{"collector_number": "sos_204", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_yn5c6j3w/tests.py::TestMoltenNoteInteractions::test_does_not_affect_non_targets"}

@@ -1,0 +1,10 @@
+{"collector_number": "sos_27", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0umcyh_p/tests.py::TestQuillBladeLaureateTwofoldIntentBasicProperties::test_is_creature"}
+{"collector_number": "sos_27", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0umcyh_p/tests.py::TestQuillBladeLaureateTwofoldIntentBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_27", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0umcyh_p/tests.py::TestQuillBladeLaureateTwofoldIntentBasicProperties::test_colors"}
+{"collector_number": "sos_27", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0umcyh_p/tests.py::TestQuillBladeLaureateTwofoldIntentAbilities::test_has_prepared"}
+{"collector_number": "sos_27", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0umcyh_p/tests.py::TestQuillBladeLaureateTwofoldIntentAbilities::test_has_double_strike"}
+{"collector_number": "sos_27", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0umcyh_p/tests.py::TestQuillBladeLaureateTwofoldIntentAbilities::test_etb_trigger_callable"}
+{"collector_number": "sos_27", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0umcyh_p/tests.py::TestQuillBladeLaureateTwofoldIntentEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_27", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0umcyh_p/tests.py::TestQuillBladeLaureateTwofoldIntentEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_27", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0umcyh_p/tests.py::TestQuillBladeLaureateTwofoldIntentInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_27", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_0umcyh_p/tests.py::TestQuillBladeLaureateTwofoldIntentInteractions::test_coexists_with_other_permanents"}

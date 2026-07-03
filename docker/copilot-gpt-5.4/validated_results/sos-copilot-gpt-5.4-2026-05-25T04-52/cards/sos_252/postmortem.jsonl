@@ -1,0 +1,9 @@
+{"collector_number": "sos_252", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7a1ug7o0/tests.py::TestStrixhavenSkycoachBasicProperties::test_is_artifact"}
+{"collector_number": "sos_252", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7a1ug7o0/tests.py::TestStrixhavenSkycoachBasicProperties::test_card_types"}
+{"collector_number": "sos_252", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7a1ug7o0/tests.py::TestStrixhavenSkycoachBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_252", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7a1ug7o0/tests.py::TestStrixhavenSkycoachBasicProperties::test_colorless"}
+{"collector_number": "sos_252", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7a1ug7o0/tests.py::TestStrixhavenSkycoachAbilities::test_has_flying"}
+{"collector_number": "sos_252", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7a1ug7o0/tests.py::TestStrixhavenSkycoachEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_252", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7a1ug7o0/tests.py::TestStrixhavenSkycoachEdgeCases::test_resolution_with_empty_board"}
+{"collector_number": "sos_252", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7a1ug7o0/tests.py::TestStrixhavenSkycoachInteractions::test_spell_to_graveyard_after_resolution"}
+{"collector_number": "sos_252", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7a1ug7o0/tests.py::TestStrixhavenSkycoachInteractions::test_coexists_with_other_permanents"}

@@ -1,0 +1,3 @@
+{"collector_number": "sos_28", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7544n09t/tests.py::TestRapierWitBasicProperties::test_colors"}
+{"collector_number": "sos_28", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7544n09t/tests.py::TestRapierWitEdgeCases::test_fizzle_spell_goes_to_graveyard"}
+{"collector_number": "sos_28", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_7544n09t/tests.py::TestRapierWitInteractions::test_spell_to_graveyard_after_resolution"}

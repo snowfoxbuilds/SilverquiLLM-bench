@@ -1,0 +1,6 @@
+{"collector_number": "sos_266", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8rjbqx4f/tests.py::TestTitansGraveBasicProperties::test_is_land"}
+{"collector_number": "sos_266", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8rjbqx4f/tests.py::TestTitansGraveBasicProperties::test_card_types"}
+{"collector_number": "sos_266", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8rjbqx4f/tests.py::TestTitansGraveBasicProperties::test_colorless"}
+{"collector_number": "sos_266", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8rjbqx4f/tests.py::TestTitansGraveEdgeCases::test_resolution_with_empty_board"}
+{"collector_number": "sos_266", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8rjbqx4f/tests.py::TestTitansGraveInteractions::test_spell_to_graveyard_after_resolution"}
+{"collector_number": "sos_266", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_8rjbqx4f/tests.py::TestTitansGraveInteractions::test_coexists_with_other_permanents"}

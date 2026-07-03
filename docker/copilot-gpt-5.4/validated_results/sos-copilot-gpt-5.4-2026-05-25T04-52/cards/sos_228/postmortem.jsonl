@@ -1,0 +1,9 @@
+{"collector_number": "sos_228", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mpdiwv9w/tests.py::TestSocialSnubBasicProperties::test_is_sorcery"}
+{"collector_number": "sos_228", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mpdiwv9w/tests.py::TestSocialSnubBasicProperties::test_card_types"}
+{"collector_number": "sos_228", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mpdiwv9w/tests.py::TestSocialSnubBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_228", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mpdiwv9w/tests.py::TestSocialSnubBasicProperties::test_colors"}
+{"collector_number": "sos_228", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mpdiwv9w/tests.py::TestSocialSnubAbilities::test_gains_life"}
+{"collector_number": "sos_228", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mpdiwv9w/tests.py::TestSocialSnubAbilities::test_causes_life_loss"}
+{"collector_number": "sos_228", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mpdiwv9w/tests.py::TestSocialSnubEdgeCases::test_may_choice_optional"}
+{"collector_number": "sos_228", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mpdiwv9w/tests.py::TestSocialSnubInteractions::test_resolution_with_board_state"}
+{"collector_number": "sos_228", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_mpdiwv9w/tests.py::TestSocialSnubInteractions::test_does_not_affect_non_targets"}

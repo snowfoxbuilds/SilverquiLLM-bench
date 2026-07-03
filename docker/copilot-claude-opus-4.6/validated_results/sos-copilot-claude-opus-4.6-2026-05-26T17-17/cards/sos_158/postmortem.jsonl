@@ -1,0 +1,2 @@
+{"collector_number": "sos_158", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_m2s_4yd7/tests.py::TestPlanarEngineeringBasicProperties::test_colors"}
+{"collector_number": "sos_158", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_m2s_4yd7/tests.py::TestPlanarEngineeringAbilities::test_on_resolve_searches_four_basic_lands"}

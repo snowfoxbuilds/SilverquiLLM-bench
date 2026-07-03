@@ -1,0 +1,3 @@
+{"collector_number": "sos_156", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c6w0w1j6/tests.py::TestOraclesRestorationBasicProperties::test_colors"}
+{"collector_number": "sos_156", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c6w0w1j6/tests.py::TestOraclesRestorationAbilities::test_pump_effect"}
+{"collector_number": "sos_156", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_c6w0w1j6/tests.py::TestOraclesRestorationEdgeCases::test_targets_only_own_permanents"}

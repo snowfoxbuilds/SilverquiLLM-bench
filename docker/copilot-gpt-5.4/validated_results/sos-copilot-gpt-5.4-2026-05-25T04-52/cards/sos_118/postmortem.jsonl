@@ -1,0 +1,6 @@
+{"collector_number": "sos_118", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fzp3cfsn/tests.py::TestHeatedArgumentBasicProperties::test_is_instant"}
+{"collector_number": "sos_118", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fzp3cfsn/tests.py::TestHeatedArgumentBasicProperties::test_colors"}
+{"collector_number": "sos_118", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fzp3cfsn/tests.py::TestHeatedArgumentAbilities::test_deals_damage"}
+{"collector_number": "sos_118", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fzp3cfsn/tests.py::TestHeatedArgumentEdgeCases::test_may_choice_optional"}
+{"collector_number": "sos_118", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fzp3cfsn/tests.py::TestHeatedArgumentInteractions::test_get_targets_finds_creatures"}
+{"collector_number": "sos_118", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_fzp3cfsn/tests.py::TestHeatedArgumentInteractions::test_does_not_affect_non_targets"}

@@ -1,0 +1,9 @@
+{"collector_number": "sos_33", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cnwrxh99/tests.py::TestSpiritcallEnthusiastScrollboostBasicProperties::test_is_creature"}
+{"collector_number": "sos_33", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cnwrxh99/tests.py::TestSpiritcallEnthusiastScrollboostBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_33", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cnwrxh99/tests.py::TestSpiritcallEnthusiastScrollboostBasicProperties::test_colors"}
+{"collector_number": "sos_33", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cnwrxh99/tests.py::TestSpiritcallEnthusiastScrollboostAbilities::test_has_prepared"}
+{"collector_number": "sos_33", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cnwrxh99/tests.py::TestSpiritcallEnthusiastScrollboostAbilities::test_etb_creates_tokens"}
+{"collector_number": "sos_33", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cnwrxh99/tests.py::TestSpiritcallEnthusiastScrollboostEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_33", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cnwrxh99/tests.py::TestSpiritcallEnthusiastScrollboostEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_33", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cnwrxh99/tests.py::TestSpiritcallEnthusiastScrollboostInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_33", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cnwrxh99/tests.py::TestSpiritcallEnthusiastScrollboostInteractions::test_tokens_appear_on_battlefield"}

@@ -1,0 +1,14 @@
+{"collector_number": "sos_238", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cb50k63l/tests.py::TestTeachersPestBasicProperties::test_is_creature"}
+{"collector_number": "sos_238", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cb50k63l/tests.py::TestTeachersPestBasicProperties::test_name"}
+{"collector_number": "sos_238", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cb50k63l/tests.py::TestTeachersPestBasicProperties::test_card_types"}
+{"collector_number": "sos_238", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cb50k63l/tests.py::TestTeachersPestBasicProperties::test_mana_cost_cmc"}
+{"collector_number": "sos_238", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cb50k63l/tests.py::TestTeachersPestBasicProperties::test_colors"}
+{"collector_number": "sos_238", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cb50k63l/tests.py::TestTeachersPestBasicProperties::test_power"}
+{"collector_number": "sos_238", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cb50k63l/tests.py::TestTeachersPestBasicProperties::test_toughness"}
+{"collector_number": "sos_238", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cb50k63l/tests.py::TestTeachersPestAbilities::test_has_menace"}
+{"collector_number": "sos_238", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cb50k63l/tests.py::TestTeachersPestAbilities::test_attack_trigger_uses_graveyard"}
+{"collector_number": "sos_238", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cb50k63l/tests.py::TestTeachersPestEdgeCases::test_instances_have_independent_state"}
+{"collector_number": "sos_238", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cb50k63l/tests.py::TestTeachersPestEdgeCases::test_mana_cost_matches_spec"}
+{"collector_number": "sos_238", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cb50k63l/tests.py::TestTeachersPestEdgeCases::test_survives_nonfatal_damage"}
+{"collector_number": "sos_238", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cb50k63l/tests.py::TestTeachersPestInteractions::test_combat_with_opponent"}
+{"collector_number": "sos_238", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_cb50k63l/tests.py::TestTeachersPestInteractions::test_coexists_with_other_permanents"}

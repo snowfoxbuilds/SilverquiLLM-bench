@@ -1,0 +1,8 @@
+{"collector_number": "sos_115", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9fikwiin/tests.py::TestFlashbackBasicProperties::test_is_instant"}
+{"collector_number": "sos_115", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9fikwiin/tests.py::TestFlashbackBasicProperties::test_colors"}
+{"collector_number": "sos_115", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9fikwiin/tests.py::TestFlashbackAbilities::test_flashback_cost_attribute"}
+{"collector_number": "sos_115", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9fikwiin/tests.py::TestFlashbackAbilities::test_flashback_exiles_after_resolution"}
+{"collector_number": "sos_115", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9fikwiin/tests.py::TestFlashbackAbilities::test_flashback_removes_from_graveyard"}
+{"collector_number": "sos_115", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9fikwiin/tests.py::TestFlashbackEdgeCases::test_may_choice_optional"}
+{"collector_number": "sos_115", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9fikwiin/tests.py::TestFlashbackInteractions::test_flashback_not_from_hand"}
+{"collector_number": "sos_115", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_9fikwiin/tests.py::TestFlashbackInteractions::test_does_not_affect_non_targets"}

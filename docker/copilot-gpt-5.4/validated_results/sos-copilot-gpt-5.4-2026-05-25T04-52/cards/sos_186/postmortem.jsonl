@@ -1,0 +1,3 @@
+{"collector_number": "sos_186", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ctqb9vdr/tests.py::TestEmbraceTheParadoxBasicProperties::test_is_instant"}
+{"collector_number": "sos_186", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ctqb9vdr/tests.py::TestEmbraceTheParadoxBasicProperties::test_colors"}
+{"collector_number": "sos_186", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_ctqb9vdr/tests.py::TestEmbraceTheParadoxAbilities::test_on_resolve_draws_cards"}

@@ -1,0 +1,17 @@
+{
+  "name": "Thrill of Possibility",
+  "mana_cost": "{1}{R}",
+  "type_line": "Instant",
+  "oracle_text": "As an additional cost to cast this spell, discard a card.\nDraw two cards.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "210",
+  "complexity_tier": "medium"
+}

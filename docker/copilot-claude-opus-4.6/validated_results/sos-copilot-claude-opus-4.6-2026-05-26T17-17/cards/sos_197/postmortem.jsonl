@@ -1,0 +1,4 @@
+{"collector_number": "sos_197", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_y0257lvy/tests.py::TestKilliansConfidenceBasicProperties::test_colors"}
+{"collector_number": "sos_197", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_y0257lvy/tests.py::TestKilliansConfidenceAbilities::test_pump_effect"}
+{"collector_number": "sos_197", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_y0257lvy/tests.py::TestKilliansConfidenceAbilities::test_returns_from_graveyard"}
+{"collector_number": "sos_197", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_y0257lvy/tests.py::TestKilliansConfidenceInteractions::test_get_targets_finds_own_creatures"}

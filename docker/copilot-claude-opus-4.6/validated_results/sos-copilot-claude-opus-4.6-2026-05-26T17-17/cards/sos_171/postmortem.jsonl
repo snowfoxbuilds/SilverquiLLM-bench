@@ -1,0 +1,2 @@
+{"collector_number": "sos_171", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s06ze8hf/tests.py::TestAbstractPaintmageBasicProperties::test_colors"}
+{"collector_number": "sos_171", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_s06ze8hf/tests.py::TestAbstractPaintmageAbilities::test_has_beginning_of_phase_trigger"}

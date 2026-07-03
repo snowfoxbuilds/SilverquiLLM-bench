@@ -1,0 +1,7 @@
+{"collector_number": "sos_84", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_eoos90ff/tests.py::TestForumNecroscribeBasicProperties::test_colors"}
+{"collector_number": "sos_84", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_eoos90ff/tests.py::TestForumNecroscribeAbilities::test_repartee_registers_trigger"}
+{"collector_number": "sos_84", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_eoos90ff/tests.py::TestForumNecroscribeAbilities::test_repartee_requires_creature_target"}
+{"collector_number": "sos_84", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_eoos90ff/tests.py::TestForumNecroscribeAbilities::test_repartee_produces_effect"}
+{"collector_number": "sos_84", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_eoos90ff/tests.py::TestForumNecroscribeAbilities::test_causes_discard"}
+{"collector_number": "sos_84", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_eoos90ff/tests.py::TestForumNecroscribeAbilities::test_returns_from_graveyard"}
+{"collector_number": "sos_84", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_eoos90ff/tests.py::TestForumNecroscribeInteractions::test_get_targets_finds_creatures"}

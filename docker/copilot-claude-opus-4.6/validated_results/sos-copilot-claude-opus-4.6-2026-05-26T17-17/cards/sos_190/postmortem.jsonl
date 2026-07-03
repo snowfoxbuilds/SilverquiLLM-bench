@@ -1,0 +1,3 @@
+{"collector_number": "sos_190", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2a_py76q/tests.py::TestFractalTenderBasicProperties::test_colors"}
+{"collector_number": "sos_190", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2a_py76q/tests.py::TestFractalTenderInteractions::test_counters_survive_end_of_turn"}
+{"collector_number": "sos_190", "type": "error", "message": "FAILED ../../../../tmp/eval_sos_2a_py76q/tests.py::TestFractalTenderInteractions::test_tokens_appear_on_battlefield"}
