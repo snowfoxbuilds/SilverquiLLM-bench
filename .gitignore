@@ -26,4 +26,4 @@ docker/*/results/
 
 aggregated_results.csv
 
-validation.json
+validation.jsonbenchmarks/*/analysis/*.json

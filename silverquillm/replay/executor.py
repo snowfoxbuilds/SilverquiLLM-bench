@@ -85,6 +85,10 @@ class StepResult:
     # mutation. Each entry becomes an ENGINE_ERROR divergence — failures are
     # recorded, never masked.
     engine_failures: list[str] = field(default_factory=list)
+    # Simulate mode: executor-side impossibilities (empty engine library on a
+    # GRE-observed draw, step-event plumbing) — REPLAY_INFRA divergences,
+    # kept out of the engine/card-bug signal.
+    infra_failures: list[str] = field(default_factory=list)
 
     @property
     def matched(self) -> bool:
@@ -626,7 +630,9 @@ class ReplayExecutor:
 
         # Honest comparison against the state the engine actually reached.
         result.mismatches.extend(self.compare_state(curr_snapshot))
-        result.success = not result.mismatches and not result.engine_failures
+        result.success = not (
+            result.mismatches or result.engine_failures or result.infra_failures
+        )
 
         # Oracle-resync to GRE truth so the next step starts clean.
         self._resync_to_snapshot(curr_snapshot)
@@ -897,7 +903,7 @@ class ReplayExecutor:
             for iid in new_iids:
                 drawn = draw_card(self.game, player)
                 if drawn is None:
-                    result.engine_failures.append(
+                    result.infra_failures.append(
                         f"draw (seat {seat}): engine library empty"
                     )
                     continue
@@ -2368,7 +2374,7 @@ class ReplayExecutor:
                 )
         except Exception as exc:
             if result is not None:
-                result.engine_failures.append(
+                result.infra_failures.append(
                     f"step event ({step}): {type(exc).__name__}: {exc}"
                 )
             else:
