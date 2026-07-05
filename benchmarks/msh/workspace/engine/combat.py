@@ -109,6 +109,8 @@ def _can_block(blocker: Any, attacker: Any) -> bool:
     Checks:
     - If the blocker is tapped it cannot block.
     - A continuous effect has set ``_cant_block`` (e.g. Pacifism).
+    - A continuous effect has set ``_cant_be_blocked`` on the attacker
+      (e.g. Rogue's Passage).
     - If the attacker has flying, the blocker must have flying or reach.
     """
     if getattr(blocker, "is_tapped", False):
@@ -116,6 +118,10 @@ def _can_block(blocker: Any, attacker: Any) -> bool:
 
     # Check for "can't block" restriction (set by continuous effects like Pacifism)
     if getattr(blocker, "_cant_block", False):
+        return False
+
+    # Check for "can't be blocked" restriction on the attacker
+    if getattr(attacker, "_cant_be_blocked", False):
         return False
 
     attacker_kw = getattr(attacker, "keywords", Keyword(0))
@@ -197,8 +203,9 @@ def _deal_damage(
     source_kw = getattr(source, "keywords", Keyword(0))
     if Keyword.LIFELINK in source_kw:
         controller = getattr(source, "controller", None)
-        if controller is not None and hasattr(controller, "life"):
-            controller.life += amount
+        if controller is not None:
+            from engine.game import gain_life
+            gain_life(game, controller, amount)
 
 
 # ---------------------------------------------------------------------------
@@ -380,7 +387,7 @@ def declare_blockers_step(game: GameState, block_assignments: Any = None) -> Non
             )
 
 
-def combat_damage_step(game: GameState) -> None:
+def combat_damage_step(game: GameState, *, sub_step: str | None = None) -> None:
     """Combat damage step: deal combat damage.
 
     Handles:
@@ -393,6 +400,11 @@ def combat_damage_step(game: GameState) -> None:
 
     Parameters:
         game: The current game state.
+        sub_step: ``None`` (default) runs the full step — a first-strike
+            pass when any combatant has first/double strike, then the
+            normal pass. ``"first_strike"`` or ``"normal"`` runs only that
+            pass, for callers that walk the two damage steps separately
+            (e.g. replay validation following the GRE step sequence).
     """
     from engine.state_based_actions import resolve_state_based_actions
 
@@ -416,13 +428,14 @@ def combat_damage_step(game: GameState) -> None:
     )
 
     # --- First strike damage sub-step ---
-    if has_first_strike_step:
+    if sub_step in (None, "first_strike") and has_first_strike_step:
         _assign_combat_damage(all_attackers, combat, game, is_first_strike=True)
         resolve_state_based_actions(game)
 
     # --- Normal damage sub-step ---
-    _assign_combat_damage(all_attackers, combat, game, is_first_strike=False)
-    resolve_state_based_actions(game)
+    if sub_step in (None, "normal"):
+        _assign_combat_damage(all_attackers, combat, game, is_first_strike=False)
+        resolve_state_based_actions(game)
 
 
 def _assign_combat_damage(

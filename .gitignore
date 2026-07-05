@@ -15,6 +15,7 @@ data/sets/*.json
 .review-venv/
 dist-review/
 data/replays/*
+!data/replays/golden/
 
 .opencode
 
@@ -27,3 +28,5 @@ docker/*/results/
 aggregated_results.csv
 
 validation.json
+
+benchmarks/*/analysis/*.json

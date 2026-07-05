@@ -171,7 +171,29 @@ def deal_damage(game: GameState, source: Any, target: Any, amount: int) -> None:
     if Keyword.LIFELINK in source_kw:
         controller = getattr(source, "controller", None)
         if controller is not None and hasattr(controller, "life"):
-            controller.life += amount
+            gain_life(game, controller, amount)
+
+
+def gain_life(game: GameState, player: Any, amount: int) -> None:
+    """Have *player* gain *amount* life.
+
+    The single life-gain entry point: adjusts the total and fires
+    :class:`GainsLifeTriggeredEvent` so "whenever you gain life" abilities
+    (Ajani's Pridemate et al.) trigger regardless of the gain's source —
+    lifelink, ETB triggers, or spell effects. Card impls should call this
+    instead of mutating ``player.life`` directly.
+
+    Parameters:
+        game: The current game state.
+        player: The player gaining life.
+        amount: The amount gained (must be > 0 to have effect).
+    """
+    if amount <= 0 or not hasattr(player, "life"):
+        return
+    player.life += amount
+    game.trigger_manager.fire_event(
+        game, GainsLifeTriggeredEvent(player=player, amount=amount)
+    )
 
 
 def destroy(game: GameState, permanent: Any) -> None:

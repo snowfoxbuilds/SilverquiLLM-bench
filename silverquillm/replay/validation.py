@@ -36,6 +36,10 @@ class DivergenceType(enum.Enum):
     # failure. Both are recorded divergences — never a crash of the run.
     QUERY_UNANSWERED = "QUERY_UNANSWERED"
     PROTOCOL_ERROR = "PROTOCOL_ERROR"
+    # Simulate mode: an executor-side impossibility (engine library empty on
+    # a GRE-observed draw, step-event plumbing failure) — replay-harness
+    # signal, kept separate from the engine/card-bug ENGINE_ERROR count.
+    REPLAY_INFRA = "REPLAY_INFRA"
 
 
 # Module-qualified names of the MSH protocol exceptions (engine/decisions.py).
@@ -226,16 +230,45 @@ class ValidatingExecutor:
                 involved_grp_ids=grp_ids,
             )
             self.divergences.append(div)
+            # Simulate mode: resync engine state to GRE truth so the failed
+            # step doesn't cascade into every later comparison.
+            if getattr(self.executor, "simulate", False):
+                try:
+                    self.executor._resync_to_snapshot(curr_snapshot)
+                except Exception:
+                    logger.exception("post-failure resync failed")
             return StepResult(
                 snapshot_id=curr_snapshot.game_state_id,
                 success=False,
             )
 
+        # Simulate mode: engine API failures are recorded divergences,
+        # never silent fallbacks. Executor-side impossibilities are
+        # recorded under REPLAY_INFRA so the ENGINE_ERROR count stays a
+        # clean engine/card-bug signal.
+        engine_failures = getattr(result, "engine_failures", [])
+        infra_failures = getattr(result, "infra_failures", [])
+        for div_type, failures in (
+            (DivergenceType.ENGINE_ERROR, engine_failures),
+            (DivergenceType.REPLAY_INFRA, infra_failures),
+        ):
+            for failure in failures:
+                self.divergences.append(Divergence(
+                    game_state_id=curr_snapshot.game_state_id,
+                    divergence_type=div_type,
+                    description=failure,
+                    action=curr_snapshot.actions[0] if curr_snapshot.actions else None,
+                    involved_grp_ids=[
+                        a.grp_id for a in curr_snapshot.actions if a.grp_id
+                    ][:1],
+                ))
+
         # Classify mismatches from the result
         if result.mismatches:
             self._classify_mismatches(result, curr_snapshot)
-        elif not has_missing:
-            # Only count as successful if no mismatches AND no missing cards
+        elif not has_missing and not engine_failures and not infra_failures:
+            # Only count as successful if no mismatches, missing cards,
+            # or engine failures
             self._successful += 1
 
         return result

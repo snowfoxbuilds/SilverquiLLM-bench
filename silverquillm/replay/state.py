@@ -114,7 +114,12 @@ _GAME_OBJECT_FIELD_MAP: dict[str, str] = {
 
 
 def _merge_game_object(existing: GameObject, diff: dict[str, Any]) -> None:
-    """Merge a sparse diff dict onto an existing GameObject in place."""
+    """Merge a sparse diff dict onto an existing GameObject in place.
+
+    No longer used by apply_diff — GRE diffs re-send complete objects
+    (protobuf default-omission), so apply_diff replaces instead. Kept for
+    callers that need field-level patching of a reconstructed object.
+    """
     for gre_key, attr in _GAME_OBJECT_FIELD_MAP.items():
         if gre_key in diff:
             setattr(existing, attr, diff[gre_key])
@@ -188,15 +193,12 @@ def apply_diff(prev: GameSnapshot, gsm: dict[str, Any]) -> GameSnapshot:
             zone.owner_seat_id = snapshot.zones[zone.zone_id].owner_seat_id
         snapshot.zones[zone.zone_id] = zone
 
-    # gameObjects — upsert by instanceId (merge onto existing for diffs)
+    # gameObjects — replace by instanceId. GRE diffs re-send the COMPLETE
+    # object with protobuf default-omission (a re-sent permanent without
+    # isTapped is untapped) — sparse field-merging would keep stale values
+    # like isTapped=True forever after an untap.
     for obj in gsm.get("gameObjects", []):
-        iid = obj["instanceId"]
-        existing = snapshot.game_objects.get(iid)
-        if existing is not None:
-            # Sparse merge: only update fields present in the diff dict
-            _merge_game_object(existing, obj)
-        else:
-            snapshot.game_objects[iid] = GameObject.from_dict(obj)
+        snapshot.game_objects[obj["instanceId"]] = GameObject.from_dict(obj)
 
     # diffDeletedInstanceIds — remove
     for iid in gsm.get("diffDeletedInstanceIds", []):

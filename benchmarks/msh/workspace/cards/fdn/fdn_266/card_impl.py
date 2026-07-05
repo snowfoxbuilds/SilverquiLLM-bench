@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from engine.types import ManaType
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from cards.fdn.gainlife_taplands import make_gainlife_tapland
 
-
-class ScouredBarrens(CardImpl):
-    """TODO: Implement Scoured Barrens."""
-
-    pass
+ScouredBarrens = make_gainlife_tapland(
+    "Scoured Barrens", (ManaType.WHITE, ManaType.BLACK), 266
+)

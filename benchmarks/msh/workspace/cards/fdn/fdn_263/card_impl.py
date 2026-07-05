@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from engine.types import ManaType
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from cards.fdn.gainlife_taplands import make_gainlife_tapland
 
-
-class JungleHollow(CardImpl):
-    """TODO: Implement Jungle Hollow."""
-
-    pass
+JungleHollow = make_gainlife_tapland(
+    "Jungle Hollow", (ManaType.BLACK, ManaType.GREEN), 263
+)

@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from engine.types import ManaType
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from cards.fdn.gainlife_taplands import make_gainlife_tapland
 
-
-class DismalBackwater(CardImpl):
-    """TODO: Implement Dismal Backwater."""
-
-    pass
+DismalBackwater = make_gainlife_tapland(
+    "Dismal Backwater", (ManaType.BLUE, ManaType.BLACK), 261
+)

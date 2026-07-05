@@ -5,28 +5,42 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Land, ManaAbility
-from engine.types import ManaType
+from engine.types import ManaType, Supertype
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
 class Plains(Land):
-    """Plains — Basic Land. {T}: Add {W}."""
+    """Plains — Basic Land — Plains. ({T}: Add {W}.)
+
+    FDN collector number 272.
+    """
 
     def __init__(self, **kwargs: Any) -> None:
         kwargs.setdefault("name", "Plains")
-        kwargs.setdefault("subtypes", {"Plains"})
+        kwargs["supertypes"] = (kwargs.get("supertypes") or set()) | {Supertype.BASIC}
+        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Plains"}
         super().__init__(**kwargs)
 
     def get_mana_abilities(self) -> list[ManaAbility]:
-        def cost(game: "GameState") -> bool:
-            if self.is_tapped:
+        source = self
+
+        def _tap_cost(game: "GameState", src: Any) -> bool:
+            if getattr(src, "is_tapped", False):
                 return False
-            self.is_tapped = True
+            src.is_tapped = True
             return True
 
-        def produce(game: "GameState") -> dict[ManaType, int]:
-            return {ManaType.WHITE: 1}
+        def _add_white(game: "GameState") -> None:
+            controller = source.controller
+            if controller is not None:
+                controller.mana_pool.add(ManaType.WHITE, 1)
 
-        return [ManaAbility(cost=cost, mana_produced=produce, description="{T}: Add {W}.")]
+        return [
+            ManaAbility(
+                cost=_tap_cost,
+                mana_produced=_add_white,
+                description="{T}: Add {W}.",
+            )
+        ]

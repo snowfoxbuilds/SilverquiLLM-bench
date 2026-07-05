@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from engine.types import ManaType
 
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from cards.fdn.gainlife_taplands import make_gainlife_tapland
 
-
-class BlossomingSands(CardImpl):
-    """TODO: Implement Blossoming Sands."""
-
-    pass
+BlossomingSands = make_gainlife_tapland(
+    "Blossoming Sands", (ManaType.GREEN, ManaType.WHITE), 260
+)

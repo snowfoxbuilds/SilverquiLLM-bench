@@ -68,6 +68,22 @@ class Stack:
         """Return all stack objects ordered from top to bottom."""
         return list(reversed(self._items))
 
+    def has_source(self, source: Any) -> bool:
+        """Return ``True`` if any stack object's source is *source* (identity)."""
+        return any(obj.source is source for obj in self._items)
+
+    def pop_by_source(self, source: Any) -> StackObject | None:
+        """Remove and return the topmost stack object whose source is *source*.
+
+        Returns ``None`` if no stack object has that source. Used by replay
+        validation to resolve the pending object for a specific card when
+        GRE reports its resolution out of engine stack order.
+        """
+        for i in range(len(self._items) - 1, -1, -1):
+            if self._items[i].source is source:
+                return self._items.pop(i)
+        return None
+
 
 def copy_spell(
     game: GameState,

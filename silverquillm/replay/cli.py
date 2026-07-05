@@ -15,11 +15,8 @@ import click
 
 from silverquillm.replay.executor import ReplayExecutor, load_card_id_map
 from silverquillm.replay.parser import parse_replay
-from silverquillm.replay.registry_loader import (
-    RegistryLoadReport,
-    build_registry,
-    ensure_workspace_on_path,
-)
+import sys
+
 from silverquillm.replay.validation import (
     Divergence,
     DivergenceType,
@@ -83,6 +80,33 @@ def _resolve_card_set(
             f"No card set dir at {workspace / 'cards' / resolved}"
         )
     return resolved
+
+
+def _ensure_workspace_on_path(workspace: Path) -> None:
+    """Prepend *workspace* to sys.path so flat ``engine``/``cards`` imports bind there."""
+    ws = str(workspace)
+    if ws not in sys.path:
+        sys.path.insert(0, ws)
+
+
+def _load_workspace_registry(workspace: Path, card_set: str) -> Any | None:
+    """Build a card registry via the workspace's own ``cards.loader``.
+
+    The workspace owns its card pool (its tests and agent harnesses build the
+    same registry), so the CLI imports the loader from the workspace rather
+    than shipping a host-side one. Workspaces without ``cards.loader`` (the
+    frozen SOS workspace) get no registry, preserving their original
+    registry-less behavior.
+    """
+    try:
+        from cards.loader import load_set_registry  # type: ignore[import-not-found]
+    except ImportError:
+        return None
+    try:
+        return load_set_registry(card_set)
+    except Exception as exc:
+        click.echo(f"Warning: card registry load failed: {exc}", err=True)
+        return None
 
 
 def _make_verbose_callback():
@@ -261,6 +285,17 @@ def _aggregate_reports(
         "every card is a generic placeholder and no card behaviour is validated."
     ),
 )
+@click.option(
+    "--simulate",
+    is_flag=True,
+    default=False,
+    help=(
+        "Drive gameplay through the engine (cast spells, fight combat, pay "
+        "mana) and compare state before resyncing, instead of the default "
+        "observer mode that oracle-syncs state. Requires a workspace whose "
+        "engine exposes the intent-based DeterministicPlayer (msh)."
+    ),
+)
 def validate(
     replay_path: str,
     card_filter: str | None,
@@ -270,36 +305,34 @@ def validate(
     benchmark: str | None,
     workspace: str | None,
     card_set: str | None,
+    simulate: bool,
 ) -> None:
     """Validate replay files against the engine.
 
     REPLAY_PATH can be a single JSON replay file or a directory of replay
     JSON files.
     """
-    # Resolve the workspace (engine + card impls) and build its card registry.
-    # The registry is what makes replay validation actually exercise the card
-    # implementations: with no registry every card is a generic placeholder and
-    # nothing diverges.
+    # Resolve the workspace (engine + card impls) and build its card registry
+    # through the workspace's own cards.loader. The registry is what makes
+    # replay validation actually exercise the card implementations: with no
+    # registry every card is a generic placeholder and nothing diverges.
     registry: Any | None = None
-    registry_report: RegistryLoadReport | None = None
     ws = _resolve_workspace(benchmark, workspace)
     if ws is not None:
-        ensure_workspace_on_path(ws)  # so the executor's engine imports bind here
+        _ensure_workspace_on_path(ws)  # so the executor's engine imports bind here
         resolved_card_set = _resolve_card_set(benchmark, card_set, ws)
         if resolved_card_set:
-            registry, registry_report = build_registry(ws, resolved_card_set)
-            click.echo(
-                f"Loaded {registry_report.registered} {resolved_card_set} card "
-                f"implementations from {ws} "
-                f"({registry_report.skipped} skipped, "
-                f"{len(registry_report.collisions)} name collisions)."
-            )
-            if verbose and registry_report.skipped_import_error:
+            registry = _load_workspace_registry(ws, resolved_card_set)
+            if registry is not None:
                 click.echo(
-                    "  Unimplemented/broken (skipped): "
-                    + ", ".join(sorted(registry_report.skipped_import_error))
+                    f"Loaded {len(registry)} {resolved_card_set} card "
+                    f"implementations from {ws}."
                 )
-
+    if simulate and registry is None:
+        raise click.ClickException(
+            "--simulate requires a workspace (via --benchmark or --workspace) "
+            "that provides cards.loader (a populated card registry)."
+        )
     path = Path(replay_path)
     if not path.exists():
         raise click.ClickException(f"Path not found: {replay_path}")
@@ -356,6 +389,7 @@ def validate(
             replay=replay,
             card_id_map=card_id_map,
             registry=registry,
+            simulate=simulate,
         )
 
         report = validate_replay(
@@ -380,8 +414,8 @@ def validate(
 
     # Build aggregate summary
     summary = _aggregate_reports(reports, card_id_map)
-    if registry_report is not None:
-        summary["registry"] = registry_report.to_dict()
+    if registry is not None:
+        summary["registry"] = {"registered": len(registry)}
 
     # Print summary
     click.echo(f"\n=== Validation Summary ===")
