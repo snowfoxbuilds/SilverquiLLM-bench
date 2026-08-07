@@ -89,6 +89,10 @@ class StepResult:
     # GRE-observed draw, step-event plumbing) — REPLAY_INFRA divergences,
     # kept out of the engine/card-bug signal.
     infra_failures: list[str] = field(default_factory=list)
+    # Simulate mode: hidden-origin actions the executor synthesized for this
+    # step (_infer_hidden_origin_actions) — exposed so validation can count
+    # missing cards the parser's action stream never sees.
+    synthesized_actions: list[ReplayAction] = field(default_factory=list)
 
     @property
     def matched(self) -> bool:
@@ -611,9 +615,10 @@ class ReplayExecutor:
         # Hidden-origin plays (opponent casts, opponent land plays) have no
         # pre-move object for infer_actions to see — synthesize them from the
         # arrival side, where the card is public.
-        actions = actions + self._infer_hidden_origin_actions(
+        result.synthesized_actions = self._infer_hidden_origin_actions(
             actions, prev_snapshot, curr_snapshot
         )
+        actions = actions + result.synthesized_actions
 
         for action in actions:
             action_type = action.action_type

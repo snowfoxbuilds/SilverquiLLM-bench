@@ -297,6 +297,159 @@ class TestBlockerDeathOrder:
         assert ex._blocker_death_order([161, 162, 163], s0) == [162, 161, 163]
 
 
+class FakeRegistry:
+    """Name-membership registry for mechanism tests (create falls to shells)."""
+
+    def __init__(self, names: set[str]) -> None:
+        self._names = set(names)
+
+    def __contains__(self, name: str) -> bool:
+        return name in self._names
+
+    def create_instance(self, name: str, owner=None):
+        raise KeyError(name)  # force the executor's shell fallback
+
+
+def make_validator(snapshots, registry, card_map=None, simulate=True):
+    from silverquillm.replay.validation import ValidatingExecutor
+
+    replay = ReplayGame(seat_id=1, opponent_seat_id=2)
+    replay.snapshots = snapshots
+    card_map = card_map if card_map is not None else dict(CARD_MAP)
+    ex = ReplayExecutor(
+        replay=replay, card_id_map=card_map, registry=registry, simulate=simulate
+    )
+    ex.initialize(snapshots[0])
+    ex._sync_zones(snapshots[0])
+    return ex, ValidatingExecutor(ex, card_map)
+
+
+class TestHonestMissingCard:
+    """MISSING_CARD counts the full unimplemented surface, deduplicated
+    per (game, identity): parser actions, executor-synthesized hidden-origin
+    actions, and unmapped/unregistered battlefield arrivals (tokens)."""
+
+    HARE = 95300          # mapped to a name absent from the registry
+    TOKEN = 777777        # unmapped grpId (token-style)
+    ALT_FOREST = 888888   # unmapped grpId, resolvable as a basic land
+
+    CARD_MAP2 = dict(CARD_MAP) | {HARE: "Hare Apparent"}
+    REGISTERED = {"Plains", "Island", "Forest"}
+
+    def _missing(self, validator):
+        from silverquillm.replay.validation import DivergenceType
+
+        return [
+            d for d in validator.divergences
+            if d.divergence_type == DivergenceType.MISSING_CARD
+        ]
+
+    def _stack_snap(self, gsid: int, iid: int) -> GameSnapshot:
+        spell = GameObject(
+            instance_id=iid, grp_id=self.HARE, type="GameObjectType_Card",
+            zone_id=99, owner_seat_id=2, controller_seat_id=2,
+            card_types=["CardType_Creature"], power=2, toughness=2,
+        )
+        snap = snapshot(gsid, objects={iid: spell})
+        snap.zones[99] = Zone(
+            zone_id=99, type="ZoneType_Stack", owner_seat_id=0,
+            object_instance_ids=[iid],
+        )
+        return snap
+
+    def test_synthesized_opponent_cast_counts_once_per_game(self):
+        """An unregistered card the opponent casts twice (hidden origin,
+        invisible to parser actions) yields exactly one MISSING_CARD."""
+        snaps = [
+            snapshot(1),
+            self._stack_snap(2, 300),
+            snapshot(3),
+            self._stack_snap(4, 310),  # second cast of the same card
+            snapshot(5),
+        ]
+        _, validator = make_validator(
+            snaps, FakeRegistry(self.REGISTERED), card_map=self.CARD_MAP2
+        )
+        validator.execute_all()
+        missing = self._missing(validator)
+        assert len(missing) == 1
+        assert "Hare Apparent" in missing[0].description
+
+    def test_unmapped_battlefield_arrival_counts_once_as_grp_identity(self):
+        """A token-style battlefield arrival (grpId absent from the map) is
+        one grpId_<n> MISSING_CARD per game, across leave/re-arrive."""
+        token1 = card_obj(400, self.TOKEN, 1, BF1,
+                          card_types=["CardType_Creature"], power=1, toughness=1)
+        token1.type = "GameObjectType_Token"
+        token2 = card_obj(401, self.TOKEN, 1, BF1,
+                          card_types=["CardType_Creature"], power=1, toughness=1)
+        token2.type = "GameObjectType_Token"
+        snaps = [
+            snapshot(1),
+            snapshot(2, battlefield={1: [400]}, objects={400: token1}),
+            snapshot(3),
+            snapshot(4, battlefield={1: [401]}, objects={401: token2}),
+        ]
+        _, validator = make_validator(snaps, FakeRegistry(self.REGISTERED))
+        validator.execute_all()
+        missing = self._missing(validator)
+        assert len(missing) == 1
+        assert f"grpId_{self.TOKEN}" in missing[0].description
+
+    def test_alt_printing_basic_arrival_is_not_missing(self):
+        """An unmapped grpId that resolves to a registered basic land via
+        its subtypes (arbitrary 17lands printings) is not a missing card —
+        the executor builds the real registered card for it."""
+        land = card_obj(410, self.ALT_FOREST, 1, BF1,
+                        card_types=["CardType_Land"], subtypes=["SubType_Forest"])
+        snaps = [snapshot(1), snapshot(2, battlefield={1: [410]}, objects={410: land})]
+        _, validator = make_validator(snaps, FakeRegistry(self.REGISTERED))
+        validator.execute_all()
+        assert self._missing(validator) == []
+
+    def test_parser_visible_missing_card_still_counted(self):
+        s1 = snapshot(2)
+        s1.actions = [ReplayAction(
+            action_type="spell_cast", turn_number=1, active_player=1,
+            player_seat_id=1, card_name="Hare Apparent", grp_id=self.HARE,
+            instance_id=320,
+        )]
+        _, validator = make_validator(
+            [snapshot(1), s1], FakeRegistry(self.REGISTERED), card_map=self.CARD_MAP2
+        )
+        validator.execute_all()
+        missing = self._missing(validator)
+        assert len(missing) == 1
+        assert "Hare Apparent" in missing[0].description
+
+    def test_observer_mode_counting_is_unchanged(self):
+        """Observer mode keeps the original per-occurrence counting and
+        never counts battlefield arrivals (source (c) is simulate-gated)."""
+        token = card_obj(400, self.TOKEN, 1, BF1,
+                         card_types=["CardType_Creature"], power=1, toughness=1)
+        token.type = "GameObjectType_Token"
+
+        def acting(gsid):
+            snap = snapshot(gsid, battlefield={1: [400]}, objects={400: token})
+            snap.actions = [ReplayAction(
+                action_type="spell_cast", turn_number=1, active_player=1,
+                player_seat_id=1, card_name="Hare Apparent", grp_id=self.HARE,
+                instance_id=320 + gsid,
+            )]
+            return snap
+
+        snaps = [snapshot(1), acting(2), acting(3)]
+        _, validator = make_validator(
+            snaps, FakeRegistry(self.REGISTERED),
+            card_map=self.CARD_MAP2, simulate=False,
+        )
+        validator.execute_all()
+        missing = self._missing(validator)
+        # Two occurrences -> two divergences (no dedup), token arrival ignored.
+        assert len(missing) == 2
+        assert all("Hare Apparent" in d.description for d in missing)
+
+
 class TestOraclePTCorrections:
     """Resync P/T corrections are revocable ContinuousEffects, not stat bakes.
 
@@ -437,11 +590,17 @@ class TestGoldenGame:
             else d.divergence_type.value
             for d in report.divergences
         )
+        # MISSING_CARD is one divergence per (game, identity): the game's
+        # six Hare Apparent occurrences dedupe to one, and the unmapped
+        # token arrival grpId_94160 — invisible before the battlefield-
+        # arrival source landed — is the second. successful_comparisons
+        # rose 106 -> 108: the steps carrying Hare Apparent repeats no
+        # longer fail on an already-recorded identity.
         assert report.total_snapshots == 116
-        assert report.successful_comparisons == 106
-        assert dict(by_type) == {"MISSING_CARD": 6, "STATE_MISMATCH": 10}
+        assert report.successful_comparisons == 108
+        assert dict(by_type) == {"MISSING_CARD": 2, "STATE_MISMATCH": 10}
         assert dict(by_category) == {
-            "MISSING_CARD": 6,
+            "MISSING_CARD": 2,
             "zone_contents": 8,
             "life_total": 1,
             "tapped_state": 1,
