@@ -157,6 +157,23 @@ _ANNOTATION_LOOKAHEAD = 30
 _DEATH_LOOKAHEAD = 12
 
 
+# Module-qualified names of the MSH protocol exceptions (engine/decisions.py),
+# matched via MRO so this shared code imports no MSH-only classes — the same
+# scheme as validation.classify_step_exception. Protocol exceptions surface
+# per the engine's contract (PROTOCOL_ERROR / QUERY_UNANSWERED); only
+# non-protocol exceptions may become per-action engine_failures records.
+_PROTOCOL_EXC_QUALNAMES = {
+    ("engine.decisions", "ProtocolError"),
+    ("engine.decisions", "UnmatchedQueryError"),
+}
+
+
+def _is_protocol_exception(exc: BaseException) -> bool:
+    """True for MSH Player Query protocol exceptions (and subclasses)."""
+    mro_qualnames = {(cls.__module__, cls.__name__) for cls in type(exc).__mro__}
+    return bool(mro_qualnames & _PROTOCOL_EXC_QUALNAMES)
+
+
 class _OraclePTCorrectionSource:
     """Sentinel ``source`` for replay-owned oracle P/T corrections.
 
@@ -650,13 +667,24 @@ class ReplayExecutor:
 
         # Honest comparison against the state the engine actually reached.
         result.mismatches.extend(self.compare_state(curr_snapshot))
+
+        # Oracle-resync to GRE truth so the next step starts clean.
+        # Guarded: the resync runs card code (register_triggers on injected
+        # permanents, effect callables under apply_all) — a crash there must
+        # not discard the comparisons this step already recorded; the next
+        # step's resync re-derives from scratch and self-heals.
+        try:
+            self._resync_to_snapshot(curr_snapshot)
+        except Exception as exc:
+            if _is_protocol_exception(exc):
+                raise
+            result.engine_failures.append(
+                f"post-compare resync: {type(exc).__name__}: {exc}"
+            )
+
         result.success = not (
             result.mismatches or result.engine_failures or result.infra_failures
         )
-
-        # Oracle-resync to GRE truth so the next step starts clean.
-        self._resync_to_snapshot(curr_snapshot)
-
         return result
 
     _COMBAT_DAMAGE_STEPS = {"Step_FirstStrikeDamage", "Step_CombatDamage"}
@@ -928,7 +956,17 @@ class ReplayExecutor:
                 if iid not in prev_ids and _is_draw(iid)
             ]
             for iid in new_iids:
-                drawn = draw_card(self.game, player)
+                try:
+                    drawn = draw_card(self.game, player)
+                except Exception as exc:
+                    # Draw triggers run card code — a crash there is a
+                    # per-draw failure, not a step abort.
+                    if _is_protocol_exception(exc):
+                        raise
+                    result.engine_failures.append(
+                        f"draw_card (seat {seat}): {type(exc).__name__}: {exc}"
+                    )
+                    continue
                 if drawn is None:
                     result.infra_failures.append(
                         f"draw (seat {seat}): engine library empty"
@@ -1324,7 +1362,20 @@ class ReplayExecutor:
 
         if action.source_zone == "ZoneType_Stack" and card is not None:
             # Spell resolution — run the queued engine resolution if present.
-            if self._resolve_stack_object_for(card):
+            try:
+                resolved = self._resolve_stack_object_for(card)
+            except Exception as exc:
+                # Per-action failure, not a step abort (audit: this was the
+                # second unguarded on_resolve site). The stack object was
+                # already consumed; the resync reconciles the fallout.
+                if _is_protocol_exception(exc):
+                    raise
+                result.engine_failures.append(
+                    f"resolve {action.card_name} (stack exit): "
+                    f"{type(exc).__name__}: {exc}"
+                )
+                resolved = True
+            if resolved:
                 if action.instance_id:
                     self._engine_cards[action.instance_id] = card
                 return
@@ -1419,10 +1470,22 @@ class ReplayExecutor:
 
         source_card = self._find_ability_source(action)
         if source_card is not None:
-            self._with_target_intent(
-                action, prev_snapshot, curr_snapshot,
-                lambda: self._resolve_stack_object_for(source_card),
-            )
+            name = action.card_name or getattr(source_card, "name", "?")
+            try:
+                self._with_target_intent(
+                    action, prev_snapshot, curr_snapshot,
+                    lambda: self._resolve_stack_object_for(source_card),
+                )
+            except Exception as exc:
+                # A card crash is a per-action failure, never a step abort:
+                # the step's remaining actions, comparisons, and resync
+                # still run. Protocol exceptions surface per contract.
+                if _is_protocol_exception(exc):
+                    raise
+                result.engine_failures.append(
+                    f"ability_resolution {name} (seat {action.player_seat_id}): "
+                    f"{type(exc).__name__}: {exc}"
+                )
 
     def _stack_has_source(self, card: Any) -> bool:
         """True if the engine stack already holds an object from *card*."""
@@ -2412,9 +2475,22 @@ class ReplayExecutor:
             # engine untap step for the (already updated) active player —
             # untap, clear summoning sickness, reset land plays. Arena has
             # no visible cleanup step; the turn boundary is its moment.
+            # Guarded: cleanup's apply_all runs card effect callables, and
+            # a card crash there must not abort the step's measurement.
             from engine.turn import untap_step
-            self._replay_cleanup()
-            untap_step(self.game)
+            try:
+                self._replay_cleanup()
+                untap_step(self.game)
+            except Exception as exc:
+                if _is_protocol_exception(exc):
+                    raise
+                message = (
+                    f"turn-boundary cleanup/untap: {type(exc).__name__}: {exc}"
+                )
+                if result is not None:
+                    result.engine_failures.append(message)
+                else:
+                    logger.debug(message, exc_info=True)
 
         phase_name = self._GRE_PHASE_TO_ENGINE.get(curr_turn.phase)
         if phase_name is not None:

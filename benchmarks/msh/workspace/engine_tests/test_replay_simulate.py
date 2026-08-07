@@ -546,6 +546,83 @@ class TestOraclePTCorrections:
         assert card.base_power == 2
 
 
+class TestStepAbortGuard:
+    """A card crash during ability resolution is a per-action failure —
+    the step's remaining actions, comparisons, and resync still run.
+    Protocol exceptions keep surfacing per the engine's contract."""
+
+    def _make(self, excs):
+        """Executor with one battlefield creature per exception in *excs*,
+        each with a pending stack object whose on_resolve raises it, and an
+        ability_resolution action per creature. GRE life drops 20 -> 15 at
+        the acting snapshot so a completed comparison is observable."""
+        from engine.stack import StackObject
+
+        iids = [100 + i for i in range(len(excs))]
+        grps = [555100 + i for i in range(len(excs))]
+
+        def bf(gsid: int, life: int = 20) -> GameSnapshot:
+            objects = {
+                iid: card_obj(iid, grp, 1, BF1,
+                              card_types=["CardType_Creature"], power=2, toughness=2)
+                for iid, grp in zip(iids, grps)
+            }
+            snap = snapshot(gsid, battlefield={1: list(iids)}, objects=objects)
+            snap.players[1].life_total = life
+            return snap
+
+        s0, s1, s2 = bf(1), bf(2, life=15), bf(3, life=15)
+        s1.actions = [
+            ReplayAction(
+                action_type="ability_resolution", turn_number=1, active_player=1,
+                player_seat_id=1, card_name=f"src{i}", grp_id=grp,
+                instance_id=500 + i,
+            )
+            for i, grp in enumerate(grps)
+        ]
+        ex = make_executor([s0, s1, s2])
+        for iid, exc in zip(iids, excs):
+            card = ex._engine_cards[iid]
+
+            def boom(_game, exc=exc):
+                raise exc
+
+            ex.game.stack.push(
+                StackObject(source=card, controller=ex.players[1], on_resolve=boom)
+            )
+        return ex, s0, s1, s2
+
+    def test_card_crash_is_per_action_failure_not_step_abort(self):
+        ex, s0, s1, s2 = self._make(
+            [RuntimeError("card bug A"), RuntimeError("card bug B")]
+        )
+        result = ex.execute_step(s0, s1)
+
+        # One ENGINE_ERROR record per failing action; the step completed.
+        assert len(result.engine_failures) == 2
+        assert all("RuntimeError" in f for f in result.engine_failures)
+        # The step's comparisons still ran (GRE life change was observed).
+        assert any(m.category == "life_total" for m in result.mismatches)
+        # Subsequent steps are unaffected (resync ran).
+        follow_up = ex.execute_step(s1, s2)
+        assert follow_up.engine_failures == []
+        assert follow_up.mismatches == []
+
+    def test_protocol_error_still_surfaces(self):
+        from engine.decisions import ProtocolError
+
+        ex, s0, s1, _ = self._make([ProtocolError("boundary failure")])
+        with pytest.raises(ProtocolError):
+            ex.execute_step(s0, s1)
+
+    def test_unmatched_query_error_still_surfaces(self):
+        from engine.decisions import UnmatchedQueryError
+
+        ex, s0, s1, _ = self._make([UnmatchedQueryError("no intent matched")])
+        with pytest.raises(UnmatchedQueryError):
+            ex.execute_step(s0, s1)
+
+
 class TestStrictLoader:
     def test_full_fdn_set_loads_with_zero_failures(self):
         """Every FDN card impl imports and instantiates (strict raises on
