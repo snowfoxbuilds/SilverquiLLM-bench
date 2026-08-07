@@ -297,6 +297,102 @@ class TestBlockerDeathOrder:
         assert ex._blocker_death_order([161, 162, 163], s0) == [162, 161, 163]
 
 
+class TestOraclePTCorrections:
+    """Resync P/T corrections are revocable ContinuousEffects, not stat bakes.
+
+    A GRE-side P/T delta the engine missed is corrected by a replay-owned
+    Layer 7/7c effect that is cleared and re-derived at every resync —
+    printed stats (base_*) are never written, so a temporary GRE-side
+    effect can never leave permanent residue in the engine's cards.
+    """
+
+    CREATURE = 555000  # deliberately unmapped grpId -> Creature shell
+
+    def _bf_snap(self, gsid: int, power: int, toughness: int = 2, *,
+                 turn: int = 1, present: bool = True) -> GameSnapshot:
+        if not present:
+            return snapshot(gsid, turn=turn, battlefield={1: []})
+        obj = card_obj(
+            100, self.CREATURE, 1, BF1,
+            card_types=["CardType_Creature"], power=power, toughness=toughness,
+        )
+        return snapshot(gsid, turn=turn, battlefield={1: [100]}, objects={100: obj})
+
+    @staticmethod
+    def _pt(result: StepResult) -> list:
+        return [m for m in result.mismatches if m.category == "power_toughness"]
+
+    def test_missed_temporary_buff_diverges_once_per_transition_without_stat_drift(self):
+        """A +1/+0 buff the engine misses: one divergence when it appears,
+        none while it holds, one when it expires — and the old equal-and-
+        opposite oscillation (from baking the delta into printed stats)
+        is gone: base/modified never change, and no correction remains
+        once GRE and engine agree again."""
+        snaps = [
+            self._bf_snap(1, 2),   # engine and GRE agree: 2/2
+            self._bf_snap(2, 3),   # GRE-side buff appears (engine missed it)
+            self._bf_snap(3, 3),   # buff holds
+            self._bf_snap(4, 2),   # buff expires
+            self._bf_snap(5, 2),   # steady state
+        ]
+        ex = make_executor(snaps)
+        card = ex._engine_cards[100]
+
+        results = [
+            ex.execute_step(prev, curr) for prev, curr in zip(snaps, snaps[1:])
+        ]
+        assert [len(self._pt(r)) for r in results] == [1, 0, 1, 0]
+
+        # Printed stats never drift, and the revocable correction is gone.
+        assert (card.base_power, card.base_toughness) == (2, 2)
+        assert (card.modified_power, card.modified_toughness) == (2, 2)
+        assert ex._oracle_pt_corrections() == []
+
+    def test_correction_applies_within_the_same_step(self):
+        """The timing trap: apply_all normally runs only at turn boundaries,
+        so the resync must re-apply effects itself — the corrected value
+        has to be live immediately after the step that derived it."""
+        snaps = [self._bf_snap(1, 2), self._bf_snap(2, 3)]
+        ex = make_executor(snaps)
+        card = ex._engine_cards[100]
+
+        ex.execute_step(snaps[0], snaps[1])
+        assert card.power == 3
+        assert card.base_power == 2
+        assert len(ex._oracle_pt_corrections()) == 1
+
+    def test_correction_survives_turn_boundary_cleanup(self):
+        """cleanup_mechanical's remove_expired + apply_all reset must not
+        revert a standing correction: the next comparison stays clean."""
+        snaps = [
+            self._bf_snap(1, 2, turn=1),
+            self._bf_snap(2, 3, turn=1),   # missed static buff -> correction
+            self._bf_snap(3, 3, turn=2),   # turn boundary: cleanup + untap
+        ]
+        ex = make_executor(snaps)
+
+        first = ex.execute_step(snaps[0], snaps[1])
+        assert len(self._pt(first)) == 1
+        second = ex.execute_step(snaps[1], snaps[2])
+        assert self._pt(second) == []
+        assert ex._engine_cards[100].base_power == 2
+
+    def test_departed_creature_leaves_no_orphaned_correction(self):
+        snaps = [
+            self._bf_snap(1, 2),
+            self._bf_snap(2, 3),                 # correction registered
+            self._bf_snap(3, 0, present=False),  # creature leaves the battlefield
+        ]
+        ex = make_executor(snaps)
+        card = ex._engine_cards[100]
+
+        ex.execute_step(snaps[0], snaps[1])
+        assert len(ex._oracle_pt_corrections()) == 1
+        ex.execute_step(snaps[1], snaps[2])
+        assert ex._oracle_pt_corrections() == []
+        assert card.base_power == 2
+
+
 class TestStrictLoader:
     def test_full_fdn_set_loads_with_zero_failures(self):
         """Every FDN card impl imports and instantiates (strict raises on

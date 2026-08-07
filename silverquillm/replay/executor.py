@@ -153,6 +153,21 @@ _ANNOTATION_LOOKAHEAD = 30
 _DEATH_LOOKAHEAD = 12
 
 
+class _OraclePTCorrectionSource:
+    """Sentinel ``source`` for replay-owned oracle P/T corrections.
+
+    Never a game object: ``EffectManager.get_effects_by_source`` matches by
+    identity, so tagging corrections with this singleton lets the resync
+    find (and revoke) exactly its own effects — card-owned effects and
+    ``_remove_synced_card``'s per-card effect cleanup can never collide.
+    """
+
+    name = "ReplayOraclePTCorrection"
+
+
+_ORACLE_PT_SOURCE = _OraclePTCorrectionSource()
+
+
 # ---------------------------------------------------------------------------
 # ReplayExecutor
 # ---------------------------------------------------------------------------
@@ -1490,9 +1505,10 @@ class ReplayExecutor:
         """Oracle-correct engine state to the GRE snapshot (post-comparison).
 
         Corrects everything compare_state() checks — zone contents, life
-        totals, tapped state, and P/T (via base-stat adjustment, the lever
-        that survives EffectManager.apply_all resets) — so a divergence is
-        reported exactly once and later steps validate independently.
+        totals, tapped state, and P/T (via revocable oracle correction
+        effects; printed and modified stats are never written directly) —
+        so a divergence is reported exactly once and later steps validate
+        independently.
         """
         # GRE's stack is empty but the engine still queues stack objects:
         # resolve them now (late) — Arena auto-resolves triggers without
@@ -1527,16 +1543,117 @@ class ReplayExecutor:
             # Unconditional set: generic CardImpl shells don't define
             # is_tapped, and a hasattr guard would leave them diverged forever.
             card.is_tapped = obj.is_tapped
-            if obj.power is not None and hasattr(card, "base_power"):
-                delta = obj.power - getattr(card, "power", card.base_power)
-                if delta:
-                    card.base_power += delta
-                    card.modified_power = getattr(card, "modified_power", 0) + delta
-            if obj.toughness is not None and hasattr(card, "base_toughness"):
-                delta = obj.toughness - getattr(card, "toughness", card.base_toughness)
-                if delta:
-                    card.base_toughness += delta
-                    card.modified_toughness = getattr(card, "modified_toughness", 0) + delta
+
+        self._rederive_pt_corrections(snapshot)
+
+    # ------------------------------------------------------------------
+    # Oracle P/T corrections (simulate-mode resync)
+    # ------------------------------------------------------------------
+
+    def _oracle_pt_corrections(self) -> list[Any]:
+        """The currently registered replay-owned P/T correction effects."""
+        if self.game is None:
+            return []
+        effect_manager = getattr(self.game, "effect_manager", None)
+        if effect_manager is None:
+            return []
+        return effect_manager.get_effects_by_source(_ORACLE_PT_SOURCE)
+
+    def _rederive_pt_corrections(self, snapshot: GameSnapshot) -> None:
+        """Clear-all-then-re-derive the oracle P/T corrections.
+
+        A GRE-side P/T value the engine didn't reach is corrected with a
+        revocable ContinuousEffect at Layer 7 / sublayer 7c, tagged with
+        ``_ORACLE_PT_SOURCE``. Printed and modified stats are never written
+        here — values move only through EffectManager's reset-then-apply
+        discipline, so a temporary GRE-side effect can never leave
+        permanent residue (the old base-stat bake oscillated forever).
+
+        Every resync removes ALL prior corrections and re-derives from the
+        residual delta per battlefield creature (never incremental), which
+        also drops corrections whose object left the battlefield and gives
+        fresh corrections the newest timestamps, so ``apply_all`` applies
+        them after every real card effect. ``apply_all`` is triggered only
+        when corrections are actually in play: undoing prior corrections
+        needs one reset-then-apply pass, and newly registered corrections
+        need one so this step's subsequent state (and the next step's
+        comparison) sees corrected values — apply_all otherwise runs only
+        at turn boundaries. The no-correction fast path never resets, so
+        in-turn state that isn't effect-registered (direct stat mutations,
+        counters not mirrored to ``_base_*``) is left untouched on the
+        vast majority of steps.
+        """
+        if self.game is None:
+            return
+        effect_manager = getattr(self.game, "effect_manager", None)
+        if effect_manager is None:
+            return
+        from engine.continuous_effects import (
+            DURATION_PERMANENT,
+            ContinuousEffect,
+            Layer,
+            SubLayer,
+        )
+
+        prior = effect_manager.get_effects_by_source(_ORACLE_PT_SOURCE)
+        for effect in prior:
+            effect_manager.remove(effect)
+        canonical = False
+        if prior:
+            effect_manager.apply_all(self.game)
+            canonical = True
+
+        def residual_deltas() -> list[tuple[Any, int, int]]:
+            deltas: list[tuple[Any, int, int]] = []
+            for obj in snapshot.get_zone_objects("ZoneType_Battlefield"):
+                card = self._engine_cards.get(obj.instance_id)
+                if (
+                    card is None
+                    or not hasattr(card, "modified_power")
+                    or not hasattr(card, "modified_toughness")
+                ):
+                    continue
+                delta_p = obj.power - card.power if obj.power is not None else 0
+                delta_t = (
+                    obj.toughness - card.toughness
+                    if obj.toughness is not None else 0
+                )
+                if delta_p or delta_t:
+                    deltas.append((card, delta_p, delta_t))
+            return deltas
+
+        deltas = residual_deltas()
+        if not deltas:
+            return
+        if not canonical:
+            # Corrections stack onto the reset-then-apply state, so the
+            # residuals must be measured against it, not against live
+            # state that may carry unregistered in-turn mutations.
+            effect_manager.apply_all(self.game)
+            deltas = residual_deltas()
+        for card, delta_p, delta_t in deltas:
+            effect_manager.add(ContinuousEffect(
+                source=_ORACLE_PT_SOURCE,
+                layer=Layer.POWER_TOUGHNESS,
+                sublayer=SubLayer.MODIFY_PT,
+                duration=DURATION_PERMANENT,
+                apply=self._make_pt_correction(card, delta_p, delta_t),
+            ))
+        if deltas:
+            effect_manager.apply_all(self.game)
+
+    def _make_pt_correction(self, card: Any, delta_p: int, delta_t: int) -> Any:
+        """Build the apply callable for one oracle P/T correction."""
+        def _apply(game: Any) -> None:
+            # Battlefield-only: a correction outliving its object (cleared
+            # at the next resync anyway) must not mutate off-battlefield
+            # cards, whose stats apply_all's reset never restores.
+            for player in game.players:
+                if game.get_battlefield(player).contains(card):
+                    card.modified_power += delta_p
+                    card.modified_toughness += delta_t
+                    return
+        return _apply
 
     def execute_all(self) -> list[StepResult]:
         """Execute all snapshot transitions in the replay.
