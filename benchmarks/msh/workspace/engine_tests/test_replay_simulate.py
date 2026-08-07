@@ -623,6 +623,416 @@ class TestStepAbortGuard:
             ex.execute_step(s0, s1)
 
 
+# ---------------------------------------------------------------------------
+# Guard-lifecycle tests
+#
+# Each of the five card-code surfaces the simulate executor drives is guarded
+# so a non-protocol crash becomes an ENGINE_ERROR record instead of aborting
+# the step. But recording the error is not the whole story — the invariant is
+# that a transition is *measured only from fully restored GRE truth*. So every
+# test below also proves what happens to the NEXT transition: it is either
+# based on fully restored state (the resync healed the crash) or explicitly
+# suppressed as unmeasurable (the resync could not, so no comparison is
+# emitted from dirty state). Protocol exceptions from every surface propagate.
+# ---------------------------------------------------------------------------
+
+
+def _add_broken_effect(ex, exc, counter):
+    """Register a continuous effect whose ``apply`` counts its calls and then
+    raises *exc*, so the next ``apply_all`` (resync P/T re-derivation or
+    turn-boundary cleanup) crashes. The counter proves the failing path is not
+    re-triggered once the effect layer is latched broken."""
+    from engine.continuous_effects import (
+        DURATION_PERMANENT,
+        ContinuousEffect,
+        Layer,
+        SubLayer,
+    )
+
+    class _BrokenSource:
+        name = "BrokenEffectSource"
+
+    def _apply(_game):
+        counter[0] += 1
+        raise exc
+
+    ex.game.effect_manager.add(ContinuousEffect(
+        source=_BrokenSource(),
+        layer=Layer.POWER_TOUGHNESS,
+        sublayer=SubLayer.MODIFY_PT,
+        duration=DURATION_PERMANENT,
+        apply=_apply,
+    ))
+
+
+class TestResyncTriggerRegistrationGuard:
+    """Surface 4: register_triggers on an oracle-injected battlefield permanent.
+
+    A crash there is guarded per card, so the zone sync still completes: the
+    compared surfaces (contents, tapped, P/T) are fully restored and only the
+    card's own triggers go unregistered. The next transition is therefore
+    measured from fully restored state, not suppressed.
+    """
+
+    CREATURE = 557000  # unmapped grpId -> Creature shell
+
+    def _bf(self, gsid, *, present=True):
+        if not present:
+            return snapshot(gsid, battlefield={1: []})
+        obj = card_obj(
+            101, self.CREATURE, 1, BF1,
+            card_types=["CardType_Creature"], power=2, toughness=2,
+        )
+        return snapshot(gsid, battlefield={1: [101]}, objects={101: obj})
+
+    def _arm(self, ex, exc):
+        """Make the creature injected during resync crash in register_triggers."""
+        orig = ex._create_card_from_object
+
+        def patched(obj, owner):
+            card = orig(obj, owner)
+            if getattr(obj, "grp_id", 0) == self.CREATURE:
+                def boom(_game):
+                    raise exc
+                card.register_triggers = boom
+            return card
+
+        ex._create_card_from_object = patched
+
+    def test_registration_crash_leaves_next_step_fully_restored(self):
+        snaps = [self._bf(1, present=False), self._bf(2), self._bf(3)]
+        ex = make_executor(snaps)
+        self._arm(ex, RuntimeError("register_triggers boom"))
+
+        # Step 1: the creature first appears; the resync injects it and its
+        # register_triggers crashes — recorded, but the resync still completes.
+        first = ex.execute_step(snaps[0], snaps[1])
+        assert any("register_triggers" in f for f in first.engine_failures)
+        assert ex._synced is True  # zones/life/tapped/P/T fully restored
+        assert ex._engine_cards.get(101) is not None  # creature is now tracked
+
+        # Step 2: measured from fully restored state — a clean comparison, and
+        # register_triggers is NOT re-run (the card is already injected).
+        second = ex.execute_step(snaps[1], snaps[2])
+        assert second.engine_failures == []
+        assert second.mismatches == []
+        assert ex._synced is True
+
+    def test_registration_protocol_error_propagates(self):
+        from engine.decisions import ProtocolError
+
+        snaps = [self._bf(1, present=False), self._bf(2)]
+        ex = make_executor(snaps)
+        self._arm(ex, ProtocolError("boundary failure in register_triggers"))
+        with pytest.raises(ProtocolError):
+            ex.execute_step(snaps[0], snaps[1])
+
+
+class TestResyncEffectReapplicationGuard:
+    """Surface 5: apply_all under the resync's P/T re-derivation.
+
+    A crashing card effect breaks the whole effect layer, so P/T cannot be
+    corrected — that is the one resync surface that leaves a compared value
+    dirty. The executor is marked dirty and every following transition is
+    suppressed as unmeasurable, and the recovery barrier never re-triggers the
+    crashing apply_all (proved by the call counter staying at 1).
+    """
+
+    CREATURE = 556000  # unmapped grpId -> Creature shell
+
+    def _bf(self, gsid, power, *, turn=1):
+        obj = card_obj(
+            100, self.CREATURE, 1, BF1,
+            card_types=["CardType_Creature"], power=power, toughness=2,
+        )
+        return snapshot(gsid, turn=turn, battlefield={1: [100]}, objects={100: obj})
+
+    def test_apply_all_crash_dirties_and_suppresses_following_transitions(self):
+        # GRE shows a +1/+0 the engine missed from snap2 on, so the resync has
+        # a delta to correct and calls apply_all — which crashes.
+        snaps = [self._bf(1, 2), self._bf(2, 3), self._bf(3, 3), self._bf(4, 3)]
+        ex = make_executor(snaps)
+        counter = [0]
+        _add_broken_effect(ex, RuntimeError("effect apply boom"), counter)
+
+        # Step 1 started from clean state, so it is measured: the missed buff
+        # is a genuine P/T mismatch. The end-of-step resync then crashes in
+        # apply_all, latching the effect layer broken and marking dirty.
+        first = ex.execute_step(snaps[0], snaps[1])
+        assert any(m.category == "power_toughness" for m in first.mismatches)
+        assert any("apply_all" in f for f in first.engine_failures)
+        assert ex._effects_broken is True
+        assert ex._synced is False
+        assert counter[0] == 1
+
+        # Step 2: enters dirty. Recovery to the previous snapshot cannot
+        # complete (apply_all is skipped, not re-run), so the transition is
+        # suppressed — no comparison emitted from dirty state.
+        second = ex.execute_step(snaps[1], snaps[2])
+        assert second.skipped is True
+        assert second.mismatches == []
+        assert any("unmeasurable" in f for f in second.infra_failures)
+        assert second.engine_failures == []
+        assert counter[0] == 1  # apply_all NOT re-triggered
+
+        # Step 3: repeated recovery failure — still suppressed, still no
+        # re-trigger of the failing card-code path.
+        third = ex.execute_step(snaps[2], snaps[3])
+        assert third.skipped is True
+        assert third.mismatches == []
+        assert any("unmeasurable" in f for f in third.infra_failures)
+        assert counter[0] == 1
+
+    def test_apply_all_protocol_error_propagates(self):
+        from engine.decisions import ProtocolError
+
+        snaps = [self._bf(1, 2), self._bf(2, 3)]
+        ex = make_executor(snaps)
+        _add_broken_effect(ex, ProtocolError("boundary failure in apply_all"), [0])
+        with pytest.raises(ProtocolError):
+            ex.execute_step(snaps[0], snaps[1])
+
+
+class TestTurnBoundaryCleanupSplit:
+    """Surface 3: turn-boundary cleanup vs untap, independently guarded.
+
+    cleanup_mechanical leads with apply_all (card code); untap is pure engine
+    bookkeeping. A cleanup crash must not cost us the untap, and it marks the
+    executor dirty so the next transition is suppressed rather than measured
+    from a half-cleaned state.
+    """
+
+    CREATURE = 558000  # unmapped grpId -> Creature shell
+
+    def _bf(self, gsid, *, turn):
+        obj = card_obj(
+            102, self.CREATURE, 1, BF1,
+            card_types=["CardType_Creature"], power=2, toughness=2,
+        )
+        return snapshot(
+            gsid, turn=turn, active=1,
+            battlefield={1: [102]}, objects={102: obj},
+        )
+
+    def test_cleanup_failure_does_not_skip_untap(self):
+        snaps = [self._bf(1, turn=1)]
+        ex = make_executor(snaps)
+        card = ex._engine_cards[102]
+        card.is_tapped = True
+        card.summoning_sick = True
+        ex.players[1].land_plays_remaining = 0
+        _add_broken_effect(ex, RuntimeError("cleanup apply boom"), [0])
+
+        result = StepResult(snapshot_id=2)
+        prev_turn = TurnInfo(
+            phase="Phase_Ending", step="Step_End", turn_number=1, active_player=1
+        )
+        curr_turn = TurnInfo(
+            phase="Phase_Beginning", step="Step_Upkeep", turn_number=2, active_player=1
+        )
+        ex._handle_turn_info(prev_turn, curr_turn, result)
+
+        # Cleanup crashed and was recorded, and the executor is marked dirty.
+        assert any("turn-boundary cleanup" in f for f in result.engine_failures)
+        assert ex._effects_broken is True
+        assert ex._synced is False
+        # ...but untap still ran: tapped/summoning-sickness/land-plays advanced.
+        assert card.is_tapped is False
+        assert card.summoning_sick is False
+        assert ex.players[1].land_plays_remaining == 1
+
+    def test_cleanup_failure_suppresses_the_next_transition(self):
+        snaps = [
+            self._bf(1, turn=1),
+            self._bf(2, turn=1),  # end of turn 1
+            self._bf(3, turn=2),  # turn boundary here: cleanup runs and crashes
+            self._bf(4, turn=2),
+        ]
+        ex = make_executor(snaps)
+        counter = [0]
+        _add_broken_effect(ex, RuntimeError("cleanup apply boom"), counter)
+
+        ex.execute_step(snaps[0], snaps[1])  # within turn 1, no cleanup
+        boundary = ex.execute_step(snaps[1], snaps[2])  # turn boundary
+        assert any("turn-boundary cleanup" in f for f in boundary.engine_failures)
+        assert ex._effects_broken is True
+        assert counter[0] == 1
+
+        # The transition after the cleanup crash is suppressed, not measured.
+        following = ex.execute_step(snaps[2], snaps[3])
+        assert following.skipped is True
+        assert following.mismatches == []
+        assert any("unmeasurable" in f for f in following.infra_failures)
+        assert counter[0] == 1  # cleanup's apply_all not re-triggered
+
+    def test_cleanup_protocol_error_propagates(self):
+        from engine.decisions import ProtocolError
+
+        snaps = [self._bf(1, turn=1)]
+        ex = make_executor(snaps)
+        _add_broken_effect(ex, ProtocolError("boundary failure in cleanup"), [0])
+        result = StepResult(snapshot_id=2)
+        prev_turn = TurnInfo(
+            phase="Phase_Ending", step="Step_End", turn_number=1, active_player=1
+        )
+        curr_turn = TurnInfo(
+            phase="Phase_Beginning", step="Step_Upkeep", turn_number=2, active_player=1
+        )
+        with pytest.raises(ProtocolError):
+            ex._handle_turn_info(prev_turn, curr_turn, result)
+
+
+class TestStackExitResolutionGuard:
+    """Surface 1: stack-exit on_resolve in _simulate_zone_transition.
+
+    A card crash resolving one stack object is a per-action failure: the
+    step's remaining actions still run, and the resync heals the state so the
+    next transition is measured from restored truth.
+    """
+
+    def _spell_card(self, ex, iid, name):
+        from engine.card import CardImpl
+
+        card = CardImpl(name=name, owner=ex.players[1], controller=ex.players[1])
+        ex._engine_cards[iid] = card
+        return card
+
+    def _zone_exit(self, iid, name):
+        return ReplayAction(
+            action_type="zone_transition", turn_number=1, active_player=1,
+            player_seat_id=1, card_name=name, instance_id=iid,
+            source_zone="ZoneType_Stack", dest_zone="ZoneType_Graveyard",
+        )
+
+    def test_resolution_crash_lets_later_action_run_and_next_step_is_clean(self):
+        from engine.stack import StackObject
+
+        s0, s1, s2 = snapshot(1), snapshot(2), snapshot(3)
+        s1.actions = [self._zone_exit(200, "A"), self._zone_exit(210, "B")]
+        ex = make_executor([s0, s1, s2])
+        card_a = self._spell_card(ex, 200, "A")
+        card_b = self._spell_card(ex, 210, "B")
+        ran = []
+
+        def boom_a(_game):
+            raise RuntimeError("resolve A boom")
+
+        def resolve_b(_game):
+            ran.append("B")
+
+        ex.game.stack.push(StackObject(
+            source=card_a, controller=ex.players[1], on_resolve=boom_a))
+        ex.game.stack.push(StackObject(
+            source=card_b, controller=ex.players[1], on_resolve=resolve_b))
+
+        first = ex.execute_step(s0, s1)
+        # A's stack exit crashed -> exactly one ENGINE_ERROR for it.
+        stack_exit_fails = [f for f in first.engine_failures if "stack exit" in f]
+        assert len(stack_exit_fails) == 1
+        assert "A" in stack_exit_fails[0]
+        # B still resolved despite A's crash (the later action ran).
+        assert ran == ["B"]
+        assert ex.game.stack.is_empty()
+        assert ex._synced is True
+
+        # The following transition is measured from restored state.
+        second = ex.execute_step(s1, s2)
+        assert second.engine_failures == []
+        assert second.mismatches == []
+
+    def test_resolution_protocol_error_propagates(self):
+        from engine.decisions import ProtocolError
+        from engine.stack import StackObject
+
+        s0, s1 = snapshot(1), snapshot(2)
+        s1.actions = [self._zone_exit(200, "A")]
+        ex = make_executor([s0, s1])
+        card_a = self._spell_card(ex, 200, "A")
+
+        def boom_protocol(_game):
+            raise ProtocolError("boundary failure resolving A")
+
+        ex.game.stack.push(StackObject(
+            source=card_a, controller=ex.players[1], on_resolve=boom_protocol))
+        with pytest.raises(ProtocolError):
+            ex.execute_step(s0, s1)
+
+
+class TestDrawTriggerGuard:
+    """Surface 2: a draw trigger that crashes after the library-to-hand move.
+
+    draw_card mutates zones first, then fires the draw event, so a crashing
+    draw trigger is caught after the card has already reached the hand. The
+    step still completes and the resync heals the drawn card's identity, so
+    the next transition is measured from restored state.
+    """
+
+    def _draw_snaps(self):
+        # seat 1 draws: library id 102 re-minted as hand id 130 (id_change),
+        # both hand cards carry real (registered) identities so the seat-1
+        # hand comparison is meaningful rather than hidden-shell noise.
+        h101 = card_obj(101, FOREST, 1, HAND1)
+        h130 = card_obj(130, ISLAND, 1, HAND1)
+        s0 = snapshot(1, hands={1: [101]}, libraries={1: [102, 103]},
+                      objects={101: h101})
+        s1 = snapshot(
+            2, hands={1: [101, 130]}, libraries={1: [103]},
+            objects={101: h101, 130: h130}, annotations=[id_change(911, 102, 130)],
+        )
+        s2 = snapshot(3, hands={1: [101, 130]}, libraries={1: [103]},
+                      objects={101: h101, 130: h130})
+        return s0, s1, s2
+
+    def _register_draw_trigger(self, ex, exc):
+        from engine.events import DrawsCardTriggeredEvent
+        from engine.triggers import TriggerRegistration
+
+        class _Src:
+            name = "DrawWatcher"
+
+        def boom_condition(_game, _event):
+            raise exc
+
+        ex.game.trigger_manager.register(TriggerRegistration(
+            event_type=DrawsCardTriggeredEvent,
+            condition=boom_condition,
+            effect=lambda _game: None,
+            source=_Src(),
+            controller=ex.players[1],
+        ))
+
+    def test_draw_trigger_crash_after_mutation_then_restored(self):
+        from engine.types import Zone as EZone
+
+        s0, s1, s2 = self._draw_snaps()
+        ex = make_executor([s0, s1, s2])
+        self._register_draw_trigger(ex, RuntimeError("draw trigger boom"))
+        hand_before = len(ex.players[1].zones[EZone.HAND].get_all())
+        lib_before = len(ex.players[1].zones[EZone.LIBRARY].get_all())
+
+        first = ex.execute_step(s0, s1)
+        # The draw trigger crashed and was recorded...
+        assert any("draw_card" in f for f in first.engine_failures)
+        # ...but the library-to-hand mutation already happened.
+        assert len(ex.players[1].zones[EZone.HAND].get_all()) == hand_before + 1
+        assert len(ex.players[1].zones[EZone.LIBRARY].get_all()) == lib_before - 1
+        assert ex._synced is True  # resync healed the drawn card's identity
+
+        # The following transition is measured from restored state.
+        second = ex.execute_step(s1, s2)
+        assert second.engine_failures == []
+        assert second.mismatches == []
+
+    def test_draw_trigger_protocol_error_propagates(self):
+        from engine.decisions import ProtocolError
+
+        s0, s1, _ = self._draw_snaps()
+        ex = make_executor([s0, s1])
+        self._register_draw_trigger(ex, ProtocolError("boundary failure in draw"))
+        with pytest.raises(ProtocolError):
+            ex.execute_step(s0, s1)
+
+
 class TestStrictLoader:
     def test_full_fdn_set_loads_with_zero_failures(self):
         """Every FDN card impl imports and instantiates (strict raises on

@@ -254,6 +254,24 @@ class ReplayExecutor:
         self.results: list[StepResult] = []
         self._initialized: bool = False
 
+        # Simulate-mode dirty-state tracking (recovery barrier). A transition
+        # is measurable only when it starts from fully restored GRE truth, so
+        # the resync records whether it completed:
+        #   _synced         — True while the executor is fully oracle-corrected
+        #                     to the last snapshot it resynced to; False once a
+        #                     resync could not restore a compared surface. The
+        #                     next transition must recover (or be suppressed as
+        #                     unmeasurable) before it is compared.
+        #   _effects_broken — latched once the engine's effect layer (apply_all)
+        #                     raises a non-protocol exception. Re-running it
+        #                     would only re-crash, so the resync and the
+        #                     turn-boundary cleanup skip it thereafter; P/T
+        #                     stays uncorrected and its transitions stay
+        #                     unmeasurable. This is what stops recovery from
+        #                     re-triggering the same failing card-code path.
+        self._synced: bool = True
+        self._effects_broken: bool = False
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -544,6 +562,21 @@ class ReplayExecutor:
 
         result = StepResult(snapshot_id=curr_snapshot.game_state_id)
 
+        # Recovery barrier (simulate mode): a transition is measurable only
+        # from fully restored GRE truth. If a PRIOR step's resync left the
+        # executor dirty, recover to the previous snapshot before touching
+        # anything else. This is checked here — before _handle_turn_info,
+        # whose turn-boundary cleanup can itself dirty the executor — so an
+        # in-step failure is measured (it started clean) while a carried-over
+        # dirty state is not. If recovery can't complete, the transition is
+        # unmeasurable: record REPLAY_INFRA, emit no comparison from dirty
+        # state, and resync forward so a later step can still recover.
+        if self.simulate and not self._synced:
+            if not self._resync_to_snapshot(prev_snapshot, result):
+                return self._suppress_unmeasurable(
+                    prev_snapshot, curr_snapshot, result
+                )
+
         # Detect phase/step changes
         self._handle_turn_info(
             prev_snapshot.turn_info, curr_snapshot.turn_info, result
@@ -668,23 +701,48 @@ class ReplayExecutor:
         # Honest comparison against the state the engine actually reached.
         result.mismatches.extend(self.compare_state(curr_snapshot))
 
-        # Oracle-resync to GRE truth so the next step starts clean.
-        # Guarded: the resync runs card code (register_triggers on injected
-        # permanents, effect callables under apply_all) — a crash there must
-        # not discard the comparisons this step already recorded; the next
-        # step's resync re-derives from scratch and self-heals.
-        try:
-            self._resync_to_snapshot(curr_snapshot)
-        except Exception as exc:
-            if _is_protocol_exception(exc):
-                raise
-            result.engine_failures.append(
-                f"post-compare resync: {type(exc).__name__}: {exc}"
-            )
+        # Oracle-resync to GRE truth so the next step starts clean. The resync
+        # is internally guarded and records (via _synced) whether it fully
+        # restored GRE truth — register_triggers on injected permanents and
+        # apply_all under the P/T re-derivation both run card code. A crash
+        # there does not discard the comparisons this step already recorded;
+        # it marks the executor dirty, and the recovery barrier at the top of
+        # the next step restores GRE truth or suppresses that step as
+        # unmeasurable. Protocol exceptions still propagate for classification.
+        self._resync_to_snapshot(curr_snapshot, result)
 
         result.success = not (
             result.mismatches or result.engine_failures or result.infra_failures
         )
+        return result
+
+    def _suppress_unmeasurable(
+        self,
+        prev_snapshot: GameSnapshot,
+        curr_snapshot: GameSnapshot,
+        result: StepResult,
+    ) -> StepResult:
+        """Handle a transition that can't be measured from restored GRE truth.
+
+        Reached only from the recovery barrier, when a recovery resync to the
+        previous snapshot could not complete. The engine state is dirty, so
+        emitting a state comparison would report residue from the earlier
+        failed recovery, not this transition — record a REPLAY_INFRA failure
+        instead and emit no mismatches. A forward resync to the current
+        snapshot is still attempted so a later step has a fresh chance to
+        recover (self-heal); if the effect layer is broken it is skipped
+        rather than re-triggered.
+        """
+        result.action_type = "unmeasurable"
+        result.skipped = True
+        result.skip_reason = "recovery incomplete (dirty state)"
+        result.infra_failures.append(
+            "unmeasurable transition: executor not resynced to GRE snapshot "
+            f"{prev_snapshot.game_state_id} (recovery incomplete); comparison "
+            "suppressed"
+        )
+        self._resync_to_snapshot(curr_snapshot, result)
+        result.success = False
         return result
 
     _COMBAT_DAMAGE_STEPS = {"Step_FirstStrikeDamage", "Step_CombatDamage"}
@@ -1569,7 +1627,9 @@ class ReplayExecutor:
         finally:
             player.end_intent(intent_name)
 
-    def _resync_to_snapshot(self, snapshot: GameSnapshot) -> None:
+    def _resync_to_snapshot(
+        self, snapshot: GameSnapshot, result: StepResult | None = None
+    ) -> bool:
         """Oracle-correct engine state to the GRE snapshot (post-comparison).
 
         Corrects everything compare_state() checks — zone contents, life
@@ -1577,27 +1637,27 @@ class ReplayExecutor:
         effects; printed and modified stats are never written directly) —
         so a divergence is reported exactly once and later steps validate
         independently.
+
+        Returns True when GRE truth was fully restored, False when a card-code
+        surface left a compared value uncorrected (only the P/T re-derivation's
+        apply_all can — zone/life/tapped are pure, and trigger registration is
+        guarded so it never aborts the zone sync). The executor's ``_synced``
+        flag mirrors the return value: it is set False on entry and True only
+        on full completion, so any early exit (a propagating protocol
+        exception) leaves the executor marked dirty for the recovery barrier.
+        Non-protocol card failures are recorded on ``result``; protocol
+        exceptions propagate for classification.
         """
+        # Assume dirty until every compared surface is restored.
+        self._synced = False
+
         # GRE's stack is empty but the engine still queues stack objects:
         # resolve them now (late) — Arena auto-resolves triggers without
         # distinct stack steps, so pending effects must land before sync.
         if self.game is not None:
-            gre_stack_empty = not any(
-                zone.object_instance_ids
-                for zone in snapshot.zones.values()
-                if zone.type == "ZoneType_Stack"
-            )
-            if gre_stack_empty:
-                guard = 0
-                while not self.game.stack.is_empty() and guard < 50:
-                    guard += 1
-                    stack_obj = self.game.stack.pop()
-                    try:
-                        stack_obj.on_resolve(self.game)
-                    except Exception:
-                        logger.debug("late stack resolution failed", exc_info=True)
+            self._flush_pending_stack(snapshot)
 
-        self._sync_zones(snapshot)
+        self._sync_zones(snapshot, result)
 
         for seat_id, snap_player in snapshot.players.items():
             player = self.players.get(seat_id)
@@ -1612,7 +1672,35 @@ class ReplayExecutor:
             # is_tapped, and a hasattr guard would leave them diverged forever.
             card.is_tapped = obj.is_tapped
 
-        self._rederive_pt_corrections(snapshot)
+        pt_restored = self._rederive_pt_corrections(snapshot, result)
+        self._synced = pt_restored
+        return pt_restored
+
+    def _flush_pending_stack(self, snapshot: GameSnapshot) -> None:
+        """Resolve engine stack objects GRE has already auto-resolved.
+
+        Whatever a late resolution fails to do is reconciled by the zone/life/
+        tapped sync that follows (which overwrites those surfaces to GRE
+        truth), so a non-protocol crash here is non-fatal and does not mark
+        the executor dirty. Protocol exceptions propagate for classification.
+        """
+        gre_stack_empty = not any(
+            zone.object_instance_ids
+            for zone in snapshot.zones.values()
+            if zone.type == "ZoneType_Stack"
+        )
+        if not gre_stack_empty:
+            return
+        guard = 0
+        while not self.game.stack.is_empty() and guard < 50:
+            guard += 1
+            stack_obj = self.game.stack.pop()
+            try:
+                stack_obj.on_resolve(self.game)
+            except Exception as exc:
+                if _is_protocol_exception(exc):
+                    raise
+                logger.debug("late stack resolution failed", exc_info=True)
 
     # ------------------------------------------------------------------
     # Oracle P/T corrections (simulate-mode resync)
@@ -1627,7 +1715,9 @@ class ReplayExecutor:
             return []
         return effect_manager.get_effects_by_source(_ORACLE_PT_SOURCE)
 
-    def _rederive_pt_corrections(self, snapshot: GameSnapshot) -> None:
+    def _rederive_pt_corrections(
+        self, snapshot: GameSnapshot, result: StepResult | None = None
+    ) -> bool:
         """Clear-all-then-re-derive the oracle P/T corrections.
 
         A GRE-side P/T value the engine didn't reach is corrected with a
@@ -1650,12 +1740,23 @@ class ReplayExecutor:
         in-turn state that isn't effect-registered (direct stat mutations,
         counters not mirrored to ``_base_*``) is left untouched on the
         vast majority of steps.
+
+        Returns True when the P/T surface was fully re-derived, False when the
+        effect layer (``apply_all``) has crashed and correction is impossible
+        — that is the only resync surface that leaves a compared value dirty.
         """
         if self.game is None:
-            return
+            return True
         effect_manager = getattr(self.game, "effect_manager", None)
         if effect_manager is None:
-            return
+            return True
+        if self._effects_broken:
+            # The effect layer already crashed this game; apply_all would only
+            # re-crash. Skip it entirely — P/T stays uncorrected, so this
+            # surface is dirty and the transition is unmeasurable. Reporting
+            # False (rather than re-running the failing path) is what keeps
+            # the recovery barrier from re-triggering the crash indefinitely.
+            return False
         from engine.continuous_effects import (
             DURATION_PERMANENT,
             ContinuousEffect,
@@ -1668,7 +1769,8 @@ class ReplayExecutor:
             effect_manager.remove(effect)
         canonical = False
         if prior:
-            effect_manager.apply_all(self.game)
+            if not self._safe_apply_all(result):
+                return False
             canonical = True
 
         def residual_deltas() -> list[tuple[Any, int, int]]:
@@ -1692,12 +1794,13 @@ class ReplayExecutor:
 
         deltas = residual_deltas()
         if not deltas:
-            return
+            return True
         if not canonical:
             # Corrections stack onto the reset-then-apply state, so the
             # residuals must be measured against it, not against live
             # state that may carry unregistered in-turn mutations.
-            effect_manager.apply_all(self.game)
+            if not self._safe_apply_all(result):
+                return False
             deltas = residual_deltas()
         for card, delta_p, delta_t in deltas:
             effect_manager.add(ContinuousEffect(
@@ -1708,7 +1811,47 @@ class ReplayExecutor:
                 apply=self._make_pt_correction(card, delta_p, delta_t),
             ))
         if deltas:
-            effect_manager.apply_all(self.game)
+            if not self._safe_apply_all(result):
+                return False
+        return True
+
+    def _safe_apply_all(self, result: StepResult | None = None) -> bool:
+        """Run ``effect_manager.apply_all``, guarding non-protocol card crashes.
+
+        A card effect whose ``apply`` raises breaks the whole effect layer:
+        apply_all applies nothing past the failure, so every later apply_all
+        (here and in turn-boundary cleanup) would re-crash. Latch
+        ``_effects_broken`` on the first such crash so those paths skip it,
+        record an ENGINE_ERROR, and report failure. Protocol exceptions
+        propagate for classification.
+        """
+        try:
+            self.game.effect_manager.apply_all(self.game)
+            return True
+        except Exception as exc:
+            if _is_protocol_exception(exc):
+                raise
+            self._effects_broken = True
+            self._record_engine_failure(
+                result,
+                f"effect reapplication (apply_all): {type(exc).__name__}: {exc}",
+            )
+            return False
+
+    def _record_engine_failure(
+        self, result: StepResult | None, message: str
+    ) -> None:
+        """Record a non-protocol card failure as an ENGINE_ERROR, or log it.
+
+        When a StepResult is in scope the failure becomes a per-action
+        ENGINE_ERROR divergence; otherwise (e.g. a resync driven from the
+        validation exception path) it is logged, matching the prior behavior
+        of those call sites.
+        """
+        if result is not None:
+            result.engine_failures.append(message)
+        else:
+            logger.debug(message, exc_info=True)
 
     def _make_pt_correction(self, card: Any, delta_p: int, delta_t: int) -> Any:
         """Build the apply callable for one oracle P/T correction."""
@@ -2302,12 +2445,19 @@ class ReplayExecutor:
     # Zone sync (untracked card appearances)
     # ------------------------------------------------------------------
 
-    def _sync_zones(self, snapshot: GameSnapshot) -> None:
+    def _sync_zones(
+        self, snapshot: GameSnapshot, result: StepResult | None = None
+    ) -> None:
         """Sync engine zones with snapshot for cards that appeared without
         tracked ObjectIdChanged annotations (opening hands, mulligans, etc.).
 
         Compares grpId multisets per zone. Injects missing cards into the
         engine and removes excess cards. Library and Stack are skipped.
+
+        Runs card code only for oracle-injected battlefield permanents
+        (``register_triggers``/``register_replacement_effects``), and that is
+        guarded per card so a crash there never aborts the sync — the compared
+        surfaces (contents, tapped, P/T) are fully reconciled regardless.
         """
         # Library: hidden and order-dependent, inferred via draw actions.
         # Stack: transient; engine models entries differently than GRE.
@@ -2345,10 +2495,7 @@ class ReplayExecutor:
                     if self.simulate and is_battlefield:
                         # Oracle-injected permanents still participate in the
                         # simulated game — register their triggers/effects.
-                        if hasattr(card, "register_triggers"):
-                            card.register_triggers(self.game)
-                        if hasattr(card, "register_replacement_effects"):
-                            card.register_replacement_effects(self.game)
+                        self._register_injected_triggers(card, result)
                     logger.debug(
                         "_sync_zones: injected grpId=%d into %s (seat %d)",
                         grp_id, zone_type_str, seat_id,
@@ -2392,6 +2539,32 @@ class ReplayExecutor:
                     )
 
         self._rebuild_instance_map(snapshot)
+
+    def _register_injected_triggers(
+        self, card: Any, result: StepResult | None = None
+    ) -> None:
+        """Register an oracle-injected permanent's triggers/replacement effects.
+
+        Card code — a crash here (e.g. a card whose ``register_triggers`` hits
+        a ``NameError``) is a per-card failure, never a sync abort: the
+        permanent is already in its zone, so contents/tapped/P/T still
+        reconcile; only that card's own triggers go unregistered. Recorded as
+        an ENGINE_ERROR; protocol exceptions propagate for classification.
+        """
+        for method in ("register_triggers", "register_replacement_effects"):
+            fn = getattr(card, method, None)
+            if fn is None:
+                continue
+            try:
+                fn(self.game)
+            except Exception as exc:
+                if _is_protocol_exception(exc):
+                    raise
+                self._record_engine_failure(
+                    result,
+                    f"{method} {getattr(card, 'name', '?')}: "
+                    f"{type(exc).__name__}: {exc}",
+                )
 
     def _remove_synced_card(
         self, player: Any, engine_zone: Any, card: Any, is_battlefield: bool
@@ -2475,22 +2648,42 @@ class ReplayExecutor:
             # engine untap step for the (already updated) active player —
             # untap, clear summoning sickness, reset land plays. Arena has
             # no visible cleanup step; the turn boundary is its moment.
-            # Guarded: cleanup's apply_all runs card effect callables, and
-            # a card crash there must not abort the step's measurement.
+            #
+            # Cleanup and untap are guarded INDEPENDENTLY: cleanup's effect
+            # reapplication (apply_all) runs card code, but untap is pure
+            # engine bookkeeping. A cleanup crash must not cost us the untap,
+            # so a failure in one never skips the other. Protocol exceptions
+            # propagate from both.
             from engine.turn import untap_step
             try:
                 self._replay_cleanup()
+            except Exception as exc:
+                if _is_protocol_exception(exc):
+                    raise
+                self._record_engine_failure(
+                    result,
+                    f"turn-boundary cleanup: {type(exc).__name__}: {exc}",
+                )
+                # cleanup_mechanical crashes at its leading apply_all, before
+                # the deterministic damage/flag/mana resets (rule 514 steps
+                # 3-5) run. Those fields are not compared by compare_state, so
+                # they need no direct restore — but the effect layer is now
+                # broken (every later apply_all re-crashes), so latch it and
+                # mark the executor dirty: the recovery barrier restores the
+                # compared surfaces (zones, life, tapped, P/T) before the next
+                # measured transition, or suppresses it as unmeasurable.
+                self._effects_broken = True
+                self._synced = False
+            try:
                 untap_step(self.game)
             except Exception as exc:
                 if _is_protocol_exception(exc):
                     raise
-                message = (
-                    f"turn-boundary cleanup/untap: {type(exc).__name__}: {exc}"
+                self._record_engine_failure(
+                    result,
+                    f"turn-boundary untap: {type(exc).__name__}: {exc}",
                 )
-                if result is not None:
-                    result.engine_failures.append(message)
-                else:
-                    logger.debug(message, exc_info=True)
+                self._synced = False
 
         phase_name = self._GRE_PHASE_TO_ENGINE.get(curr_turn.phase)
         if phase_name is not None:
@@ -2517,7 +2710,14 @@ class ReplayExecutor:
         explicitly) and without the SBA/priority loop (deaths are
         GRE-observed events, not for the replay layer to invent at a
         boundary GRE shows none).
+
+        Skipped once the effect layer is known broken: cleanup_mechanical
+        leads with ``apply_all``, which would only re-crash. Skipping it keeps
+        the caller from re-triggering the same failing card-code path at every
+        turn boundary (the game is already unmeasurable and suppressed).
         """
+        if self._effects_broken:
+            return
         from engine.turn import cleanup_mechanical
 
         cleanup_mechanical(self.game)
