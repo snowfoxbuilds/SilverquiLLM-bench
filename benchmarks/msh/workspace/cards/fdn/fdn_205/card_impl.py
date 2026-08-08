@@ -1,63 +1,47 @@
-"""Card implementation for Wardens of the Cycle (FDN #205 slot).
-
-Demonstrates converge / mana-color tracking.  Wardens of the Cycle is a
-multicolor creature whose enter-the-battlefield ability creates a number
-of 1/1 Saproling tokens equal to the number of distinct colors of mana
-spent to cast it (converge mechanic).
-"""
+"""Card implementation for Seismic Rupture (FDN #205)."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Creature
+from engine.card import Sorcery
 from engine.types import CardType, Keyword, ManaCost
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
-class WardensOfTheCycle(Creature):
-    """Wardens of the Cycle — {3}{B}{G} — 4/4 — Treefolk.
+class SeismicRupture(Sorcery):
+    """Seismic Rupture — {2}{R} — Sorcery.
 
-    Converge — When this creature enters, create a 1/1 green Saproling
-    creature token for each color of mana spent to cast it.
+    Seismic Rupture deals 2 damage to each creature without flying.
 
-    FDN collector number 205 (reference slot for converge/mana-color tracking).
+    FDN collector number 205.
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        kwargs.setdefault("name", "Wardens of the Cycle")
-        kwargs.setdefault("mana_cost", ManaCost.parse("{3}{B}{G}"))
-        kwargs.setdefault("subtypes", {"Treefolk"})
-        kwargs.setdefault("keywords", Keyword(0))
-        kwargs.setdefault("base_power", 4)
-        kwargs.setdefault("base_toughness", 4)
+        kwargs.setdefault("name", "Seismic Rupture")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{2}{R}"))
         kwargs.setdefault(
             "rules_text",
-            "Converge — When this creature enters, create a 1/1 green "
-            "Saproling creature token for each color of mana spent to cast it.",
+            "Seismic Rupture deals 2 damage to each creature without flying.",
         )
         super().__init__(**kwargs)
-        # Tracks colors spent when cast (set externally by cast logic or tests).
-        self.colors_spent: int = 0
 
     def on_resolve(self, game: "GameState") -> None:
-        """ETB: create Saproling tokens equal to distinct colors of mana spent."""
-        from engine.game import create_token
+        """Deal 2 damage to each creature without flying.
 
-        controller = self.controller
-        if controller is None:
-            return
+        This is untargeted mass damage — every creature without flying on
+        every battlefield is hit, regardless of controller. Damage goes
+        through :func:`engine.game.deal_damage` so protection and any
+        deals-damage triggers fire correctly.
+        """
+        from engine.game import deal_damage
 
-        # Use colors_spent attribute (set during casting or by test setup).
-        count = self.colors_spent
-
-        for _ in range(count):
-            token = Creature(
-                name="Saproling",
-                subtypes={"Saproling"},
-                base_power=1,
-                base_toughness=1,
-            )
-            create_token(game, controller, token)
+        for player in game.players:
+            for obj in list(game.get_battlefield(player).get_all()):
+                if CardType.CREATURE not in getattr(obj, "card_types", set()):
+                    continue
+                if Keyword.FLYING in getattr(obj, "keywords", Keyword(0)):
+                    continue
+                deal_damage(game, self, obj, 2)

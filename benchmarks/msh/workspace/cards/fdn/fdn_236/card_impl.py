@@ -41,10 +41,14 @@ class WildwoodScourge(Creature):
         Whenever one or more +1/+1 counters are put on another non-Hydra
         creature you control, put a +1/+1 counter on this creature.
 
-        ENGINE LIMITATION: The engine does not emit a dedicated
-        ``COUNTER_ADDED`` event type yet.  We register for the closest
-        available event and also set a marker attribute so future engine
-        work can wire this up.
+        ENGINE LIMITATION: ``CounterAddedTriggeredEvent`` is declared in
+        ``engine.events`` but ``engine.game.add_counter`` does not yet fire
+        it, so this subscription is registered correctly but will not fire
+        until the engine-primitives phase wires ``add_counter`` to emit the
+        event. The registration itself is real; the trigger is dormant. (The
+        previous ``hasattr(EventType, 'COUNTER_ADDED')`` guard referenced an
+        undefined ``EventType`` name and crashed ``register_triggers`` with a
+        NameError.)
         """
         from engine.game import add_counter
         from engine.triggers import TriggerRegistration
@@ -53,7 +57,9 @@ class WildwoodScourge(Creature):
         source._counter_synergy = True
 
         def _condition(game: Any, event: dict) -> bool:
-            target = event.target or event.permanent
+            # Read only fields the declared CounterAddedTriggeredEvent carries
+            # (permanent / counter_type / amount) — there is no ``target``.
+            target = event.permanent
             if target is None or target is source:
                 return False
             if CardType.CREATURE not in getattr(target, 'card_types', set()):
@@ -70,5 +76,4 @@ class WildwoodScourge(Creature):
 
         def _effect(game: 'GameState') -> None:
             add_counter(game, source, '+1/+1', 1)
-        if hasattr(EventType, 'COUNTER_ADDED'):
-            game.trigger_manager.register(TriggerRegistration(event_type=CounterAddedTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=CounterAddedTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

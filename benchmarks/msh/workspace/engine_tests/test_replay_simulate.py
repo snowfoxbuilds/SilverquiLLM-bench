@@ -1593,11 +1593,12 @@ class TestDrawTriggerGuard:
 class TestStrictLoader:
     def test_full_fdn_set_loads_with_zero_failures(self):
         """Every FDN card impl imports and instantiates (strict raises on
-        any failure — a swallowed loader warning becomes a test failure)."""
+        any failure) AND every name is distinct (the loader hard-fails on a
+        duplicate registration). All 286 impls register with zero shadowing."""
         from cards.loader import load_set_registry
 
         registry = load_set_registry("fdn", strict=True)
-        assert len(registry.list_all()) == 284
+        assert len(registry.list_all()) == 286
 
 
 class TestGoldenGame:
@@ -1634,17 +1635,20 @@ class TestGoldenGame:
             else d.divergence_type.value
             for d in report.divergences
         )
-        # MISSING_CARD is one divergence per (game, identity): the game's
-        # six Hare Apparent occurrences dedupe to one, and the unmapped
-        # token arrival grpId_94160 — invisible before the battlefield-
-        # arrival source landed — is the second. successful_comparisons
-        # rose 106 -> 108: the steps carrying Hare Apparent repeats no
-        # longer fail on an already-recorded identity.
+        # MISSING_CARD is one divergence per (game, identity). Hare Apparent
+        # (FDN #15) is now implemented, so its occurrences no longer register
+        # as a missing card; the only remaining missing identity is the
+        # engine-minted Rabbit token arrival grpId_94160 (deferred to the
+        # token-correlation phase). successful_comparisons rose 108 -> 109:
+        # with Hare Apparent implemented, the step that used to record the
+        # missing card now completes a comparison, while its ETB minting the
+        # (identity-less) Rabbit tokens leaves the zone/life/tapped counts
+        # unchanged.
         assert report.total_snapshots == 116
-        assert report.successful_comparisons == 108
-        assert dict(by_type) == {"MISSING_CARD": 2, "STATE_MISMATCH": 10}
+        assert report.successful_comparisons == 109
+        assert dict(by_type) == {"MISSING_CARD": 1, "STATE_MISMATCH": 10}
         assert dict(by_category) == {
-            "MISSING_CARD": 2,
+            "MISSING_CARD": 1,
             "zone_contents": 8,
             "life_total": 1,
             "tapped_state": 1,

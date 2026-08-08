@@ -31,20 +31,9 @@ class BloodthirstyConqueror(Creature):
         from engine.triggers import TriggerRegistration
         source = self
 
-        def _condition(game: Any, event: dict) -> bool:
-            player = event.player
-            controller = getattr(source, 'controller', None)
-            if controller is None:
-                return False
-            return player is not controller
-
-        def _effect(game: 'GameState') -> None:
-            controller = getattr(source, 'controller', None)
-            if controller is None:
-                return
-            amount = data.get('amount', 0)
-            if amount > 0:
-                controller.life += amount
+        # (An earlier abandoned _condition/_effect pair referenced an
+        # undefined ``data`` name; only the _cond/_eff pair below is wired up,
+        # so the dead pair — a latent NameError — is removed.)
         _last_amount = [0]
 
         def _cond(game: Any, event: dict) -> bool:
