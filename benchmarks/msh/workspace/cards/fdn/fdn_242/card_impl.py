@@ -94,6 +94,8 @@ class LathrilBladeOfTheElves(Creature):
                 return
             for player in game.players:
                 if player is not ctrl:
-                    player.life -= 10
-            ctrl.life += 10
+                    from engine.game import lose_life
+                    lose_life(game, player, 10)
+            from engine.game import gain_life
+            gain_life(game, ctrl, 10)
         return [ActivatedAbility(cost=_cost, effect=_effect, description='{T}, Tap ten untapped Elves you control: Each opponent loses 10 life and you gain 10 life.')]

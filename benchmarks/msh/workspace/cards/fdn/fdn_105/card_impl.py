@@ -113,10 +113,10 @@ class FellingBlow(Sorcery):
         if not source_valid:
             return
 
-        # +1/+1 counter via plus_one_counters (not base_power mutation)
+        # +1/+1 counter via the engine primitive (persists across apply_all).
         if hasattr(source_creature, "plus_one_counters"):
-            source_creature.plus_one_counters += 1
-            source_creature._base_plus_one_counters = source_creature.plus_one_counters  # type: ignore[attr-defined]
+            from engine.game import add_counter
+            add_counter(game, source_creature, "+1/+1", 1)
 
         if target_valid:
             power = getattr(source_creature, "power", getattr(source_creature, "base_power", 0))

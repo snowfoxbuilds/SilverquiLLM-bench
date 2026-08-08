@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 from engine.card import ActivatedAbility, Creature, Enchantment
 from engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
 from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
-from engine.events import LosesLifeTriggeredEvent, SpellCastTriggeredEvent
+from engine.events import SpellCastTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
@@ -58,7 +58,7 @@ class PainfulQuandary(Enchantment):
             from engine.game import deal_damage
             for player in game.players:
                 if player is not controller:
-                    player.life -= 5
-                    game.trigger_manager.fire_event(game, LosesLifeTriggeredEvent(player=player, amount=5))
+                    from engine.game import lose_life
+                    lose_life(game, player, 5)
         controller = getattr(self, 'controller', None) or game.active_player
         game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

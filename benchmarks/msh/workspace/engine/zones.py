@@ -285,6 +285,7 @@ def move_to_zone(
     game.refs.note_zone_change(card)
 
     # --- Leaving battlefield hooks ---
+    removed_source_effects = False
     if leaving_battlefield:
         card_types = getattr(card, "card_types", set())
         is_creature = CardType.CREATURE in card_types
@@ -304,6 +305,17 @@ def move_to_zone(
         game.trigger_manager.unregister(card)
         game.replacement_manager.unregister(card)
 
+        # A permanent that leaves the battlefield stops producing its
+        # continuous effects immediately (rule 603/611) — remove every effect
+        # this card sources so a lord/anthem's buff vanishes without waiting
+        # for the next turn-boundary cleanup. Mirrors the replay executor's
+        # per-card cleanup so the executor can rely on the engine.
+        effect_manager = getattr(game, "effect_manager", None)
+        if effect_manager is not None:
+            for effect in effect_manager.get_effects_by_source(card):
+                effect_manager.remove(effect)
+                removed_source_effects = True
+
     # --- Entering battlefield hooks ---
     if entering_battlefield:
         # Fire the ENTERS_BATTLEFIELD event *before* registering the card's
@@ -321,6 +333,19 @@ def move_to_zone(
             card.register_triggers(game)
         if hasattr(card, "register_replacement_effects"):
             card.register_replacement_effects(game)
+
+    # --- Re-derive continuous effects on any battlefield change ---
+    # A lord/anthem entering mid-turn buffs the team now; a departed source's
+    # effect stops applying now — not only at the next cleanup step. apply_all
+    # is idempotent (reset-then-reapply). The fast-path skips the common
+    # no-effects case for cheap zone churn, but a removal that empties the
+    # manager still needs one reset pass to strip the departed buff.
+    if leaving_battlefield or entering_battlefield:
+        effect_manager = getattr(game, "effect_manager", None)
+        if effect_manager is not None and (
+            len(effect_manager) > 0 or removed_source_effects
+        ):
+            effect_manager.apply_all(game)
 
 
 # Destination string → Zone for replacement-effect zone redirection.

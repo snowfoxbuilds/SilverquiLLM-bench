@@ -52,6 +52,7 @@ class TatyovaBenthicDruid(Creature):
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return
-            ctrl.life += 1
+            from engine.game import gain_life
+            gain_life(game, ctrl, 1)
             draw_card(game, ctrl)
         game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

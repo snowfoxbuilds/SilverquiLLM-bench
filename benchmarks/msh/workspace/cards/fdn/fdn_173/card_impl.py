@@ -46,6 +46,8 @@ class Exsanguinate(Sorcery):
         total_lost = 0
         for player in game.players:
             if player is not controller:
-                player.life -= x
+                from engine.game import lose_life
+                lose_life(game, player, x)
                 total_lost += x
-        controller.life += total_lost
+        from engine.game import gain_life
+        gain_life(game, controller, total_lost)

@@ -41,9 +41,9 @@ class TestGnarlidColonyContinuousEffect:
         gnarlid = GnarlidColony(owner=p1, controller=p1)
         buffed = Creature(name="Beast", subtypes={"Beast"}, base_power=1, base_toughness=1)
         plain = Creature(name="Bear", subtypes={"Bear"}, base_power=2, base_toughness=2)
-        buffed.plus_one_counters = 1
-        buffed._base_plus_one_counters = 1
         set_board_state(game, 0, battlefield=[gnarlid, buffed, plain])
+        from engine.game import add_counter
+        add_counter(game, buffed, "+1/+1", 1)
 
         for eff in gnarlid.get_continuous_effects():
             game.effect_manager.add(eff)

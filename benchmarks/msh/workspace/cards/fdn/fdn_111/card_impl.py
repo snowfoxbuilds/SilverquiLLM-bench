@@ -67,7 +67,6 @@ class QuilledGreatwurm(Creature):
                 for player in game.players:
                     if game.get_battlefield(player).contains(creature):
                         add_counter(game, creature, '+1/+1', amount)
-                        creature._base_plus_one_counters = creature.plus_one_counters
                         return
             game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_condition_with_capture, effect=_captured_effect, source=source, controller=controller))
         _make_trigger(game)

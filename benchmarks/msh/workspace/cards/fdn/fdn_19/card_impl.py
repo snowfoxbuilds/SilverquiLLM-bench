@@ -82,4 +82,5 @@ class JoustThrough(Instant):
         deal_damage(game, self, target, 3)
         controller = self.controller
         if controller is not None and hasattr(controller, "life"):
-            controller.life += 1
+            from engine.game import gain_life
+            gain_life(game, controller, 1)

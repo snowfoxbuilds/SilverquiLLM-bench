@@ -62,6 +62,4 @@ class StromkirkBloodthief(Creature):
             target = choose_object(game, ctrl, vampires, 'Choose a Vampire to put a +1/+1 counter on', source_card=source)
             if target is not None:
                 add_counter(game, target, '+1/+1', 1)
-                if hasattr(target, '_base_plus_one_counters'):
-                    target._base_plus_one_counters = target.plus_one_counters
         game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

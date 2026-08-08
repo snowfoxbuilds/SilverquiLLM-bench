@@ -50,6 +50,7 @@ class BloodthirstyConqueror(Creature):
             controller = getattr(source, 'controller', None)
             if controller is None:
                 return
-            controller.life += _last_amount[0]
+            from engine.game import gain_life
+            gain_life(game, controller, _last_amount[0])
         controller = getattr(self, 'controller', None) or game.active_player
         game.trigger_manager.register(TriggerRegistration(event_type=LosesLifeTriggeredEvent, condition=_cond, effect=_eff, source=self, controller=controller))

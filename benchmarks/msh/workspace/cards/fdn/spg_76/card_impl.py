@@ -74,4 +74,5 @@ class GrimTutor(Sorcery):
         library.shuffle()
 
         # Lose 3 life
-        controller.life -= 3
+        from engine.game import lose_life
+        lose_life(game, controller, 3)

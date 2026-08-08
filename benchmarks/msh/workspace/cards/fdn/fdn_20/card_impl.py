@@ -1,37 +1,29 @@
 """Card implementation for Luminous Rebuke."""
 
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
-from engine.card import Instant, Sorcery
-from engine.continuous_effects import (
-    ContinuousEffect,
-    DURATION_END_OF_TURN,
-    Layer,
-    SubLayer,
-)
-from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+
+from engine.card import Instant
+from engine.types import CardType, ManaCost, TargetRequirement, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
-    from cards.registry import CardRegistry
 
-def _get_chosen_target(card: Any, game: Any) -> Any:
-    """Retrieve the first chosen target for a spell.
-
-    Looks for ``chosen_targets`` (set by :func:`cast_spell` during the
-    real casting pipeline) first, then falls back to the test-backdoor
-    attribute ``_resolve_target``.
-    """
+def _get_chosen_target(card: Any) -> Any:
+    """Return the first chosen target (from cast_spell) or the test backdoor."""
     chosen = getattr(card, "chosen_targets", None)
     if chosen:
         return chosen[0]
     return getattr(card, "_resolve_target", None)
 
+
 class LuminousRebuke(Instant):
-    """Luminous Rebuke — {4}{W} — Destroy target creature.
+    """Luminous Rebuke — {4}{W} — Instant.
 
     This spell costs {3} less to cast if it targets a tapped creature.
-    (Cost reduction not implemented.)
+    Destroy target creature.
 
     FDN collector number 20.
     """
@@ -46,26 +38,33 @@ class LuminousRebuke(Instant):
         )
         super().__init__(**kwargs)
 
-    def get_targets(self, game: GameState) -> list[Any]:
+    def get_targets(self, game: "GameState") -> list[Any]:
         """Target creature on the battlefield."""
-        targets: list[Any] = []
-        for player in game.players:
-            for obj in game.get_battlefield(player).get_all():
-                if CardType.CREATURE in getattr(obj, "card_types", set()):
-                    targets.append(obj)
         return [
             TargetRequirement(
-                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, "card_types", set()),
+                filter_fn=lambda obj: CardType.CREATURE
+                in getattr(obj, "card_types", set()),
                 description="target creature",
                 zone=Zone.BATTLEFIELD,
             )
         ]
 
-    def on_resolve(self, game: GameState) -> None:
+    def cost_reduction(self, game: "GameState", targets: list[Any] | None = None) -> int:
+        """Costs {3} less if it targets a tapped creature."""
+        for target in targets or ():
+            if (
+                target is not None
+                and CardType.CREATURE in getattr(target, "card_types", set())
+                and getattr(target, "is_tapped", False)
+            ):
+                return 3
+        return 0
+
+    def on_resolve(self, game: "GameState") -> None:
         """Destroy the target creature."""
         from engine.game import destroy
 
-        target = _get_chosen_target(self, game)
+        target = _get_chosen_target(self)
         if target is None:
             return
         for player in game.players:

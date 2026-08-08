@@ -74,4 +74,5 @@ class Condemn(Instant):
         if hasattr(game, 'replacement_manager'):
             game.replacement_manager.unregister(target)
         if controller is not None and toughness > 0:
-            controller.life += toughness
+            from engine.game import gain_life
+            gain_life(game, controller, toughness)

@@ -79,10 +79,10 @@ class SnakeskinVeil(Instant):
         if not still_valid:
             return
 
-        # +1/+1 counter via plus_one_counters (not base_power mutation)
+        # +1/+1 counter via the engine primitive (persists across apply_all).
         if hasattr(target, "plus_one_counters"):
-            target.plus_one_counters += 1
-            target._base_plus_one_counters = target.plus_one_counters  # type: ignore[attr-defined]
+            from engine.game import add_counter
+            add_counter(game, target, "+1/+1", 1)
 
         creature_ref = target
 

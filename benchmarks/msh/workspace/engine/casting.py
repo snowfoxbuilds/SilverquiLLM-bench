@@ -21,6 +21,7 @@ created by :func:`cast_spell`:
 
 from __future__ import annotations
 
+import inspect
 from typing import TYPE_CHECKING, Any
 
 from engine.card import CardImpl
@@ -176,26 +177,95 @@ def can_cast_at_instant_speed(card: CardImpl) -> bool:
 # Cost reduction
 # ------------------------------------------------------------------
 
-def get_cost_reduction(game: GameState, card: CardImpl, controller: Player) -> int:
-    """Return the generic mana reduction for casting *card*.
+def _call_self_reduction(
+    card: CardImpl, game: GameState, targets: list[Any] | None
+) -> int:
+    """Call ``card.cost_reduction``, passing *targets* only when the hook
+    accepts it (backward-compatible with the historical ``(self, game)``
+    signature)."""
+    fn = card.cost_reduction
+    try:
+        params = inspect.signature(fn).parameters
+        accepts_targets = "targets" in params or any(
+            p.kind == p.VAR_KEYWORD for p in params.values()
+        )
+    except (TypeError, ValueError):
+        accepts_targets = False
+    return fn(game, targets=targets) if accepts_targets else fn(game)
 
-    Queries ``card.cost_reduction(game)`` and clamps the result so that
-    the generic portion of the mana cost cannot go below 0.
 
-    This is a simplified single-card self-reduction model.  Full MTG
-    cost-reduction interactions (Trinisphere, multiple reductions from
-    different sources) are deferred.
+def _battlefield_cost_reduction(
+    game: GameState, card: CardImpl, caster: Player
+) -> int:
+    """Sum the generic reductions every battlefield permanent grants *card*.
+
+    Consults each permanent's ``spell_cost_reduction(game, spell, caster)``
+    hook (default 0), so "your instant and sorcery spells cost {1} less"
+    permanents (Archmage of Runes, Mocking Sprite) reduce other spells.
+    """
+    total = 0
+    for player in game.players:
+        for perm in game.get_battlefield(player).get_all():
+            hook = getattr(perm, "spell_cost_reduction", None)
+            if callable(hook):
+                total += max(0, int(hook(game, card, caster)))
+    return total
+
+
+def get_cost_reduction(
+    game: GameState,
+    card: CardImpl,
+    controller: Player,
+    targets: list[Any] | None = None,
+) -> int:
+    """Return the total generic mana reduction for casting *card*.
+
+    Combines the spell's own :meth:`~engine.card.CardImpl.cost_reduction`
+    (target-aware when *targets* is supplied) with the battlefield sweep in
+    :func:`_battlefield_cost_reduction`, then clamps so the generic portion of
+    the mana cost cannot go below 0 (colored pips are never reduced).
     """
     # Ensure card.controller is set so the hook can reference "you" / the
     # casting player even when the card was never explicitly assigned one.
     prev_controller = card.controller
     card.controller = controller
-    raw = card.cost_reduction(game)
+    raw = _call_self_reduction(card, game, targets)
     # Restore previous controller in case the caller doesn't want a
     # side-effect (get_cost_reduction is a query, not a mutation).
     card.controller = prev_controller
+    raw += _battlefield_cost_reduction(game, card, controller)
     generic = card.mana_cost.generic if card.mana_cost else 0
     return max(0, min(raw, generic))
+
+
+def _choose_cost(
+    game: GameState,
+    player: Player,
+    card: CardImpl,
+    normal_cost: ManaCost,
+    alternatives: list[ManaCost],
+) -> ManaCost:
+    """Ask the caster whether to pay the normal cost or an alternative.
+
+    Offered only when *alternatives* is non-empty. Index 0 is the normal cost;
+    later indices are the alternatives in order. An alternative fully replaces
+    the mana cost (rule 118.9).
+    """
+    from engine.decisions import Decision
+    from engine.queries import PlayerQuery, ask
+
+    costs = [normal_cost, *alternatives]
+    options = tuple(Decision.ability(index=i) for i in range(len(costs)))
+    query = PlayerQuery(
+        source=(_source_decision(game, card),),
+        prompt="Choose a cost to pay",
+        options=options,
+        min=1,
+        max=1,
+    )
+    answer = ask(player, query)
+    idx = dict(answer.selected[0].attrs)["index"]
+    return costs[idx]
 
 
 def _apply_cost_reduction(cost: ManaCost, reduction: int) -> ManaCost:
@@ -302,8 +372,14 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     # explicit controller assignment.
     if card.controller is None:
         card.controller = player
-    reduction = get_cost_reduction(game, card, player)
+    reduction = get_cost_reduction(game, card, player, targets=chosen_targets)
     effective_cost = _apply_cost_reduction(card.mana_cost, reduction) if reduction > 0 else card.mana_cost
+
+    # Alternative costs (rule 118.9) — the caster may pay an alternative that
+    # fully replaces the (reduced) mana cost, e.g. Blasphemous Edict's {B}.
+    alternatives = card.alternative_costs(game)
+    if alternatives:
+        effective_cost = _choose_cost(game, player, card, effective_cost, alternatives)
 
     if not player.mana_pool.can_pay(effective_cost):
         # Rollback: move card from stack zone back to hand

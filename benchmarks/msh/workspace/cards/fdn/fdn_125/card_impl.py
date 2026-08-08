@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 from engine.card import Creature
 from engine.card_queries import choose_mode
 from engine.types import ManaCost
-from engine.events import EndStepTriggeredEvent, GainsLifeTriggeredEvent
+from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
@@ -50,8 +50,9 @@ class WardensOfTheCycle(Creature):
             mode = choose_mode(game, ctrl, ['gain_life', 'draw_card'], 'Choose: gain 2 life or draw a card and lose 1 life', source_card=source)
             if mode == 'draw_card':
                 draw_card(game, ctrl)
-                ctrl.life -= 1
+                from engine.game import lose_life
+                lose_life(game, ctrl, 1)
             else:
-                ctrl.life += 2
-                game.trigger_manager.fire_event(game, GainsLifeTriggeredEvent(player=ctrl, amount=2))
+                from engine.game import gain_life
+                gain_life(game, ctrl, 2)
         game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

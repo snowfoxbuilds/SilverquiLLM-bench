@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
 from engine.types import CardType, Keyword, ManaCost
-from engine.events import EntersBattlefieldTriggeredEvent, GainsLifeTriggeredEvent
+from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
@@ -48,6 +48,6 @@ class DazzlingAngel(Creature):
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return
-            ctrl.life += 1
-            game.trigger_manager.fire_event(game, GainsLifeTriggeredEvent(player=ctrl, amount=1))
+            from engine.game import gain_life
+            gain_life(game, ctrl, 1)
         game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_etb_condition, effect=_etb_effect, source=self, controller=controller))

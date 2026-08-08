@@ -32,8 +32,6 @@ class WildwoodScourge(Creature):
         from engine.game import add_counter
         if self.x_value > 0:
             add_counter(game, self, '+1/+1', self.x_value)
-            if hasattr(self, '_base_plus_one_counters'):
-                self._base_plus_one_counters = self.plus_one_counters
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register +1/+1 counter synergy trigger.

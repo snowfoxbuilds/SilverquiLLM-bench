@@ -5,24 +5,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
-from engine.continuous_effects import (
-    ContinuousEffect,
-    DURATION_PERMANENT,
-    Layer,
-    SubLayer,
-)
 from engine.types import CardType, Keyword, ManaCost
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
-
-
-def _is_on_battlefield(game: Any, obj: Any) -> bool:
-    """Return True if *obj* is on any player's battlefield."""
-    for player in game.players:
-        if game.get_battlefield(player).contains(obj):
-            return True
-    return False
+    from engine.player import Player
 
 
 class MockingSprite(Creature):
@@ -46,30 +33,13 @@ class MockingSprite(Creature):
         )
         super().__init__(**kwargs)
 
-    def register_triggers(self, game: "GameState") -> None:
-        """Register cost reduction continuous effect."""
-        source = self
-
-        # ENGINE LIMITATION: Cost reduction for other spells is best modeled
-        # via cost_reduction() on those spells or a game-level hook. We store
-        # a flag that can be checked by the casting system.
-        source._provides_cost_reduction = True
-
-    def apply_continuous_effect(self, game: "GameState") -> None:
-        """Register continuous effect for spell cost reduction."""
-        source = self
-
-        def _apply(game: Any) -> None:
-            # ENGINE LIMITATION: The engine doesn't have a central cost
-            # reduction registry. This effect is a marker that the casting
-            # system would consult.
-            pass
-
-        # Ability-granting effect: Layer 6 (ABILITY), no sublayer. The prior
-        # ``Layer.ABILITIES`` / ``SubLayer.ADD_ABILITY`` members do not exist.
-        game.effect_manager.add(ContinuousEffect(
-            source=self,
-            layer=Layer.ABILITY,
-            apply=_apply,
-            duration=DURATION_PERMANENT,
-        ))
+    def spell_cost_reduction(
+        self, game: "GameState", spell: Any, caster: "Player"
+    ) -> int:
+        """Instant/sorcery spells the controller casts cost {1} less."""
+        if self.controller is not caster:
+            return 0
+        types = getattr(spell, "card_types", set())
+        if CardType.INSTANT in types or CardType.SORCERY in types:
+            return 1
+        return 0

@@ -64,8 +64,6 @@ class GiadaFontOfHope(Creature):
                     angel_count += 1
             if angel_count > 0:
                 add_counter(game, target, '+1/+1', angel_count)
-                if hasattr(target, '_base_plus_one_counters'):
-                    target._base_plus_one_counters = target.plus_one_counters
         game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_cond_with_capture, effect=_final_effect, source=self, controller=controller))
 
     def get_mana_abilities(self) -> list:

@@ -7,12 +7,16 @@ runs during a real game (the ``NameError: EventType`` / ``AttributeError:
 Layer.ABILITY_ADDING`` class of bug that this phase fixed).
 
 This guard walks each ``card_impl.py`` with :mod:`ast` — no execution — and
-fails on three defect classes:
+fails on four defect classes:
 
   (a) a ``Layer.X`` / ``SubLayer.X`` attribute that is not a real enum member;
   (b) a bare name that is referenced (loaded) but never bound or imported
       anywhere in the module (catches the ``EventType`` class of bug);
-  (c) the misspelled ``sub_layer=`` keyword (the field is ``sublayer``).
+  (c) the misspelled ``sub_layer=`` keyword (the field is ``sublayer``);
+  (d) a direct ``<player>.life`` mutation (assignment or augmented
+      assignment). Life must move only through ``game.gain_life`` /
+      ``game.lose_life`` so the gain/loss triggers fire (Ajani's Pridemate
+      et al.); a raw ``player.life += N`` silently bypasses them.
 
 It is intentionally AST-based, not execution-based, so it catches paths that
 only run mid-game. It is fast (well under 2s over the full set) and every
@@ -110,6 +114,21 @@ def find_impl_defects(source: str) -> list[tuple[int, str]]:
                         (node.lineno, "misspelled keyword 'sub_layer=' (the field is 'sublayer')")
                     )
 
+        # (d) direct `.life` mutation — must route through gain_life/lose_life.
+        _life_targets: list[ast.expr] = []
+        if isinstance(node, ast.AugAssign):
+            _life_targets = [node.target]
+        elif isinstance(node, ast.Assign):
+            _life_targets = list(node.targets)
+        for tgt in _life_targets:
+            if isinstance(tgt, ast.Attribute) and tgt.attr == "life":
+                findings.append(
+                    (
+                        node.lineno,
+                        "direct '.life' mutation — use game.gain_life / game.lose_life",
+                    )
+                )
+
         # (b) undefined bare name (skipped when a wildcard import hides bindings).
         if (
             not saw_wildcard
@@ -198,6 +217,27 @@ class TestGuardCatchesEachOriginalDefect:
             "sublayer=SubLayer.MODIFICATION, apply=_apply)\n"
         )
         assert any("SubLayer.MODIFICATION" in m for m in self._messages(src))
+
+    def test_direct_life_augassign_is_flagged(self) -> None:
+        # player.life += N and player.life -= N both bypass the life triggers.
+        src = "def f(game, player):\n    player.life += 3\n    player.life -= 1\n"
+        msgs = self._messages(src)
+        assert sum("direct '.life' mutation" in m for m in msgs) == 2
+
+    def test_direct_life_assign_is_flagged(self) -> None:
+        src = "def f(game, player):\n    player.life = 20\n"
+        assert any("direct '.life' mutation" in m for m in self._messages(src))
+
+    def test_gain_life_call_is_not_flagged(self) -> None:
+        # The sanctioned path — reading player.life is fine, only mutation is not.
+        src = (
+            "from engine.game import gain_life, lose_life\n"
+            "def f(game, player):\n"
+            "    if player.life > 0:\n"
+            "        gain_life(game, player, 3)\n"
+            "        lose_life(game, player, 1)\n"
+        )
+        assert not any("direct '.life' mutation" in m for m in self._messages(src))
 
     def test_valid_members_and_bound_names_are_not_flagged(self) -> None:
         # No false positive on the corrected forms.
