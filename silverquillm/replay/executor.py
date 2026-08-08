@@ -275,10 +275,15 @@ class ReplayExecutor:
         #                     re-triggering the same failing card-code path.
         #
         #   Operational-state domain (owned by the turn-boundary untap):
-        #   _operational_dirty — set when a non-protocol untap failure could not
-        #                     be repaired by the deterministic fallback, leaving
-        #                     summoning sickness or land plays in an unknown
-        #                     state. compare_state never reads those surfaces, so
+        #   _operational_dirty — set when an untap failure (protocol or not)
+        #                     could not be repaired by the deterministic
+        #                     fallback, leaving summoning sickness or land plays
+        #                     in an unknown state. A protocol untap failure still
+        #                     re-raises for classification, but only AFTER this
+        #                     repair-or-latch runs, so a recorded PROTOCOL_ERROR /
+        #                     QUERY_UNANSWERED can never leave the operational
+        #                     domain silently dirty.
+        #                     compare_state never reads those surfaces, so
         #                     a successful P/T resync would otherwise report the
         #                     executor "synced" while they stay dirty — hence a
         #                     flag the resync never touches. Once latched it
@@ -2745,6 +2750,32 @@ class ReplayExecutor:
                 untap_step(self.game)
             except Exception as exc:
                 if _is_protocol_exception(exc):
+                    # A protocol exception surfaces per the engine's contract
+                    # (PROTOCOL_ERROR / QUERY_UNANSWERED) and must NOT be
+                    # converted to an ENGINE_ERROR — so nothing is recorded on
+                    # result here. But a broken untap can partially mutate state
+                    # and then raise a protocol exception too, and the validator
+                    # that catches this re-raise resyncs only the compared / P/T
+                    # surfaces (setting _synced True); it never touches the
+                    # operational domain. So make that domain safe BEFORE
+                    # propagating, exactly as the non-protocol path does: finish
+                    # the untap deterministically, and if repair cannot be
+                    # proven complete latch _operational_dirty so the
+                    # post-exception resync cannot report the executor synced
+                    # over half-untapped operational state (uncleared summoning
+                    # sickness, unreset land plays — neither read by
+                    # compare_state).
+                    #
+                    # The fallback can itself raise (protocol or otherwise); a
+                    # secondary recovery exception must not replace the primary
+                    # untap exception (that would corrupt its classification),
+                    # so its propagation is contained here — on any fallback
+                    # exception the domain is latched dirty (fail-closed) and the
+                    # ORIGINAL untap exception is the one re-raised.
+                    try:
+                        self._operational_dirty = not self._fallback_untap()
+                    except Exception:
+                        self._operational_dirty = True
                     raise
                 # untap_step is pure engine bookkeeping, but a broken (or
                 # monkeypatched) implementation can partially mutate state —
@@ -2807,7 +2838,13 @@ class ReplayExecutor:
         The writes touch no card code, so they cannot re-trigger the original
         crash; the only way they fail is an exotic engine-object error, which is
         recorded and reported as False so the caller latches operational
-        dirtiness (the fail-closed path). Protocol exceptions propagate.
+        dirtiness (the fail-closed path). A protocol exception mid-repair
+        latches operational dirtiness ITSELF before propagating (fail-closed):
+        reaching the handler means the invariants are unproven, and the caller's
+        ``_operational_dirty = not _fallback_untap(...)`` assignment never runs
+        when this raises, so without the latch a later P/T resync could report
+        the executor synced over half-untapped state. Classification is
+        preserved — the protocol exception propagates unchanged.
 
         Returns True when all invariants were restored, False otherwise.
         """
@@ -2826,6 +2863,17 @@ class ReplayExecutor:
             return True
         except Exception as exc:
             if _is_protocol_exception(exc):
+                # Fail-closed: reaching here means the idempotent writes did NOT
+                # all complete (the sole success path returns True with every
+                # invariant restored), so the untap invariants are unproven.
+                # Latch the operational domain dirty BEFORE propagating —
+                # otherwise the caller's `_operational_dirty =
+                # not _fallback_untap(...)` assignment never runs (the exception
+                # propagates through it) and the post-exception P/T resync would
+                # report the executor synced while summoning sickness / land
+                # plays stay unrestored. Classification is preserved: the
+                # protocol exception propagates unchanged.
+                self._operational_dirty = True
                 raise
             self._record_engine_failure(
                 result,

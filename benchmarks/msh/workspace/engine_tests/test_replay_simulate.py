@@ -1098,37 +1098,112 @@ class TestTurnBoundaryUntapRecovery:
         assert any("untap fallback: RuntimeError" in f for f in result.engine_failures)
 
     def test_untap_protocol_error_propagates(self, monkeypatch):
+        # A partial-mutation untap that raises ProtocolError still re-raises for
+        # classification — but only AFTER the operational domain is made safe:
+        # the deterministic fallback finishes the untap and NO ENGINE_ERROR is
+        # recorded (protocol classification is never converted).
+        from engine.decisions import ProtocolError
+
+        snaps = [self._bf(1, turn=1)]
+        ex = make_executor(snaps)
+        card = ex._engine_cards[103]
+        card.is_tapped = True
+        card.summoning_sick = True
+        ex.players[1].land_plays_remaining = 0
+
+        did = [0]
+        monkeypatch.setattr(
+            "engine.turn.untap_step",
+            self._partial_then_raise(ProtocolError("boundary failure in untap"), did),
+        )
+
+        result = StepResult(snapshot_id=2)
+        with pytest.raises(ProtocolError):
+            ex._handle_turn_info(self._PREV_TURN, self._CURR_TURN, result)
+
+        # No ENGINE_ERROR recorded for a protocol exception; untap ran once.
+        assert result.engine_failures == []
+        assert did[0] == 1
+        # The fallback restored every untap invariant before propagation, so the
+        # operational domain is clean despite the propagating protocol exception.
+        assert card.is_tapped is False
+        assert card.summoning_sick is False
+        assert ex.players[1].land_plays_remaining == 1
+        assert ex._operational_dirty is False
+
+    def test_untap_unmatched_query_error_propagates(self, monkeypatch):
+        # Same operational-barrier behavior for a QUERY_UNANSWERED-class untap
+        # failure: repair deterministically, record no ENGINE_ERROR, re-raise.
+        from engine.decisions import UnmatchedQueryError
+
+        snaps = [self._bf(1, turn=1)]
+        ex = make_executor(snaps)
+        card = ex._engine_cards[103]
+        card.is_tapped = True
+        card.summoning_sick = True
+        ex.players[1].land_plays_remaining = 0
+
+        did = [0]
+        monkeypatch.setattr(
+            "engine.turn.untap_step",
+            self._partial_then_raise(
+                UnmatchedQueryError("no intent matched during untap"), did
+            ),
+        )
+
+        result = StepResult(snapshot_id=2)
+        with pytest.raises(UnmatchedQueryError):
+            ex._handle_turn_info(self._PREV_TURN, self._CURR_TURN, result)
+
+        assert result.engine_failures == []
+        assert did[0] == 1
+        assert card.is_tapped is False
+        assert card.summoning_sick is False
+        assert ex.players[1].land_plays_remaining == 1
+        assert ex._operational_dirty is False
+
+    def test_untap_protocol_error_with_failing_fallback_latches_dirty(
+        self, monkeypatch
+    ):
+        # Protocol untap failure whose deterministic repair CANNOT complete: the
+        # exception still propagates for classification, but the operational
+        # domain is latched dirty first (fail-closed), never left silently clean.
         from engine.decisions import ProtocolError
 
         snaps = [self._bf(1, turn=1)]
         ex = make_executor(snaps)
 
-        def boom(game):
-            raise ProtocolError("boundary failure in untap")
+        did = [0]
+        monkeypatch.setattr(
+            "engine.turn.untap_step",
+            self._partial_then_raise(ProtocolError("boundary failure in untap"), did),
+        )
+        fallback_calls = [0]
 
-        monkeypatch.setattr("engine.turn.untap_step", boom)
+        def _failing_fallback(result=None):
+            fallback_calls[0] += 1
+            return False
+
+        monkeypatch.setattr(ex, "_fallback_untap", _failing_fallback)
+
         with pytest.raises(ProtocolError):
             ex._handle_turn_info(self._PREV_TURN, self._CURR_TURN, StepResult(snapshot_id=2))
 
-    def test_untap_unmatched_query_error_propagates(self, monkeypatch):
-        from engine.decisions import UnmatchedQueryError
-
-        snaps = [self._bf(1, turn=1)]
-        ex = make_executor(snaps)
-
-        def boom(game):
-            raise UnmatchedQueryError("no intent matched during untap")
-
-        monkeypatch.setattr("engine.turn.untap_step", boom)
-        with pytest.raises(UnmatchedQueryError):
-            ex._handle_turn_info(self._PREV_TURN, self._CURR_TURN, StepResult(snapshot_id=2))
+        # The protocol path invoked the fallback (no result argument, so it can
+        # record no ENGINE_ERROR) and latched dirty when it returned False.
+        assert fallback_calls[0] == 1
+        assert ex._operational_dirty is True
 
     def test_fallback_untap_protocol_error_propagates(self):
+        # The real fallback's own protocol branch: latch operational dirtiness
+        # BEFORE propagating, so a protocol failure mid-repair can never be
+        # mistaken for a clean untap once the P/T resync restores the surfaces.
         from engine.decisions import ProtocolError
         from engine.types import Zone
 
         snaps = [self._bf(1, turn=1)]
         ex = make_executor(snaps)
+        assert ex._operational_dirty is False
 
         def _boom():
             raise ProtocolError("boundary failure in fallback")
@@ -1136,6 +1211,232 @@ class TestTurnBoundaryUntapRecovery:
         ex.game.active_player.zones[Zone.BATTLEFIELD].get_all = _boom
         with pytest.raises(ProtocolError):
             ex._fallback_untap(StepResult(snapshot_id=1))
+        assert ex._operational_dirty is True  # latched fail-closed before raise
+
+
+class TestValidatorUntapProtocolLifecycle:
+    """Protocol untap failures obey the operational barrier through the REAL
+    ``ValidatingExecutor`` lifecycle (not only direct ``_handle_turn_info``
+    calls).
+
+    A ``ProtocolError`` / ``UnmatchedQueryError`` from the turn-boundary untap
+    (or from the deterministic fallback) is re-raised for classification — the
+    validator records it as PROTOCOL_ERROR / QUERY_UNANSWERED and resyncs only
+    the compared / P/T surfaces. The barrier under test: recording that
+    divergence must not let the next transition run from half-untapped
+    operational state. So each test asserts BOTH the current step's
+    classification AND the next step's behavior:
+
+      - fallback repairs -> operational domain clean -> next transition measured;
+      - fallback cannot repair -> operational domain latched dirty -> the
+        post-exception P/T resync (which sets _synced True) cannot promote it,
+        and the next transition is suppressed as REPLAY_INFRA.
+    """
+
+    CREATURE = 560000  # unmapped grpId -> Creature shell
+
+    def _bf(self, gsid, *, turn):
+        obj = card_obj(
+            104, self.CREATURE, 1, BF1,
+            card_types=["CardType_Creature"], power=2, toughness=2,
+        )
+        return snapshot(
+            gsid, turn=turn, active=1,
+            battlefield={1: [104]}, objects={104: obj},
+        )
+
+    @staticmethod
+    def _partial_then_raise(exc, did):
+        """A broken untap_step: untap ``is_tapped`` on the active player's
+        permanents (partial mutation), then raise before summoning sickness and
+        land plays are restored. ``did`` counts invocations."""
+        def broken(game):
+            from engine.types import Zone
+            did[0] += 1
+            active = game.active_player
+            for card in active.zones[Zone.BATTLEFIELD].get_all():
+                if hasattr(card, "is_tapped"):
+                    card.is_tapped = False
+            raise exc
+        return broken
+
+    @staticmethod
+    def _of_type(validator, dtype):
+        return [d for d in validator.divergences if d.divergence_type == dtype]
+
+    def test_protocol_error_recorded_and_repaired_next_step_measured(
+        self, monkeypatch
+    ):
+        from engine.decisions import ProtocolError
+        from silverquillm.replay.validation import DivergenceType
+
+        # Boundary is the first transition; the second transition is the follow-up.
+        snaps = [self._bf(1, turn=1), self._bf(2, turn=2), self._bf(3, turn=2)]
+        ex, validator = make_validator(snaps, None)
+        # Operational state the deterministic fallback must repair.
+        ex._engine_cards[104].summoning_sick = True
+        ex.players[1].land_plays_remaining = 0
+
+        did = [0]
+        monkeypatch.setattr(
+            "engine.turn.untap_step",
+            self._partial_then_raise(ProtocolError("boundary failure in untap"), did),
+        )
+
+        results = validator.execute_all()
+
+        # Boundary transition (gsId 2): exactly one PROTOCOL_ERROR, no ENGINE_ERROR.
+        protocol = self._of_type(validator, DivergenceType.PROTOCOL_ERROR)
+        assert len(protocol) == 1
+        assert protocol[0].game_state_id == 2
+        assert self._of_type(validator, DivergenceType.ENGINE_ERROR) == []
+        assert did[0] == 1  # untap_step ran once; the fallback did not retry it
+
+        # The deterministic fallback repaired the operational domain, so the
+        # executor ends fully synchronized and NOTHING was suppressed.
+        assert ex._operational_dirty is False
+        assert ex._fully_synced is True
+        assert self._of_type(validator, DivergenceType.REPLAY_INFRA) == []
+        # The repair actually happened — summoning sickness cleared and the land
+        # play reset (surfaces compare_state never reads, so only the fallback
+        # could restore them). Without the protocol-path repair these would stay
+        # half-untapped while the executor still reported itself synchronized.
+        assert ex._engine_cards[104].summoning_sick is False
+        assert ex.players[1].land_plays_remaining == 1
+
+        # The following transition (gsId 2 -> 3) was measured, not suppressed.
+        following = results[1]
+        assert following.skipped is False
+        assert following.mismatches == []
+
+    def test_unmatched_query_error_recorded_and_repaired_next_step_measured(
+        self, monkeypatch
+    ):
+        from engine.decisions import UnmatchedQueryError
+        from silverquillm.replay.validation import DivergenceType
+
+        snaps = [self._bf(1, turn=1), self._bf(2, turn=2), self._bf(3, turn=2)]
+        ex, validator = make_validator(snaps, None)
+        ex._engine_cards[104].summoning_sick = True
+        ex.players[1].land_plays_remaining = 0
+
+        did = [0]
+        monkeypatch.setattr(
+            "engine.turn.untap_step",
+            self._partial_then_raise(
+                UnmatchedQueryError("no intent matched during untap"), did
+            ),
+        )
+
+        results = validator.execute_all()
+
+        # QUERY_UNANSWERED retains its classification (not converted to
+        # ENGINE_ERROR or PROTOCOL_ERROR).
+        unanswered = self._of_type(validator, DivergenceType.QUERY_UNANSWERED)
+        assert len(unanswered) == 1
+        assert unanswered[0].game_state_id == 2
+        assert self._of_type(validator, DivergenceType.ENGINE_ERROR) == []
+        assert self._of_type(validator, DivergenceType.PROTOCOL_ERROR) == []
+
+        assert ex._operational_dirty is False
+        assert self._of_type(validator, DivergenceType.REPLAY_INFRA) == []
+        # Operational invariants restored by the deterministic repair.
+        assert ex._engine_cards[104].summoning_sick is False
+        assert ex.players[1].land_plays_remaining == 1
+        assert results[1].skipped is False
+        assert results[1].mismatches == []
+
+    def test_unrepairable_protocol_untap_suppresses_next_transition(
+        self, monkeypatch
+    ):
+        # Fail-closed lifecycle + the resync-cannot-promote invariant: when the
+        # deterministic fallback cannot complete, the operational domain latches
+        # dirty and the post-exception P/T resync (which sets _synced True) can
+        # never promote the executor back to fully synchronized.
+        from engine.decisions import ProtocolError
+        from silverquillm.replay.validation import DivergenceType
+
+        snaps = [self._bf(1, turn=1), self._bf(2, turn=2), self._bf(3, turn=2)]
+        ex, validator = make_validator(snaps, None)
+
+        did = [0]
+        monkeypatch.setattr(
+            "engine.turn.untap_step",
+            self._partial_then_raise(ProtocolError("boundary failure in untap"), did),
+        )
+        fallback_calls = [0]
+
+        def _failing_fallback(result=None):
+            fallback_calls[0] += 1
+            return False  # repair cannot be proven complete
+
+        monkeypatch.setattr(ex, "_fallback_untap", _failing_fallback)
+
+        # Boundary transition: PROTOCOL_ERROR recorded, operational domain dirty.
+        boundary = validator.execute_step(snaps[0], snaps[1])
+        assert len(self._of_type(validator, DivergenceType.PROTOCOL_ERROR)) == 1
+        assert self._of_type(validator, DivergenceType.ENGINE_ERROR) == []
+        assert fallback_calls[0] == 1
+        # The P/T resync restored the compared surfaces (_synced True) but the
+        # operational domain is independent and stays dirty -> not fully synced.
+        assert ex._synced is True
+        assert ex._operational_dirty is True
+        assert ex._fully_synced is False
+
+        # Following transition suppressed as unmeasurable: a REPLAY_INFRA
+        # divergence, no comparison from dirty state, and no re-trigger of untap
+        # or the fallback during recovery.
+        following = validator.execute_step(snaps[1], snaps[2])
+        assert following.skipped is True
+        assert following.mismatches == []
+        infra = self._of_type(validator, DivergenceType.REPLAY_INFRA)
+        assert any("unmeasurable" in d.description for d in infra)
+        assert did[0] == 1
+        assert fallback_calls[0] == 1
+
+    def test_fallback_protocol_exception_preserves_primary_and_suppresses(
+        self, monkeypatch
+    ):
+        # The fallback itself raises a protocol exception after the untap's
+        # partial writes. The SECONDARY exception must not replace the PRIMARY
+        # untap exception's classification, and the operational domain must be
+        # latched dirty so the next transition is suppressed.
+        from engine.decisions import ProtocolError, UnmatchedQueryError
+        from silverquillm.replay.validation import DivergenceType
+
+        snaps = [self._bf(1, turn=1), self._bf(2, turn=2), self._bf(3, turn=2)]
+        ex, validator = make_validator(snaps, None)
+
+        did = [0]
+        monkeypatch.setattr(
+            "engine.turn.untap_step",
+            self._partial_then_raise(
+                ProtocolError("PRIMARY untap protocol failure"), did
+            ),
+        )
+
+        # A fallback that raises a DIFFERENT protocol exception and deliberately
+        # does NOT latch the domain — proving the untap protocol path itself
+        # latches dirty and re-raises the PRIMARY, never the secondary.
+        def _fallback_raises(result=None):
+            raise UnmatchedQueryError("SECONDARY failure during untap repair")
+
+        monkeypatch.setattr(ex, "_fallback_untap", _fallback_raises)
+
+        boundary = validator.execute_step(snaps[0], snaps[1])
+
+        # The PRIMARY ProtocolError surfaced; the secondary UnmatchedQueryError
+        # did not replace its classification.
+        assert len(self._of_type(validator, DivergenceType.PROTOCOL_ERROR)) == 1
+        assert self._of_type(validator, DivergenceType.QUERY_UNANSWERED) == []
+        # The untap protocol path latched the domain dirty even though the
+        # fallback did not.
+        assert ex._operational_dirty is True
+
+        following = validator.execute_step(snaps[1], snaps[2])
+        assert following.skipped is True
+        infra = self._of_type(validator, DivergenceType.REPLAY_INFRA)
+        assert any("unmeasurable" in d.description for d in infra)
 
 
 class TestStackExitResolutionGuard:
