@@ -882,6 +882,262 @@ class TestTurnBoundaryCleanupSplit:
             ex._handle_turn_info(prev_turn, curr_turn, result)
 
 
+class TestTurnBoundaryUntapRecovery:
+    """Non-protocol untap failures and the operational-state domain.
+
+    ``untap_step`` is pure engine bookkeeping (untap the active player's
+    permanents, clear summoning sickness, reset land plays), but a broken
+    implementation can partially mutate state and then raise. Those three
+    surfaces — summoning sickness and land plays especially — are NOT read by
+    compare_state, so the post-step P/T resync (which sets ``_synced`` True)
+    would happily overwrite a bare dirty marker and let a later transition
+    execute from half-untapped state.
+
+    The fix tracks operational dirtiness in its own domain (``_operational_dirty``)
+    that the resync never touches, and repairs untap DETERMINISTICALLY: the
+    failing entry point is not retried; the three invariants are re-done with
+    idempotent attribute writes. If even that cannot complete, the domain
+    latches dirty and every later transition is suppressed as unmeasurable
+    until the next successful turn-boundary untap.
+    """
+
+    CREATURE = 559000  # unmapped grpId -> Creature shell
+
+    def _bf(self, gsid, *, turn):
+        obj = card_obj(
+            103, self.CREATURE, 1, BF1,
+            card_types=["CardType_Creature"], power=2, toughness=2,
+        )
+        return snapshot(
+            gsid, turn=turn, active=1,
+            battlefield={1: [103]}, objects={103: obj},
+        )
+
+    @staticmethod
+    def _partial_then_raise(exc, did):
+        """A broken ``untap_step``: untap ``is_tapped`` on the active player's
+        permanents (partial mutation) and then raise before summoning sickness
+        and land plays are restored. ``did`` counts invocations, proving the
+        failing operation is executed exactly once — never retried."""
+        def broken(game):
+            from engine.types import Zone
+            did[0] += 1
+            active = game.active_player
+            for card in active.zones[Zone.BATTLEFIELD].get_all():
+                if hasattr(card, "is_tapped"):
+                    card.is_tapped = False
+            raise exc
+        return broken
+
+    _PREV_TURN = TurnInfo(
+        phase="Phase_Ending", step="Step_End", turn_number=1, active_player=1
+    )
+    _CURR_TURN = TurnInfo(
+        phase="Phase_Beginning", step="Step_Upkeep", turn_number=2, active_player=1
+    )
+
+    def test_untap_failure_records_one_error_and_deterministically_repairs(
+        self, monkeypatch
+    ):
+        # The current step began from clean state, so the untap crash is
+        # honestly attributable here: exactly one ENGINE_ERROR, and the
+        # deterministic fallback restores every untap invariant in place.
+        snaps = [self._bf(1, turn=1)]
+        ex = make_executor(snaps)
+        card = ex._engine_cards[103]
+        card.is_tapped = True
+        card.summoning_sick = True
+        ex.players[1].land_plays_remaining = 0
+
+        did = [0]
+        monkeypatch.setattr(
+            "engine.turn.untap_step",
+            self._partial_then_raise(RuntimeError("untap boom"), did),
+        )
+
+        result = StepResult(snapshot_id=2)
+        ex._handle_turn_info(self._PREV_TURN, self._CURR_TURN, result)
+
+        # Exactly one current-step ENGINE_ERROR — the untap crash, not the
+        # fallback (which records nothing on success).
+        assert len(result.engine_failures) == 1
+        assert "turn-boundary untap" in result.engine_failures[0]
+        assert not any("untap fallback" in f for f in result.engine_failures)
+        assert did[0] == 1  # the failing untap_step ran exactly once
+
+        # Deterministic repair restored ALL untap invariants...
+        assert card.is_tapped is False
+        assert card.summoning_sick is False
+        assert ex.players[1].land_plays_remaining == 1
+        # ...so the operational domain is clean and nothing is latched.
+        assert ex._operational_dirty is False
+        assert ex._fully_synced is True
+
+    def test_pt_resync_success_cannot_clear_operational_dirty(self):
+        # The direct domain-separation invariant: success in the compared/P/T
+        # domain must never promote an operationally-dirty executor to fully
+        # synchronized.
+        snaps = [self._bf(1, turn=1), self._bf(2, turn=1)]
+        ex = make_executor(snaps)
+        ex._operational_dirty = True
+
+        # A full P/T resync restores the compared surfaces and sets _synced.
+        assert ex._resync_to_snapshot(snaps[1]) is True
+        assert ex._synced is True
+        # But the operational domain is independent — the resync never touches
+        # it — so the executor is NOT fully synchronized.
+        assert ex._operational_dirty is True
+        assert ex._fully_synced is False
+
+    def test_deterministic_repair_lets_following_transition_measure_cleanly(
+        self, monkeypatch
+    ):
+        # Full lifecycle, preferred path: the untap crash is repaired in place,
+        # so the FOLLOWING transition is measured from fully restored state
+        # (not suppressed) and shows no residue mismatch from the partial untap.
+        snaps = [
+            self._bf(1, turn=1),
+            self._bf(2, turn=1),   # within turn 1
+            self._bf(3, turn=2),   # turn boundary: untap crashes, fallback repairs
+            self._bf(4, turn=2),
+        ]
+        ex = make_executor(snaps)
+        ex.execute_step(snaps[0], snaps[1])
+
+        card = ex._engine_cards[103]
+        card.summoning_sick = True
+        ex.players[1].land_plays_remaining = 0
+        did = [0]
+        monkeypatch.setattr(
+            "engine.turn.untap_step",
+            self._partial_then_raise(RuntimeError("untap boom"), did),
+        )
+
+        boundary = ex.execute_step(snaps[1], snaps[2])
+        assert any("turn-boundary untap" in f for f in boundary.engine_failures)
+        # Fallback repaired the operational invariants...
+        assert card.summoning_sick is False
+        assert ex.players[1].land_plays_remaining == 1
+        assert ex._operational_dirty is False
+
+        # ...so the following transition is measured, not suppressed, and clean.
+        following = ex.execute_step(snaps[2], snaps[3])
+        assert following.skipped is False
+        assert following.mismatches == []
+        assert did[0] == 1  # untap_step not re-run
+
+    def test_unrecoverable_untap_suppresses_following_transitions(self, monkeypatch):
+        # Full lifecycle, fail-closed path: when even the deterministic fallback
+        # cannot complete, the operational domain latches dirty and every later
+        # transition is suppressed — no comparison emitted from dirty state, and
+        # neither the failing untap nor the fallback is re-run during recovery.
+        snaps = [
+            self._bf(1, turn=1),
+            self._bf(2, turn=1),   # within turn 1
+            self._bf(3, turn=2),   # turn boundary: untap crashes, fallback fails
+            self._bf(4, turn=2),
+            self._bf(5, turn=2),
+        ]
+        ex = make_executor(snaps)
+
+        did = [0]
+        monkeypatch.setattr(
+            "engine.turn.untap_step",
+            self._partial_then_raise(RuntimeError("untap boom"), did),
+        )
+        fallback_calls = [0]
+
+        def _failing_fallback(result=None):
+            fallback_calls[0] += 1
+            ex._record_engine_failure(result, "untap fallback: RuntimeError: no repair")
+            return False
+
+        monkeypatch.setattr(ex, "_fallback_untap", _failing_fallback)
+
+        ex.execute_step(snaps[0], snaps[1])  # within turn 1, no boundary
+        boundary = ex.execute_step(snaps[1], snaps[2])  # boundary: untap fails
+        # The boundary step started clean, so it is still measured and records
+        # the ENGINE_ERROR; the operational domain is now latched dirty.
+        assert any("turn-boundary untap" in f for f in boundary.engine_failures)
+        assert boundary.skipped is False
+        assert ex._operational_dirty is True
+        assert did[0] == 1
+        assert fallback_calls[0] == 1
+
+        # The next transition is suppressed as unmeasurable — no mismatch from
+        # the partially untapped state.
+        following = ex.execute_step(snaps[2], snaps[3])
+        assert following.skipped is True
+        assert following.mismatches == []
+        assert any("unmeasurable" in f for f in following.infra_failures)
+        # Recovery re-ran neither the failing untap nor the fallback.
+        assert did[0] == 1
+        assert fallback_calls[0] == 1
+
+        # Still suppressed a step later — the latch persists within the turn.
+        third = ex.execute_step(snaps[3], snaps[4])
+        assert third.skipped is True
+        assert third.mismatches == []
+        assert did[0] == 1
+        assert fallback_calls[0] == 1
+
+    def test_fallback_untap_records_error_and_returns_false_on_write_failure(self):
+        # The real fallback's fail-closed branch: a non-protocol error during
+        # its idempotent writes is recorded and reported False (so the caller
+        # latches operational dirtiness).
+        snaps = [self._bf(1, turn=1)]
+        ex = make_executor(snaps)
+        from engine.types import Zone
+
+        def _boom():
+            raise RuntimeError("zone read boom")
+
+        ex.game.active_player.zones[Zone.BATTLEFIELD].get_all = _boom
+        result = StepResult(snapshot_id=1)
+        assert ex._fallback_untap(result) is False
+        assert any("untap fallback: RuntimeError" in f for f in result.engine_failures)
+
+    def test_untap_protocol_error_propagates(self, monkeypatch):
+        from engine.decisions import ProtocolError
+
+        snaps = [self._bf(1, turn=1)]
+        ex = make_executor(snaps)
+
+        def boom(game):
+            raise ProtocolError("boundary failure in untap")
+
+        monkeypatch.setattr("engine.turn.untap_step", boom)
+        with pytest.raises(ProtocolError):
+            ex._handle_turn_info(self._PREV_TURN, self._CURR_TURN, StepResult(snapshot_id=2))
+
+    def test_untap_unmatched_query_error_propagates(self, monkeypatch):
+        from engine.decisions import UnmatchedQueryError
+
+        snaps = [self._bf(1, turn=1)]
+        ex = make_executor(snaps)
+
+        def boom(game):
+            raise UnmatchedQueryError("no intent matched during untap")
+
+        monkeypatch.setattr("engine.turn.untap_step", boom)
+        with pytest.raises(UnmatchedQueryError):
+            ex._handle_turn_info(self._PREV_TURN, self._CURR_TURN, StepResult(snapshot_id=2))
+
+    def test_fallback_untap_protocol_error_propagates(self):
+        from engine.decisions import ProtocolError
+        from engine.types import Zone
+
+        snaps = [self._bf(1, turn=1)]
+        ex = make_executor(snaps)
+
+        def _boom():
+            raise ProtocolError("boundary failure in fallback")
+
+        ex.game.active_player.zones[Zone.BATTLEFIELD].get_all = _boom
+        with pytest.raises(ProtocolError):
+            ex._fallback_untap(StepResult(snapshot_id=1))
+
+
 class TestStackExitResolutionGuard:
     """Surface 1: stack-exit on_resolve in _simulate_zone_transition.
 

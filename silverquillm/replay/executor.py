@@ -255,13 +255,17 @@ class ReplayExecutor:
         self._initialized: bool = False
 
         # Simulate-mode dirty-state tracking (recovery barrier). A transition
-        # is measurable only when it starts from fully restored GRE truth, so
-        # the resync records whether it completed:
+        # is measurable only when it starts from fully restored GRE truth.
+        # Synchronization spans two INDEPENDENT domains, tracked separately so
+        # restoring one can never be mistaken for restoring the other:
+        #
+        #   Compared-surface / P/T domain (owned by _resync_to_snapshot):
         #   _synced         — True while the executor is fully oracle-corrected
         #                     to the last snapshot it resynced to; False once a
-        #                     resync could not restore a compared surface. The
-        #                     next transition must recover (or be suppressed as
-        #                     unmeasurable) before it is compared.
+        #                     resync could not restore a compared surface (zone
+        #                     contents, life, tapped, P/T). The resync sets it
+        #                     False on entry and True only on full completion,
+        #                     so it owns this domain alone.
         #   _effects_broken — latched once the engine's effect layer (apply_all)
         #                     raises a non-protocol exception. Re-running it
         #                     would only re-crash, so the resync and the
@@ -269,8 +273,42 @@ class ReplayExecutor:
         #                     stays uncorrected and its transitions stay
         #                     unmeasurable. This is what stops recovery from
         #                     re-triggering the same failing card-code path.
+        #
+        #   Operational-state domain (owned by the turn-boundary untap):
+        #   _operational_dirty — set when a non-protocol untap failure could not
+        #                     be repaired by the deterministic fallback, leaving
+        #                     summoning sickness or land plays in an unknown
+        #                     state. compare_state never reads those surfaces, so
+        #                     a successful P/T resync would otherwise report the
+        #                     executor "synced" while they stay dirty — hence a
+        #                     flag the resync never touches. Once latched it
+        #                     suppresses every subsequent transition (the
+        #                     fail-closed floor): a suppressed step returns
+        #                     before _handle_turn_info, so no later untap runs to
+        #                     clear it. The deterministic fallback is what keeps
+        #                     it False in the common case — latching is the rare
+        #                     fallback-of-the-fallback.
+        #
+        # The executor is fully synchronized (_fully_synced) only when BOTH
+        # domains are clean — success in one can never promote the whole.
         self._synced: bool = True
         self._effects_broken: bool = False
+        self._operational_dirty: bool = False
+
+    @property
+    def _fully_synced(self) -> bool:
+        """True only when every recovery domain is restored.
+
+        Synchronization is not a single boolean: the compared-surface / P/T
+        domain (``_synced``, owned by :meth:`_resync_to_snapshot`) and the
+        operational-state domain (``_operational_dirty``, owned by the
+        turn-boundary untap) move independently. A successful P/T resync sets
+        ``_synced`` True but must never speak for the operational domain, so
+        the recovery barrier gates on both: the executor may call itself fully
+        synchronized only when the compared surfaces are restored AND no
+        unresolved untap dirtiness remains.
+        """
+        return self._synced and not self._operational_dirty
 
     # ------------------------------------------------------------------
     # Public API
@@ -563,16 +601,26 @@ class ReplayExecutor:
         result = StepResult(snapshot_id=curr_snapshot.game_state_id)
 
         # Recovery barrier (simulate mode): a transition is measurable only
-        # from fully restored GRE truth. If a PRIOR step's resync left the
-        # executor dirty, recover to the previous snapshot before touching
-        # anything else. This is checked here — before _handle_turn_info,
-        # whose turn-boundary cleanup can itself dirty the executor — so an
-        # in-step failure is measured (it started clean) while a carried-over
-        # dirty state is not. If recovery can't complete, the transition is
-        # unmeasurable: record REPLAY_INFRA, emit no comparison from dirty
-        # state, and resync forward so a later step can still recover.
-        if self.simulate and not self._synced:
-            if not self._resync_to_snapshot(prev_snapshot, result):
+        # from fully restored GRE truth — across BOTH synchronization domains
+        # (compared/P/T surfaces AND operational untap state). If a PRIOR step
+        # left either domain dirty, recover before touching anything else. This
+        # is checked here — before _handle_turn_info, whose turn-boundary
+        # cleanup/untap can itself dirty the executor — so an in-step failure is
+        # measured (it started clean) while a carried-over dirty state is not.
+        #   - Compared surfaces recover by resyncing to the previous snapshot.
+        #   - Operational dirtiness (an unrecoverable untap) has no mid-turn
+        #     reconstruction point, so it forces suppression outright — and,
+        #     since suppression returns before _handle_turn_info, the latch
+        #     then persists (the fail-closed floor for a broken untap).
+        # If recovery can't complete, the transition is unmeasurable: record
+        # REPLAY_INFRA, emit no comparison from dirty state, and resync forward
+        # so a later step can still recover.
+        if self.simulate and not self._fully_synced:
+            recovered = (
+                not self._operational_dirty
+                and self._resync_to_snapshot(prev_snapshot, result)
+            )
+            if not recovered:
                 return self._suppress_unmeasurable(
                     prev_snapshot, curr_snapshot, result
                 )
@@ -703,12 +751,18 @@ class ReplayExecutor:
 
         # Oracle-resync to GRE truth so the next step starts clean. The resync
         # is internally guarded and records (via _synced) whether it fully
-        # restored GRE truth — register_triggers on injected permanents and
-        # apply_all under the P/T re-derivation both run card code. A crash
-        # there does not discard the comparisons this step already recorded;
-        # it marks the executor dirty, and the recovery barrier at the top of
-        # the next step restores GRE truth or suppresses that step as
+        # restored the compared surfaces — register_triggers on injected
+        # permanents and apply_all under the P/T re-derivation both run card
+        # code. A crash there does not discard the comparisons this step already
+        # recorded; it marks the executor dirty, and the recovery barrier at the
+        # top of the next step restores GRE truth or suppresses that step as
         # unmeasurable. Protocol exceptions still propagate for classification.
+        #
+        # Crucially, the resync owns ONLY the compared/P/T domain: it sets
+        # _synced but never _operational_dirty. So an untap failure earlier in
+        # this step (from _handle_turn_info) that latched operational dirtiness
+        # survives this resync even when P/T restores cleanly — the two domains
+        # are independent, and _fully_synced gates on both.
         self._resync_to_snapshot(curr_snapshot, result)
 
         result.success = not (
@@ -724,14 +778,19 @@ class ReplayExecutor:
     ) -> StepResult:
         """Handle a transition that can't be measured from restored GRE truth.
 
-        Reached only from the recovery barrier, when a recovery resync to the
-        previous snapshot could not complete. The engine state is dirty, so
-        emitting a state comparison would report residue from the earlier
-        failed recovery, not this transition — record a REPLAY_INFRA failure
-        instead and emit no mismatches. A forward resync to the current
-        snapshot is still attempted so a later step has a fresh chance to
-        recover (self-heal); if the effect layer is broken it is skipped
-        rather than re-triggered.
+        Reached from the recovery barrier when a dirty domain could not be
+        restored: either a recovery resync to the previous snapshot did not
+        complete (compared/P/T domain), or operational untap state is latched
+        dirty with no mid-turn reconstruction point (operational domain). The
+        engine state is dirty, so emitting a state comparison would report
+        residue from the earlier failure, not this transition — record a
+        REPLAY_INFRA failure instead and emit no mismatches. A forward resync to
+        the current snapshot is still attempted so a later step has a fresh
+        chance to recover the compared surfaces (self-heal); if the effect layer
+        is broken it is skipped rather than re-triggered. Operational dirtiness
+        is never cleared here — and because this path returns before
+        _handle_turn_info, no later untap runs to clear it either, so a latched
+        operational domain stays suppressed (the fail-closed floor).
         """
         result.action_type = "unmeasurable"
         result.skipped = True
@@ -1647,8 +1706,16 @@ class ReplayExecutor:
         exception) leaves the executor marked dirty for the recovery barrier.
         Non-protocol card failures are recorded on ``result``; protocol
         exceptions propagate for classification.
+
+        This method owns the compared-surface / P/T domain ALONE. It never
+        reads or writes ``_operational_dirty``: operational untap state
+        (summoning sickness, land plays) is not a surface compare_state checks,
+        so restoring P/T says nothing about it. A successful resync therefore
+        cannot promote an operationally-dirty executor to fully synchronized —
+        the recovery barrier gates on both domains via ``_fully_synced``.
         """
-        # Assume dirty until every compared surface is restored.
+        # Assume dirty until every compared surface is restored. (Only the
+        # compared/P/T domain — the operational domain is untouched here.)
         self._synced = False
 
         # GRE's stack is empty but the engine still queues stack objects:
@@ -2679,11 +2746,32 @@ class ReplayExecutor:
             except Exception as exc:
                 if _is_protocol_exception(exc):
                     raise
+                # untap_step is pure engine bookkeeping, but a broken (or
+                # monkeypatched) implementation can partially mutate state —
+                # untap some permanents, half-clear summoning sickness — and
+                # then raise. Record the ENGINE_ERROR (this transition started
+                # clean, so it is honestly attributable here), then finish the
+                # untap DETERMINISTICALLY rather than re-run the failing entry
+                # point: _fallback_untap re-does the same three invariants with
+                # idempotent attribute writes. If even that cannot complete,
+                # latch the operational-state domain dirty so the recovery
+                # barrier suppresses every later transition (the fail-closed
+                # floor). Operational dirtiness is tracked separately from
+                # _synced precisely so the post-step P/T resync — which sets
+                # _synced True — can never erase it.
                 self._record_engine_failure(
                     result,
                     f"turn-boundary untap: {type(exc).__name__}: {exc}",
                 )
-                self._synced = False
+                self._operational_dirty = not self._fallback_untap(result)
+            else:
+                # A clean untap leaves every untap invariant restored, so the
+                # operational domain is clean. Set explicitly for symmetry with
+                # the failure path — _operational_dirty is only ever raised on
+                # that path, and a raised latch suppresses every later step
+                # (its _handle_turn_info, and so this untap, never re-runs), so
+                # in the normal flow this is a reaffirming no-op.
+                self._operational_dirty = False
 
         phase_name = self._GRE_PHASE_TO_ENGINE.get(curr_turn.phase)
         if phase_name is not None:
@@ -2701,6 +2789,49 @@ class ReplayExecutor:
                 pool = getattr(player, "mana_pool", None)
                 if pool is not None:
                     pool.empty()
+
+    def _fallback_untap(self, result: StepResult | None = None) -> bool:
+        """Deterministically restore untap invariants after ``untap_step`` raised.
+
+        The engine untap step is three operations on the active player: untap
+        every permanent they control, clear its summoning sickness, and reset
+        ``land_plays_remaining`` to 1. A broken implementation may complete some
+        of these and then raise, leaving state half-untapped. This re-does
+        exactly those operations directly — NOT by calling ``untap_step`` again
+        (which would re-hit the same failing path), but with idempotent
+        attribute writes: setting ``is_tapped``/``summoning_sick`` False and
+        ``land_plays_remaining`` to 1 is safe whether or not the original run
+        already applied it, so a partially completed untap is finished rather
+        than retried. That idempotency is what makes recovery well-defined.
+
+        The writes touch no card code, so they cannot re-trigger the original
+        crash; the only way they fail is an exotic engine-object error, which is
+        recorded and reported as False so the caller latches operational
+        dirtiness (the fail-closed path). Protocol exceptions propagate.
+
+        Returns True when all invariants were restored, False otherwise.
+        """
+        if self.game is None:
+            return True
+        from engine.types import Zone
+
+        try:
+            active = self.game.active_player
+            for card in active.zones[Zone.BATTLEFIELD].get_all():
+                if hasattr(card, "is_tapped"):
+                    card.is_tapped = False
+                if hasattr(card, "summoning_sick"):
+                    card.summoning_sick = False
+            active.land_plays_remaining = 1
+            return True
+        except Exception as exc:
+            if _is_protocol_exception(exc):
+                raise
+            self._record_engine_failure(
+                result,
+                f"untap fallback: {type(exc).__name__}: {exc}",
+            )
+            return False
 
     def _replay_cleanup(self) -> None:
         """The mechanical part of the cleanup step, at the GRE turn boundary.
