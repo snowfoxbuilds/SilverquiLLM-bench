@@ -1,71 +1,81 @@
-"""Card implementation for Bigfin Bouncer (FDN #15 slot).
-
-Demonstrates a targeted ETB trigger: when this creature enters the
-battlefield, return target creature an opponent controls to its owner's hand.
-"""
+"""Card implementation for Hare Apparent (FDN #15)."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
-from engine.types import CardType, Keyword, ManaCost, Zone
+from engine.types import CardType, Color, ManaCost
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
-class BigfinBouncer(Creature):
-    """Bigfin Bouncer — {3}{U} — 3/2 — Merfolk Rogue.
+class HareApparent(Creature):
+    """Hare Apparent — {1}{W} — 2/2 — Rabbit Noble.
 
-    When this creature enters, return target creature an opponent
-    controls to its owner's hand.
+    When this creature enters, create a number of 1/1 white Rabbit creature
+    tokens equal to the number of other creatures you control named Hare
+    Apparent.
 
-    FDN collector number 15 (reference slot for targeted ETB).
+    A deck can have any number of cards named Hare Apparent.
+
+    FDN collector number 15.
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        kwargs.setdefault("name", "Bigfin Bouncer")
-        kwargs.setdefault("mana_cost", ManaCost.parse("{3}{U}"))
-        kwargs.setdefault("subtypes", {"Merfolk", "Rogue"})
-        kwargs.setdefault("keywords", Keyword(0))
-        kwargs.setdefault("base_power", 3)
+        kwargs.setdefault("name", "Hare Apparent")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{1}{W}"))
+        kwargs.setdefault("subtypes", {"Rabbit", "Noble"})
+        kwargs.setdefault("base_power", 2)
         kwargs.setdefault("base_toughness", 2)
         kwargs.setdefault(
             "rules_text",
-            "When this creature enters, return target creature an opponent "
-            "controls to its owner's hand.",
+            "When this creature enters, create a number of 1/1 white Rabbit "
+            "creature tokens equal to the number of other creatures you "
+            "control named Hare Apparent.\n"
+            "A deck can have any number of cards named Hare Apparent.",
         )
         super().__init__(**kwargs)
-        # Target is selected during ETB trigger resolution.
-        self.chosen_targets: list[Any] = []
 
     def on_resolve(self, game: "GameState") -> None:
-        """ETB: return target opponent's creature to its owner's hand.
+        """ETB: one 1/1 white Rabbit per *other* Hare Apparent you control.
 
-        Target validation: the target must be on an opponent's battlefield.
-        If the target is no longer valid (left the battlefield), the
-        ability fizzles (does nothing).
+        ``on_resolve`` is the engine's enters-the-battlefield hook for a
+        creature spell (see :func:`engine.casting._resolve_spell`): it runs
+        while this card is still on the stack, so a battlefield scan
+        naturally sees only the *other* creatures already in play. The
+        ``obj is not self`` guard keeps the "other" semantics correct even
+        when a test places this card on the battlefield before resolving.
+
+        Note: engine-minted tokens carry no grpId identity, so replay zone
+        divergences around the Rabbit tokens are expected to persist until
+        the token-correlation phase — the win here is the ETB firing and the
+        Hare Apparent MISSING_CARD entries clearing.
         """
-        from engine.zones import move_to_zone
+        from engine.game import create_token
 
         controller = self.controller
         if controller is None:
             return
 
-        if not self.chosen_targets:
-            return
+        count = sum(
+            1
+            for obj in game.get_battlefield(controller).get_all()
+            if obj is not self
+            and CardType.CREATURE in getattr(obj, "card_types", set())
+            and getattr(obj, "name", None) == "Hare Apparent"
+        )
 
-        target = self.chosen_targets[0]
-
-        # Validate target: must be on an opponent's battlefield
-        for player in game.players:
-            if player is controller:
-                continue
-            bf = game.get_battlefield(player)
-            if target in bf.get_all():
-                # Valid target — bounce it to owner's hand
-                move_to_zone(game, target, Zone.BATTLEFIELD, Zone.HAND)
-                return
-
-        # Target not found on any opponent's battlefield — fizzles
+        for _ in range(count):
+            token = Creature(
+                name="Rabbit",
+                subtypes={"Rabbit"},
+                base_power=1,
+                base_toughness=1,
+            )
+            # A token has no mana cost, so its printed colour must be stated
+            # explicitly (get_colors reads an explicit ``colors`` attribute
+            # before falling back to coloured mana pips). The Rabbit is white.
+            token.colors = {Color.WHITE}
+            create_token(game, controller, token)

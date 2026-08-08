@@ -65,10 +65,11 @@ class MockingSprite(Creature):
             # system would consult.
             pass
 
+        # Ability-granting effect: Layer 6 (ABILITY), no sublayer. The prior
+        # ``Layer.ABILITIES`` / ``SubLayer.ADD_ABILITY`` members do not exist.
         game.effect_manager.add(ContinuousEffect(
             source=self,
-            layer=Layer.ABILITIES,
-            sublayer=SubLayer.ADD_ABILITY,
+            layer=Layer.ABILITY,
             apply=_apply,
             duration=DURATION_PERMANENT,
         ))

@@ -35,6 +35,16 @@ def _get_colors_of_permanent(obj: Any) -> set[Color]:
     from engine.protection import get_colors
     return get_colors(obj)
 
+# Maps each MTG color to the mana it produces. (Previously referenced but
+# never defined, so the mana ability raised NameError when activated.)
+_COLOR_TO_MANA: dict[Color, ManaType] = {
+    Color.WHITE: ManaType.WHITE,
+    Color.BLUE: ManaType.BLUE,
+    Color.BLACK: ManaType.BLACK,
+    Color.RED: ManaType.RED,
+    Color.GREEN: ManaType.GREEN,
+}
+
 class BloomTender(Creature):
     """Bloom Tender — {1}{G} — 1/1 — Elf Druid
 

@@ -61,4 +61,8 @@ class GnarlidColony(Creature):
             for obj in g.get_battlefield(controller).get_all():
                 if CardType.CREATURE in getattr(obj, 'card_types', set()) and getattr(obj, 'plus_one_counters', 0) > 0:
                     obj.keywords = obj.keywords | Keyword.TRAMPLE
-        return [ContinuousEffect(source=self, layer=Layer.ABILITY_ADDING, sub_layer=SubLayer.DEFAULT, apply=_apply)]
+        # Ability-granting effect: Layer 6 (ABILITY), no sublayer (sublayers
+        # are a Layer 7 P/T concept). The prior ``Layer.ABILITY_ADDING`` /
+        # ``SubLayer.DEFAULT`` members do not exist, and the field is
+        # ``sublayer``, not ``sub_layer`` — three errors on one line.
+        return [ContinuousEffect(source=self, layer=Layer.ABILITY, apply=_apply)]

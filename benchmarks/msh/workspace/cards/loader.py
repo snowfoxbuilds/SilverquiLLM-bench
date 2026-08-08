@@ -110,6 +110,10 @@ def load_set_registry(
     if not set_root.is_dir():
         raise FileNotFoundError(f"No card set directory at {set_root}")
 
+    # Track the module that first registered each name so a collision can name
+    # both offenders (a card slot squatting on another card's printed name).
+    registered_by: dict[str, str] = {}
+
     for card_dir in sorted(set_root.iterdir()):
         impl_path = card_dir / "card_impl.py"
         if not impl_path.is_file():
@@ -138,15 +142,25 @@ def load_set_registry(
                 )
                 continue
             if instance.name in registry:
-                # TODO(card-pool): fdn_15/fdn_31 (Bigfin Bouncer) and
-                # fdn_125/fdn_205 (Wardens of the Cycle) are duplicate-name
-                # slots — the squatted dirs need their real cards implemented.
-                # Until then: deterministic last-write-wins (dirs are scanned
-                # in sorted order), loudly warned.
-                logger.warning(
-                    "Duplicate card name %r — %s overwrites earlier registration",
-                    instance.name, module_name,
+                # A card name must map to exactly one implementation. Two dirs
+                # claiming the same printed name means one is squatting on the
+                # other's slot (a real card would silently resolve as the
+                # wrong impl). Hard-fail, naming both offenders.
+                prior = registered_by.get(instance.name)
+                if prior is None:
+                    # The collision is against an entry the caller supplied in
+                    # a pre-populated registry, not one this load registered —
+                    # recover its implementation from the registry itself so
+                    # the error still names both sides of the collision rather
+                    # than an unhelpful placeholder.
+                    prior_cls, _prior_meta = registry.get(instance.name)
+                    prior = f"{prior_cls.__module__}.{prior_cls.__name__}"
+                raise ValueError(
+                    f"Duplicate card name {instance.name!r}: "
+                    f"{module_name}.{cls.__name__} collides with the earlier "
+                    f"registration from {prior}"
                 )
             registry.register(instance.name, cls, metadata)
+            registered_by[instance.name] = f"{module_name}.{cls.__name__}"
 
     return registry

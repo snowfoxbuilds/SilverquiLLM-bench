@@ -102,11 +102,16 @@ class ElvishArchdruid(Creature):
                     card.modified_power = card.base_power + 1
                     card.modified_toughness = card.base_toughness + 1
 
+        # Lord effect at Layer 7c (P/T modification). The prior construction
+        # crashed three ways: ``SubLayer.MODIFICATION`` is not a member (the
+        # valid modify sublayer is ``MODIFY_PT``), the field is ``apply`` not
+        # ``apply_fn``, and ``EffectManager`` registers via ``add``, not
+        # ``register``.
         effect = ContinuousEffect(
             source=source,
-            apply_fn=_apply,
+            apply=_apply,
             layer=Layer.POWER_TOUGHNESS,
-            sublayer=SubLayer.MODIFICATION,
+            sublayer=SubLayer.MODIFY_PT,
             duration=DURATION_PERMANENT,
         )
-        game.effect_manager.register(effect)
+        game.effect_manager.add(effect)

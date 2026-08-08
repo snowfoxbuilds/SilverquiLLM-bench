@@ -79,5 +79,7 @@ class FakeYourOwnDeath(Instant):
 
         def _eot_cleanup_effect(game: 'GameState') -> None:
             game.trigger_manager.unregister(_sentinel_ref)
-        if hasattr(EventType, 'END_OF_TURN'):
-            game.trigger_manager.register(TriggerRegistration(event_type=EndOfTurnTriggeredEvent, condition=_eot_cleanup_condition, effect=_eot_cleanup_effect, source=sentinel, controller=controller))
+        # Clean up the death trigger at end of turn. (The guard here used to
+        # reference an undefined ``EventType`` name, crashing this resolution
+        # with a NameError; the intended event type is imported directly.)
+        game.trigger_manager.register(TriggerRegistration(event_type=EndOfTurnTriggeredEvent, condition=_eot_cleanup_condition, effect=_eot_cleanup_effect, source=sentinel, controller=controller))

@@ -1,20 +1,17 @@
 {
-  "name": "Wardens of the Cycle",
-  "mana_cost": "{3}{B}{G}",
-  "type_line": "Creature — Treefolk",
-  "oracle_text": "Converge — When this creature enters, create a 1/1 green Saproling creature token for each color of mana spent to cast it.",
-  "power": "4",
-  "toughness": "4",
+  "name": "Seismic Rupture",
+  "mana_cost": "{2}{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "Seismic Rupture deals 2 damage to each creature without flying.",
+  "power": null,
+  "toughness": null,
   "loyalty": null,
   "colors": [
-    "B",
-    "G"
+    "R"
   ],
-  "keywords": [
-    "Converge"
-  ],
+  "keywords": [],
   "rarity": "uncommon",
   "set_code": "fdn",
   "collector_number": "205",
-  "complexity_tier": "medium"
+  "complexity_tier": "low"
 }

@@ -1,13 +1,13 @@
 {
-  "name": "Bigfin Bouncer",
-  "mana_cost": "{3}{U}",
-  "type_line": "Creature — Merfolk Rogue",
-  "oracle_text": "When this creature enters, return target creature an opponent controls to its owner's hand.",
-  "power": "3",
+  "name": "Hare Apparent",
+  "mana_cost": "{1}{W}",
+  "type_line": "Creature — Rabbit Noble",
+  "oracle_text": "When this creature enters, create a number of 1/1 white Rabbit creature tokens equal to the number of other creatures you control named Hare Apparent.\nA deck can have any number of cards named Hare Apparent.",
+  "power": "2",
   "toughness": "2",
   "loyalty": null,
   "colors": [
-    "U"
+    "W"
   ],
   "keywords": [],
   "rarity": "common",
