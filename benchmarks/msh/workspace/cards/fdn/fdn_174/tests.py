@@ -14,8 +14,8 @@ from __future__ import annotations
 from cards.fdn.fdn_174.card_impl import FakeYourOwnDeath
 from engine.card import Creature, Instant
 from engine.events import CreatureDiesTriggeredEvent, EndOfTurnTriggeredEvent
-from engine.types import ManaCost
-from test_utils import create_game, set_board_state
+from engine.types import ManaCost, ManaType
+from test_utils import cast_spell, create_game, set_board_state
 
 
 class TestFakeYourOwnDeathProperties:
@@ -62,3 +62,49 @@ class TestFakeYourOwnDeathResolution:
         spell.chosen_targets = []
         spell.on_resolve(game)  # fizzles cleanly
         assert game.effect_manager.get_effects_by_source(spell) == []
+
+
+class TestFakeYourOwnDeathThroughStack:
+    """Integration coverage of the real crash surface: the spell cast and
+    resolved through the normal stack pipeline (not ``on_resolve`` by hand).
+
+    The original NameError fired at *stack exit*, so the honest regression is
+    a full cast → resolve → leave-the-stack round-trip.
+    """
+
+    def test_cast_and_resolve_leaves_stack_and_registers_effects(self) -> None:
+        game = create_game()
+        p1 = game.players[0]
+        target = Creature(
+            name="Bear", subtypes={"Bear"}, base_power=2, base_toughness=2
+        )
+        spell = FakeYourOwnDeath(owner=p1, controller=p1)
+        set_board_state(
+            game, 0,
+            battlefield=[target],
+            hand=[spell],
+            mana={ManaType.BLACK: 1, ManaType.RED: 1},
+        )
+
+        # Cast and resolve through the stack — must not raise (the NameError
+        # used to crash resolution as the spell left the stack).
+        cast_spell(game, 0, "Fake Your Own Death", targets=[target])
+
+        # The spell resolved off the stack into its owner's graveyard.
+        assert game.stack.is_empty()
+        grave_names = [
+            getattr(c, "name", None) for c in game.get_graveyard(p1).get_all()
+        ]
+        assert "Fake Your Own Death" in grave_names
+
+        # The buff registration survived resolution: +2/+0 on the target.
+        assert game.effect_manager.get_effects_by_source(spell)
+        game.effect_manager.apply_all(game)
+        assert target.power == 4  # 2 base + 2
+        assert target.toughness == 2
+
+        # The death trigger and its end-of-turn cleanup trigger (the line that
+        # used to crash) are both registered.
+        event_types = {t.event_type for t in game.trigger_manager.get_triggers()}
+        assert CreatureDiesTriggeredEvent in event_types
+        assert EndOfTurnTriggeredEvent in event_types

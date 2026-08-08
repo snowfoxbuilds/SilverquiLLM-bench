@@ -146,10 +146,19 @@ def load_set_registry(
                 # claiming the same printed name means one is squatting on the
                 # other's slot (a real card would silently resolve as the
                 # wrong impl). Hard-fail, naming both offenders.
+                prior = registered_by.get(instance.name)
+                if prior is None:
+                    # The collision is against an entry the caller supplied in
+                    # a pre-populated registry, not one this load registered —
+                    # recover its implementation from the registry itself so
+                    # the error still names both sides of the collision rather
+                    # than an unhelpful placeholder.
+                    prior_cls, _prior_meta = registry.get(instance.name)
+                    prior = f"{prior_cls.__module__}.{prior_cls.__name__}"
                 raise ValueError(
                     f"Duplicate card name {instance.name!r}: "
                     f"{module_name}.{cls.__name__} collides with the earlier "
-                    f"registration from {registered_by.get(instance.name, '<unknown>')}"
+                    f"registration from {prior}"
                 )
             registry.register(instance.name, cls, metadata)
             registered_by[instance.name] = f"{module_name}.{cls.__name__}"

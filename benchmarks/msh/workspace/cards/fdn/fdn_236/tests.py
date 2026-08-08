@@ -18,7 +18,8 @@ from cards.fdn.fdn_236.card_impl import WildwoodScourge
 from engine.card import Creature
 from engine.events import CounterAddedTriggeredEvent
 from engine.game import add_counter
-from engine.types import ManaCost
+from engine.types import ManaCost, Zone
+from engine.zones import move_to_zone
 from test_utils import create_game, set_board_state
 
 
@@ -71,3 +72,27 @@ class TestWildwoodScourgeTriggerRegistration:
         # Self and Hydra creatures are excluded.
         self_event = CounterAddedTriggeredEvent(permanent=scourge, counter_type="+1/+1")
         assert trig.condition(game, self_event) is False
+
+
+class TestWildwoodScourgeThroughBattlefieldEntry:
+    """Integration coverage: trigger registration for a permanent normally
+    happens through the battlefield-entry path, not a hand-call to
+    ``register_triggers``. Entering via the real zone-transition must not
+    raise and must leave the ``CounterAddedTriggeredEvent`` subscription live.
+    """
+
+    def test_battlefield_entry_registers_counter_trigger(self) -> None:
+        game = create_game()
+        p1 = game.players[0]
+        scourge = WildwoodScourge(owner=p1, controller=p1)
+        set_board_state(game, 0, hand=[scourge])
+
+        # Normal zone-entry path: move_to_zone runs register_triggers on
+        # battlefield entry (must not raise — the NameError used to crash it).
+        move_to_zone(game, scourge, Zone.HAND, Zone.BATTLEFIELD)
+
+        assert game.get_battlefield(p1).contains(scourge)
+        triggers = game.trigger_manager.get_triggers_for_source(scourge)
+        assert any(
+            t.event_type is CounterAddedTriggeredEvent for t in triggers
+        )

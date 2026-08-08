@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
-from engine.types import CardType, ManaCost
+from engine.types import CardType, Color, ManaCost
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -74,4 +74,8 @@ class HareApparent(Creature):
                 base_power=1,
                 base_toughness=1,
             )
+            # A token has no mana cost, so its printed colour must be stated
+            # explicitly (get_colors reads an explicit ``colors`` attribute
+            # before falling back to coloured mana pips). The Rabbit is white.
+            token.colors = {Color.WHITE}
             create_token(game, controller, token)

@@ -16,7 +16,8 @@ from __future__ import annotations
 
 from cards.fdn.fdn_15.card_impl import HareApparent
 from engine.card import Creature
-from engine.types import ManaCost, ManaType, Zone
+from engine.protection import get_colors
+from engine.types import Color, ManaCost, ManaType, Zone
 from test_utils import cast_spell, create_game, set_board_state
 
 
@@ -113,6 +114,24 @@ class TestHareApparentEtb:
         assert (tok.base_power, tok.base_toughness) == (1, 1)
         assert tok.is_token is True
 
+    def test_tokens_are_white(self) -> None:
+        """The Rabbit token is white — a token has no mana cost, so its
+        colour must be represented explicitly for ``get_colors`` (and the
+        protection / colour-matching machinery built on it) to see it."""
+        game = create_game()
+        p1 = game.players[0]
+        entering = HareApparent(owner=p1, controller=p1)
+        other = HareApparent(owner=p1, controller=p1)
+        set_board_state(game, 0, battlefield=[entering, other])
+
+        entering.on_resolve(game)
+
+        tok = _rabbit_tokens(game, p1)[0]
+        assert get_colors(tok) == {Color.WHITE}
+        # Negative guard: a fake mana cost would leave it colourless, which is
+        # exactly the mono-white protection/colour logic this token must feed.
+        assert get_colors(tok) != set()
+
     def test_etb_fires_through_the_cast_pipeline(self) -> None:
         """End-to-end: casting Hare Apparent with two others already in play
         resolves the ETB and leaves two fresh Rabbit tokens — proving
@@ -135,5 +154,14 @@ class TestHareApparentEtb:
         bf = game.get_battlefield(p1).get_all()
         hares = [c for c in bf if getattr(c, "name", None) == "Hare Apparent"]
         assert len(hares) == 3
-        assert len(_rabbit_tokens(game, p1)) == 2
+
+        # Validate the tokens the resolution produced, not merely their count:
+        # each is a 1/1 white Rabbit creature token.
+        tokens = _rabbit_tokens(game, p1)
+        assert len(tokens) == 2
+        for tok in tokens:
+            assert (tok.base_power, tok.base_toughness) == (1, 1)
+            assert tok.is_token is True
+            assert get_colors(tok) == {Color.WHITE}
+
         assert game.players[0].zones[Zone.HAND].get_all() == []
