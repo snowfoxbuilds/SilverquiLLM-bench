@@ -123,9 +123,14 @@ class TestDivergenceType:
         # MSH Player Query protocol: engine-side boundary-validation failure.
         assert DivergenceType.PROTOCOL_ERROR.value == "PROTOCOL_ERROR"
 
-    def test_exactly_six_members(self) -> None:
-        # Four V1 divergence types + the two MSH Player Query types.
-        assert len(DivergenceType) == 6
+    def test_has_replay_infra(self) -> None:
+        # Simulate mode: executor-side impossibility, kept out of ENGINE_ERROR.
+        assert DivergenceType.REPLAY_INFRA.value == "REPLAY_INFRA"
+
+    def test_exactly_seven_members(self) -> None:
+        # Four V1 divergence types + the two MSH Player Query types
+        # + the simulate-mode REPLAY_INFRA type.
+        assert len(DivergenceType) == 7
 
 
 # ---------------------------------------------------------------------------

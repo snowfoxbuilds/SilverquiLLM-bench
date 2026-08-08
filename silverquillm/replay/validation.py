@@ -187,6 +187,10 @@ class ValidatingExecutor:
         self._snapshots_processed: int = 0
         self._successful: int = 0
         self._card_appearances: dict[int, int] = Counter()
+        # Simulate mode: missing-card identities already recorded — the
+        # counting unit is one divergence per (game, identity), not per
+        # action or snapshot.
+        self._missing_identities: set[str] = set()
 
     # ------------------------------------------------------------------
     # Public API
@@ -205,8 +209,18 @@ class ValidatingExecutor:
             if action.grp_id and action.grp_id != 0:
                 self._card_appearances[action.grp_id] += 1
 
-        # Check for missing cards before executing
-        missing = self._check_missing_cards(curr_snapshot)
+        # Check for missing cards before executing. Simulate mode counts the
+        # full unimplemented surface (parser actions + battlefield arrivals
+        # here, executor-synthesized actions after execution), deduplicated
+        # per (game, identity); observer mode keeps the original
+        # per-occurrence, mapped-actions-only behavior.
+        simulate = getattr(self.executor, "simulate", False)
+        if simulate:
+            missing = self._check_missing_cards_simulate(
+                prev_snapshot, curr_snapshot
+            )
+        else:
+            missing = self._check_missing_cards(curr_snapshot)
         has_missing = len(missing) > 0
         for div in missing:
             self.divergences.append(div)
@@ -262,6 +276,15 @@ class ValidatingExecutor:
                         a.grp_id for a in curr_snapshot.actions if a.grp_id
                     ][:1],
                 ))
+
+        # Simulate mode: hidden-origin actions are synthesized inside the
+        # executor, after the pre-execution check ran — count their missing
+        # cards from the StepResult.
+        if simulate:
+            synth_missing = self._check_missing_synthesized(result, curr_snapshot)
+            for div in synth_missing:
+                self.divergences.append(div)
+            has_missing = has_missing or bool(synth_missing)
 
         # Classify mismatches from the result
         if result.mismatches:
@@ -333,6 +356,128 @@ class ValidatingExecutor:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    # Basic-land names the executor resolves from GRE subtypes for grpIds
+    # outside the card map (arbitrary 17lands printings) — those become
+    # real registered cards, not misses.
+    _BASIC_LAND_NAMES = {"Plains", "Island", "Swamp", "Mountain", "Forest"}
+
+    def _missing_card_identity(self, grp_id: int, obj: Any = None) -> str | None:
+        """Resolve a grpId to its missing-card identity.
+
+        The mapped card name when the grpId maps; else the executor's
+        basic-land subtype resolution (mirroring ``_create_card_from_object``,
+        so an alt-printing Forest is 'Forest', not an unknown); else
+        ``grpId_<n>``. ``None`` for grp_id 0 (nothing to identify).
+        """
+        if not grp_id:
+            return None
+        name = self.card_id_map.get(grp_id, "")
+        if (
+            not name
+            and obj is not None
+            and "CardType_Land" in getattr(obj, "card_types", [])
+        ):
+            for subtype in getattr(obj, "subtypes", []):
+                basic = subtype.removeprefix("SubType_")
+                if basic in self._BASIC_LAND_NAMES:
+                    name = basic
+                    break
+        return name or f"grpId_{grp_id}"
+
+    def _identity_is_missing(self, identity: str) -> bool:
+        """True if *identity* has no implementation in the engine registry."""
+        if identity.startswith("grpId_"):
+            return True  # unmapped grpId: nothing to look up in the registry
+        return identity not in self.executor.registry
+
+    def _record_missing(
+        self,
+        snapshot: GameSnapshot,
+        grp_id: int,
+        obj: Any = None,
+        action: ReplayAction | None = None,
+    ) -> Divergence | None:
+        """Dedup-record one missing identity; None if known/implemented."""
+        identity = self._missing_card_identity(grp_id, obj)
+        if identity is None or identity in self._missing_identities:
+            return None
+        if not self._identity_is_missing(identity):
+            return None
+        self._missing_identities.add(identity)
+        return Divergence(
+            game_state_id=snapshot.game_state_id,
+            divergence_type=DivergenceType.MISSING_CARD,
+            description=(
+                f"Card '{identity}' (grpId={grp_id}) not implemented in engine"
+            ),
+            expected_state=self._snapshot_state_summary(snapshot),
+            actual_state=None,
+            action=action,
+            involved_grp_ids=[grp_id],
+        )
+
+    def _check_missing_cards_simulate(
+        self,
+        prev_snapshot: GameSnapshot,
+        curr_snapshot: GameSnapshot,
+    ) -> list[Divergence]:
+        """Simulate-mode missing-card check: parser actions + battlefield
+        arrivals, one divergence per (game, identity)."""
+        missing: list[Divergence] = []
+        if self.executor.registry is None:
+            return missing  # Can't check without a registry
+
+        # (a) parser-inferred actions.
+        for action in curr_snapshot.actions:
+            obj = curr_snapshot.game_objects.get(action.instance_id)
+            div = self._record_missing(
+                curr_snapshot, action.grp_id, obj=obj, action=action
+            )
+            if div is not None:
+                missing.append(div)
+
+        # (c) battlefield arrivals — makes cards the parser and the
+        # hidden-origin synthesis never surface (tokens above all) visible.
+        prev_bf = self._battlefield_instance_ids(prev_snapshot)
+        for iid in self._battlefield_instance_ids(curr_snapshot) - prev_bf:
+            obj = curr_snapshot.game_objects.get(iid)
+            if obj is None:
+                continue
+            if obj.type not in ("GameObjectType_Card", "GameObjectType_Token"):
+                continue
+            div = self._record_missing(curr_snapshot, obj.grp_id, obj=obj)
+            if div is not None:
+                missing.append(div)
+
+        return missing
+
+    def _check_missing_synthesized(
+        self,
+        result: StepResult,
+        curr_snapshot: GameSnapshot,
+    ) -> list[Divergence]:
+        """(b) executor-synthesized hidden-origin actions (opponent casts
+        and land plays the parser can't see)."""
+        missing: list[Divergence] = []
+        if self.executor.registry is None:
+            return missing
+        for action in getattr(result, "synthesized_actions", []):
+            obj = curr_snapshot.game_objects.get(action.instance_id)
+            div = self._record_missing(
+                curr_snapshot, action.grp_id, obj=obj, action=action
+            )
+            if div is not None:
+                missing.append(div)
+        return missing
+
+    @staticmethod
+    def _battlefield_instance_ids(snapshot: GameSnapshot) -> set[int]:
+        ids: set[int] = set()
+        for zone in snapshot.zones.values():
+            if zone.type == "ZoneType_Battlefield":
+                ids.update(zone.object_instance_ids)
+        return ids
 
     def _check_missing_cards(self, snapshot: GameSnapshot) -> list[Divergence]:
         """Check for cards in the snapshot that aren't implemented in the engine."""
