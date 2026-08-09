@@ -7,7 +7,7 @@ runs during a real game (the ``NameError: EventType`` / ``AttributeError:
 Layer.ABILITY_ADDING`` class of bug that this phase fixed).
 
 This guard walks each ``card_impl.py`` with :mod:`ast` — no execution — and
-fails on four defect classes:
+fails on seven defect classes:
 
   (a) a ``Layer.X`` / ``SubLayer.X`` attribute that is not a real enum member;
   (b) a bare name that is referenced (loaded) but never bound or imported
@@ -17,6 +17,15 @@ fails on four defect classes:
       assignment). Life must move only through ``game.gain_life`` /
       ``game.lose_life`` so the gain/loss triggers fire (Ajani's Pridemate
       et al.); a raw ``player.life += N`` silently bypasses them.
+  (e) a read of the dead-target backdoors ``_current_target`` /
+      ``_resolve_target`` (attribute load or ``getattr(..., "_current_target")``).
+      Nothing assigns these; targets flow through ``get_targets`` (spells),
+      the ``targeting`` hook (activated/loyalty abilities), or ``choose_object``
+      (resolution-time choices). A card reading them silently no-ops.
+  (f) a write to ``.tapped`` (assignment/augmented-assignment or
+      ``setattr(x, "tapped", …)``). The engine field is ``is_tapped``; a
+      ``.tapped`` write is invisible to state comparison and wrong for
+      ``GameRef`` matching. Use ``is_tapped`` or ``engine.game.tap`` / ``untap``.
 
 It is intentionally AST-based, not execution-based, so it catches paths that
 only run mid-game. It is fast (well under 2s over the full set) and every
@@ -39,6 +48,10 @@ _CARDS_ROOT = _WORKSPACE / "cards"
 
 _VALID_LAYER = set(Layer.__members__)
 _VALID_SUBLAYER = set(SubLayer.__members__)
+
+# Dead test backdoors: nothing in the engine assigns these, so a card reading
+# one silently no-ops. Targets flow through the real channels instead.
+_DEAD_TARGET_ATTRS = {"_current_target", "_resolve_target"}
 
 # Names that are always available without a binding in the module.
 _ALLOWED_NAMES = set(dir(builtins)) | {
@@ -115,12 +128,13 @@ def find_impl_defects(source: str) -> list[tuple[int, str]]:
                     )
 
         # (d) direct `.life` mutation — must route through gain_life/lose_life.
-        _life_targets: list[ast.expr] = []
+        # (f) `.tapped` write — the engine field is `is_tapped`.
+        _assign_targets: list[ast.expr] = []
         if isinstance(node, ast.AugAssign):
-            _life_targets = [node.target]
+            _assign_targets = [node.target]
         elif isinstance(node, ast.Assign):
-            _life_targets = list(node.targets)
-        for tgt in _life_targets:
+            _assign_targets = list(node.targets)
+        for tgt in _assign_targets:
             if isinstance(tgt, ast.Attribute) and tgt.attr == "life":
                 findings.append(
                     (
@@ -128,6 +142,45 @@ def find_impl_defects(source: str) -> list[tuple[int, str]]:
                         "direct '.life' mutation — use game.gain_life / game.lose_life",
                     )
                 )
+            if isinstance(tgt, ast.Attribute) and tgt.attr == "tapped":
+                findings.append((
+                    node.lineno,
+                    ("'.tapped' write — the engine field is 'is_tapped' "
+                     "(or use engine.game.tap / untap)"),
+                ))
+
+        # (e) dead-target backdoor reads: `_current_target` / `_resolve_target`.
+        #     Nothing assigns these — a card reading one silently no-ops.
+        if (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.ctx, ast.Load)
+            and node.attr in _DEAD_TARGET_ATTRS
+        ):
+            findings.append((
+                node.lineno,
+                (f"dead-target backdoor read '{node.attr}' — targets flow "
+                 "through get_targets / targeting / choose_object"),
+            ))
+
+        # (e'/f') the same defects via getattr/setattr string literals.
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            fn = node.func.id
+            if fn == "getattr" and len(node.args) >= 2:
+                key = node.args[1]
+                if isinstance(key, ast.Constant) and key.value in _DEAD_TARGET_ATTRS:
+                    findings.append((
+                        node.lineno,
+                        (f"dead-target backdoor read '{key.value}' via getattr — "
+                         "targets flow through the real channels"),
+                    ))
+            if fn == "setattr" and len(node.args) >= 2:
+                key = node.args[1]
+                if isinstance(key, ast.Constant) and key.value == "tapped":
+                    findings.append((
+                        node.lineno,
+                        ("setattr '.tapped' — the engine field is 'is_tapped' "
+                         "(or use engine.game.tap / untap)"),
+                    ))
 
         # (b) undefined bare name (skipped when a wildcard import hides bindings).
         if (
@@ -249,6 +302,48 @@ class TestGuardCatchesEachOriginalDefect:
             "    return ContinuousEffect(source=self, layer=Layer.ABILITY, "
             "sublayer=SubLayer.MODIFY_PT, apply=_apply)\n"
         )
+        assert find_impl_defects(src) == []
+
+    # (e) dead-target backdoor reads.
+    def test_current_target_attribute_read_is_flagged(self) -> None:
+        src = "def f(self):\n    t = self._current_target\n    return t\n"
+        assert any("_current_target" in m for m in self._messages(src))
+
+    def test_resolve_target_attribute_read_is_flagged(self) -> None:
+        src = "def f(self):\n    return self._resolve_target\n"
+        assert any("_resolve_target" in m for m in self._messages(src))
+
+    def test_current_target_getattr_is_flagged(self) -> None:
+        src = "def f(self):\n    return getattr(self, '_current_target', None)\n"
+        assert any("_current_target" in m for m in self._messages(src))
+
+    def test_resolve_target_getattr_is_flagged(self) -> None:
+        src = "def f(self):\n    return getattr(self, '_resolve_target', None)\n"
+        assert any("_resolve_target" in m for m in self._messages(src))
+
+    def test_chosen_targets_is_not_flagged(self) -> None:
+        # The sanctioned target channel must NOT be flagged.
+        src = "def f(self):\n    return getattr(self, 'chosen_targets', None)\n"
+        assert not any("backdoor" in m for m in self._messages(src))
+
+    # (f) `.tapped` writes.
+    def test_tapped_assign_is_flagged(self) -> None:
+        src = "def f(self, obj):\n    obj.tapped = True\n"
+        assert any("'.tapped' write" in m for m in self._messages(src))
+
+    def test_tapped_setattr_is_flagged(self) -> None:
+        src = "def f(self, obj):\n    setattr(obj, 'tapped', True)\n"
+        assert any("setattr '.tapped'" in m for m in self._messages(src))
+
+    def test_is_tapped_write_is_not_flagged(self) -> None:
+        # The correct field is fine.
+        src = "def f(self, obj):\n    obj.is_tapped = True\n"
+        assert not any("tapped" in m for m in self._messages(src))
+
+    def test_reading_tapped_is_not_flagged(self) -> None:
+        # Only writes are banned; a read (wrong, but out of scope here) is not
+        # flagged by the write rule.
+        src = "def f(self, obj):\n    return obj.is_tapped\n"
         assert find_impl_defects(src) == []
 
 

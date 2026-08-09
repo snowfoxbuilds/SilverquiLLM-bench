@@ -50,19 +50,21 @@ class ZimoneParadoxSculptor(Creature):
             candidates = [c for c in bf.get_all() if CardType.CREATURE in getattr(c, 'card_types', set())]
             if not candidates:
                 return
-            targets_chosen = []
+            targets_chosen: list[Any] = []
             for i in range(min(2, len(candidates))):
                 remaining = [c for c in candidates if c not in targets_chosen]
                 if not remaining:
                     break
-                chosen = choose_object(game, ctrl, remaining, f'creature to get +1/+1 counter ({i + 1}/2)', source_card=source)
-                if chosen is not None:
-                    targets_chosen.append(chosen)
+                # "up to two" — each pick is declinable; a decline stops here.
+                chosen = choose_object(game, ctrl, remaining, f'creature to get +1/+1 counter ({i + 1}/2)', source_card=source, optional=True)
+                if chosen is None:
+                    break
+                targets_chosen.append(chosen)
             for target in targets_chosen:
                 add_counter(game, target, '+1/+1')
         game.trigger_manager.register(TriggerRegistration(event_type=BeginningOfCombatTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
 
-    def get_activated_abilities(self, game: 'GameState') -> list:
+    def get_activated_abilities(self) -> list:
         """{G}{U}, {T}: Double counters on up to two targets."""
         source = self
 
@@ -74,14 +76,16 @@ class ZimoneParadoxSculptor(Creature):
             candidates = [c for c in bf.get_all() if CardType.CREATURE in getattr(c, 'card_types', set()) or CardType.ARTIFACT in getattr(c, 'card_types', set())]
             if not candidates:
                 return
-            targets_chosen = []
+            targets_chosen: list[Any] = []
             for i in range(min(2, len(candidates))):
                 remaining = [c for c in candidates if c not in targets_chosen]
                 if not remaining:
                     break
-                chosen = choose_object(game, ctrl, remaining, f'creature/artifact to double counters ({i + 1}/2)', source_card=source)
-                if chosen is not None:
-                    targets_chosen.append(chosen)
+                # "up to two" — each pick is declinable; a decline stops here.
+                chosen = choose_object(game, ctrl, remaining, f'creature/artifact to double counters ({i + 1}/2)', source_card=source, optional=True)
+                if chosen is None:
+                    break
+                targets_chosen.append(chosen)
             for target in targets_chosen:
                 plus_one = getattr(target, 'plus_one_counters', 0)
                 if plus_one > 0:

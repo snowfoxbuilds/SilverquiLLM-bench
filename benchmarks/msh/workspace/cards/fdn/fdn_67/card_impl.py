@@ -57,4 +57,3 @@ class RevengeOfTheRats(Sorcery):
             create_token(game, controller, token)
             # Token enters tapped
             token.is_tapped = True
-            token.tapped = True

@@ -49,14 +49,34 @@ class BurnishedHart(ArtifactCreature):
             return True
 
         def _effect(game: Any) -> None:
+            from engine.card_queries import choose_object
+
             controller = source.controller
             if controller is None:
                 return
             library = controller.zones[Zone.LIBRARY]
-            found: list[Any] = []
-            for card in list(library.get_all()):
-                if getattr(card, "is_basic_land", False) and len(found) < 2:
-                    found.append(card)
+            # A basic land is a Land with the Basic supertype (there is no
+            # `is_basic_land` flag — the earlier filter matched nothing).
+            basics = [
+                card
+                for card in library.get_all()
+                if Supertype.BASIC in getattr(card, "supertypes", set())
+                and CardType.LAND in getattr(card, "card_types", set())
+            ]
+            # "Search for UP TO TWO basic land cards" — a declinable choice of
+            # 0, 1, or 2 (min=0, max=2), not an automatic grab of the first two.
+            found = []
+            if basics:
+                chosen = choose_object(
+                    game,
+                    controller,
+                    basics,
+                    "Search your library for up to two basic land cards",
+                    source_card=source,
+                    min=0,
+                    max=2,
+                )
+                found = chosen if isinstance(chosen, list) else ([chosen] if chosen else [])
             for basic in found:
                 library.remove(basic)
                 basic.is_tapped = True

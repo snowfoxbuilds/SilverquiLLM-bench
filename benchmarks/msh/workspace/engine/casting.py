@@ -89,18 +89,37 @@ def _source_decision(game: GameState, card: Any) -> Any:
     )
 
 
-def _query_target(game: GameState, player: Player, card: CardImpl, spec: Any) -> Any:
+def _query_target(
+    game: GameState,
+    player: Player,
+    card: CardImpl,
+    spec: Any,
+    exclude: Any = (),
+) -> Any:
     """Raise a Player Query for one target spec; return the chosen game object.
 
     The engine enumerates the legal option set (objects in ``spec.zone`` across
     both players, plus the players themselves), offers only those, and maps the
-    Answer back to the game object via the Game Refs registry. A required spec
-    with no legal target raises :class:`CastingError`.
+    Answer back to the game object via the Game Refs registry.
+
+    A **required** spec (``optional`` unset/``False``) keeps a mandatory
+    ``min == 1`` query and raises :class:`CastingError` when no legal target
+    exists. An **optional** spec ("up to one target"; ``optional == True``) is
+    declinable: an empty candidate set returns ``None`` without raising, and the
+    query is offered with ``min == 0`` so the player may decline (also ``None``).
+    ``None`` means "no target for this spec" — the caller adds nothing to
+    ``chosen_targets``.
+
+    *exclude* holds the objects already chosen for earlier target specs of this
+    same cast; they are dropped from the candidate set so a multi-target spell
+    picks **distinct** objects (rule 601.2c). For an optional spec this can
+    empty the option set, which then declines cleanly rather than raising.
     """
     from engine.queries import PlayerQuery, ask
 
     filter_fn = getattr(spec, "filter_fn", None)
     zone = getattr(spec, "zone", None)
+    optional = bool(getattr(spec, "optional", False))
 
     candidates: list[Any] = []
     if zone is not None:
@@ -112,6 +131,8 @@ def _query_target(game: GameState, player: Player, card: CardImpl, spec: Any) ->
     options: list[Any] = []
     by_decision: dict[Any, Any] = {}
     for candidate in candidates:
+        if any(candidate is chosen for chosen in exclude):
+            continue
         if filter_fn is not None and not _safe_filter(filter_fn, candidate):
             continue
         decision = _candidate_decision(game, candidate, zone)
@@ -121,6 +142,8 @@ def _query_target(game: GameState, player: Player, card: CardImpl, spec: Any) ->
         by_decision[decision] = candidate
 
     if not options:
+        if optional:
+            return None
         raise CastingError(
             f"Cannot cast {card.name!r} — no legal target for "
             f"{getattr(spec, 'description', 'target')!r}"
@@ -130,10 +153,13 @@ def _query_target(game: GameState, player: Player, card: CardImpl, spec: Any) ->
         source=(_source_decision(game, card),),
         prompt=getattr(spec, "description", "choose target"),
         options=tuple(options),
-        min=1,
+        min=0 if optional else 1,
         max=1,
     )
     answer = ask(player, query)
+    if not answer.selected:
+        # A declined optional target (min == 0) — no object chosen.
+        return None
     return by_decision[answer.selected[0]]
 
 
@@ -362,17 +388,20 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     chosen_targets: list[Any] = []
     if target_specs:
         for spec in target_specs:
-            target = _query_target(game, player, card, spec)
+            target = _query_target(game, player, card, spec, exclude=chosen_targets)
+            if target is None:
+                # An optional "up to one target" that was declined or had no
+                # legal candidate — it contributes no target.
+                continue
             # Validate against filter_fn if the spec provides one
             filter_fn = getattr(spec, "filter_fn", None)
-            if filter_fn is not None and target is not None:
-                if not filter_fn(target):
-                    stack_zone.remove(card)
-                    hand.add(card)
-                    raise CastingError(
-                        f"Cannot cast {card.name!r} — chosen target does not "
-                        f"satisfy filter: {getattr(spec, 'description', '')}"
-                    )
+            if filter_fn is not None and not filter_fn(target):
+                stack_zone.remove(card)
+                hand.add(card)
+                raise CastingError(
+                    f"Cannot cast {card.name!r} — chosen target does not "
+                    f"satisfy filter: {getattr(spec, 'description', '')}"
+                )
             chosen_targets.append(target)
 
     # 5b. Protection check — reject targets that have protection from this
@@ -532,15 +561,18 @@ def cast_spell_free(
         chosen_targets: list[Any] = []
         if target_specs:
             for spec in target_specs:
-                target = _query_target(game, player, card, spec)
+                target = _query_target(game, player, card, spec, exclude=chosen_targets)
+                if target is None:
+                    # An optional "up to one target" declined or with no legal
+                    # candidate — it contributes no target.
+                    continue
                 # Validate against filter_fn if the spec provides one
                 filter_fn = getattr(spec, "filter_fn", None)
-                if filter_fn is not None and target is not None:
-                    if not filter_fn(target):
-                        raise CastingError(
-                            f"Cannot cast {card.name!r} — chosen target does not "
-                            f"satisfy filter: {getattr(spec, 'description', '')}"
-                        )
+                if filter_fn is not None and not filter_fn(target):
+                    raise CastingError(
+                        f"Cannot cast {card.name!r} — chosen target does not "
+                        f"satisfy filter: {getattr(spec, 'description', '')}"
+                    )
                 chosen_targets.append(target)
 
         # Protection check — reject targets that have protection from this spell

@@ -1,37 +1,33 @@
 """Card implementation for Abrade."""
 
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature, Instant, Mode, Sorcery
-from engine.continuous_effects import (
-    ContinuousEffect,
-    DURATION_END_OF_TURN,
-    Layer,
-    SubLayer,
-)
-from engine.types import CardType, Keyword, ManaCost, Zone
+
+from engine.card import Instant, Mode
+from engine.card_queries import choose_mode
+from engine.types import CardType, ManaCost, TargetRequirement, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
-    from cards.registry import CardRegistry
 
-def _get_target(card: Any) -> Any:
-    """Return the first chosen target or the _resolve_target fallback."""
-    chosen = getattr(card, "chosen_targets", None)
-    if chosen:
-        return chosen[0]
-    return getattr(card, "_resolve_target", None)
-def _is_on_battlefield(game: Any, obj: Any) -> bool:
-    for player in game.players:
-        if game.get_battlefield(player).contains(obj):
-            return True
-    return False
+def _on_battlefield(game: Any, obj: Any) -> bool:
+    return any(game.get_battlefield(p).contains(obj) for p in game.players)
+
+
+# Mode indices — the chosen mode determines which target type is legal.
+_MODE_DAMAGE = 0
+_MODE_DESTROY_ARTIFACT = 1
+_MODE_NAMES = ["Damage", "Destroy Artifact"]
+
 
 class Abrade(Instant):
-    """Abrade — {1}{R} — Choose one.
+    """Abrade — {1}{R} — Instant.
 
-    - Abrade deals 3 damage to target creature.
-    - Destroy target artifact.
+    Choose one —
+    • Abrade deals 3 damage to target creature.
+    • Destroy target artifact.
 
     FDN collector number 188.
     """
@@ -46,7 +42,7 @@ class Abrade(Instant):
             "• Destroy target artifact.",
         )
         super().__init__(**kwargs)
-        self.chosen_mode: int | None = None
+        self._chosen_mode_index: int | None = None
 
     def get_modes(self) -> list[Mode]:
         return [
@@ -54,17 +50,45 @@ class Abrade(Instant):
             Mode(name="Destroy Artifact", description="Destroy target artifact."),
         ]
 
-    def on_resolve(self, game: GameState) -> None:
-        mode = self.chosen_mode
-        if mode is None:
+    def get_targets(self, game: "GameState") -> list[Any]:
+        """Choose the mode, then return the matching single-target requirement."""
+        controller = self.controller or getattr(self, "owner", None)
+        chosen = choose_mode(game, controller, _MODE_NAMES, "Choose one", source_card=self)
+        self._chosen_mode_index = _MODE_NAMES.index(chosen)
+
+        if self._chosen_mode_index == _MODE_DAMAGE:
+            return [
+                TargetRequirement(
+                    filter_fn=lambda obj: CardType.CREATURE
+                    in getattr(obj, "card_types", set()),
+                    description="target creature",
+                    zone=Zone.BATTLEFIELD,
+                )
+            ]
+        return [
+            TargetRequirement(
+                filter_fn=lambda obj: CardType.ARTIFACT
+                in getattr(obj, "card_types", set()),
+                description="target artifact",
+                zone=Zone.BATTLEFIELD,
+            )
+        ]
+
+    def on_resolve(self, game: "GameState") -> None:
+        """Resolve the chosen mode against the captured target."""
+        chosen = getattr(self, "chosen_targets", None) or []
+        target = chosen[0] if chosen else None
+        if target is None or self._chosen_mode_index is None:
             return
-        if mode == 0:
+
+        if self._chosen_mode_index == _MODE_DAMAGE:
             from engine.game import deal_damage
-            target = _get_target(self)
-            if target is not None:
-                deal_damage(game, self, target, 3)
-        elif mode == 1:
+
+            deal_damage(game, self, target, 3)
+        elif self._chosen_mode_index == _MODE_DESTROY_ARTIFACT:
             from engine.game import destroy
-            target = _get_target(self)
-            if target is not None and _is_on_battlefield(game, target):
+
+            if _on_battlefield(game, target) and CardType.ARTIFACT in getattr(
+                target, "card_types", set()
+            ):
                 destroy(game, target)

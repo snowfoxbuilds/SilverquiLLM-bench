@@ -93,26 +93,52 @@ class VivienReid(Planeswalker):
             for c in remaining:
                 library.add(c, position="bottom")
 
-        def _minus3(game: Any) -> None:
-            """Destroy target artifact, enchantment, or creature with flying.
-
-            Uses lazy target validation at resolution time.
-            """
-            from engine.game import destroy
-
-            target = getattr(pw, "_resolve_target", None)
-            if target is None:
-                return
-
-            # Lazy filter: revalidate target at resolution
-            card_types = getattr(target, "card_types", set())
-            keywords = getattr(target, "keywords", Keyword(0))
-            is_legal = (
+        def _is_minus3_legal(obj: Any) -> bool:
+            """Artifact, enchantment, or creature with flying."""
+            card_types = getattr(obj, "card_types", set())
+            keywords = getattr(obj, "keywords", Keyword(0))
+            return (
                 CardType.ARTIFACT in card_types
                 or CardType.ENCHANTMENT in card_types
                 or (CardType.CREATURE in card_types and Keyword.FLYING in keywords)
             )
-            if is_legal:
+
+        def _minus3_targeting(
+            game: Any, source: Any, controller: Any
+        ) -> list[Any] | None:
+            """Required target — no legal permanent ⇒ cannot be activated."""
+            candidates = [
+                obj
+                for player in game.players
+                for obj in game.get_battlefield(player).get_all()
+                if _is_minus3_legal(obj)
+            ]
+            if not candidates:
+                return None
+            chosen = choose_object(
+                game,
+                controller,
+                candidates,
+                "Destroy target artifact, enchantment, or creature with flying",
+                source_card=source,
+            )
+            if chosen is None:
+                return None
+            return [chosen]
+
+        def _minus3(game: Any, targets: list[Any], context: Any = None) -> None:
+            """Destroy the chosen target — revalidated at resolution."""
+            from engine.game import destroy
+
+            target = targets[0] if targets else None
+            if target is None:
+                return
+            if not any(
+                game.get_battlefield(p).contains(target) for p in game.players
+            ):
+                return
+            # Revalidate the target's characteristics at resolution.
+            if _is_minus3_legal(target):
                 destroy(game, target)
 
         def _minus8(game: Any) -> None:
@@ -178,6 +204,7 @@ class VivienReid(Planeswalker):
             LoyaltyAbility(
                 loyalty_cost=-3,
                 effect=_minus3,
+                targeting=_minus3_targeting,
                 description="−3: Destroy target artifact, enchantment, or creature with flying.",
             ),
             LoyaltyAbility(

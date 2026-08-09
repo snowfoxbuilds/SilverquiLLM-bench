@@ -979,3 +979,157 @@ class TestCastResolveIntegration:
 
         top = game.stack.peek()
         assert top.targets == [target_creature]
+
+
+# ---------------------------------------------------------------------------
+# Optional targets — "up to one target X" (TargetRequirement.optional)
+# ---------------------------------------------------------------------------
+
+class TestOptionalTargets:
+    """`TargetRequirement.optional` makes a target query declinable (min == 0)
+    and lets an empty candidate set skip the requirement instead of raising —
+    so "up to N target X" is castable with fewer than N (or zero) candidates."""
+
+    @staticmethod
+    def _creature_spec(*, optional: bool):
+        from engine.types import TargetRequirement, Zone
+
+        return TargetRequirement(
+            filter_fn=lambda obj: CardType.CREATURE
+            in getattr(obj, "card_types", set()),
+            description="up to one target creature" if optional else "target creature",
+            zone=Zone.BATTLEFIELD,
+            optional=optional,
+        )
+
+    def _spell_class(self, specs):
+        class _Spell(Instant):
+            def get_targets(self, game):
+                return specs
+
+        return _Spell
+
+    def _place_creature(self, game, player_idx, name):
+        from engine.types import Zone
+
+        p = game.players[player_idx]
+        c = Creature(name=name, mana_cost=ManaCost(pips={ManaType.GREEN: 1}),
+                     base_power=2, base_toughness=2)
+        c.owner = p
+        c.controller = p
+        p.zones[Zone.BATTLEFIELD].add(c)
+        c.instance_id = game.refs.instance_id(c, Zone.BATTLEFIELD.value)
+        return c
+
+    def test_optional_empty_candidate_set_casts_without_target(self):
+        """No legal candidate + optional: the spell casts, raises no query, and
+        goes on the stack with no target (rather than raising CastingError)."""
+        Spell = self._spell_class([self._creature_spec(optional=True)])
+        game = _make_game()
+        player = game.players[0]
+        card = Spell(name="Optional Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        _add_to_hand(game, 0, card)
+        _add_mana(player, ManaType.RED, 1)
+        # No creatures anywhere; no intent needed — the empty option set skips.
+        cast_spell(game, player, card)
+        top = game.stack.peek()
+        assert top is not None and top.source is card
+        assert top.targets == []
+
+    def test_required_empty_candidate_set_still_raises(self):
+        """The required-target boundary is unchanged: an empty candidate set for
+        a non-optional spec still raises CastingError, and no StackObject is
+        pushed (a candidate present would instead cast — see other tests)."""
+        Spell = self._spell_class([self._creature_spec(optional=False)])
+        game = _make_game()
+        player = game.players[0]
+        card = Spell(name="Required Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        _add_to_hand(game, 0, card)
+        _add_mana(player, ManaType.RED, 1)
+        with pytest.raises(CastingError):
+            cast_spell(game, player, card)
+        assert game.stack.is_empty()   # nothing pushed onto the stack
+
+    def test_optional_declined_when_candidate_present(self):
+        """Candidate present but declined (intent with no matching preference,
+        min == 0): the spell casts with no target."""
+        Spell = self._spell_class([self._creature_spec(optional=True)])
+        game = _make_game()
+        player = game.players[0]
+        self._place_creature(game, 1, "Bystander")
+        card = Spell(name="Optional Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        _add_to_hand(game, 0, card)
+        _add_mana(player, ManaType.RED, 1)
+        # Intent routes to the spell but prefers nothing → decline at min == 0.
+        player.start_intent("bolt", Intent(
+            pattern=GameRef(card=frozenset({("name", "Optional Bolt")})),
+            preferences=(),
+        ))
+        cast_spell(game, player, card)
+        player.end_intent("bolt")
+        assert game.stack.peek().targets == []
+
+    def test_optional_chosen_when_preferred(self):
+        """An optional target IS captured when the intent prefers a candidate."""
+        Spell = self._spell_class([self._creature_spec(optional=True)])
+        game = _make_game()
+        player = game.players[0]
+        victim = self._place_creature(game, 1, "Victim")
+        card = Spell(name="Optional Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        _add_to_hand(game, 0, card)
+        _add_mana(player, ManaType.RED, 1)
+        player.start_intent("bolt", Intent(
+            pattern=GameRef(card=frozenset({("name", "Optional Bolt")})),
+            preferences=(Decision.obj(instance=victim.instance_id),),
+        ))
+        cast_spell(game, player, card)
+        player.end_intent("bolt")
+        assert game.stack.peek().targets == [victim]
+
+    def test_up_to_two_picks_distinct_targets(self):
+        """Two optional specs + an intent preferring both creatures capture two
+        DISTINCT targets — the second query excludes the first pick."""
+        Spell = self._spell_class([
+            self._creature_spec(optional=True),
+            self._creature_spec(optional=True),
+        ])
+        game = _make_game()
+        player = game.players[0]
+        a = self._place_creature(game, 1, "A")
+        b = self._place_creature(game, 1, "B")
+        card = Spell(name="Twin Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        _add_to_hand(game, 0, card)
+        _add_mana(player, ManaType.RED, 1)
+        player.start_intent("bolt", Intent(
+            pattern=GameRef(card=frozenset({("name", "Twin Bolt")})),
+            preferences=(
+                Decision.obj(instance=a.instance_id),
+                Decision.obj(instance=b.instance_id),
+            ),
+        ))
+        cast_spell(game, player, card)
+        player.end_intent("bolt")
+        targets = game.stack.peek().targets
+        assert set(id(t) for t in targets) == {id(a), id(b)}
+        assert len(targets) == 2   # distinct, no duplicate
+
+    def test_up_to_two_with_one_candidate_casts_with_one(self):
+        """Two optional specs but only one candidate: casts with a single target
+        (the second spec's option set is empty after excluding the first)."""
+        Spell = self._spell_class([
+            self._creature_spec(optional=True),
+            self._creature_spec(optional=True),
+        ])
+        game = _make_game()
+        player = game.players[0]
+        only = self._place_creature(game, 1, "Only")
+        card = Spell(name="Twin Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        _add_to_hand(game, 0, card)
+        _add_mana(player, ManaType.RED, 1)
+        player.start_intent("bolt", Intent(
+            pattern=GameRef(card=frozenset({("name", "Twin Bolt")})),
+            preferences=(Decision.obj(instance=only.instance_id),),
+        ))
+        cast_spell(game, player, card)
+        player.end_intent("bolt")
+        assert game.stack.peek().targets == [only]

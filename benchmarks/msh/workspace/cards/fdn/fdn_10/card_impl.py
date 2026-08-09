@@ -80,7 +80,7 @@ class DivineResilience(Instant):
         """Grant indestructible until end of turn to chosen target(s)."""
         chosen = getattr(self, "chosen_targets", None)
         if not chosen:
-            t = getattr(self, "_resolve_target", None)
+            t = None
             chosen = [t] if t is not None else []
 
         if not chosen:

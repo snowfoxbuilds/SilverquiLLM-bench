@@ -5,8 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
-from engine.card_queries import choose_object
-from engine.types import ManaCost, Zone
+from engine.types import CardType, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -34,46 +33,34 @@ class BigfinBouncer(Creature):
         )
         super().__init__(**kwargs)
 
-    def get_targets(self, game: "GameState") -> list:
-        """Choose target creature an opponent controls to bounce."""
-        controller = self.controller
-        if controller is None:
-            return []
-        targets: list = []
-        for player in game.players:
-            if player is controller:
-                continue
-            bf = game.get_battlefield(player)
-            for obj in bf.get_all():
-                from engine.types import CardType
-                card_types = getattr(obj, "card_types", set())
-                if CardType.CREATURE in card_types:
-                    targets.append(obj)
-        if not targets:
-            return []
-        # Controller chooses one target
-        chosen = choose_object(game, controller, targets, "creature an opponent controls", source_card=self)
-        return [chosen] if chosen else []
+    def _is_opponent_creature(self, obj: Any) -> bool:
+        """Legal target: a creature controlled by a player other than me."""
+        if CardType.CREATURE not in getattr(obj, "card_types", set()):
+            return False
+        obj_controller = getattr(obj, "controller", None)
+        return obj_controller is not None and obj_controller is not self.controller
+
+    def get_targets(self, game: "GameState") -> list[Any]:
+        """Target creature an opponent controls (chosen at cast/ETB)."""
+        return [
+            TargetRequirement(
+                filter_fn=self._is_opponent_creature,
+                description="target creature an opponent controls",
+                zone=Zone.BATTLEFIELD,
+            )
+        ]
 
     def on_resolve(self, game: "GameState") -> None:
-        """ETB: bounce target creature an opponent controls."""
+        """ETB: bounce the chosen creature to its owner's hand."""
         from engine.zones import move_to_zone
 
-        controller = self.controller
-        if controller is None:
-            return
-
-        # Get chosen target (lazy revalidation at resolution)
-        chosen = getattr(self, "chosen_targets", None)
-        target = chosen[0] if chosen else getattr(self, "_resolve_target", None)
+        targets = getattr(self, "chosen_targets", None) or []
+        target = targets[0] if targets else None
         if target is None:
             return
 
-        # Verify target is still on an opponent's battlefield
+        # Revalidate: the target must still be on a battlefield.
         for player in game.players:
-            if player is controller:
-                continue
-            bf = game.get_battlefield(player)
-            if bf.contains(target):
+            if game.get_battlefield(player).contains(target):
                 move_to_zone(game, target, Zone.BATTLEFIELD, Zone.HAND)
                 return

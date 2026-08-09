@@ -1,75 +1,110 @@
 """Card implementation for Apothecary Stomper."""
+
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature, Instant, Mode, Sorcery
-from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
-from engine.types import CardType, Keyword, ManaCost, Zone
-from engine.events import EntersBattlefieldTriggeredEvent
+
+from engine.card import Creature, Mode
+from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
-    from cards.registry import CardRegistry
 
-def _get_controller(card: Any) -> Any:
-    """Return the controller of a card, or None."""
-    return getattr(card, 'controller', None)
-
-def _get_target(card: Any) -> Any:
-    """Return the first chosen target or the _resolve_target fallback."""
-    chosen = getattr(card, 'chosen_targets', None)
-    if chosen:
-        return chosen[0]
-    return getattr(card, '_resolve_target', None)
-
-def _self_etb_condition(source: Any):
-    """Return a condition callable that matches only when *source* enters."""
-
-    def _condition(game: Any, event: dict) -> bool:
-        return event.permanent is source
-    return _condition
 
 class ApothecaryStomper(Creature):
-    """Apothecary Stomper — {4}{G}{G} — 4/4 — Elephant
+    """Apothecary Stomper — {4}{G}{G} — 4/4 — Elephant — Vigilance.
 
-    Vigilance.
+    Vigilance
     When this creature enters, choose one —
-    - Put two +1/+1 counters on target creature you control.
-    - You gain 4 life.
+    • Put two +1/+1 counters on target creature you control.
+    • You gain 4 life.
 
     FDN collector number 99.
+
+    Modal ETB (Pattern 5 + Pattern 1): the mode is chosen at cast in
+    ``get_targets``; mode 0 returns a "target creature you control" requirement
+    and mode 1 (gain life) is non-targeted. The effect resolves in
+    ``on_resolve`` before the Stomper arrives.
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        kwargs.setdefault('name', 'Apothecary Stomper')
-        kwargs.setdefault('mana_cost', ManaCost.parse('{4}{G}{G}'))
-        kwargs.setdefault('base_power', 4)
-        kwargs.setdefault('base_toughness', 4)
-        kwargs.setdefault('subtypes', {'Elephant'})
-        kwargs.setdefault('keywords', Keyword.VIGILANCE)
+        kwargs.setdefault("name", "Apothecary Stomper")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{4}{G}{G}"))
+        kwargs.setdefault("base_power", 4)
+        kwargs.setdefault("base_toughness", 4)
+        kwargs.setdefault("subtypes", {"Elephant"})
+        kwargs.setdefault("keywords", Keyword.VIGILANCE)
+        kwargs.setdefault(
+            "rules_text",
+            "Vigilance\nWhen this creature enters, choose one —\n"
+            "• Put two +1/+1 counters on target creature you control.\n"
+            "• You gain 4 life.",
+        )
         super().__init__(**kwargs)
         self.chosen_mode: int | None = None
 
     def get_modes(self) -> list[Mode]:
-        return [Mode(name='Counters', description='Put two +1/+1 counters on target creature you control.'), Mode(name='Life', description='You gain 4 life.')]
+        return [
+            Mode(
+                name="Counters",
+                description="Put two +1/+1 counters on target creature you control.",
+            ),
+            Mode(name="Life", description="You gain 4 life."),
+        ]
 
-    def register_triggers(self, game: GameState) -> None:
-        from engine.triggers import TriggerRegistration
+    def get_targets(self, game: "GameState") -> list[Any]:
+        """Choose the mode; return a target requirement only for mode 0."""
+        from engine.card_queries import choose_mode
 
-        def _etb_effect(g: GameState) -> None:
-            controller = _get_controller(self)
-            if controller is None:
+        controller = self.controller or getattr(self, "owner", None)
+        modes = self.get_modes()
+        chosen_name = choose_mode(
+            game,
+            controller,
+            [m.name for m in modes],
+            "Choose one",
+            source_card=self,
+        )
+        self.chosen_mode = next(
+            i for i, m in enumerate(modes) if m.name == chosen_name
+        )
+
+        if self.chosen_mode == 0:
+            def _yours(obj: Any) -> bool:
+                return (
+                    CardType.CREATURE in getattr(obj, "card_types", set())
+                    and getattr(obj, "controller", None) is controller
+                )
+
+            return [
+                TargetRequirement(
+                    filter_fn=_yours,
+                    description="target creature you control",
+                    zone=Zone.BATTLEFIELD,
+                )
+            ]
+        return []
+
+    def on_resolve(self, game: "GameState") -> None:
+        mode = self.chosen_mode
+        controller = self.controller or getattr(self, "owner", None)
+        if mode is None or controller is None:
+            return
+
+        if mode == 0:
+            from engine.game import add_counter
+
+            chosen = getattr(self, "chosen_targets", None) or []
+            target = chosen[0] if chosen else None
+            if target is None:
                 return
-            mode = self.chosen_mode
-            if mode is None:
-                mode = 0
-            if mode == 0:
-                target = _get_target(self)
-                if target is None:
-                    target = self
-                if hasattr(target, 'plus_one_counters'):
-                    from engine.game import add_counter
-                    add_counter(g, target, "+1/+1", 2)
-            elif mode == 1:
-                from engine.game import gain_life
-                gain_life(g, controller, 4)
-        reg = TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_etb_effect, source=self, controller=self.controller or self.owner)
-        game.trigger_manager.register(reg)
+            # Revalidate: still a creature you control on the battlefield.
+            if getattr(target, "controller", None) is not controller:
+                return
+            if not game.get_battlefield(controller).contains(target):
+                return
+            add_counter(game, target, "+1/+1", 2)
+        elif mode == 1:
+            from engine.game import gain_life
+
+            gain_life(game, controller, 4)

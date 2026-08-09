@@ -1,13 +1,12 @@
 """Card implementation for Condemn."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import ActivatedAbility, Artifact, Creature, Enchantment, Instant, ManaAbility, Sorcery
-from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, DURATION_PERMANENT, Layer, SubLayer
-from engine.types import CardType, Color, HybridManaSymbol, Keyword, ManaCost, ManaType, Supertype, Zone
+from engine.card import Instant
+from engine.types import CardType, ManaCost, TargetRequirement, Zone
 from engine.events import LeavesBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
-    from cards.registry import CardRegistry
+
 
 def _is_on_battlefield(game: Any, card: Any) -> bool:
     """Check if *card* is on any player's battlefield."""
@@ -15,6 +14,15 @@ def _is_on_battlefield(game: Any, card: Any) -> bool:
         if game.get_battlefield(player).contains(card):
             return True
     return False
+
+
+def _is_attacking_creature(obj: Any) -> bool:
+    """Legal target: an attacking creature."""
+    return (
+        CardType.CREATURE in getattr(obj, "card_types", set())
+        and bool(getattr(obj, "is_attacking", False))
+    )
+
 
 class Condemn(Instant):
     """Condemn — {W} — Instant
@@ -31,37 +39,31 @@ class Condemn(Instant):
         kwargs.setdefault('rules_text', "Put target attacking creature on the bottom of its owner's library. Its controller gains life equal to its toughness.")
         super().__init__(**kwargs)
 
-    def _get_attacking_creatures(self, game: GameState) -> list[Any]:
-        """Return all attacking creatures on the battlefield."""
-        targets: list[Any] = []
-        for player in game.players:
-            bf = game.get_battlefield(player)
-            for card in bf.get_all():
-                if CardType.CREATURE in getattr(card, 'card_types', set()) and getattr(card, 'is_attacking', False):
-                    targets.append(card)
-        return targets
+    def get_targets(self, game: "GameState") -> list[Any]:
+        """Target attacking creature (required)."""
+        return [
+            TargetRequirement(
+                filter_fn=_is_attacking_creature,
+                description="target attacking creature",
+                zone=Zone.BATTLEFIELD,
+            )
+        ]
 
-    def can_cast(self, game: GameState) -> bool:
-        """Can only cast when there is at least one attacking creature."""
-        return bool(self._get_attacking_creatures(game))
-
-    def get_targets(self, game: GameState) -> list[Any]:
-        """Return all attacking creatures as valid targets."""
-        return self._get_attacking_creatures(game)
-
-    def on_resolve(self, game: GameState) -> None:
+    def on_resolve(self, game: "GameState") -> None:
         """Resolve Condemn: bottom-of-library + life gain."""
-        chosen = getattr(self, 'chosen_targets', None)
-        target = chosen[0] if chosen else None
+        targets = getattr(self, 'chosen_targets', None) or []
+        target = targets[0] if targets else None
         if target is None:
             return
         if not _is_on_battlefield(game, target):
             return
-        if not getattr(target, 'is_attacking', False):
-            return
+
+        # Capture characteristics before the creature leaves the battlefield.
         controller = getattr(target, 'controller', None)
         toughness = getattr(target, 'toughness', 0)
         owner = getattr(target, 'owner', controller)
+
+        # Move the creature to the bottom of its owner's library.
         for player in game.players:
             bf = game.get_battlefield(player)
             if bf.contains(target):
@@ -69,10 +71,15 @@ class Condemn(Instant):
                 break
         if owner is not None:
             owner.zones[Zone.LIBRARY].add(target, position='bottom')
-        game.trigger_manager.fire_event(game, LeavesBattlefieldTriggeredEvent(permanent=target, controller=controller))
+        game.trigger_manager.fire_event(
+            game,
+            LeavesBattlefieldTriggeredEvent(permanent=target, controller=controller),
+        )
         game.trigger_manager.unregister(target)
         if hasattr(game, 'replacement_manager'):
             game.replacement_manager.unregister(target)
+
+        # Its controller gains life equal to its toughness.
         if controller is not None and toughness > 0:
             from engine.game import gain_life
             gain_life(game, controller, toughness)

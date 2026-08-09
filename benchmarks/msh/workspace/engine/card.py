@@ -79,15 +79,32 @@ class ActivatedAbility:
 class LoyaltyAbility:
     """A planeswalker loyalty ability.
 
+    Mirrors the :class:`ActivatedAbility` targeting contract (Phase D): a loyalty
+    ability may carry a ``targeting`` hook chosen at activation, before the
+    loyalty cost is paid, with the same legality-before-query-before-payment
+    ordering Phase C established for activated abilities.
+
     Attributes:
         loyalty_cost: The loyalty cost (positive for ``+``, negative for ``−``).
-        effect: A callable that applies the ability's effect.
+        effect: A callable that applies the ability's effect. For an untargeted
+            ability it is invoked ``effect(game)``; for a *targeted* ability
+            (``targeting`` is set) it is invoked ``effect(game, targets, context)``
+            with the targets chosen at activation and stored on the stack object,
+            and the :class:`~engine.stack.ActivationContext` captured at activation.
         description: Human-readable description.
+        targeting: Optional callable ``(game, source, controller) -> list | None``
+            run **at activation, before the loyalty cost is paid**. Returns the
+            chosen targets (a list; may be empty for an "up to one target" ability
+            with no chosen/legal target — the ability still activates) or ``None``
+            to signal a *required* target has no legal choice, in which case the
+            ability cannot be activated. The result is stored on the stack object
+            and passed to ``effect`` at resolution — never re-selected.
     """
 
     loyalty_cost: int
     effect: Callable[..., Any]
     description: str = ""
+    targeting: Callable[..., Any] | None = None
 
 
 @dataclass

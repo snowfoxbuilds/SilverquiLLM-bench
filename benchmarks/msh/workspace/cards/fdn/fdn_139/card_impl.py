@@ -1,21 +1,29 @@
 """Card implementation for Cathar Commando."""
 
 from __future__ import annotations
-import random
+
 from typing import TYPE_CHECKING, Any
-from engine.card import ActivatedAbility, ArtifactCreature, Creature, ManaAbility
-from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
+
+from engine.card import ActivatedAbility, Creature
+from engine.card_queries import choose_object
+from engine.types import CardType, Keyword, ManaCost
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
-    from cards.registry import CardRegistry
 
-def _is_on_battlefield(game: Any, card: Any) -> bool:
-    """Check if *card* is on any player's battlefield."""
+def _on_battlefield(game: Any, obj: Any) -> bool:
+    """Return ``True`` if *obj* is on any player's battlefield."""
     for player in game.players:
-        if game.get_battlefield(player).contains(card):
+        if game.get_battlefield(player).contains(obj):
             return True
     return False
+
+
+def _is_artifact_or_enchantment(obj: Any) -> bool:
+    types = getattr(obj, "card_types", set())
+    return CardType.ARTIFACT in types or CardType.ENCHANTMENT in types
+
 
 class CatharCommando(Creature):
     """Cathar Commando — {1}{W} — 3/1 — Human Soldier
@@ -43,34 +51,67 @@ class CatharCommando(Creature):
     def get_activated_abilities(self) -> list[ActivatedAbility]:
         source = self
 
-        def _cost(game: Any, src: Any) -> bool:
+        def _can_activate(game: "GameState", src: Any, controller: Any) -> bool:
+            # Instant-speed ability: the only legality gate is that the source
+            # is still on the battlefield to be sacrificed.
+            return controller is not None and _on_battlefield(game, src)
+
+        def _targeting(
+            game: "GameState", src: Any, controller: Any
+        ) -> list[Any] | None:
+            # Choose the target at activation (rule 602.2b), before the cost
+            # sacrifices this creature.
+            candidates = [
+                obj
+                for player in game.players
+                for obj in game.get_battlefield(player).get_all()
+                if _is_artifact_or_enchantment(obj)
+            ]
+            if not candidates:
+                return None
+            target = choose_object(
+                game,
+                controller,
+                candidates,
+                "Choose target artifact or enchantment to destroy",
+                source_card=src,
+            )
+            if target is None:
+                return None
+            return [target]
+
+        def _cost(game: "GameState", src: Any) -> bool:
+            from engine.game import sacrifice
+
             controller = src.controller
             if controller is None:
                 return False
             if controller.mana_pool.total() < 1:
                 return False
             controller.mana_pool.pay(ManaCost(generic=1))
-            # Sacrifice self
-            from engine.game import sacrifice
             sacrifice(game, controller, src)
             return True
 
-        def _effect(game: Any) -> None:
+        def _effect(
+            game: "GameState", targets: list[Any], context: Any = None
+        ) -> None:
             from engine.game import destroy
 
-            target = getattr(source, "_current_target", None)
-            if target is None:
+            target = targets[0] if targets else None
+            if target is None or not _on_battlefield(game, target):
                 return
-            if not _is_on_battlefield(game, target):
+            # Revalidate the target is still an artifact or enchantment.
+            if not _is_artifact_or_enchantment(target):
                 return
-            # Only targets artifacts or enchantments
-            target_types = getattr(target, "card_types", set())
-            if CardType.ARTIFACT in target_types or CardType.ENCHANTMENT in target_types:
-                destroy(game, target)
+            destroy(game, target)
 
-        return [ActivatedAbility(
-            cost=_cost,
-            effect=_effect,
-            description="{1}, Sacrifice this creature: Destroy target "
-            "artifact or enchantment.",
-        )]
+        return [
+            ActivatedAbility(
+                cost=_cost,
+                effect=_effect,
+                targeting=_targeting,
+                can_activate=_can_activate,
+                description="{1}, Sacrifice this creature: Destroy target "
+                "artifact or enchantment.",
+            )
+        ]

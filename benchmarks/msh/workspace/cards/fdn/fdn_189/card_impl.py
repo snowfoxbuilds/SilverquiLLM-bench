@@ -1,21 +1,39 @@
 """Card implementation for Axgard Cavalry."""
 
 from __future__ import annotations
-import random
+
 from typing import TYPE_CHECKING, Any
-from engine.card import ActivatedAbility, ArtifactCreature, Creature, ManaAbility
-from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
+
+from engine.card import ActivatedAbility, Creature
+from engine.card_queries import choose_object
+from engine.continuous_effects import (
+    DURATION_END_OF_TURN,
+    ContinuousEffect,
+    Layer,
+)
+from engine.types import CardType, Keyword, ManaCost
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
-    from cards.registry import CardRegistry
 
-def _tap_cost(game: Any, source: Any) -> bool:
-    """Generic tap-cost: check untapped, then tap."""
+def _on_battlefield(game: Any, obj: Any) -> bool:
+    """Return ``True`` if *obj* is on any player's battlefield."""
+    for player in game.players:
+        if game.get_battlefield(player).contains(obj):
+            return True
+    return False
+
+
+def _can_tap(source: Any) -> bool:
+    """Return ``True`` if *source* can pay a ``{T}`` cost (rule 302.6)."""
     if getattr(source, "is_tapped", False):
         return False
-    source.is_tapped = True
+    keywords = getattr(source, "keywords", Keyword(0))
+    if getattr(source, "summoning_sick", False) and Keyword.HASTE not in keywords:
+        return False
     return True
+
 
 class AxgardCavalry(Creature):
     """Axgard Cavalry — {1}{R} — 2/2 — Dwarf Berserker
@@ -40,19 +58,72 @@ class AxgardCavalry(Creature):
     def get_activated_abilities(self) -> list[ActivatedAbility]:
         source = self
 
-        def _cost(game: Any, src: Any) -> bool:
-            return _tap_cost(game, src)
+        def _can_activate(game: "GameState", src: Any, controller: Any) -> bool:
+            # The source must be on the battlefield and able to pay the tap cost.
+            return (
+                controller is not None
+                and _on_battlefield(game, src)
+                and _can_tap(src)
+            )
 
-        def _effect(game: Any) -> None:
-            target = getattr(source, "_current_target", None)
-            if target is not None:
-                target.summoning_sick = False
-                # Add haste keyword
-                kw = getattr(target, "keywords", Keyword(0))
-                target.keywords = kw | Keyword.HASTE
+        def _targeting(
+            game: "GameState", src: Any, controller: Any
+        ) -> list[Any] | None:
+            # Any creature on the battlefield is a legal target.
+            creatures = [
+                obj
+                for player in game.players
+                for obj in game.get_battlefield(player).get_all()
+                if CardType.CREATURE in getattr(obj, "card_types", set())
+            ]
+            if not creatures:
+                return None
+            target = choose_object(
+                game,
+                controller,
+                creatures,
+                "Choose target creature to gain haste",
+                source_card=src,
+            )
+            if target is None:
+                return None
+            return [target]
 
-        return [ActivatedAbility(
-            cost=_cost,
-            effect=_effect,
-            description="{T}: Target creature gains haste until end of turn.",
-        )]
+        def _cost(game: "GameState", src: Any) -> bool:
+            if not _can_tap(src):
+                return False
+            src.is_tapped = True
+            return True
+
+        def _effect(
+            game: "GameState", targets: list[Any], context: Any = None
+        ) -> None:
+            target = targets[0] if targets else None
+            if target is None or not _on_battlefield(game, target):
+                return
+            chosen = target
+
+            def _apply(g: "GameState") -> None:
+                chosen.keywords = getattr(chosen, "keywords", Keyword(0)) | Keyword.HASTE
+
+            # Until-end-of-turn: keywords are reset to their originals on every
+            # apply_all() pass, so the grant is re-applied by this effect.
+            chosen.keywords = chosen.keywords | Keyword.HASTE
+            game.effect_manager.add(
+                ContinuousEffect(
+                    source=source,
+                    layer=Layer.ABILITY,
+                    apply=_apply,
+                    duration=DURATION_END_OF_TURN,
+                )
+            )
+
+        return [
+            ActivatedAbility(
+                cost=_cost,
+                effect=_effect,
+                targeting=_targeting,
+                can_activate=_can_activate,
+                description="{T}: Target creature gains haste until end of turn.",
+            )
+        ]

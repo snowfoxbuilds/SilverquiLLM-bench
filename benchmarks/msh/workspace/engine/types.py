@@ -246,8 +246,17 @@ class TargetRequirement:
             a snapshot of legal targets when the filter is created.
         description: Human-readable description of what this targets.
         zone: The zone in which legal targets must reside.
+        optional: When ``True``, the requirement is "up to one target" — the
+            target query is declinable (``min == 0``) and an empty candidate set
+            skips the requirement instead of making the spell/ability uncastable.
+            "Up to N target X" is expressed as N optional requirements, each
+            targeted at cast. A declined or skipped optional requirement
+            contributes **no** entry to ``chosen_targets`` (default ``False`` —
+            a required target that keeps the historical ``min == 1`` boundary
+            and raises when no legal target exists).
     """
 
     filter_fn: Callable[..., Any]
     description: str
     zone: Zone
+    optional: bool = False

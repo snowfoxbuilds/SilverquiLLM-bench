@@ -2,7 +2,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Instant
-from engine.card_queries import choose_object
 from engine.types import CardType, ManaCost, TargetRequirement, Zone
 from engine.events import CreatureDiesTriggeredEvent
 if TYPE_CHECKING:
@@ -25,13 +24,32 @@ class FieryAnnihilation(Instant):
         super().__init__(**kwargs)
 
     def get_targets(self, game: 'GameState') -> list:
-        """Target creature (required) and up to one target Equipment attached to it."""
-        return [TargetRequirement(filter_fn=lambda obj: CardType.CREATURE in getattr(obj, 'card_types', set()), description='target creature', zone=Zone.BATTLEFIELD), TargetRequirement(filter_fn=lambda obj: 'Equipment' in getattr(obj, 'subtypes', set()), description='up to one target Equipment attached to that creature', zone=Zone.BATTLEFIELD)]
+        """Target creature (required) and *up to one* target Equipment (optional).
+
+        The Equipment target is optional (rule "up to one target"), so the spell
+        stays castable when no Equipment is on the battlefield — the second
+        requirement is simply skipped, contributing no entry to ``chosen_targets``.
+        """
+        return [
+            TargetRequirement(
+                filter_fn=lambda obj: CardType.CREATURE
+                in getattr(obj, 'card_types', set()),
+                description='target creature',
+                zone=Zone.BATTLEFIELD,
+            ),
+            TargetRequirement(
+                filter_fn=lambda obj: 'Equipment' in getattr(obj, 'subtypes', set())
+                and getattr(obj, 'attached_to', None) is not None,
+                description='up to one target Equipment attached to that creature',
+                zone=Zone.BATTLEFIELD,
+                optional=True,
+            ),
+        ]
 
     def on_resolve(self, game: 'GameState') -> None:
-        """Deal 5 damage, exile attached equipment, set exile replacement."""
+        """Deal 5 damage, exile the chosen Equipment (if any), set exile replacement."""
         from engine.game import deal_damage, exile
-        chosen = getattr(self, 'chosen_targets', None)
+        chosen = getattr(self, 'chosen_targets', None) or []
         target = chosen[0] if chosen else None
         if target is None:
             return
@@ -39,20 +57,11 @@ class FieryAnnihilation(Instant):
             return
         controller = self.controller
         deal_damage(game, self, target, 5)
+        # The Equipment target is chosen at cast ("up to one"): exile it if the
+        # player targeted one, otherwise exile nothing (never re-choose here).
         equip_target = chosen[1] if len(chosen) > 1 else None
         if equip_target is not None:
             exile(game, equip_target)
-        else:
-            attached = getattr(target, 'attached_equipments', [])
-            if not attached:
-                attached = [obj for player in game.players for obj in game.get_battlefield(player).get_all() if getattr(obj, 'attached_to', None) is target and 'Equipment' in getattr(obj, 'subtypes', set())]
-            if attached:
-                if controller is not None:
-                    equip = choose_object(game, controller, attached, 'Equipment to exile', source_card=self)
-                else:
-                    equip = attached[0]
-                if equip is not None:
-                    exile(game, equip)
         target._exile_on_death = True
         from engine.triggers import TriggerRegistration
         _target_ref = target

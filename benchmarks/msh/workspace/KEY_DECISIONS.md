@@ -264,3 +264,109 @@ pre-built `token` (extra copies are cloned with fresh identity via
 may be multiplied, since every token needs a distinct object). `create_token`
 returns the list of placed tokens. The token-correlation itself is out of scope
 for this phase.
+
+
+## replay-gap Phase D — card-impl sweep (issue #32)
+
+### Optional targets: `TargetRequirement.optional`
+`TargetRequirement` gained `optional: bool = False` (`engine/types.py`). A
+**required** spec is unchanged — `_query_target` (`engine/casting.py`) keeps the
+mandatory `min == 1` query and raises `CastingError` on an empty candidate set
+(boundary validation is byte-identical). An **optional** spec ("up to one
+target") is declinable: `_query_target` offers the query with `min == 0` (the
+player may decline) and, when the candidate set is empty, returns `None`
+**without raising** so the spell/ability stays castable. `None` means "no target
+for this spec" — the cast loop adds nothing to `chosen_targets`, so an optional
+requirement contributes 0 or 1 targets.
+
+- **"Up to N target X" = N optional requirements, targeted at cast** (real
+  targeting, not resolve-time picks). The effect reads a `chosen_targets` list of
+  length 0..N and must tolerate fewer than N (or zero).
+- **Distinctness (rule 601.2c).** `_query_target` takes an `exclude` set — the
+  objects already chosen for earlier specs of the same cast — and drops them from
+  the option set, so a multi-target spell picks *distinct* objects and the intent
+  model cannot re-select the same target on a later spec (an optional spec whose
+  only candidate is already taken then declines cleanly). This applies to
+  required multi-target specs too (they were previously free to re-offer the same
+  object); no existing single-target card is affected (`exclude` is empty for the
+  sole spec).
+- This makes `fdn_86` Fiery Annihilation castable with zero Equipment on the
+  battlefield (its "up to one target" no longer forces a `CastingError`), and
+  gives fdn_12 / fdn_177 / fdn_126 / fdn_250 genuinely declinable choices per
+  oracle text.
+
+### Loyalty targeting channel
+`LoyaltyAbility` (`engine/card.py`) and `LoyaltyAbilityInstance`
+(`engine/abilities.py`) gained an optional `targeting` hook, mirroring the Phase
+C `ActivatedAbility` contract. `_activate_loyalty_ability` now runs
+**authorization → legality (sorcery-speed + once-per-turn) → target selection →
+loyalty payment → push**:
+
+- **Authorization** matches the activated-ability gate: the activating player
+  must equal `LoyaltyAbilityInstance.controller`, rejected before any query or
+  loyalty change.
+- **Targeting before payment.** When `targeting` is set it is called with
+  `(game, source, controller)` after the legality checks and *before* the loyalty
+  cost is paid. `None` → a required target has no legal choice, so the ability
+  cannot be activated and **no loyalty is spent**; a list (possibly empty, for
+  "up to one target") → activate with those targets. The engine captures the same
+  immutable `ActivationContext` (controller + source/target stints) used by
+  activated abilities and stores it on the `StackObject`.
+- **Resolution.** A targeted loyalty ability's effect is invoked
+  `effect(game, targets, context)`; an untargeted one keeps `effect(game)`. The
+  effect revalidates against the context exactly as equip does (never re-selects).
+- `test_utils.activate_loyalty_ability(game, player, source_card, index)` is the
+  test bridge (sibling of `activate_card_ability`), threading the `targeting`
+  hook from `get_loyalty_abilities()`.
+- **Delta from full mirroring:** none required — the loyalty stack pathway
+  already builds a `StackObject`, so threading targets + context + the wrapped
+  `on_resolve` was proportional; loyalty abilities have no `can_activate` hook
+  (their legality is the fixed sorcery-speed + once-per-turn rule, checked inline).
+
+### AbilityError cluster attribution (task 8)
+The `activate_ability … AbilityError: cost could not be paid` cluster (130 of 203
+`ENGINE_ERROR`s) survived Phase C unchanged, disproving the earlier
+equip-lifecycle / counter-persistence hypotheses. Per-card mechanism, with the
+transcript, split into card-side fixes and executor-side Phase-E input:
+
+- **Hungry Ghoul (fdn_62)** — *card-side, fixed here.* The `{1}, Sacrifice
+  another creature` cost read a never-assigned `_sacrifice_target` backdoor and
+  always failed. The sacrifice is a **cost choice**, so it now picks the creature
+  via `choose_object` at cost-payment time (answered by an Intent in tests / the
+  replay-derived intent / the permissive baseline in validation) — no legal
+  "another creature" → the cost cannot be paid (correct). Corpus 22 → 1.
+- **Heartfire Immolator (fdn_201)** — *split.* Task 3 fixed its dead-target
+  **no-op** (`_current_target` → the targeted-ActivatedAbility channel), but its
+  6 `AbilityError`s **persist** — they are the same executor-side cause as the
+  equipment: the `{R}` in `{R}, Sacrifice this creature` is unfunded at the
+  executor's activation moment (Phase E). Corpus-measured unchanged at 6.
+- **Goldvein Pick (fdn_253) + Adventuring Gear (fdn_249)** — *executor-side
+  (Phase E).* Both use the base `Equipment` equip ability, whose `_cost`
+  re-checks `is_sorcery_speed(game, controller)` and `mana_pool.can_pay({1})`.
+  The AbilityError fires when, at the executor's activation moment, either the
+  equip `{1}` is unfunded (the `ManaPaid` look-ahead in `_apply_spell_mana_lookahead`
+  is keyed to the ability's instance id) or the engine's sorcery-speed context
+  (phase / active-player / empty-stack) is not satisfied. Not patched here per the
+  issue's do-not-touch-executor scope; Phase E must reconcile ManaPaid→equip
+  funding and the sorcery-speed context.
+- **Drake Hatcher (fdn_35)** — *executor-side (Phase E).* Cost `remove three
+  incubation counters` reads a custom `incubation_counters` int fed only by the
+  engine's combat-damage trigger. The executor reconstructs **no** counter state
+  from GRE (it re-derives only the P/T correction surface), so at the replay's
+  activation the engine holds < 3 counters and the non-mana cost cannot be paid.
+  Phase E must reconstruct counter state (or drive the combat-damage trigger).
+- **Loot, Exuberant Explorer (fdn_106)** — *executor-side (Phase E).* The
+  `{4}{G}{G}, {T}` activation's multi-pip mana is unfunded at the executor's
+  activation moment. (Task 7 also corrected its `.tapped`→`is_tapped` tap-cost
+  drift, a contributing card-side error.)
+
+### AST-guard extension (task 9)
+`engine_tests/test_card_impl_ast_guard.py` gained three banned-pattern classes
+(each with revert-proving self-tests): (e) reads of the dead `_current_target` /
+`_resolve_target` backdoors (attribute load **or** `getattr(x, "_current_target")`)
+— nothing assigns them, so a card reading one silently no-ops; (f) `.tapped`
+writes (assignment/aug-assign **or** `setattr(x, "tapped", …)`) — the engine field
+is `is_tapped`, and a `.tapped` write is invisible to state comparison and wrong
+for `GameRef` matching. The dead `chosen_targets or _resolve_target` fallback was
+removed workspace-wide (behavior-preserving: the backdoor was never assigned, so
+`getattr(x, "_resolve_target", None)` was provably `None`).

@@ -1,14 +1,43 @@
 """Card implementation for Fanatical Firebrand."""
 
 from __future__ import annotations
-import random
+
 from typing import TYPE_CHECKING, Any
-from engine.card import ActivatedAbility, ArtifactCreature, Creature, ManaAbility
-from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
+
+from engine.card import ActivatedAbility, Creature
+from engine.card_queries import choose_object
+from engine.types import CardType, Keyword, ManaCost
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
-    from cards.registry import CardRegistry
+
+def _on_battlefield(game: Any, obj: Any) -> bool:
+    """Return ``True`` if *obj* is on any player's battlefield."""
+    for player in game.players:
+        if game.get_battlefield(player).contains(obj):
+            return True
+    return False
+
+
+def _any_targets(game: Any) -> list[Any]:
+    """Every "any target": each player, and each creature/planeswalker."""
+    targets: list[Any] = []
+    for player in game.players:
+        targets.append(player)
+        for obj in game.get_battlefield(player).get_all():
+            types = getattr(obj, "card_types", set())
+            if CardType.CREATURE in types or CardType.PLANESWALKER in types:
+                targets.append(obj)
+    return targets
+
+
+def _still_legal(game: Any, obj: Any) -> bool:
+    """A player is always a legal target; a permanent must still be on the battlefield."""
+    if hasattr(obj, "life"):
+        return True
+    return _on_battlefield(game, obj)
+
 
 class FanaticalFirebrand(Creature):
     """Fanatical Firebrand — {R} — 1/1 — Goblin Pirate
@@ -36,28 +65,61 @@ class FanaticalFirebrand(Creature):
     def get_activated_abilities(self) -> list[ActivatedAbility]:
         source = self
 
-        def _cost(game: Any, src: Any) -> bool:
-            if getattr(src, "is_tapped", False):
-                return False
-            src.is_tapped = True
-            # Sacrifice self
+        def _can_activate(game: "GameState", src: Any, controller: Any) -> bool:
+            # The source must be on the battlefield and untapped to pay {T}.
+            # (Haste means summoning sickness never blocks the tap.)
+            return (
+                controller is not None
+                and _on_battlefield(game, src)
+                and not getattr(src, "is_tapped", False)
+            )
+
+        def _targeting(
+            game: "GameState", src: Any, controller: Any
+        ) -> list[Any] | None:
+            candidates = _any_targets(game)
+            if not candidates:
+                return None
+            target = choose_object(
+                game,
+                controller,
+                candidates,
+                "Choose any target for 1 damage",
+                source_card=src,
+            )
+            if target is None:
+                return None
+            return [target]
+
+        def _cost(game: "GameState", src: Any) -> bool:
+            from engine.game import sacrifice
+
             controller = src.controller
             if controller is None:
                 return False
-            from engine.game import sacrifice
+            if getattr(src, "is_tapped", False):
+                return False
+            src.is_tapped = True
             sacrifice(game, controller, src)
             return True
 
-        def _effect(game: Any) -> None:
+        def _effect(
+            game: "GameState", targets: list[Any], context: Any = None
+        ) -> None:
             from engine.game import deal_damage
 
-            target = getattr(source, "_current_target", None)
-            if target is not None:
-                deal_damage(game, source, target, 1)
+            target = targets[0] if targets else None
+            if target is None or not _still_legal(game, target):
+                return
+            deal_damage(game, source, target, 1)
 
-        return [ActivatedAbility(
-            cost=_cost,
-            effect=_effect,
-            description="{T}, Sacrifice this creature: It deals 1 damage "
-            "to any target.",
-        )]
+        return [
+            ActivatedAbility(
+                cost=_cost,
+                effect=_effect,
+                targeting=_targeting,
+                can_activate=_can_activate,
+                description="{T}, Sacrifice this creature: It deals 1 damage "
+                "to any target.",
+            )
+        ]

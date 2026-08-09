@@ -5,8 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature, Instant
-from engine.card_queries import choose_object
-from engine.types import Keyword, ManaCost
+from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -31,35 +30,40 @@ class FaebloomTrick(Instant):
         )
         super().__init__(**kwargs)
 
-    def get_targets(self, game: "GameState") -> list:
-        """Choose target creature an opponent controls to tap."""
-        controller = self.controller
-        if controller is None:
-            return []
-        targets: list = []
-        for player in game.players:
-            if player is controller:
-                continue
-            bf = game.get_battlefield(player)
-            for obj in bf.get_all():
-                from engine.types import CardType
-                card_types = getattr(obj, "card_types", set())
-                if CardType.CREATURE in card_types:
-                    targets.append(obj)
-        if not targets:
-            return []
-        chosen = choose_object(game, controller, targets, "creature an opponent controls", source_card=self)
-        return [chosen] if chosen else []
+    def _is_opponent_creature(self, obj: Any) -> bool:
+        """Legal target: a creature controlled by a player other than me."""
+        if CardType.CREATURE not in getattr(obj, "card_types", set()):
+            return False
+        obj_controller = getattr(obj, "controller", None)
+        return obj_controller is not None and obj_controller is not self.controller
+
+    def get_targets(self, game: "GameState") -> list[Any]:
+        """Up-to-one target creature an opponent controls (the reflexive tap).
+
+        The reflexive "when you do, tap target creature an opponent controls"
+        only puts a target on the stack if a legal one exists, and the token
+        creation always happens — so the tap is modelled as an optional
+        ("up to one") requirement: the spell stays castable (and still makes
+        tokens) even with no opponent creatures.
+        """
+        return [
+            TargetRequirement(
+                filter_fn=self._is_opponent_creature,
+                description="target creature an opponent controls",
+                zone=Zone.BATTLEFIELD,
+                optional=True,
+            )
+        ]
 
     def on_resolve(self, game: "GameState") -> None:
-        """Create two Faerie tokens, then tap target opponent creature."""
-        from engine.game import create_token
+        """Create two Faerie tokens, then tap the chosen opponent creature."""
+        from engine.game import create_token, tap
 
         controller = self.controller
         if controller is None:
             return
 
-        # Create two 1/1 blue Faerie tokens with flying
+        # Create two 1/1 blue Faerie tokens with flying.
         for _ in range(2):
             token = Creature(
                 name="Faerie",
@@ -70,16 +74,14 @@ class FaebloomTrick(Instant):
             )
             create_token(game, controller, token)
 
-        # Reflexive trigger: tap target creature an opponent controls
-        chosen = getattr(self, "chosen_targets", None)
-        target = chosen[0] if chosen else getattr(self, "_resolve_target", None)
-        if target is not None:
-            # Verify target is still on opponent's battlefield
-            for player in game.players:
-                if player is controller:
-                    continue
-                bf = game.get_battlefield(player)
-                if bf.contains(target):
-                    target.is_tapped = True
-                    target.tapped = True
-                    break
+        # Reflexive trigger: tap the chosen creature an opponent controls.
+        targets = getattr(self, "chosen_targets", None) or []
+        target = targets[0] if targets else None
+        if target is None:
+            return
+        for player in game.players:
+            if player is controller:
+                continue
+            if game.get_battlefield(player).contains(target):
+                tap(game, target)
+                return

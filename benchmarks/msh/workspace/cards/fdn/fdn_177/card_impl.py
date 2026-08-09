@@ -34,9 +34,10 @@ class MacabreWaltz(Sorcery):
     def get_targets(self, game: "GameState") -> list:
         """Up to two target creature cards in your graveyard.
 
-        The engine does not support ``optional`` on TargetRequirement,
-        so we advertise a single target requirement.  The caller may
-        supply zero, one, or two chosen targets via ``chosen_targets``.
+        "Up to two target" → two optional requirements, targeted at cast. The
+        engine picks distinct cards (rule 601.2c) and the spell stays castable
+        with one or zero creature cards in the graveyard; ``chosen_targets`` then
+        holds 0, 1, or 2 cards.
         """
         controller = self.controller
 
@@ -49,8 +50,15 @@ class MacabreWaltz(Sorcery):
         return [
             TargetRequirement(
                 filter_fn=_filter,
-                description="target creature card in your graveyard",
+                description="first of up to two target creature cards in your graveyard",
                 zone=Zone.GRAVEYARD,
+                optional=True,
+            ),
+            TargetRequirement(
+                filter_fn=_filter,
+                description="second of up to two target creature cards in your graveyard",
+                zone=Zone.GRAVEYARD,
+                optional=True,
             ),
         ]
 
