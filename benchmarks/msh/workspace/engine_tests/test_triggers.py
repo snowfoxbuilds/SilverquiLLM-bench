@@ -598,7 +598,7 @@ class TestTriggeredTargetChannel:
         game, p1, p2, a, b = self._game()
         seen = {}
 
-        def _targeting(g, event):
+        def _targeting(g, event, controller):
             return [a, b]
 
         def _effect(g, targets, context):
@@ -619,6 +619,66 @@ class TestTriggeredTargetChannel:
         resolve_top_of_stack(game)
         assert seen["targets"] == [a, b]                   # effect got the fixed targets
         assert seen["context"] is top.activation_context
+
+    def test_controller_determined_at_fire_time(self):
+        """The source changes controller after registration but before the
+        trigger fires: the fire-time controller (not the registration one) is
+        passed to targeting and used for the stack object + ActivationContext
+        (rule 603.3e)."""
+        game, p1, p2, a, b = self._game()
+        seen = {}
+
+        def _targeting(g, event, controller):
+            seen["target_controller"] = controller
+            return []
+
+        def _effect(g, targets, context):
+            pass
+
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=_effect, source=a, controller=p1,
+            targeting=_targeting,
+        ))
+        a.controller = p2  # source changes hands after registration
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        top = game.stack.peek()
+        assert seen["target_controller"] is p2             # targeting saw p2
+        assert top.controller is p2                        # stack object is p2's
+        assert top.activation_context.controller is p2     # context is p2
+
+    def test_required_target_none_not_put_on_stack(self):
+        """A required targeted trigger whose targeting returns None (no legal
+        target) is NOT put on the stack (rule 603.3c)."""
+        game, p1, p2, a, b = self._game()
+
+        def _targeting(g, event, controller):
+            return None  # required target, none legal
+
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=lambda g, t, c: None, source=a, controller=p1,
+            targeting=_targeting,
+        ))
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        assert game.stack.is_empty()                       # nothing pushed
+
+    def test_empty_list_target_still_put_on_stack(self):
+        """An "up to N" targeted trigger that chooses zero targets returns [] and
+        is still put on the stack (distinct from the required-None case)."""
+        game, p1, p2, a, b = self._game()
+
+        def _targeting(g, event, controller):
+            return []  # up-to-N with none chosen — legal
+
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=lambda g, t, c: None, source=a, controller=p1,
+            targeting=_targeting,
+        ))
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        assert not game.stack.is_empty()                   # pushed with 0 targets
+        assert game.stack.peek().targets == []
 
     def test_untargeted_trigger_unchanged(self):
         game, p1, p2, a, b = self._game()

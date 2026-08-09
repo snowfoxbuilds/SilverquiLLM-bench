@@ -1199,3 +1199,110 @@ class TestDependentTargetFilterArity:
             raise RuntimeError("nope")
 
         assert _safe_filter(_boom, "a", []) is False
+
+
+class TestSpellTargetStintRevalidation:
+    """cast_spell / cast_spell_free capture the casting controller + each chosen
+    target's zone-stint on the StackObject; a target that leaves its selected
+    zone and returns before resolution (a new object in the same Python instance)
+    is rejected at resolution."""
+
+    def _mark_spell(self, owner):
+        from engine.card import Instant
+        from engine.types import CardType, TargetRequirement, Zone as _Z
+
+        class _MarkCreature(Instant):
+            def get_targets(self, game):
+                return [TargetRequirement(
+                    filter_fn=lambda o: CardType.CREATURE in getattr(o, "card_types", set()),
+                    description="target creature",
+                    zone=_Z.BATTLEFIELD,
+                )]
+
+            def on_resolve(self, game):
+                chosen = getattr(self, "chosen_targets", None) or []
+                target = chosen[0] if chosen else None
+                if target is not None:
+                    target._marked = True
+
+        return _MarkCreature(name="Mark Creature", owner=owner, controller=owner)
+
+    def _cast_free_no_resolve(self, game, player, card, target, from_zone):
+        from engine.casting import cast_spell_free
+        from engine.decisions import Decision, GameRef
+        from engine.intent_player import Intent
+        from engine.types import Zone as _Z
+        inst = game.refs.instance_id(target, _Z.BATTLEFIELD.value)
+        player.start_intent("free", Intent(
+            pattern=GameRef(card=frozenset({("name", card.name)})),
+            preferences=(Decision.obj(instance=inst),),
+        ))
+        try:
+            cast_spell_free(game, player, card, from_zone)
+        finally:
+            player.end_intent("free")
+
+    def test_free_cast_marks_target_normally(self):
+        from engine.card import Creature
+        from engine.stack import resolve_top_of_stack
+        from engine.types import Zone
+        from test_utils import create_game, set_board_state
+        game = create_game()
+        p1, p2 = game.players
+        bear = Creature(name="Bear", base_power=2, base_toughness=2, owner=p2, controller=p2)
+        spell = self._mark_spell(p1)
+        set_board_state(game, 1, battlefield=[bear])
+        p1.zones[Zone.EXILE].add(spell)
+        spell.instance_id = game.refs.instance_id(spell, Zone.EXILE.value)
+        self._cast_free_no_resolve(game, p1, spell, bear, Zone.EXILE)
+        resolve_top_of_stack(game)
+        assert getattr(bear, "_marked", False) is True
+
+    def test_free_cast_leave_and_return_rejected(self):
+        from engine.card import Creature
+        from engine.stack import resolve_top_of_stack
+        from engine.types import Zone
+        from engine.zones import move_to_zone
+        from test_utils import create_game, set_board_state
+        game = create_game()
+        p1, p2 = game.players
+        bear = Creature(name="Bear", base_power=2, base_toughness=2, owner=p2, controller=p2)
+        spell = self._mark_spell(p1)
+        set_board_state(game, 1, battlefield=[bear])
+        p1.zones[Zone.EXILE].add(spell)
+        spell.instance_id = game.refs.instance_id(spell, Zone.EXILE.value)
+        self._cast_free_no_resolve(game, p1, spell, bear, Zone.EXILE)
+        move_to_zone(game, bear, Zone.BATTLEFIELD, Zone.GRAVEYARD)
+        move_to_zone(game, bear, Zone.GRAVEYARD, Zone.BATTLEFIELD)  # new stint
+        resolve_top_of_stack(game)
+        assert getattr(bear, "_marked", False) is False            # rejected by stint
+
+    def test_normal_cast_context_stored_on_stack_object(self):
+        from engine.card import Creature
+        from engine.casting import cast_spell as engine_cast_spell
+        from engine.decisions import Decision, GameRef
+        from engine.intent_player import Intent
+        from engine.types import Phase, Zone
+        from test_utils import create_game, set_board_state
+        game = create_game()
+        p1, p2 = game.players
+        bear = Creature(name="Bear", base_power=2, base_toughness=2, owner=p2, controller=p2)
+        spell = self._mark_spell(p1)
+        set_board_state(game, 0, hand=[spell])
+        set_board_state(game, 1, battlefield=[bear])
+        game.active_player_index = 0
+        game.phase = Phase.PRECOMBAT_MAIN
+        inst = game.refs.instance_id(bear, Zone.BATTLEFIELD.value)
+        p1.start_intent("c", Intent(
+            pattern=GameRef(card=frozenset({("name", spell.name)})),
+            preferences=(Decision.obj(instance=inst),),
+        ))
+        try:
+            engine_cast_spell(game, p1, spell)
+        finally:
+            p1.end_intent("c")
+        top = game.stack.peek()
+        # The casting controller and the target stint are captured on the stack.
+        assert top.activation_context is not None
+        assert top.activation_context.controller is p1
+        assert top.activation_context.target_instance_ids[0] == inst

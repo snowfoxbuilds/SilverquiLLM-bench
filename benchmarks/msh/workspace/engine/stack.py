@@ -189,6 +189,34 @@ def surviving_targets(
     return survivors
 
 
+def stint_checked_targets(
+    game: GameState,
+    context: ActivationContext | None,
+    targets: list[Any],
+) -> list[Any]:
+    """Return a **position-preserving** copy of *targets* in which any target no
+    longer in the same zone-stint captured at activation is replaced by ``None``.
+
+    Unlike :func:`surviving_targets` (which drops illegal targets and is used by
+    activated/loyalty/triggered abilities that iterate a flat legal list), this
+    keeps each target at its original index so a spell with **heterogeneous or
+    dependent** targets — e.g. Fiery Annihilation's ``[creature, Equipment]`` —
+    can still read ``chosen[0]`` / ``chosen[1]`` by position after a
+    leave-and-return nulls one of them. A ``None`` at a position reads as "that
+    target is illegal": the object's own predicate re-check (``getattr(None,
+    …)`` yields empty) then does nothing for it. When *context* is ``None`` the
+    targets are returned unchanged (spell copies carry no context).
+    """
+    if context is None:
+        return list(targets)
+    ids = context.target_instance_ids
+    checked: list[Any] = []
+    for i, target in enumerate(targets):
+        stint = ids[i] if i < len(ids) else None
+        checked.append(target if same_stint(game, target, stint) else None)
+    return checked
+
+
 class Stack:
     """The game stack — a LIFO structure for spells and abilities.
 

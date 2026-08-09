@@ -17,6 +17,7 @@ from engine.decisions import Decision, GameRef
 from engine.intent_player import Intent
 from engine.stack import resolve_top_of_stack
 from engine.types import ManaCost, ManaType, Zone
+from engine.zones import move_to_zone
 from test_utils import create_game, set_board_state
 
 
@@ -114,6 +115,35 @@ class TestFieryAnnihilationTargets:
         resolve_top_of_stack(game)
         assert game.get_battlefield(p2).contains(eq1)   # not exiled
         assert c1.damage_marked == 5
+
+    def test_equipment_leaves_and_returns_not_exiled(self):
+        """The chosen Equipment leaves the battlefield and returns (a new object
+        in the same Python instance), re-attached to the creature. Its predicate
+        (attached to that creature) would pass, but the spell's captured
+        zone-stint rejects the returned object — it is not exiled. The creature
+        target (unchanged stint) still takes 5."""
+        game, p1, p2, spell, c1, c2, eq1, eq2 = self._board()
+        _cast_no_resolve(game, p1, spell, [c1, eq1])
+        move_to_zone(game, eq1, Zone.BATTLEFIELD, Zone.EXILE)
+        move_to_zone(game, eq1, Zone.EXILE, Zone.BATTLEFIELD)  # new stint
+        eq1.attached_to = c1                                   # predicate would pass
+        resolve_top_of_stack(game)
+        assert game.get_battlefield(p2).contains(eq1)          # NOT exiled (stint)
+        assert not game.get_exile(p2).contains(eq1)
+        assert c1.damage_marked == 5                           # creature still resolves
+
+    def test_creature_leaves_and_returns_takes_no_damage(self):
+        """The creature target leaves and returns before resolution: a new object,
+        rejected by stint, so it takes no damage (and the Equipment, whose
+        legality depends on that creature target, is not exiled either)."""
+        game, p1, p2, spell, c1, c2, eq1, eq2 = self._board()
+        _cast_no_resolve(game, p1, spell, [c1, eq1])
+        move_to_zone(game, c1, Zone.BATTLEFIELD, Zone.EXILE)
+        move_to_zone(game, c1, Zone.EXILE, Zone.BATTLEFIELD)   # new stint
+        eq1.attached_to = c1
+        resolve_top_of_stack(game)
+        assert c1.damage_marked == 0                           # not damaged (stint)
+        assert game.get_battlefield(p2).contains(eq1)          # Equipment not exiled
 
     def test_zero_equipment_remains_legal(self):
         """No Equipment on the board: the spell is castable and exiles nothing,

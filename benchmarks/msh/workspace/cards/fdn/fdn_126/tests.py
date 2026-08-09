@@ -181,3 +181,24 @@ class TestZimoneCombatTrigger:
         resolve_stack(game)
         assert a.plus_one_counters == 0          # illegal → no counter
         assert b.plus_one_counters == 1          # still legal
+
+    def test_source_control_change_between_registration_and_fire(self):
+        """Zimone changes controller after its trigger is registered but before
+        beginning of combat: the trigger's controller is determined at fire time
+        (rule 603.3e), so it targets the NEW controller's creatures and the stack
+        object / context are the new controller's."""
+        game, p1, p2, z, a, b = self._setup()  # registered under p1
+        # Zimone (and a creature to buff) are now controlled by p2.
+        z.controller = p2
+        p2_creature = _creature(p2, "Stolen Ally")
+        game.get_battlefield(p2).add(p2_creature)
+        p2_creature.instance_id = game.refs.instance_id(p2_creature, Zone.BATTLEFIELD.value)
+        game.active_player_index = 1               # p2's turn → condition holds
+        self._fire(game, p2, [p2_creature])        # p2 answers the target query
+        top = game.stack.peek()
+        assert top.controller is p2                # trigger is now p2's
+        assert top.activation_context.controller is p2
+        assert top.targets == [p2_creature]
+        resolve_stack(game)
+        assert p2_creature.plus_one_counters == 1  # p2's creature got the counter
+        assert a.plus_one_counters == 0            # p1's creatures untouched

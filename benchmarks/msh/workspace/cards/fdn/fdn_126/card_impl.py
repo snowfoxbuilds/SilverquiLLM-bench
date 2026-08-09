@@ -99,18 +99,21 @@ class ZimoneParadoxSculptor(Creature):
                 return False
             return game.active_player is ctrl
 
-        def _targeting(game: Any, event: Any) -> list[Any]:
+        def _targeting(game: Any, event: Any, controller: Any) -> list[Any]:
             # Fix the targets as the trigger goes on the stack: up to two
-            # distinct creatures the trigger's controller controls.
-            ctrl = getattr(source, 'controller', None)
-            if ctrl is None:
+            # distinct creatures the *fire-time* controller controls (passed in
+            # by the trigger engine — the current controller of the source, which
+            # may differ from the registration-time controller if Zimone changed
+            # hands). "Up to two" is genuinely optional, so this returns a list
+            # (never None): zero targets is a legal choice.
+            if controller is None:
                 return []
             candidates = [
-                c for c in game.get_battlefield(ctrl).get_all()
-                if _is_creature(c) and _controls(ctrl, c)
+                c for c in game.get_battlefield(controller).get_all()
+                if _is_creature(c) and _controls(controller, c)
             ]
             return _choose_up_to_two(
-                game, ctrl, source, candidates,
+                game, controller, source, candidates,
                 "creature you control to get a +1/+1 counter",
             )
 

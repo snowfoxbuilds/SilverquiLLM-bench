@@ -381,13 +381,45 @@ fdn_139, fdn_189, fdn_195, fdn_201, fdn_234) still route through
 - **Fiery Annihilation (fdn_86)** — see dependent-target casting below.
 
 **Triggered-target channel (`engine/triggers.py`).** `TriggerRegistration`
-gained an optional `targeting(game, event) -> list` hook. When set, `fire_event`
-chooses the trigger's targets **as it is put on the stack** (rule 603.3d),
-captures an `ActivationContext`, stores the targets on the `StackObject`, and
-invokes `effect(game, targets, context)` at resolution. Untargeted triggers keep
-the historical `effect(game)` and build the same bare `StackObject` as before, so
-existing triggers are unaffected. This is the "smallest reusable triggered-target
-mechanism" Zimone's combat trigger needed.
+gained an optional `targeting(game, event, controller) -> list | None` hook. When
+set, `fire_event` chooses the trigger's targets **as it is put on the stack**
+(rule 603.3d), captures an `ActivationContext`, stores the targets on the
+`StackObject`, and invokes `effect(game, targets, context)` at resolution.
+Untargeted triggers keep the historical `effect(game)` and build the same bare
+`StackObject` as before, so existing triggers are unaffected. This is the
+"smallest reusable triggered-target mechanism" Zimone's combat trigger needed.
+
+Two rules refinements on this channel:
+
+- **Controller determined at fire time (rule 603.3d/3e).** The `controller`
+  passed to `targeting`, set on the `StackObject`, and captured into the
+  `ActivationContext` is the source's *current* controller when the trigger goes
+  on the stack (falling back to the registration-time controller if the source
+  has none) — **not** the registration-time controller. So a source that changed
+  hands after its trigger was registered (Zimone stolen before its beginning-of-
+  combat trigger fires) targets and resolves relative to its new controller. The
+  card's `targeting` receives that controller explicitly rather than reading
+  `source.controller` itself.
+- **Required-vs-optional target semantics.** `targeting` returning **`None`**
+  means a *required* target has no legal choice, so the trigger is **not put on
+  the stack at all** (rule 603.3c). Returning a **list** — possibly empty — puts
+  the trigger on the stack with those targets; the empty list is the genuinely
+  *optional* "up to N target" case (Zimone chooses zero, one, or two). `None` and
+  `[]` are therefore distinct and documented on the hook.
+
+**Spell target-stint revalidation (`engine/casting.py`).** `cast_spell` and
+`cast_spell_free` now capture an `ActivationContext` (casting controller + each
+chosen target's **zone-generic** stint) on the spell's `StackObject`, exactly as
+activated abilities do. At resolution, `_resolve_spell` runs
+`stint_checked_targets(game, context, targets)` before handing `chosen_targets` to
+the card: a target no longer in the same zone-stint it was chosen in — departed,
+or left-and-returned (a new object in the same Python instance) — is replaced by
+`None` **at its position**, so heterogeneous/dependent multi-target spells (Fiery
+Annihilation's `[creature, Equipment]`) still read by index and each target is
+judged independently. This closes the gap the per-card predicate re-checks left: a
+predicate ("still a creature an opponent controls", "still Equipment attached to
+that creature") *passes* for a leave-and-return object, but the captured stint
+rejects it. Spell copies (storm) carry no context and pass through unchanged.
 
 **Dependent-target casting (`engine/casting.py`).** A `TargetRequirement.filter_fn`
 may now take a second positional argument — the list of targets already chosen

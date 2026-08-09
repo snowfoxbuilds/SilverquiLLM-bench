@@ -43,15 +43,26 @@ class TriggerRegistration:
         source: The game object (card / permanent) that owns this trigger.
         controller: The player who controls the source at the time of
             registration.
-        targeting: Optional callable ``(game, event) -> list`` run **as the
-            trigger is put on the stack** (rule 603.3d — a triggered ability
-            chooses its targets when it goes on the stack, not when it resolves).
-            Returns the chosen targets (a list; may be empty for an "up to N
-            target" trigger with none chosen). The result is stored on the
-            :class:`~engine.stack.StackObject`, an
-            :class:`~engine.stack.ActivationContext` is captured alongside it,
-            and both are passed to ``effect`` at resolution — targets are never
-            re-selected there.
+        targeting: Optional callable ``(game, event, controller) -> list | None``
+            run **as the trigger is put on the stack** (rule 603.3d — a triggered
+            ability chooses its targets when it goes on the stack, not when it
+            resolves). *controller* is the trigger's controller **determined at
+            fire time** (the current controller of :attr:`source`, falling back to
+            :attr:`controller` — rule 603.3e), so a source whose control changed
+            after registration targets and resolves relative to its *new*
+            controller. Return value:
+
+            * a **list** (possibly empty, for an "up to N target" trigger with
+              none chosen) — the trigger is put on the stack with those targets;
+            * ``None`` — a **required** target has no legal choice, so the
+              trigger is **not put on the stack at all** (rule 603.3c). Use the
+              empty-list return for the genuinely-optional "up to N" case; reserve
+              ``None`` for required targets.
+
+            The chosen targets and a fire-time
+            :class:`~engine.stack.ActivationContext` (with the fire-time
+            *controller*) are stored on the :class:`~engine.stack.StackObject` and
+            passed to ``effect`` at resolution — targets are never re-selected.
     """
 
     event_type: type[TriggeredEvent]
@@ -131,17 +142,27 @@ class TriggerManager:
 
         for trigger in ordered:
             if trigger.targeting is not None:
-                # Choose targets as the trigger is put on the stack (rule
-                # 603.3d) and capture the activation-time identity, so the
-                # resolving effect revalidates rather than re-selects.
-                chosen = trigger.targeting(game, event)
-                chosen_targets = list(chosen) if chosen else []
+                # The trigger's controller is determined when it is put on the
+                # stack (rule 603.3d/3e): the source's *current* controller, not
+                # whoever controlled it at registration. That exact controller is
+                # used for target selection, the stack object, and the captured
+                # ActivationContext.
+                fire_controller = (
+                    getattr(trigger.source, "controller", None) or trigger.controller
+                )
+                # Choose targets as the trigger goes on the stack.
+                chosen = trigger.targeting(game, event, fire_controller)
+                if chosen is None:
+                    # A required target with no legal choice — the trigger is not
+                    # put on the stack at all (rule 603.3c).
+                    continue
+                chosen_targets = list(chosen)
                 context = capture_activation_context(
-                    game, trigger.source, trigger.controller, chosen_targets
+                    game, trigger.source, fire_controller, chosen_targets
                 )
                 stack_obj = StackObject(
                     source=trigger.source,
-                    controller=trigger.controller,
+                    controller=fire_controller,
                     targets=chosen_targets,
                     activation_context=context,
                 )

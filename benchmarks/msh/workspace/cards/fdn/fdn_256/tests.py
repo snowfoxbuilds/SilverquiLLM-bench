@@ -16,6 +16,7 @@ from engine.decisions import Decision, DecisionKind, GameRef
 from engine.intent_player import Intent
 from engine.stack import resolve_top_of_stack
 from engine.types import CardType, ManaCost, ManaType, Phase, Zone
+from engine.zones import move_to_zone
 from test_utils import cast_spell, create_game, set_board_state
 
 
@@ -116,6 +117,20 @@ class TestMeteorGolemETB:
         game, p1, p2, golem = self._setup([bear])
         _cast_no_resolve(game, 0, golem, [bear])
         bear.card_types = set(bear.card_types) | {CardType.LAND}  # became a land
+        resolve_top_of_stack(game)
+        assert game.get_battlefield(p2).contains(bear)          # not destroyed
+        assert not p2.zones[Zone.GRAVEYARD].contains(bear)
+
+    def test_target_leaves_and_returns_before_resolution_not_destroyed(self):
+        """Normal casting, leave-and-return: the target creature leaves the
+        battlefield and returns (a new object in the same Python instance) before
+        the ETB resolves. It satisfies the predicate again, but the spell's
+        captured zone-stint rejects the returned object — it is not destroyed."""
+        bear = Creature(name="Bear", base_power=2, base_toughness=2)
+        game, p1, p2, golem = self._setup([bear])
+        _cast_no_resolve(game, 0, golem, [bear])
+        move_to_zone(game, bear, Zone.BATTLEFIELD, Zone.EXILE)
+        move_to_zone(game, bear, Zone.EXILE, Zone.BATTLEFIELD)  # new stint
         resolve_top_of_stack(game)
         assert game.get_battlefield(p2).contains(bear)          # not destroyed
         assert not p2.zones[Zone.GRAVEYARD].contains(bear)

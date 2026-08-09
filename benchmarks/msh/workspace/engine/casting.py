@@ -25,7 +25,11 @@ import inspect
 from typing import TYPE_CHECKING, Any
 
 from engine.card import CardImpl
-from engine.stack import StackObject
+from engine.stack import (
+    StackObject,
+    capture_activation_context,
+    stint_checked_targets,
+)
 from engine.types import CardType, Keyword, ManaCost, Phase, Zone
 from engine.zones import move_zone
 
@@ -502,12 +506,18 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     # 7. Call on_cast hook
     card.on_cast(game)
 
-    # 8. Build on_resolve callback and push StackObject
+    # 8. Build on_resolve callback and push StackObject. Capture the casting
+    #    controller and each chosen target's zone-stint now (rule 601.2b/608.2b)
+    #    so a target that leaves its selected zone and returns before resolution
+    #    — a new object in the same Python instance — is rejected at resolution.
     stack_obj = StackObject(
         source=card,
         controller=player,
         targets=chosen_targets,
         on_resolve=lambda g: None,  # replaced below
+        activation_context=capture_activation_context(
+            game, card, player, chosen_targets
+        ),
     )
 
     def _on_resolve(g: GameState) -> None:
@@ -633,12 +643,18 @@ def cast_spell_free(
     # 4. Call on_cast hook
     card.on_cast(game)
 
-    # 5. Build on_resolve callback and push StackObject
+    # 5. Build on_resolve callback and push StackObject. Capture the casting
+    #    controller + chosen target zone-stints (same as cast_spell) so a
+    #    leave-and-return target is rejected at resolution even on the free-cast
+    #    path (cascade / Etali / exile casting).
     stack_obj = StackObject(
         source=card,
         controller=player,
         targets=chosen_targets,
         on_resolve=lambda g: None,  # replaced below
+        activation_context=capture_activation_context(
+            game, card, player, chosen_targets
+        ),
     )
 
     def _on_resolve(g: GameState) -> None:
@@ -672,8 +688,17 @@ def _resolve_spell(
     # Read targets from the StackObject — the single source of truth.
     # Set chosen_targets on the card just before resolution so that
     # _get_chosen_target helpers (which read via getattr) work.
+    #
+    # First apply the shared zone-stint check (rule 608.2b): a target that left
+    # its selected zone before resolution — whether it stayed gone or left and
+    # returned (a new object in the same Python instance) — is nulled at its
+    # position. Position is preserved so heterogeneous/dependent targets still
+    # read by index; the card's own predicate re-check then handles a ``None`` (a
+    # target still present but no longer satisfying its restriction is caught
+    # there). Spell copies carry no context and pass through unchanged.
     targets = stack_obj.targets
     if targets is not None:
+        targets = stint_checked_targets(game, stack_obj.activation_context, targets)
         card.chosen_targets = targets  # type: ignore[attr-defined]
 
     card.on_resolve(game)
