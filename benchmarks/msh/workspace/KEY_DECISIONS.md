@@ -404,6 +404,14 @@ Two rules refinements on this channel:
   rather than reading `source.controller` itself. So Zimone stolen before its
   beginning-of-combat trigger fires targets, orders, and resolves relative to its
   new controller.
+- **Controller threaded into untargeted effects.** An untargeted trigger effect
+  is invoked `effect(game)` by default, but a *controller-sensitive* one (Thousand-
+  Year Storm's "copy it for the controller") declares a second positional
+  parameter — `effect(game, controller)` — and is threaded the **immutable**
+  fire-time controller (arity-detected by `_effect_wants_controller`). It never
+  re-reads `source.controller` at resolution, so a source that changes hands
+  again between fire and resolution does not shift "you". Every pre-existing
+  untargeted effect is one-argument, so this is backward-compatible.
 - **Required-vs-optional target semantics.** `targeting` returning **`None`**
   means a *required* target has no legal choice, so the trigger is **not put on
   the stack at all** (rule 603.3c). Returning a **list** — possibly empty — puts
@@ -436,6 +444,13 @@ copy's controller for "you control"), so a retained target that left and returne
 between the original's cast and the copy's resolution is rejected. A copy that
 **chooses new targets** captures those new targets' *current* stints. A copy of an
 object that carried no context (an ability copy) falls back to a fresh capture.
+Thousand-Year Storm's retargeting no longer hand-rolls its own filter loop: it
+re-chooses each copy's targets through the shared cast-time machinery
+(`_query_target` per `get_targets` spec, with `exclude` for distinctness), so the
+copy respects target zones, protection, and **dependent** requirements (Fiery
+Annihilation's "Equipment attached to *that* creature" is offered relative to the
+copy's newly-chosen creature) — a required spec with no legal target or a declined
+optional one keeps the original target at that position.
 
 **Dependent-target casting (`engine/casting.py`).** A `TargetRequirement.filter_fn`
 may now take a second positional argument — the list of targets already chosen

@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Enchantment
-from engine.card_queries import choose_object, query_yes_no
+from engine.card_queries import query_yes_no
 from engine.types import CardType, ManaCost
 from engine.events import SpellCastTriggeredEvent
 if TYPE_CHECKING:
@@ -57,12 +57,17 @@ class ThousandYearStorm(Enchantment):
             source._pending_spell = spell
             return True
 
-        def _effect(game: 'GameState') -> None:
+        def _effect(game: 'GameState', controller: Any) -> None:
+            from engine.casting import CastingError, _query_target
+
             copies_to_make = source._storm_count
             source._storm_count += 1
             if copies_to_make <= 0:
                 return
-            ctrl = getattr(source, 'controller', None)
+            # "You" is the ability's fire-time controller, threaded in immutably by
+            # the trigger engine — never re-read from source.controller (the
+            # enchantment could have changed hands since the trigger fired).
+            ctrl = controller
             if ctrl is None:
                 return
             pending_spell = getattr(source, '_pending_spell', None)
@@ -84,21 +89,25 @@ class ThousandYearStorm(Enchantment):
                         f"Choose new targets for copy of {original_so.source.name}?",
                         source_card=source,
                     ):
-                        requirements = getattr(
-                            original_so.source, 'get_targets', lambda _: []
-                        )(game)
+                        # Re-choose targets through the shared cast-time target
+                        # machinery (_query_target): zone-aware, arity-aware
+                        # filters (so dependent targets like "Equipment attached
+                        # to that creature" work), distinctness via exclude, and
+                        # protection — not a bespoke filter loop. A required spec
+                        # with no legal target, or a declined optional one, keeps
+                        # the original target for that position.
+                        specs = original_so.source.get_targets(game)
                         new_targets = []
-                        for req in requirements:
-                            legal: list[Any] = []
-                            for p in game.players:
-                                for obj in game.get_battlefield(p).get_all():
-                                    if req.filter_fn(obj):
-                                        legal.append(obj)
-                                if req.filter_fn(p):
-                                    legal.append(p)
-                            if legal:
-                                chosen = choose_object(game, ctrl, legal, getattr(req, 'description', 'choose target'), source_card=source)
-                                new_targets.append(chosen)
+                        for i, spec in enumerate(specs):
+                            try:
+                                chosen = _query_target(
+                                    game, ctrl, source, spec, exclude=new_targets
+                                )
+                            except CastingError:
+                                chosen = None
+                            if chosen is None and i < len(original_so.targets):
+                                chosen = original_so.targets[i]
+                            new_targets.append(chosen)
                 copy_obj = copy_spell(game, original_so, ctrl, new_targets)
                 game.stack.push(copy_obj)
 

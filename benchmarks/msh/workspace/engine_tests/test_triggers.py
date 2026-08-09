@@ -744,3 +744,41 @@ class TestFireTimeControllerPipeline:
         # the fire-time regrouping.
         assert objs[0].source is b and objs[0].controller is p2
         assert objs[1].source is a and objs[1].controller is p2
+
+    def test_untargeted_controller_effect_uses_immutable_fire_time_controller(self):
+        """A controller-sensitive UNTARGETED effect (effect(game, controller)) is
+        threaded the fire-time controller, captured immutably when the trigger
+        goes on the stack — not re-read from source.controller at resolution.
+        Regression: the source changes hands twice (once before fire, once before
+        resolution); the effect must see the controller from fire time."""
+        from engine.stack import resolve_top_of_stack
+        game, p1, p2 = self._game()
+        src = Creature(name="Src", owner=p1, controller=p1)
+        seen = {}
+
+        def _effect(g, controller):          # controller-sensitive, 2-arg
+            seen["controller"] = controller
+
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=_effect, source=src, controller=p1))
+        src.controller = p2                  # changes hands BEFORE the trigger fires
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        assert game.stack.peek().controller is p2
+        src.controller = p1                  # changes AGAIN before resolution
+        resolve_top_of_stack(game)
+        assert seen["controller"] is p2      # fire-time controller, not resolution-time
+
+    def test_one_arg_untargeted_effect_still_called_with_game_only(self):
+        """A controller-insensitive untargeted effect keeps the effect(game)
+        signature and is never passed a controller (backward compatibility)."""
+        from engine.stack import resolve_top_of_stack
+        game, p1, p2 = self._game()
+        src = Creature(name="Src", owner=p1, controller=p1)
+        calls = []
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=lambda g: calls.append("ran"), source=src, controller=p1))
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        resolve_top_of_stack(game)
+        assert calls == ["ran"]

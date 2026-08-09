@@ -15,12 +15,39 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
+import inspect
+
 from engine.events import TriggeredEvent
 from engine.stack import StackObject, capture_activation_context
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
     from engine.player import Player
+
+
+def _effect_wants_controller(effect: Callable[..., Any]) -> bool:
+    """Return ``True`` if an *untargeted* trigger effect accepts the fire-time
+    controller as a second positional argument — ``effect(game, controller)``.
+
+    Controller-*insensitive* effects keep the historical ``effect(game)``
+    signature and return ``False`` (they are invoked with the game alone). A
+    controller-*sensitive* untargeted effect ("copy it for the controller",
+    "that player draws") declares a second required positional parameter and is
+    threaded the immutable fire-time controller, so it never re-reads
+    ``source.controller`` at resolution. Every pre-existing untargeted effect is
+    one-argument, so this is backward-compatible.
+    """
+    try:
+        params = list(inspect.signature(effect).parameters.values())
+    except (TypeError, ValueError):
+        return False
+    required = [
+        p
+        for p in params
+        if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+        and p.default is p.empty
+    ]
+    return len(required) >= 2
 
 
 @dataclass
@@ -35,14 +62,22 @@ class TriggerRegistration:
             return ``True`` for the trigger to fire.  ``None`` means the
             trigger always fires for its event type.
         effect: Callable executed when the trigger resolves (becomes the
-            :attr:`StackObject.on_resolve` callback). For an *untargeted* trigger
-            it is invoked ``effect(game)``. For a *targeted* trigger (``targeting``
-            set) it is invoked ``effect(game, targets, context)`` — the targets
-            chosen as the trigger was put on the stack and the
-            :class:`~engine.stack.ActivationContext` captured then.
+            :attr:`StackObject.on_resolve` callback). For a *targeted* trigger
+            (``targeting`` set) it is invoked ``effect(game, targets, context)`` —
+            the targets chosen as the trigger was put on the stack and the
+            :class:`~engine.stack.ActivationContext` captured then. For an
+            *untargeted* trigger it is invoked ``effect(game)`` by default, or
+            ``effect(game, controller)`` when it declares a second positional
+            parameter — a *controller-sensitive* effect ("copy it for the
+            controller") is threaded the immutable **fire-time** controller so it
+            never re-reads ``source.controller`` at resolution.
         source: The game object (card / permanent) that owns this trigger.
         controller: The player who controls the source at the time of
-            registration.
+            registration. Note the *fire-time* controller (the source's current
+            controller when the trigger goes on the stack) is what the pipeline
+            actually uses for grouping, the stack object, targeting, and the
+            context (rule 603.3d/3e); this field is only the fallback for a source
+            that no longer has a controller.
         targeting: Optional callable ``(game, event, controller) -> list | None``
             run **as the trigger is put on the stack** (rule 603.3d — a triggered
             ability chooses its targets when it goes on the stack, not when it
@@ -171,11 +206,29 @@ class TriggerManager:
                     )
                 )
             else:
-                stack_obj = StackObject(
-                    source=trigger.source,
-                    controller=fire_controller,
-                    on_resolve=trigger.effect,
-                )
+                effect = trigger.effect
+                if _effect_wants_controller(effect):
+                    # Thread the immutable fire-time controller into a
+                    # controller-sensitive untargeted effect (effect(game,
+                    # controller)); capture the context for consistency so the
+                    # stack object reflects the same fire-time controller.
+                    context = capture_activation_context(
+                        game, trigger.source, fire_controller, []
+                    )
+                    stack_obj = StackObject(
+                        source=trigger.source,
+                        controller=fire_controller,
+                        activation_context=context,
+                    )
+                    stack_obj.on_resolve = (
+                        lambda g, _c=fire_controller, _e=effect: _e(g, _c)
+                    )
+                else:
+                    stack_obj = StackObject(
+                        source=trigger.source,
+                        controller=fire_controller,
+                        on_resolve=effect,
+                    )
             game.stack.push(stack_obj)
 
     def get_triggers(self) -> list[TriggerRegistration]:
