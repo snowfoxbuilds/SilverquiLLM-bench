@@ -459,8 +459,15 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
                 f"Cannot cast {card.name!r} — target has protection from this spell"
             )
 
-    # Targets are stored on the StackObject (not the card) and passed
-    # through the resolve pipeline via on_resolve(game, targets=...).
+    # 5c. Capture the casting controller and each chosen target's zone-stint
+    #     NOW — immediately after target selection and protection validation, and
+    #     *before* any cost payment or on_cast side effect can move a target (rule
+    #     601.2b/608.2b). A target that then leaves its selected zone and returns
+    #     before resolution (a new object in the same Python instance) is rejected
+    #     at resolution. Targets live on the StackObject, not the card.
+    activation_context = capture_activation_context(
+        game, card, player, chosen_targets
+    )
 
     # 6. Mana check / payment (rollback on failure)
     # Ensure the card knows its controller so that cost_reduction() hooks
@@ -506,18 +513,14 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     # 7. Call on_cast hook
     card.on_cast(game)
 
-    # 8. Build on_resolve callback and push StackObject. Capture the casting
-    #    controller and each chosen target's zone-stint now (rule 601.2b/608.2b)
-    #    so a target that leaves its selected zone and returns before resolution
-    #    — a new object in the same Python instance — is rejected at resolution.
+    # 8. Build on_resolve callback and push StackObject with the context captured
+    #    at target-selection time (step 5c).
     stack_obj = StackObject(
         source=card,
         controller=player,
         targets=chosen_targets,
         on_resolve=lambda g: None,  # replaced below
-        activation_context=capture_activation_context(
-            game, card, player, chosen_targets
-        ),
+        activation_context=activation_context,
     )
 
     def _on_resolve(g: GameState) -> None:
@@ -640,21 +643,26 @@ def cast_spell_free(
         source_zone_container.add(card)
         raise CastingError(str(exc)) from exc
 
+    # 3b. Capture the casting controller + chosen target zone-stints NOW —
+    #     immediately after target selection and protection validation, before
+    #     the on_cast side effect (same discipline as cast_spell step 5c) — so a
+    #     leave-and-return target is rejected at resolution on the free-cast path
+    #     (cascade / Etali / exile casting).
+    activation_context = capture_activation_context(
+        game, card, player, chosen_targets
+    )
+
     # 4. Call on_cast hook
     card.on_cast(game)
 
-    # 5. Build on_resolve callback and push StackObject. Capture the casting
-    #    controller + chosen target zone-stints (same as cast_spell) so a
-    #    leave-and-return target is rejected at resolution even on the free-cast
-    #    path (cascade / Etali / exile casting).
+    # 5. Build on_resolve callback and push StackObject with the context captured
+    #    at target-selection time (step 3b).
     stack_obj = StackObject(
         source=card,
         controller=player,
         targets=chosen_targets,
         on_resolve=lambda g: None,  # replaced below
-        activation_context=capture_activation_context(
-            game, card, player, chosen_targets
-        ),
+        activation_context=activation_context,
     )
 
     def _on_resolve(g: GameState) -> None:

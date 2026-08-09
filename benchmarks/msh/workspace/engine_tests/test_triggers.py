@@ -694,3 +694,53 @@ class TestTriggeredTargetChannel:
         from engine.stack import resolve_top_of_stack
         resolve_top_of_stack(game)
         assert calls == [True]                             # effect(game) still fired
+
+
+class TestFireTimeControllerPipeline:
+    """The fire-time controller (source's current controller) is used
+    consistently across the whole trigger pipeline: APNAP grouping, targeted and
+    untargeted stack objects, target selection, and the ActivationContext."""
+
+    def _game(self):
+        from test_utils import create_game
+        game = create_game()
+        game.active_player_index = 0  # players[0] is active
+        return game, game.players[0], game.players[1]
+
+    def test_untargeted_trigger_uses_fire_time_controller(self):
+        """An UNTARGETED trigger whose source changed controller after
+        registration builds its stack object with the fire-time controller."""
+        game, p1, p2 = self._game()
+        src = Creature(name="Src", owner=p1, controller=p1)
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=lambda g: None, source=src, controller=p1,
+        ))
+        src.controller = p2  # source changes hands after registration
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        assert game.stack.peek().controller is p2  # fire-time controller
+
+    def test_apnap_grouping_uses_fire_time_controller(self):
+        """Two simultaneous triggers; one source changed controller after
+        registration. APNAP grouping uses the fire-time controllers, so the
+        regrouped trigger orders as its NEW controller's and its stack object
+        carries that controller."""
+        game, p1, p2 = self._game()          # p1 active, p2 non-active
+        a = Creature(name="SrcA", owner=p2, controller=p2)  # p2's (non-active)
+        b = Creature(name="SrcB", owner=p1, controller=p1)  # registered as p1's
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=lambda g: None, source=a, controller=p2))
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=lambda g: None, source=b, controller=p1))
+        b.controller = p2                    # b changes hands after registration
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        objs = game.stack.objects()          # top → bottom
+        assert len(objs) == 2
+        # Both are now p2's (non-active), ordered in registration order (a, b),
+        # so b is pushed last and sits on top. Under registration-time grouping b
+        # would have been the active player's and ordered before a — this asserts
+        # the fire-time regrouping.
+        assert objs[0].source is b and objs[0].controller is p2
+        assert objs[1].source is a and objs[1].controller is p2

@@ -285,6 +285,19 @@ def copy_spell(
     on_resolve to call the copied card's on_resolve directly — no zone
     movement, which is correct for spell copies.
 
+    The copy carries its own :class:`ActivationContext` so its targets are
+    stint-revalidated at resolution exactly like a normally-cast spell (rule
+    608.2b):
+
+    * **Retaining the original's targets** (``new_targets is None``) — the copy
+      *inherits the original's captured target stint ids* (not fresh ones), so a
+      retained target that left and returned between the original's cast and the
+      copy's resolution is rejected. The context's controller is the copy's
+      controller ("you control" is judged for the copy's controller).
+    * **Choosing new targets** (``new_targets`` given) — the copy captures those
+      new targets' *current* stints, since they were selected as the copy was
+      created.
+
     Args:
         game: The current game state.
         original: The StackObject being copied.
@@ -299,16 +312,42 @@ def copy_spell(
     copied_card.controller = controller
     copied_card.owner = getattr(original.source, "owner", controller)
 
-    targets = new_targets if new_targets is not None else list(original.targets)
+    if new_targets is not None:
+        # New targets chosen for the copy — capture their current stints.
+        targets = list(new_targets)
+        context: ActivationContext | None = capture_activation_context(
+            game, copied_card, controller, targets
+        )
+    else:
+        # Retained targets — inherit the original's captured stint ids so a
+        # leave-and-return is still rejected. Fall back to a fresh capture if the
+        # original carried no context (e.g. an ability copy).
+        targets = list(original.targets)
+        orig_ctx = original.activation_context
+        if orig_ctx is not None:
+            context = ActivationContext(
+                controller=controller,
+                source_instance_id=orig_ctx.source_instance_id,
+                target_instance_ids=orig_ctx.target_instance_ids,
+            )
+        else:
+            context = capture_activation_context(
+                game, copied_card, controller, targets
+            )
 
     copy_obj = StackObject(
         source=copied_card,
         controller=controller,
         targets=targets,
+        activation_context=context,
     )
 
     def _copy_resolve(g: GameState) -> None:
-        copied_card.chosen_targets = copy_obj.targets
+        # Stint-revalidate (position-preserving) before the copy resolves, the
+        # same check _resolve_spell applies to a normal cast.
+        copied_card.chosen_targets = stint_checked_targets(
+            g, copy_obj.activation_context, copy_obj.targets
+        )
         copied_card.on_resolve(g)
 
     copy_obj.on_resolve = _copy_resolve

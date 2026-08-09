@@ -128,28 +128,26 @@ class TriggerManager:
         if not matching:
             return
 
+        # The controller of each triggered ability is determined when it is put
+        # on the stack (rule 603.3d/3e): the source's *current* controller, or
+        # the registration-time controller if the source no longer has one (e.g.
+        # a leaves-the-battlefield trigger whose source is already gone). This
+        # fire-time controller is used **consistently** across the whole
+        # pipeline — APNAP grouping, the stack object (targeted *and* untargeted),
+        # target selection, and the ActivationContext — so a source that changed
+        # hands after registration triggers, orders, and resolves under its new
+        # controller.
+        def _fire_controller(trigger: TriggerRegistration) -> Any:
+            return getattr(trigger.source, "controller", None) or trigger.controller
+
         active_player = game.active_player
-        active_triggers: list[TriggerRegistration] = []
-        non_active_triggers: list[TriggerRegistration] = []
-
-        for trigger in matching:
-            if trigger.controller is active_player:
-                active_triggers.append(trigger)
-            else:
-                non_active_triggers.append(trigger)
-
+        matched = [(trigger, _fire_controller(trigger)) for trigger in matching]
+        active_triggers = [(t, c) for (t, c) in matched if c is active_player]
+        non_active_triggers = [(t, c) for (t, c) in matched if c is not active_player]
         ordered = active_triggers + non_active_triggers
 
-        for trigger in ordered:
+        for trigger, fire_controller in ordered:
             if trigger.targeting is not None:
-                # The trigger's controller is determined when it is put on the
-                # stack (rule 603.3d/3e): the source's *current* controller, not
-                # whoever controlled it at registration. That exact controller is
-                # used for target selection, the stack object, and the captured
-                # ActivationContext.
-                fire_controller = (
-                    getattr(trigger.source, "controller", None) or trigger.controller
-                )
                 # Choose targets as the trigger goes on the stack.
                 chosen = trigger.targeting(game, event, fire_controller)
                 if chosen is None:
@@ -175,7 +173,7 @@ class TriggerManager:
             else:
                 stack_obj = StackObject(
                     source=trigger.source,
-                    controller=trigger.controller,
+                    controller=fire_controller,
                     on_resolve=trigger.effect,
                 )
             game.stack.push(stack_obj)
