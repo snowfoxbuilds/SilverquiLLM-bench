@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature, LoyaltyAbility, Planeswalker
 from engine.card_queries import choose_object
+from engine.stack import surviving_targets
 from engine.continuous_effects import (
     DURATION_END_OF_TURN,
     ContinuousEffect,
@@ -104,11 +105,21 @@ class KaitoCunningInfiltrator(Planeswalker):
             return [chosen]
 
         def _plus1(game: Any, targets: list[Any], context: Any = None) -> None:
-            """Up to one target creature can't be blocked. Draw then discard."""
+            """Up to one target creature you control can't be blocked. Draw then
+            discard. "You" and "you control" are relative to the ability's
+            activation-time controller (rule 602.2)."""
             from engine.game import discard, draw_card
 
-            target = targets[0] if targets else None
-            if target is not None and _on_battlefield(game, target):
+            controller = context.controller if context is not None else pw.controller
+            legal = surviving_targets(
+                game, context, targets,
+                is_legal=lambda t: (
+                    CardType.CREATURE in getattr(t, "card_types", set())
+                    and getattr(t, "controller", None) is controller
+                ),
+            )
+            target = legal[0] if legal else None
+            if target is not None:
                 def _apply(g: Any) -> None:
                     target._cant_be_blocked = True
 
@@ -123,7 +134,6 @@ class KaitoCunningInfiltrator(Planeswalker):
                         duration=DURATION_END_OF_TURN,
                     )
                 )
-            controller = pw.controller
             if controller is not None:
                 draw_card(game, controller)
                 hand = controller.zones[Zone.HAND]

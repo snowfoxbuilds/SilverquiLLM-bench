@@ -48,6 +48,17 @@ class ElvishRegrower(Creature):
         )
         super().__init__(**kwargs)
 
+    def _is_permanent_card(self, obj: Any) -> bool:
+        """The type half of the target predicate — a permanent card (creature,
+        artifact, enchantment, land, or planeswalker).
+
+        Shared by cast-time targeting (``get_targets``) and resolution
+        revalidation (``on_resolve``) so both enforce one predicate (rule
+        608.2b): the effect re-checks the *complete* original restriction at
+        resolution, not merely graveyard membership.
+        """
+        return bool(getattr(obj, "card_types", set()) & _PERMANENT_TYPES)
+
     def get_targets(self, game: "GameState") -> list[Any]:
         """Target a permanent card in your graveyard."""
         controller = self.controller or getattr(self, "owner", None)
@@ -55,7 +66,7 @@ class ElvishRegrower(Creature):
         def _filter(obj: Any) -> bool:
             if controller is None:
                 return False
-            if not (getattr(obj, "card_types", set()) & _PERMANENT_TYPES):
+            if not self._is_permanent_card(obj):
                 return False
             return game.get_graveyard(controller).contains(obj)
 
@@ -78,6 +89,10 @@ class ElvishRegrower(Creature):
         target = chosen[0] if chosen else None
         if target is None:
             return
+        # Revalidate the FULL original predicate (rule 608.2b): the card must
+        # still be in your graveyard AND still be a permanent card.
         if not game.get_graveyard(controller).contains(target):
+            return
+        if not self._is_permanent_card(target):
             return
         move_to_zone(game, target, Zone.GRAVEYARD, Zone.HAND)

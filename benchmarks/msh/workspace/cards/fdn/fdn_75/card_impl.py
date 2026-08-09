@@ -41,20 +41,20 @@ class VampireSoulcaller(Creature):
         )
         super().__init__(**kwargs)
 
+    def _is_creature_card_in_my_graveyard(self, game: "GameState", obj: Any) -> bool:
+        """Legal target: a creature card currently in your graveyard."""
+        controller = self.controller or getattr(self, "owner", None)
+        if controller is None:
+            return False
+        if CardType.CREATURE not in getattr(obj, "card_types", set()):
+            return False
+        return game.get_graveyard(controller).contains(obj)
+
     def get_targets(self, game: "GameState") -> list[Any]:
         """Target a creature card in your graveyard."""
-        controller = self.controller or getattr(self, "owner", None)
-
-        def _filter(obj: Any) -> bool:
-            if controller is None:
-                return False
-            if CardType.CREATURE not in getattr(obj, "card_types", set()):
-                return False
-            return game.get_graveyard(controller).contains(obj)
-
         return [
             TargetRequirement(
-                filter_fn=_filter,
+                filter_fn=lambda obj: self._is_creature_card_in_my_graveyard(game, obj),
                 description="target creature card from your graveyard",
                 zone=Zone.GRAVEYARD,
             )
@@ -71,7 +71,9 @@ class VampireSoulcaller(Creature):
         target = chosen[0] if chosen else None
         if target is None:
             return
-        # Revalidate: still in your graveyard at resolution.
-        if not game.get_graveyard(controller).contains(target):
+        # Revalidate the COMPLETE target predicate at resolution (rule 608.2b):
+        # the target must still be a creature card *and* still in your
+        # graveyard — not merely still present. If either fails, do nothing.
+        if not self._is_creature_card_in_my_graveyard(game, target):
             return
         move_to_zone(game, target, Zone.GRAVEYARD, Zone.HAND)

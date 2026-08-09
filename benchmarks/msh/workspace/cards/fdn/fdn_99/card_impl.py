@@ -70,20 +70,22 @@ class ApothecaryStomper(Creature):
         )
 
         if self.chosen_mode == 0:
-            def _yours(obj: Any) -> bool:
-                return (
-                    CardType.CREATURE in getattr(obj, "card_types", set())
-                    and getattr(obj, "controller", None) is controller
-                )
-
             return [
                 TargetRequirement(
-                    filter_fn=_yours,
+                    filter_fn=self._is_creature_you_control,
                     description="target creature you control",
                     zone=Zone.BATTLEFIELD,
                 )
             ]
         return []
+
+    def _is_creature_you_control(self, obj: Any) -> bool:
+        """Legal target: a creature currently controlled by the caster."""
+        controller = self.controller or getattr(self, "owner", None)
+        return (
+            CardType.CREATURE in getattr(obj, "card_types", set())
+            and getattr(obj, "controller", None) is controller
+        )
 
     def on_resolve(self, game: "GameState") -> None:
         mode = self.chosen_mode
@@ -98,10 +100,12 @@ class ApothecaryStomper(Creature):
             target = chosen[0] if chosen else None
             if target is None:
                 return
-            # Revalidate: still a creature you control on the battlefield.
-            if getattr(target, "controller", None) is not controller:
-                return
-            if not game.get_battlefield(controller).contains(target):
+            # Revalidate the COMPLETE target predicate at resolution (608.2b):
+            # still a creature you control, still on the battlefield — not
+            # merely still present. If it lost creature-ness or changed
+            # control, the counters are not placed.
+            on_bf = game.get_battlefield(controller).contains(target)
+            if not on_bf or not self._is_creature_you_control(target):
                 return
             add_counter(game, target, "+1/+1", 2)
         elif mode == 1:

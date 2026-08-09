@@ -16,6 +16,18 @@ def _on_battlefield(game: Any, obj: Any) -> bool:
     return any(game.get_battlefield(p).contains(obj) for p in game.players)
 
 
+def _is_creature(obj: Any) -> bool:
+    """Mode-0 target predicate — a creature. Shared by cast-time targeting and
+    resolution revalidation so both enforce one predicate (rule 608.2b)."""
+    return CardType.CREATURE in getattr(obj, "card_types", set())
+
+
+def _is_artifact(obj: Any) -> bool:
+    """Mode-1 target predicate — an artifact. Shared by cast-time targeting and
+    resolution revalidation so both enforce one predicate (rule 608.2b)."""
+    return CardType.ARTIFACT in getattr(obj, "card_types", set())
+
+
 # Mode indices — the chosen mode determines which target type is legal.
 _MODE_DAMAGE = 0
 _MODE_DESTROY_ARTIFACT = 1
@@ -59,16 +71,14 @@ class Abrade(Instant):
         if self._chosen_mode_index == _MODE_DAMAGE:
             return [
                 TargetRequirement(
-                    filter_fn=lambda obj: CardType.CREATURE
-                    in getattr(obj, "card_types", set()),
+                    filter_fn=_is_creature,
                     description="target creature",
                     zone=Zone.BATTLEFIELD,
                 )
             ]
         return [
             TargetRequirement(
-                filter_fn=lambda obj: CardType.ARTIFACT
-                in getattr(obj, "card_types", set()),
+                filter_fn=_is_artifact,
                 description="target artifact",
                 zone=Zone.BATTLEFIELD,
             )
@@ -84,11 +94,12 @@ class Abrade(Instant):
         if self._chosen_mode_index == _MODE_DAMAGE:
             from engine.game import deal_damage
 
-            deal_damage(game, self, target, 3)
+            # Revalidate the FULL original predicate (rule 608.2b): the target
+            # must still be a creature on the battlefield, not merely present.
+            if _on_battlefield(game, target) and _is_creature(target):
+                deal_damage(game, self, target, 3)
         elif self._chosen_mode_index == _MODE_DESTROY_ARTIFACT:
             from engine.game import destroy
 
-            if _on_battlefield(game, target) and CardType.ARTIFACT in getattr(
-                target, "card_types", set()
-            ):
+            if _on_battlefield(game, target) and _is_artifact(target):
                 destroy(game, target)

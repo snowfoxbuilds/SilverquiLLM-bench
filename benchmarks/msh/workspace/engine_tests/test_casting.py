@@ -1133,3 +1133,69 @@ class TestOptionalTargets:
         cast_spell(game, player, card)
         player.end_intent("bolt")
         assert game.stack.peek().targets == [only]
+
+
+class TestDependentTargetFilterArity:
+    """`_safe_filter` supports both (obj) and dependent (obj, chosen) filter
+    signatures, so a target's legality can depend on targets already chosen this
+    cast (rule 601.2c dependent requirements) without a card-specific backdoor."""
+
+    def test_filter_wants_chosen_detects_arity(self):
+        from engine.casting import _filter_wants_chosen
+        assert _filter_wants_chosen(lambda obj: True) is False
+        assert _filter_wants_chosen(lambda obj, chosen: True) is True
+        # The loop-binding idiom `lambda obj, _c=controller` has a DEFAULTED
+        # second parameter — it is NOT a dependent filter and must be called with
+        # the object alone (regression: binding `chosen` to `_c` broke ~8 cards).
+        _controller = object()
+        assert _filter_wants_chosen(lambda obj, _c=_controller: True) is False
+        assert _filter_wants_chosen(lambda obj, g=None, ctrl=None: True) is False
+        # `*rest` is not a required second positional — treated as single-arg.
+        assert _filter_wants_chosen(lambda obj, *rest: True) is False
+
+        class _C:
+            def one(self, obj):
+                return True
+
+            def two(self, obj, chosen):
+                return True
+
+            def bound_default(self, obj, _c=None):
+                return True
+
+        # Bound methods: `self` is excluded from the counted parameters.
+        assert _filter_wants_chosen(_C().one) is False
+        assert _filter_wants_chosen(_C().two) is True
+        assert _filter_wants_chosen(_C().bound_default) is False
+
+    def test_single_arg_filter_called_with_object_only(self):
+        from engine.casting import _safe_filter
+        seen = {}
+
+        def _f(obj):
+            seen["obj"] = obj
+            return obj == "x"
+
+        assert _safe_filter(_f, "x", ["ignored"]) is True
+        assert _safe_filter(_f, "y", []) is False
+        assert seen["obj"] == "y"
+
+    def test_dependent_filter_receives_chosen(self):
+        from engine.casting import _safe_filter
+        captured = {}
+
+        def _f(obj, chosen):
+            captured["chosen"] = list(chosen)
+            return obj in chosen
+
+        assert _safe_filter(_f, "a", ["a", "b"]) is True
+        assert _safe_filter(_f, "z", ["a", "b"]) is False
+        assert captured["chosen"] == ["a", "b"]
+
+    def test_raising_filter_is_excluded_not_propagated(self):
+        from engine.casting import _safe_filter
+
+        def _boom(obj, chosen):
+            raise RuntimeError("nope")
+
+        assert _safe_filter(_boom, "a", []) is False

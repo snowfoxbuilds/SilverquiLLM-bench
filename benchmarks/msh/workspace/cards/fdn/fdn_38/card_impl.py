@@ -75,13 +75,16 @@ class FaebloomTrick(Instant):
             create_token(game, controller, token)
 
         # Reflexive trigger: tap the chosen creature an opponent controls.
+        # Revalidate the COMPLETE target predicate at resolution (rule 608.2b):
+        # the target must still be a creature an opponent controls, on the
+        # battlefield — not merely still on *a* battlefield. If it changed
+        # control to the caster or ceased to be a creature, it is illegal and
+        # nothing is tapped.
         targets = getattr(self, "chosen_targets", None) or []
         target = targets[0] if targets else None
         if target is None:
             return
-        for player in game.players:
-            if player is controller:
-                continue
-            if game.get_battlefield(player).contains(target):
-                tap(game, target)
-                return
+        on_bf = any(game.get_battlefield(p).contains(target) for p in game.players)
+        if not on_bf or not self._is_opponent_creature(target):
+            return
+        tap(game, target)

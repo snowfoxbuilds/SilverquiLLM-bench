@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature, LoyaltyAbility, Planeswalker
 from engine.card_queries import choose_object
+from engine.stack import surviving_targets
 from engine.continuous_effects import (
     DURATION_END_OF_TURN,
     ContinuousEffect,
@@ -89,14 +90,15 @@ class AjaniCallerOfThePride(Planeswalker):
             return [chosen]
 
         def _plus1(game: Any, targets: list[Any], context: Any = None) -> None:
-            target = targets[0] if targets else None
-            if target is None or not _on_battlefield(game, target):
-                return
-            if not hasattr(target, "plus_one_counters"):
-                return
             from engine.game import add_counter
 
-            add_counter(game, target, "+1/+1", 1)
+            legal = surviving_targets(
+                game, context, targets,
+                is_legal=lambda t: CardType.CREATURE in getattr(t, "card_types", set())
+                and hasattr(t, "plus_one_counters"),
+            )
+            for target in legal:
+                add_counter(game, target, "+1/+1", 1)
 
         # ------------------------------------------------------------------
         # −3: Target creature gains flying and double strike until end of turn.
@@ -120,8 +122,12 @@ class AjaniCallerOfThePride(Planeswalker):
             return [chosen]
 
         def _minus3(game: Any, targets: list[Any], context: Any = None) -> None:
-            target = targets[0] if targets else None
-            if target is None or not _on_battlefield(game, target):
+            legal = surviving_targets(
+                game, context, targets,
+                is_legal=lambda t: CardType.CREATURE in getattr(t, "card_types", set()),
+            )
+            target = legal[0] if legal else None
+            if target is None:
                 return
             grant = Keyword.FLYING | Keyword.DOUBLE_STRIKE
 

@@ -39,17 +39,17 @@ class MischievousPup(Creature):
         )
         super().__init__(**kwargs)
 
+    def _is_other_permanent_you_control(self, obj: Any) -> bool:
+        """Legal target: another permanent controlled by this card's controller
+        (the caster). Shared by ``get_targets`` and the resolution revalidation."""
+        controller = self.controller or getattr(self, "owner", None)
+        return obj is not self and getattr(obj, "controller", None) is controller
+
     def get_targets(self, game: "GameState") -> list[Any]:
         """Up to one OTHER target permanent you control (optional/declinable)."""
-        controller = self.controller or getattr(self, "owner", None)
-        source = self
-
-        def _filter(obj: Any) -> bool:
-            return obj is not source and getattr(obj, "controller", None) is controller
-
         return [
             TargetRequirement(
-                filter_fn=_filter,
+                filter_fn=self._is_other_permanent_you_control,
                 description="up to one other target permanent you control",
                 zone=Zone.BATTLEFIELD,
                 optional=True,
@@ -57,12 +57,21 @@ class MischievousPup(Creature):
         ]
 
     def on_resolve(self, game: "GameState") -> None:
-        """Return the chosen permanent (if any) to its owner's hand."""
+        """Return the chosen permanent (if any) to its owner's hand.
+
+        Revalidate the COMPLETE predicate at resolution: still *another*
+        permanent the caster controls, on the battlefield. A permanent whose
+        control changed away from the caster before resolution is illegal and is
+        not returned.
+        """
         from engine.zones import move_to_zone
 
         chosen = getattr(self, "chosen_targets", None) or []
         target = chosen[0] if chosen else None
-        if target is None or target is self:
+        if target is None:
             return
-        if _on_battlefield(game, target):
-            move_to_zone(game, target, Zone.BATTLEFIELD, Zone.HAND)
+        if not _on_battlefield(game, target):
+            return
+        if not self._is_other_permanent_you_control(target):
+            return
+        move_to_zone(game, target, Zone.BATTLEFIELD, Zone.HAND)

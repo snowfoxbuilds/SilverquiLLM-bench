@@ -53,6 +53,11 @@ class SeekersFolly(Sorcery):
             ),
         ]
 
+    def _is_opponent(self, game: "GameState", obj: Any) -> bool:
+        """Legal target: a player in the game other than the caster."""
+        controller = self.controller or getattr(self, "owner", None)
+        return obj is not controller and any(obj is p for p in game.players)
+
     def get_targets(self, game: "GameState") -> list[Any]:
         """Choose the mode; return a target requirement only for mode 0."""
         from engine.card_queries import choose_mode
@@ -71,12 +76,9 @@ class SeekersFolly(Sorcery):
         )
 
         if self.chosen_mode == 0:
-            def _is_opponent(obj: Any) -> bool:
-                return obj is not controller and any(obj is p for p in game.players)
-
             return [
                 TargetRequirement(
-                    filter_fn=_is_opponent,
+                    filter_fn=lambda obj: self._is_opponent(game, obj),
                     description="target opponent",
                     zone=Zone.BATTLEFIELD,
                 )
@@ -95,6 +97,10 @@ class SeekersFolly(Sorcery):
             chosen = getattr(self, "chosen_targets", None) or []
             target = chosen[0] if chosen else None
             if target is None:
+                return
+            # Revalidate the full target predicate at resolution (rule 608.2b):
+            # the target must still be an opponent in the game.
+            if not self._is_opponent(game, target):
                 return
             hand = game.get_hand(target)
             for _ in range(2):

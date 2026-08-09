@@ -13,7 +13,11 @@ import pytest
 
 from cards.fdn.fdn_75.card_impl import VampireSoulcaller
 from engine.card import Creature, Instant
-from engine.types import Keyword, ManaCost, ManaType, Phase, Zone
+from engine.casting import cast_spell as engine_cast_spell
+from engine.decisions import Decision, GameRef
+from engine.intent_player import Intent
+from engine.stack import resolve_top_of_stack
+from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Zone
 from test_utils import (
     TestSetupError as _TestSetupError,
     cast_spell,
@@ -24,6 +28,29 @@ from test_utils import (
 
 def _bear(name: str = "Bear") -> Creature:
     return Creature(name=name, base_power=2, base_toughness=2)
+
+
+def _cast_no_resolve(game, player_index, card, targets, zone=Zone.BATTLEFIELD):
+    """Cast *card* but leave it on the stack (targets chosen, not resolved)."""
+    player = game.players[player_index]
+    game.active_player_index = player_index
+    game.priority_player_index = player_index
+    game.phase = Phase.PRECOMBAT_MAIN
+    game.step = None
+    prefs = tuple(
+        Decision.obj(instance=game.refs.instance_id(t, zone.value)) for t in targets
+    )
+    player.start_intent(
+        "cast",
+        Intent(
+            pattern=GameRef(card=frozenset({("name", card.name)})),
+            preferences=prefs,
+        ),
+    )
+    try:
+        engine_cast_spell(game, player, card)
+    finally:
+        player.end_intent("cast")
 
 
 def _setup():
@@ -100,3 +127,22 @@ class TestVampireSoulcallerETB:
             cast_spell(game, 0, "Vampire Soulcaller")
         # The cast was rejected — the Soulcaller never resolved onto the field.
         assert not game.get_battlefield(p1).contains(soulcaller)
+
+
+class TestVampireSoulcallerRevalidation:
+    """Rule 608.2b: the reanimation revalidates the FULL predicate ("a creature
+    card in your graveyard") at resolution, not merely graveyard presence."""
+
+    def test_no_return_when_target_ceases_to_be_creature_card(self):
+        game, p1, p2, soulcaller, dead = _setup()
+        _cast_no_resolve(game, 0, soulcaller, [dead], zone=Zone.GRAVEYARD)
+        # Before resolution the target stops being a creature card.
+        dead.card_types = set(dead.card_types) - {CardType.CREATURE}
+        while not game.stack.is_empty():
+            resolve_top_of_stack(game)
+
+        # Effect did nothing: the card stays in the graveyard, not the hand.
+        assert game.get_graveyard(p1).contains(dead)
+        assert not game.get_hand(p1).contains(dead)
+        # The Soulcaller itself still resolved onto the battlefield.
+        assert game.get_battlefield(p1).contains(soulcaller)

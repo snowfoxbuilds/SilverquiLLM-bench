@@ -6,6 +6,8 @@ import copy
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
+from engine.types import Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
     from engine.player import Player
@@ -63,6 +65,128 @@ class StackObject:
     on_resolve: Callable[[GameState], None] = field(default=lambda _game: None)
     is_mana_ability: bool = False
     activation_context: ActivationContext | None = None
+
+
+# ---------------------------------------------------------------------------
+# Activation-time identity: stint capture and resolution-time revalidation
+# ---------------------------------------------------------------------------
+#
+# These are the *single* shared mechanism for capturing an activated/triggered
+# ability's activation-time identity and revalidating its captured targets when
+# it resolves (rule 602.2 / 608.2b / 608.2c). Every targeted activated ability,
+# loyalty ability, and triggered ability captures its context through
+# :func:`capture_activation_context` and, at resolution, keeps only the targets
+# :func:`surviving_targets` returns — the targets are never re-selected.
+#
+# A zone change mints a fresh *stint* id (see ``GameRefsRegistry.instance_id``),
+# so comparing a target's current-zone stint id against the one captured at
+# activation is what distinguishes "the same object I targeted" from "a new
+# object in the same Python instance" after a leave-and-return (invariant: a
+# battlefield object that leaves and returns is a new object for targeting).
+
+
+def object_current_zone(game: GameState, obj: Any) -> str | None:
+    """Return the zone value (e.g. ``"battlefield"``) *obj* currently occupies,
+    or ``None`` if it is in no player's zone.
+
+    Zone-generic on purpose: a captured target may be a battlefield permanent
+    (creatures) or a card in a graveyard (Scavenging Ooze), and both must be
+    revalidated by the same helper.
+    """
+    for player in game.players:
+        zones = player.zones
+        for zone in Zone:
+            if zone in zones and zones[zone].contains(obj):
+                return zone.value
+    return None
+
+
+def object_stint_id(game: GameState, obj: Any) -> int | None:
+    """Return the instance id of *obj*'s current-zone stint, or ``None`` if it
+    is in no zone. Used to snapshot a target's identity at activation."""
+    zone_value = object_current_zone(game, obj)
+    if zone_value is None:
+        return None
+    return game.refs.instance_id(obj, zone_value)
+
+
+def battlefield_stint_id(game: GameState, obj: Any) -> int | None:
+    """Return the instance id of *obj*'s current battlefield stint, or ``None``
+    if it is not on any player's battlefield (used to snapshot the source)."""
+    for player in game.players:
+        if game.get_battlefield(player).contains(obj):
+            return game.refs.instance_id(obj, Zone.BATTLEFIELD.value)
+    return None
+
+
+def capture_activation_context(
+    game: GameState,
+    source: Any,
+    controller: Any,
+    targets: list[Any],
+) -> ActivationContext:
+    """Snapshot the activation-time controller and the source/target stints
+    (rule 602.2). Stored on the :class:`StackObject`, never on the mutable
+    source. Target stints are captured zone-generically so a graveyard-card
+    target is revalidated the same way a battlefield permanent is."""
+    return ActivationContext(
+        controller=controller,
+        source_instance_id=battlefield_stint_id(game, source),
+        target_instance_ids=tuple(object_stint_id(game, t) for t in targets),
+    )
+
+
+def same_stint(game: GameState, obj: Any, stint_id: int | None) -> bool:
+    """Return ``True`` if *obj* is currently in the *same* zone-stint captured
+    as *stint_id* at activation.
+
+    ``False`` when *obj* has left its zone, or left and returned (a new stint,
+    hence a new instance id). A ``stint_id`` of ``None`` — the object was in no
+    zone at activation — never matches, **except** for a player: players are not
+    zone residents and their identity is stable, so a targeted player is always
+    "the same" (any legality restriction is left to the caller's predicate).
+    """
+    if any(obj is player for player in game.players):
+        return True
+    if stint_id is None:
+        return False
+    zone_value = object_current_zone(game, obj)
+    if zone_value is None:
+        return False
+    return game.refs.instance_id(obj, zone_value) == stint_id
+
+
+def surviving_targets(
+    game: GameState,
+    context: ActivationContext | None,
+    targets: list[Any],
+    is_legal: Callable[[Any], bool] | None = None,
+) -> list[Any]:
+    """Return the subset of *targets* still legal at resolution (rule 608.2b/2c).
+
+    A target survives iff **both**:
+
+    1. it is in the *same zone-stint* captured at activation
+       (:func:`same_stint`) — a leave-and-return mints a new stint and fails
+       this, so a departed-and-returned object is rejected; and
+    2. it satisfies *is_legal* — a predicate expressing the *complete*
+       targeting restriction, evaluated relative to ``context.controller`` for
+       "you control"-style requirements (never the source's mutable current
+       controller).
+
+    Callers apply the effect only to the returned targets. When the list is
+    empty every target was illegal and the effect does nothing (rule 608.2c).
+    """
+    survivors: list[Any] = []
+    ids = context.target_instance_ids if context is not None else ()
+    for i, target in enumerate(targets):
+        stint = ids[i] if i < len(ids) else None
+        if not same_stint(game, target, stint):
+            continue
+        if is_legal is not None and not is_legal(target):
+            continue
+        survivors.append(target)
+    return survivors
 
 
 class Stack:

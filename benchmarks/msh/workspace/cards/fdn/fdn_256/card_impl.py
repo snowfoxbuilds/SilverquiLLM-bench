@@ -37,30 +37,41 @@ class MeteorGolem(ArtifactCreature):
         )
         super().__init__(**kwargs)
 
+    def _is_opponent_nonland_permanent(self, obj: Any) -> bool:
+        """Legal target: a nonland permanent controlled by a player other than
+        the caster. Shared by ``get_targets`` and the resolution revalidation."""
+        controller = self.controller or getattr(self, "owner", None)
+        if CardType.LAND in getattr(obj, "card_types", set()):
+            return False
+        obj_controller = getattr(obj, "controller", None)
+        return obj_controller is not None and obj_controller is not controller
+
     def get_targets(self, game: "GameState") -> list[Any]:
         """Required target: a nonland permanent an opponent controls."""
-        controller = self.controller or getattr(self, "owner", None)
-
-        def _filter(obj: Any) -> bool:
-            if CardType.LAND in getattr(obj, "card_types", set()):
-                return False
-            return getattr(obj, "controller", None) is not controller
-
         return [
             TargetRequirement(
-                filter_fn=_filter,
+                filter_fn=self._is_opponent_nonland_permanent,
                 description="target nonland permanent an opponent controls",
                 zone=Zone.BATTLEFIELD,
             )
         ]
 
     def on_resolve(self, game: "GameState") -> None:
-        """Destroy the targeted permanent."""
+        """Destroy the targeted permanent.
+
+        Revalidate the COMPLETE predicate at resolution: still a *nonland*
+        permanent an *opponent* controls, on the battlefield. If it became a
+        land, came under the caster's control, or left play before resolution,
+        it is illegal and is not destroyed.
+        """
         from engine.game import destroy
 
         chosen = getattr(self, "chosen_targets", None) or []
         target = chosen[0] if chosen else None
         if target is None:
             return
-        if _on_battlefield(game, target):
-            destroy(game, target)
+        if not _on_battlefield(game, target):
+            return
+        if not self._is_opponent_nonland_permanent(target):
+            return
+        destroy(game, target)

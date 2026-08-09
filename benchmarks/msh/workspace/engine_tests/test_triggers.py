@@ -577,3 +577,60 @@ class TestAutoTriggerUnregistrationViaLeave:
         assert len(game.trigger_manager.get_triggers_for_source(card)) == 0
         game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent())
         assert game.stack.is_empty()
+
+
+class TestTriggeredTargetChannel:
+    """The optional TriggerRegistration.targeting hook: targets are chosen as the
+    trigger is put on the stack, captured with an ActivationContext, and passed
+    to effect(game, targets, context) — never re-selected at resolution."""
+
+    def _game(self):
+        from test_utils import create_game, set_board_state
+        game = create_game()
+        p1, p2 = game.players
+        a = Creature(name="A", base_power=1, base_toughness=1, owner=p1, controller=p1)
+        b = Creature(name="B", base_power=1, base_toughness=1, owner=p1, controller=p1)
+        set_board_state(game, 0, battlefield=[a, b])
+        game.active_player_index = 0
+        return game, p1, p2, a, b
+
+    def test_targets_and_context_captured_on_fire(self):
+        game, p1, p2, a, b = self._game()
+        seen = {}
+
+        def _targeting(g, event):
+            return [a, b]
+
+        def _effect(g, targets, context):
+            seen["targets"] = list(targets)
+            seen["context"] = context
+
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=_effect, source=a, controller=p1,
+            targeting=_targeting,
+        ))
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        top = game.stack.peek()
+        assert top.targets == [a, b]                       # fixed as it went up
+        assert top.activation_context is not None
+        assert top.activation_context.controller is p1
+        from engine.stack import resolve_top_of_stack
+        resolve_top_of_stack(game)
+        assert seen["targets"] == [a, b]                   # effect got the fixed targets
+        assert seen["context"] is top.activation_context
+
+    def test_untargeted_trigger_unchanged(self):
+        game, p1, p2, a, b = self._game()
+        calls = []
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=lambda g: calls.append(True), source=a, controller=p1,
+        ))
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        top = game.stack.peek()
+        assert top.targets == []
+        assert top.activation_context is None              # no context for untargeted
+        from engine.stack import resolve_top_of_stack
+        resolve_top_of_stack(game)
+        assert calls == [True]                             # effect(game) still fired

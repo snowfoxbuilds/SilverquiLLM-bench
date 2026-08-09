@@ -19,10 +19,11 @@ from __future__ import annotations
 from cards.fdn.fdn_215.card_impl import Bushwhack
 from engine.basic_lands import Forest
 from engine.card import Creature, Land
+from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, DecisionKind, GameRef
 from engine.intent_player import Intent
-from engine.types import ManaCost, ManaType, Zone
-from test_utils import cast_spell, create_game, set_board_state
+from engine.types import CardType, ManaCost, ManaType, Phase, Zone
+from test_utils import cast_spell, create_game, resolve_stack, set_board_state
 
 
 def _cast_bushwhack(game, mode_name, obj_instance_ids):
@@ -37,6 +38,28 @@ def _cast_bushwhack(game, mode_name, obj_instance_ids):
     ))
     try:
         cast_spell(game, 0, "Bushwhack")
+    finally:
+        p1.end_intent("bw")
+
+
+def _cast_bushwhack_no_resolve(game, mode_name, obj_instance_ids):
+    """Cast Bushwhack (choosing mode + targets) WITHOUT resolving, so a test can
+    change a target before the fight resolves."""
+    p1 = game.players[0]
+    game.active_player_index = 0
+    game.priority_player_index = 0
+    game.phase = Phase.PRECOMBAT_MAIN
+    game.step = None
+    bw = next(c for c in game.get_hand(p1).get_all() if c.name == "Bushwhack")
+    prefs = (Decision.mode(mode_name),) + tuple(
+        Decision.obj(instance=i) for i in obj_instance_ids
+    )
+    p1.start_intent("bw", Intent(
+        pattern=GameRef(card=frozenset({("name", "Bushwhack")})),
+        preferences=prefs,
+    ))
+    try:
+        engine_cast_spell(game, p1, bw)
     finally:
         p1.end_intent("bw")
 
@@ -129,3 +152,36 @@ class TestBushwhackSearch:
             if o.kind is DecisionKind.OBJECT
         }
         assert offered == {"Forest"}
+
+class TestBushwhackFightRevalidation:
+    def _setup(self):
+        game = create_game()
+        p1, p2 = game.players
+        bw = Bushwhack(owner=p1, controller=p1)
+        ours = Creature(name="Ours", base_power=3, base_toughness=3)
+        theirs = Creature(name="Theirs", base_power=1, base_toughness=1)
+        set_board_state(game, 0, hand=[bw], battlefield=[ours], mana={ManaType.GREEN: 1})
+        set_board_state(game, 1, battlefield=[theirs])
+        return game, p1, p2, ours, theirs
+
+    def test_target_control_change_before_resolution_no_fight(self):
+        """Negative revalidation: the opponent's creature comes under the
+        caster's control before resolution → no longer 'a creature you don't
+        control'. The fight needs both legal targets, so nothing happens."""
+        game, p1, p2, ours, theirs = self._setup()
+        _cast_bushwhack_no_resolve(game, "Fight", [ours.instance_id, theirs.instance_id])
+        theirs.controller = p1  # now controlled by the caster
+        resolve_stack(game)
+        assert ours.damage_marked == 0
+        assert theirs.damage_marked == 0
+        assert game.get_battlefield(p2).contains(theirs)
+
+    def test_target_ceases_to_be_creature_before_resolution_no_fight(self):
+        """Negative revalidation: one target stops being a creature before
+        resolution → illegal, so the fight does not happen."""
+        game, p1, p2, ours, theirs = self._setup()
+        _cast_bushwhack_no_resolve(game, "Fight", [ours.instance_id, theirs.instance_id])
+        ours.card_types = set(ours.card_types) - {CardType.CREATURE}  # no longer a creature
+        resolve_stack(game)
+        assert theirs.damage_marked == 0
+        assert game.get_battlefield(p2).contains(theirs)

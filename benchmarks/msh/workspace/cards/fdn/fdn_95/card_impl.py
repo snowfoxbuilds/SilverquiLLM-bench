@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from engine.card import ActivatedAbility, Creature
 from engine.card_queries import choose_object
+from engine.stack import surviving_targets
 from engine.continuous_effects import (
     DURATION_END_OF_TURN,
     ContinuousEffect,
@@ -92,10 +93,15 @@ class SowerOfChaos(Creature):
             game: "GameState", targets: list[Any], context: Any = None
         ) -> None:
             # Resolve using the target chosen at activation; never re-select.
-            target = targets[0] if targets else None
-            if target is None or not _on_battlefield(game, target):
+            # Revalidate via the shared helper: same battlefield stint (a
+            # leave-and-return is a new object) and still a creature.
+            legal = surviving_targets(
+                game, context, targets,
+                is_legal=lambda t: CardType.CREATURE in getattr(t, "card_types", set()),
+            )
+            chosen = legal[0] if legal else None
+            if chosen is None:
                 return
-            chosen = target
 
             def _apply(g: "GameState") -> None:
                 chosen._cant_block = True

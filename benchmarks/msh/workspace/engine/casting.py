@@ -52,9 +52,42 @@ class CastingError(Exception):
 # ------------------------------------------------------------------
 
 
-def _safe_filter(filter_fn: Any, obj: Any) -> bool:
-    """Evaluate a lazy target ``filter_fn`` defensively (illegal → excluded)."""
+def _filter_wants_chosen(filter_fn: Any) -> bool:
+    """Return ``True`` if *filter_fn* requires the already-chosen targets as a
+    *second* positional argument — a *dependent* target filter (rule 601.2c
+    dependent requirements), e.g. "target Equipment attached to *that creature*"
+    whose legality depends on the creature chosen earlier in the same cast.
+
+    A dependent filter is exactly ``(obj, chosen)`` — **two required positional
+    parameters, neither defaulted**. The common one-argument filter ``(obj)``
+    returns ``False``. Crucially, the loop-binding idiom
+    ``lambda obj, _c=controller: ...`` also returns ``False``: its second
+    parameter has a *default*, so it is not a dependent filter and must still be
+    called with the object alone (never with the chosen list bound to ``_c``).
+    """
     try:
+        params = list(inspect.signature(filter_fn).parameters.values())
+    except (TypeError, ValueError):
+        return False
+    required_positional = [
+        p
+        for p in params
+        if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+        and p.default is p.empty
+    ]
+    return len(required_positional) >= 2
+
+
+def _safe_filter(filter_fn: Any, obj: Any, chosen: Any = ()) -> bool:
+    """Evaluate a lazy target ``filter_fn`` defensively (illegal → excluded).
+
+    Supports both the ``(obj)`` signature and the dependent ``(obj, chosen)``
+    signature, where *chosen* is the list of targets already selected for
+    earlier requirements of this same cast (see :func:`_filter_wants_chosen`).
+    """
+    try:
+        if _filter_wants_chosen(filter_fn):
+            return bool(filter_fn(obj, list(chosen)))
         return bool(filter_fn(obj))
     except Exception:
         return False
@@ -133,7 +166,9 @@ def _query_target(
     for candidate in candidates:
         if any(candidate is chosen for chosen in exclude):
             continue
-        if filter_fn is not None and not _safe_filter(filter_fn, candidate):
+        # *exclude* is also the already-chosen target list for this cast, so a
+        # dependent filter (rule 601.2c) sees the earlier targets it depends on.
+        if filter_fn is not None and not _safe_filter(filter_fn, candidate, exclude):
             continue
         decision = _candidate_decision(game, candidate, zone)
         if decision in by_decision:
@@ -393,9 +428,12 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
                 # An optional "up to one target" that was declined or had no
                 # legal candidate — it contributes no target.
                 continue
-            # Validate against filter_fn if the spec provides one
+            # Validate against filter_fn if the spec provides one (arity-aware,
+            # so a dependent target is checked against the earlier targets).
             filter_fn = getattr(spec, "filter_fn", None)
-            if filter_fn is not None and not filter_fn(target):
+            if filter_fn is not None and not _safe_filter(
+                filter_fn, target, chosen_targets
+            ):
                 stack_zone.remove(card)
                 hand.add(card)
                 raise CastingError(
@@ -566,9 +604,12 @@ def cast_spell_free(
                     # An optional "up to one target" declined or with no legal
                     # candidate — it contributes no target.
                     continue
-                # Validate against filter_fn if the spec provides one
+                # Validate against filter_fn if the spec provides one (arity-aware,
+                # so a dependent target is checked against the earlier targets).
                 filter_fn = getattr(spec, "filter_fn", None)
-                if filter_fn is not None and not filter_fn(target):
+                if filter_fn is not None and not _safe_filter(
+                    filter_fn, target, chosen_targets
+                ):
                     raise CastingError(
                         f"Cannot cast {card.name!r} — chosen target does not "
                         f"satisfy filter: {getattr(spec, 'description', '')}"

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from engine.card import ActivatedAbility, Creature
 from engine.card_queries import choose_object
+from engine.stack import surviving_targets
 from engine.types import CardType, Keyword, ManaCost, ManaType
 
 if TYPE_CHECKING:
@@ -99,10 +100,13 @@ class HeartfireImmolator(Creature):
         ) -> None:
             from engine.game import deal_damage
 
-            target = targets[0] if targets else None
-            if target is None or not _on_battlefield(game, target):
-                return
-            if not _creature_or_planeswalker(target):
+            # Revalidate via the shared helper: same battlefield stint and still
+            # a creature or planeswalker.
+            legal = surviving_targets(
+                game, context, targets, is_legal=_creature_or_planeswalker
+            )
+            target = legal[0] if legal else None
+            if target is None:
                 return
             dmg = getattr(source, "_snapshot_power", source.base_power)
             deal_damage(game, source, target, dmg)

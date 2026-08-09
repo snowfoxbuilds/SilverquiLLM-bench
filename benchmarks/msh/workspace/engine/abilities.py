@@ -20,8 +20,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
 from engine.casting import is_sorcery_speed
-from engine.stack import ActivationContext, StackObject
-from engine.types import Zone
+from engine.stack import (
+    ActivationContext,
+    StackObject,
+    capture_activation_context,
+)
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -236,38 +239,6 @@ def activate_ability(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _battlefield_instance_id(game: GameState, obj: Any) -> int | None:
-    """Return *obj*'s current battlefield stint id, or ``None`` if it is not on
-    any player's battlefield.
-
-    A zone change mints a fresh stint id (see ``GameRefsRegistry.instance_id``),
-    so a snapshot taken here at activation lets a resolving effect tell whether
-    the same Python object is still the *same* battlefield permanent it was when
-    the ability was activated — a leave-and-return yields a different id.
-    """
-    for player in game.players:
-        if game.get_battlefield(player).contains(obj):
-            return game.refs.instance_id(obj, Zone.BATTLEFIELD.value)
-    return None
-
-
-def _capture_activation_context(
-    game: GameState,
-    source: Any,
-    controller: Any,
-    targets: list[Any],
-) -> ActivationContext:
-    """Snapshot the activation-time controller and source/target stints (rule
-    602.2). Stored on the :class:`StackObject`, never on the mutable source."""
-    return ActivationContext(
-        controller=controller,
-        source_instance_id=_battlefield_instance_id(game, source),
-        target_instance_ids=tuple(
-            _battlefield_instance_id(game, t) for t in targets
-        ),
-    )
-
-
 def _activate_regular_ability(
     game: GameState,
     player: Any,
@@ -333,7 +304,7 @@ def _activate_regular_ability(
         # 5. Capture the immutable activation context (authorized controller +
         #    source/target stints) now, while the source and targets are in
         #    their activation zones, and before the cost mutates anything.
-        context = _capture_activation_context(game, source, controller, chosen_targets)
+        context = capture_activation_context(game, source, controller, chosen_targets)
 
     # 6. Pay costs
     cost_paid = ability.cost(game, source)
@@ -414,7 +385,7 @@ def _activate_loyalty_ability(
                 "Cannot activate loyalty ability — no legal target"
             )
         chosen_targets = list(chosen)
-        context = _capture_activation_context(
+        context = capture_activation_context(
             game, source, controller, chosen_targets
         )
 

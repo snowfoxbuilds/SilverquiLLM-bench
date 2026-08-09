@@ -12,10 +12,28 @@ from __future__ import annotations
 
 from cards.fdn.fdn_188.card_impl import Abrade
 from engine.card import Artifact, Creature
+from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, DecisionKind, GameRef
 from engine.intent_player import Intent
-from engine.types import ManaCost, ManaType, Phase, Zone
+from engine.stack import resolve_top_of_stack
+from engine.types import CardType, ManaCost, ManaType, Phase, Zone
 from test_utils import cast_spell, create_game, set_board_state
+
+
+def _cast_modal_no_resolve(game, idx, card, mode_name, target):
+    """Cast modal *card* (choosing *mode_name* + *target*) but leave it on the
+    stack, so a test can mutate the target and resolve manually to exercise
+    resolution-time target revalidation."""
+    player = game.players[idx]
+    inst = game.refs.instance_id(target, Zone.BATTLEFIELD.value)
+    player.start_intent("cast", Intent(
+        pattern=GameRef(card=frozenset({("name", card.name)})),
+        preferences=(Decision.mode(mode_name), Decision.obj(instance=inst)),
+    ))
+    try:
+        engine_cast_spell(game, player, card)
+    finally:
+        player.end_intent("cast")
 
 
 def _cast_modal(game, idx, name, mode_name, target):
@@ -70,6 +88,25 @@ class TestAbradeDamageMode:
         _cast_modal(game, 0, "Abrade", "Damage", wall)
         assert game.get_battlefield(p2).contains(wall)     # survives (5 > 3)
         assert wall.damage_marked == 3
+
+    def test_damage_mode_target_no_longer_creature_does_nothing(self):
+        """Resolution-time revalidation (rule 608.2b): the damage mode re-checks
+        that its target is still a creature on the battlefield. If the target
+        stops being a creature before Abrade resolves, no damage is dealt."""
+        game = create_game()
+        p1, p2 = game.players
+        abrade = Abrade(owner=p1, controller=p1)
+        bear = Creature(name="Bear", base_power=2, base_toughness=2)
+        set_board_state(game, 0, hand=[abrade], mana={ManaType.RED: 2})
+        set_board_state(game, 1, battlefield=[bear])
+        _prime(game)
+        _cast_modal_no_resolve(game, 0, abrade, "Damage", bear)
+        # The target stops being a creature while Abrade is on the stack (still a
+        # permanent — now an artifact — so it stays on the battlefield).
+        bear.card_types = {CardType.ARTIFACT}
+        resolve_top_of_stack(game)
+        assert game.get_battlefield(p2).contains(bear)   # survives
+        assert getattr(bear, "damage_marked", 0) == 0    # no damage dealt
 
     def test_damage_mode_offers_only_creatures(self):
         """Option-set invariant: mode 0 targets creatures, never the artifact."""

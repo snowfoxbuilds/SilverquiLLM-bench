@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from engine.card import ActivatedAbility, Creature
 from engine.card_queries import choose_object
+from engine.stack import surviving_targets
 from engine.types import CardType, Keyword, ManaCost
 
 if TYPE_CHECKING:
@@ -97,13 +98,13 @@ class CatharCommando(Creature):
         ) -> None:
             from engine.game import destroy
 
-            target = targets[0] if targets else None
-            if target is None or not _on_battlefield(game, target):
-                return
-            # Revalidate the target is still an artifact or enchantment.
-            if not _is_artifact_or_enchantment(target):
-                return
-            destroy(game, target)
+            # Revalidate via the shared helper: same battlefield stint and still
+            # an artifact or enchantment.
+            legal = surviving_targets(
+                game, context, targets, is_legal=_is_artifact_or_enchantment
+            )
+            for target in legal:
+                destroy(game, target)
 
         return [
             ActivatedAbility(

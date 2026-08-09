@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from engine.card import ActivatedAbility, Creature
 from engine.card_queries import choose_object
+from engine.stack import surviving_targets
 from engine.types import CardType, Keyword, ManaCost, ManaType, Phase
 
 if TYPE_CHECKING:
@@ -101,13 +102,20 @@ class TreetopSnarespinner(Creature):
         ) -> None:
             from engine.game import add_counter
 
-            target = targets[0] if targets else None
-            if target is None or not _on_battlefield(game, target):
-                return
-            # Revalidate the "creature you control" restriction at resolution.
-            if getattr(target, "controller", None) is not source.controller:
-                return
-            add_counter(game, target, "+1/+1", 1)
+            # "Creature you control" is evaluated relative to the ability's
+            # activation-time controller (rule 602.2), never the source's
+            # possibly-changed current controller. Stint validation additionally
+            # rejects a leave-and-return.
+            controller = context.controller if context is not None else source.controller
+            legal = surviving_targets(
+                game, context, targets,
+                is_legal=lambda t: (
+                    CardType.CREATURE in getattr(t, "card_types", set())
+                    and getattr(t, "controller", None) is controller
+                ),
+            )
+            for target in legal:
+                add_counter(game, target, "+1/+1", 1)
 
         return [
             ActivatedAbility(

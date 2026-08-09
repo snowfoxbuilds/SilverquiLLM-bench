@@ -11,8 +11,44 @@ from __future__ import annotations
 
 from cards.fdn.fdn_38.card_impl import FaebloomTrick
 from engine.card import Creature
-from engine.types import CardType, Keyword, ManaCost, ManaType, TargetRequirement, Zone
+from engine.casting import cast_spell as engine_cast_spell
+from engine.decisions import Decision, GameRef
+from engine.intent_player import Intent
+from engine.stack import resolve_top_of_stack
+from engine.types import (
+    CardType,
+    Keyword,
+    ManaCost,
+    ManaType,
+    Phase,
+    TargetRequirement,
+    Zone,
+)
 from test_utils import cast_spell, create_game, set_board_state
+
+
+def _cast_no_resolve(game, player_index, card, targets):
+    """Cast *card* but leave it on the stack (targets chosen, not resolved)."""
+    player = game.players[player_index]
+    game.active_player_index = player_index
+    game.priority_player_index = player_index
+    game.phase = Phase.PRECOMBAT_MAIN
+    game.step = None
+    prefs = tuple(
+        Decision.obj(instance=game.refs.instance_id(t, Zone.BATTLEFIELD.value))
+        for t in targets
+    )
+    player.start_intent(
+        "cast",
+        Intent(
+            pattern=GameRef(card=frozenset({("name", card.name)})),
+            preferences=prefs,
+        ),
+    )
+    try:
+        engine_cast_spell(game, player, card)
+    finally:
+        player.end_intent("cast")
 
 
 def _bear(p, name="Bear"):
@@ -74,4 +110,28 @@ class TestFaebloomTrickResolve:
         trick = FaebloomTrick(owner=p1, controller=p1)
         set_board_state(game, 0, hand=[trick], mana={ManaType.BLUE: 3})
         cast_spell(game, 0, "Faebloom Trick")  # no targets available/needed
+        assert len(_faeries(game, p1)) == 2
+
+
+class TestFaebloomTrickRevalidation:
+    """Rule 608.2b: the reflexive tap revalidates the FULL predicate ("a
+    creature an opponent controls") at resolution, not merely presence."""
+
+    def test_no_tap_when_target_leaves_opponent_control(self):
+        game = create_game()
+        p1, p2 = game.players
+        trick = FaebloomTrick(owner=p1, controller=p1)
+        their_bear = _bear(p2, "Their Bear")
+        set_board_state(game, 0, hand=[trick], mana={ManaType.BLUE: 3})
+        set_board_state(game, 1, battlefield=[their_bear])
+
+        _cast_no_resolve(game, 0, trick, [their_bear])
+        # Before resolution, control of the target passes to the caster — it is
+        # no longer "a creature an opponent controls".
+        their_bear.controller = p1
+        while not game.stack.is_empty():
+            resolve_top_of_stack(game)
+
+        # Tap did nothing; the tokens still appeared.
+        assert their_bear.is_tapped is False
         assert len(_faeries(game, p1)) == 2

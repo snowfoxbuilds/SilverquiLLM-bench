@@ -71,30 +71,34 @@ class Bushwhack(Sorcery):
             # Search mode chooses its basic land at resolution (non-target).
             return []
 
-        def _yours(obj: Any) -> bool:
-            return (
-                CardType.CREATURE in getattr(obj, "card_types", set())
-                and getattr(obj, "controller", None) is controller
-            )
-
-        def _theirs(obj: Any) -> bool:
-            return (
-                CardType.CREATURE in getattr(obj, "card_types", set())
-                and getattr(obj, "controller", None) is not controller
-            )
-
         return [
             TargetRequirement(
-                filter_fn=_yours,
+                filter_fn=self._is_your_creature,
                 description="target creature you control",
                 zone=Zone.BATTLEFIELD,
             ),
             TargetRequirement(
-                filter_fn=_theirs,
+                filter_fn=self._is_their_creature,
                 description="target creature you don't control",
                 zone=Zone.BATTLEFIELD,
             ),
         ]
+
+    def _is_your_creature(self, obj: Any) -> bool:
+        """A creature the caster controls (shared cast/resolution predicate)."""
+        controller = self.controller or getattr(self, "owner", None)
+        return (
+            CardType.CREATURE in getattr(obj, "card_types", set())
+            and getattr(obj, "controller", None) is controller
+        )
+
+    def _is_their_creature(self, obj: Any) -> bool:
+        """A creature the caster does not control (shared cast/resolution)."""
+        controller = self.controller or getattr(self, "owner", None)
+        return (
+            CardType.CREATURE in getattr(obj, "card_types", set())
+            and getattr(obj, "controller", None) is not controller
+        )
 
     def on_resolve(self, game: "GameState") -> None:
         if self._chosen_mode_index == _MODE_SEARCH:
@@ -137,7 +141,14 @@ class Bushwhack(Sorcery):
         if len(chosen) < 2:
             return
         yours, theirs = chosen[0], chosen[1]
+        # Revalidate the COMPLETE predicate for BOTH targets (rule 608.2b): each
+        # must still be on the battlefield and a creature with the correct
+        # control relationship. If either changed control or ceased to be a
+        # creature, that target is illegal; a fight needs both, so it does
+        # nothing (rule 608.2c — the fight cannot happen with an illegal target).
         if not (_on_battlefield(game, yours) and _on_battlefield(game, theirs)):
+            return
+        if not (self._is_your_creature(yours) and self._is_their_creature(theirs)):
             return
         yours_power = getattr(yours, "power", getattr(yours, "base_power", 0))
         theirs_power = getattr(theirs, "power", getattr(theirs, "base_power", 0))

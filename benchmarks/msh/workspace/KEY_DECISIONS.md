@@ -323,6 +323,115 @@ loyalty payment → push**:
   `on_resolve` was proportional; loyalty abilities have no `can_activate` hook
   (their legality is the fixed sorcery-speed + once-per-turn rule, checked inline).
 
+### Centralized activation-time targeting + resolution revalidation (Phase D correction)
+The original Phase D sweep left several cards still **selecting targets at
+resolution** (a resolve-time `choose_object`), which violates rule 601.2b/602.2b
+(targets are chosen when the spell/ability is put on the stack) and rule
+608.2b/608.2c (a resolving effect revalidates, never re-selects). The correction
+introduces **one shared mechanism** in `engine/stack.py` and routes every
+targeted activated ability, loyalty ability, triggered ability, and converted
+spell through it.
+
+**Shared helpers (`engine/stack.py`).** Co-located with `ActivationContext`:
+- `capture_activation_context(game, source, controller, targets)` — the single
+  capture path (rule 602.2). `abilities.py` and `triggers.py` both call it; the
+  private `_capture_activation_context`/`_battlefield_instance_id` copies in
+  `abilities.py` were removed. Source stint is the battlefield stint; **target
+  stints are zone-generic** (`object_stint_id` finds whichever zone the target
+  occupies), so a graveyard-card target (Scavenging Ooze) is captured and
+  revalidated by the same code that handles a battlefield permanent.
+- `same_stint(game, obj, stint_id)` — `True` iff *obj* is still in the same
+  zone-stint captured at activation. A zone change (including leave-and-return)
+  mints a new stint id, so a departed-and-returned object fails. A **player** is
+  never a zone resident and has stable identity, so `same_stint` short-circuits
+  to `True` for players (needed by "any target" damage abilities); the caller's
+  predicate still enforces any player-legality restriction.
+- `surviving_targets(game, context, targets, is_legal=None)` — the **canonical
+  resolution revalidation**. Returns the subset of `targets` that both (a) pass
+  `same_stint` and (b) satisfy `is_legal`, a predicate expressing the *complete*
+  targeting restriction relative to `context.controller`. Callers apply the
+  effect only to the returned list; an empty list means every target was illegal
+  and the effect does nothing (rule 608.2c). This is what replaced the ad-hoc
+  per-card `if not _on_battlefield(target): return` + `source.controller` checks.
+
+**"You control" uses `context.controller`, never `source.controller`.** Every
+targeted activated/loyalty ability that carries a control restriction (fdn_114,
+fdn_44, plus Zimone fdn_126) evaluates it against the immutable activation-time
+controller from the context, so a control change of the *source* after activation
+does not move who "you" is. Cards without a control restriction (fdn_95, fdn_134,
+fdn_139, fdn_189, fdn_195, fdn_201, fdn_234) still route through
+`surviving_targets` so stint validation (leave-and-return rejection) is uniform.
+
+**Flagship corrections.**
+- **Scavenging Ooze (fdn_232)** — `{G}: Exile target card from a graveyard` now
+  selects the graveyard card via an `ActivatedAbility.targeting` hook at
+  activation (before `{G}` is paid), captures its graveyard stint, and at
+  resolution exiles it only if it is still the same graveyard card. A card that
+  left the graveyard is not replaced and no other graveyard card can be picked;
+  the creature-card reward (`+1/+1` counter, gain 1 life) lands only when the
+  originally-captured legal card is exiled — the counter additionally requires
+  the source to still be the same battlefield permanent.
+- **Zimone (fdn_126)** — the `{G}{U}, {T}` ability targets **up to two distinct**
+  creatures/artifacts you control at activation (genuinely optional: 0/1/2), and
+  the beginning-of-combat trigger's "up to two target creatures you control" is
+  fixed **when the trigger is put on the stack** via the new triggered-target
+  channel. Both revalidate through `surviving_targets` with a
+  `context.controller`-relative predicate. `get_activated_abilities(self)` keeps
+  its fixed self-only signature.
+- **Fiery Annihilation (fdn_86)** — see dependent-target casting below.
+
+**Triggered-target channel (`engine/triggers.py`).** `TriggerRegistration`
+gained an optional `targeting(game, event) -> list` hook. When set, `fire_event`
+chooses the trigger's targets **as it is put on the stack** (rule 603.3d),
+captures an `ActivationContext`, stores the targets on the `StackObject`, and
+invokes `effect(game, targets, context)` at resolution. Untargeted triggers keep
+the historical `effect(game)` and build the same bare `StackObject` as before, so
+existing triggers are unaffected. This is the "smallest reusable triggered-target
+mechanism" Zimone's combat trigger needed.
+
+**Dependent-target casting (`engine/casting.py`).** A `TargetRequirement.filter_fn`
+may now take a second positional argument — the list of targets already chosen
+for earlier requirements of the same cast — expressing a *dependent* requirement
+(rule 601.2c). `_safe_filter` inspects the filter's arity (`_filter_wants_chosen`)
+and calls `filter_fn(obj, chosen)` or `filter_fn(obj)` accordingly; single-arg
+filters (every pre-existing card) are unaffected. `_query_target` passes the
+already-chosen `exclude` list as that `chosen` context both when building the
+option set and in the post-selection validation, so no card-specific backdoor is
+needed and Player-Query validation is preserved. Fiery Annihilation's "Exile up
+to one target **Equipment attached to that creature**" uses this: the Equipment
+requirement's filter accepts only Equipment whose `attached_to` is the creature
+chosen for the first (required) target, so Equipment on any *other* creature is
+never offered. At resolution each target is revalidated independently — the
+Equipment is exiled only while still attached to that creature target, and the
+creature target still resolves if only it remains legal.
+
+**Spell / ETB revalidation of the complete predicate.** Converted spells and
+ETB-on-resolve effects now revalidate the **entire** original target predicate at
+resolution, not merely zone membership. The predicate is factored into a single
+named method shared by `get_targets` and `on_resolve` (e.g.
+`_is_opponent_creature`, `_is_opponent_nonland_permanent`, `_is_your_creature`/
+`_is_their_creature`), so the cast-time filter and the resolution-time check can
+never drift. A target that changed control, ceased to be the required card type,
+or otherwise stopped satisfying its restriction before resolution is illegal and
+the effect does nothing to it (rule 608.2b/2c).
+
+- **Gap found and fixed** (predicate-share + resolution revalidation, each with a
+  negative resolution test where the restriction is mutable): fdn_31 (Bigfin
+  Bouncer), fdn_144 (Mischievous Pup), fdn_215 (Bushwhack — both fight targets),
+  fdn_256 (Meteor Golem), fdn_38 (Faebloom Trick), fdn_75 (Vampire Soulcaller —
+  creature card in your graveyard), fdn_99 (Apothecary Stomper — mode 0),
+  fdn_104 (Elvish Regrower — permanent card in your graveyard), fdn_188 (Abrade —
+  damage mode), spg_74 (Condemn — attacking creature), and fdn_86 (Fiery
+  Annihilation, see dependent targets above).
+- **Modal player-target** (fdn_69 Seeker's Folly): revalidation added for
+  uniformity, but no negative test — "target opponent" has no *mutable*
+  restriction (a player cannot become the caster mid-game).
+- **Already revalidated fully — no change**: fdn_98 (Ambush Wolf — target is any
+  graveyard card, and `on_resolve` already re-checked graveyard membership, the
+  only restriction), fdn_136 (Angel of Finality — targets a player, immutable),
+  fdn_231 (Reclamation Sage — `on_resolve` already re-checked battlefield +
+  artifact-or-enchantment).
+
 ### AbilityError cluster attribution (task 8)
 The `activate_ability … AbilityError: cost could not be paid` cluster (130 of 203
 `ENGINE_ERROR`s) survived Phase C unchanged, disproving the earlier

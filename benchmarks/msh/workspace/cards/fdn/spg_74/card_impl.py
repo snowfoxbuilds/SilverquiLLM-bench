@@ -55,7 +55,13 @@ class Condemn(Instant):
         target = targets[0] if targets else None
         if target is None:
             return
+        # Revalidate the FULL original predicate (rule 608.2b): the target must
+        # still be an attacking creature, not merely still on the battlefield.
+        # A creature removed from combat (or that stopped being a creature) is
+        # no longer a legal target, so Condemn does nothing.
         if not _is_on_battlefield(game, target):
+            return
+        if not _is_attacking_creature(target):
             return
 
         # Capture characteristics before the creature leaves the battlefield.

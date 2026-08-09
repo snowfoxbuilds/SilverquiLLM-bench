@@ -51,16 +51,21 @@ class BigfinBouncer(Creature):
         ]
 
     def on_resolve(self, game: "GameState") -> None:
-        """ETB: bounce the chosen creature to its owner's hand."""
+        """ETB: bounce the chosen creature to its owner's hand.
+
+        Revalidate the COMPLETE target predicate at resolution (rule 608.2b):
+        the target must still be a creature an opponent controls, on the
+        battlefield — not merely still on *a* battlefield. If it changed control
+        to the caster, left play, or ceased to be a creature, it is illegal and
+        the ETB does nothing.
+        """
         from engine.zones import move_to_zone
 
         targets = getattr(self, "chosen_targets", None) or []
         target = targets[0] if targets else None
         if target is None:
             return
-
-        # Revalidate: the target must still be on a battlefield.
-        for player in game.players:
-            if game.get_battlefield(player).contains(target):
-                move_to_zone(game, target, Zone.BATTLEFIELD, Zone.HAND)
-                return
+        on_bf = any(game.get_battlefield(p).contains(target) for p in game.players)
+        if not on_bf or not self._is_opponent_creature(target):
+            return
+        move_to_zone(game, target, Zone.BATTLEFIELD, Zone.HAND)

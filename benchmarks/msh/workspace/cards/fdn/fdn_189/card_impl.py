@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from engine.card import ActivatedAbility, Creature
 from engine.card_queries import choose_object
+from engine.stack import surviving_targets
 from engine.continuous_effects import (
     DURATION_END_OF_TURN,
     ContinuousEffect,
@@ -98,10 +99,15 @@ class AxgardCavalry(Creature):
         def _effect(
             game: "GameState", targets: list[Any], context: Any = None
         ) -> None:
-            target = targets[0] if targets else None
-            if target is None or not _on_battlefield(game, target):
+            # Revalidate via the shared helper: same battlefield stint and still
+            # a creature.
+            legal = surviving_targets(
+                game, context, targets,
+                is_legal=lambda t: CardType.CREATURE in getattr(t, "card_types", set()),
+            )
+            chosen = legal[0] if legal else None
+            if chosen is None:
                 return
-            chosen = target
 
             def _apply(g: "GameState") -> None:
                 chosen.keywords = getattr(chosen, "keywords", Keyword(0)) | Keyword.HASTE

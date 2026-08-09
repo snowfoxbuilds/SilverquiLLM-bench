@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature, LoyaltyAbility, Planeswalker
 from engine.card_queries import choose_object
+from engine.stack import surviving_targets
 from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -127,18 +128,14 @@ class VivienReid(Planeswalker):
             return [chosen]
 
         def _minus3(game: Any, targets: list[Any], context: Any = None) -> None:
-            """Destroy the chosen target — revalidated at resolution."""
+            """Destroy the chosen target — revalidated at resolution via the
+            shared helper: same battlefield stint and still a legal −3 target."""
             from engine.game import destroy
 
-            target = targets[0] if targets else None
-            if target is None:
-                return
-            if not any(
-                game.get_battlefield(p).contains(target) for p in game.players
-            ):
-                return
-            # Revalidate the target's characteristics at resolution.
-            if _is_minus3_legal(target):
+            legal = surviving_targets(
+                game, context, targets, is_legal=_is_minus3_legal
+            )
+            for target in legal:
                 destroy(game, target)
 
         def _minus8(game: Any) -> None:

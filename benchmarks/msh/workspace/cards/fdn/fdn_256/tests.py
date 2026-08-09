@@ -11,9 +11,34 @@ from __future__ import annotations
 from cards.fdn.fdn_256.card_impl import MeteorGolem
 from engine.basic_lands import Forest
 from engine.card import Artifact, Creature
-from engine.decisions import DecisionKind
-from engine.types import ManaCost, ManaType, Zone
+from engine.casting import cast_spell as engine_cast_spell
+from engine.decisions import Decision, DecisionKind, GameRef
+from engine.intent_player import Intent
+from engine.stack import resolve_top_of_stack
+from engine.types import CardType, ManaCost, ManaType, Phase, Zone
 from test_utils import cast_spell, create_game, set_board_state
+
+
+def _cast_no_resolve(game, player_index, card, targets):
+    """Cast *card* (sorcery-speed) choosing *targets* via an Intent, WITHOUT
+    resolving, so a test can change the target before the ETB resolves."""
+    player = game.players[player_index]
+    game.active_player_index = player_index
+    game.priority_player_index = player_index
+    game.phase = Phase.PRECOMBAT_MAIN
+    game.step = None
+    prefs = tuple(
+        Decision.obj(instance=game.refs.instance_id(t, Zone.BATTLEFIELD.value))
+        for t in targets
+    )
+    player.start_intent("cast", Intent(
+        pattern=GameRef(card=frozenset({("name", card.name)})),
+        preferences=prefs,
+    ))
+    try:
+        engine_cast_spell(game, player, card)
+    finally:
+        player.end_intent("cast")
 
 
 class TestMeteorGolemProperties:
@@ -72,3 +97,25 @@ class TestMeteorGolemETB:
         assert "Forest" not in offered_names      # land excluded
         assert "My Creature" not in offered_names  # own permanent excluded
         assert "Bear" in offered_names             # opponent's nonland offered
+
+    def test_target_becomes_caster_controlled_before_resolution_not_destroyed(self):
+        """Negative revalidation: the target comes under the caster's control
+        before the ETB resolves → no longer 'an opponent controls', not destroyed."""
+        bear = Creature(name="Bear", base_power=2, base_toughness=2)
+        game, p1, p2, golem = self._setup([bear])
+        _cast_no_resolve(game, 0, golem, [bear])
+        bear.controller = p1  # caster now controls it
+        resolve_top_of_stack(game)
+        assert game.get_battlefield(p2).contains(bear)          # not destroyed
+        assert not p2.zones[Zone.GRAVEYARD].contains(bear)
+
+    def test_target_becomes_land_before_resolution_not_destroyed(self):
+        """Negative revalidation: the target becomes a land before the ETB
+        resolves → no longer a 'nonland permanent', so it is not destroyed."""
+        bear = Creature(name="Bear", base_power=2, base_toughness=2)
+        game, p1, p2, golem = self._setup([bear])
+        _cast_no_resolve(game, 0, golem, [bear])
+        bear.card_types = set(bear.card_types) | {CardType.LAND}  # became a land
+        resolve_top_of_stack(game)
+        assert game.get_battlefield(p2).contains(bear)          # not destroyed
+        assert not p2.zones[Zone.GRAVEYARD].contains(bear)

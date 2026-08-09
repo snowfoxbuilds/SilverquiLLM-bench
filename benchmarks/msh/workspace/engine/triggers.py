@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
 from engine.events import TriggeredEvent
-from engine.stack import StackObject
+from engine.stack import StackObject, capture_activation_context
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -34,11 +34,24 @@ class TriggerRegistration:
         condition: Optional callable ``(game, event) -> bool`` that must
             return ``True`` for the trigger to fire.  ``None`` means the
             trigger always fires for its event type.
-        effect: Callable ``(game) -> None`` executed when the trigger
-            resolves (becomes the :attr:`StackObject.on_resolve` callback).
+        effect: Callable executed when the trigger resolves (becomes the
+            :attr:`StackObject.on_resolve` callback). For an *untargeted* trigger
+            it is invoked ``effect(game)``. For a *targeted* trigger (``targeting``
+            set) it is invoked ``effect(game, targets, context)`` — the targets
+            chosen as the trigger was put on the stack and the
+            :class:`~engine.stack.ActivationContext` captured then.
         source: The game object (card / permanent) that owns this trigger.
         controller: The player who controls the source at the time of
             registration.
+        targeting: Optional callable ``(game, event) -> list`` run **as the
+            trigger is put on the stack** (rule 603.3d — a triggered ability
+            chooses its targets when it goes on the stack, not when it resolves).
+            Returns the chosen targets (a list; may be empty for an "up to N
+            target" trigger with none chosen). The result is stored on the
+            :class:`~engine.stack.StackObject`, an
+            :class:`~engine.stack.ActivationContext` is captured alongside it,
+            and both are passed to ``effect`` at resolution — targets are never
+            re-selected there.
     """
 
     event_type: type[TriggeredEvent]
@@ -46,6 +59,7 @@ class TriggerRegistration:
     effect: Callable[..., None]
     source: Any
     controller: Player
+    targeting: Callable[..., Any] | None = None
 
 
 class TriggerManager:
@@ -116,11 +130,33 @@ class TriggerManager:
         ordered = active_triggers + non_active_triggers
 
         for trigger in ordered:
-            stack_obj = StackObject(
-                source=trigger.source,
-                controller=trigger.controller,
-                on_resolve=trigger.effect,
-            )
+            if trigger.targeting is not None:
+                # Choose targets as the trigger is put on the stack (rule
+                # 603.3d) and capture the activation-time identity, so the
+                # resolving effect revalidates rather than re-selects.
+                chosen = trigger.targeting(game, event)
+                chosen_targets = list(chosen) if chosen else []
+                context = capture_activation_context(
+                    game, trigger.source, trigger.controller, chosen_targets
+                )
+                stack_obj = StackObject(
+                    source=trigger.source,
+                    controller=trigger.controller,
+                    targets=chosen_targets,
+                    activation_context=context,
+                )
+                effect = trigger.effect
+                stack_obj.on_resolve = (
+                    lambda g, _obj=stack_obj, _effect=effect: _effect(
+                        g, _obj.targets, _obj.activation_context
+                    )
+                )
+            else:
+                stack_obj = StackObject(
+                    source=trigger.source,
+                    controller=trigger.controller,
+                    on_resolve=trigger.effect,
+                )
             game.stack.push(stack_obj)
 
     def get_triggers(self) -> list[TriggerRegistration]:

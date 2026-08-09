@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from engine.card import ActivatedAbility, Creature
 from engine.card_queries import choose_object
+from engine.stack import surviving_targets
 from engine.types import CardType, Keyword, ManaCost
 
 if TYPE_CHECKING:
@@ -108,8 +109,14 @@ class FanaticalFirebrand(Creature):
         ) -> None:
             from engine.game import deal_damage
 
-            target = targets[0] if targets else None
-            if target is None or not _still_legal(game, target):
+            # Revalidate via the shared helper: a player is always legal
+            # (same_stint short-circuits players); a permanent must still be the
+            # same battlefield stint and a legal any-target.
+            legal = surviving_targets(
+                game, context, targets, is_legal=lambda t: _still_legal(game, t)
+            )
+            target = legal[0] if legal else None
+            if target is None:
                 return
             deal_damage(game, source, target, 1)
 
