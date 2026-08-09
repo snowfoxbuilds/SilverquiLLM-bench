@@ -25,6 +25,15 @@ class ArchmageOfRunes(Creature):
         kwargs.setdefault('rules_text', 'Instant and sorcery spells you cast cost {1} less to cast.\nWhenever you cast an instant or sorcery spell, draw a card.')
         super().__init__(**kwargs)
 
+    def spell_cost_reduction(self, game: 'GameState', spell: Any, caster: Any) -> int:
+        """Instant/sorcery spells the controller casts cost {1} less."""
+        if self.controller is not caster:
+            return 0
+        types = getattr(spell, 'card_types', set())
+        if CardType.INSTANT in types or CardType.SORCERY in types:
+            return 1
+        return 0
+
     def register_triggers(self, game: 'GameState') -> None:
         """Register spell-cast trigger: draw a card when you cast instant/sorcery."""
         from engine.game import draw_card

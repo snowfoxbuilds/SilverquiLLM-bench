@@ -60,7 +60,8 @@ class MidnightSnack(Enchantment):
             opponents = [p for p in game.players if p is not controller]
             if opponents and life_gained > 0:
                 target = opponents[0]
-                target.life -= life_gained
+                from engine.game import lose_life
+                lose_life(game, target, life_gained)
 
         def _sac_cost(game: 'GameState', src=self) -> bool:
             """Pay {2}{B} mana cost for the sacrifice ability."""

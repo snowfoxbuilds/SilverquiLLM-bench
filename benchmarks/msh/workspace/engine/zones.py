@@ -285,6 +285,7 @@ def move_to_zone(
     game.refs.note_zone_change(card)
 
     # --- Leaving battlefield hooks ---
+    removed_source_effects = False
     if leaving_battlefield:
         card_types = getattr(card, "card_types", set())
         is_creature = CardType.CREATURE in card_types
@@ -304,6 +305,33 @@ def move_to_zone(
         game.trigger_manager.unregister(card)
         game.replacement_manager.unregister(card)
 
+        # An Equipment that itself leaves the battlefield detaches: clear
+        # attached_to, clear its internal effect references, and run its detach
+        # hook exactly once (rule 704.5q keeps it attached only while both are
+        # on the battlefield). This leaves no stale attachment state in the
+        # graveyard/hand/exile/stack copy, so the Equipment can be equipped
+        # again after it is bounced, blinked, destroyed, or replayed. The
+        # equipped-creature-leaves case is handled separately by the attachment
+        # SBA, which detaches while the Equipment stays on the battlefield.
+        if getattr(card, "is_equipment", False) and getattr(card, "attached_to", None) is not None:
+            detach = getattr(card, "detach", None)
+            if callable(detach):
+                detach(game)
+                removed_source_effects = True
+
+        # A permanent that leaves the battlefield stops producing its
+        # continuous effects immediately (rule 603/611) — remove every effect
+        # this card sources so a lord/anthem's buff vanishes without waiting
+        # for the next turn-boundary cleanup. Mirrors the replay executor's
+        # per-card cleanup so the executor can rely on the engine. (For an
+        # Equipment the detach above already removed its buff effects; this
+        # sweep catches any other effect the card still sources.)
+        effect_manager = getattr(game, "effect_manager", None)
+        if effect_manager is not None:
+            for effect in effect_manager.get_effects_by_source(card):
+                effect_manager.remove(effect)
+                removed_source_effects = True
+
     # --- Entering battlefield hooks ---
     if entering_battlefield:
         # Fire the ENTERS_BATTLEFIELD event *before* registering the card's
@@ -321,6 +349,19 @@ def move_to_zone(
             card.register_triggers(game)
         if hasattr(card, "register_replacement_effects"):
             card.register_replacement_effects(game)
+
+    # --- Re-derive continuous effects on any battlefield change ---
+    # A lord/anthem entering mid-turn buffs the team now; a departed source's
+    # effect stops applying now — not only at the next cleanup step. apply_all
+    # is idempotent (reset-then-reapply). The fast-path skips the common
+    # no-effects case for cheap zone churn, but a removal that empties the
+    # manager still needs one reset pass to strip the departed buff.
+    if leaving_battlefield or entering_battlefield:
+        effect_manager = getattr(game, "effect_manager", None)
+        if effect_manager is not None and (
+            len(effect_manager) > 0 or removed_source_effects
+        ):
+            effect_manager.apply_all(game)
 
 
 # Destination string → Zone for replacement-effect zone redirection.

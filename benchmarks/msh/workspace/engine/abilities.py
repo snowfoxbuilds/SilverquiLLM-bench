@@ -20,7 +20,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
 from engine.casting import is_sorcery_speed
-from engine.stack import StackObject
+from engine.stack import ActivationContext, StackObject
+from engine.types import Zone
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -45,15 +46,40 @@ class ActivatedAbilityInstance:
 
     Attributes:
         source: The permanent that has this ability.
-        controller: The player who controls the source.
+        controller: The player activating the ability — its authoritative
+            controller (rule 602.2). :func:`activate_ability` must be called
+            with this same player; a mismatch is rejected before any query,
+            payment, or stack mutation. This controller (never the source's
+            possibly-different current controller) is threaded into the
+            ``targeting``/``can_activate`` hooks, the cost, the captured
+            :class:`~engine.stack.ActivationContext`, and the resulting
+            :class:`~engine.stack.StackObject`.
         cost: A callable ``(game, source) -> bool`` that checks and pays
             the cost. Returns ``True`` if the cost was successfully paid,
             ``False`` otherwise.
-        effect: A callable ``(game) -> None`` that applies the ability's
-            effect when it resolves.
+        effect: A callable that applies the ability's effect when it resolves.
+            Invoked ``effect(game)`` for an untargeted ability, or
+            ``effect(game, targets, context)`` when ``targeting`` is set — the
+            targets are the ones chosen at activation and stored on the stack
+            object, and *context* is the :class:`~engine.stack.ActivationContext`
+            captured at activation.
         is_mana_ability: Whether this is a mana ability (resolves
             immediately without using the stack).
         description: Human-readable description of the ability.
+        targeting: Optional callable ``(game, source, controller) -> list | None``
+            run **at activation, before costs are paid**. Returns the chosen
+            targets, or ``None`` to signal no legal target (the ability then
+            cannot be activated and no cost is spent). The result is stored on
+            the :class:`~engine.stack.StackObject` and passed to ``effect`` at
+            resolution — the target is never re-selected there. When set, the
+            effect is invoked ``effect(game, targets, context)`` where *context*
+            is the :class:`~engine.stack.ActivationContext` captured at activation.
+        can_activate: Optional callable ``(game, source, controller) -> bool``
+            checked **before** any target query is raised or any cost is paid
+            (rule 602.2a). Verifies source-zone and timing restrictions with no
+            side effects, so an illegal-timing activation raises no query and
+            spends no resources. ``None`` means no extra restriction beyond the
+            source's ``_cant_activate`` suppression.
     """
 
     source: Any
@@ -62,6 +88,8 @@ class ActivatedAbilityInstance:
     effect: Callable[..., None]
     is_mana_ability: bool = False
     description: str = ""
+    targeting: Callable[..., Any] | None = None
+    can_activate: Callable[..., bool] | None = None
 
 
 @dataclass
@@ -196,35 +224,134 @@ def activate_ability(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+def _battlefield_instance_id(game: GameState, obj: Any) -> int | None:
+    """Return *obj*'s current battlefield stint id, or ``None`` if it is not on
+    any player's battlefield.
+
+    A zone change mints a fresh stint id (see ``GameRefsRegistry.instance_id``),
+    so a snapshot taken here at activation lets a resolving effect tell whether
+    the same Python object is still the *same* battlefield permanent it was when
+    the ability was activated — a leave-and-return yields a different id.
+    """
+    for player in game.players:
+        if game.get_battlefield(player).contains(obj):
+            return game.refs.instance_id(obj, Zone.BATTLEFIELD.value)
+    return None
+
+
+def _capture_activation_context(
+    game: GameState,
+    source: Any,
+    controller: Any,
+    targets: list[Any],
+) -> ActivationContext:
+    """Snapshot the activation-time controller and source/target stints (rule
+    602.2). Stored on the :class:`StackObject`, never on the mutable source."""
+    return ActivationContext(
+        controller=controller,
+        source_instance_id=_battlefield_instance_id(game, source),
+        target_instance_ids=tuple(
+            _battlefield_instance_id(game, t) for t in targets
+        ),
+    )
+
+
 def _activate_regular_ability(
     game: GameState,
     player: Any,
     ability: ActivatedAbilityInstance,
 ) -> None:
-    """Activate a regular (non-loyalty) activated ability."""
-    # 1. Check "can't activate" restriction (e.g. Arrest).
-    if getattr(ability.source, "_cant_activate", False):
+    """Activate a regular (non-loyalty) activated ability.
+
+    Sequence (rule 602.2): authorization → legality → target selection → cost
+    payment → push. Authorization and legality are verified *before* any target
+    query is raised or any cost is paid, so an illegal or unauthorized
+    activation (wrong player, wrong timing, source off the battlefield) consumes
+    no target intent and spends no resources.
+    """
+    source = ability.source
+
+    # 1. Authorization (rule 602.2): the player activating the ability *is* its
+    #    controller, and that must be the ability's declared controller. We do
+    #    not silently substitute the source's current controller here — a
+    #    permanent's controller is not automatically entitled to activate an
+    #    instance another player set up, and authorization must never rewrite
+    #    who the activating player is. Whether that controller may *legally*
+    #    activate this ability (e.g. does it actually control the source?) is a
+    #    ``can_activate`` concern, checked below. The authorized controller is
+    #    the one threaded into targeting, the cost, the activation context, and
+    #    the stack object.
+    controller = ability.controller if ability.controller is not None else player
+    if player is not controller:
+        raise AbilityError(
+            "Cannot activate ability — the activating player is not the "
+            "ability's controller"
+        )
+
+    # 2. Check "can't activate" restriction (e.g. Arrest).
+    if getattr(source, "_cant_activate", False):
         raise AbilityError(
             "Cannot activate ability — source's activated abilities are suppressed"
         )
 
-    # 2. Pay costs
-    cost_paid = ability.cost(game, ability.source)
+    # 3. Activation legality — source-zone and timing restrictions (rule
+    #    602.2a), checked BEFORE raising any target query or paying any cost.
+    if ability.can_activate is not None and not ability.can_activate(
+        game, source, controller
+    ):
+        raise AbilityError(
+            "Cannot activate ability — activation is illegal (timing or zone)"
+        )
+
+    # 4. Choose targets (rule 602.2b/2c) — BEFORE paying costs, so an ability
+    #    with no legal target cannot be activated and spends no mana. The chosen
+    #    targets are stored on the stack object and are not re-selected at
+    #    resolution (see KEY_DECISIONS: activation-time ability targeting).
+    chosen_targets: list[Any] = []
+    context: ActivationContext | None = None
+    if ability.targeting is not None:
+        # Mana abilities cannot target (rule 605.1a); reject the combination
+        # explicitly rather than calling the wrong effect signature.
+        if ability.is_mana_ability:
+            raise AbilityError("A mana ability cannot target")
+        chosen = ability.targeting(game, source, controller)
+        if chosen is None:
+            raise AbilityError("Cannot activate ability — no legal target")
+        chosen_targets = list(chosen)
+        # 5. Capture the immutable activation context (authorized controller +
+        #    source/target stints) now, while the source and targets are in
+        #    their activation zones, and before the cost mutates anything.
+        context = _capture_activation_context(game, source, controller, chosen_targets)
+
+    # 6. Pay costs
+    cost_paid = ability.cost(game, source)
     if not cost_paid:
         raise AbilityError("Cannot activate ability — cost could not be paid")
 
-    # 3. Resolve or push
+    # 7. Resolve or push
     if ability.is_mana_ability:
         # Mana abilities resolve immediately without using the stack.
         ability.effect(game)
     else:
-        # Push to stack for resolution.
+        # Push to stack for resolution. A targeted ability's effect reads the
+        # activation-time targets and context off the stack object; an untargeted
+        # effect keeps the historical ``effect(game)`` signature.
         stack_obj = StackObject(
-            source=ability.source,
-            controller=player,
-            on_resolve=ability.effect,
+            source=source,
+            controller=controller,
+            targets=chosen_targets,
             is_mana_ability=False,
+            activation_context=context,
         )
+        if ability.targeting is not None:
+            effect = ability.effect
+            stack_obj.on_resolve = (
+                lambda g, _obj=stack_obj, _effect=effect: _effect(
+                    g, _obj.targets, _obj.activation_context
+                )
+            )
+        else:
+            stack_obj.on_resolve = ability.effect
         game.stack.push(stack_obj)
 
 

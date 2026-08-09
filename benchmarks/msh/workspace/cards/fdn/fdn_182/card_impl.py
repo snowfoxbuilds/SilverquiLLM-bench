@@ -61,10 +61,16 @@ class ReassemblingSkeleton(Creature):
             source.is_tapped = True
             source.damage_marked = 0
             source.summoning_sick = True
-            # Clear accumulated state — return as fresh creature
-            source.plus_one_counters = 0
-            if hasattr(source, "counters"):
-                source.counters.clear()
+            # Clear accumulated state — return as a fresh creature. Routing
+            # through remove_counter zeroes both the live counts and their
+            # persistent base shadow fields, so the apply_all reset-then-reapply
+            # cycle doesn't resurrect them.
+            from engine.game import remove_counter
+
+            remove_counter(game, source, "+1/+1", getattr(source, "plus_one_counters", 0))
+            remove_counter(game, source, "-1/-1", getattr(source, "minus_one_counters", 0))
+            if isinstance(getattr(source, "_generic_counters", None), dict):
+                source._generic_counters.clear()
             bf = game.get_battlefield(controller)
             bf.add(source)
             # Register triggers

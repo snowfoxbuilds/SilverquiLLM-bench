@@ -72,7 +72,8 @@ class RavenousAmulet(Artifact):
                 sacrifice(game, controller, source)
                 for p in game.players:
                     if p is not controller:
-                        p.life -= source.soul_counters
+                        from engine.game import lose_life
+                        lose_life(game, p, source.soul_counters)
 
         return [
             ActivatedAbility(

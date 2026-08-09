@@ -11,6 +11,37 @@ if TYPE_CHECKING:
     from engine.player import Player
 
 
+@dataclass(frozen=True)
+class ActivationContext:
+    """Immutable snapshot of an activated ability's activation-time identity.
+
+    Captured once at activation (rule 602.2) and stored on the
+    :class:`StackObject`, so an ability that is already on the stack keeps its
+    activation-time controller and the *stints* of its source and targets even
+    when zone changes reuse the same Python objects (see
+    ``GameRefsRegistry.instance_id`` — a zone change mints a new stint id).
+
+    A resolving effect revalidates against this context; it never re-selects
+    targets. Because the context lives on the stack object (not on a mutable
+    field of the source permanent), two activations of the same source may
+    coexist on the stack without clobbering each other.
+
+    Attributes:
+        controller: The player who activated the ability (the ability's
+            controller). "Target creature you control" is evaluated relative to
+            this player, not the source's possibly-changed current controller.
+        source_instance_id: The source's battlefield stint id at activation, or
+            ``None`` if the source was not on the battlefield.
+        target_instance_ids: The battlefield stint id of each chosen target at
+            activation (``None`` for a target not on the battlefield), positionally
+            aligned with :attr:`StackObject.targets`.
+    """
+
+    controller: Any
+    source_instance_id: int | None = None
+    target_instance_ids: tuple[int | None, ...] = ()
+
+
 @dataclass
 class StackObject:
     """An object on the stack representing a spell or ability.
@@ -21,6 +52,9 @@ class StackObject:
         targets: The chosen targets for the spell/ability.
         on_resolve: Callback invoked when this object resolves.
         is_mana_ability: Whether this is a mana ability (resolves immediately).
+        activation_context: For activated abilities, the immutable
+            :class:`ActivationContext` captured at activation (``None`` for
+            spells and untargeted abilities that need no revalidation).
     """
 
     source: Any
@@ -28,6 +62,7 @@ class StackObject:
     targets: list[Any] = field(default_factory=list)
     on_resolve: Callable[[GameState], None] = field(default=lambda _game: None)
     is_mana_ability: bool = False
+    activation_context: ActivationContext | None = None
 
 
 class Stack:
@@ -143,6 +178,77 @@ def check_state_based_actions(game: GameState) -> None:
     resolve_state_based_actions(game)
 
 
+def _rederive_continuous_effects(game: GameState) -> None:
+    """Re-derive continuous characteristics from scratch (reset then reapply).
+
+    Always runs a full pass — it does **not** short-circuit on an empty effect
+    manager. A resolution (or an SBA) may have removed the last active effect,
+    in which case a reset is still required so a departed buff does not stay
+    baked into a permanent's modified characteristics. ``apply_all`` resets
+    every battlefield object to its base characteristics before reapplying, so
+    an empty manager cleanly strips all continuous modifications.
+    """
+    effect_manager = getattr(game, "effect_manager", None)
+    if effect_manager is not None:
+        effect_manager.apply_all(game)
+
+
+def settle_after_resolution(game: GameState) -> None:
+    """Bring the game to a stable state after a stack object resolves.
+
+    Ordering (rule 608.2g → 704): re-derive continuous effects *before* SBAs so
+    every SBA inspects current characteristics (toughness, lethal damage,
+    attachment legality). Then loop: run one SBA pass and, whenever it changes
+    the board, re-derive again so the next pass — and the state visible when
+    priority returns — is never checked against pre-recalculation characteristics.
+
+    The loop always ends on a re-derive with no subsequent SBA change, so a 2/2
+    that a resolving +2/+2 turns into a damaged 4/4 survives (re-derive precedes
+    the lethal-damage check), a resolving -2/-2 sends a 2/2 to the graveyard
+    before priority returns (re-derive precedes the zero-toughness check), and
+    removing the last effect during resolution resets the permanent.
+
+    ``resolve_state_based_actions`` is the full SBA settler (its own inner loop
+    runs checks until stable and repeats while triggers are queued, per rule
+    704.3); wrapping it in the re-derive loop guarantees the *first* SBA check
+    each round sees freshly re-derived characteristics. The loop terminates:
+    SBAs only remove permanents / decrement counters, and re-derivation is
+    deterministic, so the state cannot oscillate.
+    """
+    from engine.state_based_actions import resolve_state_based_actions
+
+    while True:
+        _rederive_continuous_effects(game)
+        if not resolve_state_based_actions(game):
+            break
+
+
+def resolve_top_of_stack(game: GameState) -> None:
+    """Pop and resolve exactly one stack object, then settle the game.
+
+    This is the single, canonical normal-game resolution primitive shared by
+    :func:`priority_loop` (the normal-game path), :func:`engine.casting.resolve_top`
+    (a thin delegating alias), and the test-suite stack resolver — so settlement
+    behaviour is identical at every entry point.
+
+    Sequence:
+
+    1. Pop and resolve exactly one stack object.
+    2. Re-derive continuous effects immediately (so an effect the resolution
+       just registered — e.g. Adventuring Gear's landfall +2/+2 — applies now).
+    3. Run state-based actions until stable, re-deriving between passes so SBAs
+       never inspect stale characteristics and any board change they cause leaves
+       continuous characteristics current before priority returns.
+
+    See :func:`settle_after_resolution` for the ordering rationale.
+    """
+    if game.stack.is_empty():
+        return
+    obj = game.stack.pop()
+    obj.on_resolve(game)
+    settle_after_resolution(game)
+
+
 def _get_legal_actions(game: GameState, player: Player) -> list[Any]:
     """Return the legal actions available to *player*.
 
@@ -220,8 +326,7 @@ def priority_loop(game: GameState) -> None:
         if game.stack.is_empty():
             return  # Advance to next phase/step
 
-        # Resolve top of stack (LIFO).
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-        check_state_based_actions(game)
+        # Resolve top of stack (LIFO) — settles SBAs and re-derives continuous
+        # effects so a just-registered mid-turn effect applies immediately.
+        resolve_top_of_stack(game)
         # Active player receives priority again — outer loop continues.

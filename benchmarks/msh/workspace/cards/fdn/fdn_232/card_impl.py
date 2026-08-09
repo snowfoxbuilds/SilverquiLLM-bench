@@ -66,7 +66,8 @@ class ScavengingOoze(Creature):
                 add_counter(game, source, "+1/+1", 1)
                 controller = source.controller
                 if controller is not None:
-                    controller.life += 1
+                    from engine.game import gain_life
+                    gain_life(game, controller, 1)
 
         return [ActivatedAbility(
             cost=_cost,

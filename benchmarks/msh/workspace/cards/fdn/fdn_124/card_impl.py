@@ -66,7 +66,8 @@ class PerforatingArtist(Creature):
                 options.append('lose_life')
                 chose_alternative = False
                 if len(options) == 1:
-                    player.life -= 3
+                    from engine.game import lose_life
+                    lose_life(game, player, 3)
                     continue
                 if nonland:
                     chosen = choose_object(game, player, nonland, 'sacrifice a nonland permanent, or decline (discard / lose 3 life)', source_card=source, optional=True)
@@ -80,5 +81,6 @@ class PerforatingArtist(Creature):
                         _discard(game, player, chosen)
                         chose_alternative = True
                 if not chose_alternative:
-                    player.life -= 3
+                    from engine.game import lose_life
+                    lose_life(game, player, 3)
         game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

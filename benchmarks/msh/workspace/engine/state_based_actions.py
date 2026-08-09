@@ -279,14 +279,26 @@ def _sba_aura_unattached(game: GameState) -> bool:
                     to_remove.append((player, obj))
             elif is_equipment:
                 target = obj.attached_to
-                if target is not None and _attachment_illegal_due_to_protection(obj):
+                # Equipment stays on the battlefield but becomes unattached when
+                # its creature is gone (rule 704.5q) or the attachment is illegal
+                # due to protection.
+                if target is not None and (
+                    id(target) not in all_on_battlefield
+                    or _attachment_illegal_due_to_protection(obj)
+                ):
                     to_unattach.append(obj)
 
     for player, obj in to_remove:
         _move_to_graveyard(game, player, obj)
         action_taken = True
     for obj in to_unattach:
-        obj.attached_to = None
+        # Prefer the Equipment lifecycle so its buff continuous effects are
+        # removed; fall back to a bare unattach for duck-typed objects.
+        detach = getattr(obj, "detach", None)
+        if callable(detach):
+            detach(game)
+        else:
+            obj.attached_to = None
         action_taken = True
     return action_taken
 
@@ -306,6 +318,13 @@ def _sba_counter_annihilation(game: GameState) -> bool:
                     annihilate = min(plus, minus)
                     obj.plus_one_counters -= annihilate
                     obj.minus_one_counters -= annihilate
+                    # Persist the annihilation into the base shadow fields too,
+                    # otherwise the reset-then-reapply cycle in apply_all would
+                    # restore the annihilated counters from _base_*.
+                    if hasattr(obj, "_base_plus_one_counters"):
+                        obj._base_plus_one_counters = obj.plus_one_counters
+                    if hasattr(obj, "_base_minus_one_counters"):
+                        obj._base_minus_one_counters = obj.minus_one_counters
                     action_taken = True
     return action_taken
 

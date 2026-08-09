@@ -167,6 +167,15 @@ class GameState:
             self.phase = _TURN_SEQUENCE[0][0]
             self.step = _TURN_SEQUENCE[0][1]
 
+            # The active player has changed. Re-derive continuous effects so a
+            # turn-dependent buff ("during your turn ...", e.g. Quick-Draw
+            # Katana) is recalculated at the actual turn transition — not only
+            # during the ending turn's cleanup, which still saw the old active
+            # player. apply_all is idempotent (reset-then-reapply).
+            effect_manager = getattr(self, "effect_manager", None)
+            if effect_manager is not None and len(effect_manager) > 0:
+                effect_manager.apply_all(self)
+
         self.empty_mana_pools()
 
     def empty_mana_pools(self) -> None:

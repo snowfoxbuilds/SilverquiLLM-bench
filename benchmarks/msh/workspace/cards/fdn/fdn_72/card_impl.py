@@ -61,9 +61,7 @@ class TinybonesBaubleBurglar(Creature):
                         gy = player.zones[Zone.GRAVEYARD]
                         if gy.contains(chosen):
                             exile(game, chosen)
-                            if not hasattr(chosen, 'counters'):
-                                chosen.counters = {}
-                            chosen.counters['stash'] = chosen.counters.get('stash', 0) + 1
+                            add_counter(game, chosen, 'stash', 1)
 
         def _cost(game: 'GameState', src=source) -> bool:
             """Pay {3}{B}, tap. Only at sorcery speed."""

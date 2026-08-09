@@ -40,5 +40,6 @@ class MaraudingBlightPriest(Creature):
                 return
             for player in game.players:
                 if player is not ctrl:
-                    player.life -= 1
+                    from engine.game import lose_life
+                    lose_life(game, player, 1)
         game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

@@ -16,6 +16,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.events import (
+    AddCounterReplacementEvent,
+    CounterAddedTriggeredEvent,
+    CreateTokenReplacementEvent,
     CreatureDiesReplacementEvent,
     DealsDamageTriggeredEvent,
     DrawsCardTriggeredEvent,
@@ -174,26 +177,56 @@ def deal_damage(game: GameState, source: Any, target: Any, amount: int) -> None:
             gain_life(game, controller, amount)
 
 
-def gain_life(game: GameState, player: Any, amount: int) -> None:
+def gain_life(game: GameState, player: Any, amount: int, source: Any = None) -> None:
     """Have *player* gain *amount* life.
 
-    The single life-gain entry point: adjusts the total and fires
+    One of the two sanctioned life-mutation paths (the other is
+    :func:`lose_life`). Adjusts the total and fires
     :class:`GainsLifeTriggeredEvent` so "whenever you gain life" abilities
     (Ajani's Pridemate et al.) trigger regardless of the gain's source —
-    lifelink, ETB triggers, or spell effects. Card impls should call this
-    instead of mutating ``player.life`` directly.
+    lifelink, ETB triggers, or spell effects. Card impls must call this
+    instead of mutating ``player.life`` directly (enforced by the AST guard
+    in ``engine_tests/test_card_impl_ast_guard.py``).
 
     Parameters:
         game: The current game state.
         player: The player gaining life.
         amount: The amount gained (must be > 0 to have effect).
+        source: Optional object causing the gain (informational).
     """
     if amount <= 0 or not hasattr(player, "life"):
         return
     player.life += amount
-    game.trigger_manager.fire_event(
-        game, GainsLifeTriggeredEvent(player=player, amount=amount)
-    )
+    if hasattr(game, "trigger_manager"):
+        game.trigger_manager.fire_event(
+            game, GainsLifeTriggeredEvent(player=player, amount=amount)
+        )
+
+
+def lose_life(game: GameState, player: Any, amount: int, source: Any = None) -> None:
+    """Have *player* lose *amount* life (not via damage).
+
+    The sanctioned counterpart to :func:`gain_life`: adjusts the total and
+    fires :class:`LosesLifeTriggeredEvent` so "whenever you/an opponent lose
+    life" abilities trigger. Use this for drain effects, "each opponent loses
+    N life", forced self-loss, and life *payments* — any life reduction that
+    is **not** combat/spell damage (damage already fires the event from
+    :func:`deal_damage`). Card impls must call this instead of mutating
+    ``player.life`` directly (enforced by the AST guard).
+
+    Parameters:
+        game: The current game state.
+        player: The player losing life.
+        amount: The amount lost (must be > 0 to have effect).
+        source: Optional object causing the loss (informational).
+    """
+    if amount <= 0 or not hasattr(player, "life"):
+        return
+    player.life -= amount
+    if hasattr(game, "trigger_manager"):
+        game.trigger_manager.fire_event(
+            game, LosesLifeTriggeredEvent(player=player, amount=amount)
+        )
 
 
 def destroy(game: GameState, permanent: Any) -> None:
@@ -372,21 +405,16 @@ def discard(game: GameState, player: Player, card: Any) -> None:
     move_to_zone(game, card, Zone.HAND, Zone.GRAVEYARD)
 
 
-def create_token(game: GameState, player: Player, token: Any) -> None:
-    """Create a token on the battlefield under *player*'s control.
-
-    Sets ``is_token = True`` on the token, along with ``owner`` and
-    ``controller``.  Uses :func:`move_to_zone` for entering-battlefield
-    hooks (trigger/replacement-effect registration and ETB event).
-
-    Parameters:
-        game: The current game state.
-        player: The player who controls the token.
-        token: The token object to place on the battlefield.
-    """
+def _place_token(game: GameState, player: Player, token: Any, grp_id: Any) -> None:
+    """Place a single already-built token on *player*'s battlefield + fire hooks."""
     token.is_token = True
     token.owner = player
     token.controller = player
+    # Identity hook for the replay executor's token correlation (next phase):
+    # a stable attachment point for an external GRE id, so tokens can be
+    # matched without name reverse-lookup. Defaults to None.
+    if getattr(token, "_grp_id", None) is None:
+        token._grp_id = grp_id
 
     # Tokens don't come from an existing zone — add directly and fire hooks.
     # Ordering matches move_to_zone: fire ETB *before* registering the token's
@@ -394,16 +422,107 @@ def create_token(game: GameState, player: Player, token: Any) -> None:
     battlefield = game.get_battlefield(player)
     battlefield.add(token)
 
-    game.trigger_manager.fire_event(
-        game,
-        EntersBattlefieldTriggeredEvent(permanent=token, controller=player),
-    )
+    if hasattr(game, "trigger_manager"):
+        game.trigger_manager.fire_event(
+            game,
+            EntersBattlefieldTriggeredEvent(permanent=token, controller=player),
+        )
 
     # Register triggers/replacement effects after the ETB event.
     if hasattr(token, "register_triggers"):
         token.register_triggers(game)
     if hasattr(token, "register_replacement_effects"):
         token.register_replacement_effects(game)
+
+    # Re-derive continuous effects so anthems/lords buff the new token
+    # immediately (and the token's own static effect, if any, is applied).
+    if hasattr(game, "effect_manager") and len(game.effect_manager) > 0:
+        game.effect_manager.apply_all(game)
+
+
+def _clone_token(token: Any) -> Any:
+    """Return a fresh shallow copy of *token* with an independent identity.
+
+    Used when a creation-replacement effect (Doubling Season) multiplies a
+    single supplied token object into several. Assigns a new ``object_id`` and
+    copies the mutable characteristic containers so the copies do not alias.
+    """
+    import copy as _copy
+
+    from engine.card import GameObject
+
+    clone = _copy.copy(token)
+    clone.object_id = GameObject._next_id
+    GameObject._next_id += 1
+    # Break aliasing of mutable containers shared by the shallow copy.
+    for attr in ("card_types", "subtypes", "supertypes"):
+        val = getattr(clone, attr, None)
+        if isinstance(val, set):
+            setattr(clone, attr, set(val))
+    if isinstance(getattr(clone, "_generic_counters", None), dict):
+        clone._generic_counters = dict(clone._generic_counters)
+    clone._grp_id = None
+    return clone
+
+
+def create_token(
+    game: GameState,
+    player: Player,
+    token: Any = None,
+    *,
+    factory: Any = None,
+    count: int = 1,
+    grp_id: Any = None,
+) -> list[Any]:
+    """Create one or more tokens on the battlefield under *player*'s control.
+
+    Consults :class:`CreateTokenReplacementEvent` first, so token-doubling
+    effects (Doubling Season) take effect. Each token is stamped with
+    ``is_token``, ``owner``/``controller``, and a ``_grp_id`` identity hook,
+    then entered via the battlefield hooks (ETB event, trigger/replacement
+    registration, continuous-effect re-derivation).
+
+    Callers may pass either a pre-built ``token`` object (the common case) or
+    a ``factory`` callable that mints a fresh token each call (preferred when
+    ``count`` may be multiplied, since every token needs a distinct object).
+    When only ``token`` is given and the effective count exceeds one, the
+    extra copies are cloned via :func:`_clone_token`.
+
+    Parameters:
+        game: The current game state.
+        player: The player who controls the tokens.
+        token: A pre-built token object (mutually exclusive-ish with factory).
+        factory: Optional ``() -> token`` callable producing fresh tokens.
+        count: Number of tokens to create before replacement (default 1).
+        grp_id: Optional external identity stamped onto each token's
+            ``_grp_id`` if not already set.
+
+    Returns:
+        The list of tokens actually placed on the battlefield.
+    """
+    if token is None and factory is None:
+        return []
+
+    # Creation-replacement effects (Doubling Season et al.) may change count.
+    if hasattr(game, "replacement_manager"):
+        event = game.replacement_manager.apply(
+            game, CreateTokenReplacementEvent(player=player, count=count)
+        )
+        count = getattr(event, "count", count)
+    if count <= 0:
+        return []
+
+    placed: list[Any] = []
+    for i in range(count):
+        if factory is not None:
+            tok = factory()
+        elif i == 0:
+            tok = token
+        else:
+            tok = _clone_token(token)
+        _place_token(game, player, tok, grp_id)
+        placed.append(tok)
+    return placed
 
 
 def add_counter(
@@ -418,6 +537,19 @@ def add_counter(
     ``plus_one_counters`` / ``minus_one_counters`` attributes.  For other
     counter types, uses a generic ``counters`` dict.
 
+    Counters are a real engine primitive:
+
+    * ``AddCounterReplacementEvent`` is consulted first, so effects that
+      modify counter placement (e.g. Doubling Season) can adjust *amount*.
+    * ``+1/+1`` / ``-1/-1`` counters persist their ``_base_*`` shadow fields
+      so they survive the reset-then-reapply cycle in
+      :meth:`~engine.continuous_effects.EffectManager.apply_all`. Card impls
+      must **not** hand-roll ``_base_plus_one_counters = plus_one_counters``.
+    * Other counter types live in the generic ``_generic_counters`` dict,
+      surfaced read-only via the ``counters`` property.
+    * ``CounterAddedTriggeredEvent`` fires after the counters land, so
+      "whenever a counter is put on…" abilities trigger.
+
     Parameters:
         game: The current game state.
         permanent: The permanent to add counters to.
@@ -428,17 +560,44 @@ def add_counter(
     if amount <= 0:
         return
 
+    # Replacement effects (Doubling Season et al.) may change the amount.
+    if hasattr(game, "replacement_manager"):
+        event = game.replacement_manager.apply(
+            game,
+            AddCounterReplacementEvent(
+                permanent=permanent, counter_type=counter_type, amount=amount
+            ),
+        )
+        amount = getattr(event, "amount", amount)
+        if amount <= 0:
+            return
+
     if counter_type == "+1/+1" and hasattr(permanent, "plus_one_counters"):
         permanent.plus_one_counters += amount
+        if hasattr(permanent, "_base_plus_one_counters"):
+            permanent._base_plus_one_counters += amount
     elif counter_type == "-1/-1" and hasattr(permanent, "minus_one_counters"):
         permanent.minus_one_counters += amount
+        if hasattr(permanent, "_base_minus_one_counters"):
+            permanent._base_minus_one_counters += amount
     elif counter_type == "loyalty" and hasattr(permanent, "loyalty"):
         permanent.loyalty += amount
     else:
-        # Generic counter storage
-        if not hasattr(permanent, "counters"):
-            permanent.counters = {}
-        permanent.counters[counter_type] = permanent.counters.get(counter_type, 0) + amount
+        # Generic counter storage (charge, stash, oil, …).
+        store = getattr(permanent, "_generic_counters", None)
+        if store is None:
+            store = {}
+            permanent._generic_counters = store
+        store[counter_type] = store.get(counter_type, 0) + amount
+
+    # Fire the counter-added trigger after the counters have landed.
+    if hasattr(game, "trigger_manager"):
+        game.trigger_manager.fire_event(
+            game,
+            CounterAddedTriggeredEvent(
+                permanent=permanent, counter_type=counter_type, amount=amount
+            ),
+        )
 
 
 def remove_counter(
@@ -462,15 +621,18 @@ def remove_counter(
 
     if counter_type == "+1/+1" and hasattr(permanent, "plus_one_counters"):
         permanent.plus_one_counters = max(0, permanent.plus_one_counters - amount)
+        if hasattr(permanent, "_base_plus_one_counters"):
+            permanent._base_plus_one_counters = permanent.plus_one_counters
     elif counter_type == "-1/-1" and hasattr(permanent, "minus_one_counters"):
         permanent.minus_one_counters = max(0, permanent.minus_one_counters - amount)
+        if hasattr(permanent, "_base_minus_one_counters"):
+            permanent._base_minus_one_counters = permanent.minus_one_counters
     elif counter_type == "loyalty" and hasattr(permanent, "loyalty"):
         permanent.loyalty = max(0, permanent.loyalty - amount)
     else:
-        if hasattr(permanent, "counters") and counter_type in permanent.counters:
-            permanent.counters[counter_type] = max(
-                0, permanent.counters[counter_type] - amount
-            )
+        store = getattr(permanent, "_generic_counters", None)
+        if store is not None and counter_type in store:
+            store[counter_type] = max(0, store[counter_type] - amount)
 
 
 def tap(game: GameState, permanent: Any) -> None:

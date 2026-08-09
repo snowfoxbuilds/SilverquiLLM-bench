@@ -199,3 +199,4 @@ class AddCounterReplacementEvent(ReplacementEvent):
 
     permanent: Any = None
     amount: int = 1
+    counter_type: Any = None

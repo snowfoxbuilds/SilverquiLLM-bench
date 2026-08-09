@@ -21,6 +21,7 @@ created by :func:`cast_spell`:
 
 from __future__ import annotations
 
+import inspect
 from typing import TYPE_CHECKING, Any
 
 from engine.card import CardImpl
@@ -176,26 +177,121 @@ def can_cast_at_instant_speed(card: CardImpl) -> bool:
 # Cost reduction
 # ------------------------------------------------------------------
 
-def get_cost_reduction(game: GameState, card: CardImpl, controller: Player) -> int:
-    """Return the generic mana reduction for casting *card*.
+def _call_self_reduction(
+    card: CardImpl, game: GameState, targets: list[Any] | None
+) -> int:
+    """Call ``card.cost_reduction``, passing *targets* only when the hook
+    accepts it (backward-compatible with the historical ``(self, game)``
+    signature)."""
+    fn = card.cost_reduction
+    try:
+        params = inspect.signature(fn).parameters
+        accepts_targets = "targets" in params or any(
+            p.kind == p.VAR_KEYWORD for p in params.values()
+        )
+    except (TypeError, ValueError):
+        accepts_targets = False
+    return fn(game, targets=targets) if accepts_targets else fn(game)
 
-    Queries ``card.cost_reduction(game)`` and clamps the result so that
-    the generic portion of the mana cost cannot go below 0.
 
-    This is a simplified single-card self-reduction model.  Full MTG
-    cost-reduction interactions (Trinisphere, multiple reductions from
-    different sources) are deferred.
+def _battlefield_cost_reduction(
+    game: GameState, card: CardImpl, caster: Player
+) -> int:
+    """Sum the generic reductions every battlefield permanent grants *card*.
+
+    Consults each permanent's ``spell_cost_reduction(game, spell, caster)``
+    hook (default 0), so "your instant and sorcery spells cost {1} less"
+    permanents (Archmage of Runes, Mocking Sprite) reduce other spells.
+    """
+    total = 0
+    for player in game.players:
+        for perm in game.get_battlefield(player).get_all():
+            hook = getattr(perm, "spell_cost_reduction", None)
+            if callable(hook):
+                total += max(0, int(hook(game, card, caster)))
+    return total
+
+
+def _raw_cost_reduction(
+    game: GameState,
+    card: CardImpl,
+    controller: Player,
+    targets: list[Any] | None = None,
+) -> int:
+    """Return the total generic reduction available for *card* — the spell's
+    own :meth:`~engine.card.CardImpl.cost_reduction` (target-aware) plus the
+    battlefield sweep — as a non-negative amount, **unclamped**.
+
+    The clamp against a specific cost's generic pips is applied by the caller
+    against whichever base cost is selected (the normal cost or a chosen
+    alternative), so the reduction never eats colored pips. :func:`cast_spell`
+    needs the unclamped figure to clamp per candidate cost.
     """
     # Ensure card.controller is set so the hook can reference "you" / the
     # casting player even when the card was never explicitly assigned one.
     prev_controller = card.controller
     card.controller = controller
-    raw = card.cost_reduction(game)
+    raw = _call_self_reduction(card, game, targets)
     # Restore previous controller in case the caller doesn't want a
     # side-effect (get_cost_reduction is a query, not a mutation).
     card.controller = prev_controller
+    raw += _battlefield_cost_reduction(game, card, controller)
+    return max(0, raw)
+
+
+def get_cost_reduction(
+    game: GameState,
+    card: CardImpl,
+    controller: Player,
+    targets: list[Any] | None = None,
+) -> int:
+    """Return the total generic mana reduction for casting *card*'s normal cost.
+
+    Combines the spell's own :meth:`~engine.card.CardImpl.cost_reduction`
+    (target-aware when *targets* is supplied) with the battlefield sweep in
+    :func:`_battlefield_cost_reduction`, then clamps so the generic portion of
+    the (normal) mana cost cannot go below 0 (colored pips are never reduced).
+    """
     generic = card.mana_cost.generic if card.mana_cost else 0
-    return max(0, min(raw, generic))
+    return max(0, min(_raw_cost_reduction(game, card, controller, targets), generic))
+
+
+def _choose_cost(
+    game: GameState,
+    player: Player,
+    card: CardImpl,
+    payable: list[tuple[int, ManaCost]],
+) -> ManaCost:
+    """Return the (already-reduced) mana cost the caster pays.
+
+    *payable* is a list of ``(base_index, reduced_cost)`` pairs — one per base
+    cost the player can actually pay — where ``base_index`` is the candidate's
+    position in ``[normal_cost, *alternatives]``. Unpayable candidates are never
+    offered (rule 601.2f: a player can only choose to pay a cost they can pay).
+
+    When only one candidate is payable it is returned without asking. Otherwise
+    the caster answers a Player Query whose option indices are the base indices,
+    so a recorded choice ("the alternative", index 1) still maps unambiguously
+    even though unpayable candidates were filtered out.
+    """
+    if len(payable) == 1:
+        return payable[0][1]
+
+    from engine.decisions import Decision
+    from engine.queries import PlayerQuery, ask
+
+    options = tuple(Decision.ability(index=i) for i, _ in payable)
+    query = PlayerQuery(
+        source=(_source_decision(game, card),),
+        prompt="Choose a cost to pay",
+        options=options,
+        min=1,
+        max=1,
+    )
+    answer = ask(player, query)
+    idx = dict(answer.selected[0].attrs)["index"]
+    by_index = {i: cost for i, cost in payable}
+    return by_index[idx]
 
 
 def _apply_cost_reduction(cost: ManaCost, reduction: int) -> ManaCost:
@@ -302,14 +398,32 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     # explicit controller assignment.
     if card.controller is None:
         card.controller = player
-    reduction = get_cost_reduction(game, card, player)
-    effective_cost = _apply_cost_reduction(card.mana_cost, reduction) if reduction > 0 else card.mana_cost
 
-    if not player.mana_pool.can_pay(effective_cost):
+    # Select the mana cost to pay (rule 601.2f):
+    #   1. Enumerate the base costs — the normal mana cost and any alternative
+    #      costs (rule 118.9) the card offers. An alternative *replaces* the
+    #      normal cost outright (e.g. Blasphemous Edict's {B} for {3}{B}{B}); it
+    #      is a separate base cost, not a reduction of the normal one.
+    #   2. Apply cost reductions to each base cost afterward, clamped to that
+    #      cost's own generic component so colored pips are never reduced.
+    #   3. Keep only the candidates the player can actually pay, then choose
+    #      among them (a Player Query fires only when more than one is payable).
+    raw_reduction = _raw_cost_reduction(game, card, player, targets=chosen_targets)
+    base_costs = [card.mana_cost, *card.alternative_costs(game)]
+    payable: list[tuple[int, ManaCost]] = []
+    for index, base in enumerate(base_costs):
+        clamped = min(raw_reduction, base.generic) if raw_reduction > 0 else 0
+        reduced = _apply_cost_reduction(base, clamped) if clamped > 0 else base
+        if player.mana_pool.can_pay(reduced):
+            payable.append((index, reduced))
+
+    if not payable:
         # Rollback: move card from stack zone back to hand
         stack_zone.remove(card)
         hand.add(card)
         raise CastingError(f"Cannot cast {card.name!r} — insufficient mana")
+
+    effective_cost = _choose_cost(game, player, card, payable)
 
     # TODO: Phase 3 — support player choice for generic mana payment to optimize Converge color count
     player.mana_pool.pay(effective_cost)
@@ -568,15 +682,16 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
 
 
 def resolve_top(game: GameState) -> None:
-    """Resolve the top spell/ability on the stack.
+    """Resolve the top spell/ability on the stack (thin compatibility alias).
 
-    Pops the top item from the stack, calls its on_resolve callback,
-    then runs state-based actions.  If the stack is empty this is a no-op.
+    Delegates to :func:`engine.stack.resolve_top_of_stack`, the single canonical
+    resolution primitive, so this legacy entry point settles the game exactly
+    like :func:`~engine.stack.priority_loop`: resolve one object, re-derive
+    continuous effects, then run state-based actions to stability (re-deriving
+    between passes). It previously ran SBAs *without* re-deriving continuous
+    effects first; that divergence is gone. Retained (rather than removed)
+    because it is part of the published engine import surface.
     """
-    if game.stack.is_empty():
-        return
-    from engine.state_based_actions import resolve_state_based_actions
+    from engine.stack import resolve_top_of_stack
 
-    obj = game.stack.pop()
-    obj.on_resolve(game)
-    resolve_state_based_actions(game)
+    resolve_top_of_stack(game)

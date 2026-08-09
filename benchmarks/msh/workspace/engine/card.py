@@ -47,13 +47,32 @@ class ActivatedAbility:
 
     Attributes:
         cost: A callable that checks/pays the cost given the game state.
-        effect: A callable that applies the effect given the game state.
+        effect: A callable that applies the effect. For an untargeted ability
+            it is invoked ``effect(game)``; for a *targeted* ability (``targeting``
+            is set) it is invoked ``effect(game, targets, context)`` with the
+            targets chosen at activation and stored on the stack object, and the
+            :class:`~engine.stack.ActivationContext` captured at activation.
+        targeting: Optional callable ``(game, source, controller) -> list | None``
+            run **at activation, before costs are paid** (rule 602.2b/2c). It
+            returns the chosen targets (a list; may be empty for a modal choice
+            that needs none) or ``None`` to signal there is no legal target — in
+            which case the ability cannot be activated and no cost is spent. The
+            returned targets are stored on the :class:`~engine.stack.StackObject`
+            and are **not** re-selected at resolution (see KEY_DECISIONS). When
+            set, the effect is invoked ``effect(game, targets, context)`` with the
+            :class:`~engine.stack.ActivationContext` captured at activation.
+        can_activate: Optional callable ``(game, source, controller) -> bool``
+            verifying source-zone and timing restrictions with no side effects.
+            Checked **before** any target query or cost payment (rule 602.2a), so
+            an illegal activation raises no query and spends nothing.
         description: Human-readable description of the ability.
     """
 
     cost: Callable[..., Any]
     effect: Callable[..., Any]
     description: str = ""
+    targeting: Callable[..., Any] | None = None
+    can_activate: Callable[..., Any] | None = None
 
 
 @dataclass
@@ -174,6 +193,13 @@ class CardImpl(GameObject):
         # Snapshot original characteristics for continuous-effect reset.
         self._original_card_types: frozenset[CardType] = frozenset(self.card_types)
         self._original_keywords: Keyword = self.keywords
+        # Generic (non-P/T) counter storage — e.g. "charge", "stash", "oil".
+        # +1/+1 and -1/-1 counters live in dedicated fields on Creature.
+        # Mutate via engine.game.add_counter / remove_counter, never by
+        # writing the read-only ``counters`` view. This dict is not reset by
+        # ``_reset_characteristics`` — generic counters persist across the
+        # continuous-effect recalculation, unlike layer-derived stats.
+        self._generic_counters: dict[str, int] = {}
 
     # ------------------------------------------------------------------
     # Continuous-effect reset support
@@ -188,6 +214,17 @@ class CardImpl(GameObject):
         self.card_types = set(self._original_card_types)
         self.keywords = self._original_keywords
 
+    @property
+    def counters(self) -> dict[str, int]:
+        """Return a read-only view of generic counters (type → count).
+
+        ``Creature`` overrides this to also surface ``+1/+1`` / ``-1/-1``
+        counters. Only positive counts appear. Mutate counters through
+        :func:`engine.game.add_counter` / :func:`~engine.game.remove_counter`
+        — writing to the returned dict has no effect on the object.
+        """
+        return {k: v for k, v in self._generic_counters.items() if v > 0}
+
     # ------------------------------------------------------------------
     # Hook methods — override in subclasses / card definitions
     # ------------------------------------------------------------------
@@ -196,18 +233,45 @@ class CardImpl(GameObject):
         """Return ``True`` if this card can currently be cast."""
         return True
 
-    def cost_reduction(self, game: GameState) -> int:
-        """Return the generic mana reduction for casting this card.
+    def cost_reduction(self, game: GameState, targets: list[Any] | None = None) -> int:
+        """Return this card's *self* generic-mana reduction for casting it.
 
-        Override in subclasses to implement cost-reduction mechanics
+        Override in subclasses to implement self-reduction mechanics
         (e.g. Embercleave costs {1} less for each attacking creature).
-        The returned value is clamped so that generic mana cannot go below 0.
-        Only reduces generic mana — colored costs are never reduced.
+        *targets* carries the already-chosen targets so target-conditional
+        reductions ("costs {3} less if it targets a tapped creature") can be
+        expressed; it is ``None`` for cards that don't care. The returned
+        value is clamped so generic mana cannot go below 0 — colored costs are
+        never reduced. Reductions from *other* permanents come through
+        :meth:`spell_cost_reduction`, not this hook.
 
         Returns:
             Non-negative integer representing generic mana to subtract.
         """
         return 0
+
+    def spell_cost_reduction(
+        self, game: GameState, spell: "CardImpl", caster: Player
+    ) -> int:
+        """Return the generic-mana reduction this permanent grants to *spell*.
+
+        Override on a permanent (e.g. Archmage of Runes: "instant and sorcery
+        spells you cast cost {1} less") to reduce the cost of *other* spells.
+        The casting pipeline sweeps every battlefield permanent's hook when
+        computing a spell's cost. Return 0 when the reduction does not apply.
+        """
+        return 0
+
+    def alternative_costs(self, game: GameState) -> list[ManaCost]:
+        """Return alternative mana costs the caster may pay instead of the
+        normal mana cost (rule 118.9), e.g. Blasphemous Edict's "you may pay
+        {B} rather than pay this spell's mana cost".
+
+        Each entry fully replaces the mana cost when chosen. Return an empty
+        list (the default) when no alternative is available — the caster is
+        only offered a choice when this is non-empty.
+        """
+        return []
 
     def on_cast(self, game: GameState) -> None:
         """Called when the card is cast (before it goes on the stack)."""
@@ -328,8 +392,13 @@ class Creature(CardImpl):
 
     @property
     def counters(self) -> dict[str, int]:
-        """Return a dict-like view of counters on this creature."""
-        result: dict[str, int] = {}
+        """Return a read-only view of all counters on this creature.
+
+        Merges the dedicated ``+1/+1`` / ``-1/-1`` fields with the generic
+        counter dict. Only positive counts appear. Mutate via
+        :func:`engine.game.add_counter` / :func:`~engine.game.remove_counter`.
+        """
+        result: dict[str, int] = {k: v for k, v in self._generic_counters.items() if v > 0}
         if self.plus_one_counters > 0:
             result["+1/+1"] = self.plus_one_counters
         if self.minus_one_counters > 0:
@@ -444,6 +513,289 @@ class ArtifactCreature(Creature):
     def __init__(self, **kwargs: Any) -> None:
         kwargs["card_types"] = (kwargs.get("card_types") or set()) | {CardType.ARTIFACT, CardType.CREATURE}
         super().__init__(**kwargs)
+
+
+def _obj_on_battlefield(game: GameState, obj: Any) -> bool:
+    """Return ``True`` if *obj* is on any player's battlefield."""
+    for player in game.players:
+        if game.get_battlefield(player).contains(obj):
+            return True
+    return False
+
+
+def _on_battlefield_same_stint(game: GameState, obj: Any, stint_id: Any) -> bool:
+    """Return ``True`` if *obj* is on the battlefield in the *same* stint as
+    *stint_id* (the battlefield instance id captured at activation).
+
+    ``False`` when *obj* has left the battlefield, or when it left and returned
+    (a new stint, hence a new instance id). ``stint_id`` of ``None`` — the object
+    was not on the battlefield at activation — is never a match.
+    """
+    from engine.types import Zone
+
+    if stint_id is None:
+        return False
+    for player in game.players:
+        if game.get_battlefield(player).contains(obj):
+            return game.refs.instance_id(obj, Zone.BATTLEFIELD.value) == stint_id
+    return False
+
+
+class Equipment(Artifact):
+    """An Equipment artifact (rule 301.5) — a first-class attachment type.
+
+    Equipment attaches to a creature its controller controls via a
+    sorcery-speed equip ability and buffs that creature through continuous
+    effects registered on attach and removed on detach. Lifecycle cleanup is
+    fully engine-driven:
+
+    * **Equipment leaves the battlefield** — ``move_to_zone`` removes every
+      continuous effect keyed to this source, so the buff vanishes.
+    * **Equipped creature leaves** — the attachment state-based action
+      (``_sba_aura_unattached``) detaches this Equipment, which removes the
+      effects.
+
+    Subclasses declare the buff by overriding :meth:`make_equip_effects`
+    (and may add triggers via ``register_triggers``). They pass ``equip_cost``
+    as a real :class:`~engine.types.ManaCost` — colored pips included, no
+    generic-mana approximation.
+
+    Attributes:
+        is_equipment: Always ``True`` (consulted by the attachment SBA and the
+            replacement of the historical ``getattr(..., "is_equipment")``
+            duck-type).
+        attached_to: The creature this Equipment is attached to, or ``None``.
+        equip_cost: The mana cost of the equip activated ability.
+    """
+
+    is_equipment: bool = True
+
+    def __init__(self, *, equip_cost: ManaCost | None = None, **kwargs: Any) -> None:
+        kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Equipment"}
+        super().__init__(**kwargs)
+        self.attached_to: Any | None = None
+        self.equip_cost: ManaCost = equip_cost if equip_cost is not None else ManaCost()
+        self._equip_effect_refs: list[Any] = []
+
+    # ------------------------------------------------------------------
+    # Attach / detach lifecycle
+    # ------------------------------------------------------------------
+
+    def make_equip_effects(self, game: GameState) -> list[Any]:
+        """Return the continuous effects that buff ``self.attached_to``.
+
+        Called at attach time with ``attached_to`` already set. Override in
+        subclasses. Each returned effect must use ``source=self`` and should
+        self-guard via :meth:`is_equip_active` so it no-ops in the window
+        between the equipped creature dying and the SBA detaching.
+        """
+        return []
+
+    def is_equip_active(self, game: GameState) -> bool:
+        """``True`` if both this Equipment and its equipped creature are on the
+        battlefield — the condition under which the buff applies."""
+        creature = self.attached_to
+        if creature is None:
+            return False
+        return _obj_on_battlefield(game, self) and _obj_on_battlefield(game, creature)
+
+    def _legal_equip_targets(
+        self, game: GameState, controller: Any | None = None
+    ) -> list[Any]:
+        """Creatures *controller* controls that this Equipment may target — the
+        legal equip targets (rule 702.6e).
+
+        Evaluated relative to *controller* (the equip ability's controller), not
+        the Equipment's possibly-changed current controller; defaults to the
+        Equipment's current controller when not supplied. Creatures with
+        protection from this Equipment are excluded from the option set (the T in
+        DEBT — a protected creature cannot be equipped).
+        """
+        from engine.protection import has_protection_from
+
+        if controller is None:
+            controller = getattr(self, "controller", None)
+        if controller is None:
+            return []
+        return [
+            obj
+            for obj in game.get_battlefield(controller).get_all()
+            if CardType.CREATURE in getattr(obj, "card_types", set())
+            and getattr(obj, "controller", None) is controller
+            and not has_protection_from(obj, self)
+        ]
+
+    def _is_legal_equip_target_for(
+        self, game: GameState, target: Any, controller: Any
+    ) -> bool:
+        """``True`` if *target* is (still) a legal equip target for *controller*
+        — a creature that player controls, on the battlefield, without protection
+        from this Equipment. Used to revalidate the activation-time target
+        against the *ability's* controller when the equip ability resolves."""
+        return target is not None and target in self._legal_equip_targets(
+            game, controller
+        )
+
+    def equip(self, target: Any, game: GameState) -> None:
+        """Attach to *target* (detaching from any previous creature first) and
+        register the buff effects. Re-derives continuous effects so the buff
+        takes hold immediately."""
+        if target is None or self.attached_to is target:
+            return
+        # An Equipment attaches to only one creature at a time.
+        self._remove_equip_effects(game)
+        self.attached_to = target
+        self.on_attach(game)
+        self._register_equip_effects(game)
+        self._rederive(game)
+
+    def detach(self, game: GameState) -> None:
+        """Detach from the equipped creature and remove the buff effects."""
+        had_target = self.attached_to is not None
+        self._remove_equip_effects(game)
+        self.attached_to = None
+        if had_target:
+            self.on_detach(game)
+            self._rederive(game)
+
+    def on_attach(self, game: GameState) -> None:
+        """Hook after this Equipment attaches (before its effects register)."""
+
+    def on_detach(self, game: GameState) -> None:
+        """Hook after this Equipment detaches."""
+
+    def _register_equip_effects(self, game: GameState) -> None:
+        mgr = getattr(game, "effect_manager", None)
+        if mgr is None:
+            return
+        for eff in self.make_equip_effects(game):
+            self._equip_effect_refs.append(mgr.add(eff))
+
+    def _remove_equip_effects(self, game: GameState) -> None:
+        mgr = getattr(game, "effect_manager", None)
+        if mgr is not None:
+            for eff in self._equip_effect_refs:
+                mgr.remove(eff)
+        self._equip_effect_refs = []
+
+    def _rederive(self, game: GameState) -> None:
+        # Always re-derive: detach may have just removed the last effect, and a
+        # skipped reset would leave the departed buff baked into modified stats.
+        # equip/detach are infrequent, so the full pass is cheap here.
+        mgr = getattr(game, "effect_manager", None)
+        if mgr is not None:
+            mgr.apply_all(game)
+
+    # ------------------------------------------------------------------
+    # Equip activated ability (sorcery speed, target creature you control)
+    # ------------------------------------------------------------------
+
+    def get_activated_abilities(self) -> list[ActivatedAbility]:
+        return [self._make_equip_ability()]
+
+    def _make_equip_ability(self) -> ActivatedAbility:
+        equipment = self
+
+        def _can_activate(game: GameState, source: Any, controller: Any) -> bool:
+            # Activation legality (rule 602.2a), checked before any target query
+            # or payment: the equip ability may only be activated by the player
+            # who currently controls the Equipment (rule 602.2 — a player may
+            # activate an activated ability only if they control its source),
+            # while the Equipment is on the battlefield, and at sorcery speed
+            # (rule 702.6e).
+            from engine.casting import is_sorcery_speed
+
+            if controller is None:
+                return False
+            if not _obj_on_battlefield(game, source):
+                return False
+            # The activation-time controller must currently control the
+            # Equipment — a control change away from that player makes the equip
+            # ability unavailable to them (and stops another player activating an
+            # Equipment they do not control).
+            if getattr(source, "controller", None) is not controller:
+                return False
+            return is_sorcery_speed(game, controller)
+
+        def _cost(game: GameState, source: Any) -> bool:
+            from engine.casting import is_sorcery_speed
+
+            controller = getattr(source, "controller", None)
+            if controller is None:
+                return False
+            # Equip is sorcery speed (rule 702.6e).
+            if not is_sorcery_speed(game, controller):
+                return False
+            if not controller.mana_pool.can_pay(equipment.equip_cost):
+                return False
+            controller.mana_pool.pay(equipment.equip_cost)
+            return True
+
+        def _targeting(game: GameState, source: Any, controller: Any) -> list[Any] | None:
+            # Choose the equip target at activation, before costs are paid,
+            # relative to the activating controller. Return None when no legal
+            # target exists so the ability cannot be activated and no mana is
+            # spent (rule 602.2b — no legal target). Protected creatures are
+            # already excluded from the legal-target set.
+            from engine.card_queries import choose_object
+
+            legal = equipment._legal_equip_targets(game, controller)
+            if not legal:
+                return None
+            target = choose_object(
+                game,
+                controller,
+                legal,
+                "Choose a creature to equip",
+                source_card=equipment,
+            )
+            if target is None:
+                return None
+            return [target]
+
+        def _effect(
+            game: GameState, targets: list[Any], context: Any = None
+        ) -> None:
+            # Resolve using the target chosen at activation (stored on the stack
+            # object) — never re-select here, never retarget (rule 608.2b/608.2c).
+            # Revalidate against the activation-time context: the Equipment and
+            # the target must both still be on the battlefield in the *same*
+            # stint they were at activation (a leave-and-return is a new object),
+            # and the target must still be a legal equip target for the ability's
+            # controller (creature you control, no protection). Any failure and
+            # the ability resolves without attaching and without registering
+            # effects.
+            target = targets[0] if targets else None
+            if target is None or context is None:
+                return
+            # Source stint: the Equipment must be the same battlefield permanent.
+            if not _on_battlefield_same_stint(
+                game, equipment, context.source_instance_id
+            ):
+                return
+            # Target stint: the target must be the same battlefield permanent.
+            target_stint = (
+                context.target_instance_ids[0]
+                if context.target_instance_ids
+                else None
+            )
+            if not _on_battlefield_same_stint(game, target, target_stint):
+                return
+            # Legality relative to the ability's controller (not the Equipment's
+            # possibly-changed current controller), including protection.
+            if not equipment._is_legal_equip_target_for(
+                game, target, context.controller
+            ):
+                return
+            equipment.equip(target, game)
+
+        return ActivatedAbility(
+            cost=_cost,
+            effect=_effect,
+            targeting=_targeting,
+            can_activate=_can_activate,
+            description=f"Equip {equipment.equip_cost}",
+        )
 
 
 # ---------------------------------------------------------------------------

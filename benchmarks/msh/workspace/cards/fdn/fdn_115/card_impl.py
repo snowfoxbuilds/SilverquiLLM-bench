@@ -45,7 +45,6 @@ class AleshaWhoLaughsAtFate(Creature):
 
         def _attack_effect(game: 'GameState') -> None:
             add_counter(game, source, '+1/+1')
-            source._base_plus_one_counters = source.plus_one_counters
         game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller))
 
         def _raid_condition(game: Any, event: dict) -> bool:

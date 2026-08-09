@@ -52,6 +52,4 @@ class NessianHornbeetle(Creature):
 
         def _effect(game: 'GameState') -> None:
             add_counter(game, source, '+1/+1', 1)
-            if hasattr(source, '_base_plus_one_counters'):
-                source._base_plus_one_counters = source.plus_one_counters
         game.trigger_manager.register(TriggerRegistration(event_type=BeginningOfCombatTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

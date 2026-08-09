@@ -86,5 +86,7 @@ class SoulShackledZombie(Creature):
         if exiled_creature:
             for player in game.players:
                 if player is not controller:
-                    player.life -= 2
-            controller.life += 2
+                    from engine.game import lose_life
+                    lose_life(game, player, 2)
+            from engine.game import gain_life
+            gain_life(game, controller, 2)

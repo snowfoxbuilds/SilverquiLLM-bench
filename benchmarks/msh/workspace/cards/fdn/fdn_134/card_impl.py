@@ -43,8 +43,8 @@ class AjaniCallerOfThePride(Planeswalker):
             # Put a +1/+1 counter on up to one target creature.
             target = getattr(pw, "_resolve_target", None)
             if target is not None and hasattr(target, "plus_one_counters"):
-                target.plus_one_counters += 1
-                target._base_plus_one_counters = target.plus_one_counters
+                from engine.game import add_counter
+                add_counter(game, target, "+1/+1", 1)
 
         def _minus3(game: Any) -> None:
             # Target creature gains flying and double strike until end of turn.

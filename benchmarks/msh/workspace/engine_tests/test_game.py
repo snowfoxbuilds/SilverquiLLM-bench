@@ -520,11 +520,16 @@ class TestCounters:
         assert creature.minus_one_counters == 1
 
     def test_add_generic_counter(self) -> None:
-        """Adding a generic counter type should use the counters dict."""
+        """Adding a generic counter type routes through the backing dict.
+
+        Generic (non-P/T, non-loyalty) counters live in ``_generic_counters``
+        and are surfaced read-only via the ``counters`` property.
+        """
         game, _, _ = _make_bare_game()
-        obj = SimpleNamespace()
-        add_counter(game, obj, "charge", 3)
-        assert obj.counters["charge"] == 3
+        creature = _make_creature()
+        add_counter(game, creature, "charge", 3)
+        assert creature.counters["charge"] == 3
+        assert creature._generic_counters["charge"] == 3
 
     def test_add_counter_zero_amount_is_noop(self) -> None:
         """Adding 0 counters should not change anything."""
@@ -550,11 +555,12 @@ class TestCounters:
         assert creature.plus_one_counters == 0
 
     def test_remove_generic_counter(self) -> None:
-        """Removing generic counters should work via the counters dict."""
+        """Removing generic counters should work via the backing dict."""
         game, _, _ = _make_bare_game()
-        obj = SimpleNamespace(counters={"charge": 5})
-        remove_counter(game, obj, "charge", 2)
-        assert obj.counters["charge"] == 3
+        creature = _make_creature()
+        add_counter(game, creature, "charge", 5)
+        remove_counter(game, creature, "charge", 2)
+        assert creature.counters["charge"] == 3
 
     def test_add_loyalty_counter(self) -> None:
         """Adding loyalty counters should increase loyalty attribute."""

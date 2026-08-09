@@ -71,8 +71,6 @@ class FleetingFlight(Instant):
 
         add_counter(game, target, "+1/+1", 1)
         # Sync original counters per KEY_DECISIONS
-        if hasattr(target, "_base_plus_one_counters"):
-            target._base_plus_one_counters = target.plus_one_counters
 
         # Flying until end of turn
         creature_ref = target

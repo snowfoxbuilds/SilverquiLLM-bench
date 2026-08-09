@@ -90,5 +90,3 @@ class FelidarSavior(Creature):
                 continue
             add_counter(game, target, "+1/+1", 1)
             # Sync original counters
-            if hasattr(target, "_base_plus_one_counters"):
-                target._base_plus_one_counters = target.plus_one_counters

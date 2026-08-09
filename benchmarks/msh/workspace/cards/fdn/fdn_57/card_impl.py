@@ -33,25 +33,21 @@ class BlasphemousEdict(Sorcery):
         )
         super().__init__(**kwargs)
 
-    def cost_reduction(self, game: "GameState") -> int:
-        """Allow alternative cost of {B} if 13+ creatures on battlefield.
+    def alternative_costs(self, game: "GameState") -> list[ManaCost]:
+        """Offer {B} as an alternative cost when 13+ creatures are in play.
 
-        The alternative cost should make total cost {B}. The original cost is
-        {3}{B}{B} (generic=3, pips={B:2}). cost_reduction only reduces
-        the generic portion. We return 4 (intent: reduce fully to {B}),
-        but the engine's get_cost_reduction() clamps to min(4, generic=3)=3,
-        yielding {B}{B}. Full alternative-cost support (removing colored
-        pips) would require engine changes beyond current scope.
+        Unlike a cost *reduction* (which only touches generic mana), an
+        alternative cost fully replaces {3}{B}{B} with {B}.
         """
-        total_creatures = 0
-        for player in game.players:
-            bf = game.get_battlefield(player)
-            for obj in bf.get_all():
-                if CardType.CREATURE in getattr(obj, "card_types", set()):
-                    total_creatures += 1
+        total_creatures = sum(
+            1
+            for player in game.players
+            for obj in game.get_battlefield(player).get_all()
+            if CardType.CREATURE in getattr(obj, "card_types", set())
+        )
         if total_creatures >= 13:
-            return 4  # Intent: reduce to {B}; engine limitation applies
-        return 0
+            return [ManaCost.parse("{B}")]
+        return []
 
     def on_resolve(self, game: "GameState") -> None:
         """Each player sacrifices thirteen creatures of their choice."""
@@ -61,11 +57,14 @@ class BlasphemousEdict(Sorcery):
             bf = game.get_battlefield(player)
             for _ in range(13):
                 creatures = [
-                    c for c in bf.get_all()
+                    c
+                    for c in bf.get_all()
                     if CardType.CREATURE in getattr(c, "card_types", set())
                 ]
                 if not creatures:
                     break
-                chosen = choose_object(game, player, creatures, "sacrifice a creature", source_card=self)
+                chosen = choose_object(
+                    game, player, creatures, "sacrifice a creature", source_card=self
+                )
                 if chosen is not None:
                     sacrifice(game, player, chosen)
