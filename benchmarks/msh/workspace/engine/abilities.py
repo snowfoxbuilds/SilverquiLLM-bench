@@ -46,14 +46,23 @@ class ActivatedAbilityInstance:
 
     Attributes:
         source: The permanent that has this ability.
-        controller: The player who controls the source.
+        controller: The player activating the ability — its authoritative
+            controller (rule 602.2). :func:`activate_ability` must be called
+            with this same player; a mismatch is rejected before any query,
+            payment, or stack mutation. This controller (never the source's
+            possibly-different current controller) is threaded into the
+            ``targeting``/``can_activate`` hooks, the cost, the captured
+            :class:`~engine.stack.ActivationContext`, and the resulting
+            :class:`~engine.stack.StackObject`.
         cost: A callable ``(game, source) -> bool`` that checks and pays
             the cost. Returns ``True`` if the cost was successfully paid,
             ``False`` otherwise.
         effect: A callable that applies the ability's effect when it resolves.
             Invoked ``effect(game)`` for an untargeted ability, or
-            ``effect(game, targets)`` when ``targeting`` is set (the targets are
-            the ones chosen at activation and stored on the stack object).
+            ``effect(game, targets, context)`` when ``targeting`` is set — the
+            targets are the ones chosen at activation and stored on the stack
+            object, and *context* is the :class:`~engine.stack.ActivationContext`
+            captured at activation.
         is_mana_ability: Whether this is a mana ability (resolves
             immediately without using the stack).
         description: Human-readable description of the ability.
@@ -254,21 +263,38 @@ def _activate_regular_ability(
 ) -> None:
     """Activate a regular (non-loyalty) activated ability.
 
-    Sequence (rule 602.2): legality → target selection → cost payment → push.
-    Legality is verified *before* any target query is raised or any cost is
-    paid, so an illegal activation (wrong timing, source off the battlefield)
-    consumes no target intent and spends no resources.
+    Sequence (rule 602.2): authorization → legality → target selection → cost
+    payment → push. Authorization and legality are verified *before* any target
+    query is raised or any cost is paid, so an illegal or unauthorized
+    activation (wrong player, wrong timing, source off the battlefield) consumes
+    no target intent and spends no resources.
     """
     source = ability.source
-    controller = getattr(source, "controller", None) or player
 
-    # 1. Check "can't activate" restriction (e.g. Arrest).
+    # 1. Authorization (rule 602.2): the player activating the ability *is* its
+    #    controller, and that must be the ability's declared controller. We do
+    #    not silently substitute the source's current controller here — a
+    #    permanent's controller is not automatically entitled to activate an
+    #    instance another player set up, and authorization must never rewrite
+    #    who the activating player is. Whether that controller may *legally*
+    #    activate this ability (e.g. does it actually control the source?) is a
+    #    ``can_activate`` concern, checked below. The authorized controller is
+    #    the one threaded into targeting, the cost, the activation context, and
+    #    the stack object.
+    controller = ability.controller if ability.controller is not None else player
+    if player is not controller:
+        raise AbilityError(
+            "Cannot activate ability — the activating player is not the "
+            "ability's controller"
+        )
+
+    # 2. Check "can't activate" restriction (e.g. Arrest).
     if getattr(source, "_cant_activate", False):
         raise AbilityError(
             "Cannot activate ability — source's activated abilities are suppressed"
         )
 
-    # 2. Activation legality — source-zone and timing restrictions (rule
+    # 3. Activation legality — source-zone and timing restrictions (rule
     #    602.2a), checked BEFORE raising any target query or paying any cost.
     if ability.can_activate is not None and not ability.can_activate(
         game, source, controller
@@ -277,7 +303,7 @@ def _activate_regular_ability(
             "Cannot activate ability — activation is illegal (timing or zone)"
         )
 
-    # 3. Choose targets (rule 602.2b/2c) — BEFORE paying costs, so an ability
+    # 4. Choose targets (rule 602.2b/2c) — BEFORE paying costs, so an ability
     #    with no legal target cannot be activated and spends no mana. The chosen
     #    targets are stored on the stack object and are not re-selected at
     #    resolution (see KEY_DECISIONS: activation-time ability targeting).
@@ -292,17 +318,17 @@ def _activate_regular_ability(
         if chosen is None:
             raise AbilityError("Cannot activate ability — no legal target")
         chosen_targets = list(chosen)
-        # 4. Capture the immutable activation context (controller + source/target
-        #    stints) now, while the source and targets are in their activation
-        #    zones, and before the cost mutates anything.
+        # 5. Capture the immutable activation context (authorized controller +
+        #    source/target stints) now, while the source and targets are in
+        #    their activation zones, and before the cost mutates anything.
         context = _capture_activation_context(game, source, controller, chosen_targets)
 
-    # 5. Pay costs
+    # 6. Pay costs
     cost_paid = ability.cost(game, source)
     if not cost_paid:
         raise AbilityError("Cannot activate ability — cost could not be paid")
 
-    # 6. Resolve or push
+    # 7. Resolve or push
     if ability.is_mana_ability:
         # Mana abilities resolve immediately without using the stack.
         ability.effect(game)

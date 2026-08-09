@@ -113,13 +113,24 @@ mechanism tests and the golden-game fingerprint stay green. The executor's
 zone sync (that path bypasses `move_to_zone`), now mirrored by the engine for
 the normal game path.
 
-### Activation-time ability targeting and stint identity
+### Activation-time controller authorization, ability targeting, and stint identity
 An `ActivatedAbility`/`ActivatedAbilityInstance` may carry two optional hooks:
 `can_activate(game, source, controller) -> bool` and
 `targeting(game, source, controller) -> list | None`. `_activate_regular_ability`
-runs the **legality → target-query → cost-payment** sequence (rule 602.2):
+runs the **authorization → legality → target-query → cost-payment** sequence
+(rule 602.2):
 
-1. **Legality first (`can_activate`)** — verifies source-zone and timing
+0. **Authorization first** — the activating player (the `player` passed to
+   `activate_ability`) **is** the ability's controller, and must equal the
+   `ActivatedAbilityInstance.controller` declared on the instance. The engine
+   does **not** silently substitute the source's current controller: a mismatch
+   raises `AbilityError` before any Player Query, cost, source mutation, or
+   stack push. The authorized controller — never `source.controller` — is what
+   is threaded into `can_activate`, `targeting`, the cost, the
+   `ActivationContext`, and the `StackObject`. (Whether that controller may
+   *legally* activate this particular ability — e.g. does it actually control
+   the source? — is a `can_activate` concern, below.)
+1. **Legality (`can_activate`)** — verifies source-zone and timing
    restrictions with *no side effects*, **before any target query is raised or
    any cost is paid**. An illegal-timing (or source-off-battlefield) activation
    therefore raises `AbilityError` immediately: no Player Query, no target intent
@@ -156,23 +167,30 @@ context and never retargets** (rule 608.2b/608.2c):
   controller. Protection is re-checked here too (a target that gained protection
   from the source after activation fails to attach).
 
-**Protection filtering in the option set.** Targeted activated abilities exclude
-protected candidates from the activation option set (the T in DEBT), so a
-protected creature is never offered as a target in the first place.
+**Protection filtering in the equip option set.** Protection filtering is *not*
+a generic feature of the activation machinery — it lives in the **equip**
+ability. `Equipment._legal_equip_targets` excludes creatures with protection
+from the Equipment (the T in DEBT), so a protected creature is never offered as
+an equip target in the first place, and the same exclusion is re-checked at
+resolution. A future targeted activated ability that must exclude protected
+candidates has to filter them in its own `targeting` hook (or the filtering must
+first be lifted into the shared machinery).
 
 The equip ability is the first user: `Equipment._make_equip_ability` supplies
-`can_activate` (Equipment on the battlefield + sorcery speed), a `targeting` that
-offers the *ability controller's* creatures without protection
-(`_legal_equip_targets(game, controller)`), and an `effect(game, targets,
-context)` that runs the source-stint, target-stint, controller-relative and
-protection revalidation (`_on_battlefield_same_stint`,
-`_is_legal_equip_target_for`) before `equip`. So no Equipment attaches while off
-the battlefield, a leave-and-return never lets an old ability affect the new
-source or target stint, control changes are judged against the ability's
-controller, and equipping with zero legal creatures spends nothing. The replay
-executor's ability bridge threads both `targeting` and `can_activate` when
-building the `ActivatedAbilityInstance`, so the corpus drives the same
-activation-time selection and resolution-time revalidation.
+`can_activate` (Equipment on the battlefield, **controlled by the activation-time
+controller**, and sorcery speed — so another player cannot activate an Equipment
+they do not control, and a control change away from the activating player makes
+the equip ability unavailable to them), a `targeting` that offers the *ability
+controller's* creatures without protection (`_legal_equip_targets(game,
+controller)`), and an `effect(game, targets, context)` that runs the
+source-stint, target-stint, controller-relative and protection revalidation
+(`_on_battlefield_same_stint`, `_is_legal_equip_target_for`) before `equip`. So
+no Equipment attaches while off the battlefield, a leave-and-return never lets an
+old ability affect the new source or target stint, control changes are judged
+against the ability's controller, and equipping with zero legal creatures spends
+nothing. The replay executor's ability bridge threads both `targeting` and
+`can_activate` when building the `ActivatedAbilityInstance`, so the corpus drives
+the same activation-time selection and resolution-time revalidation.
 
 ### Equipment departure cleanup and SBA integration
 `Equipment(Artifact)` sets a class attribute `is_equipment = True`. Two distinct

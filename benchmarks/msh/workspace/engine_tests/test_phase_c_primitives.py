@@ -882,6 +882,146 @@ class TestEquipmentLifecycle:
 
 
 # ---------------------------------------------------------------------------
+# 4b. Activated-ability authorization
+# ---------------------------------------------------------------------------
+
+class TestActivationAuthorization:
+    """The activating player is the ability's controller (rule 602.2), and only
+    that player may activate it. Authorization is decided before any query,
+    payment, source mutation, or stack push, and the authorized controller is
+    captured on the stack object and never rewritten by a later control change
+    of the source."""
+
+    def test_opponent_cannot_activate_your_equipment(self):
+        """Player B may not activate player A's Equipment. B controls a creature
+        of its own and A has mana to pay — so under the pre-fix behaviour (derive
+        the controller from ``source.controller``) the equip would have resolved,
+        equipping A's creature out of A's pool at B's command. The control gate in
+        ``can_activate`` now rejects it before any target query, mana, or push."""
+        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
+
+        game = create_game()
+        p1, p2 = game.players
+        a_bear = _creature("A's Bear", p1, 2, 2)          # p1's creature
+        boots = SwiftfootBoots(owner=p1, controller=p1)   # p1 controls the Equipment
+        b_bear = _creature("B's Bear", p2, 2, 2)          # p2 has its own creature
+        set_board_state(game, 0, battlefield=[a_bear, boots],
+                        mana={ManaType.COLORLESS: 1})
+        set_board_state(game, 1, battlefield=[b_bear])
+        game.phase = Phase.PRECOMBAT_MAIN
+        calls1, restore1 = _spy_on_answer(p1)
+        calls2, restore2 = _spy_on_answer(p2)
+        try:
+            with pytest.raises(AbilityError):
+                activate_card_ability(game, p2, boots)  # B activates A's Equipment
+        finally:
+            restore1()
+            restore2()
+        assert calls1 == [] and calls2 == []   # no target query raised on anyone
+        assert p1.mana_pool.total() == 1       # A's mana untouched
+        assert game.stack.is_empty()           # nothing pushed
+        assert boots.attached_to is None       # nothing attached
+
+    def test_mismatched_ability_controller_is_rejected(self):
+        """An ActivatedAbilityInstance whose declared controller differs from the
+        activating player is rejected outright — the caller is not the ability's
+        controller — before any query, payment, source mutation, or push. Under
+        the pre-fix behaviour the declared controller was ignored (the source's
+        current controller was used instead), so the stale/mismatched value went
+        undetected."""
+        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
+
+        from engine.abilities import ActivatedAbilityInstance, activate_ability
+
+        game = create_game()
+        p1, p2 = game.players
+        bear = _creature("Bear", p1, 2, 2)
+        boots = SwiftfootBoots(owner=p1, controller=p1)
+        set_board_state(game, 0, battlefield=[bear, boots],
+                        mana={ManaType.COLORLESS: 1})
+        game.phase = Phase.PRECOMBAT_MAIN
+        ability = boots.get_activated_abilities()[0]
+        instance = ActivatedAbilityInstance(
+            source=boots,
+            controller=p1,          # declared controller: p1 ...
+            cost=ability.cost,
+            effect=ability.effect,
+            targeting=ability.targeting,
+            can_activate=ability.can_activate,
+            description=ability.description,
+        )
+        calls1, restore1 = _spy_on_answer(p1)
+        calls2, restore2 = _spy_on_answer(p2)
+        try:
+            with pytest.raises(AbilityError):
+                activate_ability(game, p2, instance)   # ... but the caller is p2
+        finally:
+            restore1()
+            restore2()
+        assert calls1 == [] and calls2 == []   # no target query raised
+        assert p1.mana_pool.total() == 1       # no mana spent
+        assert game.stack.is_empty()           # nothing pushed
+        assert boots.attached_to is None       # source unmutated
+
+    def test_valid_activation_targets_pays_and_resolves(self):
+        """The happy path is unaffected: the controller activating their own
+        Equipment raises the target query, pays the cost, pushes with the
+        authorized controller on the stack object, and resolves into a real
+        attachment."""
+        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
+
+        game = create_game()
+        p1 = game.players[0]
+        bear = _creature("Bear", p1, 2, 2)
+        boots = SwiftfootBoots(owner=p1, controller=p1)
+        set_board_state(game, 0, battlefield=[bear, boots],
+                        mana={ManaType.COLORLESS: 1})
+        game.phase = Phase.PRECOMBAT_MAIN
+        calls, restore = _spy_on_answer(p1)
+        try:
+            _equip_via_ability(game, p1, boots, bear)   # activate + push
+        finally:
+            restore()
+        assert calls != []                     # a target query WAS raised
+        assert p1.mana_pool.total() == 0       # the cost was paid
+        assert not game.stack.is_empty()       # object pushed
+        top = game.stack.peek()
+        assert top.controller is p1            # authorized controller on the stack
+        assert top.activation_context.controller is p1
+        resolve_stack(game)
+        assert boots.attached_to is bear       # resolves into an attachment
+        assert Keyword.HEXPROOF in bear.keywords  # ... with the buff applied
+
+    def test_source_control_change_after_activation_keeps_captured_controller(self):
+        """A control change of the source *after* a valid activation does not
+        rewrite the captured activation-time controller: both
+        ``StackObject.controller`` and ``ActivationContext.controller`` stay p1,
+        and the ability resolves against p1's board (target legality is judged
+        against the captured controller, not the Equipment's new one)."""
+        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
+
+        game = create_game()
+        p1, p2 = game.players
+        bear = _creature("Bear", p1, 2, 2)
+        boots = SwiftfootBoots(owner=p1, controller=p1)
+        set_board_state(game, 0, battlefield=[bear, boots],
+                        mana={ManaType.COLORLESS: 1})
+        game.phase = Phase.PRECOMBAT_MAIN
+        _equip_via_ability(game, p1, boots, bear)   # activated by p1
+        top = game.stack.peek()
+        assert top is not None
+        # Control of the Equipment changes to p2 while the ability waits.
+        boots.controller = p2
+        # The captured controller is untouched by the control change.
+        assert top.controller is p1
+        assert top.activation_context is not None
+        assert top.activation_context.controller is p1
+        resolve_stack(game)
+        # Target legality judged against the captured controller (p1) — attaches.
+        assert boots.attached_to is bear
+
+
+# ---------------------------------------------------------------------------
 # 5. Cost system
 # ---------------------------------------------------------------------------
 

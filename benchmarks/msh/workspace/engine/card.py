@@ -49,8 +49,9 @@ class ActivatedAbility:
         cost: A callable that checks/pays the cost given the game state.
         effect: A callable that applies the effect. For an untargeted ability
             it is invoked ``effect(game)``; for a *targeted* ability (``targeting``
-            is set) it is invoked ``effect(game, targets)`` with the targets that
-            were chosen at activation and stored on the stack object.
+            is set) it is invoked ``effect(game, targets, context)`` with the
+            targets chosen at activation and stored on the stack object, and the
+            :class:`~engine.stack.ActivationContext` captured at activation.
         targeting: Optional callable ``(game, source, controller) -> list | None``
             run **at activation, before costs are paid** (rule 602.2b/2c). It
             returns the chosen targets (a list; may be empty for a modal choice
@@ -697,13 +698,22 @@ class Equipment(Artifact):
 
         def _can_activate(game: GameState, source: Any, controller: Any) -> bool:
             # Activation legality (rule 602.2a), checked before any target query
-            # or payment: the equip ability may only be activated while the
-            # Equipment is on the battlefield and at sorcery speed (rule 702.6e).
+            # or payment: the equip ability may only be activated by the player
+            # who currently controls the Equipment (rule 602.2 — a player may
+            # activate an activated ability only if they control its source),
+            # while the Equipment is on the battlefield, and at sorcery speed
+            # (rule 702.6e).
             from engine.casting import is_sorcery_speed
 
             if controller is None:
                 return False
             if not _obj_on_battlefield(game, source):
+                return False
+            # The activation-time controller must currently control the
+            # Equipment — a control change away from that player makes the equip
+            # ability unavailable to them (and stops another player activating an
+            # Equipment they do not control).
+            if getattr(source, "controller", None) is not controller:
                 return False
             return is_sorcery_speed(game, controller)
 
