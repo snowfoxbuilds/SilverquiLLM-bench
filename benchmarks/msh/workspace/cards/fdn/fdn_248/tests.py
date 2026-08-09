@@ -1,31 +1,102 @@
 """End-to-end reference tests for FDN 248 — Thousand-Year Storm.
 
-Exercises the real copy pipeline: Storm's trigger copies a spell already on the
-stack, optionally re-choosing targets **through the shared cast-time target
-machinery** (`_query_target`), and each copy stint-revalidates its targets at
-resolution. The retargeting handles Fiery Annihilation's *dependent* Equipment
-target (only Equipment attached to the newly-chosen creature is offered), and a
-copy whose newly-chosen target leaves and returns before resolution is rejected.
+Two invariants are exercised here through the *real* casting + trigger pipeline:
+
+1. **Per-trigger immutable state (rule: "for each other instant and sorcery
+   spell you've cast before it this turn").** Each Storm trigger captures, when it
+   goes on the stack, which spell it copies and how many copies to make — the
+   count of spells cast *before* the triggering one this turn. It is never derived
+   from how many triggers have since resolved, nor read from a mutable
+   source-level slot. So casting B *in response to* A's Storm trigger still makes
+   B's trigger copy B once and A's trigger copy A zero times, in LIFO order.
+
+2. **Protection-aware copy retargeting through the shared spell-retargeting
+   path.** A copy re-choosing its targets applies the complete cast-time legality
+   contract *for the copied spell*: zone, the (arity-aware, so dependent) target
+   filter, distinctness, and **protection from the copied spell** — a protected
+   permanent is absent from the option set, not merely rejected at resolution.
+   Each copy stint-revalidates its targets, so a newly-chosen leave-and-return
+   target is rejected.
 """
 
 from __future__ import annotations
 
+from typing import Any
+
 from cards.fdn.fdn_248.card_impl import ThousandYearStorm
 from cards.fdn.fdn_86.card_impl import FieryAnnihilation
-from engine.card import Creature, Equipment
+from engine.card import Creature, Equipment, Instant
 from engine.casting import cast_spell as engine_cast_spell
-from engine.decisions import Decision, GameRef
+from engine.decisions import Decision, DecisionKind, GameRef
 from engine.events import SpellCastTriggeredEvent
 from engine.intent_player import Intent
+from engine.protection import ProtectionAbility
 from engine.stack import resolve_top_of_stack
-from engine.types import ManaCost, ManaType, Zone
+from engine.types import CardType, Color, ManaCost, ManaType, TargetRequirement, Zone
 from engine.zones import move_to_zone
 from test_utils import create_game, resolve_stack, set_board_state
 
 
+# ---------------------------------------------------------------------------
+# Lightweight test spells (real cards, driven through the real cast pipeline)
+# ---------------------------------------------------------------------------
+
+
+def _is_creature(obj: Any) -> bool:
+    return CardType.CREATURE in getattr(obj, "card_types", set())
+
+
+class _Signal(Instant):
+    """A {0} instant with no targets — used to drive the cast/count pipeline
+    without any target queries."""
+
+    def __init__(self, name: str, **kwargs: Any) -> None:
+        kwargs.setdefault("name", name)
+        kwargs.setdefault("mana_cost", ManaCost.parse("{0}"))
+        super().__init__(**kwargs)
+
+    def get_targets(self, game: Any) -> list:
+        return []
+
+    def on_resolve(self, game: Any) -> None:
+        return None
+
+
+class _Bolt(Instant):
+    """A {0} instant that deals 5 damage to target creature — used where a copy
+    must choose a target so independent retargeting is observable."""
+
+    def __init__(self, name: str, **kwargs: Any) -> None:
+        kwargs.setdefault("name", name)
+        kwargs.setdefault("mana_cost", ManaCost.parse("{0}"))
+        super().__init__(**kwargs)
+
+    def get_targets(self, game: Any) -> list:
+        return [
+            TargetRequirement(
+                filter_fn=_is_creature,
+                description="target creature",
+                zone=Zone.BATTLEFIELD,
+            )
+        ]
+
+    def on_resolve(self, game: Any) -> None:
+        from engine.game import deal_damage
+
+        chosen = getattr(self, "chosen_targets", None) or []
+        target = chosen[0] if chosen else None
+        if target is not None and _is_creature(target):
+            deal_damage(game, self, target, 5)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
 def _creature(p, name, toughness=12):
-    # High toughness so double-damage (original + copy both hitting one creature)
-    # doesn't trigger a lethal-damage SBA and complicate the assertions.
+    # High toughness so double damage does not trip a lethal-damage SBA and
+    # complicate the assertions.
     return Creature(name=name, base_power=2, base_toughness=toughness, owner=p, controller=p)
 
 
@@ -37,53 +108,44 @@ def _pref(game, obj):
     return Decision.obj(instance=game.refs.instance_id(obj, Zone.BATTLEFIELD.value))
 
 
-def _cast_fiery(game, p1, fiery, targets):
-    """Cast Fiery Annihilation (instant) choosing *targets*, WITHOUT resolving."""
-    prefs = tuple(_pref(game, t) for t in targets)
-    p1.start_intent("fiery", Intent(
-        pattern=GameRef(card=frozenset({("name", "Fiery Annihilation")})),
-        preferences=prefs,
-    ))
-    try:
-        engine_cast_spell(game, p1, fiery)
-    finally:
-        p1.end_intent("fiery")
+def _cast(game, p1, spell, target_prefs=None):
+    """Cast *spell* through the real pipeline, answering its cast-time target
+    query (when it targets) with *target_prefs*, routed by the spell's own name."""
+    if target_prefs is not None:
+        p1.start_intent("cast", Intent(
+            pattern=GameRef(card=frozenset({("name", spell.name)})),
+            preferences=tuple(target_prefs),
+        ))
+        try:
+            engine_cast_spell(game, p1, spell)
+        finally:
+            p1.end_intent("cast")
+    else:
+        engine_cast_spell(game, p1, spell)
 
 
-def _fire_storm(game, p1, pending_spell, storm_prefs):
-    """Fire the spell-cast event so Storm's trigger goes on the stack, answering
-    Storm's retarget prompt + target queries (when it resolves) via *storm_prefs*.
-    Leaves the Storm trigger on the stack (not yet resolved)."""
-    p1.start_intent("storm", Intent(
-        pattern=GameRef(card=frozenset({("name", "Thousand-Year Storm")})),
-        preferences=storm_prefs,
-    ))
+def _fire(game, p1, spell):
+    """Fire the spell-cast event so Storm's trigger (if any) goes on the stack —
+    exactly what the game/replay pipeline does after a spell is cast."""
     game.trigger_manager.fire_event(
-        game, SpellCastTriggeredEvent(spell=pending_spell, player=p1)
+        game, SpellCastTriggeredEvent(spell=spell, player=p1)
     )
-    return "storm"  # intent name; caller ends it after the trigger resolves
 
 
-def _setup():
-    game = create_game()
-    p1, p2 = game.players
-    storm = ThousandYearStorm(owner=p1, controller=p1)
-    c1 = _creature(p2, "Creature One")
-    c2 = _creature(p2, "Creature Two")
-    eq1 = _equipment(p2, "Sword One")
-    eq2 = _equipment(p2, "Sword Two")
-    eq1.attached_to = c1
-    eq2.attached_to = c2
-    fiery = FieryAnnihilation(owner=p1, controller=p1)
-    set_board_state(game, 0, hand=[fiery], battlefield=[storm],
-                    mana={ManaType.RED: 1, ManaType.COLORLESS: 2})
-    set_board_state(game, 1, battlefield=[c1, c2, eq1, eq2])
-    game.active_player_index = 0
-    storm.register_triggers(game)
-    # One prior instant/sorcery this turn → the next cast makes exactly one copy.
-    storm._storm_count = 1
-    storm._last_turn = game.turn_number
-    return game, p1, p2, storm, fiery, c1, c2, eq1, eq2
+def _resolve_top_collect_new(game):
+    """Resolve exactly the top stack object; return the objects it pushed."""
+    before = list(game.stack._items)
+    resolve_top_of_stack(game)
+    return [so for so in game.stack._items if all(so is not b for b in before)]
+
+
+def _storm_triggers(game, storm):
+    return [so for so in game.stack._items if so.source is storm]
+
+
+# ---------------------------------------------------------------------------
+# Static data
+# ---------------------------------------------------------------------------
 
 
 class TestThousandYearStormProperties:
@@ -93,49 +155,299 @@ class TestThousandYearStormProperties:
         assert storm.mana_cost == ManaCost.parse("{4}{U}{R}")
 
 
-class TestThousandYearStormEndToEnd:
-    def test_copy_retains_targets_and_resolves(self):
-        """Baseline: with no retarget the copy keeps the original's target and
-        the copy resolves (deals its damage)."""
-        game, p1, p2, storm, fiery, c1, c2, eq1, eq2 = _setup()
-        _cast_fiery(game, p1, fiery, [c1])            # original targets c1 only
-        name = _fire_storm(game, p1, fiery, (Decision.no(),))  # decline retarget
+# ---------------------------------------------------------------------------
+# Required change 2 — per-trigger immutable copy count / spell (no manual seed)
+# ---------------------------------------------------------------------------
+
+
+class TestStormPerTriggerState:
+    def _setup(self, hand):
+        game = create_game()
+        p1, _p2 = game.players
+        storm = ThousandYearStorm(owner=p1, controller=p1)
+        set_board_state(game, 0, hand=hand, battlefield=[storm])
+        game.active_player_index = 0
+        storm.register_triggers(game)  # count starts at 0, this turn — no seeding
+        return game, p1, storm
+
+    def test_response_order_B_copies_B_A_copies_nothing(self):
+        """Cast A; then cast B *in response to* A's Storm trigger. Driven entirely
+        through cast_spell + SpellCastTriggeredEvent (no seeded count):
+
+        * B's trigger (on top) copies B exactly once.
+        * A's trigger copies A exactly zero times.
+        * Neither trigger copies the other spell.
+        """
+        a, b = _Signal("Spell A"), _Signal("Spell B")
+        game, p1, storm = self._setup([a, b])
+
+        _cast(game, p1, a)
+        _fire(game, p1, a)                 # A's trigger: copies=0, spell=A
+        _cast(game, p1, b)                 # B cast in response to A's trigger
+        _fire(game, p1, b)                 # B's trigger: copies=1, spell=B
+
+        # LIFO top→bottom: [StormB, B, StormA, A].
+        new_from_b = _resolve_top_collect_new(game)   # resolve B's Storm trigger
+        assert len(new_from_b) == 1
+        assert new_from_b[0].source.name == "Spell B"  # copies B, not A
+        assert new_from_b[0].source is not b           # a genuine copy
+
+        resolve_top_of_stack(game)         # the copy of B resolves
+        resolve_top_of_stack(game)         # B resolves
+        new_from_a = _resolve_top_collect_new(game)   # resolve A's Storm trigger
+        assert new_from_a == []            # A's trigger makes zero copies
+
+    def test_three_spells_counts_zero_one_two(self):
+        """A third spell: the per-trigger captured copy counts are 0, 1, 2 — read
+        straight off each trigger's immutable event_state, which also records the
+        exact spell each trigger copies."""
+        a, b, c = _Signal("Spell A"), _Signal("Spell B"), _Signal("Spell C")
+        game, p1, storm = self._setup([a, b, c])
+
+        for spell in (a, b, c):
+            _cast(game, p1, spell)
+            _fire(game, p1, spell)
+
+        counts = {
+            so.event_state.spell.name: so.event_state.copies
+            for so in _storm_triggers(game, storm)
+        }
+        assert counts == {"Spell A": 0, "Spell B": 1, "Spell C": 2}
+        # Each trigger correlates to its OWN triggering spell's StackObject.
+        for so in _storm_triggers(game, storm):
+            assert so.event_state.stack_object.source is so.event_state.spell
+
+    def test_turn_rollover_resets_count(self):
+        """Spells cast in turn N do not inflate the copy count in turn N+1 — the
+        turn-local tally resets exactly once when the turn changes."""
+        a, b = _Signal("Spell A"), _Signal("Spell B")
+        game, p1, storm = self._setup([a, b])
+
+        _cast(game, p1, a)
+        _fire(game, p1, a)                 # turn 1: A → copies=0, count now 1
         resolve_stack(game)
-        p1.end_intent(name)
-        assert c1.damage_marked == 10                 # original + copy both hit c1 (5 + 5)
+
+        game.turn_number += 1              # roll to the next turn
+
+        _cast(game, p1, b)
+        _fire(game, p1, b)                 # turn 2: B is the first spell → copies=0
+        (trig_b,) = _storm_triggers(game, storm)
+        assert trig_b.event_state.copies == 0
+
+    def test_countered_triggering_spell_makes_no_copies_and_copies_no_other(self):
+        """A trigger whose spell has left the stack (countered) makes no copies —
+        and never falls back to copying a *different* pending spell."""
+        b, a = _Signal("Spell B"), _Signal("Spell A")
+        game, p1, storm = self._setup([b, a])
+
+        # Cast B first (so B and its trigger sit lower on the stack), then A.
+        _cast(game, p1, b)
+        _fire(game, p1, b)                 # B → copies=0
+        _cast(game, p1, a)
+        _fire(game, p1, a)                 # A → copies=1, captured A's StackObject
+
+        # "Counter" A — remove its spell StackObject from the stack. B's spell
+        # StackObject is still there, below A's Storm trigger.
+        a_so = next(so for so in game.stack._items if so.source is a)
+        game.stack._items.remove(a_so)
+
+        # A's Storm trigger is now on top. It must make zero copies (A is gone) —
+        # not copy B (a different spell still pending).
+        new = _resolve_top_collect_new(game)
+        assert new == []
+
+    def test_control_change_after_fire_retains_fire_time_controller(self):
+        """The trigger's controller is fixed at fire time. Changing control of
+        Thousand-Year Storm *after* the trigger fires does not shift "you": the
+        copy is still controlled by the fire-time controller."""
+        a = _Signal("Spell A")
+        game, p1, storm = self._setup([a])
+        p2 = game.players[1]
+        # One prior spell this turn so the trigger makes a copy we can inspect.
+        storm._storm_count = 1
+        storm._storm_turn = game.turn_number
+
+        _cast(game, p1, a)
+        _fire(game, p1, a)                 # fires with controller p1
+
+        storm.controller = p2              # Storm changes hands before resolution
+
+        new = _resolve_top_collect_new(game)   # resolve the Storm trigger
+        assert len(new) == 1
+        assert new[0].controller is p1     # fire-time controller, not p2
+
+    def test_independent_targets_for_simultaneous_triggers(self):
+        """Two Storm triggers pending at once, copying different spells, choose
+        new targets independently — one trigger's retarget never leaks into the
+        other's copies."""
+        game = create_game()
+        p1, p2 = game.players
+        storm = ThousandYearStorm(owner=p1, controller=p1)
+        c1, c2, c3 = (_creature(p2, n) for n in ("Creature One", "Creature Two", "Creature Three"))
+        filler = _Signal("Filler")
+        bolt_a, bolt_b = _Bolt("Bolt A"), _Bolt("Bolt B")
+        set_board_state(game, 0, hand=[filler, bolt_a, bolt_b], battlefield=[storm])
+        set_board_state(game, 1, battlefield=[c1, c2, c3])
+        game.active_player_index = 0
+        storm.register_triggers(game)
+
+        _cast(game, p1, filler); _fire(game, p1, filler)          # count → 1
+        _cast(game, p1, bolt_a, [_pref(game, c1)]); _fire(game, p1, bolt_a)  # A copies=1
+        _cast(game, p1, bolt_b, [_pref(game, c1)]); _fire(game, p1, bolt_b)  # B copies=2
+
+        # Retarget every copy: yes to Storm, Bolt A's copies → c3, Bolt B's → c2.
+        p1.start_intent("storm", Intent(
+            pattern=GameRef(card=frozenset({("name", "Thousand-Year Storm")})),
+            preferences=(Decision.yes(),),
+        ))
+        p1.start_intent("a", Intent(
+            pattern=GameRef(card=frozenset({("name", "Bolt A")})),
+            preferences=(_pref(game, c3),),
+        ))
+        p1.start_intent("b", Intent(
+            pattern=GameRef(card=frozenset({("name", "Bolt B")})),
+            preferences=(_pref(game, c2),),
+        ))
+
+        # Bolt B's trigger is on top: two copies, both retargeted to c2.
+        new_b = _resolve_top_collect_new(game)
+        assert len(new_b) == 2
+        assert all(so.source.name == "Bolt B" for so in new_b)
+        assert all(so.targets == [c2] for so in new_b)
+
+        # Drain B's copies + the original B to reach Bolt A's trigger.
+        while any(so.source.name == "Bolt B" for so in game.stack._items):
+            resolve_top_of_stack(game)
+
+        new_a = _resolve_top_collect_new(game)
+        assert len(new_a) == 1
+        assert new_a[0].source.name == "Bolt A"
+        assert new_a[0].targets == [c3]    # A's own choice, not B's c2
+
+        for name in ("storm", "a", "b"):
+            p1.end_intent(name)
+
+
+# ---------------------------------------------------------------------------
+# Required change 1 — protection-aware copy retargeting (Fiery Annihilation)
+# ---------------------------------------------------------------------------
+
+
+class TestStormCopyRetargeting:
+    def _setup(self, extra_p2_battlefield=()):
+        game = create_game()
+        p1, p2 = game.players
+        storm = ThousandYearStorm(owner=p1, controller=p1)
+        c1 = _creature(p2, "Creature One")
+        c2 = _creature(p2, "Creature Two")
+        eq1 = _equipment(p2, "Sword One")
+        eq2 = _equipment(p2, "Sword Two")
+        eq1.attached_to = c1
+        eq2.attached_to = c2
+        fiery = FieryAnnihilation(owner=p1, controller=p1)
+        set_board_state(game, 0, hand=[fiery], battlefield=[storm],
+                        mana={ManaType.RED: 1, ManaType.COLORLESS: 2})
+        set_board_state(game, 1, battlefield=[c1, c2, eq1, eq2, *extra_p2_battlefield])
+        game.active_player_index = 0
+        storm.register_triggers(game)
+        # One prior instant/sorcery this turn → the next cast makes exactly one
+        # copy (this suite is about retargeting, not counting).
+        storm._storm_count = 1
+        storm._storm_turn = game.turn_number
+        return game, p1, p2, storm, fiery, c1, c2, eq1, eq2
+
+    def _cast_fiery(self, game, p1, fiery, targets):
+        _cast(game, p1, fiery, [_pref(game, t) for t in targets])
+
+    def _fire_storm(self, game, p1, fiery, *, retarget, copy_target_prefs=()):
+        """Fire Storm's trigger for *fiery*, routing the retarget yes/no to the
+        Storm intent and the copy's target queries to a Fiery Annihilation intent
+        (the copy's provenance is the copied spell, not the enchantment)."""
+        p1.start_intent("storm", Intent(
+            pattern=GameRef(card=frozenset({("name", "Thousand-Year Storm")})),
+            preferences=(Decision.yes(),) if retarget else (Decision.no(),),
+        ))
+        p1.start_intent("copytarget", Intent(
+            pattern=GameRef(card=frozenset({("name", "Fiery Annihilation")})),
+            preferences=tuple(copy_target_prefs),
+        ))
+        _fire(game, p1, fiery)
+
+    def _end_storm(self, p1):
+        p1.end_intent("storm")
+        p1.end_intent("copytarget")
+
+    def test_copy_retains_targets_and_resolves(self):
+        """Decline the retarget → the copy keeps the original's target and
+        resolves (both original and copy hit c1)."""
+        game, p1, p2, storm, fiery, c1, c2, eq1, eq2 = self._setup()
+        self._cast_fiery(game, p1, fiery, [c1])
+        self._fire_storm(game, p1, fiery, retarget=False)
+        resolve_stack(game)
+        self._end_storm(p1)
+        assert c1.damage_marked == 10      # original + copy both hit c1
 
     def test_copy_dependent_retarget_offers_only_matching_equipment(self):
-        """The copy re-chooses new targets: a new creature (c2) and — via the
-        shared dependent-target machinery — an Equipment attached to *that*
-        creature (eq2). eq1 (attached to the other creature) is not a legal option
-        and is not exiled; eq2 is."""
-        game, p1, p2, storm, fiery, c1, c2, eq1, eq2 = _setup()
-        _cast_fiery(game, p1, fiery, [c1])            # original: c1, no Equipment
-        # Retarget the copy: yes, creature → c2, Equipment → eq2 (attached to c2).
-        name = _fire_storm(game, p1, fiery, (Decision.yes(), _pref(game, c2), _pref(game, eq2)))
+        """Retarget the copy to a new creature c2 and — via the shared dependent
+        machinery — an Equipment attached to *that* creature (eq2). eq1 (on the
+        other creature) is not a legal option; eq2 is."""
+        game, p1, p2, storm, fiery, c1, c2, eq1, eq2 = self._setup()
+        self._cast_fiery(game, p1, fiery, [c1])
+        self._fire_storm(game, p1, fiery, retarget=True,
+                         copy_target_prefs=(_pref(game, c2), _pref(game, eq2)))
         resolve_stack(game)
-        p1.end_intent(name)
-        assert c2.damage_marked == 5                  # copy hit the new creature
-        assert game.get_exile(p2).contains(eq2)       # copy exiled the dependent Equipment
-        assert not game.get_exile(p2).contains(eq1)   # eq1 (other creature's) never targeted
-        assert c1.damage_marked == 5                  # original still hit c1
+        self._end_storm(p1)
+        assert c2.damage_marked == 5       # copy hit the new creature
+        assert game.get_exile(p2).contains(eq2)      # dependent Equipment exiled
+        assert not game.get_exile(p2).contains(eq1)  # other creature's, never targeted
+        assert c1.damage_marked == 5       # original still hit c1
 
     def test_copy_new_target_leave_and_return_rejected(self):
-        """A copy's newly-chosen target leaves and returns AFTER the copy is
-        created but before it resolves: the copy captured that target's stint, so
-        the returned object (new stint) is rejected — the copy does nothing to it,
-        while the original (a different, untouched target) still resolves."""
-        game, p1, p2, storm, fiery, c1, c2, eq1, eq2 = _setup()
-        _cast_fiery(game, p1, fiery, [c1])            # original targets c1
-        # Retarget the copy's creature to c2 (decline the Equipment).
-        name = _fire_storm(game, p1, fiery, (Decision.yes(), _pref(game, c2)))
-        # Resolve ONLY the Storm trigger — it creates the copy (capturing c2's
-        # current stint) and pushes it on top of the still-pending original.
-        resolve_top_of_stack(game)
-        p1.end_intent(name)
-        # Now leave-and-return c2 before the copy resolves.
+        """A copy's newly-chosen target leaves and returns before the copy
+        resolves: the copy captured its stint, so the returned object (new stint)
+        is rejected, while the original (a different, untouched target) resolves."""
+        game, p1, p2, storm, fiery, c1, c2, eq1, eq2 = self._setup()
+        self._cast_fiery(game, p1, fiery, [c1])
+        self._fire_storm(game, p1, fiery, retarget=True,
+                         copy_target_prefs=(_pref(game, c2),))  # decline Equipment
+        resolve_top_of_stack(game)         # resolve ONLY Storm's trigger → makes the copy
+        self._end_storm(p1)
         move_to_zone(game, c2, Zone.BATTLEFIELD, Zone.EXILE)
-        move_to_zone(game, c2, Zone.EXILE, Zone.BATTLEFIELD)  # new stint
+        move_to_zone(game, c2, Zone.EXILE, Zone.BATTLEFIELD)   # new stint
         resolve_stack(game)
-        assert c2.damage_marked == 0                  # copy rejected the returned c2
-        assert c1.damage_marked == 5                  # original (unchanged) still hit c1
+        assert c2.damage_marked == 0       # copy rejected the returned c2
+        assert c1.damage_marked == 5       # original (unchanged) still hit c1
+
+    def test_copy_cannot_target_protected_permanent(self):
+        """A permanent with protection from the copied spell (Fiery Annihilation
+        is red → protection from red) is **absent from the copy's option set**,
+        not merely ignored at resolution; an unprotected creature remains
+        selectable, so the copy targets it instead."""
+        protected = _creature(None, "Protected One")
+        protected.protections = [ProtectionAbility(quality=Color.RED)]
+        game, p1, p2, storm, fiery, c1, c2, eq1, eq2 = self._setup(
+            extra_p2_battlefield=[protected]
+        )
+        protected.owner = protected.controller = p2
+        self._cast_fiery(game, p1, fiery, [c1])
+        # Prefer c2 (unprotected). Even if a preference pointed at the protected
+        # creature it could not be chosen — it is never offered.
+        self._fire_storm(game, p1, fiery, retarget=True,
+                         copy_target_prefs=(_pref(game, c2),))
+        resolve_stack(game)                # the copy re-chooses its target here
+        self._end_storm(p1)
+
+        # Option-set invariant on the copy's creature-selection query (the most
+        # recent one — the cast-time query, unprotected against, came first): it
+        # offered the unprotected creature but never the protected one.
+        creature_queries = [
+            r for r in p1.transcript.queries(kind=DecisionKind.OBJECT)
+            if any(("name", "Creature Two") in o.attrs for o in r.options)
+        ]
+        assert len(creature_queries) >= 2, "expected cast-time and copy queries"
+        offered = creature_queries[-1].options
+        assert not any(("name", "Protected One") in o.attrs for o in offered)
+        assert any(("name", "Creature Two") in o.attrs for o in offered)
+
+        assert protected.damage_marked == 0   # copy never targeted the protected one
+        assert c2.damage_marked == 5           # copy hit the unprotected creature

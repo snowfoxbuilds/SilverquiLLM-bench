@@ -132,6 +132,7 @@ def _query_target(
     card: CardImpl,
     spec: Any,
     exclude: Any = (),
+    protect_from: Any = None,
 ) -> Any:
     """Raise a Player Query for one target spec; return the chosen game object.
 
@@ -151,12 +152,25 @@ def _query_target(
     same cast; they are dropped from the candidate set so a multi-target spell
     picks **distinct** objects (rule 601.2c). For an optional spec this can
     empty the option set, which then declines cleanly rather than raising.
+
+    *protect_from*, when given, is the spell/source whose *protection* legality
+    is folded into the option set: a candidate with protection from it (rule
+    509.1b — the *T* in DEBT) is **absent from the offered options**, never merely
+    rejected after selection. Normal casting leaves this ``None`` (its option set
+    is unchanged; protection is enforced by the post-selection check in
+    :func:`cast_spell`); the shared :func:`query_spell_target` path pins it so a
+    spell copy re-choosing targets can never be offered a permanent protected
+    from that spell.
     """
     from engine.queries import PlayerQuery, ask
 
     filter_fn = getattr(spec, "filter_fn", None)
     zone = getattr(spec, "zone", None)
     optional = bool(getattr(spec, "optional", False))
+
+    _has_protection = None
+    if protect_from is not None:
+        from engine.protection import has_protection_from as _has_protection
 
     candidates: list[Any] = []
     if zone is not None:
@@ -173,6 +187,10 @@ def _query_target(
         # *exclude* is also the already-chosen target list for this cast, so a
         # dependent filter (rule 601.2c) sees the earlier targets it depends on.
         if filter_fn is not None and not _safe_filter(filter_fn, candidate, exclude):
+            continue
+        # Protection (rule 509.1b): a candidate protected from *protect_from* is
+        # not a legal target and is dropped from the option set entirely.
+        if _has_protection is not None and _has_protection(candidate, protect_from):
             continue
         decision = _candidate_decision(game, candidate, zone)
         if decision in by_decision:
@@ -200,6 +218,42 @@ def _query_target(
         # A declined optional target (min == 0) — no object chosen.
         return None
     return by_decision[answer.selected[0]]
+
+
+def query_spell_target(
+    game: GameState,
+    player: Player,
+    spell: CardImpl,
+    spec: Any,
+    exclude: Any = (),
+) -> Any:
+    """Choose one target for *spell* applying the **complete** target-legality
+    contract normal casting uses — the single reusable spell-retargeting path.
+
+    *spell* is the spell on the stack doing the targeting: a spell **copy**
+    re-choosing its targets (Thousand-Year Storm), or the original spell being
+    copied (they share every protection-relevant characteristic). The contract:
+
+    * **Zone** — only objects in ``spec.zone`` (plus players) are candidates.
+    * **Target requirement** — ``spec.filter_fn``, evaluated arity-aware so a
+      *dependent* target (rule 601.2c, e.g. "Equipment attached to *that*
+      creature") sees the targets already chosen for this same retarget.
+    * **Distinctness** — *exclude* (also the already-chosen list) removes prior
+      picks so multiple requirements select distinct objects.
+    * **Protection** — a permanent with protection from *spell* is **absent from
+      the offered option set**, not offered then rejected at resolution (rule
+      509.1b). Protection is judged against *spell* (the copied spell), never the
+      permanent that created the copy.
+    * **Provenance** — the query is raised *as* *spell* (a stack-zone spell), so
+      routing/records identify the copied spell rather than mislabelling a
+      battlefield source (Thousand-Year Storm) as a spell on the stack.
+
+    Returns the chosen game object, or ``None`` when the spec is optional and the
+    player declines / no legal candidate exists — the caller then keeps the
+    original target for that position. Reuses :func:`_query_target`; the only
+    addition over normal casting is that protection is pinned to *spell*.
+    """
+    return _query_target(game, player, spell, spec, exclude=exclude, protect_from=spell)
 
 
 # ------------------------------------------------------------------
@@ -703,7 +757,9 @@ def _resolve_spell(
     # position. Position is preserved so heterogeneous/dependent targets still
     # read by index; the card's own predicate re-check then handles a ``None`` (a
     # target still present but no longer satisfying its restriction is caught
-    # there). Spell copies carry no context and pass through unchanged.
+    # there). A stack object with no captured context (``activation_context is
+    # None``) passes through unchanged; spell copies carry their own context and
+    # are revalidated the same way (see :func:`~engine.stack.copy_spell`).
     targets = stack_obj.targets
     if targets is not None:
         targets = stint_checked_targets(game, stack_obj.activation_context, targets)

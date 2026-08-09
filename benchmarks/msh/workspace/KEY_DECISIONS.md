@@ -412,6 +412,16 @@ Two rules refinements on this channel:
   re-reads `source.controller` at resolution, so a source that changes hands
   again between fire and resolution does not shift "you". Every pre-existing
   untargeted effect is one-argument, so this is backward-compatible.
+- **Per-fire captured state (`capture` channel).** `TriggerRegistration` has an
+  optional `capture(game, event, controller) -> Any` hook run **as the trigger
+  goes on the stack** (rule 603.3), with the same immutable fire-time controller.
+  Its result is stored on *this trigger's own* `StackObject.event_state` and
+  passed to `effect(game, controller, event_state)` at resolution. This is how a
+  trigger correlates itself to the firing's event-specific facts **without** a
+  mutable source-level slot that a later firing would clobber — the whole point of
+  the Thousand-Year Storm fix (see *Copied spells* below). Two pending triggers of
+  the same source hold independent `event_state`, so LIFO resolution copies the
+  right spell the right number of times.
 - **Required-vs-optional target semantics.** `targeting` returning **`None`**
   means a *required* target has no legal choice, so the trigger is **not put on
   the stack at all** (rule 603.3c). Returning a **list** — possibly empty — puts
@@ -444,13 +454,35 @@ copy's controller for "you control"), so a retained target that left and returne
 between the original's cast and the copy's resolution is rejected. A copy that
 **chooses new targets** captures those new targets' *current* stints. A copy of an
 object that carried no context (an ability copy) falls back to a fresh capture.
-Thousand-Year Storm's retargeting no longer hand-rolls its own filter loop: it
-re-chooses each copy's targets through the shared cast-time machinery
-(`_query_target` per `get_targets` spec, with `exclude` for distinctness), so the
-copy respects target zones, protection, and **dependent** requirements (Fiery
+
+*Immutable per-trigger state.* Thousand-Year Storm no longer keeps a mutable
+source-level `_pending_spell` slot, and no longer derives the copy count from how
+many of its triggers have resolved (both were correlation bugs when multiple
+spells were cast before earlier Storm triggers resolved). Instead its `capture`
+hook (above) fixes, on each trigger's own `StackObject`, an immutable record of
+(a) the **triggering spell's `StackObject`** and (b) the **copy count** — the
+number of instant/sorcery spells the controller had cast *before* this one this
+turn. The count is tallied when a spell is **cast** (in `capture`, once per
+matching cast), not at resolution, and the turn-local tally resets exactly once
+per turn change. So casting B in response to A's Storm trigger still makes B's
+trigger copy B once and A's copy A zero times, in LIFO order; a triggering spell
+that has left the stack (countered) makes zero copies and never falls back to a
+different pending spell.
+
+*Protection-aware retargeting via the shared spell-retargeting path.* When the
+controller chooses new targets for a copy, each target is re-chosen through
+`engine.casting.query_spell_target(game, player, spell, spec, exclude)` — the
+single reusable helper that applies the **complete** cast-time legality contract
+*for the copied spell*: zone, the (arity-aware, so **dependent**) target filter,
+distinctness via `exclude`, and **protection from the copied spell** (a protected
+permanent is **absent from the offered option set**, not offered then rejected).
+Its query provenance identifies the copied spell — a stack-zone spell — rather
+than mislabelling the battlefield enchantment as a spell on the stack. Fiery
 Annihilation's "Equipment attached to *that* creature" is offered relative to the
-copy's newly-chosen creature) — a required spec with no legal target or a declined
-optional one keeps the original target at that position.
+copy's newly-chosen creature; a required spec with no legal target, or a declined
+optional one, keeps the original target at that position. Protection is judged
+against the *copied* spell (equivalently the original being copied — they share
+every protection-relevant characteristic), never against Thousand-Year Storm.
 
 **Dependent-target casting (`engine/casting.py`).** A `TargetRequirement.filter_fn`
 may now take a second positional argument — the list of targets already chosen

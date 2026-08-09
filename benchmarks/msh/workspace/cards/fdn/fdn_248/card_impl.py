@@ -1,5 +1,6 @@
 """Card implementation for Thousand-Year Storm."""
 from __future__ import annotations
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from engine.card import Enchantment
 from engine.card_queries import query_yes_no
@@ -7,6 +8,32 @@ from engine.types import CardType, ManaCost
 from engine.events import SpellCastTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
+    from engine.stack import StackObject
+
+
+@dataclass(frozen=True)
+class _StormTriggerState:
+    """Immutable facts one Storm trigger captured when it went on the stack.
+
+    Owned by a single trigger instance (stored on its ``StackObject``), so two
+    Storm triggers pending at once never share or overwrite each other's spell
+    or count.
+
+    Attributes:
+        spell: The instant/sorcery whose cast fired this trigger.
+        stack_object: That spell's :class:`~engine.stack.StackObject` at fire
+            time. Re-checked at resolution — if it has since left the stack
+            (countered, resolved), no copies are made.
+        copies: How many copies this trigger must create — the number of instant
+            and sorcery spells the controller had cast *before* this one this turn
+            (rule: "for each *other* instant and sorcery spell you've cast before
+            it this turn"). Fixed when the spell is cast, never derived from how
+            many Storm triggers have since resolved.
+    """
+
+    spell: Any
+    stack_object: "StackObject | None"
+    copies: int
 
 
 class ThousandYearStorm(Enchantment):
@@ -31,15 +58,21 @@ class ThousandYearStorm(Enchantment):
         super().__init__(**kwargs)
 
     def register_triggers(self, game: 'GameState') -> None:
-        from engine.stack import copy_spell
         from engine.triggers import TriggerRegistration
 
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
+        # Turn-local tally of instant/sorcery spells this source's controller has
+        # cast this turn. It counts spells *when they are cast* (in `_capture`,
+        # which runs as each trigger goes on the stack — rule 603.3), never at
+        # resolution, and resets exactly once when the turn changes. Each trigger
+        # then captures, immutably, its own copy count from this tally.
         source._storm_count: int = 0
-        source._last_turn: int = getattr(game, 'turn_number', 0)
+        source._storm_turn: int = getattr(game, 'turn_number', 0)
 
         def _condition(game: Any, event: Any) -> bool:
+            # Side-effect free: only decide whether this cast triggers. The
+            # controller of "you" is the source's *current* controller.
             ctrl = getattr(source, 'controller', None)
             caster = getattr(event, 'player', None) or getattr(event, 'controller', None)
             if caster is not ctrl:
@@ -48,67 +81,80 @@ class ThousandYearStorm(Enchantment):
             if spell is None:
                 return False
             card_types = getattr(spell, 'card_types', set())
-            if not card_types & {CardType.INSTANT, CardType.SORCERY}:
-                return False
+            return bool(card_types & {CardType.INSTANT, CardType.SORCERY})
+
+        def _capture(game: 'GameState', event: Any, controller: Any) -> _StormTriggerState:
+            # Runs as this trigger is put on the stack (fire time), once per
+            # matching cast. Fixes this firing's facts immutably: which spell, and
+            # how many copies (= spells cast before it this turn).
+            spell = getattr(event, 'spell', None) or getattr(event, 'card', None)
             current_turn = getattr(game, 'turn_number', 0)
-            if current_turn != source._last_turn:
+            if current_turn != source._storm_turn:
+                # Turn changed — reset the tally exactly once (guarded by the
+                # stored turn), before counting this turn's first spell.
                 source._storm_count = 0
-                source._last_turn = current_turn
-            source._pending_spell = spell
-            return True
-
-        def _effect(game: 'GameState', controller: Any) -> None:
-            from engine.casting import CastingError, _query_target
-
-            copies_to_make = source._storm_count
+                source._storm_turn = current_turn
+            copies = source._storm_count
             source._storm_count += 1
-            if copies_to_make <= 0:
-                return
-            # "You" is the ability's fire-time controller, threaded in immutably by
-            # the trigger engine — never re-read from source.controller (the
-            # enchantment could have changed hands since the trigger fired).
-            ctrl = controller
-            if ctrl is None:
-                return
-            pending_spell = getattr(source, '_pending_spell', None)
-            if pending_spell is None:
-                return
-            original_so = None
+            # Correlate this trigger to the triggering spell's StackObject now, by
+            # identity. Stored per-trigger, so a later cast's trigger cannot make
+            # this one copy a different spell.
+            original_so: "StackObject | None" = None
             for so in game.stack._items:
-                if so.source is pending_spell:
+                if so.source is spell:
                     original_so = so
                     break
-            if original_so is None:
+            return _StormTriggerState(spell=spell, stack_object=original_so, copies=copies)
+
+        def _effect(game: 'GameState', controller: Any, state: _StormTriggerState) -> None:
+            from engine.stack import copy_spell
+            from engine.casting import CastingError, query_spell_target
+
+            if state is None or controller is None:
+                return
+            copies_to_make = state.copies
+            if copies_to_make <= 0:
+                return
+            original_so = state.stack_object
+            # Fail safe: the triggering spell must still be on the stack. If it
+            # was countered or otherwise left, this trigger makes no copies — it
+            # never falls back to copying some *other* pending spell.
+            if original_so is None or original_so not in game.stack._items:
                 return
             for _ in range(copies_to_make):
                 new_targets: list[Any] | None = None
                 if original_so.targets:
                     if query_yes_no(
                         game,
-                        ctrl,
+                        controller,
                         f"Choose new targets for copy of {original_so.source.name}?",
                         source_card=source,
                     ):
-                        # Re-choose targets through the shared cast-time target
-                        # machinery (_query_target): zone-aware, arity-aware
-                        # filters (so dependent targets like "Equipment attached
-                        # to that creature" work), distinctness via exclude, and
-                        # protection — not a bespoke filter loop. A required spec
-                        # with no legal target, or a declined optional one, keeps
-                        # the original target for that position.
+                        # Re-choose each target through the shared spell-retargeting
+                        # path, which applies the COMPLETE cast-time legality
+                        # contract *for the copied spell*: zone, the (arity-aware,
+                        # so dependent) target filter, distinctness via `exclude`,
+                        # and protection from the copied spell — a protected
+                        # permanent is never offered. A required spec with no legal
+                        # target, or a declined optional one, keeps the original
+                        # target at that position.
                         specs = original_so.source.get_targets(game)
                         new_targets = []
                         for i, spec in enumerate(specs):
                             try:
-                                chosen = _query_target(
-                                    game, ctrl, source, spec, exclude=new_targets
+                                chosen = query_spell_target(
+                                    game,
+                                    controller,
+                                    original_so.source,
+                                    spec,
+                                    exclude=new_targets,
                                 )
                             except CastingError:
                                 chosen = None
                             if chosen is None and i < len(original_so.targets):
                                 chosen = original_so.targets[i]
                             new_targets.append(chosen)
-                copy_obj = copy_spell(game, original_so, ctrl, new_targets)
+                copy_obj = copy_spell(game, original_so, controller, new_targets)
                 game.stack.push(copy_obj)
 
         game.trigger_manager.register(TriggerRegistration(
@@ -117,4 +163,5 @@ class ThousandYearStorm(Enchantment):
             effect=_effect,
             source=self,
             controller=controller,
+            capture=_capture,
         ))

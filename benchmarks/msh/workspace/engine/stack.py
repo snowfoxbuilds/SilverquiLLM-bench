@@ -57,6 +57,13 @@ class StackObject:
         activation_context: For activated abilities, the immutable
             :class:`ActivationContext` captured at activation (``None`` for
             spells and untargeted abilities that need no revalidation).
+        event_state: Immutable per-fire state a triggered ability captured when
+            it was put on the stack (rule 603.3), via its
+            :attr:`~engine.triggers.TriggerRegistration.capture` hook — e.g.
+            Thousand-Year Storm's triggering-spell StackObject and copy count.
+            ``None`` for spells and triggers with no capture hook. Owned by this
+            one trigger instance, so two pending triggers of the same source do
+            not share or clobber it.
     """
 
     source: Any
@@ -65,6 +72,7 @@ class StackObject:
     on_resolve: Callable[[GameState], None] = field(default=lambda _game: None)
     is_mana_ability: bool = False
     activation_context: ActivationContext | None = None
+    event_state: Any = None
 
 
 # ---------------------------------------------------------------------------
@@ -204,8 +212,10 @@ def stint_checked_targets(
     can still read ``chosen[0]`` / ``chosen[1]`` by position after a
     leave-and-return nulls one of them. A ``None`` at a position reads as "that
     target is illegal": the object's own predicate re-check (``getattr(None,
-    …)`` yields empty) then does nothing for it. When *context* is ``None`` the
-    targets are returned unchanged (spell copies carry no context).
+    …)`` yields empty) then does nothing for it. When *context* is ``None`` (a
+    stack object that captured none) the targets are returned unchanged; spell
+    copies **do** carry their own context (see :func:`copy_spell`) and are
+    revalidated by this same pass.
     """
     if context is None:
         return list(targets)

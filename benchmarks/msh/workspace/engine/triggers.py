@@ -66,6 +66,9 @@ class TriggerRegistration:
             (``targeting`` set) it is invoked ``effect(game, targets, context)`` —
             the targets chosen as the trigger was put on the stack and the
             :class:`~engine.stack.ActivationContext` captured then. For an
+            *untargeted* trigger with a ``capture`` hook it is invoked
+            ``effect(game, controller, event_state)`` — the immutable fire-time
+            controller and the per-fire state ``capture`` returned. For a plain
             *untargeted* trigger it is invoked ``effect(game)`` by default, or
             ``effect(game, controller)`` when it declares a second positional
             parameter — a *controller-sensitive* effect ("copy it for the
@@ -98,6 +101,19 @@ class TriggerRegistration:
             :class:`~engine.stack.ActivationContext` (with the fire-time
             *controller*) are stored on the :class:`~engine.stack.StackObject` and
             passed to ``effect`` at resolution — targets are never re-selected.
+        capture: Optional callable ``(game, event, controller) -> Any`` run **as
+            the trigger is put on the stack** (rule 603.3 — a trigger's
+            event-specific facts are fixed then, not at resolution). *controller*
+            is the same fire-time controller ``targeting`` receives. Its return
+            value — arbitrary immutable per-fire state — is stored on the
+            :class:`~engine.stack.StackObject` as
+            :attr:`~engine.stack.StackObject.event_state` and passed to ``effect``
+            as ``effect(game, controller, event_state)`` at resolution. This is
+            how a trigger correlates itself to *this* firing's facts (Thousand-Year
+            Storm captures the triggering spell's ``StackObject`` and its copy
+            count) **without** a mutable source-level slot that later firings would
+            clobber. ``capture`` is for *untargeted* triggers (a targeted trigger
+            uses ``targeting`` + the effect's ``targets``/``context`` instead).
     """
 
     event_type: type[TriggeredEvent]
@@ -106,6 +122,7 @@ class TriggerRegistration:
     source: Any
     controller: Player
     targeting: Callable[..., Any] | None = None
+    capture: Callable[..., Any] | None = None
 
 
 class TriggerManager:
@@ -205,6 +222,30 @@ class TriggerManager:
                         g, _obj.targets, _obj.activation_context
                     )
                 )
+                game.stack.push(stack_obj)
+            elif trigger.capture is not None:
+                # Untargeted trigger that captures per-fire event state (rule
+                # 603.3): capture NOW (fire time) and store it on this trigger's
+                # own StackObject, so two pending triggers of the same source hold
+                # independent state. The effect reads the immutable fire-time
+                # controller and that state — never a mutable source-level slot.
+                event_state = trigger.capture(game, event, fire_controller)
+                context = capture_activation_context(
+                    game, trigger.source, fire_controller, []
+                )
+                stack_obj = StackObject(
+                    source=trigger.source,
+                    controller=fire_controller,
+                    activation_context=context,
+                    event_state=event_state,
+                )
+                effect = trigger.effect
+                stack_obj.on_resolve = (
+                    lambda g, _c=fire_controller, _e=effect, _s=event_state: _e(
+                        g, _c, _s
+                    )
+                )
+                game.stack.push(stack_obj)
             else:
                 effect = trigger.effect
                 if _effect_wants_controller(effect):
@@ -229,7 +270,7 @@ class TriggerManager:
                         controller=fire_controller,
                         on_resolve=effect,
                     )
-            game.stack.push(stack_obj)
+                game.stack.push(stack_obj)
 
     def get_triggers(self) -> list[TriggerRegistration]:
         """Return a shallow copy of all registered triggers."""

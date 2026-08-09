@@ -129,3 +129,77 @@ class TestTargetingQuery:
         except CastingError:
             return
         raise AssertionError("expected CastingError for no legal target")
+
+
+class TestQuerySpellTargetProtection:
+    """`engine.casting.query_spell_target` — the shared spell-retargeting path
+    (used by spell copies, e.g. Thousand-Year Storm) — applies the COMPLETE
+    cast-time legality contract *for the copied spell*, including protection:
+    a permanent with protection from the spell is absent from the option set,
+    and the query's provenance identifies the spell (not the copying source)."""
+
+    def _red_instant(self, filter_fn):
+        from engine.types import ManaType, TargetRequirement
+
+        spell = Instant(
+            name="Fire Bolt",
+            mana_cost=ManaCost(pips={ManaType.RED: 1}),
+            card_types={CardType.INSTANT},
+        )
+
+        def get_targets(game):
+            return [TargetRequirement(
+                filter_fn=filter_fn, description="target creature", zone=Zone.BATTLEFIELD)]
+
+        spell.get_targets = get_targets  # type: ignore[method-assign]
+        return spell
+
+    def test_protected_permanent_absent_from_option_set(self):
+        from engine.casting import query_spell_target
+        from engine.protection import ProtectionAbility
+        from engine.types import Color, ManaType
+
+        p0, p1 = PrefPlayer("P0"), PrefPlayer("P1")
+        game = GameState([p0, p1])
+        plain = _creature("Bear")
+        warded = _creature("Warded")
+        warded.protections = [ProtectionAbility(quality=Color.RED)]
+        _put(game, p1, Zone.BATTLEFIELD, plain)
+        _put(game, p1, Zone.BATTLEFIELD, warded)
+
+        spell = self._red_instant(
+            lambda o: CardType.CREATURE in getattr(o, "card_types", set()))
+        _put(game, p0, Zone.STACK, spell)
+
+        p0.prefs = []  # take the first offered option
+        chosen = query_spell_target(game, p0, spell, spell.get_targets(game)[0])
+
+        query = p0.transcript[-1]
+        # Option-set invariant: the red-protected creature is never offered; the
+        # unprotected one is, and is chosen.
+        assert not any(("name", "Warded") in opt.attrs for opt in query.options)
+        assert any(("name", "Bear") in opt.attrs for opt in query.options)
+        assert chosen is plain
+        # Provenance: the query is raised as the spell (stack zone), by name.
+        assert any(("name", "Fire Bolt") in s.ref.card for s in query.source)
+
+    def test_unprotected_permanent_selectable(self):
+        from engine.casting import query_spell_target
+        from engine.protection import ProtectionAbility
+        from engine.types import Color, ManaType
+
+        p0, p1 = PrefPlayer("P0"), PrefPlayer("P1")
+        game = GameState([p0, p1])
+        # Protection from BLUE does not shield against a RED spell.
+        blue_warded = _creature("BlueWarded")
+        blue_warded.protections = [ProtectionAbility(quality=Color.BLUE)]
+        _put(game, p1, Zone.BATTLEFIELD, blue_warded)
+
+        spell = self._red_instant(
+            lambda o: CardType.CREATURE in getattr(o, "card_types", set()))
+        _put(game, p0, Zone.STACK, spell)
+
+        p0.prefs = []
+        chosen = query_spell_target(game, p0, spell, spell.get_targets(game)[0])
+        assert chosen is blue_warded
+        assert any(("name", "BlueWarded") in opt.attrs for opt in p0.transcript[-1].options)

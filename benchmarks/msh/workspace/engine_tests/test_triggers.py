@@ -782,3 +782,98 @@ class TestFireTimeControllerPipeline:
         game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
         resolve_top_of_stack(game)
         assert calls == ["ran"]
+
+
+class TestTriggerCaptureChannel:
+    """The `capture` channel fixes per-fire event state on each trigger's own
+    StackObject (rule 603.3) and passes it — with the fire-time controller — to
+    the effect, so a source's later firings never clobber an earlier trigger's
+    state. This is the mechanism Thousand-Year Storm uses to correlate a trigger
+    to its triggering spell + copy count."""
+
+    def _game(self):
+        from test_utils import create_game
+        game = create_game()
+        game.active_player_index = 0
+        return game, game.players[0], game.players[1]
+
+    def test_capture_runs_at_fire_time_and_threads_state_and_controller(self):
+        """`capture(game, event, controller)` runs when the trigger goes on the
+        stack; its result is stored as event_state and passed to
+        effect(game, controller, event_state) at resolution."""
+        from engine.stack import resolve_top_of_stack
+        game, p1, p2 = self._game()
+        src = Creature(name="Src", owner=p1, controller=p1)
+        captured_at_fire = {}
+        seen = {}
+
+        def _capture(g, event, controller):
+            captured_at_fire["controller"] = controller
+            return {"tag": "fire-state", "amount": event.amount}
+
+        def _effect(g, controller, state):
+            seen["controller"] = controller
+            seen["state"] = state
+
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=DealsDamageTriggeredEvent,
+            condition=None, effect=_effect, source=src, controller=p1,
+            capture=_capture))
+        game.trigger_manager.fire_event(game, DealsDamageTriggeredEvent(amount=7))
+        # State is captured at fire time and stored on the stack object.
+        so = game.stack.peek()
+        assert so.event_state == {"tag": "fire-state", "amount": 7}
+        assert captured_at_fire["controller"] is p1
+        resolve_top_of_stack(game)
+        assert seen["controller"] is p1
+        assert seen["state"] == {"tag": "fire-state", "amount": 7}
+
+    def test_capture_uses_immutable_fire_time_controller(self):
+        """The controller passed to capture/effect is the fire-time controller,
+        even if the source changes hands before resolution."""
+        from engine.stack import resolve_top_of_stack
+        game, p1, p2 = self._game()
+        src = Creature(name="Src", owner=p1, controller=p1)
+        seen = {}
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None,
+            effect=lambda g, c, s: seen.setdefault("controller", c),
+            source=src, controller=p1,
+            capture=lambda g, e, c: c))
+        src.controller = p2                       # changes hands before fire
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        assert game.stack.peek().controller is p2
+        assert game.stack.peek().event_state is p2
+        src.controller = p1                       # changes AGAIN before resolution
+        resolve_top_of_stack(game)
+        assert seen["controller"] is p2           # fire-time, not resolution-time
+
+    def test_two_pending_captures_are_independent(self):
+        """Two firings of the same source's trigger capture independent state on
+        their own stack objects — a later firing never overwrites an earlier
+        trigger's captured facts."""
+        from engine.stack import resolve_top_of_stack
+        game, p1, p2 = self._game()
+        src = Creature(name="Src", owner=p1, controller=p1)
+        counter = {"n": 0}
+        results = []
+
+        def _capture(g, event, controller):
+            counter["n"] += 1
+            return counter["n"]                   # 1 on the first fire, 2 on the second
+
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None,
+            effect=lambda g, c, s: results.append(s),
+            source=src, controller=p1,
+            capture=_capture))
+
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())  # state 1
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())  # state 2
+        pending = [so.event_state for so in game.stack._items]
+        assert sorted(pending) == [1, 2]          # independent, not both 2
+        resolve_top_of_stack(game)                # LIFO: the second fire (state 2)
+        resolve_top_of_stack(game)                # then the first (state 1)
+        assert results == [2, 1]
