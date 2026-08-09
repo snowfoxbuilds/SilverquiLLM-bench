@@ -212,18 +212,20 @@ def _battlefield_cost_reduction(
     return total
 
 
-def get_cost_reduction(
+def _raw_cost_reduction(
     game: GameState,
     card: CardImpl,
     controller: Player,
     targets: list[Any] | None = None,
 ) -> int:
-    """Return the total generic mana reduction for casting *card*.
+    """Return the total generic reduction available for *card* — the spell's
+    own :meth:`~engine.card.CardImpl.cost_reduction` (target-aware) plus the
+    battlefield sweep — as a non-negative amount, **unclamped**.
 
-    Combines the spell's own :meth:`~engine.card.CardImpl.cost_reduction`
-    (target-aware when *targets* is supplied) with the battlefield sweep in
-    :func:`_battlefield_cost_reduction`, then clamps so the generic portion of
-    the mana cost cannot go below 0 (colored pips are never reduced).
+    The clamp against a specific cost's generic pips is applied by the caller
+    against whichever base cost is selected (the normal cost or a chosen
+    alternative), so the reduction never eats colored pips. :func:`cast_spell`
+    needs the unclamped figure to clamp per candidate cost.
     """
     # Ensure card.controller is set so the hook can reference "you" / the
     # casting player even when the card was never explicitly assigned one.
@@ -234,28 +236,51 @@ def get_cost_reduction(
     # side-effect (get_cost_reduction is a query, not a mutation).
     card.controller = prev_controller
     raw += _battlefield_cost_reduction(game, card, controller)
+    return max(0, raw)
+
+
+def get_cost_reduction(
+    game: GameState,
+    card: CardImpl,
+    controller: Player,
+    targets: list[Any] | None = None,
+) -> int:
+    """Return the total generic mana reduction for casting *card*'s normal cost.
+
+    Combines the spell's own :meth:`~engine.card.CardImpl.cost_reduction`
+    (target-aware when *targets* is supplied) with the battlefield sweep in
+    :func:`_battlefield_cost_reduction`, then clamps so the generic portion of
+    the (normal) mana cost cannot go below 0 (colored pips are never reduced).
+    """
     generic = card.mana_cost.generic if card.mana_cost else 0
-    return max(0, min(raw, generic))
+    return max(0, min(_raw_cost_reduction(game, card, controller, targets), generic))
 
 
 def _choose_cost(
     game: GameState,
     player: Player,
     card: CardImpl,
-    normal_cost: ManaCost,
-    alternatives: list[ManaCost],
+    payable: list[tuple[int, ManaCost]],
 ) -> ManaCost:
-    """Ask the caster whether to pay the normal cost or an alternative.
+    """Return the (already-reduced) mana cost the caster pays.
 
-    Offered only when *alternatives* is non-empty. Index 0 is the normal cost;
-    later indices are the alternatives in order. An alternative fully replaces
-    the mana cost (rule 118.9).
+    *payable* is a list of ``(base_index, reduced_cost)`` pairs — one per base
+    cost the player can actually pay — where ``base_index`` is the candidate's
+    position in ``[normal_cost, *alternatives]``. Unpayable candidates are never
+    offered (rule 601.2f: a player can only choose to pay a cost they can pay).
+
+    When only one candidate is payable it is returned without asking. Otherwise
+    the caster answers a Player Query whose option indices are the base indices,
+    so a recorded choice ("the alternative", index 1) still maps unambiguously
+    even though unpayable candidates were filtered out.
     """
+    if len(payable) == 1:
+        return payable[0][1]
+
     from engine.decisions import Decision
     from engine.queries import PlayerQuery, ask
 
-    costs = [normal_cost, *alternatives]
-    options = tuple(Decision.ability(index=i) for i in range(len(costs)))
+    options = tuple(Decision.ability(index=i) for i, _ in payable)
     query = PlayerQuery(
         source=(_source_decision(game, card),),
         prompt="Choose a cost to pay",
@@ -265,7 +290,8 @@ def _choose_cost(
     )
     answer = ask(player, query)
     idx = dict(answer.selected[0].attrs)["index"]
-    return costs[idx]
+    by_index = {i: cost for i, cost in payable}
+    return by_index[idx]
 
 
 def _apply_cost_reduction(cost: ManaCost, reduction: int) -> ManaCost:
@@ -372,20 +398,32 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     # explicit controller assignment.
     if card.controller is None:
         card.controller = player
-    reduction = get_cost_reduction(game, card, player, targets=chosen_targets)
-    effective_cost = _apply_cost_reduction(card.mana_cost, reduction) if reduction > 0 else card.mana_cost
 
-    # Alternative costs (rule 118.9) — the caster may pay an alternative that
-    # fully replaces the (reduced) mana cost, e.g. Blasphemous Edict's {B}.
-    alternatives = card.alternative_costs(game)
-    if alternatives:
-        effective_cost = _choose_cost(game, player, card, effective_cost, alternatives)
+    # Select the mana cost to pay (rule 601.2f):
+    #   1. Enumerate the base costs — the normal mana cost and any alternative
+    #      costs (rule 118.9) the card offers. An alternative *replaces* the
+    #      normal cost outright (e.g. Blasphemous Edict's {B} for {3}{B}{B}); it
+    #      is a separate base cost, not a reduction of the normal one.
+    #   2. Apply cost reductions to each base cost afterward, clamped to that
+    #      cost's own generic component so colored pips are never reduced.
+    #   3. Keep only the candidates the player can actually pay, then choose
+    #      among them (a Player Query fires only when more than one is payable).
+    raw_reduction = _raw_cost_reduction(game, card, player, targets=chosen_targets)
+    base_costs = [card.mana_cost, *card.alternative_costs(game)]
+    payable: list[tuple[int, ManaCost]] = []
+    for index, base in enumerate(base_costs):
+        clamped = min(raw_reduction, base.generic) if raw_reduction > 0 else 0
+        reduced = _apply_cost_reduction(base, clamped) if clamped > 0 else base
+        if player.mana_pool.can_pay(reduced):
+            payable.append((index, reduced))
 
-    if not player.mana_pool.can_pay(effective_cost):
+    if not payable:
         # Rollback: move card from stack zone back to hand
         stack_zone.remove(card)
         hand.add(card)
         raise CastingError(f"Cannot cast {card.name!r} — insufficient mana")
+
+    effective_cost = _choose_cost(game, player, card, payable)
 
     # TODO: Phase 3 — support player choice for generic mana payment to optimize Converge color count
     player.mana_pool.pay(effective_cost)

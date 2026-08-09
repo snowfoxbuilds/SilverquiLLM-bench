@@ -35,6 +35,19 @@ Tests answer those queries with **Intents** (see `test_utils.md`).
    anything that already exists in `engine/` — no renaming, no refactoring.
    Restructuring the engine will break the grader's imports and zero your score.
 
+4. **Life mutation goes through `gain_life` / `lose_life`** — A card
+   implementation must change a player's life **only** by calling
+   `engine.game.gain_life(game, player, amount)` or
+   `engine.game.lose_life(game, player, amount)`. Never assign `player.life`
+   directly (`player.life += …` / `-= …`). These helpers fire
+   `GainsLifeTriggeredEvent` / `LosesLifeTriggeredEvent`, so life-triggered
+   abilities (Ajani's Pridemate, "whenever you lose life", drains) fire on
+   their own — do not hand-roll those events either. Combat/spell *damage* is
+   separate (it already fires `LosesLifeTriggeredEvent` from `deal_damage`); a
+   life *payment* as a cost routes through `lose_life`. Direct `.life` mutation
+   in a card impl is rejected by the AST guard
+   (`engine_tests/test_card_impl_ast_guard.py`, rule (d)).
+
 These rules are derived from the project's Workspace Contract decisions
 (maintained outside this workspace). They ensure deterministic grading.
 

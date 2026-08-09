@@ -344,18 +344,53 @@ def resolve_stack(game: GameState) -> None:
     _resolve_top_of_stack(game)
 
 
-def _resolve_top_of_stack(game: GameState) -> None:
-    """Resolve the top spell/ability on the stack by passing priority.
+def activate_card_ability(
+    game: GameState,
+    player: Any,
+    source_card: Any,
+    index: int = 0,
+) -> None:
+    """Activate ``source_card``'s activated ability ``index`` through the real
+    engine path — the same bridge the replay executor uses.
 
-    Both players pass priority so the top of the stack resolves.
-    Repeats until the stack is empty.
+    Builds an :class:`~engine.abilities.ActivatedAbilityInstance` from the
+    card's :class:`~engine.card.ActivatedAbility` (threading its ``targeting``
+    hook) and calls :func:`~engine.abilities.activate_ability`, which chooses
+    the ability's targets **before** paying costs, stores them on the stack
+    object, and pushes the effect. The caller resolves the stack afterward
+    (e.g. via :func:`resolve_stack`) to run the ability's effect.
+
+    Raises :class:`~engine.abilities.AbilityError` when the ability cannot be
+    activated (no legal target, unmet timing, or unpayable cost) — no cost is
+    spent in that case.
     """
-    from engine.state_based_actions import resolve_state_based_actions
+    from engine.abilities import ActivatedAbilityInstance, activate_ability
+
+    ability = source_card.get_activated_abilities()[index]
+    instance = ActivatedAbilityInstance(
+        source=source_card,
+        controller=player,
+        cost=ability.cost,
+        effect=ability.effect,
+        is_mana_ability=False,
+        description=ability.description,
+        targeting=getattr(ability, "targeting", None),
+    )
+    activate_ability(game, player, instance)
+
+
+def _resolve_top_of_stack(game: GameState) -> None:
+    """Resolve the whole stack via the engine's resolution primitive.
+
+    Delegates to :func:`engine.stack.resolve_top_of_stack` so tests settle the
+    stack exactly as :func:`~engine.stack.priority_loop` does — state-based
+    actions run and continuous effects re-derive after each resolution (no
+    per-test ``apply_all``). Repeats until the stack is empty.
+    """
+    from engine.stack import resolve_top_of_stack
 
     while not game.stack.is_empty():
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-        resolve_state_based_actions(game)
+        resolve_top_of_stack(game)
 
 
 # ---------------------------------------------------------------------------

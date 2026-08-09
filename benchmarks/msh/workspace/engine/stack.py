@@ -143,6 +143,30 @@ def check_state_based_actions(game: GameState) -> None:
     resolve_state_based_actions(game)
 
 
+def resolve_top_of_stack(game: GameState) -> None:
+    """Pop and resolve the top object on the stack, then settle the game.
+
+    After the object resolves, state-based actions are checked and continuous
+    effects are re-derived so any effect the resolution just registered — for
+    example an until-end-of-turn buff added by a triggered ability such as
+    Adventuring Gear's landfall — applies immediately, not only at the next
+    turn-boundary cleanup. ``apply_all`` is idempotent (reset-then-reapply), so
+    re-deriving here never double-applies effects already in the manager.
+
+    This is the single resolution primitive shared by :func:`priority_loop`
+    (the normal-game path) and the test-suite stack resolver, so the mid-turn
+    invalidation is production behaviour rather than a per-test apply_all.
+    """
+    if game.stack.is_empty():
+        return
+    obj = game.stack.pop()
+    obj.on_resolve(game)
+    check_state_based_actions(game)
+    effect_manager = getattr(game, "effect_manager", None)
+    if effect_manager is not None and len(effect_manager) > 0:
+        effect_manager.apply_all(game)
+
+
 def _get_legal_actions(game: GameState, player: Player) -> list[Any]:
     """Return the legal actions available to *player*.
 
@@ -220,8 +244,7 @@ def priority_loop(game: GameState) -> None:
         if game.stack.is_empty():
             return  # Advance to next phase/step
 
-        # Resolve top of stack (LIFO).
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-        check_state_based_actions(game)
+        # Resolve top of stack (LIFO) — settles SBAs and re-derives continuous
+        # effects so a just-registered mid-turn effect applies immediately.
+        resolve_top_of_stack(game)
         # Active player receives priority again — outer loop continues.

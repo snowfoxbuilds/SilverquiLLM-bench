@@ -50,8 +50,10 @@ class TestAdventuringGearBehaviour:
         land = Land(name="Forest", owner=p1, controller=p1)
         set_board_state(game, 0, hand=[land])
         move_to_zone(game, land, Zone.HAND, Zone.BATTLEFIELD)
-        priority_loop(game)  # resolve the landfall trigger
-        game.effect_manager.apply_all(game)
+        # Resolving the landfall trigger through the real stack applies the
+        # +2/+2 immediately — the engine re-derives continuous effects after a
+        # stack object resolves, so no manual apply_all is needed here.
+        priority_loop(game)
         assert (bear.power, bear.toughness) == (4, 4)
 
         cleanup_mechanical(game)  # the +2/+2 is until end of turn

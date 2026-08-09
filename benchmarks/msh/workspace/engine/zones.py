@@ -305,11 +305,27 @@ def move_to_zone(
         game.trigger_manager.unregister(card)
         game.replacement_manager.unregister(card)
 
+        # An Equipment that itself leaves the battlefield detaches: clear
+        # attached_to, clear its internal effect references, and run its detach
+        # hook exactly once (rule 704.5q keeps it attached only while both are
+        # on the battlefield). This leaves no stale attachment state in the
+        # graveyard/hand/exile/stack copy, so the Equipment can be equipped
+        # again after it is bounced, blinked, destroyed, or replayed. The
+        # equipped-creature-leaves case is handled separately by the attachment
+        # SBA, which detaches while the Equipment stays on the battlefield.
+        if getattr(card, "is_equipment", False) and getattr(card, "attached_to", None) is not None:
+            detach = getattr(card, "detach", None)
+            if callable(detach):
+                detach(game)
+                removed_source_effects = True
+
         # A permanent that leaves the battlefield stops producing its
         # continuous effects immediately (rule 603/611) — remove every effect
         # this card sources so a lord/anthem's buff vanishes without waiting
         # for the next turn-boundary cleanup. Mirrors the replay executor's
-        # per-card cleanup so the executor can rely on the engine.
+        # per-card cleanup so the executor can rely on the engine. (For an
+        # Equipment the detach above already removed its buff effects; this
+        # sweep catches any other effect the card still sources.)
         effect_manager = getattr(game, "effect_manager", None)
         if effect_manager is not None:
             for effect in effect_manager.get_effects_by_source(card):

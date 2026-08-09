@@ -49,11 +49,19 @@ class ActivatedAbilityInstance:
         cost: A callable ``(game, source) -> bool`` that checks and pays
             the cost. Returns ``True`` if the cost was successfully paid,
             ``False`` otherwise.
-        effect: A callable ``(game) -> None`` that applies the ability's
-            effect when it resolves.
+        effect: A callable that applies the ability's effect when it resolves.
+            Invoked ``effect(game)`` for an untargeted ability, or
+            ``effect(game, targets)`` when ``targeting`` is set (the targets are
+            the ones chosen at activation and stored on the stack object).
         is_mana_ability: Whether this is a mana ability (resolves
             immediately without using the stack).
         description: Human-readable description of the ability.
+        targeting: Optional callable ``(game, source, controller) -> list | None``
+            run **at activation, before costs are paid**. Returns the chosen
+            targets, or ``None`` to signal no legal target (the ability then
+            cannot be activated and no cost is spent). The result is stored on
+            the :class:`~engine.stack.StackObject` and passed to ``effect`` at
+            resolution — the target is never re-selected there.
     """
 
     source: Any
@@ -62,6 +70,7 @@ class ActivatedAbilityInstance:
     effect: Callable[..., None]
     is_mana_ability: bool = False
     description: str = ""
+    targeting: Callable[..., Any] | None = None
 
 
 @dataclass
@@ -208,23 +217,44 @@ def _activate_regular_ability(
             "Cannot activate ability — source's activated abilities are suppressed"
         )
 
-    # 2. Pay costs
+    # 2. Choose targets (rule 602.2b/2c) — BEFORE paying costs, so an ability
+    #    with no legal target cannot be activated and spends no mana. The chosen
+    #    targets are stored on the stack object and are not re-selected at
+    #    resolution (see KEY_DECISIONS: activation-time ability targeting).
+    chosen_targets: list[Any] = []
+    if ability.targeting is not None:
+        controller = getattr(ability.source, "controller", None) or player
+        chosen = ability.targeting(game, ability.source, controller)
+        if chosen is None:
+            raise AbilityError("Cannot activate ability — no legal target")
+        chosen_targets = list(chosen)
+
+    # 3. Pay costs
     cost_paid = ability.cost(game, ability.source)
     if not cost_paid:
         raise AbilityError("Cannot activate ability — cost could not be paid")
 
-    # 3. Resolve or push
+    # 4. Resolve or push
     if ability.is_mana_ability:
         # Mana abilities resolve immediately without using the stack.
         ability.effect(game)
     else:
-        # Push to stack for resolution.
+        # Push to stack for resolution. A targeted ability's effect reads the
+        # activation-time targets off the stack object; an untargeted effect
+        # keeps the historical ``effect(game)`` signature.
         stack_obj = StackObject(
             source=ability.source,
             controller=player,
-            on_resolve=ability.effect,
+            targets=chosen_targets,
             is_mana_ability=False,
         )
+        if ability.targeting is not None:
+            effect = ability.effect
+            stack_obj.on_resolve = lambda g, _obj=stack_obj, _effect=effect: _effect(
+                g, _obj.targets
+            )
+        else:
+            stack_obj.on_resolve = ability.effect
         game.stack.push(stack_obj)
 
 

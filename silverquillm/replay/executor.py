@@ -1643,6 +1643,7 @@ class ReplayExecutor:
             effect=abilities[0].effect,
             is_mana_ability=False,
             description=abilities[0].description,
+            targeting=getattr(abilities[0], "targeting", None),
         )
         name = action.card_name or getattr(source_card, "name", "?")
         try:

@@ -47,13 +47,24 @@ class ActivatedAbility:
 
     Attributes:
         cost: A callable that checks/pays the cost given the game state.
-        effect: A callable that applies the effect given the game state.
+        effect: A callable that applies the effect. For an untargeted ability
+            it is invoked ``effect(game)``; for a *targeted* ability (``targeting``
+            is set) it is invoked ``effect(game, targets)`` with the targets that
+            were chosen at activation and stored on the stack object.
+        targeting: Optional callable ``(game, source, controller) -> list | None``
+            run **at activation, before costs are paid** (rule 602.2b/2c). It
+            returns the chosen targets (a list; may be empty for a modal choice
+            that needs none) or ``None`` to signal there is no legal target — in
+            which case the ability cannot be activated and no cost is spent. The
+            returned targets are stored on the :class:`~engine.stack.StackObject`
+            and are **not** re-selected at resolution (see KEY_DECISIONS).
         description: Human-readable description of the ability.
     """
 
     cost: Callable[..., Any]
     effect: Callable[..., Any]
     description: str = ""
+    targeting: Callable[..., Any] | None = None
 
 
 @dataclass
@@ -562,6 +573,24 @@ class Equipment(Artifact):
             return False
         return _obj_on_battlefield(game, self) and _obj_on_battlefield(game, creature)
 
+    def _legal_equip_targets(self, game: GameState) -> list[Any]:
+        """Creatures this Equipment's controller controls — the legal equip
+        targets (rule 702.6e)."""
+        controller = getattr(self, "controller", None)
+        if controller is None:
+            return []
+        return [
+            obj
+            for obj in game.get_battlefield(controller).get_all()
+            if CardType.CREATURE in getattr(obj, "card_types", set())
+        ]
+
+    def _is_legal_equip_target(self, game: GameState, target: Any) -> bool:
+        """``True`` if *target* is (still) a creature this Equipment's
+        controller controls — used to revalidate the activation-time target
+        when the equip ability resolves."""
+        return target is not None and target in self._legal_equip_targets(game)
+
     def equip(self, target: Any, game: GameState) -> None:
         """Attach to *target* (detaching from any previous creature first) and
         register the buff effects. Re-derives continuous effects so the buff
@@ -636,33 +665,40 @@ class Equipment(Artifact):
             controller.mana_pool.pay(equipment.equip_cost)
             return True
 
-        def _effect(game: GameState) -> None:
+        def _targeting(game: GameState, source: Any, controller: Any) -> list[Any] | None:
+            # Choose the equip target at activation, before costs are paid.
+            # Return None when no legal target exists so the ability cannot be
+            # activated and no mana is spent (rule 602.2b — no legal target).
             from engine.card_queries import choose_object
 
-            controller = getattr(equipment, "controller", None)
-            if controller is None:
-                return
-            # Equip can only target a creature its controller controls.
-            creatures = [
-                obj
-                for obj in game.get_battlefield(controller).get_all()
-                if CardType.CREATURE in getattr(obj, "card_types", set())
-            ]
-            if not creatures:
-                return
+            legal = equipment._legal_equip_targets(game)
+            if not legal:
+                return None
             target = choose_object(
                 game,
                 controller,
-                creatures,
+                legal,
                 "Choose a creature to equip",
                 source_card=equipment,
             )
-            if target is not None:
-                equipment.equip(target, game)
+            if target is None:
+                return None
+            return [target]
+
+        def _effect(game: GameState, targets: list[Any]) -> None:
+            # Resolve using the target chosen at activation (stored on the stack
+            # object) — never re-select here. Revalidate: if the target is no
+            # longer a legal equip target the ability resolves without
+            # attaching, and does not retarget (rule 608.2b/608.2c).
+            target = targets[0] if targets else None
+            if target is None or not equipment._is_legal_equip_target(game, target):
+                return
+            equipment.equip(target, game)
 
         return ActivatedAbility(
             cost=_cost,
             effect=_effect,
+            targeting=_targeting,
             description=f"Equip {equipment.equip_cost}",
         )
 
