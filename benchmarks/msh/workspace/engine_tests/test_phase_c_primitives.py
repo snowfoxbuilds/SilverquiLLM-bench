@@ -65,6 +65,47 @@ def _equip_via_ability(game, player, equipment, target):
         player.end_intent("equip")
 
 
+def _push_equip_activation(game, player, equipment, target):
+    """Push an equip activation onto the stack targeting *target*, capturing the
+    activation context exactly as the engine does but bypassing the
+    sorcery-speed/empty-stack timing gate — so two activations of the same
+    Equipment can coexist on the stack (the scenario the per-activation context
+    isolation must survive). Returns the pushed :class:`StackObject`."""
+    from engine.stack import ActivationContext, StackObject
+
+    bf = Zone.BATTLEFIELD.value
+    ability = equipment.get_activated_abilities()[0]
+    context = ActivationContext(
+        controller=player,
+        source_instance_id=game.refs.instance_id(equipment, bf),
+        target_instance_ids=(game.refs.instance_id(target, bf),),
+    )
+    obj = StackObject(
+        source=equipment, controller=player, targets=[target],
+        activation_context=context,
+    )
+    effect = ability.effect
+    obj.on_resolve = (
+        lambda g, _o=obj, _e=effect: _e(g, _o.targets, _o.activation_context)
+    )
+    game.stack.push(obj)
+    return obj
+
+
+def _spy_on_answer(player):
+    """Replace ``player.answer`` with a spy; return (calls, restore) so a test
+    can assert no Player Query was raised (``calls == []``)."""
+    calls: list = []
+    original = player.answer
+
+    def _spy(query):
+        calls.append(query)
+        return original(query)
+
+    player.answer = _spy
+    return calls, (lambda: setattr(player, "answer", original))
+
+
 def _creature(name, p, power=2, tough=2):
     return Creature(name=name, base_power=power, base_toughness=tough, owner=p, controller=p)
 
@@ -273,6 +314,121 @@ class TestEffectTiming:
 
 
 # ---------------------------------------------------------------------------
+# 3b. Resolution settlement order: resolve → re-derive → SBA
+# ---------------------------------------------------------------------------
+
+
+def _pt_effect(target, dp, dt):
+    """A permanent +dp/+dt continuous effect on *target* (layer 7c)."""
+    def _apply(_g):
+        target.modified_power += dp
+        target.modified_toughness += dt
+
+    return ContinuousEffect(
+        source=object(), layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT,
+        apply=_apply, duration=DURATION_PERMANENT,
+    )
+
+
+def _resolving(on_resolve):
+    """A minimal StackObject that runs *on_resolve* when it resolves."""
+    from engine.stack import StackObject
+
+    return StackObject(source=object(), controller=None, on_resolve=on_resolve)
+
+
+class TestResolutionOrder:
+    def test_resolving_buff_saves_damaged_creature(self):
+        """A 2/2 with two marked damage survives when a resolving ability creates
+        an applicable +2/+2 continuous effect — re-derive precedes the
+        lethal-damage SBA, so the creature is a 4/4 with 2 damage when checked."""
+        from engine.stack import resolve_top_of_stack
+
+        game = create_game()
+        p1 = game.players[0]
+        bear = _creature("Bear", p1, 2, 2)
+        set_board_state(game, 0, battlefield=[bear])
+        bear.damage_marked = 2  # lethal for a 2/2 as-is
+
+        game.stack.push(_resolving(
+            lambda g: g.effect_manager.add(_pt_effect(bear, 2, 2))
+        ))
+        resolve_top_of_stack(game)
+
+        assert game.get_battlefield(p1).contains(bear)  # survived
+        assert (bear.power, bear.toughness) == (4, 4)
+        assert bear.damage_marked == 2
+
+    def test_resolving_debuff_kills_creature_before_priority(self):
+        """A resolving -2/-2 continuous effect moves a 2/2 to the graveyard
+        before priority returns — re-derive (→ 0/0) precedes the zero-toughness
+        SBA."""
+        from engine.stack import resolve_top_of_stack
+
+        game = create_game()
+        p1 = game.players[0]
+        bear = _creature("Bear", p1, 2, 2)
+        set_board_state(game, 0, battlefield=[bear])
+
+        game.stack.push(_resolving(
+            lambda g: g.effect_manager.add(_pt_effect(bear, -2, -2))
+        ))
+        resolve_top_of_stack(game)
+
+        assert not game.get_battlefield(p1).contains(bear)
+        assert game.get_graveyard(p1).contains(bear)
+
+    def test_removing_last_effect_during_resolution_resets(self):
+        """Removing the last active effect during resolution resets the affected
+        permanent rather than leaving stale modified characteristics — the
+        resolver always re-derives, even when the effect manager becomes empty."""
+        from engine.stack import resolve_top_of_stack
+
+        game = create_game()
+        p1 = game.players[0]
+        bear = _creature("Bear", p1, 2, 2)
+        set_board_state(game, 0, battlefield=[bear])
+        eff = game.effect_manager.add(_pt_effect(bear, 2, 2))
+        game.effect_manager.apply_all(game)
+        assert (bear.power, bear.toughness) == (4, 4)
+        assert len(game.effect_manager) == 1
+
+        game.stack.push(_resolving(lambda g: g.effect_manager.remove(eff)))
+        resolve_top_of_stack(game)
+
+        assert len(game.effect_manager) == 0
+        assert (bear.power, bear.toughness) == (2, 2)  # reset, not left at 4/4
+
+    def test_casting_resolve_top_matches_priority_loop_settlement(self):
+        """engine.casting.resolve_top and priority_loop share one resolution
+        primitive, so they settle a resolving -2/-2 identically (the creature
+        dies before priority returns in both)."""
+        from engine.casting import resolve_top
+        from engine.stack import priority_loop
+
+        def _scenario():
+            game = create_game()
+            p1 = game.players[0]
+            bear = _creature("Bear", p1, 2, 2)
+            set_board_state(game, 0, battlefield=[bear])
+            game.stack.push(_resolving(
+                lambda g: g.effect_manager.add(_pt_effect(bear, -2, -2))
+            ))
+            return game, p1, bear
+
+        ga, pa, ba = _scenario()
+        resolve_top(ga)
+        gb, pb, bb = _scenario()
+        priority_loop(gb)
+
+        # Both settled the same way: creature dead, off the battlefield.
+        assert ga.get_battlefield(pa).contains(ba) is False
+        assert gb.get_battlefield(pb).contains(bb) is False
+        assert ga.get_graveyard(pa).contains(ba)
+        assert gb.get_graveyard(pb).contains(bb)
+
+
+# ---------------------------------------------------------------------------
 # 4. Equipment lifecycle
 # ---------------------------------------------------------------------------
 
@@ -403,6 +559,235 @@ class TestEquipmentLifecycle:
         resolve_stack(game)
         assert boots.attached_to is chosen       # the activation-time target
         assert boots.attached_to is not newcomer
+
+    def test_equip_illegal_timing_raises_no_query_no_cost(self):
+        """Activation outside sorcery timing is rejected before any target query
+        is raised — no query, no target intent consumed, no mana, nothing pushed."""
+        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
+
+        game = create_game()
+        p1 = game.players[0]
+        bear = _creature("Bear", p1, 2, 2)
+        boots = SwiftfootBoots(owner=p1, controller=p1)
+        set_board_state(game, 0, battlefield=[bear, boots],
+                        mana={ManaType.COLORLESS: 1})
+        game.phase = Phase.COMBAT  # not sorcery speed
+        calls, restore = _spy_on_answer(p1)
+        try:
+            with pytest.raises(AbilityError):
+                _equip_via_ability(game, p1, boots, bear)
+        finally:
+            restore()
+        assert calls == []                    # no target query raised
+        assert p1.mana_pool.total() == 1      # no mana spent
+        assert game.stack.is_empty()          # nothing pushed
+        assert boots.attached_to is None
+
+    def test_equip_source_off_battlefield_rejected_before_query(self):
+        """Activation when the Equipment is not on the battlefield is rejected
+        before querying or payment."""
+        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
+
+        game = create_game()
+        p1 = game.players[0]
+        bear = _creature("Bear", p1, 2, 2)
+        boots = SwiftfootBoots(owner=p1, controller=p1)
+        # Boots in hand — not on the battlefield.
+        set_board_state(game, 0, battlefield=[bear], hand=[boots],
+                        mana={ManaType.COLORLESS: 1})
+        game.phase = Phase.PRECOMBAT_MAIN
+        calls, restore = _spy_on_answer(p1)
+        try:
+            with pytest.raises(AbilityError):
+                _equip_via_ability(game, p1, boots, bear)
+        finally:
+            restore()
+        assert calls == []
+        assert p1.mana_pool.total() == 1
+        assert game.stack.is_empty()
+        assert boots.attached_to is None
+
+    def test_equipment_leaves_for_graveyard_before_resolution_no_attach(self):
+        """Equipment leaves for the graveyard before resolution: the ability
+        resolves without attaching; attached_to remains None."""
+        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
+
+        game = create_game()
+        p1 = game.players[0]
+        bear = _creature("Bear", p1, 2, 2)
+        boots = SwiftfootBoots(owner=p1, controller=p1)
+        set_board_state(game, 0, battlefield=[bear, boots],
+                        mana={ManaType.COLORLESS: 1})
+        game.phase = Phase.PRECOMBAT_MAIN
+        _equip_via_ability(game, p1, boots, bear)
+        assert not game.stack.is_empty()
+        move_to_zone(game, boots, Zone.BATTLEFIELD, Zone.GRAVEYARD)  # source leaves
+        resolve_stack(game)
+        assert boots.attached_to is None
+        assert game.get_graveyard(p1).contains(boots)
+
+    def test_equipment_bounced_before_resolution_no_attach_in_hand(self):
+        """Equipment is bounced before resolution: no attachment in hand."""
+        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
+
+        game = create_game()
+        p1 = game.players[0]
+        bear = _creature("Bear", p1, 2, 2)
+        boots = SwiftfootBoots(owner=p1, controller=p1)
+        set_board_state(game, 0, battlefield=[bear, boots],
+                        mana={ManaType.COLORLESS: 1})
+        game.phase = Phase.PRECOMBAT_MAIN
+        _equip_via_ability(game, p1, boots, bear)
+        move_to_zone(game, boots, Zone.BATTLEFIELD, Zone.HAND)  # bounce
+        resolve_stack(game)
+        assert boots.attached_to is None
+        assert game.get_hand(p1).contains(boots)
+
+    def test_equipment_leaves_and_returns_before_resolution_no_attach(self):
+        """Equipment leaves and returns before resolution: the old ability does
+        not attach the new stint (the returned permanent is a new object)."""
+        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
+
+        game = create_game()
+        p1 = game.players[0]
+        bear = _creature("Bear", p1, 2, 2)
+        boots = SwiftfootBoots(owner=p1, controller=p1)
+        set_board_state(game, 0, battlefield=[bear, boots],
+                        mana={ManaType.COLORLESS: 1})
+        game.phase = Phase.PRECOMBAT_MAIN
+        _equip_via_ability(game, p1, boots, bear)
+        move_to_zone(game, boots, Zone.BATTLEFIELD, Zone.GRAVEYARD)  # leaves
+        move_to_zone(game, boots, Zone.GRAVEYARD, Zone.BATTLEFIELD)  # returns (new stint)
+        resolve_stack(game)
+        assert boots.attached_to is None
+
+    def test_target_leaves_and_returns_before_resolution_no_attach(self):
+        """Target leaves and returns before resolution: no attachment to the new
+        stint (the returned creature is a new object)."""
+        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
+
+        game = create_game()
+        p1 = game.players[0]
+        bear = _creature("Bear", p1, 2, 2)
+        boots = SwiftfootBoots(owner=p1, controller=p1)
+        set_board_state(game, 0, battlefield=[bear, boots],
+                        mana={ManaType.COLORLESS: 1})
+        game.phase = Phase.PRECOMBAT_MAIN
+        _equip_via_ability(game, p1, boots, bear)
+        move_to_zone(game, bear, Zone.BATTLEFIELD, Zone.GRAVEYARD)  # leaves
+        move_to_zone(game, bear, Zone.GRAVEYARD, Zone.BATTLEFIELD)  # returns (new stint)
+        resolve_stack(game)
+        assert boots.attached_to is None
+
+    def test_equipment_controller_change_uses_ability_controller(self):
+        """Equipment changes controller while its source stays the same stint:
+        target legality remains relative to the ability's activation-time
+        controller, so the ability still attaches to that player's creature."""
+        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
+
+        game = create_game()
+        p1, p2 = game.players
+        bear = _creature("Bear", p1, 2, 2)  # a creature p1 controls
+        boots = SwiftfootBoots(owner=p1, controller=p1)
+        set_board_state(game, 0, battlefield=[bear, boots],
+                        mana={ManaType.COLORLESS: 1})
+        game.phase = Phase.PRECOMBAT_MAIN
+        _equip_via_ability(game, p1, boots, bear)  # ability controller = p1
+        # Control of the Equipment changes to the opponent (stint-preserving:
+        # it stays on the same battlefield, so no new object stint).
+        boots.controller = p2
+        resolve_stack(game)
+        # Evaluated relative to the ability controller (p1), bear is still legal.
+        assert boots.attached_to is bear
+
+    def test_target_control_change_away_from_ability_controller_no_attach(self):
+        """Target changes control away from the ability's controller before
+        resolution: 'creature you control' no longer holds, so no attach."""
+        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
+
+        game = create_game()
+        p1, p2 = game.players
+        bear = _creature("Bear", p1, 2, 2)
+        boots = SwiftfootBoots(owner=p1, controller=p1)
+        set_board_state(game, 0, battlefield=[bear, boots],
+                        mana={ManaType.COLORLESS: 1})
+        game.phase = Phase.PRECOMBAT_MAIN
+        _equip_via_ability(game, p1, boots, bear)  # ability controller = p1
+        # The target changes control to the opponent (stint-preserving).
+        bear.controller = p2
+        resolve_stack(game)
+        assert boots.attached_to is None
+
+    def test_protected_creature_absent_from_activation_option_set(self):
+        """A creature with protection from the Equipment is not in the activation
+        option set, so with no other creature there is no legal target."""
+        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
+        from engine.protection import ProtectionAbility
+
+        game = create_game()
+        p1 = game.players[0]
+        protected = _creature("Protected", p1, 2, 2)
+        protected.protections = [ProtectionAbility(
+            quality="artifacts",
+            predicate=lambda src: CardType.ARTIFACT in getattr(src, "card_types", set()),
+        )]
+        boots = SwiftfootBoots(owner=p1, controller=p1)  # an artifact
+        set_board_state(game, 0, battlefield=[protected, boots],
+                        mana={ManaType.COLORLESS: 1})
+        game.phase = Phase.PRECOMBAT_MAIN
+        with pytest.raises(AbilityError):
+            activate_card_ability(game, p1, boots)  # only creature is protected
+        assert boots.attached_to is None
+        assert p1.mana_pool.total() == 1  # no mana spent
+
+    def test_target_gains_protection_before_resolution_no_attach(self):
+        """Target gains protection from the Equipment before resolution: the
+        ability fails to attach."""
+        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
+        from engine.protection import ProtectionAbility
+
+        game = create_game()
+        p1 = game.players[0]
+        bear = _creature("Bear", p1, 2, 2)
+        boots = SwiftfootBoots(owner=p1, controller=p1)
+        set_board_state(game, 0, battlefield=[bear, boots],
+                        mana={ManaType.COLORLESS: 1})
+        game.phase = Phase.PRECOMBAT_MAIN
+        _equip_via_ability(game, p1, boots, bear)  # legal at activation
+        # The target gains protection from artifacts before the ability resolves.
+        bear.protections = [ProtectionAbility(
+            quality="artifacts",
+            predicate=lambda src: CardType.ARTIFACT in getattr(src, "card_types", set()),
+        )]
+        resolve_stack(game)
+        assert boots.attached_to is None
+
+    def test_two_equip_activations_coexist_independent_context(self):
+        """Two equip activations from the same Equipment carry independent
+        activation contexts on their stack objects — neither clobbers the other,
+        so each resolves against its own activation-time target."""
+        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
+        from engine.stack import resolve_top_of_stack
+
+        game = create_game()
+        p1 = game.players[0]
+        a = _creature("A", p1, 2, 2)
+        b = _creature("B", p1, 2, 2)
+        boots = SwiftfootBoots(owner=p1, controller=p1)
+        set_board_state(game, 0, battlefield=[a, b, boots])
+        game.phase = Phase.PRECOMBAT_MAIN
+        obj_a = _push_equip_activation(game, p1, boots, a)
+        obj_b = _push_equip_activation(game, p1, boots, b)
+        # The contexts are distinct per-activation snapshots, not a shared field.
+        assert obj_a.activation_context is not obj_b.activation_context
+        assert obj_a.targets == [a] and obj_b.targets == [b]
+        # LIFO: obj_b resolves first (attaches b), then obj_a (attaches a). If the
+        # context lived on a mutable Equipment field the second push would have
+        # overwritten the first and both would target the same creature.
+        resolve_top_of_stack(game)
+        assert boots.attached_to is b
+        resolve_top_of_stack(game)
+        assert boots.attached_to is a
 
     # --- Equipment departure lifecycle ---
 

@@ -57,7 +57,13 @@ class ActivatedAbility:
             that needs none) or ``None`` to signal there is no legal target — in
             which case the ability cannot be activated and no cost is spent. The
             returned targets are stored on the :class:`~engine.stack.StackObject`
-            and are **not** re-selected at resolution (see KEY_DECISIONS).
+            and are **not** re-selected at resolution (see KEY_DECISIONS). When
+            set, the effect is invoked ``effect(game, targets, context)`` with the
+            :class:`~engine.stack.ActivationContext` captured at activation.
+        can_activate: Optional callable ``(game, source, controller) -> bool``
+            verifying source-zone and timing restrictions with no side effects.
+            Checked **before** any target query or cost payment (rule 602.2a), so
+            an illegal activation raises no query and spends nothing.
         description: Human-readable description of the ability.
     """
 
@@ -65,6 +71,7 @@ class ActivatedAbility:
     effect: Callable[..., Any]
     description: str = ""
     targeting: Callable[..., Any] | None = None
+    can_activate: Callable[..., Any] | None = None
 
 
 @dataclass
@@ -515,6 +522,24 @@ def _obj_on_battlefield(game: GameState, obj: Any) -> bool:
     return False
 
 
+def _on_battlefield_same_stint(game: GameState, obj: Any, stint_id: Any) -> bool:
+    """Return ``True`` if *obj* is on the battlefield in the *same* stint as
+    *stint_id* (the battlefield instance id captured at activation).
+
+    ``False`` when *obj* has left the battlefield, or when it left and returned
+    (a new stint, hence a new instance id). ``stint_id`` of ``None`` — the object
+    was not on the battlefield at activation — is never a match.
+    """
+    from engine.types import Zone
+
+    if stint_id is None:
+        return False
+    for player in game.players:
+        if game.get_battlefield(player).contains(obj):
+            return game.refs.instance_id(obj, Zone.BATTLEFIELD.value) == stint_id
+    return False
+
+
 class Equipment(Artifact):
     """An Equipment artifact (rule 301.5) — a first-class attachment type.
 
@@ -573,23 +598,42 @@ class Equipment(Artifact):
             return False
         return _obj_on_battlefield(game, self) and _obj_on_battlefield(game, creature)
 
-    def _legal_equip_targets(self, game: GameState) -> list[Any]:
-        """Creatures this Equipment's controller controls — the legal equip
-        targets (rule 702.6e)."""
-        controller = getattr(self, "controller", None)
+    def _legal_equip_targets(
+        self, game: GameState, controller: Any | None = None
+    ) -> list[Any]:
+        """Creatures *controller* controls that this Equipment may target — the
+        legal equip targets (rule 702.6e).
+
+        Evaluated relative to *controller* (the equip ability's controller), not
+        the Equipment's possibly-changed current controller; defaults to the
+        Equipment's current controller when not supplied. Creatures with
+        protection from this Equipment are excluded from the option set (the T in
+        DEBT — a protected creature cannot be equipped).
+        """
+        from engine.protection import has_protection_from
+
+        if controller is None:
+            controller = getattr(self, "controller", None)
         if controller is None:
             return []
         return [
             obj
             for obj in game.get_battlefield(controller).get_all()
             if CardType.CREATURE in getattr(obj, "card_types", set())
+            and getattr(obj, "controller", None) is controller
+            and not has_protection_from(obj, self)
         ]
 
-    def _is_legal_equip_target(self, game: GameState, target: Any) -> bool:
-        """``True`` if *target* is (still) a creature this Equipment's
-        controller controls — used to revalidate the activation-time target
-        when the equip ability resolves."""
-        return target is not None and target in self._legal_equip_targets(game)
+    def _is_legal_equip_target_for(
+        self, game: GameState, target: Any, controller: Any
+    ) -> bool:
+        """``True`` if *target* is (still) a legal equip target for *controller*
+        — a creature that player controls, on the battlefield, without protection
+        from this Equipment. Used to revalidate the activation-time target
+        against the *ability's* controller when the equip ability resolves."""
+        return target is not None and target in self._legal_equip_targets(
+            game, controller
+        )
 
     def equip(self, target: Any, game: GameState) -> None:
         """Attach to *target* (detaching from any previous creature first) and
@@ -651,6 +695,18 @@ class Equipment(Artifact):
     def _make_equip_ability(self) -> ActivatedAbility:
         equipment = self
 
+        def _can_activate(game: GameState, source: Any, controller: Any) -> bool:
+            # Activation legality (rule 602.2a), checked before any target query
+            # or payment: the equip ability may only be activated while the
+            # Equipment is on the battlefield and at sorcery speed (rule 702.6e).
+            from engine.casting import is_sorcery_speed
+
+            if controller is None:
+                return False
+            if not _obj_on_battlefield(game, source):
+                return False
+            return is_sorcery_speed(game, controller)
+
         def _cost(game: GameState, source: Any) -> bool:
             from engine.casting import is_sorcery_speed
 
@@ -666,12 +722,14 @@ class Equipment(Artifact):
             return True
 
         def _targeting(game: GameState, source: Any, controller: Any) -> list[Any] | None:
-            # Choose the equip target at activation, before costs are paid.
-            # Return None when no legal target exists so the ability cannot be
-            # activated and no mana is spent (rule 602.2b — no legal target).
+            # Choose the equip target at activation, before costs are paid,
+            # relative to the activating controller. Return None when no legal
+            # target exists so the ability cannot be activated and no mana is
+            # spent (rule 602.2b — no legal target). Protected creatures are
+            # already excluded from the legal-target set.
             from engine.card_queries import choose_object
 
-            legal = equipment._legal_equip_targets(game)
+            legal = equipment._legal_equip_targets(game, controller)
             if not legal:
                 return None
             target = choose_object(
@@ -685,13 +743,39 @@ class Equipment(Artifact):
                 return None
             return [target]
 
-        def _effect(game: GameState, targets: list[Any]) -> None:
+        def _effect(
+            game: GameState, targets: list[Any], context: Any = None
+        ) -> None:
             # Resolve using the target chosen at activation (stored on the stack
-            # object) — never re-select here. Revalidate: if the target is no
-            # longer a legal equip target the ability resolves without
-            # attaching, and does not retarget (rule 608.2b/608.2c).
+            # object) — never re-select here, never retarget (rule 608.2b/608.2c).
+            # Revalidate against the activation-time context: the Equipment and
+            # the target must both still be on the battlefield in the *same*
+            # stint they were at activation (a leave-and-return is a new object),
+            # and the target must still be a legal equip target for the ability's
+            # controller (creature you control, no protection). Any failure and
+            # the ability resolves without attaching and without registering
+            # effects.
             target = targets[0] if targets else None
-            if target is None or not equipment._is_legal_equip_target(game, target):
+            if target is None or context is None:
+                return
+            # Source stint: the Equipment must be the same battlefield permanent.
+            if not _on_battlefield_same_stint(
+                game, equipment, context.source_instance_id
+            ):
+                return
+            # Target stint: the target must be the same battlefield permanent.
+            target_stint = (
+                context.target_instance_ids[0]
+                if context.target_instance_ids
+                else None
+            )
+            if not _on_battlefield_same_stint(game, target, target_stint):
+                return
+            # Legality relative to the ability's controller (not the Equipment's
+            # possibly-changed current controller), including protection.
+            if not equipment._is_legal_equip_target_for(
+                game, target, context.controller
+            ):
                 return
             equipment.equip(target, game)
 
@@ -699,6 +783,7 @@ class Equipment(Artifact):
             cost=_cost,
             effect=_effect,
             targeting=_targeting,
+            can_activate=_can_activate,
             description=f"Equip {equipment.equip_cost}",
         )
 

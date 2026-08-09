@@ -682,15 +682,16 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
 
 
 def resolve_top(game: GameState) -> None:
-    """Resolve the top spell/ability on the stack.
+    """Resolve the top spell/ability on the stack (thin compatibility alias).
 
-    Pops the top item from the stack, calls its on_resolve callback,
-    then runs state-based actions.  If the stack is empty this is a no-op.
+    Delegates to :func:`engine.stack.resolve_top_of_stack`, the single canonical
+    resolution primitive, so this legacy entry point settles the game exactly
+    like :func:`~engine.stack.priority_loop`: resolve one object, re-derive
+    continuous effects, then run state-based actions to stability (re-deriving
+    between passes). It previously ran SBAs *without* re-deriving continuous
+    effects first; that divergence is gone. Retained (rather than removed)
+    because it is part of the published engine import surface.
     """
-    if game.stack.is_empty():
-        return
-    from engine.state_based_actions import resolve_state_based_actions
+    from engine.stack import resolve_top_of_stack
 
-    obj = game.stack.pop()
-    obj.on_resolve(game)
-    resolve_state_based_actions(game)
+    resolve_top_of_stack(game)

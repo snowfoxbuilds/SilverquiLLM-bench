@@ -46,10 +46,9 @@ the AST guard (`test_card_impl_ast_guard.py`, rule (d)).
    `move_to_zone` first removes every continuous effect the departing card
    sources, so a lord/anthem's buff vanishes immediately (not at next cleanup).
 3. Token creation via `create_token` (so anthems buff a new token at once).
-4. **Stack resolution** via `engine.stack.resolve_top_of_stack` — the single
-   resolution primitive shared by `priority_loop` (normal-game path) and the
-   test-suite stack resolver. After a spell/ability resolves it runs SBAs and
-   re-derives, so an effect the resolution just *registered* — e.g. Adventuring
+4. **Stack resolution** via `engine.stack.resolve_top_of_stack` — the single,
+   canonical normal-game resolution primitive (see the next section for the
+   exact order). An effect the resolution just *registered* — e.g. Adventuring
    Gear's landfall adding an until-EOT +2/+2 when its trigger resolves — applies
    immediately. This is production behaviour, not a per-test `apply_all`.
 5. **Active-player change** in `GameState.advance_phase` — when the turn passes
@@ -57,12 +56,46 @@ the AST guard (`test_card_impl_ast_guard.py`, rule (d)).
    Quick-Draw Katana) are recalculated at the actual transition, not left stale
    from the ending turn's cleanup (which still saw the old active player).
 
-A fast-path skips the re-derive when the effect manager is empty *and* nothing
-was just removed — but a removal that empties the manager still runs one reset
-pass so the departed buff is stripped. `Equipment.equip`/`detach` always
-re-derive (they are infrequent and detach may have emptied the manager).
-`apply_all` is idempotent (reset-then-reapply), so re-deriving at any of these
-points never double-applies an effect already in the manager.
+At points 2, 3, and 5 a fast-path skips the re-derive when the effect manager is
+empty *and* nothing was just removed — but a removal that empties the manager
+still runs one reset pass so the departed buff is stripped. **Point 4 (stack
+resolution) never uses this fast-path**: it re-derives unconditionally, because a
+resolution may remove the *last* active effect and a skipped reset would leave
+that departed buff baked into a permanent's modified characteristics. `len()`
+alone is therefore never used to decide the post-resolution recalculation.
+`Equipment.equip`/`detach` always re-derive (they are infrequent and detach may
+have emptied the manager). `apply_all` is idempotent (reset-then-reapply), so
+re-deriving at any of these points never double-applies an effect already in the
+manager.
+
+### Canonical resolution order: resolve → re-derive → SBA
+`engine.stack.resolve_top_of_stack` is the one normal-game resolution primitive,
+shared by `priority_loop` (normal-game path), the test-suite stack resolver, and
+`engine.casting.resolve_top` (a thin delegating alias — see below). It settles in
+this order (`settle_after_resolution`):
+
+1. Pop and resolve exactly one stack object.
+2. **Re-derive continuous effects immediately** (`apply_all`) — always, with no
+   `len()` fast-path, so the last-effect-removed case still resets the permanent.
+3. **Run state-based actions to stability**, re-deriving *before* the first SBA
+   check and *again after* every SBA pass that changes the board. SBAs therefore
+   never inspect pre-recalculation characteristics, and any battlefield change an
+   SBA causes leaves continuous characteristics current before priority returns.
+
+Consequences validated by tests: a 2/2 with two marked damage *survives* a
+resolving +2/+2 (re-derive → 4/4 precedes the lethal-damage check); a resolving
+−2/−2 sends a 2/2 to the graveyard *before priority returns* (re-derive → 0/0
+precedes the zero-toughness check); and removing the last active effect during
+resolution resets the permanent instead of leaving stale modified stats. The
+settle loop terminates because SBAs only remove permanents / decrement counters
+and re-derivation is deterministic, so the state cannot oscillate.
+
+**`engine.casting.resolve_top` disposition:** kept (it is part of the published
+engine import surface — `tests/test_engine_import_surface.py`,
+`test_oracle_workspace_bootstrap.py`) but reduced to a thin alias that delegates
+to `resolve_top_of_stack`. It previously ran SBAs *without* re-deriving
+continuous effects first; that second, divergent settlement implementation is
+gone, so every stack-resolution entry point now settles identically.
 
 The replay executor drives the corpus through its own resync (`_safe_apply_all`)
 and turn-transition handling, **not** `priority_loop`/`advance_phase`, so points
@@ -80,29 +113,66 @@ mechanism tests and the golden-game fingerprint stay green. The executor's
 zone sync (that path bypasses `move_to_zone`), now mirrored by the engine for
 the normal game path.
 
-### Activation-time ability targeting
-An `ActivatedAbility`/`ActivatedAbilityInstance` may carry an optional
-`targeting(game, source, controller) -> list | None` hook. When present,
-`activate_ability` runs it **at activation, before the cost is paid** (rule
-602.2b/2c) and:
-* returns a list of chosen targets → stored on the `StackObject.targets`;
-* returns `None` (no legal target) → activation is rejected with `AbilityError`
-  and **no cost is spent** (no mana leaves the pool, nothing goes on the stack).
+### Activation-time ability targeting and stint identity
+An `ActivatedAbility`/`ActivatedAbilityInstance` may carry two optional hooks:
+`can_activate(game, source, controller) -> bool` and
+`targeting(game, source, controller) -> list | None`. `_activate_regular_ability`
+runs the **legality → target-query → cost-payment** sequence (rule 602.2):
 
-The chosen targets live on the stack object and are passed to the effect at
-resolution as `effect(game, targets)` (untargeted abilities keep the historical
-`effect(game)` signature). The target is **never re-selected at resolution** —
-the effect revalidates the stored target and, if it is no longer legal, resolves
-without acting and does not retarget (rule 608.2b/608.2c).
+1. **Legality first (`can_activate`)** — verifies source-zone and timing
+   restrictions with *no side effects*, **before any target query is raised or
+   any cost is paid**. An illegal-timing (or source-off-battlefield) activation
+   therefore raises `AbilityError` immediately: no Player Query, no target intent
+   consumed, no mana spent, nothing pushed.
+2. **Target selection (`targeting`)** — returns the chosen targets, or `None`
+   (no legal target) which rejects the activation before the cost. A `targeting`
+   hook on a mana ability is rejected explicitly (mana abilities cannot target,
+   rule 605.1a) rather than mis-invoking the effect.
+3. **Capture the activation context**, then **pay the cost**, then push.
 
-The equip ability is the first user: `Equipment._make_equip_ability` supplies a
-`targeting` that offers the controller's creatures (`_legal_equip_targets`) and
-an `effect(game, targets)` that revalidates via `_is_legal_equip_target` before
-attaching. So a new creature that appears after activation can never become the
-target, a target that leaves before resolution yields no attach, and equipping
-with zero legal creatures spends nothing. The replay executor's ability bridge
-threads `targeting` through when building the `ActivatedAbilityInstance`, so the
-corpus drives the same activation-time selection.
+**Activation context (immutable, on the stack object).** After targets are
+chosen, the engine captures an `ActivationContext(controller, source_instance_id,
+target_instance_ids)` and stores it on the `StackObject` — never on a mutable
+field of the source permanent. `source_instance_id` / `target_instance_ids` are
+the *battlefield stint ids* (`GameRefsRegistry.instance_id`) at activation; a
+zone change mints a new stint id, so a leave-and-return is a *different* object
+even when the same Python instance is reused. Because the context lives on the
+stack object, **two activations of the same source coexist on the stack without
+clobbering each other**.
+
+**Resolution revalidation (never re-select).** The chosen targets are passed to
+the effect as `effect(game, targets, context)` (untargeted abilities keep the
+historical `effect(game)` signature). The effect **revalidates against the
+context and never retargets** (rule 608.2b/608.2c):
+* **Source stint** — the source must still be on the battlefield in the *same*
+  stint captured at activation. If it left (even if the same Python object now
+  sits in another zone), or left and returned (a new stint), the ability resolves
+  without acting and writes no state.
+* **Target stint** — likewise for each target; a target that left, or left and
+  returned, is treated as gone.
+* **Controller-relative legality** — "target creature you control" is evaluated
+  against the *ability's* activation-time controller (`context.controller` /
+  `StackObject.controller`), **not** the source's possibly-changed current
+  controller. Protection is re-checked here too (a target that gained protection
+  from the source after activation fails to attach).
+
+**Protection filtering in the option set.** Targeted activated abilities exclude
+protected candidates from the activation option set (the T in DEBT), so a
+protected creature is never offered as a target in the first place.
+
+The equip ability is the first user: `Equipment._make_equip_ability` supplies
+`can_activate` (Equipment on the battlefield + sorcery speed), a `targeting` that
+offers the *ability controller's* creatures without protection
+(`_legal_equip_targets(game, controller)`), and an `effect(game, targets,
+context)` that runs the source-stint, target-stint, controller-relative and
+protection revalidation (`_on_battlefield_same_stint`,
+`_is_legal_equip_target_for`) before `equip`. So no Equipment attaches while off
+the battlefield, a leave-and-return never lets an old ability affect the new
+source or target stint, control changes are judged against the ability's
+controller, and equipping with zero legal creatures spends nothing. The replay
+executor's ability bridge threads both `targeting` and `can_activate` when
+building the `ActivatedAbilityInstance`, so the corpus drives the same
+activation-time selection and resolution-time revalidation.
 
 ### Equipment departure cleanup and SBA integration
 `Equipment(Artifact)` sets a class attribute `is_equipment = True`. Two distinct

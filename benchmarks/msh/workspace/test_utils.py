@@ -375,6 +375,7 @@ def activate_card_ability(
         is_mana_ability=False,
         description=ability.description,
         targeting=getattr(ability, "targeting", None),
+        can_activate=getattr(ability, "can_activate", None),
     )
     activate_ability(game, player, instance)
 
