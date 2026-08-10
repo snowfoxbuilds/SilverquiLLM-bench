@@ -22,10 +22,12 @@ reused by a recycled object. Consumer of record: the replay executor's counter
 reconciliation, which identifies a battlefield stint as (engine-object key,
 fold-time epoch) and, since correction part 3, also accumulates per-pendency
 epoch evidence to prove (or refute) same-stint continuity across GRE
-instance-id churn — with each observation stamped by reconciliation pass since
-part 4, because two equal epoch reads prove continuity only when the first
-read predates the pass consuming it — see root `KEY_DECISIONS.md` Phase F
-correction parts 2–4.
+instance-id churn — since part 5, a deferred fold's baseline is the engine
+battlefield CENSUS of epochs frozen on the pass GRE first attests the
+effect's identity on the battlefield (the window start): two equal epoch
+reads prove continuity only for the interval they bracket, so the first read
+must date from the window start, not merely from some pass before the fold —
+see root `KEY_DECISIONS.md` Phase F correction parts 2–5.
 
 **`object_id` uniqueness caveat** (surfaced by part 3's epoch evidence): the
 `GameObject.object_id` counter guarantees uniqueness only for CONSTRUCTED

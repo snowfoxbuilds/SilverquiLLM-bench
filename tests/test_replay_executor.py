@@ -1182,11 +1182,11 @@ class TestCounterDeferral:
         self, executor: ReplayExecutor
     ) -> None:
         # Valid late correlation: the engine object IS on the engine
-        # battlefield during the first reconciliation pass (its epoch is
-        # swept into the pendency evidence then) but not yet in _engine_cards
+        # battlefield on the pass GRE first attests the affected id there
+        # (the window-start census records it) but not yet in _engine_cards
         # (the map is only rebuilt post-comparison). The deferred retry may
-        # fold because the prior-pass observation plus an unchanged epoch
-        # bracket the pendency window.
+        # fold because the census membership plus an unchanged epoch bracket
+        # the complete GRE battlefield window.
         from engine.types import Zone
 
         perm = _FakePermanent(3000)
@@ -1198,10 +1198,13 @@ class TestCounterDeferral:
         assert (30, 7001) not in executor._applied_counter_effects
         payload = executor._pending_counter_effects[(30, 7001)]
         okey = executor._counter_key(perm)
-        # Evidence observation pass 1 — the sweep that saw the object BEFORE
-        # the retry; this is what licenses the deferred fold below.
-        assert payload["bf_epochs"][okey] == (0, 1)
+        # The GRE battlefield window opened on pass 1 and froze the engine
+        # battlefield census — the object's presence in it (with an unchanged
+        # epoch) is what licenses the deferred fold below.
         assert payload["pending_since"] == 1
+        assert payload["battlefield_since"] == 1
+        assert payload["window_epochs"][okey] == 0
+        assert payload["bf_epochs"][okey] == (0, 1)
 
         # The post-comparison rebuild correlates the permanent; retry applies.
         executor._engine_cards[7001] = perm
@@ -1215,16 +1218,18 @@ class TestCounterDeferral:
     ) -> None:
         # The annotation pends with NO candidate on the engine battlefield;
         # the engine object is created (and correlated) only on the retry
-        # pass. Its current epoch is then the endpoint measuring itself — not
-        # proof it survived the pendency window — so the effect cancels as
-        # unproven instead of folding onto the newcomer, and the missing
-        # counter stays visible in comparison.
+        # pass. It is absent from the window-start census, so nothing can
+        # prove it was there when the GRE battlefield window opened — the
+        # effect cancels as unproven instead of folding onto the newcomer,
+        # and the missing counter stays visible in comparison.
         executor._apply_counter_annotations(
             _ann_snap(2, _counter_ann(37, [7005], 1, 1), bf={7005: 1})
         )
         assert (37, 7005) in executor._pending_counter_effects
         payload = executor._pending_counter_effects[(37, 7005)]
         assert payload["pending_since"] == 1
+        assert payload["battlefield_since"] == 1
+        assert payload["window_epochs"] == {}  # empty engine bf at window start
 
         perm = _FakePermanent(3050)
         _place(executor, perm, 7005)  # created + correlated only NOW
@@ -1233,14 +1238,50 @@ class TestCounterDeferral:
         assert (37, 7005) in executor._cancelled_counter_effects
         assert (37, 7005) not in executor._applied_counter_effects
         assert (37, 7005) not in executor._pending_counter_effects
-        # First (and only) observation of the newcomer is the retry pass.
+        # First (and only) observation of the newcomer is the retry pass —
+        # after the window start, so it can never enter the frozen census.
         assert payload["bf_epochs"][executor._counter_key(perm)] == (0, 2)
         [rec] = [
             r for r in executor._unresolved_counter_effects
             if r["annotation_id"] == 37
         ]
-        assert "first observed after pendency began" in rec["reason"]
+        assert "start of the GRE battlefield window" in rec["reason"]
         assert rec["pending_since"] == 1
+        assert rec["battlefield_since"] == 1
+
+    def test_after_window_candidate_not_proven_by_waiting_extra_pass(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # THE closed defect: the candidate appears on the engine battlefield
+        # one pass after the GRE battlefield window opened, stays uncorrelated
+        # for a pass, and correlates only afterwards. Its earliest observation
+        # now predates the consuming pass — but not the WINDOW START, so the
+        # extra wait must not convert it into valid historical evidence.
+        from engine.types import Zone
+
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(38, [7006], 1, 1), bf={7006: 1})
+        )
+        payload = executor._pending_counter_effects[(38, 7006)]
+        assert payload["battlefield_since"] == 1
+
+        perm = _FakePermanent(3060)
+        executor.players[1].zones[Zone.BATTLEFIELD].add(perm)  # pass 2: present
+        executor._apply_counter_annotations(_ann_snap(3, bf={7006: 1}))
+        assert (38, 7006) in executor._pending_counter_effects  # still unproven
+        assert payload["bf_epochs"][executor._counter_key(perm)] == (0, 2)
+
+        executor._engine_cards[7006] = perm  # correlates only on pass 3
+        executor._apply_counter_annotations(_ann_snap(4, bf={7006: 1}))
+        assert perm.plus_one_counters == 0
+        assert (38, 7006) in executor._cancelled_counter_effects
+        assert (38, 7006) not in executor._applied_counter_effects
+        [rec] = [
+            r for r in executor._unresolved_counter_effects
+            if r["annotation_id"] == 38
+        ]
+        assert "start of the GRE battlefield window" in rec["reason"]
+        assert rec["battlefield_since"] == 1
 
     def test_engine_minted_token_same_snapshot_correlated_and_countered(
         self, executor: ReplayExecutor
