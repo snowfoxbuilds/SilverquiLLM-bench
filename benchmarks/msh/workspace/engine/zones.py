@@ -334,10 +334,17 @@ def move_to_zone(
 
     # --- Entering battlefield hooks ---
     if entering_battlefield:
-        # Fire the ENTERS_BATTLEFIELD event *before* registering the card's
-        # own triggers so that a permanent's ETB trigger does not
-        # retroactively trigger off its own entry.  Other already-registered
-        # triggers that watch for ENTERS_BATTLEFIELD will still fire.
+        # Register the card's own triggers/replacement effects *before* firing
+        # the ENTERS_BATTLEFIELD event, so a permanent's own enters-trigger
+        # fires on its own entry (rule 603.3a — a permanent's own
+        # enters-the-battlefield ability triggers when that permanent enters).
+        # An "another …"-style ability must exclude the source in its own
+        # condition filter (the card-text responsibility), not rely on the
+        # engine suppressing the whole event — see the Phase F subscriber audit.
+        if hasattr(card, "register_triggers"):
+            card.register_triggers(game)
+        if hasattr(card, "register_replacement_effects"):
+            card.register_replacement_effects(game)
         game.trigger_manager.fire_event(
             game,
             EntersBattlefieldTriggeredEvent(
@@ -345,10 +352,6 @@ def move_to_zone(
                 controller=controller if controller is not None else owner,
             ),
         )
-        if hasattr(card, "register_triggers"):
-            card.register_triggers(game)
-        if hasattr(card, "register_replacement_effects"):
-            card.register_replacement_effects(game)
 
     # --- Re-derive continuous effects on any battlefield change ---
     # A lord/anthem entering mid-turn buffs the team now; a departed source's

@@ -417,22 +417,23 @@ def _place_token(game: GameState, player: Player, token: Any, grp_id: Any) -> No
         token._grp_id = grp_id
 
     # Tokens don't come from an existing zone — add directly and fire hooks.
-    # Ordering matches move_to_zone: fire ETB *before* registering the token's
-    # own triggers so a token's ETB trigger doesn't self-fire on entry.
+    # Ordering matches move_to_zone: register the token's own triggers/
+    # replacement effects *before* firing the ETB event, so a token's own
+    # enters-trigger fires on its own entry (rule 603.3a). An "another …"
+    # ability must exclude the source in its own condition filter.
     battlefield = game.get_battlefield(player)
     battlefield.add(token)
+
+    if hasattr(token, "register_triggers"):
+        token.register_triggers(game)
+    if hasattr(token, "register_replacement_effects"):
+        token.register_replacement_effects(game)
 
     if hasattr(game, "trigger_manager"):
         game.trigger_manager.fire_event(
             game,
             EntersBattlefieldTriggeredEvent(permanent=token, controller=player),
         )
-
-    # Register triggers/replacement effects after the ETB event.
-    if hasattr(token, "register_triggers"):
-        token.register_triggers(game)
-    if hasattr(token, "register_replacement_effects"):
-        token.register_replacement_effects(game)
 
     # Re-derive continuous effects so anthems/lords buff the new token
     # immediately (and the token's own static effect, if any, is applied).
