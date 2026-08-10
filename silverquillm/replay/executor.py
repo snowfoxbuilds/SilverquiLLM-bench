@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -1746,6 +1747,45 @@ class ReplayExecutor:
         """True if the engine stack already holds an object from *card*."""
         return self.game is not None and self.game.stack.has_source(card)
 
+    @contextmanager
+    def _replay_activation_context(self, player: Any):
+        """Supply the observed-legal timing GRE confirms for a driven activation.
+
+        GRE is ground truth that an observed activation was legal, but the
+        snapshot's ``turn_info`` phase can lag the actual activation moment —
+        Arena routinely reports a combat step for a main-phase equip — which
+        makes the engine's sorcery-speed ``can_activate`` gate (equip, loyalty)
+        reject a legal activation as "illegal (timing or zone)". For the
+        duration of a driven activation ONLY, this aligns the engine to a
+        sorcery-legal context: the active player is the activator and the phase
+        is a main phase. The gate still runs in full (source zone, control,
+        authorization are all still checked) — it is never weakened; it is
+        simply given the observed-legal timing. Engine/non-replay activation is
+        untouched (this is executor-owned), so Phase C's gate stays strict
+        there. State is saved and restored so nothing leaks into comparison.
+        """
+        game = self.game
+        if game is None:
+            yield
+            return
+        from engine.types import Phase
+
+        saved_phase = getattr(game, "phase", None)
+        saved_idx = getattr(game, "active_player_index", None)
+        try:
+            for i, seat in enumerate(sorted(self.players.keys())):
+                if self.players[seat] is player:
+                    game.active_player_index = i
+                    break
+            if saved_phase not in (Phase.PRECOMBAT_MAIN, Phase.POSTCOMBAT_MAIN):
+                game.phase = Phase.PRECOMBAT_MAIN
+            yield
+        finally:
+            if saved_phase is not None:
+                game.phase = saved_phase
+            if saved_idx is not None:
+                game.active_player_index = saved_idx
+
     def _try_activate_ability(
         self,
         player: Any,
@@ -1781,10 +1821,11 @@ class ReplayExecutor:
         )
         name = action.card_name or getattr(source_card, "name", "?")
         try:
-            self._with_target_intent(
-                action, prev_snapshot, curr_snapshot,
-                lambda: activate_ability(self.game, player, instance),
-            )
+            with self._replay_activation_context(player):
+                self._with_target_intent(
+                    action, prev_snapshot, curr_snapshot,
+                    lambda: activate_ability(self.game, player, instance),
+                )
         except Exception as exc:
             result.engine_failures.append(
                 f"activate_ability {name} (seat {action.player_seat_id}): "

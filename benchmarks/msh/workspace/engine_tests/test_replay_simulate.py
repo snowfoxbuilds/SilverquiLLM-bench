@@ -613,6 +613,46 @@ class TestTokenMissingSemantics:
         assert f"grpId_{CAT_TOK}" not in missing[0].description
 
 
+class TestReplayActivationTimingContext:
+    """Phase E task 3: a driven activation runs under GRE-observed-legal timing
+    so the sorcery-speed can_activate gate accepts it, without weakening the
+    gate for the engine's own path (engine_tests cover non-replay strictness)."""
+
+    def test_context_supplies_sorcery_legal_timing_and_restores(self):
+        from engine.casting import is_sorcery_speed
+        from engine.types import Phase
+
+        s0 = snapshot(1)
+        ex = make_executor([s0])
+        game = ex.game
+        # Simulate the GRE turn_info lagging into combat while the opponent is
+        # the engine's active player — is_sorcery_speed is False for seat 1.
+        game.phase = Phase.COMBAT
+        game.active_player_index = 1
+        p1 = ex.players[1]
+        assert not is_sorcery_speed(game, p1)
+        with ex._replay_activation_context(p1):
+            # Inside the context the observed-legal timing is supplied.
+            assert is_sorcery_speed(game, p1)
+        # State restored afterward — nothing leaks into comparison.
+        assert game.phase == Phase.COMBAT
+        assert game.active_player_index == 1
+
+    def test_context_preserves_an_existing_main_phase(self):
+        from engine.types import Phase
+
+        s0 = snapshot(1)
+        ex = make_executor([s0])
+        game = ex.game
+        game.phase = Phase.POSTCOMBAT_MAIN
+        game.active_player_index = 0
+        with ex._replay_activation_context(ex.players[1]):
+            # Already a main phase — kept, not overridden to precombat.
+            assert game.phase == Phase.POSTCOMBAT_MAIN
+        assert game.phase == Phase.POSTCOMBAT_MAIN
+        assert game.active_player_index == 0
+
+
 class TestOraclePTCorrections:
     """Resync P/T corrections are revocable ContinuousEffects, not stat bakes.
 
