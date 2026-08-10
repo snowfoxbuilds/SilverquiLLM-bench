@@ -455,19 +455,41 @@ between the original's cast and the copy's resolution is rejected. A copy that
 **chooses new targets** captures those new targets' *current* stints. A copy of an
 object that carried no context (an ability copy) falls back to a fresh capture.
 
-*Immutable per-trigger state.* Thousand-Year Storm no longer keeps a mutable
-source-level `_pending_spell` slot, and no longer derives the copy count from how
-many of its triggers have resolved (both were correlation bugs when multiple
-spells were cast before earlier Storm triggers resolved). Instead its `capture`
-hook (above) fixes, on each trigger's own `StackObject`, an immutable record of
-(a) the **triggering spell's `StackObject`** and (b) the **copy count** — the
-number of instant/sorcery spells the controller had cast *before* this one this
-turn. The count is tallied when a spell is **cast** (in `capture`, once per
-matching cast), not at resolution, and the turn-local tally resets exactly once
-per turn change. So casting B in response to A's Storm trigger still makes B's
-trigger copy B once and A's copy A zero times, in LIFO order; a triggering spell
-that has left the stack (countered) makes zero copies and never falls back to a
-different pending spell.
+*Authoritative spell-cast history (`engine/player.py`, `engine/casting.py`).*
+Spell-cast history belongs to the game/player/turn lifecycle, **not** to any one
+triggered-ability source. Each `Player` keeps a turn-stamped record of the
+instant and sorcery spells *that player* has cast this turn, written through
+`record_instant_or_sorcery_cast(spell, turn_number)` and read through
+`instant_or_sorcery_casts_this_turn(turn_number)` (a stale turn stamp reads as
+empty, so the record resets lazily at the turn boundary — exactly once, without
+depending on any cleanup step running). The record is populated at the **single
+authoritative cast site**: `cast_spell` and `cast_spell_free` call
+`_record_spell_cast` once per cast, right after the spell becomes cast (rule
+601.2i) and only for instant/sorcery spells — so creatures, artifacts,
+enchantments, planeswalkers, and lands (which never enter `cast_spell`) never
+affect it, and it counts qualifying spells whether or not any Storm is present.
+Because recording happens at the cast site rather than in a trigger's `capture`
+hook, multiple observers of one cast (two Thousand-Year Storms, or any number of
+cast-triggered abilities) increment it exactly once.
+
+*Immutable per-trigger state.* Thousand-Year Storm keeps **no** source-local
+spell state — the former mutable `_pending_spell` slot and the `_storm_count` /
+`_storm_turn` tally are gone. On each trigger's own `StackObject` its `capture`
+hook (above) fixes an immutable record of (a) the **triggering spell's
+`StackObject`** and (b) the **copy count**. That count is **read at fire time
+from the fire-time controller's authoritative turn history** (above) — the number
+of instant/sorcery spells that controller cast *before* this one this turn, the
+triggering spell itself excluded by identity — never reconstructed from how many
+Storm triggers have since resolved, nor from a scalar stored on the enchantment.
+Sourcing the count from player-level history makes it independent of when this
+Storm entered, how long its trigger has been registered, whether control changed,
+how many Storms exist, and when pending triggers resolve: a Storm that entered
+after two spells were cast still captures two; two Storms (one late) capture the
+same count for one cast; a control change reads the *new* controller's history
+(zero for that player's first spell), never the previous controller's. Casting B
+in response to A's Storm trigger still makes B's trigger copy B once and A's copy
+A zero times, in LIFO order; a triggering spell that has left the stack
+(countered) makes zero copies and never falls back to a different pending spell.
 
 *Protection-aware retargeting via the shared spell-retargeting path.* When the
 controller chooses new targets for a copy, each target is re-chosen through

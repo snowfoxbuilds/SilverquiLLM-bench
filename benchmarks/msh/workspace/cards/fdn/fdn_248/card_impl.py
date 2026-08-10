@@ -25,10 +25,11 @@ class _StormTriggerState:
             time. Re-checked at resolution — if it has since left the stack
             (countered, resolved), no copies are made.
         copies: How many copies this trigger must create — the number of instant
-            and sorcery spells the controller had cast *before* this one this turn
-            (rule: "for each *other* instant and sorcery spell you've cast before
-            it this turn"). Fixed when the spell is cast, never derived from how
-            many Storm triggers have since resolved.
+            and sorcery spells the fire-time controller had cast *before* this one
+            this turn (rule: "for each *other* instant and sorcery spell you've
+            cast before it this turn"). Read at fire time from the controller's
+            authoritative per-player turn history, never reconstructed from
+            resolved triggers or from a scalar stored on this enchantment.
     """
 
     spell: Any
@@ -62,13 +63,13 @@ class ThousandYearStorm(Enchantment):
 
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
-        # Turn-local tally of instant/sorcery spells this source's controller has
-        # cast this turn. It counts spells *when they are cast* (in `_capture`,
-        # which runs as each trigger goes on the stack — rule 603.3), never at
-        # resolution, and resets exactly once when the turn changes. Each trigger
-        # then captures, immutably, its own copy count from this tally.
-        source._storm_count: int = 0
-        source._storm_turn: int = getattr(game, 'turn_number', 0)
+        # No source-local spell tally lives here. The copy count is read at fire
+        # time from the *authoritative* per-player, per-turn instant/sorcery cast
+        # history (``Player.instant_or_sorcery_casts_this_turn``), which the
+        # casting pipeline maintains regardless of this enchantment's presence,
+        # entry time, or control history — so every Storm trigger this turn sees
+        # the same count for a given cast, and a Storm that entered late (or a
+        # second Storm) is not under-counted.
 
         def _condition(game: Any, event: Any) -> bool:
             # Side-effect free: only decide whether this cast triggers. The
@@ -86,16 +87,19 @@ class ThousandYearStorm(Enchantment):
         def _capture(game: 'GameState', event: Any, controller: Any) -> _StormTriggerState:
             # Runs as this trigger is put on the stack (fire time), once per
             # matching cast. Fixes this firing's facts immutably: which spell, and
-            # how many copies (= spells cast before it this turn).
+            # how many copies to make. The count is read from the fire-time
+            # controller's authoritative turn history — the number of instant and
+            # sorcery spells that controller cast *before* this one this turn —
+            # NOT from any state stored on this source. The triggering spell is
+            # already recorded in that history by the time this runs, so it is
+            # excluded by identity ("for each *other* … spell you've cast before
+            # it this turn").
             spell = getattr(event, 'spell', None) or getattr(event, 'card', None)
-            current_turn = getattr(game, 'turn_number', 0)
-            if current_turn != source._storm_turn:
-                # Turn changed — reset the tally exactly once (guarded by the
-                # stored turn), before counting this turn's first spell.
-                source._storm_count = 0
-                source._storm_turn = current_turn
-            copies = source._storm_count
-            source._storm_count += 1
+            copies = 0
+            if controller is not None:
+                turn_number = getattr(game, 'turn_number', 0)
+                prior = controller.instant_or_sorcery_casts_this_turn(turn_number)
+                copies = sum(1 for cast in prior if cast is not spell)
             # Correlate this trigger to the triggering spell's StackObject now, by
             # identity. Stored per-trigger, so a later cast's trigger cannot make
             # this one copy a different spell.

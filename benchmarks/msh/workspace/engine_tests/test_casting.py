@@ -1306,3 +1306,154 @@ class TestSpellTargetStintRevalidation:
         assert top.activation_context is not None
         assert top.activation_context.controller is p1
         assert top.activation_context.target_instance_ids[0] == inst
+
+
+# ---------------------------------------------------------------------------
+# Spell-cast history — authoritative per-player, per-turn record
+# ---------------------------------------------------------------------------
+
+
+class TestSpellCastHistoryRecord:
+    """The turn-stamped record on :class:`~engine.player.Player` itself.
+
+    This is the authoritative surface a cast-triggered ability (Thousand-Year
+    Storm) reads its copy count from. It belongs to the player/turn lifecycle:
+    per-player, resettable at the turn boundary, and never owned by a trigger
+    source.
+    """
+
+    def test_record_and_read_round_trips_in_cast_order(self):
+        p = DeterministicPlayer("Alice")
+        s1, s2 = object(), object()
+        p.record_instant_or_sorcery_cast(s1, 3)
+        p.record_instant_or_sorcery_cast(s2, 3)
+        assert p.instant_or_sorcery_casts_this_turn(3) == [s1, s2]
+
+    def test_read_returns_a_copy_not_the_backing_list(self):
+        p = DeterministicPlayer("Alice")
+        s1 = object()
+        p.record_instant_or_sorcery_cast(s1, 1)
+        out = p.instant_or_sorcery_casts_this_turn(1)
+        out.append(object())
+        assert p.instant_or_sorcery_casts_this_turn(1) == [s1]
+
+    def test_stale_turn_reads_empty(self):
+        p = DeterministicPlayer("Alice")
+        p.record_instant_or_sorcery_cast(object(), 1)
+        assert p.instant_or_sorcery_casts_this_turn(2) == []
+
+    def test_recording_on_a_new_turn_resets_before_appending(self):
+        p = DeterministicPlayer("Alice")
+        s1, s2 = object(), object()
+        p.record_instant_or_sorcery_cast(s1, 1)
+        p.record_instant_or_sorcery_cast(s2, 2)  # new turn — resets, then appends
+        assert p.instant_or_sorcery_casts_this_turn(1) == []
+        assert p.instant_or_sorcery_casts_this_turn(2) == [s2]
+
+    def test_players_keep_separate_records(self):
+        p1 = DeterministicPlayer("Alice")
+        p2 = DeterministicPlayer("Bob")
+        a, b = object(), object()
+        p1.record_instant_or_sorcery_cast(a, 1)
+        p2.record_instant_or_sorcery_cast(b, 1)
+        assert p1.instant_or_sorcery_casts_this_turn(1) == [a]
+        assert p2.instant_or_sorcery_casts_this_turn(1) == [b]
+
+
+class TestSpellCastHistoryPipeline:
+    """The casting pipeline records qualifying casts exactly once, at the single
+    authoritative cast site, and only for instant/sorcery spells."""
+
+    def _fresh(self) -> tuple[GameState, DeterministicPlayer]:
+        game = _make_game()
+        return game, game.players[0]
+
+    def test_cast_instant_is_recorded(self):
+        game, p = self._fresh()
+        bolt = Instant(name="Bolt", mana_cost=ManaCost.parse("{0}"), owner=p)
+        _add_to_hand(game, 0, bolt)
+        cast_spell(game, p, bolt)
+        assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == [bolt]
+
+    def test_cast_sorcery_is_recorded(self):
+        game, p = self._fresh()
+        ritual = Sorcery(name="Ritual", mana_cost=ManaCost.parse("{0}"), owner=p)
+        _add_to_hand(game, 0, ritual)
+        cast_spell(game, p, ritual)
+        assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == [ritual]
+
+    def test_instant_is_recorded_exactly_once(self):
+        game, p = self._fresh()
+        bolt = Instant(name="Bolt", mana_cost=ManaCost.parse("{0}"), owner=p)
+        _add_to_hand(game, 0, bolt)
+        cast_spell(game, p, bolt)
+        history = p.instant_or_sorcery_casts_this_turn(game.turn_number)
+        assert history.count(bolt) == 1
+
+    def test_nonqualifying_spells_do_not_record(self):
+        # A creature, artifact, enchantment, and planeswalker each cast in a
+        # fresh game (empty stack for sorcery-speed timing) — none is recorded.
+        nonqualifying = [
+            Creature(name="Bear", base_power=2, base_toughness=2,
+                     mana_cost=ManaCost.parse("{0}")),
+            Artifact(name="Rock", mana_cost=ManaCost.parse("{0}")),
+            Enchantment(name="Glow", mana_cost=ManaCost.parse("{0}")),
+            Planeswalker(name="Walker", mana_cost=ManaCost.parse("{0}"),
+                         starting_loyalty=3),
+        ]
+        for card in nonqualifying:
+            game, p = self._fresh()
+            card.owner = p
+            _add_to_hand(game, 0, card)
+            cast_spell(game, p, card)
+            assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == [], (
+                f"{card.name} should not be recorded"
+            )
+
+    def test_playing_a_land_does_not_record(self):
+        # Lands are played via a special action (never through cast_spell), so
+        # they are structurally excluded from the record.
+        game, p = self._fresh()
+        forest = Land(name="Forest", owner=p)
+        _add_to_hand(game, 0, forest)
+        play_land(game, p, forest)
+        assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == []
+
+    def test_two_players_get_separate_histories_through_the_pipeline(self):
+        game = _make_game()
+        p1, p2 = game.players
+        a = Instant(name="A", mana_cost=ManaCost.parse("{0}"), owner=p1)
+        b = Instant(name="B", mana_cost=ManaCost.parse("{0}"), owner=p2)
+        _add_to_hand(game, 0, a)
+        _add_to_hand(game, 1, b)
+        cast_spell(game, p1, a)
+        cast_spell(game, p2, b)  # non-active player, but instant speed is legal
+        t = game.turn_number
+        assert p1.instant_or_sorcery_casts_this_turn(t) == [a]
+        assert p2.instant_or_sorcery_casts_this_turn(t) == [b]
+
+    def test_free_cast_is_recorded(self):
+        from engine.casting import cast_spell_free
+        from engine.types import Zone
+
+        game, p = self._fresh()
+        bolt = Instant(name="FreeBolt", mana_cost=ManaCost.parse("{5}"), owner=p)
+        p.zones[Zone.HAND].add(bolt)
+        cast_spell_free(game, p, bolt, Zone.HAND)
+        assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == [bolt]
+
+    def test_turn_rollover_resets_through_the_pipeline(self):
+        game, p = self._fresh()
+        a = Instant(name="A", mana_cost=ManaCost.parse("{0}"), owner=p)
+        b = Instant(name="B", mana_cost=ManaCost.parse("{0}"), owner=p)
+        _add_to_hand(game, 0, a)
+        _add_to_hand(game, 0, b)
+        cast_spell(game, p, a)
+        t1 = game.turn_number
+        assert p.instant_or_sorcery_casts_this_turn(t1) == [a]
+        game.turn_number += 1
+        # A new turn: last turn's cast no longer contributes.
+        assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == []
+        cast_spell(game, p, b)
+        assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == [b]
+        assert p.instant_or_sorcery_casts_this_turn(t1) == []

@@ -425,6 +425,29 @@ def _apply_cost_reduction(cost: ManaCost, reduction: int) -> ManaCost:
 
 
 # ------------------------------------------------------------------
+# Spell-cast history (per-player, per-turn) — authoritative record
+# ------------------------------------------------------------------
+
+_INSTANT_SORCERY: frozenset[CardType] = frozenset({CardType.INSTANT, CardType.SORCERY})
+
+
+def _record_spell_cast(game: GameState, player: Player, card: CardImpl) -> None:
+    """Record *card* in *player*'s per-turn instant/sorcery cast history.
+
+    This is the single authoritative point at which a cast is counted (rule
+    601.2i — the spell has become cast). It runs once per cast, for both the
+    normal and free-cast paths, and only for instant and sorcery spells — so
+    creatures, artifacts, enchantments, planeswalkers, and lands never affect the
+    count. Recording here (not in any trigger's capture hook) is what keeps the
+    count correct when several observers — e.g. two Thousand-Year Storms — watch
+    the same cast: the history is incremented exactly once regardless of how many
+    triggers fire. See :meth:`engine.player.Player.record_instant_or_sorcery_cast`.
+    """
+    if card.card_types & _INSTANT_SORCERY:
+        player.record_instant_or_sorcery_cast(card, game.turn_number)
+
+
+# ------------------------------------------------------------------
 # Cast spell
 # ------------------------------------------------------------------
 
@@ -567,6 +590,12 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     # 7. Call on_cast hook
     card.on_cast(game)
 
+    # 7b. The spell has now become cast (rule 601.2i). Record it in the caster's
+    #     authoritative per-turn instant/sorcery history exactly once — before the
+    #     cast-triggered event fires, so a cast-triggered ability (Thousand-Year
+    #     Storm) reading the history sees this spell already counted.
+    _record_spell_cast(game, player, card)
+
     # 8. Build on_resolve callback and push StackObject with the context captured
     #    at target-selection time (step 5c).
     stack_obj = StackObject(
@@ -708,6 +737,12 @@ def cast_spell_free(
 
     # 4. Call on_cast hook
     card.on_cast(game)
+
+    # 4b. The free-cast spell has become cast (rule 601.2i); record it in the
+    #     caster's per-turn instant/sorcery history exactly once, the same as the
+    #     normal path — a spell cast without paying its cost (cascade, Etali, exile
+    #     casting) still counts toward "spells you've cast this turn".
+    _record_spell_cast(game, player, card)
 
     # 5. Build on_resolve callback and push StackObject with the context captured
     #    at target-selection time (step 3b).

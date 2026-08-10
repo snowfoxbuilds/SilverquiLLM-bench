@@ -32,7 +32,15 @@ from engine.events import SpellCastTriggeredEvent
 from engine.intent_player import Intent
 from engine.protection import ProtectionAbility
 from engine.stack import resolve_top_of_stack
-from engine.types import CardType, Color, ManaCost, ManaType, TargetRequirement, Zone
+from engine.types import (
+    CardType,
+    Color,
+    ManaCost,
+    ManaType,
+    Phase,
+    TargetRequirement,
+    Zone,
+)
 from engine.zones import move_to_zone
 from test_utils import create_game, resolve_stack, set_board_state
 
@@ -219,12 +227,12 @@ class TestStormPerTriggerState:
 
     def test_turn_rollover_resets_count(self):
         """Spells cast in turn N do not inflate the copy count in turn N+1 — the
-        turn-local tally resets exactly once when the turn changes."""
+        controller's per-turn cast history resets at the turn boundary."""
         a, b = _Signal("Spell A"), _Signal("Spell B")
         game, p1, storm = self._setup([a, b])
 
         _cast(game, p1, a)
-        _fire(game, p1, a)                 # turn 1: A → copies=0, count now 1
+        _fire(game, p1, a)                 # turn 1: A → copies=0, history now [A]
         resolve_stack(game)
 
         game.turn_number += 1              # roll to the next turn
@@ -260,15 +268,14 @@ class TestStormPerTriggerState:
         """The trigger's controller is fixed at fire time. Changing control of
         Thousand-Year Storm *after* the trigger fires does not shift "you": the
         copy is still controlled by the fire-time controller."""
-        a = _Signal("Spell A")
-        game, p1, storm = self._setup([a])
+        prior, a = _Signal("Prior"), _Signal("Spell A")
+        game, p1, storm = self._setup([prior, a])
         p2 = game.players[1]
-        # One prior spell this turn so the trigger makes a copy we can inspect.
-        storm._storm_count = 1
-        storm._storm_turn = game.turn_number
-
+        # One prior qualifying spell this turn — cast through the real pipeline
+        # (no manual count seeding) — so A's trigger makes exactly one copy.
+        _cast(game, p1, prior)
         _cast(game, p1, a)
-        _fire(game, p1, a)                 # fires with controller p1
+        _fire(game, p1, a)                 # fires with controller p1, copies == 1
 
         storm.controller = p2              # Storm changes hands before resolution
 
@@ -345,15 +352,21 @@ class TestStormCopyRetargeting:
         eq1.attached_to = c1
         eq2.attached_to = c2
         fiery = FieryAnnihilation(owner=p1, controller=p1)
-        set_board_state(game, 0, hand=[fiery], battlefield=[storm],
+        prior = _Signal("Prior Spell")
+        set_board_state(game, 0, hand=[fiery, prior], battlefield=[storm],
                         mana={ManaType.RED: 1, ManaType.COLORLESS: 2})
         set_board_state(game, 1, battlefield=[c1, c2, eq1, eq2, *extra_p2_battlefield])
         game.active_player_index = 0
         storm.register_triggers(game)
-        # One prior instant/sorcery this turn → the next cast makes exactly one
-        # copy (this suite is about retargeting, not counting).
-        storm._storm_count = 1
-        storm._storm_turn = game.turn_number
+        # One prior instant/sorcery this turn — cast through the real pipeline so
+        # p1's turn history holds one qualifying spell → the next cast makes
+        # exactly one copy. This suite is about retargeting, not counting, so no
+        # manual count seeding is used. The prior spell (a {0} instant) is left
+        # unresolved on the stack — Fiery Annihilation is an instant, so a
+        # non-empty stack does not block it — deliberately avoiding a settle pass
+        # (``apply_all``) here, which would clear a creature's protections before
+        # the retargeting queries under test.
+        _cast(game, p1, prior)
         return game, p1, p2, storm, fiery, c1, c2, eq1, eq2
 
     def _cast_fiery(self, game, p1, fiery, targets):
@@ -451,3 +464,199 @@ class TestStormCopyRetargeting:
 
         assert protected.damage_marked == 0   # copy never targeted the protected one
         assert c2.damage_marked == 5           # copy hit the unprotected creature
+
+
+# ---------------------------------------------------------------------------
+# Copy count sourced from authoritative per-player turn history (lifecycle)
+# ---------------------------------------------------------------------------
+#
+# The copy count for a Thousand-Year Storm trigger equals the number of instant
+# and sorcery spells its fire-time controller cast earlier this turn. These
+# end-to-end tests (through the real cast + trigger pipeline, no seeding) prove
+# the count does NOT depend on: when this Storm entered, how long its trigger has
+# been registered, whether control changed, how many Storms exist, or when
+# pending triggers resolve — because the count lives in the player/turn
+# lifecycle, not on the Storm source.
+
+
+class TestStormAuthoritativeCount:
+    def _storm(self, p):
+        return ThousandYearStorm(owner=p, controller=p)
+
+    def test_late_entering_storm_captures_full_prior_count(self):
+        """P1 casts two qualifying spells; THEN Storm enters and registers; P1
+        casts a third. The trigger captures a copy count of two — the count
+        comes from P1's turn history, not from when this Storm began observing."""
+        game = create_game()
+        p1, _p2 = game.players
+        s1, s2, s3 = (_Signal(n) for n in ("S1", "S2", "S3"))
+        storm = self._storm(p1)
+        set_board_state(game, 0, hand=[s1, s2, s3])
+        game.active_player_index = 0
+
+        _cast(game, p1, s1)                # history: [s1]  (no Storm present yet)
+        _cast(game, p1, s2)                # history: [s1, s2]
+
+        # Storm enters the battlefield and registers only now.
+        set_board_state(game, 0, battlefield=[storm])
+        storm.register_triggers(game)
+
+        _cast(game, p1, s3)
+        _fire(game, p1, s3)
+        (trig,) = _storm_triggers(game, storm)
+        assert trig.event_state.copies == 2       # not 0 — full prior history counts
+        assert trig.event_state.spell is s3
+
+    def test_control_change_reads_new_controllers_history(self):
+        """P1 casts two qualifying spells while controlling Storm; P2 then gains
+        control and casts P2's first qualifying spell that turn. The trigger
+        captures zero (P2's history), not two (P1's)."""
+        game = create_game()
+        p1, p2 = game.players
+        p1a, p1b = _Signal("P1a"), _Signal("P1b")
+        p2a = _Signal("P2a")
+        storm = self._storm(p1)
+        set_board_state(game, 0, hand=[p1a, p1b], battlefield=[storm])
+        set_board_state(game, 1, hand=[p2a])
+        game.active_player_index = 0
+        storm.register_triggers(game)
+
+        _cast(game, p1, p1a); _fire(game, p1, p1a)   # P1's trigger: copies 0
+        _cast(game, p1, p1b); _fire(game, p1, p1b)   # P1's trigger: copies 1
+
+        storm.controller = p2                        # P2 gains control
+
+        _cast(game, p2, p2a); _fire(game, p2, p2a)   # P2's first qualifying spell
+        (p2_trig,) = [
+            so for so in _storm_triggers(game, storm)
+            if so.event_state.spell is p2a
+        ]
+        assert p2_trig.event_state.copies == 0       # P2's history, not P1's two
+
+    def test_separate_player_histories_are_not_merged_by_control_change(self):
+        """P1 and P2 cast different numbers of qualifying spells; a control
+        change of Storm neither merges nor transfers their histories."""
+        game = create_game()
+        p1, p2 = game.players
+        for n in ("A", "B", "C"):
+            c = _Signal(f"P1-{n}")
+            game.get_hand(p1).add(c)
+            _cast(game, p1, c)             # P1 casts three
+        c = _Signal("P2-A")
+        game.get_hand(p2).add(c)
+        _cast(game, p2, c)                 # P2 casts one
+
+        t = game.turn_number
+        assert len(p1.instant_or_sorcery_casts_this_turn(t)) == 3
+        assert len(p2.instant_or_sorcery_casts_this_turn(t)) == 1
+
+        storm = self._storm(p1)
+        set_board_state(game, 0, battlefield=[storm])
+        storm.register_triggers(game)
+        storm.controller = p2             # control change touches neither history
+
+        assert len(p1.instant_or_sorcery_casts_this_turn(t)) == 3
+        assert len(p2.instant_or_sorcery_casts_this_turn(t)) == 1
+
+    def test_two_storms_one_late_capture_same_count_without_double_increment(self):
+        """Two Storms controlled by the same player — one that entered later —
+        capture the same copy count for a single cast, and observing that cast
+        through two triggers does not double-increment the underlying history."""
+        game = create_game()
+        p1, _p2 = game.players
+        s1, s2, s3 = (_Signal(n) for n in ("S1", "S2", "S3"))
+        storm_early = self._storm(p1)
+        set_board_state(game, 0, hand=[s1, s2, s3], battlefield=[storm_early])
+        game.active_player_index = 0
+        storm_early.register_triggers(game)
+
+        _cast(game, p1, s1)               # history [s1]
+        _cast(game, p1, s2)               # history [s1, s2]
+
+        # A second Storm enters and registers only after two spells were cast.
+        storm_late = self._storm(p1)
+        set_board_state(game, 0, battlefield=[storm_early, storm_late])
+        storm_late.register_triggers(game)
+
+        _cast(game, p1, s3)
+        _fire(game, p1, s3)               # both Storms observe this one cast
+
+        (early,) = _storm_triggers(game, storm_early)
+        (late,) = _storm_triggers(game, storm_late)
+        assert early.event_state.copies == 2
+        assert late.event_state.copies == 2       # late Storm is NOT under-counted
+        # The history was incremented exactly once for s3 (two observers, no
+        # double-count): three qualifying spells this turn, s3 recorded once.
+        history = p1.instant_or_sorcery_casts_this_turn(game.turn_number)
+        assert len(history) == 3
+        assert history.count(s3) == 1
+
+    def test_earlier_casts_still_count_after_regaining_control(self):
+        """A player's earlier qualifying casts still count after that player
+        loses and then regains control of Storm."""
+        game = create_game()
+        p1, p2 = game.players
+        s1, s2 = _Signal("S1"), _Signal("S2")
+        storm = self._storm(p1)
+        set_board_state(game, 0, hand=[s1, s2], battlefield=[storm])
+        game.active_player_index = 0
+        storm.register_triggers(game)
+
+        _cast(game, p1, s1)               # P1 history [s1]
+        storm.controller = p2             # Storm leaves P1...
+        storm.controller = p1             # ...and returns to P1
+        _cast(game, p1, s2)
+        _fire(game, p1, s2)
+        (trig,) = _storm_triggers(game, storm)
+        assert trig.event_state.copies == 1       # s1 still counts for P1
+        assert trig.event_state.spell is s2
+
+    def test_turn_rollover_clears_both_players_histories(self):
+        """Both players' prior-turn qualifying casts stop contributing in the
+        next turn."""
+        game = create_game()
+        p1, p2 = game.players
+        p1s, p1n = _Signal("P1-prev"), _Signal("P1-next")
+        p2s, p2n = _Signal("P2-prev"), _Signal("P2-next")
+        storm1 = self._storm(p1)
+        storm2 = self._storm(p2)
+        set_board_state(game, 0, hand=[p1s, p1n], battlefield=[storm1])
+        set_board_state(game, 1, hand=[p2s, p2n], battlefield=[storm2])
+        game.active_player_index = 0
+        storm1.register_triggers(game)
+        storm2.register_triggers(game)
+
+        _cast(game, p1, p1s)              # turn N
+        _cast(game, p2, p2s)             # turn N
+        game.turn_number += 1             # roll over to turn N+1
+
+        _cast(game, p1, p1n); _fire(game, p1, p1n)   # first spell of N+1 for P1
+        _cast(game, p2, p2n); _fire(game, p2, p2n)   # first spell of N+1 for P2
+
+        (t1,) = [so for so in _storm_triggers(game, storm1)
+                 if so.event_state.spell is p1n]
+        (t2,) = [so for so in _storm_triggers(game, storm2)
+                 if so.event_state.spell is p2n]
+        assert t1.event_state.copies == 0     # P1's prior-turn cast doesn't count
+        assert t2.event_state.copies == 0     # P2's prior-turn cast doesn't count
+
+    def test_nonqualifying_spell_does_not_add_to_copy_count(self):
+        """A creature cast before an instant does not inflate the instant's
+        Storm copy count — only instant and sorcery casts contribute."""
+        game = create_game()
+        p1, _p2 = game.players
+        bear = Creature(name="Bear", base_power=1, base_toughness=1,
+                        owner=p1, controller=p1, mana_cost=ManaCost.parse("{0}"))
+        bolt = _Signal("Bolt")
+        storm = self._storm(p1)
+        set_board_state(game, 0, hand=[bear, bolt], battlefield=[storm])
+        game.active_player_index = 0
+        game.phase = Phase.PRECOMBAT_MAIN    # sorcery-speed timing for the creature
+        storm.register_triggers(game)
+
+        _cast(game, p1, bear)             # nonqualifying — not recorded
+        _cast(game, p1, bolt)
+        _fire(game, p1, bolt)
+        (trig,) = _storm_triggers(game, storm)
+        assert trig.event_state.copies == 0       # the creature cast did not count
+        assert trig.event_state.spell is bolt
