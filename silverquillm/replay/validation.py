@@ -191,6 +191,12 @@ class ValidatingExecutor:
         # counting unit is one divergence per (game, identity), not per
         # action or snapshot.
         self._missing_identities: set[str] = set()
+        # Simulate mode: battlefield tokens whose identity has no registered
+        # impl are only *missing* if the engine never mints+correlates them.
+        # That is not known until the game finishes (the engine may mint the
+        # token a step after GRE shows it), so the decision is deferred:
+        # grp_id -> (identity, snapshot). Finalized in report().
+        self._token_missing_candidates: dict[int, tuple[str, GameSnapshot]] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -342,6 +348,7 @@ class ValidatingExecutor:
 
     def report(self) -> ValidationReport:
         """Produce a ValidationReport summarizing the execution."""
+        self._finalize_token_missing()
         return ValidationReport(
             total_snapshots=self._snapshots_processed,
             successful_comparisons=self._successful,
@@ -373,6 +380,18 @@ class ValidatingExecutor:
         if not grp_id:
             return None
         name = self.card_id_map.get(grp_id, "")
+        if not name:
+            # The corpus-derived token map names the Arena-only card grpIds
+            # Scryfall omits (Gnarlid Colony, Embercleave, Llanowar Elves, and
+            # a documented out-of-set exclusion) and every token grpId, so they
+            # surface with a name instead of an anonymous grpId_<n>.
+            token_map = getattr(self.executor, "token_map", None)
+            if token_map is not None:
+                name = (
+                    token_map.arena_label(grp_id)
+                    or token_map.label(grp_id)
+                    or ""
+                )
         if (
             not name
             and obj is not None
@@ -398,11 +417,22 @@ class ValidatingExecutor:
         obj: Any = None,
         action: ReplayAction | None = None,
     ) -> Divergence | None:
-        """Dedup-record one missing identity; None if known/implemented."""
+        """Dedup-record one missing identity; None if known/implemented.
+
+        A known token whose identity has no registered impl is deferred to
+        end-of-game producibility (see report()) rather than recorded here — so
+        EVERY path that surfaces a token (parser action, synthesized action,
+        battlefield arrival) is producibility-checked uniformly, and a token the
+        engine mints and correlates is never falsely recorded as missing.
+        """
         identity = self._missing_card_identity(grp_id, obj)
         if identity is None or identity in self._missing_identities:
             return None
         if not self._identity_is_missing(identity):
+            return None
+        token_map = getattr(self.executor, "token_map", None)
+        if token_map is not None and token_map.is_token(grp_id):
+            self._token_missing_candidates.setdefault(grp_id, (identity, snapshot))
             return None
         self._missing_identities.add(identity)
         return Divergence(
@@ -446,11 +476,40 @@ class ValidatingExecutor:
                 continue
             if obj.type not in ("GameObjectType_Card", "GameObjectType_Token"):
                 continue
+            # _record_missing defers known tokens to end-of-game producibility.
             div = self._record_missing(curr_snapshot, obj.grp_id, obj=obj)
             if div is not None:
                 missing.append(div)
 
         return missing
+
+    def _finalize_token_missing(self) -> None:
+        """Record deferred token misses the engine never produced (task 6).
+
+        A token grpId the engine minted and correlated this game (present in the
+        executor's ``_minted_token_grpids``) is producible — not a missing card.
+        One that never appears there has no engine impl that mints it and must
+        still surface, as its named token identity rather than an anonymous
+        grpId. Idempotent: dedup via ``_missing_identities`` so a second call
+        adds nothing.
+        """
+        minted = getattr(self.executor, "_minted_token_grpids", set())
+        for grp_id in sorted(self._token_missing_candidates):
+            identity, snapshot = self._token_missing_candidates[grp_id]
+            if grp_id in minted or identity in self._missing_identities:
+                continue
+            self._missing_identities.add(identity)
+            self.divergences.append(Divergence(
+                game_state_id=snapshot.game_state_id,
+                divergence_type=DivergenceType.MISSING_CARD,
+                description=(
+                    f"Token '{identity}' (grpId={grp_id}) has no engine impl "
+                    f"that mints it"
+                ),
+                expected_state=self._snapshot_state_summary(snapshot),
+                actual_state=None,
+                involved_grp_ids=[grp_id],
+            ))
 
     def _check_missing_synthesized(
         self,
