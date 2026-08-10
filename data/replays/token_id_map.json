@@ -1,0 +1,1142 @@
+{
+  "arena_only_cards": {
+    "93937": {
+      "base_power": 2,
+      "base_toughness": 2,
+      "canonical_grp_id": 94188,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Green"
+      ],
+      "kind": "alt_printing",
+      "note": "2/2 green Beast; alt-printing of Gnarlid Colony (canonical grpId 94188, registered). Enters as an X/X so appears at 2/2, 4/4, 5/5.",
+      "resolves_to": "Gnarlid Colony",
+      "subtypes": [
+        "Beast"
+      ]
+    },
+    "93989": {
+      "base_power": null,
+      "base_toughness": null,
+      "canonical_grp_id": 94703,
+      "card_types": [
+        "Artifact"
+      ],
+      "colors": [
+        "Red"
+      ],
+      "kind": "alt_printing",
+      "note": "Red Equipment; the only red Equipment in the FDN/SPG registry is Embercleave (canonical synthetic grpId 94703, registered).",
+      "resolves_to": "Embercleave",
+      "subtypes": [
+        "Equipment"
+      ]
+    },
+    "93991": {
+      "base_power": 1,
+      "base_toughness": 1,
+      "canonical_grp_id": 93940,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Green"
+      ],
+      "kind": "alt_printing",
+      "note": "1/1 green Elf Druid; alt-printing of Llanowar Elves (canonical grpId 93940, registered).",
+      "resolves_to": "Llanowar Elves",
+      "subtypes": [
+        "Druid",
+        "Elf"
+      ]
+    },
+    "95283": {
+      "base_power": 1,
+      "base_toughness": 1,
+      "canonical_grp_id": null,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Black",
+        "Green"
+      ],
+      "kind": "out_of_set_exclusion",
+      "note": "Black/green Nightmare creature, base 1/1, grows with +1/+1 counters. Appears in exactly one corpus game whose decklist is full of non-FDN grpIds (11809, 81895, 175xxx...); no FDN/SPG registry match. Recorded as a named out-of-set exclusion so it stops being an anonymous grpId; it has no engine impl.",
+      "resolves_to": null,
+      "subtypes": [
+        "Nightmare"
+      ]
+    }
+  },
+  "corpus": "fdn",
+  "description": "grpId -> token identity map for FDN replays, derived from GameObjectType_Token objects in the replay corpus (Scryfall carries no arena_id for FDN tokens). 'generic' tokens are the anonymous FDN token block (94156-94178); 'copy' tokens already resolve via card_id_map.json. The arena_only_cards section resolves the four Arena-only card grpIds Scryfall's arena_id feed omits.",
+  "source": "corpus_derived",
+  "tokens": {
+    "93715": {
+      "base_power": 3,
+      "base_toughness": 3,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "White"
+      ],
+      "kind": "copy",
+      "label": "3/3 white Avatar Cat token",
+      "name": "Arahbo, the First Fang",
+      "observed_count": 2,
+      "source_grp_ids": [
+        93715
+      ],
+      "subtypes": [
+        "Avatar",
+        "Cat"
+      ]
+    },
+    "93731": {
+      "base_power": 3,
+      "base_toughness": 3,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "White"
+      ],
+      "kind": "copy",
+      "label": "3/3 white Human Knight token",
+      "name": "Inspiring Paladin",
+      "observed_count": 5,
+      "source_grp_ids": [
+        93731
+      ],
+      "subtypes": [
+        "Human",
+        "Knight"
+      ]
+    },
+    "93737": {
+      "base_power": 3,
+      "base_toughness": 4,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "White"
+      ],
+      "kind": "copy",
+      "label": "3/4 white Human Scout token",
+      "name": "Squad Rallier",
+      "observed_count": 10,
+      "source_grp_ids": [
+        93737
+      ],
+      "subtypes": [
+        "Human",
+        "Scout"
+      ]
+    },
+    "93741": {
+      "base_power": 3,
+      "base_toughness": 3,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "White"
+      ],
+      "kind": "copy",
+      "label": "3/3 white Angel Nightmare Warrior token",
+      "name": "Vanguard Seraph",
+      "observed_count": 4,
+      "source_grp_ids": [
+        93741
+      ],
+      "subtypes": [
+        "Angel",
+        "Nightmare",
+        "Warrior"
+      ]
+    },
+    "93747": {
+      "base_power": 5,
+      "base_toughness": 5,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Blue"
+      ],
+      "kind": "copy",
+      "label": "5/5 blue Sphinx token",
+      "name": "Curator of Destinies",
+      "observed_count": 18,
+      "source_grp_ids": [
+        93747
+      ],
+      "subtypes": [
+        "Sphinx"
+      ]
+    },
+    "93748": {
+      "base_power": 1,
+      "base_toughness": 3,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Blue"
+      ],
+      "kind": "copy",
+      "label": "1/3 blue Human Wizard token",
+      "name": "Drake Hatcher",
+      "observed_count": 10,
+      "source_grp_ids": [
+        93748
+      ],
+      "subtypes": [
+        "Human",
+        "Wizard"
+      ]
+    },
+    "93752": {
+      "base_power": 5,
+      "base_toughness": 6,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Blue"
+      ],
+      "kind": "copy",
+      "label": "5/6 blue Kraken token",
+      "name": "Grappling Kraken",
+      "observed_count": 8,
+      "source_grp_ids": [
+        93752
+      ],
+      "subtypes": [
+        "Kraken"
+      ]
+    },
+    "93754": {
+      "base_power": 2,
+      "base_toughness": 2,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Blue"
+      ],
+      "kind": "copy",
+      "label": "2/2 blue Homunculus token",
+      "name": "Homunculus Horde",
+      "observed_count": 286,
+      "source_grp_ids": [
+        93754
+      ],
+      "subtypes": [
+        "Homunculus"
+      ]
+    },
+    "93755": {
+      "base_power": 3,
+      "base_toughness": 4,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Blue"
+      ],
+      "kind": "copy",
+      "label": "3/4 blue Elemental token",
+      "name": "Icewind Elemental",
+      "observed_count": 11,
+      "source_grp_ids": [
+        93755
+      ],
+      "subtypes": [
+        "Elemental"
+      ]
+    },
+    "93768": {
+      "base_power": 5,
+      "base_toughness": 4,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Black"
+      ],
+      "kind": "copy",
+      "label": "5/4 black Demon token",
+      "name": "Arbiter of Woe",
+      "observed_count": 1,
+      "source_grp_ids": [
+        93768
+      ],
+      "subtypes": [
+        "Demon"
+      ]
+    },
+    "93771": {
+      "base_power": 5,
+      "base_toughness": 5,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Black"
+      ],
+      "kind": "copy",
+      "label": "5/5 black Knight Vampire token",
+      "name": "Bloodthirsty Conqueror",
+      "observed_count": 7,
+      "source_grp_ids": [
+        93771
+      ],
+      "subtypes": [
+        "Knight",
+        "Vampire"
+      ]
+    },
+    "93773": {
+      "base_power": 2,
+      "base_toughness": 2,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Black"
+      ],
+      "kind": "copy",
+      "label": "2/2 black Pirate Skeleton token",
+      "name": "Gutless Plunderer",
+      "observed_count": 2,
+      "source_grp_ids": [
+        93773
+      ],
+      "subtypes": [
+        "Pirate",
+        "Skeleton"
+      ]
+    },
+    "93777": {
+      "base_power": 1,
+      "base_toughness": 1,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Black"
+      ],
+      "kind": "copy",
+      "label": "1/1 black Elf Warlock token",
+      "name": "Infestation Sage",
+      "observed_count": 4,
+      "source_grp_ids": [
+        93777
+      ],
+      "subtypes": [
+        "Elf",
+        "Warlock"
+      ]
+    },
+    "93783": {
+      "base_power": 4,
+      "base_toughness": 2,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Black"
+      ],
+      "kind": "copy",
+      "label": "4/2 black Nightmare Zombie token",
+      "name": "Soul-Shackled Zombie",
+      "observed_count": 2,
+      "source_grp_ids": [
+        93783
+      ],
+      "subtypes": [
+        "Nightmare",
+        "Zombie"
+      ]
+    },
+    "93795": {
+      "base_power": 2,
+      "base_toughness": 2,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Red"
+      ],
+      "kind": "copy",
+      "label": "2/2 red Goblin Nightmare token",
+      "name": "Courageous Goblin",
+      "observed_count": 7,
+      "source_grp_ids": [
+        93795
+      ],
+      "subtypes": [
+        "Goblin",
+        "Nightmare"
+      ]
+    },
+    "93797": {
+      "base_power": 1,
+      "base_toughness": 1,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Red"
+      ],
+      "kind": "copy",
+      "label": "1/1 red Human token",
+      "name": "Dragon Trainer",
+      "observed_count": 5,
+      "source_grp_ids": [
+        93797
+      ],
+      "subtypes": [
+        "Human"
+      ]
+    },
+    "93806": {
+      "base_power": 2,
+      "base_toughness": 1,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Red"
+      ],
+      "kind": "copy",
+      "label": "2/1 red Goblin Warrior token",
+      "name": "Searslicer Goblin",
+      "observed_count": 1,
+      "source_grp_ids": [
+        93806
+      ],
+      "subtypes": [
+        "Goblin",
+        "Warrior"
+      ]
+    },
+    "93812": {
+      "base_power": 4,
+      "base_toughness": 4,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Green"
+      ],
+      "kind": "copy",
+      "label": "4/4 green Elephant token",
+      "name": "Apothecary Stomper",
+      "observed_count": 19,
+      "source_grp_ids": [
+        93812
+      ],
+      "subtypes": [
+        "Elephant"
+      ]
+    },
+    "93815": {
+      "base_power": 4,
+      "base_toughness": 2,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Green"
+      ],
+      "kind": "copy",
+      "label": "4/2 green Boar Nightmare token",
+      "name": "Eager Trufflesnout",
+      "observed_count": 6,
+      "source_grp_ids": [
+        93815
+      ],
+      "subtypes": [
+        "Boar",
+        "Nightmare"
+      ]
+    },
+    "93831": {
+      "base_power": 2,
+      "base_toughness": 2,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Black",
+        "Blue"
+      ],
+      "kind": "copy",
+      "label": "2/2 black blue Bird Nightmare token",
+      "name": "Dreadwing Scavenger",
+      "observed_count": 12,
+      "source_grp_ids": [
+        93831
+      ],
+      "subtypes": [
+        "Bird",
+        "Nightmare"
+      ]
+    },
+    "93849": {
+      "base_power": 3,
+      "base_toughness": 4,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "White"
+      ],
+      "kind": "copy",
+      "label": "3/4 white Angel Nightmare token",
+      "name": "Angel of Finality",
+      "observed_count": 4,
+      "source_grp_ids": [
+        93849
+      ],
+      "subtypes": [
+        "Angel",
+        "Nightmare"
+      ]
+    },
+    "93872": {
+      "base_power": 2,
+      "base_toughness": 1,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Blue"
+      ],
+      "kind": "copy",
+      "label": "2/1 blue Faerie Rogue token",
+      "name": "Mocking Sprite",
+      "observed_count": 4,
+      "source_grp_ids": [
+        93872
+      ],
+      "subtypes": [
+        "Faerie",
+        "Rogue"
+      ]
+    },
+    "93881": {
+      "base_power": null,
+      "base_toughness": null,
+      "card_types": [
+        "Enchantment"
+      ],
+      "colors": [
+        "Blue"
+      ],
+      "kind": "copy",
+      "label": "Aura token",
+      "name": "Witness Protection",
+      "observed_count": 5,
+      "source_grp_ids": [
+        93881
+      ],
+      "subtypes": [
+        "Aura"
+      ]
+    },
+    "93883": {
+      "base_power": 1,
+      "base_toughness": 1,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Black"
+      ],
+      "kind": "copy",
+      "label": "1/1 black Rat token",
+      "name": "Burglar Rat",
+      "observed_count": 9,
+      "source_grp_ids": [
+        93883
+      ],
+      "subtypes": [
+        "Rat"
+      ]
+    },
+    "93898": {
+      "base_power": 2,
+      "base_toughness": 2,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Black"
+      ],
+      "kind": "copy",
+      "label": "2/2 black Rogue Vampire token",
+      "name": "Stromkirk Bloodthief",
+      "observed_count": 4,
+      "source_grp_ids": [
+        93898
+      ],
+      "subtypes": [
+        "Rogue",
+        "Vampire"
+      ]
+    },
+    "93899": {
+      "base_power": 2,
+      "base_toughness": 3,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Black"
+      ],
+      "kind": "copy",
+      "label": "2/3 black Shaman Vampire token",
+      "name": "Vampire Nighthawk",
+      "observed_count": 12,
+      "source_grp_ids": [
+        93899
+      ],
+      "subtypes": [
+        "Shaman",
+        "Vampire"
+      ]
+    },
+    "93924": {
+      "base_power": 4,
+      "base_toughness": 4,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Green"
+      ],
+      "kind": "copy",
+      "label": "4/4 green Beast token",
+      "name": "Affectionate Indrik",
+      "observed_count": 11,
+      "source_grp_ids": [
+        93924
+      ],
+      "subtypes": [
+        "Beast"
+      ]
+    },
+    "93940": {
+      "base_power": 1,
+      "base_toughness": 1,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Green"
+      ],
+      "kind": "copy",
+      "label": "1/1 green Druid Elf Nightmare token",
+      "name": "Llanowar Elves",
+      "observed_count": 1,
+      "source_grp_ids": [
+        93940
+      ],
+      "subtypes": [
+        "Druid",
+        "Elf",
+        "Nightmare"
+      ]
+    },
+    "93951": {
+      "base_power": 16,
+      "base_toughness": 16,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Black",
+        "Blue"
+      ],
+      "kind": "copy",
+      "label": "16/16 black blue Horror token",
+      "name": "Consuming Aberration",
+      "observed_count": 22,
+      "source_grp_ids": [
+        93951
+      ],
+      "subtypes": [
+        "Horror"
+      ]
+    },
+    "93952": {
+      "base_power": 3,
+      "base_toughness": 4,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Blue",
+        "White"
+      ],
+      "kind": "copy",
+      "label": "3/4 blue white Bird Spirit token",
+      "name": "Empyrean Eagle",
+      "observed_count": 10,
+      "source_grp_ids": [
+        93952
+      ],
+      "subtypes": [
+        "Bird",
+        "Spirit"
+      ]
+    },
+    "93964": {
+      "base_power": 2,
+      "base_toughness": 1,
+      "card_types": [
+        "Artifact",
+        "Creature"
+      ],
+      "colors": [],
+      "kind": "copy",
+      "label": "2/1 colorless Golem token",
+      "name": "Campus Guide",
+      "observed_count": 2,
+      "source_grp_ids": [
+        93964
+      ],
+      "subtypes": [
+        "Golem"
+      ]
+    },
+    "94156": {
+      "base_power": 1,
+      "base_toughness": 1,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "White"
+      ],
+      "kind": "generic",
+      "label": "1/1 white Cat token",
+      "observed_count": 801,
+      "source_grp_ids": [
+        93715,
+        93717,
+        93734
+      ],
+      "subtypes": [
+        "Cat"
+      ]
+    },
+    "94158": {
+      "base_power": 1,
+      "base_toughness": 1,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "White"
+      ],
+      "kind": "generic",
+      "label": "1/1 white Human token",
+      "observed_count": 62,
+      "source_grp_ids": [
+        93861
+      ],
+      "subtypes": [
+        "Human"
+      ]
+    },
+    "94159": {
+      "base_power": 3,
+      "base_toughness": 3,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "White"
+      ],
+      "kind": "generic",
+      "label": "3/3 white Knight token",
+      "observed_count": 227,
+      "source_grp_ids": [
+        93727
+      ],
+      "subtypes": [
+        "Knight"
+      ]
+    },
+    "94160": {
+      "base_power": 1,
+      "base_toughness": 1,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "White"
+      ],
+      "kind": "generic",
+      "label": "1/1 white Rabbit token",
+      "observed_count": 1,
+      "source_grp_ids": [
+        93728
+      ],
+      "subtypes": [
+        "Rabbit"
+      ]
+    },
+    "94161": {
+      "base_power": 1,
+      "base_toughness": 1,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "White"
+      ],
+      "kind": "generic",
+      "label": "1/1 white Soldier token",
+      "observed_count": 542,
+      "source_grp_ids": [
+        93858,
+        93954
+      ],
+      "subtypes": [
+        "Soldier"
+      ]
+    },
+    "94162": {
+      "base_power": 1,
+      "base_toughness": 1,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "White"
+      ],
+      "kind": "generic",
+      "label": "1/1 white Spirit token",
+      "observed_count": 41,
+      "source_grp_ids": [
+        93835
+      ],
+      "subtypes": [
+        "Spirit"
+      ]
+    },
+    "94163": {
+      "base_power": 2,
+      "base_toughness": 2,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Blue"
+      ],
+      "kind": "generic",
+      "label": "2/2 blue Drake token",
+      "observed_count": 12,
+      "source_grp_ids": [
+        93748
+      ],
+      "subtypes": [
+        "Drake"
+      ]
+    },
+    "94164": {
+      "base_power": 1,
+      "base_toughness": 1,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Blue"
+      ],
+      "kind": "generic",
+      "label": "1/1 blue Faerie token",
+      "observed_count": 639,
+      "source_grp_ids": [
+        93751,
+        93760
+      ],
+      "subtypes": [
+        "Faerie"
+      ]
+    },
+    "94165": {
+      "base_power": 1,
+      "base_toughness": 1,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Blue"
+      ],
+      "kind": "generic",
+      "label": "1/1 blue Fish token",
+      "observed_count": 4,
+      "source_grp_ids": [
+        93841
+      ],
+      "subtypes": [
+        "Fish"
+      ]
+    },
+    "94166": {
+      "base_power": 3,
+      "base_toughness": 3,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Blue"
+      ],
+      "kind": "generic",
+      "label": "3/3 blue Serpent token",
+      "observed_count": 42,
+      "source_grp_ids": [
+        93834
+      ],
+      "subtypes": [
+        "Serpent"
+      ]
+    },
+    "94168": {
+      "base_power": 8,
+      "base_toughness": 8,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Blue"
+      ],
+      "kind": "generic",
+      "label": "8/8 blue Octopus token",
+      "observed_count": 38,
+      "source_grp_ids": [
+        93758
+      ],
+      "subtypes": [
+        "Octopus"
+      ]
+    },
+    "94169": {
+      "base_power": 1,
+      "base_toughness": 1,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Black"
+      ],
+      "kind": "generic",
+      "label": "1/1 black Rat token",
+      "observed_count": 55,
+      "source_grp_ids": [
+        93780
+      ],
+      "subtypes": [
+        "Rat"
+      ]
+    },
+    "94170": {
+      "base_power": 2,
+      "base_toughness": 2,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Black"
+      ],
+      "kind": "generic",
+      "label": "2/2 black Zombie token",
+      "observed_count": 25,
+      "source_grp_ids": [
+        93889
+      ],
+      "subtypes": [
+        "Zombie"
+      ]
+    },
+    "94171": {
+      "base_power": 4,
+      "base_toughness": 4,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Red"
+      ],
+      "kind": "generic",
+      "label": "4/4 red Dragon token",
+      "observed_count": 45,
+      "source_grp_ids": [
+        93797
+      ],
+      "subtypes": [
+        "Dragon"
+      ]
+    },
+    "94172": {
+      "base_power": 5,
+      "base_toughness": 5,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Red"
+      ],
+      "kind": "generic",
+      "label": "5/5 red Dragon token",
+      "observed_count": 28,
+      "source_grp_ids": [
+        93805
+      ],
+      "subtypes": [
+        "Dragon"
+      ]
+    },
+    "94173": {
+      "base_power": 1,
+      "base_toughness": 1,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Red"
+      ],
+      "kind": "generic",
+      "label": "1/1 red Goblin token",
+      "observed_count": 538,
+      "source_grp_ids": [
+        93801,
+        93806,
+        93913,
+        93917,
+        94173
+      ],
+      "subtypes": [
+        "Goblin"
+      ]
+    },
+    "94174": {
+      "base_power": 1,
+      "base_toughness": 1,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Green"
+      ],
+      "kind": "generic",
+      "label": "1/1 green Elf Warrior token",
+      "observed_count": 295,
+      "source_grp_ids": [
+        93816,
+        93931,
+        93955
+      ],
+      "subtypes": [
+        "Elf",
+        "Warrior"
+      ]
+    },
+    "94175": {
+      "base_power": 3,
+      "base_toughness": 3,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Green"
+      ],
+      "kind": "generic",
+      "label": "3/3 green Raccoon token",
+      "observed_count": 17,
+      "source_grp_ids": [
+        93826
+      ],
+      "subtypes": [
+        "Raccoon"
+      ]
+    },
+    "94176": {
+      "base_power": 1,
+      "base_toughness": 1,
+      "card_types": [
+        "Creature"
+      ],
+      "colors": [
+        "Black",
+        "Green"
+      ],
+      "kind": "generic",
+      "label": "1/1 black green Insect token",
+      "observed_count": 401,
+      "source_grp_ids": [
+        93777
+      ],
+      "subtypes": [
+        "Insect"
+      ]
+    },
+    "94177": {
+      "base_power": null,
+      "base_toughness": null,
+      "card_types": [
+        "Artifact"
+      ],
+      "colors": [],
+      "kind": "generic",
+      "label": "Food token",
+      "observed_count": 125,
+      "source_grp_ids": [
+        93717,
+        93778,
+        93815,
+        93882
+      ],
+      "subtypes": [
+        "Food"
+      ]
+    },
+    "94178": {
+      "base_power": null,
+      "base_toughness": null,
+      "card_types": [
+        "Artifact"
+      ],
+      "colors": [],
+      "kind": "generic",
+      "label": "Treasure token",
+      "observed_count": 116,
+      "source_grp_ids": [
+        93755,
+        93767,
+        93775,
+        93777,
+        93786,
+        93845,
+        93899,
+        93916,
+        93964,
+        93965,
+        93966
+      ],
+      "subtypes": [
+        "Treasure"
+      ]
+    }
+  }
+}
