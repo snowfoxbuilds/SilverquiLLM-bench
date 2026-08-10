@@ -417,11 +417,22 @@ class ValidatingExecutor:
         obj: Any = None,
         action: ReplayAction | None = None,
     ) -> Divergence | None:
-        """Dedup-record one missing identity; None if known/implemented."""
+        """Dedup-record one missing identity; None if known/implemented.
+
+        A known token whose identity has no registered impl is deferred to
+        end-of-game producibility (see report()) rather than recorded here — so
+        EVERY path that surfaces a token (parser action, synthesized action,
+        battlefield arrival) is producibility-checked uniformly, and a token the
+        engine mints and correlates is never falsely recorded as missing.
+        """
         identity = self._missing_card_identity(grp_id, obj)
         if identity is None or identity in self._missing_identities:
             return None
         if not self._identity_is_missing(identity):
+            return None
+        token_map = getattr(self.executor, "token_map", None)
+        if token_map is not None and token_map.is_token(grp_id):
+            self._token_missing_candidates.setdefault(grp_id, (identity, snapshot))
             return None
         self._missing_identities.add(identity)
         return Divergence(
@@ -459,29 +470,13 @@ class ValidatingExecutor:
         # (c) battlefield arrivals — makes cards the parser and the
         # hidden-origin synthesis never surface (tokens above all) visible.
         prev_bf = self._battlefield_instance_ids(prev_snapshot)
-        token_map = getattr(self.executor, "token_map", None)
         for iid in self._battlefield_instance_ids(curr_snapshot) - prev_bf:
             obj = curr_snapshot.game_objects.get(iid)
             if obj is None:
                 continue
             if obj.type not in ("GameObjectType_Card", "GameObjectType_Token"):
                 continue
-            # A known token whose identity has no registered impl is only
-            # *missing* if the engine never produces it — a decision that
-            # depends on the whole game, so defer it (see report()). Tokens that
-            # resolve to a registered card (copy-tokens) and cards fall through
-            # to the immediate, deduped record.
-            if (
-                obj.type == "GameObjectType_Token"
-                and token_map is not None
-                and token_map.is_token(obj.grp_id)
-            ):
-                identity = self._missing_card_identity(obj.grp_id, obj)
-                if identity is not None and self._identity_is_missing(identity):
-                    self._token_missing_candidates.setdefault(
-                        obj.grp_id, (identity, curr_snapshot)
-                    )
-                    continue
+            # _record_missing defers known tokens to end-of-game producibility.
             div = self._record_missing(curr_snapshot, obj.grp_id, obj=obj)
             if div is not None:
                 missing.append(div)
