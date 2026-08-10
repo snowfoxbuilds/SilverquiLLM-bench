@@ -2438,16 +2438,28 @@ class TestStrictLoader:
 
 
 class TestGoldenGame:
-    """Full simulate pipeline over a committed corpus game, fingerprint-pinned.
+    """Full simulate pipeline over committed corpus games, fingerprint-pinned.
 
     The fingerprint is intentionally exact: any executor or engine change
-    that shifts this game's divergences must be looked at (and this pin
-    updated deliberately), rather than drowning in corpus-level totals.
+    that shifts a game's divergences must be looked at (and the pin updated
+    deliberately, justified in the commit message), rather than drowning in
+    corpus-level totals. The original game (fdn_match0_game0) pins zero
+    ENGINE_ERROR / zero P/T, so it cannot regress the buckets phases A–F moved
+    most. Phase F added three fixtures chosen by explicit criteria to cover the
+    surfaces this phase moved: token minting (own-ETB), counter/dynamic-P/T
+    (the CounterAdded sync), and equipment + activation-funding (the bounded
+    funding limitation, pinned as ENGINE_ERROR).
     """
 
     FIXTURE = REPO_ROOT / "data" / "replays" / "golden" / "fdn_match0_game0.json"
+    # Phase F additions.
+    FIXTURE_TOKENS = REPO_ROOT / "data" / "replays" / "golden" / "fdn_tokens_prideful.json"
+    FIXTURE_COUNTERS = REPO_ROOT / "data" / "replays" / "golden" / "fdn_counters_dynamic_pt.json"
+    FIXTURE_EQUIP = REPO_ROOT / "data" / "replays" / "golden" / "fdn_equipment_funding.json"
 
-    def test_divergence_fingerprint(self):
+    @staticmethod
+    def _fingerprint(fixture):
+        """Run the full simulate pipeline over *fixture*, return its fingerprint."""
         from collections import Counter
 
         from cards.loader import load_set_registry
@@ -2456,14 +2468,13 @@ class TestGoldenGame:
 
         card_id_map = load_card_id_map()
         registry = load_set_registry("fdn")
-        game = parse_replay(self.FIXTURE, card_id_map=card_id_map)
+        game = parse_replay(fixture, card_id_map=card_id_map)
         executor = ReplayExecutor(
             replay=game, card_id_map=card_id_map, registry=registry, simulate=True
         )
         validator = ValidatingExecutor(executor, card_id_map)
         validator.execute_all()
         report = validator.report()
-
         by_type = Counter(d.divergence_type.value for d in report.divergences)
         by_category = Counter(
             d.description.split("]")[0].lstrip("[")
@@ -2471,6 +2482,12 @@ class TestGoldenGame:
             else d.divergence_type.value
             for d in report.divergences
         )
+        return report, by_type, by_category
+
+    def test_divergence_fingerprint(self):
+        from collections import Counter  # noqa: F401 — used via _fingerprint
+
+        report, by_type, by_category = self._fingerprint(self.FIXTURE)
         # MISSING_CARD is one divergence per (game, identity). Hare Apparent
         # (FDN #15) is implemented, so its occurrences never registered as a
         # missing card; the last remaining missing identity was the engine-minted
@@ -2493,4 +2510,65 @@ class TestGoldenGame:
             "zone_contents": 8,
             "life_total": 1,
             "tapped_state": 1,
+        }
+
+    def test_tokens_prideful_fingerprint(self):
+        """Token-dense game (Prideful Parent ×4). Phase F's own-ETB ordering
+        makes Prideful Parent's Cat tokens mint on their own entry; the minted
+        tokens correlate and enter the battlefield, so the residual here is the
+        token zone-timing surface (GRE shows a token a step before/after the
+        engine mints it), not outright MISSING_CARD."""
+        report, by_type, by_category = self._fingerprint(self.FIXTURE_TOKENS)
+        assert report.total_snapshots == 332
+        assert report.successful_comparisons == 313
+        assert dict(by_type) == {"STATE_MISMATCH": 24, "ILLEGAL_ACTION": 2}
+        assert dict(by_category) == {
+            "zone_contents": 22,
+            "power_toughness": 2,
+            "tapped_state": 2,
+        }
+
+    def test_counters_dynamic_pt_fingerprint(self):
+        """Counter / dynamic-P/T game. Phase F's CounterAdded sync lands +1/+1
+        counters on the correlated permanents, so power_toughness stays bounded
+        (12) rather than tracking every counter the executor never fired; the
+        remaining P/T is dynamic-P/T cards (e.g. Consuming Aberration) the sync
+        does not model."""
+        report, by_type, by_category = self._fingerprint(self.FIXTURE_COUNTERS)
+        assert report.total_snapshots == 770
+        assert report.successful_comparisons == 728
+        assert dict(by_type) == {
+            "STATE_MISMATCH": 57,
+            "ILLEGAL_ACTION": 1,
+            "MISSING_CARD": 1,
+        }
+        assert dict(by_category) == {
+            "zone_contents": 32,
+            "life_total": 14,
+            "power_toughness": 12,
+            "MISSING_CARD": 1,
+        }
+
+    def test_equipment_funding_fingerprint(self):
+        """Equipment + activation-funding game (Goldvein Pick ×30, + tokens +
+        counters). The ENGINE_ERROR count (6) is the bounded funding limitation:
+        equip activations whose mana GRE recorded only against the equipment's
+        cast (or floating/reused, never re-annotated) cannot be funded without
+        fabrication, so the equip cost stays unpayable. This fixture pins that
+        limitation so a future funding fix (or regression) is visible."""
+        report, by_type, by_category = self._fingerprint(self.FIXTURE_EQUIP)
+        assert report.total_snapshots == 894
+        assert report.successful_comparisons == 809
+        assert dict(by_type) == {
+            "STATE_MISMATCH": 86,
+            "ENGINE_ERROR": 6,
+            "ILLEGAL_ACTION": 4,
+            "MISSING_CARD": 4,
+        }
+        assert dict(by_category) == {
+            "zone_contents": 56,
+            "tapped_state": 19,
+            "life_total": 15,
+            "ENGINE_ERROR": 6,
+            "MISSING_CARD": 4,
         }
