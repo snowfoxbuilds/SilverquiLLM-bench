@@ -548,6 +548,11 @@ class ReplayExecutor:
             try:
                 card = self.registry.create_instance(card_name, owner=owner)
                 card.controller = owner
+                # Tag the actual grpId at creation so _card_to_grp_id reads it
+                # directly instead of a name reverse-lookup — which is ambiguous
+                # for multi-printing names (a basic land has several printings)
+                # and returns whichever printing was seen first.
+                card._grp_id = grp_id
                 return card
             except Exception:
                 pass
@@ -613,6 +618,10 @@ class ReplayExecutor:
 
         if card_name in basic_lands:
             card = Land(name=card_name, owner=owner, controller=owner)
+            # Carry the actual GRE grpId, not the name — a basic land name maps
+            # to several printings, so the name reverse-lookup in
+            # _card_to_grp_id would otherwise pick the wrong (first) printing.
+            card._grp_id = grp_id
             return card
 
         # For unknown cards, create a generic CardImpl
