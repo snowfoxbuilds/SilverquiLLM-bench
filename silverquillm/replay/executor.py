@@ -151,6 +151,24 @@ def _token_signature(
     return (cts, subs, None, None)
 
 
+def _color_key(colors: Any) -> frozenset:
+    """Normalize a colour collection to a comparable key.
+
+    Accepts either the engine's ``Color`` enum members (``get_colors`` returns a
+    ``set[Color]``) or the token map's colour strings (``["Red", "White"]``) and
+    returns a frozenset of upper-cased colour names, so an engine ``Color.RED``
+    and a map ``"Red"`` compare equal. An empty/undeclared colour collection
+    yields the empty frozenset — a token that does not declare its colour cannot
+    be told apart from a same-signature token that does, which the caller treats
+    as "no colour evidence".
+    """
+    key = set()
+    for c in colors or []:
+        name = getattr(c, "name", None) or str(c)
+        key.add(name.upper())
+    return frozenset(key)
+
+
 class TokenIdMap:
     """Corpus-derived token identity map (data/replays/token_id_map.json).
 
@@ -177,9 +195,17 @@ class TokenIdMap:
             except (ValueError, TypeError):
                 continue
 
+    def __len__(self) -> int:
+        """Number of known token identities (0 for an empty/observer map)."""
+        return len(self._tokens)
+
     def is_token(self, grp_id: int) -> bool:
         """True if *grp_id* is a known token identity."""
         return grp_id in self._tokens
+
+    def known_grp_ids(self) -> list[int]:
+        """Every known token grpId, sorted (for auditing map collisions)."""
+        return sorted(self._tokens)
 
     def signature(self, grp_id: int) -> tuple | None:
         """Correlation signature for a known token grpId (None if unknown)."""
@@ -192,6 +218,22 @@ class TokenIdMap:
             entry.get("base_power"),
             entry.get("base_toughness"),
         )
+
+    def color_key(self, grp_id: int) -> frozenset | None:
+        """Normalized colour key for a known token grpId (None if unknown).
+
+        The corpus-derived colour (``["Red"]``, ``["Black"]``, ``[]`` for a
+        colourless token) upper-cased into a frozenset, so it compares directly
+        against an engine token's ``get_colors``. Colour is the identity
+        discriminator that tells two same-signature token grpIds apart (e.g. the
+        1/1 red Human copy 93797 from the 1/1 white Human 94158); it is NOT part
+        of the base signature because a token impl that omits its colour must
+        still correlate on the common (single-grpId) path.
+        """
+        entry = self._tokens.get(grp_id)
+        if entry is None:
+            return None
+        return _color_key(entry.get("colors"))
 
     def label(self, grp_id: int) -> str | None:
         """Human-readable identity for a token grpId (None if unknown)."""
@@ -219,16 +261,48 @@ class TokenIdMap:
         return entry.get("resolves_to") or entry.get("label")
 
 
-def load_token_id_map(path: str | Path | None = None) -> TokenIdMap:
-    """Load the corpus-derived token identity map from JSON."""
+def load_token_id_map(
+    path: str | Path | None = None, *, required: bool = False
+) -> TokenIdMap:
+    """Load the corpus-derived token identity map from JSON.
+
+    ``required=True`` (used by the simulate-mode verification path) makes
+    missing or malformed data fail VISIBLY instead of degrading to an empty map:
+    a silently-empty map would still run, but every token would mis-report as
+    unproducible / anonymous, quietly inflating the divergence and MISSING_CARD
+    metrics the run exists to measure. Regeneration stays documented and
+    reproducible via ``scripts/build_token_id_map.py``.
+    """
     if path is None:
         path = Path(__file__).parent.parent.parent / "data" / "replays" / "token_id_map.json"
     else:
         path = Path(path)
     if not path.exists():
+        if required:
+            raise FileNotFoundError(
+                f"token identity map not found at {path}; simulate-mode "
+                f"validation requires it — regenerate with "
+                f"scripts/build_token_id_map.py"
+            )
         return TokenIdMap({})
-    with open(path) as f:
-        return TokenIdMap(json.load(f))
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, ValueError) as exc:  # ValueError covers JSONDecodeError
+        if required:
+            raise ValueError(
+                f"token identity map at {path} is malformed ({exc}); "
+                f"regenerate with scripts/build_token_id_map.py"
+            ) from exc
+        raise
+    token_map = TokenIdMap(data)
+    if required and len(token_map) == 0:
+        raise ValueError(
+            f"token identity map at {path} carries no token entries; "
+            f"simulate-mode validation would silently mis-report token "
+            f"producibility — regenerate with scripts/build_token_id_map.py"
+        )
+    return token_map
 
 
 # ---------------------------------------------------------------------------
@@ -331,7 +405,9 @@ class ReplayExecutor:
         if token_map is not None:
             self.token_map = token_map
         elif simulate:
-            self.token_map = load_token_id_map()
+            # Simulate is the verification path: a missing/malformed map must
+            # fail visibly, not silently validate against an empty map.
+            self.token_map = load_token_id_map(required=True)
         else:
             self.token_map = TokenIdMap()
 
@@ -548,11 +624,16 @@ class ReplayExecutor:
             try:
                 card = self.registry.create_instance(card_name, owner=owner)
                 card.controller = owner
-                # Tag the actual grpId at creation so _card_to_grp_id reads it
-                # directly instead of a name reverse-lookup — which is ambiguous
-                # for multi-printing names (a basic land has several printings)
-                # and returns whichever printing was seen first.
-                card._grp_id = grp_id
+                # Simulate-only: tag the actual grpId at creation so
+                # _card_to_grp_id reads it directly instead of a name
+                # reverse-lookup — which is ambiguous for multi-printing names (a
+                # basic land has several printings) and returns whichever
+                # printing was seen first. Gated to simulate because _create_card
+                # also runs in observer mode (Seat 2 injection): observer output
+                # must stay byte-identical to the pre-Phase-E baseline, whose
+                # _card_to_grp_id used the name reverse-lookup here.
+                if self.simulate:
+                    card._grp_id = grp_id
                 return card
             except Exception:
                 pass
@@ -618,10 +699,15 @@ class ReplayExecutor:
 
         if card_name in basic_lands:
             card = Land(name=card_name, owner=owner, controller=owner)
-            # Carry the actual GRE grpId, not the name — a basic land name maps
-            # to several printings, so the name reverse-lookup in
+            # Simulate-only: carry the actual GRE grpId, not the name — a basic
+            # land name maps to several printings, so the name reverse-lookup in
             # _card_to_grp_id would otherwise pick the wrong (first) printing.
-            card._grp_id = grp_id
+            # Gated to simulate because _create_basic_card also runs in observer
+            # mode (Seat 2 land plays of unregistered basic lands); observer
+            # output must stay byte-identical to the pre-Phase-E baseline, which
+            # did not tag the grpId here.
+            if self.simulate:
+                card._grp_id = grp_id
             return card
 
         # For unknown cards, create a generic CardImpl
@@ -2724,6 +2810,24 @@ class ReplayExecutor:
             getattr(card, "base_toughness", None),
         )
 
+    def _engine_token_color_key(self, card: Any) -> frozenset:
+        """Normalized colour of an engine token (empty if it declares none).
+
+        Uses ``engine.protection.get_colors`` — the engine's own colour helper,
+        which reads an explicit ``colors`` attribute first (the idiom token impls
+        use, e.g. Hare Apparent's ``token.colors = {Color.WHITE}``) and otherwise
+        derives from mana pips (tokens have none, so an undeclared token reads as
+        colourless). A token that does not declare its colour yields the empty
+        key and therefore cannot be disambiguated from a same-signature token of
+        a different colour — the honest outcome is to leave it unstamped.
+        """
+        try:
+            from engine.protection import get_colors
+
+            return _color_key(get_colors(card))
+        except Exception:
+            return _color_key(getattr(card, "colors", None))
+
     def _correlate_tokens_in_group(
         self, gre_objs: list[Any], engine_cards: list[Any]
     ) -> None:
@@ -2735,17 +2839,30 @@ class ReplayExecutor:
         for creatures — base P/T, which is what tells the two red Dragon tokens
         apart). Only grpIds the map recognizes are ever stamped.
 
-        Ambiguity rule (KEY_DECISIONS): same-signature tokens are
-        interchangeable per rule 601 — they are matched by COUNT, never by
-        guessed order. An engine token the map can't match stays id-0 and is
-        handled exactly as before (the overflow pass may remove it). Idempotent:
-        already-stamped tokens are skipped, so calling it twice a step is safe.
+        Identity-safety rule (KEY_DECISIONS): a stamp is made ONLY when the
+        available evidence identifies the grpId uniquely.
+
+        - One grpId shares the base signature → an unambiguous match. Duplicates
+          of that single identity are interchangeable (rule 601) and are matched
+          by COUNT, never guessed order.
+        - Several DISTINCT grpIds share the base signature (e.g. the 1/1 Human
+          copy 93797 and the 1/1 white Human 94158) → the engine object is NOT
+          distributed among them by sorted grpId or zone order. It is
+          disambiguated on real evidence (explicit token colour); a colour that
+          maps to exactly one candidate is stamped, and any object whose colour
+          still matches more than one candidate (e.g. two black 1/1 Rats,
+          93883 vs 94169) is left id-less so comparison/resync records the gap.
+
+        An ambiguous grpId is never added to ``_minted_token_grpids``. An engine
+        token the map can't match stays id-0 and is handled exactly as before
+        (the overflow pass may remove it). Idempotent: already-stamped tokens are
+        skipped, so calling it twice a step is safe.
         """
         if self.token_map is None:
             return
 
         # GRE tokens present whose grpId the map recognizes, bucketed by
-        # signature; a signature may cover more than one grpId (copy-tokens).
+        # signature; a signature may cover more than one distinct grpId.
         gre_by_sig: dict[tuple, Counter] = {}
         for obj in gre_objs:
             if obj.type != "GameObjectType_Token":
@@ -2772,15 +2889,70 @@ class ReplayExecutor:
             pool = idless.get(sig)
             if not pool:
                 continue
-            idx = 0
-            # Deterministic assignment when several grpIds share a signature.
-            for grp_id in sorted(grp_counter):
-                for _ in range(grp_counter[grp_id]):
-                    if idx >= len(pool):
-                        break
-                    pool[idx]._grp_id = grp_id
-                    self._minted_token_grpids.add(grp_id)
-                    idx += 1
+            if len(grp_counter) == 1:
+                # Exactly one identity shares this base signature: unambiguous.
+                (grp_id,) = grp_counter
+                self._stamp_tokens(pool, grp_id, grp_counter[grp_id])
+            else:
+                # Several distinct identities share this base signature. Never
+                # distribute by grpId/zone order — disambiguate on colour and
+                # stamp only where it is unique.
+                self._correlate_ambiguous_signature(grp_counter, pool)
+
+    def _stamp_tokens(self, pool: list[Any], grp_id: int, count: int) -> None:
+        """Stamp up to *count* still-id-less *pool* tokens with *grp_id*.
+
+        Marks the identity producible in ``_minted_token_grpids`` only for the
+        objects actually stamped. Skips any object already carrying a grpId so
+        repeat calls within a step are idempotent.
+        """
+        stamped = 0
+        for card in pool:
+            if stamped >= count:
+                break
+            if getattr(card, "_grp_id", None):
+                continue
+            card._grp_id = grp_id
+            self._minted_token_grpids.add(grp_id)
+            stamped += 1
+
+    def _correlate_ambiguous_signature(
+        self, grp_counter: Counter, pool: list[Any]
+    ) -> None:
+        """Disambiguate several same-base-signature grpIds by explicit colour.
+
+        Buckets candidate grpIds and engine tokens by colour. A colour that
+        identifies exactly one candidate grpId is a unique evidentiary match and
+        is count-stamped; a colour shared by more than one candidate cannot tell
+        them apart, so those objects are left id-less (honest ambiguity) and
+        their grpIds never enter ``_minted_token_grpids``. If any candidate has
+        no recorded colour, colour is not a reliable axis for this signature and
+        nothing is stamped.
+        """
+        grp_by_color: dict[frozenset, Counter] = {}
+        for grp_id, count in grp_counter.items():
+            ckey = self.token_map.color_key(grp_id)
+            if not ckey:
+                # A candidate with no recorded colour makes the colour axis
+                # unreliable for this whole signature — bail rather than guess.
+                return
+            grp_by_color.setdefault(ckey, Counter())[grp_id] += count
+
+        pool_by_color: dict[frozenset, list[Any]] = {}
+        for card in pool:
+            pool_by_color.setdefault(
+                self._engine_token_color_key(card), []
+            ).append(card)
+
+        for ckey, color_grps in grp_by_color.items():
+            if len(color_grps) != 1:
+                # Colour does not separate these identities: leave unstamped.
+                continue
+            (grp_id,) = color_grps
+            cpool = pool_by_color.get(ckey)
+            if not cpool:
+                continue
+            self._stamp_tokens(cpool, grp_id, color_grps[grp_id])
 
     def _correlate_tokens(self, snapshot: GameSnapshot) -> None:
         """Correlate engine-minted tokens across every battlefield group.

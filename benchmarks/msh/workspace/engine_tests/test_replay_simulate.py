@@ -454,6 +454,16 @@ class TestHonestMissingCard:
 RABBIT_TOK, CAT_TOK = 94160, 94156
 DRAGON4_TOK, DRAGON5_TOK = 94171, 94172  # both red Dragons, base 4/4 vs 5/5
 
+# The two runtime-signature COLLISION sets in the committed map (task 3): a
+# base signature (card_types, subtypes, base P/T) shared by more than one
+# distinct grpId. Colour separates the first pair; it cannot separate the
+# second (both black), so those stay unstamped.
+HUMAN_COPY_TOK, HUMAN_GEN_TOK = 93797, 94158  # 1/1 red vs 1/1 white Human
+RAT_COPY_TOK, RAT_GEN_TOK = 93883, 94169      # 1/1 black Rat, copy vs generic
+# A copy token whose map "base P/T" (16/16) is really modal OBSERVED P/T: the
+# real card's power/toughness is characteristic-defining (dynamic).
+CDA_COPY_TOK = 93951  # Consuming Aberration copy, black/blue Horror
+
 
 def token_obj(
     iid: int,
@@ -476,9 +486,15 @@ def token_obj(
 
 def add_engine_token(
     ex, seat: int, name: str, subtypes: list[str],
-    power: int, toughness: int,
+    power: int, toughness: int, colors=None,
 ):
-    """Place an id-less engine token on *seat*'s battlefield (as a card mints one)."""
+    """Place an id-less engine token on *seat*'s battlefield (as a card mints one).
+
+    *colors* is an optional set of ``engine.types.Color`` — the explicit colour
+    a token impl declares (e.g. ``token.colors = {Color.WHITE}``). Left unset the
+    token reads as colourless via ``get_colors``, mirroring an impl that forgot
+    to state its colour.
+    """
     from engine.card import Creature
     from engine.types import Zone as EZone
 
@@ -486,6 +502,8 @@ def add_engine_token(
         name=name, subtypes=set(subtypes), base_power=power, base_toughness=toughness,
     )
     tok.is_token = True
+    if colors is not None:
+        tok.colors = set(colors)
     tok.owner = ex.players[seat]
     tok.controller = ex.players[seat]
     ex.players[seat].zones[EZone.BATTLEFIELD].add(tok)
@@ -569,6 +587,230 @@ class TestTokenCorrelation:
         assert getattr(other, "_grp_id", None) is None
 
 
+class TestTokenCorrelationAmbiguity:
+    """Identity-safety (follow-up to PR #35): when several DISTINCT grpIds share
+    a base signature, engine objects are disambiguated on real evidence
+    (explicit token colour) and stamped only where it is unique — never
+    distributed by sorted grpId or engine-zone order. These would fail under
+    PR #35, whose ``sorted(grp_counter)`` assignment swaps identities by order.
+    """
+
+    def _color(self):
+        from engine.types import Color
+
+        return Color
+
+    def _human_group(self):
+        """A GRE group holding both 1/1 Human identities (93797 red, 94158 white)."""
+        objs = {
+            530: token_obj(530, HUMAN_COPY_TOK, 1, ["Human"], 1, 1),
+            531: token_obj(531, HUMAN_GEN_TOK, 1, ["Human"], 1, 1),
+        }
+        return snapshot(1, battlefield={1: [530, 531]}, objects=objs)
+
+    def test_human_collision_split_by_colour_engine_order_red_first(self):
+        Color = self._color()
+        ex = make_executor([self._human_group()])
+        red = add_engine_token(
+            ex, 1, "Dragon Trainer", ["Human"], 1, 1, colors={Color.RED}
+        )
+        white = add_engine_token(
+            ex, 1, "Human", ["Human"], 1, 1, colors={Color.WHITE}
+        )
+        ex._correlate_tokens(ex.replay.snapshots[0])
+        assert red._grp_id == HUMAN_COPY_TOK
+        assert white._grp_id == HUMAN_GEN_TOK
+        assert ex._minted_token_grpids == {HUMAN_COPY_TOK, HUMAN_GEN_TOK}
+
+    def test_human_collision_split_by_colour_engine_order_white_first(self):
+        """Reversed engine insertion order — must NOT swap identities (the
+        exact bug in PR #35's sorted-order distribution)."""
+        Color = self._color()
+        ex = make_executor([self._human_group()])
+        white = add_engine_token(
+            ex, 1, "Human", ["Human"], 1, 1, colors={Color.WHITE}
+        )
+        red = add_engine_token(
+            ex, 1, "Dragon Trainer", ["Human"], 1, 1, colors={Color.RED}
+        )
+        ex._correlate_tokens(ex.replay.snapshots[0])
+        assert red._grp_id == HUMAN_COPY_TOK
+        assert white._grp_id == HUMAN_GEN_TOK
+        assert ex._minted_token_grpids == {HUMAN_COPY_TOK, HUMAN_GEN_TOK}
+
+    def _rat_group(self):
+        objs = {
+            540: token_obj(540, RAT_COPY_TOK, 1, ["Rat"], 1, 1),
+            541: token_obj(541, RAT_GEN_TOK, 1, ["Rat"], 1, 1),
+        }
+        return snapshot(1, battlefield={1: [540, 541]}, objects=objs)
+
+    def test_rat_collision_colour_cannot_disambiguate_left_unstamped(self):
+        """93883 and 94169 are both 1/1 BLACK Rats: colour can't tell them
+        apart, so neither engine object is stamped and neither grpId is marked
+        producible (honest ambiguity)."""
+        Color = self._color()
+        ex = make_executor([self._rat_group()])
+        r1 = add_engine_token(
+            ex, 1, "Burglar Rat", ["Rat"], 1, 1, colors={Color.BLACK}
+        )
+        r2 = add_engine_token(ex, 1, "Rat", ["Rat"], 1, 1, colors={Color.BLACK})
+        ex._correlate_tokens(ex.replay.snapshots[0])
+        assert getattr(r1, "_grp_id", None) is None
+        assert getattr(r2, "_grp_id", None) is None
+        assert RAT_COPY_TOK not in ex._minted_token_grpids
+        assert RAT_GEN_TOK not in ex._minted_token_grpids
+
+    def test_rat_collision_reversed_order_still_unstamped(self):
+        Color = self._color()
+        ex = make_executor([self._rat_group()])
+        r2 = add_engine_token(ex, 1, "Rat", ["Rat"], 1, 1, colors={Color.BLACK})
+        r1 = add_engine_token(
+            ex, 1, "Burglar Rat", ["Rat"], 1, 1, colors={Color.BLACK}
+        )
+        ex._correlate_tokens(ex.replay.snapshots[0])
+        assert getattr(r1, "_grp_id", None) is None
+        assert getattr(r2, "_grp_id", None) is None
+        assert not (ex._minted_token_grpids & {RAT_COPY_TOK, RAT_GEN_TOK})
+
+    def test_undeclared_colour_token_not_stamped_in_collision(self):
+        """An engine token in a colliding signature that declares NO colour
+        cannot be disambiguated, so it stays unstamped rather than guessed."""
+        ex = make_executor([self._human_group()])
+        # No colour set -> get_colors is empty -> matches neither candidate.
+        t = add_engine_token(ex, 1, "Human", ["Human"], 1, 1)
+        ex._correlate_tokens(ex.replay.snapshots[0])
+        assert getattr(t, "_grp_id", None) is None
+
+    def test_single_identity_in_colliding_signature_count_matches(self):
+        """A group holding ONE identity whose signature *could* collide still
+        count-matches every duplicate — the ambiguity guard only engages when
+        more than one distinct grpId is actually present."""
+        Color = self._color()
+        objs = {
+            550: token_obj(550, HUMAN_GEN_TOK, 1, ["Human"], 1, 1),
+            551: token_obj(551, HUMAN_GEN_TOK, 1, ["Human"], 1, 1),
+            552: token_obj(552, HUMAN_GEN_TOK, 1, ["Human"], 1, 1),
+        }
+        s0 = snapshot(1, battlefield={1: [550, 551, 552]}, objects=objs)
+        ex = make_executor([s0])
+        humans = [
+            add_engine_token(ex, 1, "Human", ["Human"], 1, 1, colors={Color.WHITE})
+            for _ in range(3)
+        ]
+        ex._correlate_tokens(s0)
+        assert all(h._grp_id == HUMAN_GEN_TOK for h in humans)
+        assert ex._minted_token_grpids == {HUMAN_GEN_TOK}
+
+    def test_dynamic_pt_copy_not_matched_by_observed_pt(self):
+        """The map records 16/16 for the Consuming Aberration copy, but that is
+        modal OBSERVED P/T of a characteristic-defining creature. An engine copy
+        at its live (different) base P/T is NOT force-matched to that observed
+        value — base P/T stays a required filter, so the mismatch leaves the
+        token unstamped rather than inventing a match."""
+        Color = self._color()
+        gre = token_obj(560, CDA_COPY_TOK, 1, ["Horror"], 16, 16)
+        s0 = snapshot(1, battlefield={1: [560]}, objects={560: gre})
+        ex = make_executor([s0])
+        aberration = add_engine_token(
+            ex, 1, "Consuming Aberration", ["Horror"], 3, 3,
+            colors={Color.BLACK, Color.BLUE},
+        )
+        ex._correlate_tokens(s0)
+        assert getattr(aberration, "_grp_id", None) is None
+        assert CDA_COPY_TOK not in ex._minted_token_grpids
+
+
+class TestTokenMapCollisionAudit:
+    """Task 3: every committed-map base-signature shared by more than one grpId
+    is enumerated with the EXACT runtime signature (``TokenIdMap.signature``),
+    not a script-only signature, and is classified. This guards against map
+    drift silently introducing a new, undocumented collision that correlation
+    would then have to guess through.
+    """
+
+    def _map(self):
+        from silverquillm.replay.executor import load_token_id_map
+
+        return load_token_id_map()
+
+    def test_runtime_signature_collisions_are_exactly_the_documented_two(self):
+        from collections import defaultdict
+
+        tm = self._map()
+        by_sig: dict = defaultdict(set)
+        for grp in tm.known_grp_ids():
+            sig = tm.signature(grp)
+            if sig is not None:
+                by_sig[sig].add(grp)
+        collisions = {frozenset(g) for g in by_sig.values() if len(g) > 1}
+        assert collisions == {
+            frozenset({HUMAN_COPY_TOK, HUMAN_GEN_TOK}),
+            frozenset({RAT_COPY_TOK, RAT_GEN_TOK}),
+        }
+
+    def test_human_collision_is_colour_separable(self):
+        # 93797 (red) vs 94158 (white): colour disambiguates → both stampable.
+        tm = self._map()
+        assert tm.color_key(HUMAN_COPY_TOK) != tm.color_key(HUMAN_GEN_TOK)
+
+    def test_rat_collision_is_not_colour_separable(self):
+        # 93883 vs 94169: both black → colour cannot disambiguate → left unstamped.
+        tm = self._map()
+        assert tm.color_key(RAT_COPY_TOK) == tm.color_key(RAT_GEN_TOK)
+
+
+class TestObserverCreationPathsGrpId:
+    """Task 5: the ``_grp_id`` tags added at card creation are simulate-only, so
+    observer mode's ``_card_to_grp_id`` keeps its pre-Phase-E name reverse-lookup
+    behaviour — observer output stays byte-identical to the baseline."""
+
+    def _executor(self, simulate):
+        replay = ReplayGame(seat_id=1, opponent_seat_id=2)
+        replay.snapshots = [snapshot(1)]
+        ex = ReplayExecutor(
+            replay=replay, card_id_map=dict(CARD_MAP), registry=None, simulate=simulate
+        )
+        ex.initialize(replay.snapshots[0])
+        return ex
+
+    def test_basic_card_grpid_tagged_only_in_simulate(self):
+        obs = self._executor(simulate=False)
+        card = obs._create_basic_card(FOREST, "Forest", obs.players[1])
+        assert not getattr(card, "_grp_id", None)
+        sim = self._executor(simulate=True)
+        card2 = sim._create_basic_card(FOREST, "Forest", sim.players[1])
+        assert card2._grp_id == FOREST
+
+    def test_create_card_fallback_grpid_tagged_only_in_simulate(self):
+        # registry=None routes _create_card through the basic-land fallback.
+        obs = self._executor(simulate=False)
+        card = obs._create_card(FOREST, obs.players[1])
+        assert not getattr(card, "_grp_id", None)
+        sim = self._executor(simulate=True)
+        card2 = sim._create_card(FOREST, sim.players[1])
+        assert card2._grp_id == FOREST
+
+    def test_create_card_registry_path_grpid_tagged_only_in_simulate(self):
+        from engine.card import CardImpl
+
+        class _CreatingRegistry:
+            def __contains__(self, name):
+                return name == "Forest"
+
+            def create_instance(self, name, owner=None):
+                return CardImpl(name=name, owner=owner)
+
+        obs = self._executor(simulate=False)
+        obs.registry = _CreatingRegistry()
+        card = obs._create_card(FOREST, obs.players[1])
+        assert not getattr(card, "_grp_id", None)
+        sim = self._executor(simulate=True)
+        sim.registry = _CreatingRegistry()
+        card2 = sim._create_card(FOREST, sim.players[1])
+        assert card2._grp_id == FOREST
+
+
 class TestTokenMissingSemantics:
     """Phase E task 6: a mapped token the engine produces is not missing; one it
     never produces still surfaces, as its named token identity."""
@@ -611,6 +853,39 @@ class TestTokenMissingSemantics:
         assert CAT_TOK not in ex._minted_token_grpids
         assert "Cat token" in missing[0].description
         assert f"grpId_{CAT_TOK}" not in missing[0].description
+
+    def test_ambiguous_correlation_does_not_mark_producible_or_suppress_missing(self):
+        """An ambiguous match must NOT contaminate producibility. Both black-Rat
+        identities (93883 copy, 94169 generic) share a signature colour can't
+        split; the engine mints two black Rats but neither grpId is stamped, so
+        neither is marked producible and the generic identity still surfaces as
+        MISSING. Under PR #35 the sorted-order assignment would stamp both, mark
+        94169 producible, and wrongly suppress its MISSING_CARD entry.
+        """
+        from engine.types import Color
+
+        # Mirror the real card_id_map: the copy grpId resolves to its real card
+        # (Burglar Rat, registered → never missing); the generic grpId has no
+        # card_id_map entry and resolves via its token label.
+        card_map = dict(CARD_MAP) | {RAT_COPY_TOK: "Burglar Rat"}
+        objs = {
+            540: token_obj(540, RAT_COPY_TOK, 1, ["Rat"], 1, 1),
+            541: token_obj(541, RAT_GEN_TOK, 1, ["Rat"], 1, 1),
+        }
+        snaps = [snapshot(1), snapshot(2, battlefield={1: [540, 541]}, objects=objs)]
+        ex, validator = make_validator(
+            snaps, FakeRegistry({"Plains", "Burglar Rat"}), card_map=card_map
+        )
+        add_engine_token(ex, 1, "Burglar Rat", ["Rat"], 1, 1, colors={Color.BLACK})
+        add_engine_token(ex, 1, "Rat", ["Rat"], 1, 1, colors={Color.BLACK})
+        validator.execute_all()
+        validator.report()
+        # Ambiguous → neither identity marked producible.
+        assert RAT_COPY_TOK not in ex._minted_token_grpids
+        assert RAT_GEN_TOK not in ex._minted_token_grpids
+        # The unproven generic identity is not suppressed — it surfaces missing.
+        missing = self._missing(validator)
+        assert any(RAT_GEN_TOK in d.involved_grp_ids for d in missing)
 
 
 class TestActivationTargetIntent:
