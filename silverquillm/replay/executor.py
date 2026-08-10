@@ -194,6 +194,16 @@ class TokenIdMap:
                 self._arena[int(k)] = v
             except (ValueError, TypeError):
                 continue
+        # Precompute the COMPLETE set of grpIds sharing each runtime signature.
+        # Ambiguity is a property of the whole map, not of whichever identities
+        # a single snapshot happens to show — so correlation must decide "does
+        # this signature collide?" against this map-wide index, never against
+        # the grpIds present in one battlefield group.
+        self._sig_to_grps: dict[tuple, set[int]] = {}
+        for grp_id in self._tokens:
+            sig = self.signature(grp_id)
+            if sig is not None:
+                self._sig_to_grps.setdefault(sig, set()).add(grp_id)
 
     def __len__(self) -> int:
         """Number of known token identities (0 for an empty/observer map)."""
@@ -218,6 +228,21 @@ class TokenIdMap:
             entry.get("base_power"),
             entry.get("base_toughness"),
         )
+
+    def signature_candidates(self, sig: tuple | None) -> set[int]:
+        """Every known token grpId whose runtime signature equals *sig*.
+
+        The COMPLETE collision set for a signature — the map-wide truth about
+        how many distinct identities can carry it. Correlation uses this (never
+        the count of identities present in one snapshot) to decide whether a
+        signature is unique or colliding: a signature two grpIds share is
+        ambiguous even in a snapshot that shows only one of them, so a lone
+        colliding identity must still go through identity-evidence validation
+        rather than the count-only path. Empty for an unknown signature.
+        """
+        if sig is None:
+            return set()
+        return set(self._sig_to_grps.get(sig, ()))
 
     def color_key(self, grp_id: int) -> frozenset | None:
         """Normalized colour key for a known token grpId (None if unknown).
@@ -2840,18 +2865,26 @@ class ReplayExecutor:
         apart). Only grpIds the map recognizes are ever stamped.
 
         Identity-safety rule (KEY_DECISIONS): a stamp is made ONLY when the
-        available evidence identifies the grpId uniquely.
+        available evidence identifies the grpId uniquely. Ambiguity is decided
+        MAP-WIDE (``TokenIdMap.signature_candidates``), never from the identities
+        this snapshot happens to show — a signature two grpIds share is ambiguous
+        even in a group that contains only one of them.
 
-        - One grpId shares the base signature → an unambiguous match. Duplicates
-          of that single identity are interchangeable (rule 601) and are matched
-          by COUNT, never guessed order.
-        - Several DISTINCT grpIds share the base signature (e.g. the 1/1 Human
-          copy 93797 and the 1/1 white Human 94158) → the engine object is NOT
-          distributed among them by sorted grpId or zone order. It is
-          disambiguated on real evidence (explicit token colour); a colour that
-          maps to exactly one candidate is stamped, and any object whose colour
-          still matches more than one candidate (e.g. two black 1/1 Rats,
-          93883 vs 94169) is left id-less so comparison/resync records the gap.
+        - A GLOBALLY-UNIQUE signature (only one map identity can carry it) → an
+          unambiguous match. Duplicates of that single identity are
+          interchangeable (rule 601) and are matched by COUNT, never guessed
+          order.
+        - A GLOBALLY-COLLIDING signature (several DISTINCT map grpIds share it,
+          e.g. the 1/1 red Human copy 93797 and the 1/1 white Human 94158) → the
+          engine object is NEVER distributed among the candidates by grpId or
+          zone order, NOR inferred from being the only colliding identity the
+          snapshot shows. Each object is validated against the COMPLETE collision
+          set on real evidence (explicit token colour, then copy-card name);
+          output is restricted to the identities GRE actually contains here. An
+          object whose evidence does not pick out exactly one GRE-present
+          identity — a contradictory colour, or nothing that separates two
+          same-colour Rats (93883 vs 94169) — is left id-less so comparison and
+          resync record the gap.
 
         An ambiguous grpId is never added to ``_minted_token_grpids``. An engine
         token the map can't match stays id-0 and is handled exactly as before
@@ -2889,15 +2922,18 @@ class ReplayExecutor:
             pool = idless.get(sig)
             if not pool:
                 continue
-            if len(grp_counter) == 1:
-                # Exactly one identity shares this base signature: unambiguous.
+            candidates = self.token_map.signature_candidates(sig)
+            if len(candidates) <= 1:
+                # Globally unique signature: only one identity can ever carry it,
+                # so present duplicates are interchangeable and matched by count.
                 (grp_id,) = grp_counter
                 self._stamp_tokens(pool, grp_id, grp_counter[grp_id])
             else:
-                # Several distinct identities share this base signature. Never
-                # distribute by grpId/zone order — disambiguate on colour and
-                # stamp only where it is unique.
-                self._correlate_ambiguous_signature(grp_counter, pool)
+                # Globally colliding signature: several distinct identities share
+                # it map-wide. Validate each engine object against the COMPLETE
+                # collision set and restrict output to the GRE-present identities
+                # — presence of a single candidate never proves an object's id.
+                self._correlate_colliding_signature(grp_counter, candidates, pool)
 
     def _stamp_tokens(self, pool: list[Any], grp_id: int, count: int) -> None:
         """Stamp up to *count* still-id-less *pool* tokens with *grp_id*.
@@ -2916,43 +2952,86 @@ class ReplayExecutor:
             self._minted_token_grpids.add(grp_id)
             stamped += 1
 
-    def _correlate_ambiguous_signature(
-        self, grp_counter: Counter, pool: list[Any]
+    def _correlate_colliding_signature(
+        self, present_counter: Counter, candidates: set[int], pool: list[Any]
     ) -> None:
-        """Disambiguate several same-base-signature grpIds by explicit colour.
+        """Correlate engine tokens whose signature collides across the map.
 
-        Buckets candidate grpIds and engine tokens by colour. A colour that
-        identifies exactly one candidate grpId is a unique evidentiary match and
-        is count-stamped; a colour shared by more than one candidate cannot tell
-        them apart, so those objects are left id-less (honest ambiguity) and
-        their grpIds never enter ``_minted_token_grpids``. If any candidate has
-        no recorded colour, colour is not a reliable axis for this signature and
-        nothing is stamped.
+        A colliding signature is one several distinct grpIds share MAP-WIDE, so
+        signature + count can never prove identity — that would be inferring an
+        object's identity from whichever colliding grpId the snapshot happens to
+        show. Each engine object is instead validated against the COMPLETE
+        collision set (*candidates*): its explicit colour, then its copy-card
+        name, must pick out exactly one member (see ``_resolve_colliding_identity``).
+        The result is then restricted to the identities GRE actually contains in
+        this group (*present_counter*) and bounded by their counts.
+
+        Contradictory evidence — a colour that resolves to a candidate GRE does
+        not show here (e.g. a red engine Human when GRE shows only the white
+        94158), or no matching candidate at all — and insufficient evidence —
+        nothing separates the survivors (two same-colour Rats) — both leave the
+        object id-less, so compare/resync exposes the uncertainty and the
+        unproven identity is never marked producible.
         """
-        grp_by_color: dict[frozenset, Counter] = {}
-        for grp_id, count in grp_counter.items():
-            ckey = self.token_map.color_key(grp_id)
-            if not ckey:
-                # A candidate with no recorded colour makes the colour axis
-                # unreliable for this whole signature — bail rather than guess.
-                return
-            grp_by_color.setdefault(ckey, Counter())[grp_id] += count
-
-        pool_by_color: dict[frozenset, list[Any]] = {}
+        # Only identities present in this group may be output; ``budget`` also
+        # caps each at its GRE count. A Counter read for an absent identity is 0,
+        # so a resolved-but-not-present identity is naturally rejected.
+        budget = Counter(present_counter)
         for card in pool:
-            pool_by_color.setdefault(
-                self._engine_token_color_key(card), []
-            ).append(card)
+            if getattr(card, "_grp_id", None):
+                continue
+            grp_id = self._resolve_colliding_identity(card, candidates)
+            if grp_id is None:
+                continue  # contradictory or insufficient evidence → id-less
+            if budget[grp_id] <= 0:
+                # The engine object resolves to an identity GRE does not show
+                # here (its evidence contradicts the snapshot) or that identity's
+                # count is already exhausted. Either way: leave it id-less.
+                continue
+            card._grp_id = grp_id
+            self._minted_token_grpids.add(grp_id)
+            budget[grp_id] -= 1
 
-        for ckey, color_grps in grp_by_color.items():
-            if len(color_grps) != 1:
-                # Colour does not separate these identities: leave unstamped.
-                continue
-            (grp_id,) = color_grps
-            cpool = pool_by_color.get(ckey)
-            if not cpool:
-                continue
-            self._stamp_tokens(cpool, grp_id, color_grps[grp_id])
+    def _resolve_colliding_identity(
+        self, card: Any, candidates: set[int]
+    ) -> int | None:
+        """The one collision-set identity *card*'s own evidence uniquely supports.
+
+        Validated against the COMPLETE collision set, never narrowed to the
+        snapshot first — so an engine object cannot borrow the identity of "the
+        only colliding grpId GRE shows". Returns ``None`` unless the evidence
+        picks out exactly one candidate.
+
+        Colour is the primary discriminator: a candidate survives only if its
+        recorded colour EQUALS the engine token's explicit colour. An undeclared
+        engine colour is the empty key, which equals only a genuinely colourless
+        candidate — it can never confirm a coloured one, and a colour that
+        matches no candidate (contradiction) eliminates all. If colour leaves
+        exactly one survivor, that is the identity. If it leaves several — a
+        same-colour collision, e.g. the two black Rats — the copy-card name
+        breaks the tie: the survivor whose recorded card name equals the engine
+        token's name. A generic token (no recorded name) cannot be confirmed this
+        way and stays ambiguous. Anything short of a unique survivor → ``None``.
+        """
+        engine_color = self._engine_token_color_key(card)
+        survivors = {
+            grp_id for grp_id in candidates
+            if self.token_map.color_key(grp_id) == engine_color
+        }
+        if len(survivors) == 1:
+            (grp_id,) = survivors
+            return grp_id
+        if len(survivors) > 1:
+            engine_name = getattr(card, "name", None)
+            if engine_name:
+                named = {
+                    grp_id for grp_id in survivors
+                    if self.token_map.token_name(grp_id) == engine_name
+                }
+                if len(named) == 1:
+                    (grp_id,) = named
+                    return grp_id
+        return None
 
     def _correlate_tokens(self, snapshot: GameSnapshot) -> None:
         """Correlate engine-minted tokens across every battlefield group.
