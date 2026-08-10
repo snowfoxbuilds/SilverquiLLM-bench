@@ -613,6 +613,82 @@ class TestTokenMissingSemantics:
         assert f"grpId_{CAT_TOK}" not in missing[0].description
 
 
+class TestActivationTargetIntent:
+    """Phase E task 4: an activated ability's activation-time target query is
+    answered from the replay stream — TargetSpec keyed to the ability's own
+    instance id — via _with_target_intent."""
+
+    def test_activation_intent_started_from_ability_targetspec(self):
+        victim = card_obj(150, FOREST, 2, BF1)
+        ts = Annotation(
+            id=902, affector_id=700, affected_ids=[150],
+            type=["AnnotationType_TargetSpec"], details={"index": [1]},
+        )
+        s0 = snapshot(1, battlefield={2: [150]}, objects={150: victim})
+        s1 = snapshot(2, battlefield={2: [150]}, objects={150: victim},
+                      annotations=[ts])
+        ex = make_executor([s0, s1])
+        player = ex.players[1]
+        started: dict = {}
+        orig_start = player.start_intent
+
+        def spy(name, intent):
+            started["name"] = name
+            started["prefs"] = intent.preferences
+            return orig_start(name, intent)
+
+        player.start_intent = spy
+        action = ReplayAction(
+            action_type="ability_activation", player_seat_id=1, instance_id=700,
+        )
+        ex._with_target_intent(action, s0, s1, lambda: None)
+        assert started.get("name") == "replay_ability_700"
+        assert started.get("prefs")  # the ability's target was derived + applied
+
+
+class TestMultiAbilityFallthrough:
+    """Phase E task 5: a source with more than one activated ability is not
+    guess-driven — it falls through to the resync (honest), never activating a
+    guessed ability."""
+
+    class _TwoAbilitySource:
+        name = "TwoAbilitySource"
+
+        def get_activated_abilities(self):
+            from engine.card import ActivatedAbility
+
+            return [
+                ActivatedAbility(cost=lambda g, s: True, effect=lambda g: None,
+                                 description="a"),
+                ActivatedAbility(cost=lambda g, s: True, effect=lambda g: None,
+                                 description="b"),
+            ]
+
+    def test_multi_ability_source_is_not_driven(self):
+        s0 = snapshot(1)
+        ex = make_executor([s0])
+        source = self._TwoAbilitySource()
+        activated = {"count": 0}
+        import engine.abilities as ab
+        orig = ab.activate_ability
+
+        def spy(*a, **k):
+            activated["count"] += 1
+            return orig(*a, **k)
+
+        ab.activate_ability = spy
+        try:
+            action = ReplayAction(
+                action_type="ability_activation", player_seat_id=1, instance_id=1,
+            )
+            result = StepResult(snapshot_id=1)
+            ex._try_activate_ability(ex.players[1], source, action, s0, s0, result)
+        finally:
+            ab.activate_ability = orig
+        assert activated["count"] == 0  # never guess-drove an ability
+        assert result.engine_failures == []
+
+
 class TestReplayActivationTimingContext:
     """Phase E task 3: a driven activation runs under GRE-observed-legal timing
     so the sorcery-speed can_activate gate accepts it, without weakening the

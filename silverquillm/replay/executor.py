@@ -1806,9 +1806,19 @@ class ReplayExecutor:
     ) -> None:
         """Activate *source_card*'s single activated ability, if unambiguous.
 
-        GRE does not say which of a card's abilities an ability object is,
-        so only the one-ability case is driven; multi-ability sources fall
-        through to the resync (recorded by state comparison, not guessed).
+        Only the one-ability case is driven. Multi-ability disambiguation
+        (task 5) was investigated and is not cleanly answerable: GRE ability
+        objects DO carry an ability grpId, but there is no per-card map from
+        that grpId to a specific engine ability; and ``ActivatedAbility.cost``
+        is an opaque callable with side effects (pay mana, tap, sacrifice), so
+        it cannot be dry-run to select by cost-payability without mutating
+        state. Rather than guess-and-drive the wrong ability — which would push
+        a wrong effect and manufacture a divergence — a multi-ability (or
+        zero-ability) source falls through to the resync, which records the
+        real divergence via state comparison. Genuine multi-ability activations
+        are rare in the corpus (Ravenous Amulet, Kellan). Zero-ability sources
+        here are triggered abilities the parser labeled ``ability_activation``;
+        the resolution path (or resync) handles them.
         """
         try:
             abilities = list(source_card.get_activated_abilities() or [])
