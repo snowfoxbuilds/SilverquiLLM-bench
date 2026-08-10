@@ -926,17 +926,36 @@ def _counter_ann(ann_id: int, affected: list[int], ctype: int, amount: int,
     )
 
 
-def _ann_snap(game_state_id: int, *anns: _Annotation) -> GameSnapshot:
-    """A minimal snapshot carrying only counter annotations.
+def _ann_snap(
+    game_state_id: int,
+    *anns: _Annotation,
+    bf: dict[int, int] | None = None,
+    grp: dict[int, int] | None = None,
+) -> GameSnapshot:
+    """A minimal snapshot carrying counter annotations + GRE bf residency.
 
-    Counter reconciliation reads battlefield residency and stint identity from
-    the ENGINE (``game.refs``), not the GRE snapshot, so the snapshot only needs
-    to carry the annotation stream; residency is set up on the engine directly
-    via ``_place`` / ``_remove``.
+    ``bf`` maps affected instance ids to their controller seat: each becomes a
+    GameObject in a shared GRE battlefield zone, because a fold now requires
+    GRE itself to attest the affected object ON the battlefield in the current
+    snapshot (stint-safe correlation). ``grp`` optionally assigns grpIds
+    (default 0 — unknown, which contradicts nothing). Engine-side residency and
+    stint identity are still set up directly via ``_place`` / ``_remove``.
     """
     snap = GameSnapshot(game_state_id=game_state_id)
     snap.players = {1: PlayerInfo(seat_id=1, life_total=20),
                     2: PlayerInfo(seat_id=2, life_total=20)}
+    bf = bf or {}
+    grp = grp or {}
+    snap.zones[30] = ReplayZone(
+        zone_id=30, type="ZoneType_Battlefield", owner_seat_id=0,
+        object_instance_ids=list(bf),
+    )
+    for aid, seat in bf.items():
+        snap.game_objects[aid] = GameObject(
+            instance_id=aid, grp_id=grp.get(aid, 0),
+            type="GameObjectType_Card", zone_id=30,
+            owner_seat_id=seat, controller_seat_id=seat,
+        )
     snap.annotations = list(anns)
     return snap
 
@@ -964,14 +983,18 @@ class TestCounterAnnotationSync:
     def test_plus_one_counter_synced_to_pt_fields(self, executor: ReplayExecutor) -> None:
         perm = _FakePermanent(999)
         _place(executor, perm, 5001)
-        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(1, [5001], 1, 2)))
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(1, [5001], 1, 2), bf={5001: 1})
+        )
         assert perm.plus_one_counters == 2
         assert perm._base_plus_one_counters == 2  # survives apply_all reset
 
     def test_named_counter_synced_to_generic(self, executor: ReplayExecutor) -> None:
         perm = _FakePermanent(1000, name="Drake Hatcher")
         _place(executor, perm, 5002)
-        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(2, [5002], 200, 3)))
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(2, [5002], 200, 3), bf={5002: 1})
+        )
         assert perm._generic_counters.get("incubation") == 3
 
     def test_authoritative_set_never_double_counts(self, executor: ReplayExecutor) -> None:
@@ -981,25 +1004,33 @@ class TestCounterAnnotationSync:
         perm.plus_one_counters = 2
         perm._base_plus_one_counters = 2
         _place(executor, perm, 5003)
-        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(3, [5003], 1, 2)))
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(3, [5003], 1, 2), bf={5003: 1})
+        )
         assert perm.plus_one_counters == 2
 
     def test_dedup_by_annotation_id(self, executor: ReplayExecutor) -> None:
         perm = _FakePermanent(1002)
         _place(executor, perm, 5004)
-        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(4, [5004], 1, 1)))
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(4, [5004], 1, 1), bf={5004: 1})
+        )
         # The same annotation id repeated in a later snapshot (persistent slot)
         # is not re-folded: exactly-once per (annotation, affected id).
-        executor._apply_counter_annotations(_ann_snap(3, _counter_ann(4, [5004], 1, 1)))
+        executor._apply_counter_annotations(
+            _ann_snap(3, _counter_ann(4, [5004], 1, 1), bf={5004: 1})
+        )
         assert perm.plus_one_counters == 1
 
     def test_counter_removed_decrements(self, executor: ReplayExecutor) -> None:
         perm = _FakePermanent(1003)
         _place(executor, perm, 5005)
-        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(5, [5005], 1, 3)))
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(5, [5005], 1, 3), bf={5005: 1})
+        )
         assert perm.plus_one_counters == 3
         executor._apply_counter_annotations(
-            _ann_snap(3, _counter_ann(6, [5005], 1, 1, removed=True))
+            _ann_snap(3, _counter_ann(6, [5005], 1, 1, removed=True), bf={5005: 1})
         )
         assert perm.plus_one_counters == 2
 
@@ -1007,7 +1038,7 @@ class TestCounterAnnotationSync:
         perm = _FakePermanent(1004)
         _place(executor, perm, 5006)
         executor._apply_counter_annotations(
-            _ann_snap(2, _counter_ann(7, [5006], 1, 1, removed=True))
+            _ann_snap(2, _counter_ann(7, [5006], 1, 1, removed=True), bf={5006: 1})
         )
         assert perm.plus_one_counters == 0
 
@@ -1025,7 +1056,9 @@ class TestCounterAnnotationSync:
         _place(executor, perm, 5007)
         other = _FakePermanent(1006)
         _place(executor, other, 5008)
-        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(9, [5008], 1, 1)))
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(9, [5008], 1, 1), bf={5007: 1, 5008: 1})
+        )
         assert perm.plus_one_counters == 4  # untouched
         assert other.plus_one_counters == 1
 
@@ -1041,7 +1074,9 @@ class TestCounterStintScoping:
         # annotation: the old counter is not restored on the reused object.
         perm = _FakePermanent(2000)
         _place(executor, perm, 6001)
-        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(20, [6001], 1, 1)))
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(20, [6001], 1, 1), bf={6001: 1})
+        )
         assert perm.plus_one_counters == 1
 
         # Blink out: perm leaves the engine battlefield -> retirement clears it.
@@ -1052,7 +1087,7 @@ class TestCounterStintScoping:
 
         # Return with no new attestation: it stays clean (no inherited counter).
         _place(executor, perm, 6002)
-        executor._apply_counter_annotations(_ann_snap(4))
+        executor._apply_counter_annotations(_ann_snap(4, bf={6002: 1}))
         assert perm.plus_one_counters == 0
 
     def test_named_counter_not_restored_after_blink(self, executor: ReplayExecutor) -> None:
@@ -1060,7 +1095,7 @@ class TestCounterStintScoping:
         perm = _FakePermanent(2001, name="Drake Hatcher")
         _place(executor, perm, 6101)
         executor._apply_counter_annotations(
-            _ann_snap(2, _counter_ann(21, [6101], 200, 4))  # incubation x4
+            _ann_snap(2, _counter_ann(21, [6101], 200, 4), bf={6101: 1})  # incubation x4
         )
         assert perm._generic_counters.get("incubation") == 4
 
@@ -1075,7 +1110,9 @@ class TestCounterStintScoping:
         # global reconciliation) must not resurrect the retired object's ledger.
         perm = _FakePermanent(2002)
         _place(executor, perm, 6201)
-        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(22, [6201], 1, 2)))
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(22, [6201], 1, 2), bf={6201: 1})
+        )
         assert perm.plus_one_counters == 2
 
         # perm leaves the battlefield; an unrelated permanent enters and gets its
@@ -1083,14 +1120,18 @@ class TestCounterStintScoping:
         _remove(executor, perm)
         other = _FakePermanent(2003)
         _place(executor, other, 6301)
-        executor._apply_counter_annotations(_ann_snap(3, _counter_ann(23, [6301], 1, 1)))
+        executor._apply_counter_annotations(
+            _ann_snap(3, _counter_ann(23, [6301], 1, 1), bf={6301: 1})
+        )
         assert other.plus_one_counters == 1
         assert perm.plus_one_counters == 0  # retired, cleared
 
         # perm returns as a fresh stint; another unrelated counter fires. The old
         # ledger stays retired — perm is not resurrected to 2.
         _place(executor, perm, 6202)
-        executor._apply_counter_annotations(_ann_snap(4, _counter_ann(24, [6301], 1, 1)))
+        executor._apply_counter_annotations(
+            _ann_snap(4, _counter_ann(24, [6301], 1, 1), bf={6202: 1, 6301: 1})
+        )
         assert perm.plus_one_counters == 0
         assert other.plus_one_counters == 2
 
@@ -1103,7 +1144,9 @@ class TestCounterStintScoping:
         perm.plus_one_counters = 1
         perm._base_plus_one_counters = 1
         _place(executor, perm, 6401)
-        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(25, [6401], 1, 1)))
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(25, [6401], 1, 1), bf={6401: 1})
+        )
         assert perm.plus_one_counters == 1  # SET agrees, not 2
 
         _remove(executor, perm)
@@ -1118,13 +1161,15 @@ class TestCounterStintScoping:
         # is preserved (this is what aid-keying got wrong).
         perm = _FakePermanent(2006)
         _place(executor, perm, 6601)
-        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(28, [6601], 1, 3)))
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(28, [6601], 1, 3), bf={6601: 1})
+        )
         assert perm.plus_one_counters == 3
 
         # New GRE aid 6602 for the SAME engine object; no engine zone change.
         del executor._engine_cards[6601]
         executor._engine_cards[6602] = perm
-        executor._apply_counter_annotations(_ann_snap(3))
+        executor._apply_counter_annotations(_ann_snap(3, bf={6602: 1}))
         assert perm.plus_one_counters == 3  # preserved, not cleared
 
 
@@ -1136,17 +1181,20 @@ class TestCounterDeferral:
     def test_new_permanent_same_snapshot_deferred_then_applied(
         self, executor: ReplayExecutor
     ) -> None:
-        # A CounterAdded targeting a permanent that first appears this snapshot
-        # (not yet in _engine_cards — the map is only rebuilt post-comparison)
-        # is deferred, then applied once correlation is available.
-        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(30, [7001], 1, 1)))
+        # A CounterAdded targeting a permanent GRE already shows on the
+        # battlefield but that is not yet in _engine_cards (the map is only
+        # rebuilt post-comparison) is deferred, then applied once correlation
+        # is available — while the GRE stint persists.
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(30, [7001], 1, 1), bf={7001: 1})
+        )
         assert (30, 7001) in executor._pending_counter_effects
         assert (30, 7001) not in executor._applied_counter_effects
 
         # The post-comparison rebuild correlates the permanent; retry applies.
         perm = _FakePermanent(3000)
         _place(executor, perm, 7001)
-        executor._apply_counter_annotations(_ann_snap(3))  # no repeat annotation
+        executor._apply_counter_annotations(_ann_snap(3, bf={7001: 1}))  # no repeat
         assert perm.plus_one_counters == 1
         assert (30, 7001) in executor._applied_counter_effects
         assert (30, 7001) not in executor._pending_counter_effects
@@ -1175,7 +1223,10 @@ class TestCounterDeferral:
         assert executor._counter_token_binding.get(7100) is token
         assert 7100 not in executor._engine_cards  # resolved via binding, not map
 
-        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(31, [7100], 1, 1)))
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(31, [7100], 1, 1),
+                      bf={7100: 1}, grp={7100: 90001})
+        )
         assert token.plus_one_counters == 1
 
     def test_multi_affected_ids_apply_each_once(
@@ -1187,7 +1238,8 @@ class TestCounterDeferral:
         perm_a = _FakePermanent(3100)
         _place(executor, perm_a, 7200)  # correlated now
         executor._apply_counter_annotations(
-            _ann_snap(2, _counter_ann(32, [7200, 7201], 1, 1))
+            _ann_snap(2, _counter_ann(32, [7200, 7201], 1, 1),
+                      bf={7200: 1, 7201: 1})
         )
         assert perm_a.plus_one_counters == 1
         assert (32, 7200) in executor._applied_counter_effects
@@ -1197,7 +1249,8 @@ class TestCounterDeferral:
         perm_b = _FakePermanent(3101)
         _place(executor, perm_b, 7201)
         executor._apply_counter_annotations(
-            _ann_snap(3, _counter_ann(32, [7200, 7201], 1, 1))  # repeat
+            _ann_snap(3, _counter_ann(32, [7200, 7201], 1, 1),  # repeat
+                      bf={7200: 1, 7201: 1})
         )
         assert perm_a.plus_one_counters == 1  # not double-applied
         assert perm_b.plus_one_counters == 1
@@ -1209,7 +1262,7 @@ class TestCounterDeferral:
         _place(executor, perm, 7300)
         for gsid in (2, 3, 4):  # Arena repeats the same annotation each slot
             executor._apply_counter_annotations(
-                _ann_snap(gsid, _counter_ann(33, [7300], 1, 1))
+                _ann_snap(gsid, _counter_ann(33, [7300], 1, 1), bf={7300: 1})
             )
         assert perm.plus_one_counters == 1
 
@@ -1221,9 +1274,11 @@ class TestCounterDeferral:
         # blink: the removal lands, then the stint retires without carrying over.
         perm = _FakePermanent(3300)
         _place(executor, perm, 7400)
-        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(34, [7400], 1, 3)))
         executor._apply_counter_annotations(
-            _ann_snap(3, _counter_ann(35, [7400], 1, 2, removed=True))
+            _ann_snap(2, _counter_ann(34, [7400], 1, 3), bf={7400: 1})
+        )
+        executor._apply_counter_annotations(
+            _ann_snap(3, _counter_ann(35, [7400], 1, 2, removed=True), bf={7400: 1})
         )
         assert perm.plus_one_counters == 1
 

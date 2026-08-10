@@ -189,7 +189,10 @@ class TestCounterStintRetirement:
         ex.players[1].zones[EZone.BATTLEFIELD].add(perm)
         ex._engine_cards[6501] = perm
 
-        ex._apply_counter_annotations(snapshot(2, annotations=[_counter_added(26, 6501, 3)]))
+        ex._apply_counter_annotations(snapshot(
+            2, battlefield={1: [6501]}, objects={6501: card_obj(6501, 0, 1, BF1)},
+            annotations=[_counter_added(26, 6501, 3)],
+        ))
         assert perm.plus_one_counters == 3
         assert perm._base_plus_one_counters == 3
 
@@ -207,17 +210,365 @@ class TestCounterStintRetirement:
         ex.players[1].zones[EZone.BATTLEFIELD].add(perm)
         ex._engine_cards[6601] = perm
 
-        ex._apply_counter_annotations(snapshot(2, annotations=[_counter_added(28, 6601, 3)]))
+        ex._apply_counter_annotations(snapshot(
+            2, battlefield={1: [6601]}, objects={6601: card_obj(6601, 0, 1, BF1)},
+            annotations=[_counter_added(28, 6601, 3)],
+        ))
         assert perm.plus_one_counters == 3
         # No zone change: the object stays on the engine battlefield, so the
         # counter is preserved even across snapshots that fold nothing and across
         # GRE id churn (the aid is irrelevant to the engine-object-keyed ledger).
         ex._engine_cards[6602] = perm  # GRE re-mints the aid; same engine object
-        ex._apply_counter_annotations(snapshot(3))
+        ex._apply_counter_annotations(snapshot(
+            3, battlefield={1: [6602]}, objects={6602: card_obj(6602, 0, 1, BF1)},
+        ))
         assert perm.plus_one_counters == 3
 
 
-class TestTargetDerivation:
+def _named_counter(ann_id: int, aid: int, ctype: int, amount: int) -> Annotation:
+    return Annotation(
+        id=ann_id, affector_id=0, affected_ids=[aid],
+        type=["AnnotationType_CounterAdded"],
+        details={"counter_type": [ctype], "transaction_amount": [amount]},
+    )
+
+
+class TestCounterLifecycleIntegration:
+    """Full counter-lifecycle integration: real engine creatures moved through
+    the REAL ``move_to_zone`` (which advances ``refs.zone_epoch``), so a
+    battlefield -> X -> battlefield round trip completed ENTIRELY between two
+    ``_apply_counter_annotations`` calls is a real zone transition the ledger
+    must observe — no manually inserted sampling point ever sees the object
+    off the battlefield."""
+
+    def _executor(self):
+        return make_executor([snapshot(1)])
+
+    def _creature(self, ex, seat: int = 1, name: str = "Test Bear", grp: int = 0):
+        from engine.card import Creature
+        from engine.types import Zone as EZone
+
+        player = ex.players[seat]
+        card = Creature(
+            name=name, owner=player, controller=player,
+            base_power=2, base_toughness=2,
+        )
+        if grp:
+            card._grp_id = grp
+        player.zones[EZone.BATTLEFIELD].add(card)
+        return card
+
+    def _blink(self, ex, card, via: str = "exile") -> None:
+        """battlefield -> via -> battlefield through the real engine mover."""
+        from engine.types import Zone as EZone
+        from engine.zones import move_to_zone
+
+        mid = EZone.EXILE if via == "exile" else EZone.GRAVEYARD
+        move_to_zone(ex.game, card, EZone.BATTLEFIELD, mid)
+        move_to_zone(ex.game, card, mid, EZone.BATTLEFIELD)
+
+    # -- required tests 1-3: atomic round trips retire the ledger -----------
+
+    def test_atomic_exile_round_trip_clears_counter(self):
+        ex = self._executor()
+        card = self._creature(ex)
+        ex._engine_cards[7001] = card
+        ex._apply_counter_annotations(snapshot(
+            2, battlefield={1: [7001]}, objects={7001: card_obj(7001, 0, 1, BF1)},
+            annotations=[_counter_added(40, 7001, 2)],
+        ))
+        assert card.plus_one_counters == 2
+        assert card._base_plus_one_counters == 2
+
+        # The blink happens ENTIRELY between the two reconciliations: at the
+        # next call the object is back on the engine battlefield, so
+        # membership alone cannot see the transition — the zone epoch does.
+        self._blink(ex, card, via="exile")
+        ex._apply_counter_annotations(snapshot(
+            3, battlefield={1: [7002]}, objects={7002: card_obj(7002, 0, 1, BF1)},
+        ))
+        assert card.plus_one_counters == 0
+        assert card._base_plus_one_counters == 0
+
+    def test_atomic_graveyard_round_trip_clears_counter(self):
+        ex = self._executor()
+        card = self._creature(ex)
+        ex._engine_cards[7101] = card
+        ex._apply_counter_annotations(snapshot(
+            2, battlefield={1: [7101]}, objects={7101: card_obj(7101, 0, 1, BF1)},
+            annotations=[_counter_added(41, 7101, 3)],
+        ))
+        assert card.plus_one_counters == 3
+
+        self._blink(ex, card, via="graveyard")  # died and was reanimated
+        ex._apply_counter_annotations(snapshot(
+            3, battlefield={1: [7102]}, objects={7102: card_obj(7102, 0, 1, BF1)},
+        ))
+        assert card.plus_one_counters == 0
+        assert card._base_plus_one_counters == 0
+
+    def test_atomic_round_trip_clears_named_generic_counter(self):
+        ex = self._executor()
+        card = self._creature(ex, name="Drake Hatcher")
+        ex._engine_cards[7201] = card
+        ex._apply_counter_annotations(snapshot(
+            2, battlefield={1: [7201]}, objects={7201: card_obj(7201, 0, 1, BF1)},
+            annotations=[_named_counter(42, 7201, 200, 4)],  # incubation x4
+        ))
+        assert card._generic_counters.get("incubation") == 4
+
+        self._blink(ex, card, via="exile")
+        ex._apply_counter_annotations(snapshot(
+            3, battlefield={1: [7202]}, objects={7202: card_obj(7202, 0, 1, BF1)},
+        ))
+        assert card._generic_counters.get("incubation", 0) == 0
+
+    # -- required test 4: no resurrection through unrelated reconciliation --
+
+    def test_unrelated_annotation_after_atomic_blink_does_not_resurrect(self):
+        ex = self._executor()
+        card = self._creature(ex)
+        other = self._creature(ex, name="Bystander")
+        ex._engine_cards[7301] = card
+        ex._engine_cards[7302] = other
+        bf_objs = {7301: card_obj(7301, 0, 1, BF1), 7302: card_obj(7302, 0, 1, BF1)}
+        ex._apply_counter_annotations(snapshot(
+            2, battlefield={1: [7301, 7302]}, objects=dict(bf_objs),
+            annotations=[_counter_added(43, 7301, 2)],
+        ))
+        assert card.plus_one_counters == 2
+
+        self._blink(ex, card, via="exile")
+        # An unrelated permanent's counter drives a reconcile pass — the
+        # blinked object's retired ledger must not be re-written by it.
+        ex._apply_counter_annotations(snapshot(
+            3, battlefield={1: [7303, 7302]},
+            objects={7303: card_obj(7303, 0, 1, BF1), 7302: bf_objs[7302]},
+            annotations=[_counter_added(44, 7302, 1)],
+        ))
+        assert other.plus_one_counters == 1
+        assert card.plus_one_counters == 0
+        assert card._base_plus_one_counters == 0
+
+    # -- required test 5: pending effects vs. stale bindings ----------------
+
+    def test_pending_effect_not_applied_through_stale_binding(self):
+        from engine.types import Zone as EZone
+        from engine.zones import move_to_zone
+
+        ex = self._executor()
+        card = self._creature(ex)
+        # The CounterAdded arrives while the object is not yet correlated
+        # (grp 0 blocks the same-snapshot grpId match) -> deferred.
+        ex._apply_counter_annotations(snapshot(
+            2, battlefield={1: [7401]}, objects={7401: card_obj(7401, 0, 1, BF1)},
+            annotations=[_counter_added(45, 7401, 2)],
+        ))
+        assert (45, 7401) in ex._pending_counter_effects
+
+        # The target dies before correlation; a stale binding then appears (a
+        # resync rebuild may retain object bindings). GRE shows the aid gone.
+        move_to_zone(ex.game, card, EZone.BATTLEFIELD, EZone.GRAVEYARD)
+        ex._engine_cards[7401] = card  # stale: the object is NOT on the bf
+        ex._apply_counter_annotations(snapshot(3))
+        assert card.plus_one_counters == 0
+        assert (45, 7401) not in ex._pending_counter_effects
+        assert (45, 7401) in ex._cancelled_counter_effects
+        assert (45, 7401) not in ex._applied_counter_effects
+        assert any(
+            rec["annotation_id"] == 45 for rec in ex._unresolved_counter_effects
+        )
+
+    def test_stale_binding_rejected_even_when_gre_stream_lags(self):
+        from engine.types import Zone as EZone
+        from engine.zones import move_to_zone
+
+        ex = self._executor()
+        card = self._creature(ex)
+        ex._apply_counter_annotations(snapshot(
+            2, battlefield={1: [7451]}, objects={7451: card_obj(7451, 0, 1, BF1)},
+            annotations=[_counter_added(46, 7451, 2)],
+        ))
+        assert (46, 7451) in ex._pending_counter_effects
+
+        # Engine-side departure with a GRE snapshot that STILL lists the aid
+        # on the battlefield (lagging stream): the engine-candidate gate must
+        # reject the stale binding — the fold needs a candidate that is on the
+        # engine battlefield RIGHT NOW.
+        move_to_zone(ex.game, card, EZone.BATTLEFIELD, EZone.GRAVEYARD)
+        ex._engine_cards[7451] = card  # stale
+        ex._apply_counter_annotations(snapshot(
+            3, battlefield={1: [7451]}, objects={7451: card_obj(7451, 0, 1, BF1)},
+        ))
+        assert card.plus_one_counters == 0
+        assert (46, 7451) not in ex._applied_counter_effects
+        assert (46, 7451) in ex._pending_counter_effects  # still unproven
+
+    # -- required test 6: deferred effect never lands on a returned stint ---
+
+    def test_deferred_effect_does_not_apply_to_returned_stint(self):
+        ex = self._executor()
+        card = self._creature(ex)
+        ex._apply_counter_annotations(snapshot(
+            2, battlefield={1: [7501]}, objects={7501: card_obj(7501, 0, 1, BF1)},
+            annotations=[_counter_added(47, 7501, 2)],
+        ))
+        assert (47, 7501) in ex._pending_counter_effects
+
+        # Blink; GRE mints a NEW aid for the returned stint and the executor
+        # correlates it. The old effect belonged to the departed stint.
+        self._blink(ex, card, via="exile")
+        ex._engine_cards.clear()
+        ex._engine_cards[7502] = card  # returned stint, correlated
+        ex._apply_counter_annotations(snapshot(
+            3, battlefield={1: [7502]}, objects={7502: card_obj(7502, 0, 1, BF1)},
+        ))
+        assert card.plus_one_counters == 0
+        assert (47, 7501) in ex._cancelled_counter_effects
+        assert (47, 7501) not in ex._applied_counter_effects
+
+    def test_deferred_effect_not_rekeyed_through_blink_rename_chain(self):
+        ex = self._executor()
+        card = self._creature(ex)
+        ex._apply_counter_annotations(snapshot(
+            2, battlefield={1: [7601]}, objects={7601: card_obj(7601, 0, 1, BF1)},
+            annotations=[_counter_added(48, 7601, 2)],
+        ))
+        assert (48, 7601) in ex._pending_counter_effects
+
+        # The blink's two legs surface as an ObjectIdChanged CHAIN in one
+        # snapshot (7601 -> 7602 exile leg, 7602 -> 7603 return leg). A chain
+        # is a zone transit, not churn: the effect must NOT follow it to the
+        # returned stint even though the final id sits on the battlefield.
+        self._blink(ex, card, via="exile")
+        ex._engine_cards.clear()
+        ex._engine_cards[7603] = card
+        ex._apply_counter_annotations(snapshot(
+            3, battlefield={1: [7603]}, objects={7603: card_obj(7603, 0, 1, BF1)},
+            annotations=[id_change(900, 7601, 7602), id_change(901, 7602, 7603)],
+        ))
+        assert card.plus_one_counters == 0
+        assert (48, 7601) in ex._cancelled_counter_effects
+
+    # -- required test 7: graveyard twin must not steal a battlefield match --
+
+    def test_graveyard_gre_object_does_not_match_battlefield_twin(self):
+        GRP = 91234
+        ex = self._executor()
+        bf_twin = self._creature(ex, name="Twin", grp=GRP)  # unclaimed, unique
+        grave_obj = GameObject(
+            instance_id=7701, grp_id=GRP, type="GameObjectType_Card",
+            zone_id=77, owner_seat_id=1, controller_seat_id=1,
+        )
+        snap = snapshot(2, battlefield={1: []}, objects={7701: grave_obj})
+        snap.zones[77] = Zone(
+            zone_id=77, type="ZoneType_Graveyard", owner_seat_id=1,
+            object_instance_ids=[7701],
+        )
+        # Direct probe: the matcher refuses a GRE object that is NOT on the
+        # GRE battlefield, however unique the same-grpId engine candidate is.
+        assert ex._match_new_battlefield_permanent(7701, snap) is None
+        # End-to-end: the annotation defers rather than landing on the twin.
+        snap.annotations = [_counter_added(49, 7701, 2)]
+        ex._apply_counter_annotations(snap)
+        assert bf_twin.plus_one_counters == 0
+        assert (49, 7701) not in ex._applied_counter_effects
+
+    # -- required test 8: same grpId across players must not cross-bind -----
+
+    def test_same_grpid_across_players_does_not_cross_bind(self):
+        GRP = 91235
+        ex = self._executor()
+        seat1_perm = self._creature(ex, seat=1, name="Shared Card", grp=GRP)
+        # GRE: the counter lands on SEAT 2's copy; seat 2 has no unclaimed
+        # engine candidate yet -> the effect must stay pending, never bind to
+        # seat 1's same-grpId permanent.
+        gre_obj = GameObject(
+            instance_id=7801, grp_id=GRP, type="GameObjectType_Card",
+            zone_id=BF1, owner_seat_id=2, controller_seat_id=2,
+        )
+        ex._apply_counter_annotations(snapshot(
+            2, battlefield={2: [7801]}, objects={7801: gre_obj},
+            annotations=[_counter_added(50, 7801, 2)],
+        ))
+        assert seat1_perm.plus_one_counters == 0
+        assert (50, 7801) in ex._pending_counter_effects
+
+        # Seat 2's copy appears in the engine; the retry selects it by the
+        # controller constraint.
+        seat2_perm = self._creature(ex, seat=2, name="Shared Card", grp=GRP)
+        ex._apply_counter_annotations(snapshot(
+            3, battlefield={2: [7801]}, objects={7801: gre_obj},
+        ))
+        assert seat2_perm.plus_one_counters == 2
+        assert seat1_perm.plus_one_counters == 0
+        assert (50, 7801) in ex._applied_counter_effects
+
+    # -- required test 9: pure churn keeps counters AND pending effects -----
+
+    def test_pending_effect_follows_pure_churn_rename(self):
+        ex = self._executor()
+        card = self._creature(ex)
+        ex._apply_counter_annotations(snapshot(
+            2, battlefield={1: [7901]}, objects={7901: card_obj(7901, 0, 1, BF1)},
+            annotations=[_counter_added(51, 7901, 2)],
+        ))
+        assert (51, 7901) in ex._pending_counter_effects
+
+        # GRE re-mints the id WITHOUT a zone change (single hop, target on the
+        # battlefield, identity-consistent). No engine zone move happened. The
+        # pending effect re-keys and folds once the engine correlates.
+        ex._engine_cards[7902] = card
+        ex._apply_counter_annotations(snapshot(
+            3, battlefield={1: [7902]}, objects={7902: card_obj(7902, 0, 1, BF1)},
+            annotations=[id_change(902, 7901, 7902)],
+        ))
+        assert card.plus_one_counters == 2
+        assert (51, 7901) in ex._applied_counter_effects
+
+    def test_folded_counter_survives_churn_without_zone_change(self):
+        ex = self._executor()
+        card = self._creature(ex)
+        ex._engine_cards[8001] = card
+        ex._apply_counter_annotations(snapshot(
+            2, battlefield={1: [8001]}, objects={8001: card_obj(8001, 0, 1, BF1)},
+            annotations=[_counter_added(52, 8001, 3)],
+        ))
+        assert card.plus_one_counters == 3
+
+        # Churn only — the engine object never moved, its epoch is unchanged,
+        # so the object-keyed ledger is preserved across the re-mint.
+        del ex._engine_cards[8001]
+        ex._engine_cards[8002] = card
+        ex._apply_counter_annotations(snapshot(
+            3, battlefield={1: [8002]}, objects={8002: card_obj(8002, 0, 1, BF1)},
+        ))
+        assert card.plus_one_counters == 3
+
+    # -- required test 10: same-snapshot new-permanent correlation lands ----
+
+    def test_same_snapshot_new_permanent_counter_lands_exactly_once(self):
+        GRP = 91236
+        ex = self._executor()
+        newcomer = self._creature(ex, name="Newcomer", grp=GRP)
+        gre_obj = GameObject(
+            instance_id=8101, grp_id=GRP, type="GameObjectType_Card",
+            zone_id=BF1, owner_seat_id=1, controller_seat_id=1,
+        )
+        snap2 = snapshot(
+            2, battlefield={1: [8101]}, objects={8101: gre_obj},
+            annotations=[_counter_added(53, 8101, 2)],
+        )
+        # Not in _engine_cards yet (first appearance): the same-snapshot
+        # battlefield grpId match correlates it — controller-checked.
+        ex._apply_counter_annotations(snap2)
+        assert newcomer.plus_one_counters == 2
+        # Persistent-slot repeat: exactly once.
+        ex._apply_counter_annotations(snapshot(
+            3, battlefield={1: [8101]}, objects={8101: gre_obj},
+            annotations=[_counter_added(53, 8101, 2)],
+        ))
+        assert newcomer.plus_one_counters == 2
     def _target_spec(self, ann_id: int, spell: int, targets: list[int], index: int = 1):
         return Annotation(
             id=ann_id, affector_id=spell, affected_ids=targets,

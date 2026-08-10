@@ -514,17 +514,29 @@ class ReplayExecutor:
         #
         # A counter must still not cross a REAL zone-change boundary (blink /
         # bounce / death / reanimation). That boundary is an ENGINE event, so it
-        # is detected in engine terms: an object retires from the ledger when it
-        # LEAVES the engine battlefield (all of blink/bounce/death/reanimation
-        # remove it from the battlefield zone). Membership is read directly from
-        # the engine zones — never via ``refs.instance_id``, which would MINT
-        # stint ids as a side effect and perturb the simulation. ``object_id`` is
-        # a construction-time constant and does NOT change on a blink, so it
-        # identifies the object across churn; battlefield residency is the
-        # retirement signal.
+        # is detected in engine terms, from TWO complementary signals:
+        #   1. battlefield membership — the object is absent from the engine
+        #      battlefield zones (read directly from the zones, never via
+        #      ``refs.instance_id``, which would MINT stint ids as a side
+        #      effect and perturb the simulation). Covers every departure that
+        #      is still visible at reconciliation time, including
+        #      executor-driven resync removals that bypass ``move_to_zone``.
+        #   2. the engine zone epoch — ``refs.zone_epoch(obj)`` is a pure-read
+        #      monotonic count of the object's real zone changes, advanced by
+        #      ``move_to_zone`` via ``note_zone_change``. A ledger records the
+        #      epoch at fold time; a later epoch PROVES an intervening zone
+        #      transition even when the object is back on the battlefield
+        #      before the next reconciliation (an atomic blink completed
+        #      within one replay step) — end-of-step membership alone cannot.
+        # ``object_id`` is a construction-time constant and does NOT change on
+        # a blink, so it identifies the Python object across GRE id churn; the
+        # battlefield STINT is identified by (object_id, fold-time epoch).
         #
         # Ledger: engine ``object_id`` -> {engine counter name -> total}.
         self._gre_counter_ledger: dict[int, dict[str, int]] = {}
+        # engine ``object_id`` -> engine zone epoch observed when its ledger
+        # last folded. An epoch mismatch at reconciliation retires the ledger.
+        self._ledger_epoch: dict[int, int] = {}
         # A counter effect is (annotation id, affected aid). It is folded into
         # the ledger EXACTLY ONCE, tracked at that granularity so Arena's
         # persistent-slot repeats are idempotent AND a multi-affected-id
@@ -534,11 +546,28 @@ class ReplayExecutor:
         # Effects whose aid was not yet correlated when first seen: retried every
         # snapshot until correlation becomes available (a token/new permanent may
         # first appear in the same snapshot as its CounterAdded). Never marked
-        # applied until actually folded, so nothing is silently dropped; a truly
-        # unresolvable effect stays here and its absent counter surfaces as a
-        # normal compare divergence. Keyed by (annotation id, affected aid) so a
-        # persistent-slot repeat never enqueues a duplicate.
+        # applied until actually folded, so nothing is silently dropped. Keyed by
+        # (annotation id, ORIGINAL affected aid) so a persistent-slot repeat
+        # never enqueues a duplicate; the payload additionally carries
+        #   current_aid — the aid as re-keyed across pure GRE id churn
+        #     (a single ObjectIdChanged hop whose target stays on the GRE
+        #     battlefield with a consistent identity),
+        #   ctx — the GRE identity context (grp/owner) captured the first time
+        #     the affected object is observed, proving later folds still
+        #     target the same object,
+        #   seen_on_battlefield — whether the affected object has been
+        #     observed on the GRE battlefield during this effect's pendency.
+        # Expiration (see _advance_pending_effect): an effect whose GRE stint
+        # provably ended before correlation is CANCELLED, never applied late.
         self._pending_counter_effects: dict[tuple[int, int], dict[str, Any]] = {}
+        # Keys of cancelled effects — a persistent-slot repeat of a cancelled
+        # annotation must not re-enqueue it.
+        self._cancelled_counter_effects: set[tuple[int, int]] = set()
+        # The explicit unresolved-limitation surface: one record per cancelled
+        # effect (key, counter name/amount, reason). The absent counter still
+        # surfaces as a normal compare divergence; this records WHY the effect
+        # could not be applied, for reporting/debugging.
+        self._unresolved_counter_effects: list[dict[str, Any]] = []
         # object_id -> the engine object (holds the reference so reconcile can
         # reach it to SET/cap and to clear on retirement).
         self._ledger_obj: dict[int, Any] = {}
@@ -1628,6 +1657,10 @@ class ReplayExecutor:
         to the next) matters: a deferred counter lands one step after the resync
         has already installed an oracle P/T correction for the then-missing
         counter, and the two briefly double-count.
+
+        The returned candidate is NOT yet proven — ``_engine_candidate_valid``
+        must accept it before any fold (a stale ``_engine_cards`` binding may
+        name an object that has since left the engine battlefield).
         """
         obj = self._engine_cards.get(aid)
         if obj is not None:
@@ -1643,21 +1676,31 @@ class ReplayExecutor:
         """Match a not-yet-mapped GRE battlefield permanent to an unclaimed
         engine battlefield permanent of the same grpId (same-snapshot).
 
-        Returns the engine object only when exactly one candidate is unclaimed
-        (interchangeable duplicates or an ambiguous match stay deferred, so a
-        counter is never guessed onto the wrong object).
+        Only a GRE object the snapshot itself places on the BATTLEFIELD may
+        match (a graveyard/exile object with a battlefield twin's grpId must
+        not steal the twin), and only among the permanents of the seat GRE
+        says controls it (two same-grpId permanents across players must not
+        cross-bind). Returns the engine object only when exactly one candidate
+        is unclaimed (interchangeable duplicates or an ambiguous match stay
+        deferred, so a counter is never guessed onto the wrong object).
         """
         if snapshot is None or self.game is None:
             return None
         gre_obj = snapshot.game_objects.get(aid)
         if gre_obj is None or not gre_obj.grp_id:
             return None
+        if aid not in self._gre_battlefield_aids(snapshot):
+            return None
+        seat = gre_obj.controller_seat_id or gre_obj.owner_seat_id
+        player = self.players.get(seat)
+        if player is None:
+            return None
         from engine.types import Zone
 
         claimed = {id(o) for o in self._engine_cards.values() if o is not None}
+        claimed |= {id(o) for o in self._counter_token_binding.values()}
         candidates = [
             card
-            for player in self.game.players
             for card in player.zones[Zone.BATTLEFIELD].get_all()
             if id(card) not in claimed
             and self._card_to_grp_id(card) == gre_obj.grp_id
@@ -1688,6 +1731,40 @@ class ReplayExecutor:
                 keys.add(self._counter_key(card))
         return keys
 
+    def _object_zone_epoch(self, obj: Any) -> int:
+        """The engine's monotonic zone-change count for ``obj`` — a pure read.
+
+        ``refs.zone_epoch`` is advanced by ``move_to_zone`` (via
+        ``note_zone_change``) on every real zone transition, so two equal reads
+        bracket a window with NO transition, even when the object left and
+        returned between them. Never calls ``refs.instance_id`` — no stint id
+        is minted, no query-facing allocation is perturbed. Returns 0 when the
+        registry is absent (bare test harnesses), where battlefield membership
+        remains the sole retirement signal.
+        """
+        refs = getattr(self.game, "refs", None) if self.game is not None else None
+        zone_epoch = getattr(refs, "zone_epoch", None)
+        return zone_epoch(obj) if callable(zone_epoch) else 0
+
+    @staticmethod
+    def _gre_battlefield_aids(snapshot: GameSnapshot) -> set[int]:
+        """Every instance id the snapshot places in a GRE battlefield zone."""
+        return {
+            iid
+            for zone in snapshot.zones.values()
+            if zone.type == "ZoneType_Battlefield"
+            for iid in zone.object_instance_ids
+        }
+
+    def _seat_of_engine_player(self, player: Any) -> int | None:
+        """The GRE seat controlling an engine Player (identity match)."""
+        if player is None:
+            return None
+        for seat, candidate in self.players.items():
+            if candidate is player:
+                return seat
+        return None
+
     def _apply_counter_annotations(self, snapshot: GameSnapshot) -> None:
         """Reconcile GRE CounterAdded/Removed state onto engine permanents.
 
@@ -1701,35 +1778,63 @@ class ReplayExecutor:
         fabricated.
 
         Identity is anchored to the engine object (its ``object_id``), which
-        survives GRE instance-id churn; a counter is retired when that object
-        leaves the engine battlefield (a real zone transition — blink / bounce /
-        death / reanimation), so it never crosses a zone boundary. The SET is
+        survives GRE instance-id churn; the battlefield STINT is
+        (``object_id``, fold-time zone epoch). A ledger retires when its object
+        leaves the engine battlefield OR its zone epoch advances — the epoch
+        catches a leave-and-return completed entirely within one replay step
+        (atomic blink), which end-of-step membership alone cannot. The SET is
         applied only when the ledger actually changed this snapshot (a fold), so
         the value persists via its ``_base_*`` shadow without being re-forced at
         every snapshot — re-forcing overrode the per-step oracle P/T resync at
         timing windows and reintroduced divergences. Each per-(annotation,
-        affected id) effect is folded exactly once; an effect whose id is not yet
-        correlated is deferred and retried, never silently dropped.
+        affected id) effect is folded exactly once; an effect whose id is not
+        yet correlated is deferred and retried under the expiration rules of
+        ``_advance_pending_effect``, never silently dropped and never applied
+        to a stint other than the one GRE attested.
         """
+        from silverquillm.replay.state import extract_object_id_changes
+
         bf_keys = self._engine_battlefield_keys()
-        # Retire counters for objects that left the engine battlefield (their
-        # stale GRE-attested counters are cleared). Runs before folding so a
-        # counter re-attested this snapshot is not wiped.
+        # Retire counters for objects whose battlefield stint ended (departed,
+        # or an epoch change proving an atomic leave-and-return). Runs before
+        # folding so a counter re-attested this snapshot is not wiped.
         self._retire_departed_counters(bf_keys)
-        # Deferred effects may have become resolvable (a token/new permanent that
-        # has since correlated) — retry before folding this snapshot's stream.
+        gre_bf = self._gre_battlefield_aids(snapshot)
+        renames = extract_object_id_changes(snapshot.annotations)
         changed = False
+        # Deferred effects: advance their GRE-side identity (churn re-keying /
+        # expiration), then retry the fold for the survivors.
         for key, payload in list(self._pending_counter_effects.items()):
-            changed |= self._fold_counter_effect(key[0], key[1], payload, snapshot)
+            if self._advance_pending_effect(key, payload, snapshot, gre_bf, renames):
+                changed |= self._fold_counter_effect(
+                    key, payload, snapshot, gre_bf, bf_keys
+                )
         # Fold this snapshot's counter annotations.
         for ann in snapshot.annotations:
             parsed = self._parse_counter_annotation(ann)
             if parsed is None:
                 continue
             is_add, name, amount = parsed
-            payload = {"name": name, "is_add": is_add, "amount": amount}
             for aid in ann.affected_ids:
-                changed |= self._fold_counter_effect(ann.id, aid, payload, snapshot)
+                key = (ann.id, aid)
+                if (
+                    key in self._applied_counter_effects
+                    or key in self._cancelled_counter_effects
+                ):
+                    continue
+                payload = self._pending_counter_effects.get(key)
+                if payload is None:
+                    payload = {
+                        "name": name,
+                        "is_add": is_add,
+                        "amount": amount,
+                        "current_aid": aid,
+                        "ctx": None,
+                        "seen_on_battlefield": False,
+                    }
+                changed |= self._fold_counter_effect(
+                    key, payload, snapshot, gre_bf, bf_keys
+                )
         # Apply only when a fold changed the ledger — the SET persists via the
         # ``_base_*`` shadow, so re-forcing it every snapshot is unnecessary and
         # fights the oracle P/T resync at timing windows.
@@ -1737,47 +1842,235 @@ class ReplayExecutor:
             self._reconcile_counters()
 
     def _retire_departed_counters(self, bf_keys: set[int]) -> None:
-        """Retire (clear + drop) counters for objects no longer on the engine
-        battlefield. Their GRE-attested counters (and ``_base_*`` shadows) are
-        cleared so a reused engine object cannot carry them into a new stint."""
-        for okey in list(self._ledger_obj):
-            if okey in bf_keys:
+        """Retire every ledger whose battlefield stint has ended.
+
+        A stint ends when the object is absent from the engine battlefield OR
+        when its engine zone epoch has advanced past the fold-time value — the
+        latter proves a real zone transition happened even though the object is
+        back on the battlefield (atomic blink / bounce-and-replay within one
+        replay step). Retirement clears the GRE-attested counters (and
+        ``_base_*`` shadows) so a reused engine object cannot carry them into a
+        new stint; newly attested counters for the returned stint then
+        establish a fresh ledger."""
+        for okey, obj in list(self._ledger_obj.items()):
+            if (
+                okey in bf_keys
+                and self._object_zone_epoch(obj) == self._ledger_epoch.get(okey, 0)
+            ):
                 continue
-            obj = self._ledger_obj.pop(okey, None)
-            stale = self._gre_counter_ledger.pop(okey, None)
-            if obj is not None and stale:
-                self._clear_engine_counters(obj, stale.keys())
+            self._retire_ledger_entry(okey)
+
+    def _retire_ledger_entry(self, okey: int) -> None:
+        """Drop one object ledger and zero its GRE-attested counters."""
+        obj = self._ledger_obj.pop(okey, None)
+        stale = self._gre_counter_ledger.pop(okey, None)
+        self._ledger_epoch.pop(okey, None)
+        if obj is not None and stale:
+            self._clear_engine_counters(obj, stale.keys())
+
+    @staticmethod
+    def _capture_counter_context(payload: dict[str, Any], gre_obj: Any) -> None:
+        """Record the affected object's GRE identity the first time it is seen.
+
+        The context (grpId + owner seat — both immutable for a GRE stint)
+        proves that a later fold or churn re-key still targets the same object
+        the annotation named. Controller is deliberately NOT part of identity
+        continuity (control may change without ending a stint); it is checked
+        against the ENGINE candidate at fold time instead.
+        """
+        if payload.get("ctx") is None:
+            payload["ctx"] = {
+                "grp_id": gre_obj.grp_id,
+                "owner": gre_obj.owner_seat_id,
+            }
+
+    @staticmethod
+    def _counter_context_matches(payload: dict[str, Any], gre_obj: Any) -> bool:
+        """Whether ``gre_obj`` is identity-consistent with the recorded context.
+
+        Only POSITIVE contradictions reject (both sides known and different) —
+        an unknown grpId or seat is absence of evidence, not disagreement.
+        """
+        ctx = payload.get("ctx")
+        if ctx is None:
+            return True
+        if ctx["grp_id"] and gre_obj.grp_id and ctx["grp_id"] != gre_obj.grp_id:
+            return False
+        return not (
+            ctx["owner"]
+            and gre_obj.owner_seat_id
+            and ctx["owner"] != gre_obj.owner_seat_id
+        )
+
+    def _advance_pending_effect(
+        self,
+        key: tuple[int, int],
+        payload: dict[str, Any],
+        snapshot: GameSnapshot,
+        gre_bf: set[int],
+        renames: dict[int, int],
+    ) -> bool:
+        """Advance one pending effect's GRE-side identity for this snapshot.
+
+        Returns ``True`` when the effect is still eligible for a fold attempt,
+        ``False`` when it was cancelled. The expiration rules:
+
+        1. The affected aid is present and identity-consistent — still
+           eligible. (If it is present but NOT on the GRE battlefield: eligible
+           only while it has never been on the battlefield during pendency —
+           it may still be arriving, e.g. a stack resident; once it HAS been
+           seen on the battlefield, leaving it ends the stint → cancel.)
+        2. The aid is present but identity-INCONSISTENT with the recorded
+           context (aid reuse) — the original stint is gone → cancel.
+        3. The aid is absent but a SINGLE ObjectIdChanged hop renames it to an
+           object that is on the GRE battlefield and identity-consistent —
+           pure id churn: re-key ``current_aid`` and stay eligible. A rename
+           CHAIN (the target renamed again in the same snapshot) is a zone
+           transit (blink legs), and a rename to a non-battlefield zone is a
+           departure — both mean the stint ended → cancel.
+        4. The aid is absent with no qualifying rename — the stint disappeared
+           before correlation → cancel.
+
+        A cancelled effect is recorded in ``_unresolved_counter_effects`` (the
+        explicit unresolved-replay-limitation surface) and its key in
+        ``_cancelled_counter_effects`` so persistent-slot repeats never
+        re-enqueue it. It is never applied late: the engine-side absence of the
+        counter then surfaces as a normal compare divergence.
+        """
+        aid = payload["current_aid"]
+        gre_obj = snapshot.game_objects.get(aid)
+        if gre_obj is not None:
+            if not self._counter_context_matches(payload, gre_obj):
+                self._cancel_counter_effect(
+                    key, payload, "affected id no longer matches its recorded identity"
+                )
+                return False
+            if aid in gre_bf or not payload.get("seen_on_battlefield"):
+                return True
+            self._cancel_counter_effect(
+                key, payload, "stint left the battlefield before correlation"
+            )
+            return False
+        new_aid = renames.get(aid)
+        if new_aid is not None and new_aid not in renames:
+            new_obj = snapshot.game_objects.get(new_aid)
+            if (
+                new_obj is not None
+                and new_aid in gre_bf
+                and self._counter_context_matches(payload, new_obj)
+            ):
+                payload["current_aid"] = new_aid
+                return True
+        self._cancel_counter_effect(
+            key, payload, "affected object disappeared before correlation"
+        )
+        return False
+
+    def _cancel_counter_effect(
+        self, key: tuple[int, int], payload: dict[str, Any], reason: str
+    ) -> None:
+        """Cancel a pending effect whose GRE stint ended before correlation."""
+        self._pending_counter_effects.pop(key, None)
+        self._cancelled_counter_effects.add(key)
+        self._unresolved_counter_effects.append({
+            "annotation_id": key[0],
+            "affected_id": key[1],
+            "name": payload.get("name"),
+            "is_add": payload.get("is_add"),
+            "amount": payload.get("amount"),
+            "reason": reason,
+        })
+        logger.debug(
+            "counter effect (ann %d, aid %d) cancelled: %s", key[0], key[1], reason
+        )
+
+    def _engine_candidate_valid(
+        self, obj: Any, gre_obj: Any, engine_bf_keys: set[int]
+    ) -> bool:
+        """Whether the engine candidate provably IS the battlefield stint GRE
+        attests for this effect.
+
+        Requires the candidate to be on the engine battlefield RIGHT NOW (a
+        stale ``_engine_cards`` binding whose object departed is rejected) and
+        checks grpId, controller seat, and owner seat against the GRE object —
+        only POSITIVE contradictions reject, so an id-less engine token or a
+        bare test permanent without player attribution still folds.
+        """
+        if self._counter_key(obj) not in engine_bf_keys:
+            return False
+        engine_grp = self._card_to_grp_id(obj)
+        if engine_grp and gre_obj.grp_id and engine_grp != gre_obj.grp_id:
+            return False
+        controller_seat = self._seat_of_engine_player(getattr(obj, "controller", None))
+        gre_controller = gre_obj.controller_seat_id or gre_obj.owner_seat_id
+        if controller_seat is not None and gre_controller and controller_seat != gre_controller:
+            return False
+        owner_seat = self._seat_of_engine_player(getattr(obj, "owner", None))
+        return not (
+            owner_seat is not None
+            and gre_obj.owner_seat_id
+            and owner_seat != gre_obj.owner_seat_id
+        )
 
     def _fold_counter_effect(
         self,
-        ann_id: int,
-        aid: int,
+        key: tuple[int, int],
         payload: dict[str, Any],
-        snapshot: GameSnapshot | None = None,
+        snapshot: GameSnapshot,
+        gre_bf: set[int],
+        engine_bf_keys: set[int],
     ) -> bool:
         """Fold one ``(annotation, affected id)`` effect into the object ledger.
 
         Returns ``True`` if it modified the ledger (so the caller applies).
-        Exactly-once per ``(ann_id, aid)`` — a persistent-slot repeat is a
-        no-op, and a multi-id annotation whose ids correlate at different times
-        applies each effect once. An effect whose id is not yet correlated is
-        recorded as pending (deduped by key) and retried on later snapshots,
-        never marked applied and never discarded.
+        Exactly-once per key — a persistent-slot repeat is a no-op, and a
+        multi-id annotation whose ids correlate at different times applies each
+        effect once. A fold happens only when the effect provably targets the
+        CURRENT battlefield stint of an engine permanent:
+
+        - GRE attests the affected object in THIS snapshot, on the battlefield,
+          identity-consistent with the effect's recorded context; and
+        - the engine candidate is on the engine battlefield right now, with no
+          grpId/controller/owner contradiction (``_engine_candidate_valid``).
+
+        Anything less defers the effect (deduped by key, retried under
+        ``_advance_pending_effect``'s expiration rules) — never marked applied,
+        never guessed onto an unproven object.
         """
-        key = (ann_id, aid)
         if key in self._applied_counter_effects:
             self._pending_counter_effects.pop(key, None)
             return False
+        if key in self._cancelled_counter_effects:
+            return False
+        aid = payload["current_aid"]
+        gre_obj = snapshot.game_objects.get(aid)
+        if gre_obj is not None:
+            self._capture_counter_context(payload, gre_obj)
+        if (
+            gre_obj is None
+            or aid not in gre_bf
+            or not self._counter_context_matches(payload, gre_obj)
+        ):
+            # GRE does not (yet) attest this stint on the battlefield — defer.
+            self._pending_counter_effects[key] = payload
+            return False
+        payload["seen_on_battlefield"] = True
         obj = self._resolve_counter_object(aid, snapshot)
-        if obj is None:
-            # Correlation unavailable — defer (deduped by key) and retry later.
+        if obj is None or not self._engine_candidate_valid(obj, gre_obj, engine_bf_keys):
+            # No proven engine candidate — defer (deduped by key), retry later.
             self._pending_counter_effects[key] = payload
             return False
         okey = self._counter_key(obj)
+        epoch = self._object_zone_epoch(obj)
+        if okey in self._gre_counter_ledger and self._ledger_epoch.get(okey, 0) != epoch:
+            # The existing ledger belongs to a previous battlefield stint of
+            # this object — retire it before the new stint's first fold.
+            self._retire_ledger_entry(okey)
         ledger = self._gre_counter_ledger.setdefault(okey, {})
         delta = payload["amount"] if payload["is_add"] else -payload["amount"]
         ledger[payload["name"]] = max(0, ledger.get(payload["name"], 0) + delta)
         self._ledger_obj[okey] = obj
+        self._ledger_epoch[okey] = epoch
         self._applied_counter_effects.add(key)
         self._pending_counter_effects.pop(key, None)
         return True
@@ -2492,8 +2785,14 @@ class ReplayExecutor:
         # not be correlated yet) must NOT get a P/T correction here: the counter
         # lands next snapshot and would then double-count against a correction
         # installed for its absence. Skip such objects; the counter itself will
-        # bridge the gap once it lands.
+        # bridge the gap once it lands. Both the original and the churn-re-keyed
+        # aid are skipped (the snapshot may already show the renamed id).
         pending_aids = {aid for (_ann, aid) in self._pending_counter_effects}
+        pending_aids |= {
+            p["current_aid"]
+            for p in self._pending_counter_effects.values()
+            if p.get("current_aid")
+        }
 
         def residual_deltas() -> list[tuple[Any, int, int]]:
             deltas: list[tuple[Any, int, int]] = []

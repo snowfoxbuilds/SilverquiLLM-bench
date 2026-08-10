@@ -4,6 +4,30 @@ Design decisions of record for the MSH engine, kept out of code comments so
 the rationale survives refactors. Card impls and engine modules reference this
 file ("per KEY_DECISIONS"). Newest section first.
 
+## replay-gap Phase F correction — zone-change epoch (issue #37 follow-up)
+
+### `GameRefsRegistry.zone_epoch` — a side-effect-free real-transition signal
+The refs registry keeps a monotonic per-object **zone-change epoch**
+(`zone_epoch(obj)`), advanced by `note_zone_change` — i.e. by every real
+`move_to_zone` transition, including stints no query ever observes (a
+flicker's exile leg). Two equal reads bracket a window containing NO real zone
+transition; an increased value proves at least one occurred **even when the
+object is back in its original zone** (an atomic leave-and-return completed
+between the reads). The read is pure: it never mints instance ids and never
+perturbs the query-facing id sequence — unlike `instance_id`, whose call IS an
+observation and mints a stint id as a side effect (measured to perturb replay
+simulations when used for state inspection). The epoch is keyed by `id(obj)`;
+the registry retains a reference on the first zone change so the key is never
+reused by a recycled object. Consumer of record: the replay executor's counter
+reconciliation, which identifies a battlefield stint as (`object_id`,
+fold-time epoch) — see root `KEY_DECISIONS.md` Phase F correction part 2. —
+Rejected: exposing stint identity via `instance_id` (minting side effect);
+storing the epoch as an attribute on game objects (collides with card-impl
+attribute space and the AST guard's write rules); a battlefield-departure-only
+counter in `move_to_zone` (the generic zone-change epoch is strictly more
+informative and needs no zone-specific branching — any move by an object that
+was on the battlefield necessarily begins with a battlefield departure).
+
 ## replay-gap Phase C — engine primitives (issue #30)
 
 ### Generic-counter storage
