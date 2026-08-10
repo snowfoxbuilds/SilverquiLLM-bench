@@ -128,6 +128,109 @@ def load_card_id_map(path: str | Path | None = None) -> dict[int, str]:
 
 
 # ---------------------------------------------------------------------------
+# Token identity map (corpus-derived; see scripts/build_token_id_map.py)
+# ---------------------------------------------------------------------------
+
+def _token_signature(
+    card_types: Any, subtypes: Any, power: Any, toughness: Any
+) -> tuple:
+    """The characteristic signature used to correlate engine tokens to GRE ones.
+
+    ``card_types`` is normalized to lowercase type names ('creature',
+    'artifact', ...), so an engine ``CardType.CREATURE`` and a GRE
+    ``CardType_Creature`` produce the same key. Base P/T is part of the
+    signature ONLY for creatures — it is what tells the two red Dragon tokens
+    (94171 4/4 vs 94172 5/5) apart — and is ignored for noncreature tokens
+    (Food, Treasure) whose subtype already identifies them.
+    """
+    cts = frozenset(str(t).lower() for t in (card_types or []))
+    subs = frozenset(subtypes or [])
+    if "creature" in cts:
+        return (cts, subs, power, toughness)
+    return (cts, subs, None, None)
+
+
+class TokenIdMap:
+    """Corpus-derived token identity map (data/replays/token_id_map.json).
+
+    Gives every observed token grpId a stable identity so the executor can
+    correlate engine-minted tokens to their GRE grpId (stamping ``_grp_id``)
+    instead of treating them as anonymous id-0 shells, and so the validator can
+    surface a token that has no engine impl as a named missing identity rather
+    than an anonymous ``grpId_<n>``. Also resolves the four Arena-only card
+    grpIds Scryfall's arena_id feed omits.
+    """
+
+    def __init__(self, data: dict[str, Any] | None = None) -> None:
+        data = data or {}
+        self._tokens: dict[int, dict] = {}
+        for k, v in data.get("tokens", {}).items():
+            try:
+                self._tokens[int(k)] = v
+            except (ValueError, TypeError):
+                continue
+        self._arena: dict[int, dict] = {}
+        for k, v in data.get("arena_only_cards", {}).items():
+            try:
+                self._arena[int(k)] = v
+            except (ValueError, TypeError):
+                continue
+
+    def is_token(self, grp_id: int) -> bool:
+        """True if *grp_id* is a known token identity."""
+        return grp_id in self._tokens
+
+    def signature(self, grp_id: int) -> tuple | None:
+        """Correlation signature for a known token grpId (None if unknown)."""
+        entry = self._tokens.get(grp_id)
+        if entry is None:
+            return None
+        return _token_signature(
+            entry.get("card_types"),
+            entry.get("subtypes"),
+            entry.get("base_power"),
+            entry.get("base_toughness"),
+        )
+
+    def label(self, grp_id: int) -> str | None:
+        """Human-readable identity for a token grpId (None if unknown)."""
+        entry = self._tokens.get(grp_id)
+        return entry.get("label") if entry else None
+
+    def token_name(self, grp_id: int) -> str | None:
+        """The card name for a copy-token whose grpId is a real card, else None."""
+        entry = self._tokens.get(grp_id)
+        return entry.get("name") if entry else None
+
+    def arena_card_names(self) -> dict[int, str]:
+        """grpId -> registered card name for the resolvable Arena-only cards."""
+        return {
+            grp: entry["resolves_to"]
+            for grp, entry in self._arena.items()
+            if entry.get("resolves_to")
+        }
+
+    def arena_label(self, grp_id: int) -> str | None:
+        """Named identity for an Arena-only card grpId (None if not one)."""
+        entry = self._arena.get(grp_id)
+        if entry is None:
+            return None
+        return entry.get("resolves_to") or entry.get("label")
+
+
+def load_token_id_map(path: str | Path | None = None) -> TokenIdMap:
+    """Load the corpus-derived token identity map from JSON."""
+    if path is None:
+        path = Path(__file__).parent.parent.parent / "data" / "replays" / "token_id_map.json"
+    else:
+        path = Path(path)
+    if not path.exists():
+        return TokenIdMap({})
+    with open(path) as f:
+        return TokenIdMap(json.load(f))
+
+
+# ---------------------------------------------------------------------------
 # GRE zone type → engine zone mapping
 # ---------------------------------------------------------------------------
 
@@ -210,6 +313,7 @@ class ReplayExecutor:
         registry: Any | None = None,
         strict: bool = False,
         simulate: bool = False,
+        token_map: TokenIdMap | None = None,
     ) -> None:
         self.replay = replay
         self.card_id_map = card_id_map or {}
@@ -219,6 +323,16 @@ class ReplayExecutor:
         # mana) and compare state BEFORE resyncing. Default (False) is the
         # original observer mode that oracle-syncs state before comparison.
         self.simulate = simulate
+        # Corpus-derived token identity map (Phase E). Loaded only in simulate
+        # mode (and defaulted to the committed map so directly-constructed
+        # simulate executors correlate too); observer mode gets an empty map and
+        # never touches any Phase E path, so it stays byte-for-byte unchanged.
+        if token_map is not None:
+            self.token_map = token_map
+        elif simulate:
+            self.token_map = load_token_id_map()
+        else:
+            self.token_map = TokenIdMap()
 
         # Engine state (initialized from first snapshot)
         self.game: Any | None = None
@@ -227,9 +341,23 @@ class ReplayExecutor:
         # Tracking: grpId instance -> engine card object
         self._engine_cards: dict[int, Any] = {}  # GRE instanceId -> engine card
         self._grp_to_name: dict[int, str] = dict(self.card_id_map)
+        # Resolve the four Arena-only card grpIds Scryfall's arena_id feed omits
+        # to their registered impl name, so the executor builds the real card
+        # (Gnarlid Colony, Embercleave, Llanowar Elves) instead of a shell. Only
+        # fills gaps — a real card_id_map entry always wins. Simulate-only (the
+        # map is empty in observer mode, so this loop is a no-op there).
+        for grp_id, name in self.token_map.arena_card_names().items():
+            self._grp_to_name.setdefault(grp_id, name)
 
         # Tracks which engine cards have had register_triggers applied (prevents double-apply)
         self._triggers_registered: set[int] = set()
+
+        # Token grpIds the engine actually minted and correlated this game (via
+        # _correlate_tokens_in_group). The producibility signal for MISSING_CARD
+        # semantics: a GRE token whose grpId is here was produced by a real
+        # engine impl; one that never appears here has no impl that mints it and
+        # must still surface as a named missing identity.
+        self._minted_token_grpids: set[int] = set()
 
         # Simulate mode: the snapshot currently being executed (for handlers
         # that need GRE object data, e.g. hand materialization).
@@ -750,6 +878,11 @@ class ReplayExecutor:
 
         if not actions:
             result.action_type = "phase_transition"
+
+        # Correlate engine-minted tokens to their GRE grpId before comparing, so
+        # a token the engine correctly minted reads as its real identity instead
+        # of an anonymous id-0 shell that mis-compares against the GRE token.
+        self._correlate_tokens(curr_snapshot)
 
         # Honest comparison against the state the engine actually reached.
         result.mismatches.extend(self.compare_state(curr_snapshot))
@@ -2516,6 +2649,101 @@ class ReplayExecutor:
                 )
 
     # ------------------------------------------------------------------
+    # Token correlation (engine-minted token ↔ GRE token identity)
+    # ------------------------------------------------------------------
+
+    def _engine_token_signature(self, card: Any) -> tuple:
+        """Correlation signature for an engine token (see _token_signature)."""
+        card_types = [
+            getattr(t, "value", t) for t in getattr(card, "card_types", []) or []
+        ]
+        return _token_signature(
+            card_types,
+            getattr(card, "subtypes", None),
+            getattr(card, "base_power", None),
+            getattr(card, "base_toughness", None),
+        )
+
+    def _correlate_tokens_in_group(
+        self, gre_objs: list[Any], engine_cards: list[Any]
+    ) -> None:
+        """Stamp id-less engine tokens with their GRE grpId, matched by identity.
+
+        Matches id-less engine battlefield tokens to the GRE token objects
+        present in the same group, keyed on the token identity map: a match
+        needs the same characteristic signature (card types, subtypes, and —
+        for creatures — base P/T, which is what tells the two red Dragon tokens
+        apart). Only grpIds the map recognizes are ever stamped.
+
+        Ambiguity rule (KEY_DECISIONS): same-signature tokens are
+        interchangeable per rule 601 — they are matched by COUNT, never by
+        guessed order. An engine token the map can't match stays id-0 and is
+        handled exactly as before (the overflow pass may remove it). Idempotent:
+        already-stamped tokens are skipped, so calling it twice a step is safe.
+        """
+        if self.token_map is None:
+            return
+
+        # GRE tokens present whose grpId the map recognizes, bucketed by
+        # signature; a signature may cover more than one grpId (copy-tokens).
+        gre_by_sig: dict[tuple, Counter] = {}
+        for obj in gre_objs:
+            if obj.type != "GameObjectType_Token":
+                continue
+            if not self.token_map.is_token(obj.grp_id):
+                continue
+            sig = self.token_map.signature(obj.grp_id)
+            if sig is None:
+                continue
+            gre_by_sig.setdefault(sig, Counter())[obj.grp_id] += 1
+        if not gre_by_sig:
+            return
+
+        # Id-less engine tokens bucketed by the same signature.
+        idless: dict[tuple, list[Any]] = {}
+        for card in engine_cards:
+            if not getattr(card, "is_token", False):
+                continue
+            if getattr(card, "_grp_id", None):
+                continue
+            idless.setdefault(self._engine_token_signature(card), []).append(card)
+
+        for sig, grp_counter in gre_by_sig.items():
+            pool = idless.get(sig)
+            if not pool:
+                continue
+            idx = 0
+            # Deterministic assignment when several grpIds share a signature.
+            for grp_id in sorted(grp_counter):
+                for _ in range(grp_counter[grp_id]):
+                    if idx >= len(pool):
+                        break
+                    pool[idx]._grp_id = grp_id
+                    self._minted_token_grpids.add(grp_id)
+                    idx += 1
+
+    def _correlate_tokens(self, snapshot: GameSnapshot) -> None:
+        """Correlate engine-minted tokens across every battlefield group.
+
+        Called before ``compare_state`` (so the comparison sees stamped tokens)
+        and again inside ``_sync_zones`` (so tokens minted while the resync
+        resolves the late stack are stamped before the overflow pass runs).
+        """
+        if not self.simulate or self.token_map is None:
+            return
+        for engine_zone_enum, seat_id, zone_type_str, objs, _ in (
+            self._snapshot_zone_groups(snapshot)
+        ):
+            if zone_type_str != "ZoneType_Battlefield":
+                continue
+            player = self.players.get(seat_id)
+            if player is None:
+                continue
+            self._correlate_tokens_in_group(
+                objs, player.zones[engine_zone_enum].get_all()
+            )
+
+    # ------------------------------------------------------------------
     # Zone sync (untracked card appearances)
     # ------------------------------------------------------------------
 
@@ -2544,6 +2772,15 @@ class ReplayExecutor:
             player = self.players.get(seat_id)
             if player is None:
                 continue
+
+            # Correlate engine-minted tokens to their GRE grpId BEFORE the
+            # multiset comparison, so a matched token counts as its real grpId:
+            # it is no longer shell-injected nor deleted by the overflow pass.
+            # Simulate-only — observer mode is byte-for-byte unchanged.
+            if self.simulate and zone_type_str == "ZoneType_Battlefield":
+                self._correlate_tokens_in_group(
+                    objs, player.zones[engine_zone_enum].get_all()
+                )
 
             # grpId multiset from snapshot (skip unknown grpId=0)
             snap_grp_ids: Counter[int] = Counter(

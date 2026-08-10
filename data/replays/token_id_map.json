@@ -11,6 +11,7 @@
         "Green"
       ],
       "kind": "alt_printing",
+      "label": "Gnarlid Colony",
       "note": "2/2 green Beast; alt-printing of Gnarlid Colony (canonical grpId 94188, registered). Enters as an X/X so appears at 2/2, 4/4, 5/5.",
       "resolves_to": "Gnarlid Colony",
       "subtypes": [
@@ -28,6 +29,7 @@
         "Red"
       ],
       "kind": "alt_printing",
+      "label": "Embercleave",
       "note": "Red Equipment; the only red Equipment in the FDN/SPG registry is Embercleave (canonical synthetic grpId 94703, registered).",
       "resolves_to": "Embercleave",
       "subtypes": [
@@ -45,6 +47,7 @@
         "Green"
       ],
       "kind": "alt_printing",
+      "label": "Llanowar Elves",
       "note": "1/1 green Elf Druid; alt-printing of Llanowar Elves (canonical grpId 93940, registered).",
       "resolves_to": "Llanowar Elves",
       "subtypes": [
@@ -64,6 +67,7 @@
         "Green"
       ],
       "kind": "out_of_set_exclusion",
+      "label": "1/1 black green Nightmare (out-of-set grpId 95283)",
       "note": "Black/green Nightmare creature, base 1/1, grows with +1/+1 counters. Appears in exactly one corpus game whose decklist is full of non-FDN grpIds (11809, 81895, 175xxx...); no FDN/SPG registry match. Recorded as a named out-of-set exclusion so it stops being an anonymous grpId; it has no engine impl.",
       "resolves_to": null,
       "subtypes": [

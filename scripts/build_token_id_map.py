@@ -276,6 +276,20 @@ def build_token_map(corpus: Path) -> dict:
             entry["subtypes"] = list(subtypes)
             entry["colors"] = list(colors)
             entry["base_power"], entry["base_toughness"] = base_pt
+        # A label so an unresolved (out-of-set) grpId still surfaces as a named
+        # identity in MISSING_CARD reporting, never as an anonymous grpId.
+        if entry.get("resolves_to"):
+            entry["label"] = entry["resolves_to"]
+        elif base_sig is not None:
+            card_types, subtypes, colors = base_sig
+            subtype_phrase = " ".join(subtypes) if subtypes else " ".join(card_types)
+            pt = ""
+            if base_pt[0] is not None:
+                pt = f"{base_pt[0]}/{base_pt[1]} "
+            entry["label"] = (
+                f"{pt}{_colors_phrase(colors)} {subtype_phrase} "
+                f"(out-of-set grpId {grp})"
+            )
         arena_out[grp_str] = entry
 
     return {

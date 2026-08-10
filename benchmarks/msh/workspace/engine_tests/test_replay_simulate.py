@@ -450,6 +450,169 @@ class TestHonestMissingCard:
         assert all("Hare Apparent" in d.description for d in missing)
 
 
+# Real FDN token-block grpIds (from data/replays/token_id_map.json).
+RABBIT_TOK, CAT_TOK = 94160, 94156
+DRAGON4_TOK, DRAGON5_TOK = 94171, 94172  # both red Dragons, base 4/4 vs 5/5
+
+
+def token_obj(
+    iid: int,
+    grp: int,
+    seat: int,
+    subtypes: list[str],
+    power: int | None = None,
+    toughness: int | None = None,
+    card_types: tuple[str, ...] = ("CardType_Creature",),
+) -> GameObject:
+    """A GRE battlefield token object."""
+    return GameObject(
+        instance_id=iid, grp_id=grp, type="GameObjectType_Token", zone_id=BF1,
+        owner_seat_id=seat, controller_seat_id=seat, visibility="Visibility_Public",
+        card_types=list(card_types),
+        subtypes=[f"SubType_{s}" for s in subtypes],
+        power=power, toughness=toughness,
+    )
+
+
+def add_engine_token(
+    ex, seat: int, name: str, subtypes: list[str],
+    power: int, toughness: int,
+):
+    """Place an id-less engine token on *seat*'s battlefield (as a card mints one)."""
+    from engine.card import Creature
+    from engine.types import Zone as EZone
+
+    tok = Creature(
+        name=name, subtypes=set(subtypes), base_power=power, base_toughness=toughness,
+    )
+    tok.is_token = True
+    tok.owner = ex.players[seat]
+    tok.controller = ex.players[seat]
+    ex.players[seat].zones[EZone.BATTLEFIELD].add(tok)
+    return tok
+
+
+class TestTokenCorrelation:
+    """Phase E task 2: id-less engine tokens are stamped with their GRE grpId,
+    matched via the token identity map, and then survive sync."""
+
+    def test_idless_engine_token_stamped_from_map(self):
+        """A minted, id-less engine token gains the GRE token's grpId and lives."""
+        gre = token_obj(500, RABBIT_TOK, 1, ["Rabbit"], 1, 1)
+        s0 = snapshot(1, battlefield={1: [500]}, objects={500: gre})
+        ex = make_executor([s0])
+        tok = add_engine_token(ex, 1, "Rabbit", ["Rabbit"], 1, 1)
+        assert getattr(tok, "_grp_id", None) is None
+        ex._correlate_tokens(s0)
+        assert tok._grp_id == RABBIT_TOK
+        assert RABBIT_TOK in ex._minted_token_grpids
+        from engine.types import Zone as EZone
+        assert tok in ex.players[1].zones[EZone.BATTLEFIELD].get_all()
+
+    def test_matched_token_survives_sync_unmatched_removed(self):
+        """Overflow removes only the genuinely-unmatched id-less token."""
+        from engine.types import Zone as EZone
+
+        gre = token_obj(500, RABBIT_TOK, 1, ["Rabbit"], 1, 1)
+        s0 = snapshot(1, battlefield={1: [500]}, objects={500: gre})
+        ex = make_executor([s0])
+        rabbit = add_engine_token(ex, 1, "Rabbit", ["Rabbit"], 1, 1)
+        stray = add_engine_token(ex, 1, "Goblin", ["Goblin"], 1, 1)  # no GRE counterpart
+        ex._sync_zones(s0)
+        bf = ex.players[1].zones[EZone.BATTLEFIELD].get_all()
+        assert rabbit in bf and rabbit._grp_id == RABBIT_TOK
+        assert stray not in bf  # unmatched id-less token is overflow-removed
+
+    def test_ambiguity_matched_by_count(self):
+        """Same-signature tokens are interchangeable — matched by count.
+
+        Two GRE Cats and three id-less engine Cats: exactly two are stamped;
+        the surplus stays id-0 and is removed by the overflow pass.
+        """
+        from engine.types import Zone as EZone
+
+        objs = {
+            510: token_obj(510, CAT_TOK, 1, ["Cat"], 1, 1),
+            511: token_obj(511, CAT_TOK, 1, ["Cat"], 1, 1),
+        }
+        s0 = snapshot(1, battlefield={1: [510, 511]}, objects=objs)
+        ex = make_executor([s0])
+        cats = [add_engine_token(ex, 1, "Cat", ["Cat"], 1, 1) for _ in range(3)]
+        ex._sync_zones(s0)
+        bf = ex.players[1].zones[EZone.BATTLEFIELD].get_all()
+        stamped = [c for c in cats if getattr(c, "_grp_id", None) == CAT_TOK]
+        assert len(stamped) == 2
+        assert all(c in bf for c in stamped)
+        assert sum(1 for c in cats if c in bf) == 2  # third removed as overflow
+
+    def test_dragon_disambiguated_by_base_pt(self):
+        """Two same-subtype/color tokens (Dragon 4/4 vs 5/5) split by base P/T."""
+        objs = {
+            520: token_obj(520, DRAGON4_TOK, 1, ["Dragon"], 4, 4),
+            521: token_obj(521, DRAGON5_TOK, 1, ["Dragon"], 5, 5),
+        }
+        s0 = snapshot(1, battlefield={1: [520, 521]}, objects=objs)
+        ex = make_executor([s0])
+        d4 = add_engine_token(ex, 1, "Dragon", ["Dragon"], 4, 4)
+        d5 = add_engine_token(ex, 1, "Dragon", ["Dragon"], 5, 5)
+        ex._correlate_tokens(s0)
+        assert d4._grp_id == DRAGON4_TOK
+        assert d5._grp_id == DRAGON5_TOK
+
+    def test_unmatched_signature_stays_idless(self):
+        """An engine token whose signature no GRE token matches keeps id-0."""
+        gre = token_obj(500, RABBIT_TOK, 1, ["Rabbit"], 1, 1)
+        s0 = snapshot(1, battlefield={1: [500]}, objects={500: gre})
+        ex = make_executor([s0])
+        other = add_engine_token(ex, 1, "Zombie", ["Zombie"], 2, 2)
+        ex._correlate_tokens(s0)
+        assert getattr(other, "_grp_id", None) is None
+
+
+class TestTokenMissingSemantics:
+    """Phase E task 6: a mapped token the engine produces is not missing; one it
+    never produces still surfaces, as its named token identity."""
+
+    def _missing(self, validator):
+        from silverquillm.replay.validation import DivergenceType
+
+        return [
+            d for d in validator.divergences
+            if d.divergence_type == DivergenceType.MISSING_CARD
+        ]
+
+    def test_produced_token_is_not_missing(self):
+        """A token the engine mints and correlates clears MISSING_CARD."""
+        gre = token_obj(500, RABBIT_TOK, 1, ["Rabbit"], 1, 1)
+        snaps = [
+            snapshot(1),
+            snapshot(2, battlefield={1: [500]}, objects={500: gre}),
+        ]
+        ex, validator = make_validator(snaps, FakeRegistry({"Plains"}))
+        add_engine_token(ex, 1, "Rabbit", ["Rabbit"], 1, 1)
+        validator.execute_all()
+        validator.report()
+        assert self._missing(validator) == []
+        assert RABBIT_TOK in ex._minted_token_grpids
+
+    def test_unproduced_token_surfaces_named_not_anonymous(self):
+        """A mapped token the engine never mints surfaces as its named identity,
+        not an anonymous grpId_<n>."""
+        gre = token_obj(500, CAT_TOK, 1, ["Cat"], 1, 1)
+        snaps = [
+            snapshot(1),
+            snapshot(2, battlefield={1: [500]}, objects={500: gre}),
+        ]
+        ex, validator = make_validator(snaps, FakeRegistry({"Plains"}))
+        validator.execute_all()
+        validator.report()
+        missing = self._missing(validator)
+        assert len(missing) == 1
+        assert CAT_TOK not in ex._minted_token_grpids
+        assert "Cat token" in missing[0].description
+        assert f"grpId_{CAT_TOK}" not in missing[0].description
+
+
 class TestOraclePTCorrections:
     """Resync P/T corrections are revocable ContinuousEffects, not stat bakes.
 
@@ -1636,19 +1799,24 @@ class TestGoldenGame:
             for d in report.divergences
         )
         # MISSING_CARD is one divergence per (game, identity). Hare Apparent
-        # (FDN #15) is now implemented, so its occurrences no longer register
-        # as a missing card; the only remaining missing identity is the
-        # engine-minted Rabbit token arrival grpId_94160 (deferred to the
-        # token-correlation phase). successful_comparisons rose 108 -> 109:
-        # with Hare Apparent implemented, the step that used to record the
-        # missing card now completes a comparison, while its ETB minting the
-        # (identity-less) Rabbit tokens leaves the zone/life/tapped counts
-        # unchanged.
+        # (FDN #15) is implemented, so its occurrences never registered as a
+        # missing card; the last remaining missing identity was the engine-minted
+        # Rabbit token arrival grpId_94160. Phase E token correlation now stamps
+        # that engine token with its GRE grpId (94160) and the MISSING_CARD
+        # semantics treat a token the engine actually produces as producible, so
+        # it clears: MISSING_CARD 1 -> 0.
+        #
+        # The 10 STATE_MISMATCH are unchanged and token-independent: the one
+        # battlefield entry that mentions 94160 (gsid 93) is a resolution-TIMING
+        # divergence — GRE shows the Rabbit a step before the engine's Hare
+        # Apparent ETB mints it — not a correlation gap, so it correctly persists
+        # (the engine has no Rabbit to correlate at that step). The corpus-wide
+        # token zone/P_T cluster is where correlation moves numbers; this game
+        # has a single token.
         assert report.total_snapshots == 116
         assert report.successful_comparisons == 109
-        assert dict(by_type) == {"MISSING_CARD": 1, "STATE_MISMATCH": 10}
+        assert dict(by_type) == {"STATE_MISMATCH": 10}
         assert dict(by_category) == {
-            "MISSING_CARD": 1,
             "zone_contents": 8,
             "life_total": 1,
             "tapped_state": 1,
