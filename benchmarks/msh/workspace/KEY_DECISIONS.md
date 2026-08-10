@@ -472,24 +472,49 @@ Because recording happens at the cast site rather than in a trigger's `capture`
 hook, multiple observers of one cast (two Thousand-Year Storms, or any number of
 cast-triggered abilities) increment it exactly once.
 
+The history contains **cast occurrences, not permanent handles on cards**: the
+same physical `CardImpl` object cast twice this turn (it resolved and returned to
+a castable zone in between) appears as **two** entries. Accounting is therefore
+occurrence-aware, never identity-based. `record_instant_or_sorcery_cast` **returns
+the number of qualifying casts already made this turn *before* this one** — the
+occurrence's immutable prior-cast count, fixed as its position in the per-turn
+list at append time. `_record_spell_cast` returns that value (or `None` for a
+non-qualifying spell), and `cast_spell` / `cast_spell_free` stamp it onto this
+cast's `StackObject.prior_qualifying_casts`. Because each cast mints a fresh
+`StackObject` (a recast object left and returned), that count belongs to the
+*occurrence* — the stack representation of one cast — not to the mutable card, and
+"the current cast" is thereby excluded exactly once (it is nowhere in its own
+prior count) rather than by an object-identity filter that would wrongly drop
+*every* earlier cast of a recast object. The public
+`instant_or_sorcery_casts_this_turn` list is unchanged in shape (spell references
+in cast order, one per occurrence), so existing consumers keep working.
+
 *Immutable per-trigger state.* Thousand-Year Storm keeps **no** source-local
 spell state — the former mutable `_pending_spell` slot and the `_storm_count` /
 `_storm_turn` tally are gone. On each trigger's own `StackObject` its `capture`
 hook (above) fixes an immutable record of (a) the **triggering spell's
-`StackObject`** and (b) the **copy count**. That count is **read at fire time
-from the fire-time controller's authoritative turn history** (above) — the number
-of instant/sorcery spells that controller cast *before* this one this turn, the
-triggering spell itself excluded by identity — never reconstructed from how many
-Storm triggers have since resolved, nor from a scalar stored on the enchantment.
-Sourcing the count from player-level history makes it independent of when this
-Storm entered, how long its trigger has been registered, whether control changed,
-how many Storms exist, and when pending triggers resolve: a Storm that entered
-after two spells were cast still captures two; two Storms (one late) capture the
-same count for one cast; a control change reads the *new* controller's history
-(zero for that player's first spell), never the previous controller's. Casting B
-in response to A's Storm trigger still makes B's trigger copy B once and A's copy
-A zero times, in LIFO order; a triggering spell that has left the stack
-(countered) makes zero copies and never falls back to a different pending spell.
+`StackObject`** and (b) the **copy count**. The hook correlates to the triggering
+spell's `StackObject` by identity (at fire time — immediately after the cast — the
+spell sits in exactly one stack object, the representation of *this* occurrence)
+and reads the **copy count straight off that occurrence's
+`prior_qualifying_casts`** — the prior-cast count the casting pipeline stamped
+there (above). It is never reconstructed from how many Storm triggers have since
+resolved, nor from a scalar on the enchantment, nor by filtering the fire-time
+controller's cast history for entries that "are not" the triggering spell (that
+identity filter is the discarded approach — it dropped *every* earlier occurrence
+of a recast object and undercounted). Sourcing the count this way makes it
+occurrence-aware and independent of when this Storm entered, how long its trigger
+has been registered, whether control changed, how many Storms exist, and when
+pending triggers resolve: **recasting the same physical card this turn captures
+0, 1, 2 …** across successive casts (each cast a distinct occurrence); A, B, then
+the same A again captures two for the final A; a Storm that entered after two
+spells were cast still captures two; two Storms (one late) capture the same count
+for one cast, incrementing the underlying history only once; a control change
+reads the *new* controller's history (zero for that player's first spell), never
+the previous controller's. Casting B in response to A's Storm trigger still makes
+B's trigger copy B once and A's copy A zero times, in LIFO order; a triggering
+spell that has left the stack (countered) makes zero copies and never falls back
+to a different pending spell.
 
 *Protection-aware retargeting via the shared spell-retargeting path.* When the
 controller chooses new targets for a copy, each target is re-chosen through

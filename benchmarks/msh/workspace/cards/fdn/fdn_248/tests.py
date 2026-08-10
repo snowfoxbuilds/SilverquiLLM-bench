@@ -26,7 +26,7 @@ from typing import Any
 from cards.fdn.fdn_248.card_impl import ThousandYearStorm
 from cards.fdn.fdn_86.card_impl import FieryAnnihilation
 from engine.card import Creature, Equipment, Instant
-from engine.casting import cast_spell as engine_cast_spell
+from engine.casting import cast_spell as engine_cast_spell, cast_spell_free
 from engine.decisions import Decision, DecisionKind, GameRef
 from engine.events import SpellCastTriggeredEvent
 from engine.intent_player import Intent
@@ -660,3 +660,144 @@ class TestStormAuthoritativeCount:
         (trig,) = _storm_triggers(game, storm)
         assert trig.event_state.copies == 0       # the creature cast did not count
         assert trig.event_state.spell is bolt
+
+
+# ---------------------------------------------------------------------------
+# Recasting the same physical CardImpl object counts each cast as its own
+# occurrence (occurrence-aware accounting)
+# ---------------------------------------------------------------------------
+#
+# The copy count for a Storm trigger is the immutable prior-qualifying-cast
+# count the casting pipeline stamps on *this cast's* StackObject — the stack
+# representation of one occurrence. Recasting the same object this turn mints a
+# new StackObject with its own stamp, so the counts climb 0, 1, 2 … and the
+# current cast is excluded exactly once. An identity filter over raw cast history
+# would instead drop *every* earlier occurrence of the recast object and
+# undercount — the defect these tests pin down.
+
+
+class TestStormRepeatedObjectCasts:
+    def _setup(self, hand):
+        game = create_game()
+        p1, _p2 = game.players
+        storm = ThousandYearStorm(owner=p1, controller=p1)
+        set_board_state(game, 0, hand=hand, battlefield=[storm])
+        game.active_player_index = 0
+        storm.register_triggers(game)      # no seeding — count starts at 0 this turn
+        return game, p1, storm
+
+    def _captured_copies(self, game, storm, spell):
+        """The copy count the (single) pending Storm trigger for *spell* captured.
+
+        Exactly one Storm trigger is pending for *spell*: the tests resolve the
+        stack between casts, so a prior occurrence's trigger is already gone.
+        """
+        (trig,) = [so for so in _storm_triggers(game, storm)
+                   if so.event_state.spell is spell]
+        return trig.event_state.copies
+
+    def _return_to_hand(self, game, spell):
+        """Resolve the stack (the just-cast instant goes to its graveyard) and
+        move the very same object back to hand so it can be recast."""
+        resolve_stack(game)
+        move_to_zone(game, spell, Zone.GRAVEYARD, Zone.HAND)
+
+    def test_recast_same_object_twice_first_zero_second_one(self):
+        """Cast the same instant object twice this turn: the first trigger
+        captures zero, the second captures one (not zero)."""
+        a = _Signal("Spell A")
+        game, p1, storm = self._setup([a])
+
+        _cast(game, p1, a); _fire(game, p1, a)
+        assert self._captured_copies(game, storm, a) == 0     # first cast: no prior
+
+        self._return_to_hand(game, a)                          # A resolves, back to hand
+        _cast(game, p1, a); _fire(game, p1, a)
+        assert self._captured_copies(game, storm, a) == 1      # one prior cast of A
+
+    def test_recast_same_object_three_times_zero_one_two(self):
+        """Three casts of the same object: copy counts 0, 1, 2."""
+        a = _Signal("Spell A")
+        game, p1, storm = self._setup([a])
+
+        captured = []
+        for _ in range(3):
+            _cast(game, p1, a); _fire(game, p1, a)
+            captured.append(self._captured_copies(game, storm, a))
+            self._return_to_hand(game, a)
+        assert captured == [0, 1, 2]
+
+    def test_mixed_repeated_and_distinct_final_A_captures_two(self):
+        """Cast A, then B, then the *same* A object again: the final A has two
+        prior qualifying casts (A and B), so its trigger captures two."""
+        a, b = _Signal("Spell A"), _Signal("Spell B")
+        game, p1, storm = self._setup([a, b])
+
+        _cast(game, p1, a); _fire(game, p1, a)                 # A: 0
+        assert self._captured_copies(game, storm, a) == 0
+        self._return_to_hand(game, a)                          # A resolves, back to hand
+
+        _cast(game, p1, b); _fire(game, p1, b)                 # B: 1 (A before it)
+        assert self._captured_copies(game, storm, b) == 1
+
+        _cast(game, p1, a); _fire(game, p1, a)                 # same A again: 2 (A, B)
+        assert self._captured_copies(game, storm, a) == 2
+
+    def test_free_recast_counts_prior_cast_and_records_once(self):
+        """Through a free-cast path (cascade / exile casting): a previous normal
+        cast of the same object still counts, and the free cast is recorded
+        exactly once (the history gains a single occurrence)."""
+        a = _Signal("Spell A")
+        game, p1, storm = self._setup([a])
+
+        _cast(game, p1, a); _fire(game, p1, a)                 # normal cast: 0
+        assert self._captured_copies(game, storm, a) == 0
+        self._return_to_hand(game, a)
+
+        turn = game.turn_number
+        before = len(p1.instant_or_sorcery_casts_this_turn(turn))
+        cast_spell_free(game, p1, a, Zone.HAND)                # free cast of SAME object
+        _fire(game, p1, a)
+        assert self._captured_copies(game, storm, a) == 1      # the prior cast counts
+        after = len(p1.instant_or_sorcery_casts_this_turn(turn))
+        assert after - before == 1                             # recorded exactly once
+
+    def test_two_storms_repeated_object_same_count_single_occurrence(self):
+        """Two Storms observing the repeated-object cast both capture the same
+        prior count, and the history gains only one occurrence for that cast (two
+        observers do not double-increment it)."""
+        a = _Signal("Spell A")
+        game = create_game()
+        p1, _p2 = game.players
+        storm1 = ThousandYearStorm(owner=p1, controller=p1)
+        storm2 = ThousandYearStorm(owner=p1, controller=p1)
+        set_board_state(game, 0, hand=[a], battlefield=[storm1, storm2])
+        game.active_player_index = 0
+        storm1.register_triggers(game)
+        storm2.register_triggers(game)
+
+        _cast(game, p1, a); _fire(game, p1, a)                 # first cast — both observe
+        resolve_stack(game)                                    # drain both triggers + A
+        move_to_zone(game, a, Zone.GRAVEYARD, Zone.HAND)
+
+        turn = game.turn_number
+        before = len(p1.instant_or_sorcery_casts_this_turn(turn))
+        _cast(game, p1, a); _fire(game, p1, a)                 # recast — both observe again
+        assert self._captured_copies(game, storm1, a) == 1
+        assert self._captured_copies(game, storm2, a) == 1     # neither under-counts
+        after = len(p1.instant_or_sorcery_casts_this_turn(turn))
+        assert after - before == 1                             # ONE new occurrence
+
+    def test_turn_rollover_earlier_occurrence_of_same_object_does_not_count(self):
+        """An earlier-turn cast of the same object does not contribute after the
+        turn rolls over: the recast in the new turn captures zero."""
+        a = _Signal("Spell A")
+        game, p1, storm = self._setup([a])
+
+        _cast(game, p1, a); _fire(game, p1, a)                 # turn N
+        assert self._captured_copies(game, storm, a) == 0
+        self._return_to_hand(game, a)
+
+        game.turn_number += 1                                  # roll to the next turn
+        _cast(game, p1, a); _fire(game, p1, a)                 # same object, new turn
+        assert self._captured_copies(game, storm, a) == 0      # prior-turn cast ignored

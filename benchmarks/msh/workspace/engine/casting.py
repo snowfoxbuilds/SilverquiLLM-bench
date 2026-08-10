@@ -431,7 +431,7 @@ def _apply_cost_reduction(cost: ManaCost, reduction: int) -> ManaCost:
 _INSTANT_SORCERY: frozenset[CardType] = frozenset({CardType.INSTANT, CardType.SORCERY})
 
 
-def _record_spell_cast(game: GameState, player: Player, card: CardImpl) -> None:
+def _record_spell_cast(game: GameState, player: Player, card: CardImpl) -> int | None:
     """Record *card* in *player*'s per-turn instant/sorcery cast history.
 
     This is the single authoritative point at which a cast is counted (rule
@@ -442,9 +442,17 @@ def _record_spell_cast(game: GameState, player: Player, card: CardImpl) -> None:
     count correct when several observers — e.g. two Thousand-Year Storms — watch
     the same cast: the history is incremented exactly once regardless of how many
     triggers fire. See :meth:`engine.player.Player.record_instant_or_sorcery_cast`.
+
+    Returns the immutable prior-qualifying-cast count for this occurrence — the
+    number of instant/sorcery spells *player* had already cast this turn before
+    this one — or ``None`` for a non-qualifying spell (which is not recorded).
+    The caller stamps this onto the cast's :class:`~engine.stack.StackObject`, so
+    the count travels with this exact occurrence rather than being reconstructed
+    later by excluding the triggering spell from history by object identity.
     """
     if card.card_types & _INSTANT_SORCERY:
-        player.record_instant_or_sorcery_cast(card, game.turn_number)
+        return player.record_instant_or_sorcery_cast(card, game.turn_number)
+    return None
 
 
 # ------------------------------------------------------------------
@@ -593,17 +601,23 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     # 7b. The spell has now become cast (rule 601.2i). Record it in the caster's
     #     authoritative per-turn instant/sorcery history exactly once — before the
     #     cast-triggered event fires, so a cast-triggered ability (Thousand-Year
-    #     Storm) reading the history sees this spell already counted.
-    _record_spell_cast(game, player, card)
+    #     Storm) reading the history sees this spell already counted. The prior
+    #     count returned here is the number of qualifying spells cast *before* this
+    #     occurrence — carried onto this cast's StackObject below (``None`` for a
+    #     non-qualifying spell).
+    prior_qualifying_casts = _record_spell_cast(game, player, card)
 
     # 8. Build on_resolve callback and push StackObject with the context captured
-    #    at target-selection time (step 5c).
+    #    at target-selection time (step 5c). The StackObject is the stack
+    #    representation of this one cast occurrence, so it carries the occurrence's
+    #    immutable prior-cast count.
     stack_obj = StackObject(
         source=card,
         controller=player,
         targets=chosen_targets,
         on_resolve=lambda g: None,  # replaced below
         activation_context=activation_context,
+        prior_qualifying_casts=prior_qualifying_casts,
     )
 
     def _on_resolve(g: GameState) -> None:
@@ -741,17 +755,22 @@ def cast_spell_free(
     # 4b. The free-cast spell has become cast (rule 601.2i); record it in the
     #     caster's per-turn instant/sorcery history exactly once, the same as the
     #     normal path — a spell cast without paying its cost (cascade, Etali, exile
-    #     casting) still counts toward "spells you've cast this turn".
-    _record_spell_cast(game, player, card)
+    #     casting) still counts toward "spells you've cast this turn". Its prior
+    #     count is carried onto this cast's StackObject below, exactly as on the
+    #     normal path.
+    prior_qualifying_casts = _record_spell_cast(game, player, card)
 
     # 5. Build on_resolve callback and push StackObject with the context captured
-    #    at target-selection time (step 3b).
+    #    at target-selection time (step 3b). This StackObject is the stack
+    #    representation of this one cast occurrence and carries its immutable
+    #    prior-cast count.
     stack_obj = StackObject(
         source=card,
         controller=player,
         targets=chosen_targets,
         on_resolve=lambda g: None,  # replaced below
         activation_context=activation_context,
+        prior_qualifying_casts=prior_qualifying_casts,
     )
 
     def _on_resolve(g: GameState) -> None:

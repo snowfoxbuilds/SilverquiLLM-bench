@@ -1359,6 +1359,32 @@ class TestSpellCastHistoryRecord:
         assert p1.instant_or_sorcery_casts_this_turn(1) == [a]
         assert p2.instant_or_sorcery_casts_this_turn(1) == [b]
 
+    def test_record_returns_prior_qualifying_cast_count(self):
+        # Each recording reports how many qualifying casts came before it this
+        # turn — the immutable prior-cast count for that occurrence.
+        p = DeterministicPlayer("Alice")
+        s1, s2, s3 = object(), object(), object()
+        assert p.record_instant_or_sorcery_cast(s1, 1) == 0
+        assert p.record_instant_or_sorcery_cast(s2, 1) == 1
+        assert p.record_instant_or_sorcery_cast(s3, 1) == 2
+
+    def test_record_counts_a_recast_object_as_a_new_occurrence(self):
+        # The SAME object recorded twice this turn is two occurrences: the second
+        # recording reports one prior cast, not zero. Excluding "the current cast"
+        # by identity would instead treat both entries as the current cast.
+        p = DeterministicPlayer("Alice")
+        obj = object()
+        assert p.record_instant_or_sorcery_cast(obj, 1) == 0
+        assert p.record_instant_or_sorcery_cast(obj, 1) == 1
+        assert p.instant_or_sorcery_casts_this_turn(1) == [obj, obj]
+
+    def test_record_prior_count_restarts_at_the_turn_boundary(self):
+        p = DeterministicPlayer("Alice")
+        p.record_instant_or_sorcery_cast(object(), 1)
+        assert p.record_instant_or_sorcery_cast(object(), 1) == 1
+        # A new turn resets the record, so the count restarts from zero.
+        assert p.record_instant_or_sorcery_cast(object(), 2) == 0
+
 
 class TestSpellCastHistoryPipeline:
     """The casting pipeline records qualifying casts exactly once, at the single
@@ -1457,3 +1483,42 @@ class TestSpellCastHistoryPipeline:
         cast_spell(game, p, b)
         assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == [b]
         assert p.instant_or_sorcery_casts_this_turn(t1) == []
+
+    def test_cast_stamps_prior_qualifying_count_on_the_stack_object(self):
+        # The cast's StackObject — the stack representation of that one occurrence
+        # — carries the immutable prior-qualifying-cast count read at record time.
+        game, p = self._fresh()
+        a = Instant(name="A", mana_cost=ManaCost.parse("{0}"), owner=p)
+        b = Instant(name="B", mana_cost=ManaCost.parse("{0}"), owner=p)
+        _add_to_hand(game, 0, a)
+        _add_to_hand(game, 0, b)
+        cast_spell(game, p, a)
+        cast_spell(game, p, b)
+        stamp = {so.source: so.prior_qualifying_casts for so in game.stack._items}
+        assert stamp[a] == 0
+        assert stamp[b] == 1
+
+    def test_free_cast_stamps_prior_qualifying_count_on_the_stack_object(self):
+        from engine.casting import cast_spell_free
+        from engine.types import Zone
+
+        game, p = self._fresh()
+        a = Instant(name="A", mana_cost=ManaCost.parse("{0}"), owner=p)
+        b = Instant(name="B", mana_cost=ManaCost.parse("{5}"), owner=p)
+        _add_to_hand(game, 0, a)
+        p.zones[Zone.HAND].add(b)
+        cast_spell(game, p, a)
+        cast_spell_free(game, p, b, Zone.HAND)   # b is the second qualifying cast
+        stamp = {so.source: so.prior_qualifying_casts for so in game.stack._items}
+        assert stamp[a] == 0
+        assert stamp[b] == 1
+
+    def test_nonqualifying_cast_stamps_no_prior_count(self):
+        # A creature is not a qualifying cast, so its StackObject carries no count.
+        game, p = self._fresh()
+        bear = Creature(name="Bear", base_power=2, base_toughness=2,
+                        mana_cost=ManaCost.parse("{0}"), owner=p)
+        _add_to_hand(game, 0, bear)
+        cast_spell(game, p, bear)
+        (so,) = [s for s in game.stack._items if s.source is bear]
+        assert so.prior_qualifying_casts is None

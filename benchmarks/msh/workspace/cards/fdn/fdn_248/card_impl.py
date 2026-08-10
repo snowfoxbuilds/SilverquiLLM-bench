@@ -27,9 +27,16 @@ class _StormTriggerState:
         copies: How many copies this trigger must create — the number of instant
             and sorcery spells the fire-time controller had cast *before* this one
             this turn (rule: "for each *other* instant and sorcery spell you've
-            cast before it this turn"). Read at fire time from the controller's
-            authoritative per-player turn history, never reconstructed from
-            resolved triggers or from a scalar stored on this enchantment.
+            cast before it this turn"). Read at fire time as the immutable
+            prior-cast count that the casting pipeline stamped on *this exact cast
+            occurrence's* StackObject
+            (:attr:`~engine.stack.StackObject.prior_qualifying_casts`). Because
+            each cast mints its own StackObject, recasting the same physical card
+            this turn yields counts 0, 1, 2 …, and "this" cast is excluded exactly
+            once — never every earlier occurrence of the same object, as an
+            identity filter over raw cast history would wrongly do. Never
+            reconstructed from resolved triggers or from a scalar on this
+            enchantment.
     """
 
     spell: Any
@@ -64,12 +71,15 @@ class ThousandYearStorm(Enchantment):
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
         # No source-local spell tally lives here. The copy count is read at fire
-        # time from the *authoritative* per-player, per-turn instant/sorcery cast
-        # history (``Player.instant_or_sorcery_casts_this_turn``), which the
-        # casting pipeline maintains regardless of this enchantment's presence,
-        # entry time, or control history — so every Storm trigger this turn sees
-        # the same count for a given cast, and a Storm that entered late (or a
-        # second Storm) is not under-counted.
+        # time as the immutable prior-cast count the casting pipeline stamped on
+        # the triggering spell's own StackObject (its
+        # ``prior_qualifying_casts``) — the number of instant/sorcery spells its
+        # controller had cast before this occurrence this turn. That count is
+        # fixed once, at the authoritative cast site, from the per-player turn
+        # history — so every Storm trigger this turn sees the same count for a
+        # given cast (a late or second Storm is not under-counted), and recasting
+        # the same physical card counts each occurrence separately (0, 1, 2 …)
+        # instead of collapsing them by object identity.
 
         def _condition(game: Any, event: Any) -> bool:
             # Side-effect free: only decide whether this cast triggers. The
@@ -87,27 +97,31 @@ class ThousandYearStorm(Enchantment):
         def _capture(game: 'GameState', event: Any, controller: Any) -> _StormTriggerState:
             # Runs as this trigger is put on the stack (fire time), once per
             # matching cast. Fixes this firing's facts immutably: which spell, and
-            # how many copies to make. The count is read from the fire-time
-            # controller's authoritative turn history — the number of instant and
-            # sorcery spells that controller cast *before* this one this turn —
-            # NOT from any state stored on this source. The triggering spell is
-            # already recorded in that history by the time this runs, so it is
-            # excluded by identity ("for each *other* … spell you've cast before
-            # it this turn").
-            spell = getattr(event, 'spell', None) or getattr(event, 'card', None)
-            copies = 0
-            if controller is not None:
-                turn_number = getattr(game, 'turn_number', 0)
-                prior = controller.instant_or_sorcery_casts_this_turn(turn_number)
-                copies = sum(1 for cast in prior if cast is not spell)
+            # how many copies to make.
+            #
             # Correlate this trigger to the triggering spell's StackObject now, by
-            # identity. Stored per-trigger, so a later cast's trigger cannot make
-            # this one copy a different spell.
+            # identity. At fire time (immediately after this spell was cast) the
+            # spell sits on the stack in exactly one StackObject — the stack
+            # representation of *this* cast occurrence — so a recast of the same
+            # object never confuses this correlation. Stored per-trigger, so a
+            # later cast's trigger cannot make this one copy a different spell.
+            spell = getattr(event, 'spell', None) or getattr(event, 'card', None)
             original_so: "StackObject | None" = None
             for so in game.stack._items:
                 if so.source is spell:
                     original_so = so
                     break
+            # The copy count is the prior-cast count the casting pipeline stamped
+            # on that occurrence's StackObject — the number of instant and sorcery
+            # spells cast *before* this one this turn ("for each *other* … spell").
+            # Read straight off the occurrence, so recasting the same object gives
+            # 0, 1, 2 …; this occurrence is excluded exactly once (it is counted
+            # nowhere in its own prior count), never by an identity filter that
+            # would drop every earlier cast of the same object. No StackObject
+            # (the spell already left the stack) → no copies to make.
+            copies = 0
+            if original_so is not None:
+                copies = getattr(original_so, 'prior_qualifying_casts', None) or 0
             return _StormTriggerState(spell=spell, stack_object=original_so, copies=copies)
 
         def _effect(game: 'GameState', controller: Any, state: _StormTriggerState) -> None:

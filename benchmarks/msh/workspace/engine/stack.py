@@ -64,6 +64,18 @@ class StackObject:
             ``None`` for spells and triggers with no capture hook. Owned by this
             one trigger instance, so two pending triggers of the same source do
             not share or clobber it.
+        prior_qualifying_casts: For a spell StackObject that is an instant or
+            sorcery cast, the number of instant/sorcery spells its controller had
+            already cast this turn *before* this one — the immutable prior-cast
+            count of this exact cast occurrence, captured at the authoritative
+            cast site (:func:`engine.casting.cast_spell` / ``cast_spell_free``)
+            from :meth:`engine.player.Player.record_instant_or_sorcery_cast`.
+            Because each cast mints a new StackObject (a recast object leaves and
+            returns), this count belongs to the occurrence, not the mutable card,
+            and is read directly by Thousand-Year Storm rather than reconstructed
+            by excluding the triggering spell from cast history by identity.
+            ``None`` for anything that is not a qualifying-spell cast (copies —
+            which are not casts — abilities, triggers, and permanent spells).
     """
 
     source: Any
@@ -73,6 +85,7 @@ class StackObject:
     is_mana_ability: bool = False
     activation_context: ActivationContext | None = None
     event_state: Any = None
+    prior_qualifying_casts: int | None = None
 
 
 # ---------------------------------------------------------------------------
