@@ -492,8 +492,10 @@ def add_engine_token(
 
     *colors* is an optional set of ``engine.types.Color`` — the explicit colour
     a token impl declares (e.g. ``token.colors = {Color.WHITE}``). Left unset the
-    token reads as colourless via ``get_colors``, mirroring an impl that forgot
-    to state its colour.
+    token carries no colour declaration at all — UNDECLARED/UNKNOWN colour,
+    mirroring an impl that never states its colour. Pass ``colors=set()`` for a
+    token that POSITIVELY establishes explicit colourlessness; the two are not
+    equivalent (unknown colour is absence of evidence, not colourlessness).
     """
     from engine.card import Creature
     from engine.types import Zone as EZone
@@ -700,10 +702,11 @@ class TestTokenCorrelationAmbiguity:
 
     def test_undeclared_colour_token_not_stamped_in_collision(self):
         """An engine token in a colliding signature that declares NO colour
-        cannot be matched to a coloured candidate, so it stays unstamped rather
-        than guessed."""
+        reads as UNKNOWN colour — absence of evidence that establishes no
+        candidate — so it stays unstamped rather than guessed."""
         ex = make_executor([self._human_group()])
-        # No colour set -> get_colors is empty -> equals no coloured candidate.
+        # No colour set -> _engine_token_color_key(t) is None (UNKNOWN): it
+        # narrows nothing and establishes nothing, so no candidate resolves.
         t = add_engine_token(ex, 1, "Human", ["Human"], 1, 1)
         ex._correlate_tokens(ex.replay.snapshots[0])
         assert getattr(t, "_grp_id", None) is None

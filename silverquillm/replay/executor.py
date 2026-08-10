@@ -157,10 +157,11 @@ def _color_key(colors: Any) -> frozenset:
     Accepts either the engine's ``Color`` enum members (``get_colors`` returns a
     ``set[Color]``) or the token map's colour strings (``["Red", "White"]``) and
     returns a frozenset of upper-cased colour names, so an engine ``Color.RED``
-    and a map ``"Red"`` compare equal. An empty/undeclared colour collection
-    yields the empty frozenset — a token that does not declare its colour cannot
-    be told apart from a same-signature token that does, which the caller treats
-    as "no colour evidence".
+    and a map ``"Red"`` compare equal. An empty collection yields the empty
+    frozenset, which callers read as EXPLICIT colourlessness (the map's
+    ``"colors": []``). The undeclared/UNKNOWN state never reaches this
+    normalization: ``_engine_token_color_key`` returns ``None`` for an engine
+    token with no authoritative colour source, before any key is built.
     """
     key = set()
     for c in colors or []:
@@ -249,7 +250,9 @@ class TokenIdMap:
 
         The corpus-derived colour (``["Red"]``, ``["Black"]``, ``[]`` for a
         colourless token) upper-cased into a frozenset, so it compares directly
-        against an engine token's ``get_colors``. Colour is the identity
+        against an engine token's known colour key (``_engine_token_color_key``;
+        an unknown colour is ``None`` and never compares equal, unlike
+        ``get_colors``, which flattens unknown to empty). Colour is the identity
         discriminator that tells two same-signature token grpIds apart (e.g. the
         1/1 red Human copy 93797 from the 1/1 white Human 94158); it is NOT part
         of the base signature because a token impl that omits its colour must
