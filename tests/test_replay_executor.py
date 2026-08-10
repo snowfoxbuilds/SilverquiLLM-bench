@@ -1287,3 +1287,100 @@ class TestCounterDeferral:
         _remove(executor, perm)
         executor._apply_counter_annotations(_ann_snap(4))
         assert perm.plus_one_counters == 0
+
+
+def _id_change(ann_id: int, orig: int, new: int) -> _Annotation:
+    return _Annotation(
+        id=ann_id, type=["AnnotationType_ObjectIdChanged"],
+        details={"orig_id": [orig], "new_id": [new]},
+    )
+
+
+class TestCounterCanonicalAliases:
+    """One semantic counter effect has ONE canonical identity across GRE
+    instance-id renames: applied and cancelled state cover every rename alias,
+    so a persistent-slot repeat under a renamed aid can neither double-apply
+    an already folded effect nor resurrect a cancelled one. (Same-stint churn
+    PROOF is engine-epoch-driven and pinned in the workspace simulate suite;
+    this suite pins the identity surfaces.)"""
+
+    def test_repeat_under_renamed_aid_is_not_a_new_effect(
+        self, executor: ReplayExecutor
+    ) -> None:
+        perm = _FakePermanent(4000)
+        _place(executor, perm, 5601)
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(40, [5601], 1, 1), bf={5601: 1})
+        )
+        assert perm.plus_one_counters == 1
+
+        # GRE renames the aid; the SAME annotation id repeats under the new
+        # aid. The repeat canonicalizes to the applied record — it must not
+        # mint a second (annotation, aid) effect and double-apply.
+        del executor._engine_cards[5601]
+        executor._engine_cards[5602] = perm
+        executor._apply_counter_annotations(
+            _ann_snap(3, _id_change(90, 5601, 5602),
+                      _counter_ann(40, [5602], 1, 1), bf={5602: 1})
+        )
+        assert perm.plus_one_counters == 1
+        assert executor._counter_aid_alias == {5602: 5601}
+        assert executor._applied_counter_effects == {(40, 5601)}
+        assert not executor._pending_counter_effects
+        assert not executor._cancelled_counter_effects
+
+    def test_cancelled_effect_not_resurrected_by_aliased_repeat(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # The effect pends UNCORRELATED; its aid is renamed. With no engine
+        # correlation evidence the hop cannot be proven same-stint churn, so
+        # the effect cancels — and the repeat under the new aid resolves to
+        # that cancelled record instead of re-enqueueing.
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(41, [5701], 1, 2), bf={5701: 1})
+        )
+        assert (41, 5701) in executor._pending_counter_effects
+
+        executor._apply_counter_annotations(
+            _ann_snap(3, _id_change(91, 5701, 5702), bf={5702: 1})
+        )
+        assert (41, 5701) in executor._cancelled_counter_effects
+        assert not executor._pending_counter_effects
+
+        perm = _FakePermanent(4001)
+        _place(executor, perm, 5702)
+        executor._apply_counter_annotations(
+            _ann_snap(4, _counter_ann(41, [5702], 1, 2), bf={5702: 1})
+        )
+        assert perm.plus_one_counters == 0
+        assert not executor._pending_counter_effects
+        assert not executor._applied_counter_effects
+        assert executor._cancelled_counter_effects == {(41, 5701)}
+        assert len(executor._unresolved_counter_effects) == 1
+        assert executor._unresolved_counter_effects[0]["current_aid"] == 5701
+
+    def test_rename_chain_aliases_all_resolve_to_root(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # A rename CHAIN (blink legs in one snapshot) cancels the pending
+        # effect — and BOTH hop targets alias to the root, so a repeat under
+        # the final aid still hits the cancelled record.
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(42, [5801], 1, 1), bf={5801: 1})
+        )
+        executor._apply_counter_annotations(
+            _ann_snap(3, _id_change(92, 5801, 5802), _id_change(93, 5802, 5803),
+                      bf={5803: 1})
+        )
+        assert (42, 5801) in executor._cancelled_counter_effects
+        assert executor._canonical_aid(5803) == 5801
+        assert executor._canonical_aid(5802) == 5801
+
+        perm = _FakePermanent(4002)
+        _place(executor, perm, 5803)
+        executor._apply_counter_annotations(
+            _ann_snap(4, _counter_ann(42, [5803], 1, 1), bf={5803: 1})
+        )
+        assert perm.plus_one_counters == 0
+        assert not executor._pending_counter_effects
+        assert len(executor._unresolved_counter_effects) == 1

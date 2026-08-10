@@ -19,8 +19,24 @@ observation and mints a stint id as a side effect (measured to perturb replay
 simulations when used for state inspection). The epoch is keyed by `id(obj)`;
 the registry retains a reference on the first zone change so the key is never
 reused by a recycled object. Consumer of record: the replay executor's counter
-reconciliation, which identifies a battlefield stint as (`object_id`,
-fold-time epoch) — see root `KEY_DECISIONS.md` Phase F correction part 2. —
+reconciliation, which identifies a battlefield stint as (engine-object key,
+fold-time epoch) and, since correction part 3, also accumulates per-pendency
+epoch evidence to prove (or refute) same-stint continuity across GRE
+instance-id churn — see root `KEY_DECISIONS.md` Phase F correction parts 2–3.
+
+**`object_id` uniqueness caveat** (surfaced by part 3's epoch evidence): the
+`GameObject.object_id` counter guarantees uniqueness only for CONSTRUCTED
+objects. Copy-token impls (fdn_154, fdn_163) mint their token via
+`copy.copy(<copied card>)`, which skips `__init__`, so the token copy shares
+its original's `object_id` while both are live on the battlefield —
+`_place_token`'s multiplication clones re-mint (`game.py`), the initially
+supplied copy object does not. Consumers needing identity among LIVE objects
+must therefore not key by bare `object_id` (the replay executor keys counters
+by `(object_id, id(obj))` with pinned references). Re-minting inside the
+impls or `_place_token` was deliberately NOT done as part of the replay
+correction: `object_id` feeds per-object ability keying (`abilities.py`), so
+changing it would alter shared-ability-state semantics for copies — an engine
+change that deserves its own issue, not a side effect of a replay-layer fix. —
 Rejected: exposing stint identity via `instance_id` (minting side effect);
 storing the epoch as an attribute on game objects (collides with card-impl
 attribute space and the AST guard's write rules); a battlefield-departure-only
