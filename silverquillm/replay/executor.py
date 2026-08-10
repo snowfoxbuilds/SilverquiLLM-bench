@@ -362,6 +362,32 @@ _ANNOTATION_LOOKAHEAD = 30
 # combat's deaths resolve within its own snapshots, well inside this window.
 _DEATH_LOOKAHEAD = 12
 
+# Arena CounterType enum -> engine counter name. Derived from the FDN corpus
+# CounterAdded feasibility histogram (Phase F): enum 1 is by far the most common
+# (751/883 annotations) and lands on the +1/+1 cards (Ajani's Pridemate,
+# Skyknight Squire, Stromkirk Bloodthief, Wildwood Scourge, Scavenging Ooze);
+# the named-counter enums were pinned by the single card that carries each
+# (Drake Hatcher = incubation, Nine-Lives Familiar = revival, Ravenous Amulet =
+# soul). An enum not in this map is stored under a namespaced fallback name so
+# it round-trips through the engine counter system without colliding with a
+# card's own counter name (it just won't satisfy a card-specific cost).
+_GRE_COUNTER_TYPE_TO_NAME: dict[int, str] = {
+    1: "+1/+1",
+    200: "incubation",
+    201: "revival",
+    146: "soul",
+}
+
+
+def _gre_counter_name(counter_type: int | None) -> str | None:
+    """Map an Arena CounterType enum to an engine counter name (or a fallback)."""
+    if counter_type is None:
+        return None
+    name = _GRE_COUNTER_TYPE_TO_NAME.get(counter_type)
+    if name is not None:
+        return name
+    return f"gre_counter_{counter_type}"
+
 
 # Module-qualified names of the MSH protocol exceptions (engine/decisions.py),
 # matched via MRO so this shared code imports no MSH-only classes — the same
@@ -471,6 +497,17 @@ class ReplayExecutor:
         # after the cast event; the cast handler applies them by look-ahead
         # and this set keeps the per-snapshot pass from re-applying).
         self._seen_mana_payments: set[int] = set()
+        # CounterAdded/Removed annotations already folded into the ledger
+        # (dedup by annotation id — Arena repeats them in persistent slots).
+        self._seen_counter_anns: set[int] = set()
+        # Per-engine-object GRE counter ledger: engine object_id -> {engine
+        # counter name -> cumulative count}. Reconciled onto the object before
+        # comparison so a counter the executor never fired (its source trigger
+        # didn't run in replay) still lands on the correlated permanent — only
+        # what the GRE CounterAdded stream attests, never fabricated. Keyed by
+        # the stable engine object_id so it survives GRE instance-id churn and
+        # resets naturally for a new object (a blink mints a fresh object_id).
+        self._gre_counter_ledger: dict[int, dict[str, int]] = {}
         # GRE stack iid -> engine card awaiting resolution. Kept separately
         # from _engine_cards because the instance-map rebuild (each resync)
         # clears that dict and skips stack zones.
@@ -1008,6 +1045,12 @@ class ReplayExecutor:
         # of an anonymous id-0 shell that mis-compares against the GRE token.
         self._correlate_tokens(curr_snapshot)
 
+        # Sync counter state from the GRE CounterAdded/Removed stream onto the
+        # correlated permanents (+1/+1 counters the executor never fired, plus
+        # named counters like Drake Hatcher's incubation) before comparison — an
+        # authoritative SET, so no double-count with engine-driven counters.
+        self._apply_counter_annotations(curr_snapshot)
+
         # Honest comparison against the state the engine actually reached.
         result.mismatches.extend(self.compare_state(curr_snapshot))
 
@@ -1505,6 +1548,90 @@ class ReplayExecutor:
                     # Credit only — the tap lands at the annotation's home
                     # snapshot, when GRE also shows the source tapped.
                     self._apply_one_mana_payment(ann, tap=False)
+
+    def _apply_counter_annotations(self, snapshot: GameSnapshot) -> None:
+        """Fold this snapshot's CounterAdded/Removed annotations into the ledger,
+        then reconcile every affected engine permanent to its GRE totals.
+
+        GRE objects carry no per-object counter field, so counter state is
+        reconstructed from the annotation stream. Each annotation is folded once
+        (dedup by id — Arena repeats them in persistent slots); the running
+        per-object ledger is then written onto the correlated engine object as an
+        authoritative SET. That makes a counter the executor never fired (its
+        source trigger didn't run in replay) still land on the permanent, while a
+        counter the engine DID drive is not double-counted (the SET agrees with
+        the engine value, so it is a no-op). Only what the GRE stream attests is
+        ever written — nothing is fabricated.
+        """
+        changed = False
+        for ann in snapshot.annotations:
+            is_add = "AnnotationType_CounterAdded" in ann.type
+            is_remove = "AnnotationType_CounterRemoved" in ann.type
+            if not (is_add or is_remove):
+                continue
+            if ann.id in self._seen_counter_anns:
+                continue
+            self._seen_counter_anns.add(ann.id)
+
+            ctype = ann.details.get("counter_type")
+            if isinstance(ctype, list):
+                ctype = ctype[0] if ctype else None
+            amount = ann.details.get("transaction_amount")
+            if isinstance(amount, list):
+                amount = amount[0] if amount else None
+            if not isinstance(amount, int) or amount <= 0:
+                continue
+            name = _gre_counter_name(ctype)
+            if name is None:
+                continue
+
+            for aid in ann.affected_ids:
+                obj = self._engine_cards.get(aid)
+                if obj is None:
+                    continue
+                ledger = self._gre_counter_ledger.setdefault(
+                    getattr(obj, "object_id", id(obj)), {}
+                )
+                new_total = ledger.get(name, 0) + (amount if is_add else -amount)
+                ledger[name] = max(0, new_total)
+                changed = True
+
+        if changed:
+            self._reconcile_counters()
+
+    def _reconcile_counters(self) -> None:
+        """Write each ledgered engine object's counters to its GRE totals.
+
+        Only objects the GRE stream actually put counters on (present in the
+        ledger) are touched, so an engine counter the stream never annotated is
+        never zeroed. ``+1/+1`` / ``-1/-1`` write both the live field and its
+        ``_base_*`` shadow so the value survives ``apply_all``'s
+        reset-then-reapply; other counter types live in ``_generic_counters``,
+        which already persists across characteristic resets.
+        """
+        if not self._gre_counter_ledger:
+            return
+        for obj in self._engine_cards.values():
+            if obj is None:
+                continue
+            ledger = self._gre_counter_ledger.get(getattr(obj, "object_id", None))
+            if not ledger:
+                continue
+            for name, total in ledger.items():
+                if name == "+1/+1" and hasattr(obj, "plus_one_counters"):
+                    obj.plus_one_counters = total
+                    if hasattr(obj, "_base_plus_one_counters"):
+                        obj._base_plus_one_counters = total
+                elif name == "-1/-1" and hasattr(obj, "minus_one_counters"):
+                    obj.minus_one_counters = total
+                    if hasattr(obj, "_base_minus_one_counters"):
+                        obj._base_minus_one_counters = total
+                else:
+                    store = getattr(obj, "_generic_counters", None)
+                    if store is None:
+                        store = {}
+                        obj._generic_counters = store
+                    store[name] = total
 
     def _take_from_hand(self, player: Any, action: ReplayAction, snapshot: GameSnapshot) -> Any:
         """Find the acted-on card in *player*'s engine hand, materializing it.

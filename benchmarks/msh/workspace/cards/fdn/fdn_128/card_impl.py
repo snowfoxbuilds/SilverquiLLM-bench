@@ -32,4 +32,6 @@ class FishingPole(Artifact):
         )
         super().__init__(**kwargs)
         self.attached_to: Any | None = None
-        self.bait_counters: int = 0
+        # Bait counters, when this card's counter mechanic is implemented, live
+        # in the engine counter system (`add_counter` / `.counters`), not a
+        # card-private attribute.

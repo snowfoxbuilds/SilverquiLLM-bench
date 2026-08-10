@@ -27,11 +27,11 @@ class NineLivesFamiliar(Creature):
         kwargs.setdefault('base_toughness', 1)
         kwargs.setdefault('rules_text', 'This creature enters with eight revival counters on it if you cast it.\nWhen this creature dies, if it had a revival counter on it, return it to the battlefield with one fewer revival counter on it at the beginning of the next end step.')
         super().__init__(**kwargs)
-        self.revival_counters: int = 0
 
     def register_triggers(self, game: GameState) -> None:
         from engine.triggers import TriggerRegistration
         from engine.zones import move_to_zone
+        from engine.game import add_counter, remove_counter
         source = self
 
         def _etb_condition(game: Any, event: dict) -> bool:
@@ -41,24 +41,25 @@ class NineLivesFamiliar(Creature):
             if getattr(source, '_returning_from_graveyard', False):
                 source._returning_from_graveyard = False
                 return
-            source.revival_counters = 8
+            # Revival counters live in the engine counter system (readable via
+            # `.counters`), not a card-private attribute — enters with eight.
+            add_counter(game, source, 'revival', 8)
 
         def _dies_condition(game: Any, event: dict) -> bool:
             creature = event.creature
             if creature is not source:
                 return False
-            return source.revival_counters > 0
+            return source.counters.get('revival', 0) > 0
 
         def _dies_effect(game: GameState) -> None:
             owner = getattr(source, 'owner', None)
             if owner is None:
                 return
-            new_counters = source.revival_counters - 1
             source.controller = owner
             graveyard = owner.zones[Zone.GRAVEYARD]
             if graveyard.contains(source):
                 source._returning_from_graveyard = True
-                source.revival_counters = new_counters
+                remove_counter(game, source, 'revival', 1)
                 move_to_zone(game, source, Zone.GRAVEYARD, Zone.BATTLEFIELD)
         controller = getattr(self, 'controller', None) or game.active_player
         game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_etb_condition, effect=_etb_effect, source=self, controller=controller))

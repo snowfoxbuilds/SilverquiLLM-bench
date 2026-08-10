@@ -870,3 +870,117 @@ class TestImports:
     def test_import_step_result(self) -> None:
         from silverquillm.replay import StepResult
         assert StepResult is not None
+
+
+# ---------------------------------------------------------------------------
+# Counter annotation sync (Phase F) — CounterAdded/Removed -> engine counters
+# ---------------------------------------------------------------------------
+
+from silverquillm.replay.types import Annotation as _Annotation
+
+
+class _FakePermanent:
+    """Minimal stand-in for an engine permanent the reconcile writes onto."""
+
+    def __init__(self, oid: int, name: str = "Test") -> None:
+        self.object_id = oid
+        self.name = name
+        self.plus_one_counters = 0
+        self._base_plus_one_counters = 0
+        self.minus_one_counters = 0
+        self._base_minus_one_counters = 0
+        self._generic_counters: dict[str, int] = {}
+
+
+def _counter_ann(ann_id: int, affected: list[int], ctype: int, amount: int,
+                 removed: bool = False) -> _Annotation:
+    kind = "AnnotationType_CounterRemoved" if removed else "AnnotationType_CounterAdded"
+    return _Annotation(
+        id=ann_id, affector_id=0, affected_ids=affected, type=[kind],
+        details={"counter_type": [ctype], "transaction_amount": [amount]},
+    )
+
+
+class TestCounterAnnotationSync:
+    """The GRE CounterAdded/Removed stream is folded into a per-object ledger
+    and reconciled onto the correlated engine permanent as an authoritative
+    SET (double-count-proof)."""
+
+    def test_plus_one_counter_synced_to_pt_fields(self, executor: ReplayExecutor) -> None:
+        perm = _FakePermanent(999)
+        executor._engine_cards[5001] = perm
+        snap = _make_minimal_snapshot(game_state_id=2)
+        snap.annotations = [_counter_ann(1, [5001], 1, 2)]  # +1/+1 x2
+        executor._apply_counter_annotations(snap)
+        assert perm.plus_one_counters == 2
+        assert perm._base_plus_one_counters == 2  # survives apply_all reset
+
+    def test_named_counter_synced_to_generic(self, executor: ReplayExecutor) -> None:
+        perm = _FakePermanent(1000, name="Drake Hatcher")
+        executor._engine_cards[5002] = perm
+        snap = _make_minimal_snapshot(game_state_id=2)
+        snap.annotations = [_counter_ann(2, [5002], 200, 3)]  # incubation x3
+        executor._apply_counter_annotations(snap)
+        assert perm._generic_counters.get("incubation") == 3
+
+    def test_authoritative_set_never_double_counts(self, executor: ReplayExecutor) -> None:
+        # The engine already drove the counter to 2; GRE attests 2 -> the SET
+        # is a no-op, not an addition (would be 4 under naive incremental add).
+        perm = _FakePermanent(1001)
+        perm.plus_one_counters = 2
+        perm._base_plus_one_counters = 2
+        executor._engine_cards[5003] = perm
+        snap = _make_minimal_snapshot(game_state_id=2)
+        snap.annotations = [_counter_ann(3, [5003], 1, 2)]
+        executor._apply_counter_annotations(snap)
+        assert perm.plus_one_counters == 2
+
+    def test_dedup_by_annotation_id(self, executor: ReplayExecutor) -> None:
+        perm = _FakePermanent(1002)
+        executor._engine_cards[5004] = perm
+        snap = _make_minimal_snapshot(game_state_id=2)
+        snap.annotations = [_counter_ann(4, [5004], 1, 1)]
+        executor._apply_counter_annotations(snap)
+        # The same annotation id repeated in a later snapshot is not re-folded.
+        snap2 = _make_minimal_snapshot(game_state_id=3)
+        snap2.annotations = [_counter_ann(4, [5004], 1, 1)]
+        executor._apply_counter_annotations(snap2)
+        assert perm.plus_one_counters == 1
+
+    def test_counter_removed_decrements(self, executor: ReplayExecutor) -> None:
+        perm = _FakePermanent(1003)
+        executor._engine_cards[5005] = perm
+        snap = _make_minimal_snapshot(game_state_id=2)
+        snap.annotations = [_counter_ann(5, [5005], 1, 3)]
+        executor._apply_counter_annotations(snap)
+        assert perm.plus_one_counters == 3
+        snap2 = _make_minimal_snapshot(game_state_id=3)
+        snap2.annotations = [_counter_ann(6, [5005], 1, 1, removed=True)]
+        executor._apply_counter_annotations(snap2)
+        assert perm.plus_one_counters == 2
+
+    def test_ledger_never_goes_negative(self, executor: ReplayExecutor) -> None:
+        perm = _FakePermanent(1004)
+        executor._engine_cards[5006] = perm
+        snap = _make_minimal_snapshot(game_state_id=2)
+        snap.annotations = [_counter_ann(7, [5006], 1, 1, removed=True)]
+        executor._apply_counter_annotations(snap)
+        assert perm.plus_one_counters == 0
+
+    def test_unknown_affected_object_ignored(self, executor: ReplayExecutor) -> None:
+        snap = _make_minimal_snapshot(game_state_id=2)
+        snap.annotations = [_counter_ann(8, [99999], 1, 1)]  # no engine card
+        executor._apply_counter_annotations(snap)  # must not raise
+
+    def test_object_without_ledger_untouched(self, executor: ReplayExecutor) -> None:
+        # An engine object GRE never annotated is never zeroed by the reconcile.
+        perm = _FakePermanent(1005)
+        perm.plus_one_counters = 4  # engine-legit, no GRE annotation
+        executor._engine_cards[5007] = perm
+        other = _FakePermanent(1006)
+        executor._engine_cards[5008] = other
+        snap = _make_minimal_snapshot(game_state_id=2)
+        snap.annotations = [_counter_ann(9, [5008], 1, 1)]  # only touches 5008
+        executor._apply_counter_annotations(snap)
+        assert perm.plus_one_counters == 4  # untouched
+        assert other.plus_one_counters == 1
