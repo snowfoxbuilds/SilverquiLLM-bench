@@ -2835,23 +2835,48 @@ class ReplayExecutor:
             getattr(card, "base_toughness", None),
         )
 
-    def _engine_token_color_key(self, card: Any) -> frozenset:
-        """Normalized colour of an engine token (empty if it declares none).
+    def _engine_token_color_key(self, card: Any) -> frozenset | None:
+        """Normalized colour of an engine token, or ``None`` when it is UNKNOWN.
 
-        Uses ``engine.protection.get_colors`` — the engine's own colour helper,
-        which reads an explicit ``colors`` attribute first (the idiom token impls
-        use, e.g. Hare Apparent's ``token.colors = {Color.WHITE}``) and otherwise
-        derives from mana pips (tokens have none, so an undeclared token reads as
-        colourless). A token that does not declare its colour yields the empty
-        key and therefore cannot be disambiguated from a same-signature token of
-        a different colour — the honest outcome is to leave it unstamped.
+        Distinguishes two states the old empty-frozenset representation
+        conflated, because they carry OPPOSITE evidential weight in a colliding
+        signature:
+
+        - **Known colour** — the token establishes a colour through an
+          authoritative source: an explicit ``colors`` attribute (the token-impl
+          idiom ``token.colors = {Color.WHITE}``), coloured mana pips, or an
+          explicit ``color``. An explicit but EMPTY ``colors`` set (or a mana
+          cost of only generic pips) is *positive colourless evidence* under a
+          documented rule and returns the empty frozenset.
+        - **Unknown colour** — none of those sources is present, so the token
+          never established a colour. Returns ``None``. Unknown is NOT
+          colourless: an undeclared token must not be matched to a colourless
+          candidate by colour equality the way an explicitly-colourless one is;
+          the honest outcome is to leave it unstamped unless other reliable
+          evidence (a copy-card name) resolves it.
+
+        Source precedence mirrors ``engine.protection.get_colors`` so a token
+        that IS coloured reads identically; this only adds the
+        unknown/colourless split get_colors cannot express (it flattens both to
+        an empty set).
         """
+        colors = getattr(card, "colors", None)
+        mana_cost = getattr(card, "mana_cost", None)
+        has_pips = mana_cost is not None and bool(getattr(mana_cost, "pips", None))
+        single_color = getattr(card, "color", None)
+        # No authoritative colour source at all → UNKNOWN, not colourless.
+        if colors is None and not has_pips and single_color is None:
+            return None
         try:
             from engine.protection import get_colors
 
             return _color_key(get_colors(card))
         except Exception:
-            return _color_key(getattr(card, "colors", None))
+            if colors is not None:
+                return _color_key(colors)
+            if single_color is not None:
+                return _color_key([single_color])
+            return frozenset()
 
     def _correlate_tokens_in_group(
         self, gre_objs: list[Any], engine_cards: list[Any]
@@ -2879,12 +2904,14 @@ class ReplayExecutor:
           engine object is NEVER distributed among the candidates by grpId or
           zone order, NOR inferred from being the only colliding identity the
           snapshot shows. Each object is validated against the COMPLETE collision
-          set on real evidence (explicit token colour, then copy-card name);
-          output is restricted to the identities GRE actually contains here. An
-          object whose evidence does not pick out exactly one GRE-present
-          identity — a contradictory colour, or nothing that separates two
-          same-colour Rats (93883 vs 94169) — is left id-less so comparison and
-          resync record the gap.
+          set on real evidence — its known colour narrows the set and, for a copy
+          candidate, a matching copy-card name is REQUIRED, so every discriminator
+          must agree; output is restricted to the identities GRE actually contains
+          here. An object whose evidence does not pick out exactly one GRE-present
+          identity — a contradictory colour, a copy name that contradicts the
+          colour-unique candidate, an unknown colour, or nothing that separates
+          two same-colour Rats (93883 vs 94169) — is left id-less so comparison
+          and resync record the gap.
 
         An ambiguous grpId is never added to ``_minted_token_grpids``. An engine
         token the map can't match stays id-0 and is handled exactly as before
@@ -2961,17 +2988,22 @@ class ReplayExecutor:
         signature + count can never prove identity — that would be inferring an
         object's identity from whichever colliding grpId the snapshot happens to
         show. Each engine object is instead validated against the COMPLETE
-        collision set (*candidates*): its explicit colour, then its copy-card
-        name, must pick out exactly one member (see ``_resolve_colliding_identity``).
-        The result is then restricted to the identities GRE actually contains in
-        this group (*present_counter*) and bounded by their counts.
+        collision set (*candidates*): every available discriminator — its known
+        colour AND, for a copy candidate, a matching copy-card name — must AGREE
+        and together pick out exactly one member (see
+        ``_resolve_colliding_identity``). The result is then restricted to the
+        identities GRE actually contains in this group (*present_counter*) and
+        bounded by their counts.
 
         Contradictory evidence — a colour that resolves to a candidate GRE does
         not show here (e.g. a red engine Human when GRE shows only the white
-        94158), or no matching candidate at all — and insufficient evidence —
-        nothing separates the survivors (two same-colour Rats) — both leave the
-        object id-less, so compare/resync exposes the uncertainty and the
-        unproven identity is never marked producible.
+        94158), a copy name that contradicts the only colour-consistent
+        candidate (a red 1/1 Human named "Human", not the copy "Dragon
+        Trainer"), or no candidate all evidence agrees on — and insufficient
+        evidence — nothing uniquely separates the survivors (two same-colour
+        Rats, or an unknown-colour token) — both leave the object id-less, so
+        compare/resync exposes the uncertainty and the unproven identity is
+        never marked producible.
         """
         # Only identities present in this group may be output; ``budget`` also
         # caps each at its GRE count. A Counter read for an absent identity is 0,
@@ -2995,42 +3027,70 @@ class ReplayExecutor:
     def _resolve_colliding_identity(
         self, card: Any, candidates: set[int]
     ) -> int | None:
-        """The one collision-set identity *card*'s own evidence uniquely supports.
+        """The one collision-set identity ALL of *card*'s evidence agrees on.
 
         Validated against the COMPLETE collision set, never narrowed to the
         snapshot first — so an engine object cannot borrow the identity of "the
-        only colliding grpId GRE shows". Returns ``None`` unless the evidence
-        picks out exactly one candidate.
+        only colliding grpId GRE shows". Returns a grpId only when every
+        available reliable discriminator is mutually consistent and together
+        they pick out exactly ONE candidate; anything less → ``None``.
 
-        Colour is the primary discriminator: a candidate survives only if its
-        recorded colour EQUALS the engine token's explicit colour. An undeclared
-        engine colour is the empty key, which equals only a genuinely colourless
-        candidate — it can never confirm a coloured one, and a colour that
-        matches no candidate (contradiction) eliminates all. If colour leaves
-        exactly one survivor, that is the identity. If it leaves several — a
-        same-colour collision, e.g. the two black Rats — the copy-card name
-        breaks the tie: the survivor whose recorded card name equals the engine
-        token's name. A generic token (no recorded name) cannot be confirmed this
-        way and stays ambiguous. Anything short of a unique survivor → ``None``.
+        Colour NARROWS the collision set but never resolves it alone. A KNOWN
+        colour keeps only candidates whose recorded colour EQUALS it (a
+        contradictory colour eliminates them). An UNKNOWN colour (undeclared —
+        see ``_engine_token_color_key``) is the ABSENCE of evidence: it
+        eliminates nothing AND selects nothing, so it can never pick a
+        colourless candidate the way an explicitly-colourless token can.
+
+        Every candidate that survives the colour narrowing is then checked for
+        NAME consistency — so colour can never override a contradictory copy
+        name:
+
+        - A COPY candidate (its map entry records the copied card's ``name``)
+          is established only if the engine object's name EQUALS that copied
+          name: required, affirmative evidence. A present but different name
+          contradicts the copy and eliminates it; a missing name cannot confirm
+          it. (Red 1/1 Human ``Dragon Trainer`` → 93797; red 1/1 Human
+          ``Human`` stays id-less.)
+        - A GENERIC candidate (no recorded copy name) can never be established
+          by name — a generic token's name is impl-dependent and is not positive
+          evidence. It is established only when a KNOWN colour has already
+          isolated it as the SOLE colour-consistent candidate, and never
+          inferred by elimination once a same-colour copy is ruled out. (Black
+          1/1 Rat ``Burglar Rat`` → 93883; black 1/1 Rat ``Rat`` stays id-less
+          rather than inferring 94169.)
+
+        Exactly one established candidate → its grpId; zero or several →
+        ``None``.
         """
         engine_color = self._engine_token_color_key(card)
-        survivors = {
-            grp_id for grp_id in candidates
-            if self.token_map.color_key(grp_id) == engine_color
-        }
-        if len(survivors) == 1:
-            (grp_id,) = survivors
+        engine_name = getattr(card, "name", None)
+
+        if engine_color is not None:
+            survivors = {
+                grp_id for grp_id in candidates
+                if self.token_map.color_key(grp_id) == engine_color
+            }
+        else:
+            # Unknown colour eliminates nothing and (below) establishes no
+            # generic — only a matching copy name can resolve such a token.
+            survivors = set(candidates)
+
+        established: set[int] = set()
+        for grp_id in survivors:
+            copy_name = self.token_map.token_name(grp_id)
+            if copy_name is not None:
+                # Copy candidate: the copied-card name is a required check.
+                if engine_name is not None and engine_name == copy_name:
+                    established.add(grp_id)
+            elif engine_color is not None and len(survivors) == 1:
+                # Generic candidate: only a KNOWN colour that uniquely isolates
+                # it establishes it — never name, never elimination.
+                established.add(grp_id)
+
+        if len(established) == 1:
+            (grp_id,) = established
             return grp_id
-        if len(survivors) > 1:
-            engine_name = getattr(card, "name", None)
-            if engine_name:
-                named = {
-                    grp_id for grp_id in survivors
-                    if self.token_map.token_name(grp_id) == engine_name
-                }
-                if len(named) == 1:
-                    (grp_id,) = named
-                    return grp_id
         return None
 
     def _correlate_tokens(self, snapshot: GameSnapshot) -> None:
