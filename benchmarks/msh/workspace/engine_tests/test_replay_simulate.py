@@ -151,6 +151,72 @@ class TestManaLookahead:
         assert ex.players[1].mana_pool.total() == 1
 
 
+class _CounterPerm:
+    """Minimal engine permanent stand-in carrying the counter fields the
+    reconcile writes (used to exercise refs-based stint retirement)."""
+
+    def __init__(self, oid: int) -> None:
+        self.object_id = oid
+        self.name = "Counter Perm"
+        self.plus_one_counters = 0
+        self._base_plus_one_counters = 0
+        self.minus_one_counters = 0
+        self._base_minus_one_counters = 0
+        self._generic_counters: dict = {}
+
+
+def _counter_added(ann_id: int, aid: int, amount: int) -> Annotation:
+    return Annotation(
+        id=ann_id, affector_id=0, affected_ids=[aid],
+        type=["AnnotationType_CounterAdded"],
+        details={"counter_type": [1], "transaction_amount": [amount]},
+    )
+
+
+class TestCounterStintRetirement:
+    """Counter reconciliation is anchored to the engine object and retires when
+    that object leaves the engine battlefield (a real zone transition). Run
+    against the real simulate-mode engine game (its own players/zones)."""
+
+    def _executor(self):
+        return make_executor([snapshot(1)])
+
+    def test_blink_off_battlefield_retires_counter(self):
+        from engine.types import Zone as EZone
+
+        ex = self._executor()
+        perm = _CounterPerm(90001)
+        ex.players[1].zones[EZone.BATTLEFIELD].add(perm)
+        ex._engine_cards[6501] = perm
+
+        ex._apply_counter_annotations(snapshot(2, annotations=[_counter_added(26, 6501, 3)]))
+        assert perm.plus_one_counters == 3
+        assert perm._base_plus_one_counters == 3
+
+        # Blink: perm leaves the engine battlefield -> its counters are retired.
+        ex.players[1].zones[EZone.BATTLEFIELD].remove(perm)
+        ex._apply_counter_annotations(snapshot(3))  # no annotation
+        assert perm.plus_one_counters == 0
+        assert perm._base_plus_one_counters == 0
+
+    def test_no_zone_change_preserves_counter_across_gre_churn(self):
+        from engine.types import Zone as EZone
+
+        ex = self._executor()
+        perm = _CounterPerm(90002)
+        ex.players[1].zones[EZone.BATTLEFIELD].add(perm)
+        ex._engine_cards[6601] = perm
+
+        ex._apply_counter_annotations(snapshot(2, annotations=[_counter_added(28, 6601, 3)]))
+        assert perm.plus_one_counters == 3
+        # No zone change: the object stays on the engine battlefield, so the
+        # counter is preserved even across snapshots that fold nothing and across
+        # GRE id churn (the aid is irrelevant to the engine-object-keyed ledger).
+        ex._engine_cards[6602] = perm  # GRE re-mints the aid; same engine object
+        ex._apply_counter_annotations(snapshot(3))
+        assert perm.plus_one_counters == 3
+
+
 class TestTargetDerivation:
     def _target_spec(self, ann_id: int, spell: int, targets: list[int], index: int = 1):
         return Annotation(
@@ -1364,6 +1430,28 @@ class TestOraclePTCorrections:
         assert len(self._pt(first)) == 1
         second = ex.execute_step(snaps[1], snaps[2])
         assert self._pt(second) == []
+
+    def test_pending_counter_object_gets_no_oracle_correction(self):
+        """A permanent whose GRE counter is still deferred is skipped by the
+        resync's P/T correction. Otherwise a +N/+N correction installed for the
+        then-missing counter would double-count against the counter when it lands
+        next snapshot (the enter-with-counters 0/0-creature case). Once the
+        counter is no longer pending, the gap is corrected normally."""
+        ex = make_executor([self._bf_snap(1, 2, 2)])  # engine creature is 2/2
+        gre = self._bf_snap(2, 4, 4)                    # GRE shows 4/4 (missing +2/+2)
+
+        # Counter deferred (uncorrelated ETB) -> the object is skipped: no
+        # correction, so nothing to double-count when the counter lands.
+        ex._pending_counter_effects[(999, 100)] = {
+            "name": "+1/+1", "is_add": True, "amount": 2,
+        }
+        ex._rederive_pt_corrections(gre)
+        assert ex._oracle_pt_corrections() == []
+
+        # Same gap, no pending counter -> the correction IS installed.
+        ex._pending_counter_effects.clear()
+        ex._rederive_pt_corrections(gre)
+        assert len(ex._oracle_pt_corrections()) == 1
         assert ex._engine_cards[100].base_power == 2
 
     def test_departed_creature_leaves_no_orphaned_correction(self):
@@ -2517,7 +2605,10 @@ class TestGoldenGame:
         makes Prideful Parent's Cat tokens mint on their own entry; the minted
         tokens correlate and enter the battlefield, so the residual here is the
         token zone-timing surface (GRE shows a token a step before/after the
-        engine mints it), not outright MISSING_CARD."""
+        engine mints it), not outright MISSING_CARD. Unchanged by the Phase-F
+        counter correction: the correction anchors the ledger to the engine
+        object (not the GRE aid), so this game's counters land exactly as
+        before."""
         report, by_type, by_category = self._fingerprint(self.FIXTURE_TOKENS)
         assert report.total_snapshots == 332
         assert report.successful_comparisons == 313

@@ -497,17 +497,56 @@ class ReplayExecutor:
         # after the cast event; the cast handler applies them by look-ahead
         # and this set keeps the per-snapshot pass from re-applying).
         self._seen_mana_payments: set[int] = set()
-        # CounterAdded/Removed annotations already folded into the ledger
-        # (dedup by annotation id — Arena repeats them in persistent slots).
-        self._seen_counter_anns: set[int] = set()
-        # Per-engine-object GRE counter ledger: engine object_id -> {engine
-        # counter name -> cumulative count}. Reconciled onto the object before
-        # comparison so a counter the executor never fired (its source trigger
-        # didn't run in replay) still lands on the correlated permanent — only
-        # what the GRE CounterAdded stream attests, never fabricated. Keyed by
-        # the stable engine object_id so it survives GRE instance-id churn and
-        # resets naturally for a new object (a blink mints a fresh object_id).
+        # --- GRE CounterAdded/Removed reconciliation (simulate-only) ---------
+        # A counter is an oracle-derived pre-comparison correction: only the
+        # state the GRE annotation stream explicitly attests is ever written,
+        # never fabricated. Written onto the correlated permanent as an
+        # authoritative SET (double-count-proof), it makes a counter the executor
+        # never fired still land while capping the engine's own trigger-driven
+        # counters at the GRE total.
+        #
+        # Identity is anchored to the ENGINE OBJECT, not the GRE instance id.
+        # GRE re-mints an object's instance id pervasively (on many events, not
+        # only real zone changes, and not always via an ObjectIdChanged
+        # annotation), so keying by the GRE aid makes churn look like a stint
+        # boundary and drops live counters. The engine object survives all GRE
+        # churn; the ledger key is its stable ``object_id``.
+        #
+        # A counter must still not cross a REAL zone-change boundary (blink /
+        # bounce / death / reanimation). That boundary is an ENGINE event, so it
+        # is detected in engine terms: an object retires from the ledger when it
+        # LEAVES the engine battlefield (all of blink/bounce/death/reanimation
+        # remove it from the battlefield zone). Membership is read directly from
+        # the engine zones — never via ``refs.instance_id``, which would MINT
+        # stint ids as a side effect and perturb the simulation. ``object_id`` is
+        # a construction-time constant and does NOT change on a blink, so it
+        # identifies the object across churn; battlefield residency is the
+        # retirement signal.
+        #
+        # Ledger: engine ``object_id`` -> {engine counter name -> total}.
         self._gre_counter_ledger: dict[int, dict[str, int]] = {}
+        # A counter effect is (annotation id, affected aid). It is folded into
+        # the ledger EXACTLY ONCE, tracked at that granularity so Arena's
+        # persistent-slot repeats are idempotent AND a multi-affected-id
+        # annotation whose IDs correlate at different times still applies each
+        # effect once (never double-applying an already handled id).
+        self._applied_counter_effects: set[tuple[int, int]] = set()
+        # Effects whose aid was not yet correlated when first seen: retried every
+        # snapshot until correlation becomes available (a token/new permanent may
+        # first appear in the same snapshot as its CounterAdded). Never marked
+        # applied until actually folded, so nothing is silently dropped; a truly
+        # unresolvable effect stays here and its absent counter surfaces as a
+        # normal compare divergence. Keyed by (annotation id, affected aid) so a
+        # persistent-slot repeat never enqueues a duplicate.
+        self._pending_counter_effects: dict[tuple[int, int], dict[str, Any]] = {}
+        # object_id -> the engine object (holds the reference so reconcile can
+        # reach it to SET/cap and to clear on retirement).
+        self._ledger_obj: dict[int, Any] = {}
+        # GRE aid -> engine token object, published by token correlation so
+        # counter sync can resolve an id-less minted token that is not yet in
+        # ``_engine_cards`` (that map is only rebuilt during the post-comparison
+        # resync). Exposes the instance-to-object relationship, not just _grp_id.
+        self._counter_token_binding: dict[int, Any] = {}
         # GRE stack iid -> engine card awaiting resolution. Kept separately
         # from _engine_cards because the instance-map rebuild (each resync)
         # clears that dict and skips stack zones.
@@ -1549,89 +1588,257 @@ class ReplayExecutor:
                     # snapshot, when GRE also shows the source tapped.
                     self._apply_one_mana_payment(ann, tap=False)
 
+    @staticmethod
+    def _parse_counter_annotation(ann: Any) -> tuple[bool, str, int] | None:
+        """Decode a CounterAdded/Removed annotation to ``(is_add, name, amount)``.
+
+        Returns ``None`` for a non-counter annotation, an unmapped counter type,
+        or a non-positive amount (the real parser emits ``transaction_amount``
+        and ``counter_type`` as either scalars or single-element lists).
+        """
+        is_add = "AnnotationType_CounterAdded" in ann.type
+        is_remove = "AnnotationType_CounterRemoved" in ann.type
+        if not (is_add or is_remove):
+            return None
+        ctype = ann.details.get("counter_type")
+        if isinstance(ctype, list):
+            ctype = ctype[0] if ctype else None
+        amount = ann.details.get("transaction_amount")
+        if isinstance(amount, list):
+            amount = amount[0] if amount else None
+        if not isinstance(amount, int) or amount <= 0:
+            return None
+        name = _gre_counter_name(ctype)
+        if name is None:
+            return None
+        return is_add, name, amount
+
+    def _resolve_counter_object(
+        self, aid: int, snapshot: GameSnapshot | None = None
+    ) -> Any:
+        """The engine object for a GRE instance id, for counter reconciliation.
+
+        Prefers the rebuilt instance map, then the token-correlation binding (an
+        id-less minted token that first appears this snapshot is not yet in
+        ``_engine_cards`` — that map is only rebuilt in the post-comparison
+        resync). Finally, for a NON-token permanent that first appears this
+        snapshot (also not yet in the map), it correlates same-snapshot by
+        matching the GRE object's grpId to an unclaimed engine battlefield
+        permanent. Landing the counter on its own snapshot (rather than deferring
+        to the next) matters: a deferred counter lands one step after the resync
+        has already installed an oracle P/T correction for the then-missing
+        counter, and the two briefly double-count.
+        """
+        obj = self._engine_cards.get(aid)
+        if obj is not None:
+            return obj
+        obj = self._counter_token_binding.get(aid)
+        if obj is not None:
+            return obj
+        return self._match_new_battlefield_permanent(aid, snapshot)
+
+    def _match_new_battlefield_permanent(
+        self, aid: int, snapshot: GameSnapshot | None
+    ) -> Any:
+        """Match a not-yet-mapped GRE battlefield permanent to an unclaimed
+        engine battlefield permanent of the same grpId (same-snapshot).
+
+        Returns the engine object only when exactly one candidate is unclaimed
+        (interchangeable duplicates or an ambiguous match stay deferred, so a
+        counter is never guessed onto the wrong object).
+        """
+        if snapshot is None or self.game is None:
+            return None
+        gre_obj = snapshot.game_objects.get(aid)
+        if gre_obj is None or not gre_obj.grp_id:
+            return None
+        from engine.types import Zone
+
+        claimed = {id(o) for o in self._engine_cards.values() if o is not None}
+        candidates = [
+            card
+            for player in self.game.players
+            for card in player.zones[Zone.BATTLEFIELD].get_all()
+            if id(card) not in claimed
+            and self._card_to_grp_id(card) == gre_obj.grp_id
+        ]
+        return candidates[0] if len(candidates) == 1 else None
+
+    @staticmethod
+    def _counter_key(obj: Any) -> int:
+        """The stable ledger key for an engine object (its ``object_id``)."""
+        return getattr(obj, "object_id", id(obj))
+
+    def _engine_battlefield_keys(self) -> set[int]:
+        """The ``object_id`` of every permanent currently on the engine
+        battlefield.
+
+        Pure read of the engine zones — it never queries ``refs`` (which would
+        MINT instance ids as a side effect and perturb the simulation's id
+        sequence). An object leaving the battlefield (blink / bounce / death /
+        reanimation all remove it) is detected by its absence here.
+        """
+        keys: set[int] = set()
+        if self.game is None:
+            return keys
+        from engine.types import Zone
+
+        for player in self.game.players:
+            for card in player.zones[Zone.BATTLEFIELD].get_all():
+                keys.add(self._counter_key(card))
+        return keys
+
     def _apply_counter_annotations(self, snapshot: GameSnapshot) -> None:
-        """Fold this snapshot's CounterAdded/Removed annotations into the ledger,
-        then reconcile every affected engine permanent to its GRE totals.
+        """Reconcile GRE CounterAdded/Removed state onto engine permanents.
 
         GRE objects carry no per-object counter field, so counter state is
-        reconstructed from the annotation stream. Each annotation is folded once
-        (dedup by id — Arena repeats them in persistent slots); the running
-        per-object ledger is then written onto the correlated engine object as an
-        authoritative SET. That makes a counter the executor never fired (its
-        source trigger didn't run in replay) still land on the permanent, while a
-        counter the engine DID drive is not double-counted (the SET agrees with
-        the engine value, so it is a no-op). Only what the GRE stream attests is
-        ever written — nothing is fabricated.
+        reconstructed from the annotation stream and written onto the correlated
+        engine permanent as an authoritative SET before comparison — a counter
+        the executor never fired (its source trigger didn't run in replay) still
+        lands, while a counter the engine DID drive is not double-counted (the
+        SET agrees) and its own trigger-driven counters are capped at the GRE
+        total. Only what the GRE stream attests is ever written; nothing is
+        fabricated.
+
+        Identity is anchored to the engine object (its ``object_id``), which
+        survives GRE instance-id churn; a counter is retired when that object
+        leaves the engine battlefield (a real zone transition — blink / bounce /
+        death / reanimation), so it never crosses a zone boundary. The SET is
+        applied only when the ledger actually changed this snapshot (a fold), so
+        the value persists via its ``_base_*`` shadow without being re-forced at
+        every snapshot — re-forcing overrode the per-step oracle P/T resync at
+        timing windows and reintroduced divergences. Each per-(annotation,
+        affected id) effect is folded exactly once; an effect whose id is not yet
+        correlated is deferred and retried, never silently dropped.
         """
+        bf_keys = self._engine_battlefield_keys()
+        # Retire counters for objects that left the engine battlefield (their
+        # stale GRE-attested counters are cleared). Runs before folding so a
+        # counter re-attested this snapshot is not wiped.
+        self._retire_departed_counters(bf_keys)
+        # Deferred effects may have become resolvable (a token/new permanent that
+        # has since correlated) — retry before folding this snapshot's stream.
         changed = False
+        for key, payload in list(self._pending_counter_effects.items()):
+            changed |= self._fold_counter_effect(key[0], key[1], payload, snapshot)
+        # Fold this snapshot's counter annotations.
         for ann in snapshot.annotations:
-            is_add = "AnnotationType_CounterAdded" in ann.type
-            is_remove = "AnnotationType_CounterRemoved" in ann.type
-            if not (is_add or is_remove):
+            parsed = self._parse_counter_annotation(ann)
+            if parsed is None:
                 continue
-            if ann.id in self._seen_counter_anns:
-                continue
-            self._seen_counter_anns.add(ann.id)
-
-            ctype = ann.details.get("counter_type")
-            if isinstance(ctype, list):
-                ctype = ctype[0] if ctype else None
-            amount = ann.details.get("transaction_amount")
-            if isinstance(amount, list):
-                amount = amount[0] if amount else None
-            if not isinstance(amount, int) or amount <= 0:
-                continue
-            name = _gre_counter_name(ctype)
-            if name is None:
-                continue
-
+            is_add, name, amount = parsed
+            payload = {"name": name, "is_add": is_add, "amount": amount}
             for aid in ann.affected_ids:
-                obj = self._engine_cards.get(aid)
-                if obj is None:
-                    continue
-                ledger = self._gre_counter_ledger.setdefault(
-                    getattr(obj, "object_id", id(obj)), {}
-                )
-                new_total = ledger.get(name, 0) + (amount if is_add else -amount)
-                ledger[name] = max(0, new_total)
-                changed = True
-
+                changed |= self._fold_counter_effect(ann.id, aid, payload, snapshot)
+        # Apply only when a fold changed the ledger — the SET persists via the
+        # ``_base_*`` shadow, so re-forcing it every snapshot is unnecessary and
+        # fights the oracle P/T resync at timing windows.
         if changed:
             self._reconcile_counters()
 
-    def _reconcile_counters(self) -> None:
-        """Write each ledgered engine object's counters to its GRE totals.
+    def _retire_departed_counters(self, bf_keys: set[int]) -> None:
+        """Retire (clear + drop) counters for objects no longer on the engine
+        battlefield. Their GRE-attested counters (and ``_base_*`` shadows) are
+        cleared so a reused engine object cannot carry them into a new stint."""
+        for okey in list(self._ledger_obj):
+            if okey in bf_keys:
+                continue
+            obj = self._ledger_obj.pop(okey, None)
+            stale = self._gre_counter_ledger.pop(okey, None)
+            if obj is not None and stale:
+                self._clear_engine_counters(obj, stale.keys())
 
-        Only objects the GRE stream actually put counters on (present in the
-        ledger) are touched, so an engine counter the stream never annotated is
-        never zeroed. ``+1/+1`` / ``-1/-1`` write both the live field and its
-        ``_base_*`` shadow so the value survives ``apply_all``'s
-        reset-then-reapply; other counter types live in ``_generic_counters``,
-        which already persists across characteristic resets.
+    def _fold_counter_effect(
+        self,
+        ann_id: int,
+        aid: int,
+        payload: dict[str, Any],
+        snapshot: GameSnapshot | None = None,
+    ) -> bool:
+        """Fold one ``(annotation, affected id)`` effect into the object ledger.
+
+        Returns ``True`` if it modified the ledger (so the caller applies).
+        Exactly-once per ``(ann_id, aid)`` — a persistent-slot repeat is a
+        no-op, and a multi-id annotation whose ids correlate at different times
+        applies each effect once. An effect whose id is not yet correlated is
+        recorded as pending (deduped by key) and retried on later snapshots,
+        never marked applied and never discarded.
         """
-        if not self._gre_counter_ledger:
-            return
-        for obj in self._engine_cards.values():
-            if obj is None:
-                continue
-            ledger = self._gre_counter_ledger.get(getattr(obj, "object_id", None))
-            if not ledger:
-                continue
-            for name, total in ledger.items():
-                if name == "+1/+1" and hasattr(obj, "plus_one_counters"):
-                    obj.plus_one_counters = total
-                    if hasattr(obj, "_base_plus_one_counters"):
-                        obj._base_plus_one_counters = total
-                elif name == "-1/-1" and hasattr(obj, "minus_one_counters"):
-                    obj.minus_one_counters = total
-                    if hasattr(obj, "_base_minus_one_counters"):
-                        obj._base_minus_one_counters = total
-                else:
-                    store = getattr(obj, "_generic_counters", None)
-                    if store is None:
-                        store = {}
-                        obj._generic_counters = store
-                    store[name] = total
+        key = (ann_id, aid)
+        if key in self._applied_counter_effects:
+            self._pending_counter_effects.pop(key, None)
+            return False
+        obj = self._resolve_counter_object(aid, snapshot)
+        if obj is None:
+            # Correlation unavailable — defer (deduped by key) and retry later.
+            self._pending_counter_effects[key] = payload
+            return False
+        okey = self._counter_key(obj)
+        ledger = self._gre_counter_ledger.setdefault(okey, {})
+        delta = payload["amount"] if payload["is_add"] else -payload["amount"]
+        ledger[payload["name"]] = max(0, ledger.get(payload["name"], 0) + delta)
+        self._ledger_obj[okey] = obj
+        self._applied_counter_effects.add(key)
+        self._pending_counter_effects.pop(key, None)
+        return True
+
+    def _reconcile_counters(self) -> None:
+        """Write every surviving object ledger onto its engine permanent as an
+        authoritative SET (capping the engine's own trigger-driven counters at
+        the GRE total)."""
+        for okey, ledger in self._gre_counter_ledger.items():
+            obj = self._ledger_obj.get(okey)
+            if obj is not None:
+                self._write_engine_counters(obj, ledger)
+
+    @staticmethod
+    def _write_engine_counters(obj: Any, ledger: dict[str, int]) -> None:
+        """SET ``obj``'s counters to the ledger totals (with ``_base_*`` shadows).
+
+        ``+1/+1`` / ``-1/-1`` write both the live field and its ``_base_*``
+        shadow so the value survives ``apply_all``'s reset-then-reapply; other
+        counter types live in ``_generic_counters``, which already persists
+        across characteristic resets.
+        """
+        for name, total in ledger.items():
+            if name == "+1/+1" and hasattr(obj, "plus_one_counters"):
+                obj.plus_one_counters = total
+                if hasattr(obj, "_base_plus_one_counters"):
+                    obj._base_plus_one_counters = total
+            elif name == "-1/-1" and hasattr(obj, "minus_one_counters"):
+                obj.minus_one_counters = total
+                if hasattr(obj, "_base_minus_one_counters"):
+                    obj._base_minus_one_counters = total
+            else:
+                store = getattr(obj, "_generic_counters", None)
+                if store is None:
+                    store = {}
+                    obj._generic_counters = store
+                store[name] = total
+
+    @staticmethod
+    def _clear_engine_counters(obj: Any, names: Any) -> None:
+        """Zero the GRE-attested counters ``names`` on ``obj`` (with shadows).
+
+        Called on stint retirement so a reused engine object cannot carry a
+        prior stint's counters into a new one. Only the named (previously
+        GRE-attested) counters are cleared — nothing else is disturbed.
+        """
+        for name in names:
+            if name == "+1/+1":
+                if hasattr(obj, "plus_one_counters"):
+                    obj.plus_one_counters = 0
+                if hasattr(obj, "_base_plus_one_counters"):
+                    obj._base_plus_one_counters = 0
+            elif name == "-1/-1":
+                if hasattr(obj, "minus_one_counters"):
+                    obj.minus_one_counters = 0
+                if hasattr(obj, "_base_minus_one_counters"):
+                    obj._base_minus_one_counters = 0
+            else:
+                store = getattr(obj, "_generic_counters", None)
+                if isinstance(store, dict):
+                    store.pop(name, None)
 
     def _take_from_hand(self, player: Any, action: ReplayAction, snapshot: GameSnapshot) -> Any:
         """Find the acted-on card in *player*'s engine hand, materializing it.
@@ -2281,9 +2488,18 @@ class ReplayExecutor:
                 return False
             canonical = True
 
+        # A permanent whose GRE counter is still deferred (its ETB object could
+        # not be correlated yet) must NOT get a P/T correction here: the counter
+        # lands next snapshot and would then double-count against a correction
+        # installed for its absence. Skip such objects; the counter itself will
+        # bridge the gap once it lands.
+        pending_aids = {aid for (_ann, aid) in self._pending_counter_effects}
+
         def residual_deltas() -> list[tuple[Any, int, int]]:
             deltas: list[tuple[Any, int, int]] = []
             for obj in snapshot.get_zone_objects("ZoneType_Battlefield"):
+                if obj.instance_id in pending_aids:
+                    continue
                 card = self._engine_cards.get(obj.instance_id)
                 if (
                     card is None
@@ -3052,8 +3268,11 @@ class ReplayExecutor:
             return
 
         # GRE tokens present whose grpId the map recognizes, bucketed by
-        # signature; a signature may cover more than one distinct grpId.
+        # signature; a signature may cover more than one distinct grpId. The
+        # per-grpId GRE instance ids are collected so a stamped engine token can
+        # be bound to a distinct stint id for counter sync.
         gre_by_sig: dict[tuple, Counter] = {}
+        gre_aids_by_grp: dict[int, list[int]] = {}
         for obj in gre_objs:
             if obj.type != "GameObjectType_Token":
                 continue
@@ -3063,6 +3282,7 @@ class ReplayExecutor:
             if sig is None:
                 continue
             gre_by_sig.setdefault(sig, Counter())[obj.grp_id] += 1
+            gre_aids_by_grp.setdefault(obj.grp_id, []).append(obj.instance_id)
         if not gre_by_sig:
             return
 
@@ -3084,20 +3304,33 @@ class ReplayExecutor:
                 # Globally unique signature: only one identity can ever carry it,
                 # so present duplicates are interchangeable and matched by count.
                 (grp_id,) = grp_counter
-                self._stamp_tokens(pool, grp_id, grp_counter[grp_id])
+                self._stamp_tokens(
+                    pool, grp_id, grp_counter[grp_id], gre_aids_by_grp.get(grp_id)
+                )
             else:
                 # Globally colliding signature: several distinct identities share
                 # it map-wide. Validate each engine object against the COMPLETE
                 # collision set and restrict output to the GRE-present identities
                 # — presence of a single candidate never proves an object's id.
-                self._correlate_colliding_signature(grp_counter, candidates, pool)
+                self._correlate_colliding_signature(
+                    grp_counter, candidates, pool, gre_aids_by_grp
+                )
 
-    def _stamp_tokens(self, pool: list[Any], grp_id: int, count: int) -> None:
+    def _stamp_tokens(
+        self,
+        pool: list[Any],
+        grp_id: int,
+        count: int,
+        aids: list[int] | None = None,
+    ) -> None:
         """Stamp up to *count* still-id-less *pool* tokens with *grp_id*.
 
         Marks the identity producible in ``_minted_token_grpids`` only for the
         objects actually stamped. Skips any object already carrying a grpId so
-        repeat calls within a step are idempotent.
+        repeat calls within a step are idempotent. When *aids* is supplied, each
+        stamped token is also bound to a distinct GRE instance id (in order) via
+        ``_bind_counter_token`` so counter sync can reach a just-minted token
+        that is not yet in ``_engine_cards``.
         """
         stamped = 0
         for card in pool:
@@ -3107,10 +3340,20 @@ class ReplayExecutor:
                 continue
             card._grp_id = grp_id
             self._minted_token_grpids.add(grp_id)
+            if aids is not None and stamped < len(aids):
+                self._bind_counter_token(aids[stamped], card)
             stamped += 1
 
+    def _bind_counter_token(self, aid: int, card: Any) -> None:
+        """Publish a GRE-instance-id -> engine-token binding for counter sync."""
+        self._counter_token_binding[aid] = card
+
     def _correlate_colliding_signature(
-        self, present_counter: Counter, candidates: set[int], pool: list[Any]
+        self,
+        present_counter: Counter,
+        candidates: set[int],
+        pool: list[Any],
+        gre_aids_by_grp: dict[int, list[int]] | None = None,
     ) -> None:
         """Correlate engine tokens whose signature collides across the map.
 
@@ -3139,6 +3382,9 @@ class ReplayExecutor:
         # caps each at its GRE count. A Counter read for an absent identity is 0,
         # so a resolved-but-not-present identity is naturally rejected.
         budget = Counter(present_counter)
+        # Per-grpId cursor into the GRE stint ids, so each resolved engine token
+        # binds to a distinct instance id for counter sync.
+        aid_cursor: dict[int, int] = {}
         for card in pool:
             if getattr(card, "_grp_id", None):
                 continue
@@ -3153,6 +3399,12 @@ class ReplayExecutor:
             card._grp_id = grp_id
             self._minted_token_grpids.add(grp_id)
             budget[grp_id] -= 1
+            if gre_aids_by_grp is not None:
+                aids = gre_aids_by_grp.get(grp_id, [])
+                idx = aid_cursor.get(grp_id, 0)
+                if idx < len(aids):
+                    self._bind_counter_token(aids[idx], card)
+                    aid_cursor[grp_id] = idx + 1
 
     def _resolve_colliding_identity(
         self, card: Any, candidates: set[int]
@@ -3229,9 +3481,15 @@ class ReplayExecutor:
         Called before ``compare_state`` (so the comparison sees stamped tokens)
         and again inside ``_sync_zones`` (so tokens minted while the resync
         resolves the late stack are stamped before the overflow pass runs).
+
+        The token->engine binding published for counter sync is rebuilt fresh
+        each snapshot (a persistent token moves into ``_engine_cards`` after the
+        first rebuild, so the binding is only needed the snapshot a token first
+        appears; a stale cross-snapshot entry must never mislead resolution).
         """
         if not self.simulate or self.token_map is None:
             return
+        self._counter_token_binding.clear()
         for engine_zone_enum, seat_id, zone_type_str, objs, _ in (
             self._snapshot_zone_groups(snapshot)
         ):

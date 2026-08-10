@@ -11,6 +11,7 @@ from silverquillm.replay.executor import (
     ReplayExecutor,
     StateMismatch,
     StepResult,
+    TokenIdMap,
     load_card_id_map,
 )
 from silverquillm.replay.parser import parse_replay
@@ -892,6 +893,30 @@ class _FakePermanent:
         self._generic_counters: dict[str, int] = {}
 
 
+class _FakeToken:
+    """Minimal engine token for the correlation -> counter-binding path.
+
+    Carries the characteristic signature ``_engine_token_signature`` reads and
+    the counter fields the reconcile writes, but NOT ``_grp_id`` (it starts
+    id-less, exactly like a freshly minted engine token) and is deliberately
+    absent from ``_engine_cards`` so the test exercises the token binding rather
+    than a pre-seeded correlation.
+    """
+
+    def __init__(self, name: str = "Cat Token") -> None:
+        self.name = name
+        self.is_token = True
+        self.card_types = ["creature"]
+        self.subtypes = ["Cat"]
+        self.base_power = 1
+        self.base_toughness = 1
+        self.plus_one_counters = 0
+        self._base_plus_one_counters = 0
+        self.minus_one_counters = 0
+        self._base_minus_one_counters = 0
+        self._generic_counters: dict[str, int] = {}
+
+
 def _counter_ann(ann_id: int, affected: list[int], ctype: int, amount: int,
                  removed: bool = False) -> _Annotation:
     kind = "AnnotationType_CounterRemoved" if removed else "AnnotationType_CounterAdded"
@@ -901,26 +926,52 @@ def _counter_ann(ann_id: int, affected: list[int], ctype: int, amount: int,
     )
 
 
+def _ann_snap(game_state_id: int, *anns: _Annotation) -> GameSnapshot:
+    """A minimal snapshot carrying only counter annotations.
+
+    Counter reconciliation reads battlefield residency and stint identity from
+    the ENGINE (``game.refs``), not the GRE snapshot, so the snapshot only needs
+    to carry the annotation stream; residency is set up on the engine directly
+    via ``_place`` / ``_remove``.
+    """
+    snap = GameSnapshot(game_state_id=game_state_id)
+    snap.players = {1: PlayerInfo(seat_id=1, life_total=20),
+                    2: PlayerInfo(seat_id=2, life_total=20)}
+    snap.annotations = list(anns)
+    return snap
+
+
+def _place(executor: ReplayExecutor, perm: object, aid: int, seat: int = 1) -> None:
+    """Put an engine permanent on the engine battlefield and correlate its aid."""
+    from engine.types import Zone
+
+    executor.players[seat].zones[Zone.BATTLEFIELD].add(perm)
+    executor._engine_cards[aid] = perm
+
+
+def _remove(executor: ReplayExecutor, perm: object, seat: int = 1) -> None:
+    """Blink: remove an engine permanent from the engine battlefield."""
+    from engine.types import Zone
+
+    executor.players[seat].zones[Zone.BATTLEFIELD].remove(perm)
+
+
 class TestCounterAnnotationSync:
-    """The GRE CounterAdded/Removed stream is folded into a per-object ledger
-    and reconciled onto the correlated engine permanent as an authoritative
-    SET (double-count-proof)."""
+    """The GRE CounterAdded/Removed stream is reconciled onto the correlated
+    engine permanent as an authoritative SET (double-count-proof). Identity is
+    anchored to the engine object; retirement is an engine zone transition."""
 
     def test_plus_one_counter_synced_to_pt_fields(self, executor: ReplayExecutor) -> None:
         perm = _FakePermanent(999)
-        executor._engine_cards[5001] = perm
-        snap = _make_minimal_snapshot(game_state_id=2)
-        snap.annotations = [_counter_ann(1, [5001], 1, 2)]  # +1/+1 x2
-        executor._apply_counter_annotations(snap)
+        _place(executor, perm, 5001)
+        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(1, [5001], 1, 2)))
         assert perm.plus_one_counters == 2
         assert perm._base_plus_one_counters == 2  # survives apply_all reset
 
     def test_named_counter_synced_to_generic(self, executor: ReplayExecutor) -> None:
         perm = _FakePermanent(1000, name="Drake Hatcher")
-        executor._engine_cards[5002] = perm
-        snap = _make_minimal_snapshot(game_state_id=2)
-        snap.annotations = [_counter_ann(2, [5002], 200, 3)]  # incubation x3
-        executor._apply_counter_annotations(snap)
+        _place(executor, perm, 5002)
+        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(2, [5002], 200, 3)))
         assert perm._generic_counters.get("incubation") == 3
 
     def test_authoritative_set_never_double_counts(self, executor: ReplayExecutor) -> None:
@@ -929,58 +980,255 @@ class TestCounterAnnotationSync:
         perm = _FakePermanent(1001)
         perm.plus_one_counters = 2
         perm._base_plus_one_counters = 2
-        executor._engine_cards[5003] = perm
-        snap = _make_minimal_snapshot(game_state_id=2)
-        snap.annotations = [_counter_ann(3, [5003], 1, 2)]
-        executor._apply_counter_annotations(snap)
+        _place(executor, perm, 5003)
+        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(3, [5003], 1, 2)))
         assert perm.plus_one_counters == 2
 
     def test_dedup_by_annotation_id(self, executor: ReplayExecutor) -> None:
         perm = _FakePermanent(1002)
-        executor._engine_cards[5004] = perm
-        snap = _make_minimal_snapshot(game_state_id=2)
-        snap.annotations = [_counter_ann(4, [5004], 1, 1)]
-        executor._apply_counter_annotations(snap)
-        # The same annotation id repeated in a later snapshot is not re-folded.
-        snap2 = _make_minimal_snapshot(game_state_id=3)
-        snap2.annotations = [_counter_ann(4, [5004], 1, 1)]
-        executor._apply_counter_annotations(snap2)
+        _place(executor, perm, 5004)
+        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(4, [5004], 1, 1)))
+        # The same annotation id repeated in a later snapshot (persistent slot)
+        # is not re-folded: exactly-once per (annotation, affected id).
+        executor._apply_counter_annotations(_ann_snap(3, _counter_ann(4, [5004], 1, 1)))
         assert perm.plus_one_counters == 1
 
     def test_counter_removed_decrements(self, executor: ReplayExecutor) -> None:
         perm = _FakePermanent(1003)
-        executor._engine_cards[5005] = perm
-        snap = _make_minimal_snapshot(game_state_id=2)
-        snap.annotations = [_counter_ann(5, [5005], 1, 3)]
-        executor._apply_counter_annotations(snap)
+        _place(executor, perm, 5005)
+        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(5, [5005], 1, 3)))
         assert perm.plus_one_counters == 3
-        snap2 = _make_minimal_snapshot(game_state_id=3)
-        snap2.annotations = [_counter_ann(6, [5005], 1, 1, removed=True)]
-        executor._apply_counter_annotations(snap2)
+        executor._apply_counter_annotations(
+            _ann_snap(3, _counter_ann(6, [5005], 1, 1, removed=True))
+        )
         assert perm.plus_one_counters == 2
 
     def test_ledger_never_goes_negative(self, executor: ReplayExecutor) -> None:
         perm = _FakePermanent(1004)
-        executor._engine_cards[5006] = perm
-        snap = _make_minimal_snapshot(game_state_id=2)
-        snap.annotations = [_counter_ann(7, [5006], 1, 1, removed=True)]
-        executor._apply_counter_annotations(snap)
+        _place(executor, perm, 5006)
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(7, [5006], 1, 1, removed=True))
+        )
         assert perm.plus_one_counters == 0
 
-    def test_unknown_affected_object_ignored(self, executor: ReplayExecutor) -> None:
-        snap = _make_minimal_snapshot(game_state_id=2)
-        snap.annotations = [_counter_ann(8, [99999], 1, 1)]  # no engine card
-        executor._apply_counter_annotations(snap)  # must not raise
+    def test_unknown_affected_object_defers_not_raises(self, executor: ReplayExecutor) -> None:
+        # An uncorrelated affected id is deferred (retryable), never applied nor
+        # silently dropped — nothing to write onto, so nothing raises.
+        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(8, [99999], 1, 1)))
+        assert (8, 99999) in executor._pending_counter_effects
+        assert (8, 99999) not in executor._applied_counter_effects
 
     def test_object_without_ledger_untouched(self, executor: ReplayExecutor) -> None:
         # An engine object GRE never annotated is never zeroed by the reconcile.
         perm = _FakePermanent(1005)
         perm.plus_one_counters = 4  # engine-legit, no GRE annotation
-        executor._engine_cards[5007] = perm
+        _place(executor, perm, 5007)
         other = _FakePermanent(1006)
-        executor._engine_cards[5008] = other
-        snap = _make_minimal_snapshot(game_state_id=2)
-        snap.annotations = [_counter_ann(9, [5008], 1, 1)]  # only touches 5008
-        executor._apply_counter_annotations(snap)
+        _place(executor, other, 5008)
+        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(9, [5008], 1, 1)))
         assert perm.plus_one_counters == 4  # untouched
         assert other.plus_one_counters == 1
+
+
+class TestCounterStintScoping:
+    """A counter belongs to one battlefield stint (the GRE instance id). It
+    never crosses a real zone-change boundary: the engine reuses the same Python
+    object across a blink, but a returned permanent starts with no inherited
+    counters unless a new annotation attests them."""
+
+    def test_plus_one_not_restored_after_blink(self, executor: ReplayExecutor) -> None:
+        # +1/+1, then leaves the engine battlefield and returns with NO new
+        # annotation: the old counter is not restored on the reused object.
+        perm = _FakePermanent(2000)
+        _place(executor, perm, 6001)
+        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(20, [6001], 1, 1)))
+        assert perm.plus_one_counters == 1
+
+        # Blink out: perm leaves the engine battlefield -> retirement clears it.
+        _remove(executor, perm)
+        executor._apply_counter_annotations(_ann_snap(3))  # no annotation
+        assert perm.plus_one_counters == 0
+        assert perm._base_plus_one_counters == 0
+
+        # Return with no new attestation: it stays clean (no inherited counter).
+        _place(executor, perm, 6002)
+        executor._apply_counter_annotations(_ann_snap(4))
+        assert perm.plus_one_counters == 0
+
+    def test_named_counter_not_restored_after_blink(self, executor: ReplayExecutor) -> None:
+        # Same lifecycle for a named generic counter.
+        perm = _FakePermanent(2001, name="Drake Hatcher")
+        _place(executor, perm, 6101)
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(21, [6101], 200, 4))  # incubation x4
+        )
+        assert perm._generic_counters.get("incubation") == 4
+
+        _remove(executor, perm)
+        executor._apply_counter_annotations(_ann_snap(3))
+        assert perm._generic_counters.get("incubation", 0) == 0
+
+    def test_unrelated_counter_does_not_resurrect_old_ledger(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # After a blink, an unrelated permanent receiving a counter (which drives
+        # global reconciliation) must not resurrect the retired object's ledger.
+        perm = _FakePermanent(2002)
+        _place(executor, perm, 6201)
+        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(22, [6201], 1, 2)))
+        assert perm.plus_one_counters == 2
+
+        # perm leaves the battlefield; an unrelated permanent enters and gets its
+        # own counter.
+        _remove(executor, perm)
+        other = _FakePermanent(2003)
+        _place(executor, other, 6301)
+        executor._apply_counter_annotations(_ann_snap(3, _counter_ann(23, [6301], 1, 1)))
+        assert other.plus_one_counters == 1
+        assert perm.plus_one_counters == 0  # retired, cleared
+
+        # perm returns as a fresh stint; another unrelated counter fires. The old
+        # ledger stays retired — perm is not resurrected to 2.
+        _place(executor, perm, 6202)
+        executor._apply_counter_annotations(_ann_snap(4, _counter_ann(24, [6301], 1, 1)))
+        assert perm.plus_one_counters == 0
+        assert other.plus_one_counters == 2
+
+    def test_existing_engine_counter_not_double_counted_across_stint(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # An engine-driven counter the GRE stream also attests is set (no double
+        # count) within a stint, and cleared — not carried — into the next.
+        perm = _FakePermanent(2004)
+        perm.plus_one_counters = 1
+        perm._base_plus_one_counters = 1
+        _place(executor, perm, 6401)
+        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(25, [6401], 1, 1)))
+        assert perm.plus_one_counters == 1  # SET agrees, not 2
+
+        _remove(executor, perm)
+        executor._apply_counter_annotations(_ann_snap(3))
+        assert perm.plus_one_counters == 0
+
+    def test_gre_id_churn_without_zone_change_preserves_counter(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # GRE re-mints the object's instance id (churn, NOT a zone change) — the
+        # engine object and its battlefield stint are unchanged, so the counter
+        # is preserved (this is what aid-keying got wrong).
+        perm = _FakePermanent(2006)
+        _place(executor, perm, 6601)
+        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(28, [6601], 1, 3)))
+        assert perm.plus_one_counters == 3
+
+        # New GRE aid 6602 for the SAME engine object; no engine zone change.
+        del executor._engine_cards[6601]
+        executor._engine_cards[6602] = perm
+        executor._apply_counter_annotations(_ann_snap(3))
+        assert perm.plus_one_counters == 3  # preserved, not cleared
+
+
+class TestCounterDeferral:
+    """No annotation is silently consumed because correlation was temporarily
+    unavailable; each affected id is tracked independently and applied
+    exactly once."""
+
+    def test_new_permanent_same_snapshot_deferred_then_applied(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # A CounterAdded targeting a permanent that first appears this snapshot
+        # (not yet in _engine_cards — the map is only rebuilt post-comparison)
+        # is deferred, then applied once correlation is available.
+        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(30, [7001], 1, 1)))
+        assert (30, 7001) in executor._pending_counter_effects
+        assert (30, 7001) not in executor._applied_counter_effects
+
+        # The post-comparison rebuild correlates the permanent; retry applies.
+        perm = _FakePermanent(3000)
+        _place(executor, perm, 7001)
+        executor._apply_counter_annotations(_ann_snap(3))  # no repeat annotation
+        assert perm.plus_one_counters == 1
+        assert (30, 7001) in executor._applied_counter_effects
+        assert (30, 7001) not in executor._pending_counter_effects
+
+    def test_engine_minted_token_same_snapshot_correlated_and_countered(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # Raw replay-shaped: an engine-minted token, id-less and absent from
+        # _engine_cards, is correlated by _correlate_tokens_in_group (which now
+        # publishes the GRE-instance -> engine-object binding) so a same-snapshot
+        # CounterAdded on the token lands via that binding.
+        executor.token_map = TokenIdMap({"tokens": {"90001": {
+            "card_types": ["creature"], "subtypes": ["Cat"],
+            "base_power": 1, "base_toughness": 1, "colors": ["White"],
+            "label": "1/1 white Cat",
+        }}})
+        token = _FakeToken()
+        from engine.types import Zone
+        executor.players[1].zones[Zone.BATTLEFIELD].add(token)  # a real bf resident
+        gre_tok = GameObject(
+            instance_id=7100, grp_id=90001, type="GameObjectType_Token",
+            zone_id=30, owner_seat_id=1, controller_seat_id=1,
+        )
+        executor._correlate_tokens_in_group([gre_tok], [token])
+        assert token._grp_id == 90001
+        assert executor._counter_token_binding.get(7100) is token
+        assert 7100 not in executor._engine_cards  # resolved via binding, not map
+
+        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(31, [7100], 1, 1)))
+        assert token.plus_one_counters == 1
+
+    def test_multi_affected_ids_apply_each_once(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # One annotation with two affected ids: one correlates immediately, the
+        # other later. Each effect applies exactly once; the already-handled id
+        # is not double-applied when the annotation is retried.
+        perm_a = _FakePermanent(3100)
+        _place(executor, perm_a, 7200)  # correlated now
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(32, [7200, 7201], 1, 1))
+        )
+        assert perm_a.plus_one_counters == 1
+        assert (32, 7200) in executor._applied_counter_effects
+        assert (32, 7201) in executor._pending_counter_effects  # not yet
+
+        # 7201 correlates; retry applies only that effect, 7200 stays at 1.
+        perm_b = _FakePermanent(3101)
+        _place(executor, perm_b, 7201)
+        executor._apply_counter_annotations(
+            _ann_snap(3, _counter_ann(32, [7200, 7201], 1, 1))  # repeat
+        )
+        assert perm_a.plus_one_counters == 1  # not double-applied
+        assert perm_b.plus_one_counters == 1
+
+    def test_repeated_annotation_ids_idempotent(
+        self, executor: ReplayExecutor
+    ) -> None:
+        perm = _FakePermanent(3200)
+        _place(executor, perm, 7300)
+        for gsid in (2, 3, 4):  # Arena repeats the same annotation each slot
+            executor._apply_counter_annotations(
+                _ann_snap(gsid, _counter_ann(33, [7300], 1, 1))
+            )
+        assert perm.plus_one_counters == 1
+
+    def test_counter_removed_real_detail_shape_across_lifecycle(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # CounterRemoved uses the real parser detail shape (list-wrapped
+        # counter_type / transaction_amount) and behaves correctly through a
+        # blink: the removal lands, then the stint retires without carrying over.
+        perm = _FakePermanent(3300)
+        _place(executor, perm, 7400)
+        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(34, [7400], 1, 3)))
+        executor._apply_counter_annotations(
+            _ann_snap(3, _counter_ann(35, [7400], 1, 2, removed=True))
+        )
+        assert perm.plus_one_counters == 1
+
+        # Blink -> leaves the battlefield, no annotation: the 1 remaining counter
+        # is retired.
+        _remove(executor, perm)
+        executor._apply_counter_annotations(_ann_snap(4))
+        assert perm.plus_one_counters == 0
