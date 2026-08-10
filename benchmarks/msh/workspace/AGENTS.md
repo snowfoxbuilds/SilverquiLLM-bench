@@ -48,6 +48,27 @@ Tests answer those queries with **Intents** (see `test_utils.md`).
    in a card impl is rejected by the AST guard
    (`engine_tests/test_card_impl_ast_guard.py`, rule (d)).
 
+5. **Own enters-triggers fire on their own entry (rule 603.3a)** — The engine
+   registers an entering permanent's own triggers **before** firing its
+   `EntersBattlefieldTriggeredEvent` (in `move_to_zone` and `create_token`), so
+   a "when this creature/permanent enters" ability registered in
+   `register_triggers` fires on the source's own entry — implement it as a
+   normal self-matching ETB trigger (`condition` returns `event.permanent is
+   source`). Do **not** add an `on_resolve` self-mint workaround for it (that
+   double-fires now). An ability that reads "whenever **another** … enters"
+   must exclude the source in its own condition filter (`if permanent is
+   source: return False`); the engine no longer suppresses the whole event.
+
+6. **Counters are an engine primitive** — Add/remove counters only through
+   `engine.game.add_counter(game, permanent, type, amount)` /
+   `remove_counter(...)`, and read them via `permanent.counters` (or
+   `_generic_counters` for named types). Never store counters in a card-private
+   attribute (`self.incubation_counters` etc.): it is invisible to state
+   comparison and to the replay executor's `CounterAdded` sync. Direct
+   `*_counter(s)` attribute writes are rejected by the AST guard
+   (`engine_tests/test_card_impl_ast_guard.py`, rule (g)); the engine's own
+   `plus_one_counters` / `minus_one_counters` / `_generic_counters` are exempt.
+
 These rules are derived from the project's Workspace Contract decisions
 (maintained outside this workspace). They ensure deterministic grading.
 

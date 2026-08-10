@@ -621,3 +621,51 @@ is `is_tapped`, and a `.tapped` write is invisible to state comparison and wrong
 for `GameRef` matching. The dead `chosen_targets or _resolve_target` fallback was
 removed workspace-wide (behavior-preserving: the backdoor was never assigned, so
 `getattr(x, "_resolve_target", None)` was provably `None`).
+
+## replay-gap Phase F — own-ETB ordering + counter flow (issue #37)
+
+### Own enters-trigger ordering (rule 603.3a)
+`move_to_zone` (engine/zones.py) and `_place_token`/`create_token`
+(engine/game.py) now **register an entering permanent's own triggers and
+replacement effects BEFORE firing its `EntersBattlefieldTriggeredEvent`**. The
+old order fired the ETB event first, so a permanent's own enters-trigger was
+never registered when its own entry event dispatched — silently suppressing
+every own-enters ability (Prideful Parent's Cat token, Rune-Scarred Demon's
+tutor, the whole self-ETB minter class that dominated MISSING_CARD). Rule
+603.3a is explicit that a permanent's own enters-ability triggers on its own
+entry; an "another …" ability excludes the source in its **own condition
+filter** (the card-text responsibility), never by the engine suppressing the
+whole event.
+
+**31-subscriber audit** (every `EntersBattlefieldTriggeredEvent` subscriber,
+per-card verdict): no "another …"-filtered card self-fires — all correctly
+reject `event.permanent is source` (fdn_9/23/100/141/149/240 exclude self;
+fdn_2 Arahbo is deliberately "this OR another"; landfall/opponent-creature
+watchers can never match their own source). The old ordering was **not**
+papering over a filter bug; the real regression it hid was the opposite: two
+cards (Arahbo fdn_2, Rune-Scarred Demon fdn_184) carried an `on_resolve`
+self-mint **workaround** for the old order AND a self-matching ETB trigger, so
+the flip would double-fire them — the redundant `on_resolve` was removed; the
+registered trigger now handles their own entry exactly once. — Rejected:
+keeping the ETB-before-register order and the per-card `on_resolve` workarounds
+(suppresses every own-enters ability; the workaround does not scale to the
+whole minter class and Phase E's correlation cannot keep tokens that never
+mint).
+
+### Counters are an engine primitive — no card-private stashes
+Every card-private counter attribute was moved onto the engine counter system
+(`engine.game.add_counter` / `remove_counter`, read via `.counters` /
+`_generic_counters`): Drake Hatcher `incubation` (fdn_35), Nine-Lives Familiar
+`revival` (fdn_66), Ravenous Amulet `soul` (fdn_131), and the unused
+fellowship/bait stubs (fdn_127/fdn_128). A bespoke `self.incubation_counters`
+int is invisible to `.counters`, to state comparison, and to the replay
+executor's `CounterAdded` sync (see root `KEY_DECISIONS.md` Phase F), so a cost
+reading it can never be funded from GRE-attested counter state. Generic
+counters persist across zone changes and characteristic resets exactly as the
+old int did, so the conversion is behavior-preserving. The AST guard gains rule
+**(g)**: any `*_counter(s)` attribute assignment (plain / augmented / annotated
+/ `setattr`) other than the engine's own fields (`plus_one_counters` /
+`minus_one_counters` + `_base_*` shadows, `_generic_counters`) is flagged as a
+private stash, with revert-proving self-tests. — Rejected: leaving card-private
+counter ints (unreadable by the engine and the CounterAdded sync; the exact gap
+that left Drake Hatcher's cost unpayable in replay).
