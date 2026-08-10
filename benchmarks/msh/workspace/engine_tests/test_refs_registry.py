@@ -92,3 +92,58 @@ class TestRefAssembly:
         ref1 = reg.ref_for(o, zone="battlefield")
         ref2 = reg.ref_for(o, zone="battlefield")
         assert ref1.object == ref2.object
+
+
+class TestZoneEpoch:
+    """zone_epoch is the side-effect-free real-transition signal: monotonic,
+    advanced only by note_zone_change (i.e. by move_to_zone), and readable
+    without minting instance ids."""
+
+    def test_starts_at_zero_and_advances_per_zone_change(self):
+        reg = GameRefsRegistry()
+        o = _Obj("bear")
+        assert reg.zone_epoch(o) == 0
+        reg.note_zone_change(o)
+        assert reg.zone_epoch(o) == 1
+        reg.note_zone_change(o)
+        assert reg.zone_epoch(o) == 2
+
+    def test_atomic_round_trip_is_visible(self):
+        # A leave-and-return completed between two reads still changes the
+        # epoch — the property end-of-window membership checks cannot provide.
+        reg = GameRefsRegistry()
+        o = _Obj("bear")
+        before = reg.zone_epoch(o)
+        reg.note_zone_change(o)  # battlefield -> exile (unobserved)
+        reg.note_zone_change(o)  # exile -> battlefield (unobserved)
+        assert reg.zone_epoch(o) > before
+
+    def test_read_is_side_effect_free(self):
+        # Reading the epoch never mints and never perturbs the instance-id
+        # sequence: ids minted after many reads equal ids minted without them.
+        reg_read = GameRefsRegistry()
+        reg_ctrl = GameRefsRegistry()
+        o_read, o_ctrl = _Obj("bear"), _Obj("bear")
+        for _ in range(5):
+            reg_read.zone_epoch(o_read)
+        assert reg_read.instance_id(o_read, "battlefield") == reg_ctrl.instance_id(
+            o_ctrl, "battlefield"
+        )
+        # And the read itself is stable (no hidden state advanced).
+        assert reg_read.zone_epoch(o_read) == reg_ctrl.zone_epoch(o_ctrl) == 0
+
+    def test_per_object_independence(self):
+        reg = GameRefsRegistry()
+        a, b = _Obj("a"), _Obj("b")
+        reg.note_zone_change(a)
+        assert reg.zone_epoch(a) == 1
+        assert reg.zone_epoch(b) == 0
+
+    def test_epoch_survives_instance_id_reminting(self):
+        # Minting new stint ids (the churn surface) does not touch the epoch.
+        reg = GameRefsRegistry()
+        o = _Obj("bear")
+        reg.note_zone_change(o)
+        reg.instance_id(o, "exile")
+        reg.instance_id(o, "battlefield")
+        assert reg.zone_epoch(o) == 1

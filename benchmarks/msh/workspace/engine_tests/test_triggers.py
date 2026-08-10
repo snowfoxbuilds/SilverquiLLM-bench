@@ -547,6 +547,12 @@ class TestAutoTriggerUnregistrationViaLeave:
         cast_spell(game, p, card)
         spell_obj = game.stack.pop()
         spell_obj.on_resolve(game)
+        # The condition=None trigger fires on the creature's own entry now
+        # (rule 603.3a — own triggers register before the ETB event), pushing a
+        # StackObject. Drain it: this test verifies auto-unregistration on
+        # *leave*, not the self-ETB semantics.
+        while not game.stack.is_empty():
+            game.stack.pop()
         assert len(game.trigger_manager.get_triggers_for_source(card)) == 1
         assert game.get_battlefield(p).contains(card)
         card.damage_marked = 5

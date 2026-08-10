@@ -4,6 +4,51 @@ Design decisions of record for the MSH engine, kept out of code comments so
 the rationale survives refactors. Card impls and engine modules reference this
 file ("per KEY_DECISIONS"). Newest section first.
 
+## replay-gap Phase F correction — zone-change epoch (issue #37 follow-up)
+
+### `GameRefsRegistry.zone_epoch` — a side-effect-free real-transition signal
+The refs registry keeps a monotonic per-object **zone-change epoch**
+(`zone_epoch(obj)`), advanced by `note_zone_change` — i.e. by every real
+`move_to_zone` transition, including stints no query ever observes (a
+flicker's exile leg). Two equal reads bracket a window containing NO real zone
+transition; an increased value proves at least one occurred **even when the
+object is back in its original zone** (an atomic leave-and-return completed
+between the reads). The read is pure: it never mints instance ids and never
+perturbs the query-facing id sequence — unlike `instance_id`, whose call IS an
+observation and mints a stint id as a side effect (measured to perturb replay
+simulations when used for state inspection). The epoch is keyed by `id(obj)`;
+the registry retains a reference on the first zone change so the key is never
+reused by a recycled object. Consumer of record: the replay executor's counter
+reconciliation, which identifies a battlefield stint as (engine-object key,
+fold-time epoch) and, since correction part 3, also accumulates per-pendency
+epoch evidence to prove (or refute) same-stint continuity across GRE
+instance-id churn — since part 5, a deferred fold's baseline is the engine
+battlefield CENSUS of epochs frozen on the pass GRE first attests the
+effect's identity on the battlefield (the window start): two equal epoch
+reads prove continuity only for the interval they bracket, so the first read
+must date from the window start, not merely from some pass before the fold —
+see root `KEY_DECISIONS.md` Phase F correction parts 2–5.
+
+**`object_id` uniqueness caveat** (surfaced by part 3's epoch evidence): the
+`GameObject.object_id` counter guarantees uniqueness only for CONSTRUCTED
+objects. Copy-token impls (fdn_154, fdn_163) mint their token via
+`copy.copy(<copied card>)`, which skips `__init__`, so the token copy shares
+its original's `object_id` while both are live on the battlefield —
+`_place_token`'s multiplication clones re-mint (`game.py`), the initially
+supplied copy object does not. Consumers needing identity among LIVE objects
+must therefore not key by bare `object_id` (the replay executor keys counters
+by `(object_id, id(obj))` with pinned references). Re-minting inside the
+impls or `_place_token` was deliberately NOT done as part of the replay
+correction: `object_id` feeds per-object ability keying (`abilities.py`), so
+changing it would alter shared-ability-state semantics for copies — an engine
+change that deserves its own issue, not a side effect of a replay-layer fix. —
+Rejected: exposing stint identity via `instance_id` (minting side effect);
+storing the epoch as an attribute on game objects (collides with card-impl
+attribute space and the AST guard's write rules); a battlefield-departure-only
+counter in `move_to_zone` (the generic zone-change epoch is strictly more
+informative and needs no zone-specific branching — any move by an object that
+was on the battlefield necessarily begins with a battlefield departure).
+
 ## replay-gap Phase C — engine primitives (issue #30)
 
 ### Generic-counter storage
@@ -621,3 +666,51 @@ is `is_tapped`, and a `.tapped` write is invisible to state comparison and wrong
 for `GameRef` matching. The dead `chosen_targets or _resolve_target` fallback was
 removed workspace-wide (behavior-preserving: the backdoor was never assigned, so
 `getattr(x, "_resolve_target", None)` was provably `None`).
+
+## replay-gap Phase F — own-ETB ordering + counter flow (issue #37)
+
+### Own enters-trigger ordering (rule 603.3a)
+`move_to_zone` (engine/zones.py) and `_place_token`/`create_token`
+(engine/game.py) now **register an entering permanent's own triggers and
+replacement effects BEFORE firing its `EntersBattlefieldTriggeredEvent`**. The
+old order fired the ETB event first, so a permanent's own enters-trigger was
+never registered when its own entry event dispatched — silently suppressing
+every own-enters ability (Prideful Parent's Cat token, Rune-Scarred Demon's
+tutor, the whole self-ETB minter class that dominated MISSING_CARD). Rule
+603.3a is explicit that a permanent's own enters-ability triggers on its own
+entry; an "another …" ability excludes the source in its **own condition
+filter** (the card-text responsibility), never by the engine suppressing the
+whole event.
+
+**31-subscriber audit** (every `EntersBattlefieldTriggeredEvent` subscriber,
+per-card verdict): no "another …"-filtered card self-fires — all correctly
+reject `event.permanent is source` (fdn_9/23/100/141/149/240 exclude self;
+fdn_2 Arahbo is deliberately "this OR another"; landfall/opponent-creature
+watchers can never match their own source). The old ordering was **not**
+papering over a filter bug; the real regression it hid was the opposite: two
+cards (Arahbo fdn_2, Rune-Scarred Demon fdn_184) carried an `on_resolve`
+self-mint **workaround** for the old order AND a self-matching ETB trigger, so
+the flip would double-fire them — the redundant `on_resolve` was removed; the
+registered trigger now handles their own entry exactly once. — Rejected:
+keeping the ETB-before-register order and the per-card `on_resolve` workarounds
+(suppresses every own-enters ability; the workaround does not scale to the
+whole minter class and Phase E's correlation cannot keep tokens that never
+mint).
+
+### Counters are an engine primitive — no card-private stashes
+Every card-private counter attribute was moved onto the engine counter system
+(`engine.game.add_counter` / `remove_counter`, read via `.counters` /
+`_generic_counters`): Drake Hatcher `incubation` (fdn_35), Nine-Lives Familiar
+`revival` (fdn_66), Ravenous Amulet `soul` (fdn_131), and the unused
+fellowship/bait stubs (fdn_127/fdn_128). A bespoke `self.incubation_counters`
+int is invisible to `.counters`, to state comparison, and to the replay
+executor's `CounterAdded` sync (see root `KEY_DECISIONS.md` Phase F), so a cost
+reading it can never be funded from GRE-attested counter state. Generic
+counters persist across zone changes and characteristic resets exactly as the
+old int did, so the conversion is behavior-preserving. The AST guard gains rule
+**(g)**: any `*_counter(s)` attribute assignment (plain / augmented / annotated
+/ `setattr`) other than the engine's own fields (`plus_one_counters` /
+`minus_one_counters` + `_base_*` shadows, `_generic_counters`) is flagged as a
+private stash, with revert-proving self-tests. — Rejected: leaving card-private
+counter ints (unreadable by the engine and the CounterAdded sync; the exact gap
+that left Drake Hatcher's cost unpayable in replay).

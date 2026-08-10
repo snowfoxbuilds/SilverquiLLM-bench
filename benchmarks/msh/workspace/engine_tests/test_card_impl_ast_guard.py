@@ -26,6 +26,15 @@ fails on seven defect classes:
       ``setattr(x, "tapped", …)``). The engine field is ``is_tapped``; a
       ``.tapped`` write is invisible to state comparison and wrong for
       ``GameRef`` matching. Use ``is_tapped`` or ``engine.game.tap`` / ``untap``.
+  (g) a write to a card-private counter stash — any ``.<name>_counter`` /
+      ``.<name>_counters`` attribute other than the sanctioned engine fields
+      (``plus_one_counters`` / ``minus_one_counters`` and their ``_base_*``
+      shadows, and ``_generic_counters``). Counters are a real engine primitive:
+      a private ``self.incubation_counters`` int is invisible to ``.counters``,
+      to state comparison, and to the replay executor's ``CounterAdded`` sync.
+      Use ``engine.game.add_counter`` / ``remove_counter`` (read via
+      ``.counters``). Covers the plain, augmented, and *annotated* assignment
+      forms (``self.x_counters: int = 0``).
 
 It is intentionally AST-based, not execution-based, so it catches paths that
 only run mid-game. It is fast (well under 2s over the full set) and every
@@ -52,6 +61,18 @@ _VALID_SUBLAYER = set(SubLayer.__members__)
 # Dead test backdoors: nothing in the engine assigns these, so a card reading
 # one silently no-ops. Targets flow through the real channels instead.
 _DEAD_TARGET_ATTRS = {"_current_target", "_resolve_target"}
+
+# The engine's own counter storage. Every *other* ``*_counter(s)`` attribute a
+# card assigns is a private stash the engine (and the replay executor's
+# CounterAdded sync) cannot see — counters must flow through add_counter /
+# remove_counter and be read via ``.counters``.
+_ENGINE_COUNTER_ATTRS = {
+    "plus_one_counters",
+    "minus_one_counters",
+    "_base_plus_one_counters",
+    "_base_minus_one_counters",
+    "_generic_counters",
+}
 
 # Names that are always available without a binding in the module.
 _ALLOWED_NAMES = set(dir(builtins)) | {
@@ -134,19 +155,39 @@ def find_impl_defects(source: str) -> list[tuple[int, str]]:
             _assign_targets = [node.target]
         elif isinstance(node, ast.Assign):
             _assign_targets = list(node.targets)
+        elif isinstance(node, ast.AnnAssign):
+            # Annotated assignment (``self.x_counters: int = 0``) still binds the
+            # attribute; only the counter-stash rule needs the annotated form.
+            _assign_targets = [node.target]
         for tgt in _assign_targets:
-            if isinstance(tgt, ast.Attribute) and tgt.attr == "life":
-                findings.append(
-                    (
-                        node.lineno,
-                        "direct '.life' mutation — use game.gain_life / game.lose_life",
+            if not isinstance(tgt, ast.Attribute):
+                continue
+            # The life/tapped rules apply to plain/augmented assignment only.
+            if not isinstance(node, ast.AnnAssign):
+                if tgt.attr == "life":
+                    findings.append(
+                        (
+                            node.lineno,
+                            "direct '.life' mutation — use game.gain_life / game.lose_life",
+                        )
                     )
-                )
-            if isinstance(tgt, ast.Attribute) and tgt.attr == "tapped":
+                if tgt.attr == "tapped":
+                    findings.append((
+                        node.lineno,
+                        ("'.tapped' write — the engine field is 'is_tapped' "
+                         "(or use engine.game.tap / untap)"),
+                    ))
+            # (g) private counter stash — any `*_counter(s)` attribute that is
+            # not one of the engine's own counter fields.
+            if (
+                (tgt.attr.endswith("_counter") or tgt.attr.endswith("_counters"))
+                and tgt.attr not in _ENGINE_COUNTER_ATTRS
+            ):
                 findings.append((
                     node.lineno,
-                    ("'.tapped' write — the engine field is 'is_tapped' "
-                     "(or use engine.game.tap / untap)"),
+                    (f"private counter stash '.{tgt.attr}' — counters are an "
+                     "engine primitive (engine.game.add_counter / remove_counter, "
+                     "read via .counters)"),
                 ))
 
         # (e) dead-target backdoor reads: `_current_target` / `_resolve_target`.
@@ -180,6 +221,18 @@ def find_impl_defects(source: str) -> list[tuple[int, str]]:
                         node.lineno,
                         ("setattr '.tapped' — the engine field is 'is_tapped' "
                          "(or use engine.game.tap / untap)"),
+                    ))
+                if (
+                    isinstance(key, ast.Constant)
+                    and isinstance(key.value, str)
+                    and (key.value.endswith("_counter") or key.value.endswith("_counters"))
+                    and key.value not in _ENGINE_COUNTER_ATTRS
+                ):
+                    findings.append((
+                        node.lineno,
+                        (f"private counter stash '{key.value}' via setattr — "
+                         "counters are an engine primitive (add_counter / "
+                         "remove_counter, read via .counters)"),
                     ))
 
         # (b) undefined bare name (skipped when a wildcard import hides bindings).
@@ -345,6 +398,50 @@ class TestGuardCatchesEachOriginalDefect:
         # flagged by the write rule.
         src = "def f(self, obj):\n    return obj.is_tapped\n"
         assert find_impl_defects(src) == []
+
+    # (g) private counter stashes.
+    def test_annotated_counter_stash_is_flagged(self) -> None:
+        # The exact form Drake Hatcher / Nine-Lives Familiar used.
+        src = "class C:\n    def __init__(self):\n        self.incubation_counters: int = 0\n"
+        assert any("private counter stash '.incubation_counters'" in m
+                   for m in self._messages(src))
+
+    def test_augmented_counter_stash_is_flagged(self) -> None:
+        src = "def f(self, src):\n    src.soul_counters += 1\n"
+        assert any("private counter stash '.soul_counters'" in m
+                   for m in self._messages(src))
+
+    def test_plain_counter_stash_assign_is_flagged(self) -> None:
+        src = "def f(self, src):\n    src.revival_counters = 8\n"
+        assert any("private counter stash '.revival_counters'" in m
+                   for m in self._messages(src))
+
+    def test_singular_counter_stash_is_flagged(self) -> None:
+        src = "def f(self, src):\n    src.charge_counter = 2\n"
+        assert any("private counter stash '.charge_counter'" in m
+                   for m in self._messages(src))
+
+    def test_setattr_counter_stash_is_flagged(self) -> None:
+        src = "def f(self, src):\n    setattr(src, 'bait_counters', 3)\n"
+        assert any("bait_counters" in m and "setattr" in m
+                   for m in self._messages(src))
+
+    def test_engine_counter_fields_are_not_flagged(self) -> None:
+        # The sanctioned engine fields must NOT trip the stash rule.
+        src = (
+            "class C:\n"
+            "    def __init__(self):\n"
+            "        self.plus_one_counters: int = 0\n"
+            "        self.minus_one_counters: int = 0\n"
+            "    def f(self):\n"
+            "        self._generic_counters.clear()\n"
+        )
+        assert not any("counter stash" in m for m in self._messages(src))
+
+    def test_reading_dot_counters_is_not_flagged(self) -> None:
+        # Reading the sanctioned `.counters` view is the correct pattern.
+        src = "def f(self, src):\n    return src.counters.get('soul', 0)\n"
+        assert not any("counter stash" in m for m in self._messages(src))
 
 
 @pytest.mark.parametrize(

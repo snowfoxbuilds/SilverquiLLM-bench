@@ -11,6 +11,7 @@ from silverquillm.replay.executor import (
     ReplayExecutor,
     StateMismatch,
     StepResult,
+    TokenIdMap,
     load_card_id_map,
 )
 from silverquillm.replay.parser import parse_replay
@@ -870,3 +871,614 @@ class TestImports:
     def test_import_step_result(self) -> None:
         from silverquillm.replay import StepResult
         assert StepResult is not None
+
+
+# ---------------------------------------------------------------------------
+# Counter annotation sync (Phase F) — CounterAdded/Removed -> engine counters
+# ---------------------------------------------------------------------------
+
+from silverquillm.replay.types import Annotation as _Annotation
+
+
+class _FakePermanent:
+    """Minimal stand-in for an engine permanent the reconcile writes onto."""
+
+    def __init__(self, oid: int, name: str = "Test") -> None:
+        self.object_id = oid
+        self.name = name
+        self.plus_one_counters = 0
+        self._base_plus_one_counters = 0
+        self.minus_one_counters = 0
+        self._base_minus_one_counters = 0
+        self._generic_counters: dict[str, int] = {}
+
+
+class _FakeToken:
+    """Minimal engine token for the correlation -> counter-binding path.
+
+    Carries the characteristic signature ``_engine_token_signature`` reads and
+    the counter fields the reconcile writes, but NOT ``_grp_id`` (it starts
+    id-less, exactly like a freshly minted engine token) and is deliberately
+    absent from ``_engine_cards`` so the test exercises the token binding rather
+    than a pre-seeded correlation.
+    """
+
+    def __init__(self, name: str = "Cat Token") -> None:
+        self.name = name
+        self.is_token = True
+        self.card_types = ["creature"]
+        self.subtypes = ["Cat"]
+        self.base_power = 1
+        self.base_toughness = 1
+        self.plus_one_counters = 0
+        self._base_plus_one_counters = 0
+        self.minus_one_counters = 0
+        self._base_minus_one_counters = 0
+        self._generic_counters: dict[str, int] = {}
+
+
+def _counter_ann(ann_id: int, affected: list[int], ctype: int, amount: int,
+                 removed: bool = False) -> _Annotation:
+    kind = "AnnotationType_CounterRemoved" if removed else "AnnotationType_CounterAdded"
+    return _Annotation(
+        id=ann_id, affector_id=0, affected_ids=affected, type=[kind],
+        details={"counter_type": [ctype], "transaction_amount": [amount]},
+    )
+
+
+def _ann_snap(
+    game_state_id: int,
+    *anns: _Annotation,
+    bf: dict[int, int] | None = None,
+    grp: dict[int, int] | None = None,
+) -> GameSnapshot:
+    """A minimal snapshot carrying counter annotations + GRE bf residency.
+
+    ``bf`` maps affected instance ids to their controller seat: each becomes a
+    GameObject in a shared GRE battlefield zone, because a fold now requires
+    GRE itself to attest the affected object ON the battlefield in the current
+    snapshot (stint-safe correlation). ``grp`` optionally assigns grpIds
+    (default 0 — unknown, which contradicts nothing). Engine-side residency and
+    stint identity are still set up directly via ``_place`` / ``_remove``.
+    """
+    snap = GameSnapshot(game_state_id=game_state_id)
+    snap.players = {1: PlayerInfo(seat_id=1, life_total=20),
+                    2: PlayerInfo(seat_id=2, life_total=20)}
+    bf = bf or {}
+    grp = grp or {}
+    snap.zones[30] = ReplayZone(
+        zone_id=30, type="ZoneType_Battlefield", owner_seat_id=0,
+        object_instance_ids=list(bf),
+    )
+    for aid, seat in bf.items():
+        snap.game_objects[aid] = GameObject(
+            instance_id=aid, grp_id=grp.get(aid, 0),
+            type="GameObjectType_Card", zone_id=30,
+            owner_seat_id=seat, controller_seat_id=seat,
+        )
+    snap.annotations = list(anns)
+    return snap
+
+
+def _place(executor: ReplayExecutor, perm: object, aid: int, seat: int = 1) -> None:
+    """Put an engine permanent on the engine battlefield and correlate its aid."""
+    from engine.types import Zone
+
+    executor.players[seat].zones[Zone.BATTLEFIELD].add(perm)
+    executor._engine_cards[aid] = perm
+
+
+def _remove(executor: ReplayExecutor, perm: object, seat: int = 1) -> None:
+    """Blink: remove an engine permanent from the engine battlefield."""
+    from engine.types import Zone
+
+    executor.players[seat].zones[Zone.BATTLEFIELD].remove(perm)
+
+
+class TestCounterAnnotationSync:
+    """The GRE CounterAdded/Removed stream is reconciled onto the correlated
+    engine permanent as an authoritative SET (double-count-proof). Identity is
+    anchored to the engine object; retirement is an engine zone transition."""
+
+    def test_plus_one_counter_synced_to_pt_fields(self, executor: ReplayExecutor) -> None:
+        perm = _FakePermanent(999)
+        _place(executor, perm, 5001)
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(1, [5001], 1, 2), bf={5001: 1})
+        )
+        assert perm.plus_one_counters == 2
+        assert perm._base_plus_one_counters == 2  # survives apply_all reset
+
+    def test_named_counter_synced_to_generic(self, executor: ReplayExecutor) -> None:
+        perm = _FakePermanent(1000, name="Drake Hatcher")
+        _place(executor, perm, 5002)
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(2, [5002], 200, 3), bf={5002: 1})
+        )
+        assert perm._generic_counters.get("incubation") == 3
+
+    def test_authoritative_set_never_double_counts(self, executor: ReplayExecutor) -> None:
+        # The engine already drove the counter to 2; GRE attests 2 -> the SET
+        # is a no-op, not an addition (would be 4 under naive incremental add).
+        perm = _FakePermanent(1001)
+        perm.plus_one_counters = 2
+        perm._base_plus_one_counters = 2
+        _place(executor, perm, 5003)
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(3, [5003], 1, 2), bf={5003: 1})
+        )
+        assert perm.plus_one_counters == 2
+
+    def test_dedup_by_annotation_id(self, executor: ReplayExecutor) -> None:
+        perm = _FakePermanent(1002)
+        _place(executor, perm, 5004)
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(4, [5004], 1, 1), bf={5004: 1})
+        )
+        # The same annotation id repeated in a later snapshot (persistent slot)
+        # is not re-folded: exactly-once per (annotation, affected id).
+        executor._apply_counter_annotations(
+            _ann_snap(3, _counter_ann(4, [5004], 1, 1), bf={5004: 1})
+        )
+        assert perm.plus_one_counters == 1
+
+    def test_counter_removed_decrements(self, executor: ReplayExecutor) -> None:
+        perm = _FakePermanent(1003)
+        _place(executor, perm, 5005)
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(5, [5005], 1, 3), bf={5005: 1})
+        )
+        assert perm.plus_one_counters == 3
+        executor._apply_counter_annotations(
+            _ann_snap(3, _counter_ann(6, [5005], 1, 1, removed=True), bf={5005: 1})
+        )
+        assert perm.plus_one_counters == 2
+
+    def test_ledger_never_goes_negative(self, executor: ReplayExecutor) -> None:
+        perm = _FakePermanent(1004)
+        _place(executor, perm, 5006)
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(7, [5006], 1, 1, removed=True), bf={5006: 1})
+        )
+        assert perm.plus_one_counters == 0
+
+    def test_unknown_affected_object_defers_not_raises(self, executor: ReplayExecutor) -> None:
+        # An uncorrelated affected id is deferred (retryable), never applied nor
+        # silently dropped — nothing to write onto, so nothing raises.
+        executor._apply_counter_annotations(_ann_snap(2, _counter_ann(8, [99999], 1, 1)))
+        assert (8, 99999) in executor._pending_counter_effects
+        assert (8, 99999) not in executor._applied_counter_effects
+
+    def test_object_without_ledger_untouched(self, executor: ReplayExecutor) -> None:
+        # An engine object GRE never annotated is never zeroed by the reconcile.
+        perm = _FakePermanent(1005)
+        perm.plus_one_counters = 4  # engine-legit, no GRE annotation
+        _place(executor, perm, 5007)
+        other = _FakePermanent(1006)
+        _place(executor, other, 5008)
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(9, [5008], 1, 1), bf={5007: 1, 5008: 1})
+        )
+        assert perm.plus_one_counters == 4  # untouched
+        assert other.plus_one_counters == 1
+
+
+class TestCounterStintScoping:
+    """A counter belongs to one battlefield stint (the GRE instance id). It
+    never crosses a real zone-change boundary: the engine reuses the same Python
+    object across a blink, but a returned permanent starts with no inherited
+    counters unless a new annotation attests them."""
+
+    def test_plus_one_not_restored_after_blink(self, executor: ReplayExecutor) -> None:
+        # +1/+1, then leaves the engine battlefield and returns with NO new
+        # annotation: the old counter is not restored on the reused object.
+        perm = _FakePermanent(2000)
+        _place(executor, perm, 6001)
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(20, [6001], 1, 1), bf={6001: 1})
+        )
+        assert perm.plus_one_counters == 1
+
+        # Blink out: perm leaves the engine battlefield -> retirement clears it.
+        _remove(executor, perm)
+        executor._apply_counter_annotations(_ann_snap(3))  # no annotation
+        assert perm.plus_one_counters == 0
+        assert perm._base_plus_one_counters == 0
+
+        # Return with no new attestation: it stays clean (no inherited counter).
+        _place(executor, perm, 6002)
+        executor._apply_counter_annotations(_ann_snap(4, bf={6002: 1}))
+        assert perm.plus_one_counters == 0
+
+    def test_named_counter_not_restored_after_blink(self, executor: ReplayExecutor) -> None:
+        # Same lifecycle for a named generic counter.
+        perm = _FakePermanent(2001, name="Drake Hatcher")
+        _place(executor, perm, 6101)
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(21, [6101], 200, 4), bf={6101: 1})  # incubation x4
+        )
+        assert perm._generic_counters.get("incubation") == 4
+
+        _remove(executor, perm)
+        executor._apply_counter_annotations(_ann_snap(3))
+        assert perm._generic_counters.get("incubation", 0) == 0
+
+    def test_unrelated_counter_does_not_resurrect_old_ledger(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # After a blink, an unrelated permanent receiving a counter (which drives
+        # global reconciliation) must not resurrect the retired object's ledger.
+        perm = _FakePermanent(2002)
+        _place(executor, perm, 6201)
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(22, [6201], 1, 2), bf={6201: 1})
+        )
+        assert perm.plus_one_counters == 2
+
+        # perm leaves the battlefield; an unrelated permanent enters and gets its
+        # own counter.
+        _remove(executor, perm)
+        other = _FakePermanent(2003)
+        _place(executor, other, 6301)
+        executor._apply_counter_annotations(
+            _ann_snap(3, _counter_ann(23, [6301], 1, 1), bf={6301: 1})
+        )
+        assert other.plus_one_counters == 1
+        assert perm.plus_one_counters == 0  # retired, cleared
+
+        # perm returns as a fresh stint; another unrelated counter fires. The old
+        # ledger stays retired — perm is not resurrected to 2.
+        _place(executor, perm, 6202)
+        executor._apply_counter_annotations(
+            _ann_snap(4, _counter_ann(24, [6301], 1, 1), bf={6202: 1, 6301: 1})
+        )
+        assert perm.plus_one_counters == 0
+        assert other.plus_one_counters == 2
+
+    def test_existing_engine_counter_not_double_counted_across_stint(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # An engine-driven counter the GRE stream also attests is set (no double
+        # count) within a stint, and cleared — not carried — into the next.
+        perm = _FakePermanent(2004)
+        perm.plus_one_counters = 1
+        perm._base_plus_one_counters = 1
+        _place(executor, perm, 6401)
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(25, [6401], 1, 1), bf={6401: 1})
+        )
+        assert perm.plus_one_counters == 1  # SET agrees, not 2
+
+        _remove(executor, perm)
+        executor._apply_counter_annotations(_ann_snap(3))
+        assert perm.plus_one_counters == 0
+
+    def test_gre_id_churn_without_zone_change_preserves_counter(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # GRE re-mints the object's instance id (churn, NOT a zone change) — the
+        # engine object and its battlefield stint are unchanged, so the counter
+        # is preserved (this is what aid-keying got wrong).
+        perm = _FakePermanent(2006)
+        _place(executor, perm, 6601)
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(28, [6601], 1, 3), bf={6601: 1})
+        )
+        assert perm.plus_one_counters == 3
+
+        # New GRE aid 6602 for the SAME engine object; no engine zone change.
+        del executor._engine_cards[6601]
+        executor._engine_cards[6602] = perm
+        executor._apply_counter_annotations(_ann_snap(3, bf={6602: 1}))
+        assert perm.plus_one_counters == 3  # preserved, not cleared
+
+
+class TestCounterDeferral:
+    """No annotation is silently consumed because correlation was temporarily
+    unavailable; each affected id is tracked independently and applied
+    exactly once."""
+
+    def test_uncorrelated_battlefield_resident_late_correlation_applies(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # Valid late correlation: the engine object IS on the engine
+        # battlefield on the pass GRE first attests the affected id there
+        # (the window-start census records it) but not yet in _engine_cards
+        # (the map is only rebuilt post-comparison). The deferred retry may
+        # fold because the census membership plus an unchanged epoch bracket
+        # the complete GRE battlefield window.
+        from engine.types import Zone
+
+        perm = _FakePermanent(3000)
+        executor.players[1].zones[Zone.BATTLEFIELD].add(perm)  # present, unmapped
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(30, [7001], 1, 1), bf={7001: 1})
+        )
+        assert (30, 7001) in executor._pending_counter_effects
+        assert (30, 7001) not in executor._applied_counter_effects
+        payload = executor._pending_counter_effects[(30, 7001)]
+        okey = executor._counter_key(perm)
+        # The GRE battlefield window opened on pass 1 and froze the engine
+        # battlefield census — the object's presence in it (with an unchanged
+        # epoch) is what licenses the deferred fold below.
+        assert payload["pending_since"] == 1
+        assert payload["battlefield_since"] == 1
+        assert payload["window_epochs"][okey] == 0
+        assert payload["bf_epochs"][okey] == (0, 1)
+
+        # The post-comparison rebuild correlates the permanent; retry applies.
+        executor._engine_cards[7001] = perm
+        executor._apply_counter_annotations(_ann_snap(3, bf={7001: 1}))  # no repeat
+        assert perm.plus_one_counters == 1
+        assert (30, 7001) in executor._applied_counter_effects
+        assert (30, 7001) not in executor._pending_counter_effects
+
+    def test_candidate_created_only_on_retry_pass_cancels_unproven(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # The annotation pends with NO candidate on the engine battlefield;
+        # the engine object is created (and correlated) only on the retry
+        # pass. It is absent from the window-start census, so nothing can
+        # prove it was there when the GRE battlefield window opened — the
+        # effect cancels as unproven instead of folding onto the newcomer,
+        # and the missing counter stays visible in comparison.
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(37, [7005], 1, 1), bf={7005: 1})
+        )
+        assert (37, 7005) in executor._pending_counter_effects
+        payload = executor._pending_counter_effects[(37, 7005)]
+        assert payload["pending_since"] == 1
+        assert payload["battlefield_since"] == 1
+        assert payload["window_epochs"] == {}  # empty engine bf at window start
+
+        perm = _FakePermanent(3050)
+        _place(executor, perm, 7005)  # created + correlated only NOW
+        executor._apply_counter_annotations(_ann_snap(3, bf={7005: 1}))
+        assert perm.plus_one_counters == 0
+        assert (37, 7005) in executor._cancelled_counter_effects
+        assert (37, 7005) not in executor._applied_counter_effects
+        assert (37, 7005) not in executor._pending_counter_effects
+        # First (and only) observation of the newcomer is the retry pass —
+        # after the window start, so it can never enter the frozen census.
+        assert payload["bf_epochs"][executor._counter_key(perm)] == (0, 2)
+        [rec] = [
+            r for r in executor._unresolved_counter_effects
+            if r["annotation_id"] == 37
+        ]
+        assert "start of the GRE battlefield window" in rec["reason"]
+        assert rec["pending_since"] == 1
+        assert rec["battlefield_since"] == 1
+
+    def test_after_window_candidate_not_proven_by_waiting_extra_pass(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # THE closed defect: the candidate appears on the engine battlefield
+        # one pass after the GRE battlefield window opened, stays uncorrelated
+        # for a pass, and correlates only afterwards. Its earliest observation
+        # now predates the consuming pass — but not the WINDOW START, so the
+        # extra wait must not convert it into valid historical evidence.
+        from engine.types import Zone
+
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(38, [7006], 1, 1), bf={7006: 1})
+        )
+        payload = executor._pending_counter_effects[(38, 7006)]
+        assert payload["battlefield_since"] == 1
+
+        perm = _FakePermanent(3060)
+        executor.players[1].zones[Zone.BATTLEFIELD].add(perm)  # pass 2: present
+        executor._apply_counter_annotations(_ann_snap(3, bf={7006: 1}))
+        assert (38, 7006) in executor._pending_counter_effects  # still unproven
+        assert payload["bf_epochs"][executor._counter_key(perm)] == (0, 2)
+
+        executor._engine_cards[7006] = perm  # correlates only on pass 3
+        executor._apply_counter_annotations(_ann_snap(4, bf={7006: 1}))
+        assert perm.plus_one_counters == 0
+        assert (38, 7006) in executor._cancelled_counter_effects
+        assert (38, 7006) not in executor._applied_counter_effects
+        [rec] = [
+            r for r in executor._unresolved_counter_effects
+            if r["annotation_id"] == 38
+        ]
+        assert "start of the GRE battlefield window" in rec["reason"]
+        assert rec["battlefield_since"] == 1
+
+    def test_engine_minted_token_same_snapshot_correlated_and_countered(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # Raw replay-shaped: an engine-minted token, id-less and absent from
+        # _engine_cards, is correlated by _correlate_tokens_in_group (which now
+        # publishes the GRE-instance -> engine-object binding) so a same-snapshot
+        # CounterAdded on the token lands via that binding.
+        executor.token_map = TokenIdMap({"tokens": {"90001": {
+            "card_types": ["creature"], "subtypes": ["Cat"],
+            "base_power": 1, "base_toughness": 1, "colors": ["White"],
+            "label": "1/1 white Cat",
+        }}})
+        token = _FakeToken()
+        from engine.types import Zone
+        executor.players[1].zones[Zone.BATTLEFIELD].add(token)  # a real bf resident
+        gre_tok = GameObject(
+            instance_id=7100, grp_id=90001, type="GameObjectType_Token",
+            zone_id=30, owner_seat_id=1, controller_seat_id=1,
+        )
+        executor._correlate_tokens_in_group([gre_tok], [token])
+        assert token._grp_id == 90001
+        assert executor._counter_token_binding.get(7100) is token
+        assert 7100 not in executor._engine_cards  # resolved via binding, not map
+
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(31, [7100], 1, 1),
+                      bf={7100: 1}, grp={7100: 90001})
+        )
+        assert token.plus_one_counters == 1
+
+        # Persistent-slot repeat: the same-snapshot minted-token correlation
+        # stays exactly-once.
+        executor._apply_counter_annotations(
+            _ann_snap(3, _counter_ann(31, [7100], 1, 1),
+                      bf={7100: 1}, grp={7100: 90001})
+        )
+        assert token.plus_one_counters == 1
+        assert (31, 7100) in executor._applied_counter_effects
+
+    def test_multi_affected_ids_apply_each_once(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # One annotation with two affected ids: one correlates immediately,
+        # the other later (battlefield-resident from the first sweep, so its
+        # prior-pass evidence licenses the deferred fold). Each effect applies
+        # exactly once; the already-handled id is not double-applied when the
+        # annotation is retried.
+        from engine.types import Zone
+
+        perm_a = _FakePermanent(3100)
+        _place(executor, perm_a, 7200)  # correlated now
+        perm_b = _FakePermanent(3101)
+        executor.players[1].zones[Zone.BATTLEFIELD].add(perm_b)  # present, unmapped
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(32, [7200, 7201], 1, 1),
+                      bf={7200: 1, 7201: 1})
+        )
+        assert perm_a.plus_one_counters == 1
+        assert (32, 7200) in executor._applied_counter_effects
+        assert (32, 7201) in executor._pending_counter_effects  # not yet
+
+        # 7201 correlates; retry applies only that effect, 7200 stays at 1.
+        executor._engine_cards[7201] = perm_b
+        executor._apply_counter_annotations(
+            _ann_snap(3, _counter_ann(32, [7200, 7201], 1, 1),  # repeat
+                      bf={7200: 1, 7201: 1})
+        )
+        assert perm_a.plus_one_counters == 1  # not double-applied
+        assert perm_b.plus_one_counters == 1
+
+    def test_repeated_annotation_ids_idempotent(
+        self, executor: ReplayExecutor
+    ) -> None:
+        perm = _FakePermanent(3200)
+        _place(executor, perm, 7300)
+        for gsid in (2, 3, 4):  # Arena repeats the same annotation each slot
+            executor._apply_counter_annotations(
+                _ann_snap(gsid, _counter_ann(33, [7300], 1, 1), bf={7300: 1})
+            )
+        assert perm.plus_one_counters == 1
+
+    def test_counter_removed_real_detail_shape_across_lifecycle(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # CounterRemoved uses the real parser detail shape (list-wrapped
+        # counter_type / transaction_amount) and behaves correctly through a
+        # blink: the removal lands, then the stint retires without carrying over.
+        perm = _FakePermanent(3300)
+        _place(executor, perm, 7400)
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(34, [7400], 1, 3), bf={7400: 1})
+        )
+        executor._apply_counter_annotations(
+            _ann_snap(3, _counter_ann(35, [7400], 1, 2, removed=True), bf={7400: 1})
+        )
+        assert perm.plus_one_counters == 1
+
+        # Blink -> leaves the battlefield, no annotation: the 1 remaining counter
+        # is retired.
+        _remove(executor, perm)
+        executor._apply_counter_annotations(_ann_snap(4))
+        assert perm.plus_one_counters == 0
+
+
+def _id_change(ann_id: int, orig: int, new: int) -> _Annotation:
+    return _Annotation(
+        id=ann_id, type=["AnnotationType_ObjectIdChanged"],
+        details={"orig_id": [orig], "new_id": [new]},
+    )
+
+
+class TestCounterCanonicalAliases:
+    """One semantic counter effect has ONE canonical identity across GRE
+    instance-id renames: applied and cancelled state cover every rename alias,
+    so a persistent-slot repeat under a renamed aid can neither double-apply
+    an already folded effect nor resurrect a cancelled one. (Same-stint churn
+    PROOF is engine-epoch-driven and pinned in the workspace simulate suite;
+    this suite pins the identity surfaces.)"""
+
+    def test_repeat_under_renamed_aid_is_not_a_new_effect(
+        self, executor: ReplayExecutor
+    ) -> None:
+        perm = _FakePermanent(4000)
+        _place(executor, perm, 5601)
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(40, [5601], 1, 1), bf={5601: 1})
+        )
+        assert perm.plus_one_counters == 1
+
+        # GRE renames the aid; the SAME annotation id repeats under the new
+        # aid. The repeat canonicalizes to the applied record — it must not
+        # mint a second (annotation, aid) effect and double-apply.
+        del executor._engine_cards[5601]
+        executor._engine_cards[5602] = perm
+        executor._apply_counter_annotations(
+            _ann_snap(3, _id_change(90, 5601, 5602),
+                      _counter_ann(40, [5602], 1, 1), bf={5602: 1})
+        )
+        assert perm.plus_one_counters == 1
+        assert executor._counter_aid_alias == {5602: 5601}
+        assert executor._applied_counter_effects == {(40, 5601)}
+        assert not executor._pending_counter_effects
+        assert not executor._cancelled_counter_effects
+
+    def test_cancelled_effect_not_resurrected_by_aliased_repeat(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # The effect pends UNCORRELATED; its aid is renamed. With no engine
+        # correlation evidence the hop cannot be proven same-stint churn, so
+        # the effect cancels — and the repeat under the new aid resolves to
+        # that cancelled record instead of re-enqueueing.
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(41, [5701], 1, 2), bf={5701: 1})
+        )
+        assert (41, 5701) in executor._pending_counter_effects
+
+        executor._apply_counter_annotations(
+            _ann_snap(3, _id_change(91, 5701, 5702), bf={5702: 1})
+        )
+        assert (41, 5701) in executor._cancelled_counter_effects
+        assert not executor._pending_counter_effects
+
+        perm = _FakePermanent(4001)
+        _place(executor, perm, 5702)
+        executor._apply_counter_annotations(
+            _ann_snap(4, _counter_ann(41, [5702], 1, 2), bf={5702: 1})
+        )
+        assert perm.plus_one_counters == 0
+        assert not executor._pending_counter_effects
+        assert not executor._applied_counter_effects
+        assert executor._cancelled_counter_effects == {(41, 5701)}
+        assert len(executor._unresolved_counter_effects) == 1
+        assert executor._unresolved_counter_effects[0]["current_aid"] == 5701
+
+    def test_rename_chain_aliases_all_resolve_to_root(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # A rename CHAIN (blink legs in one snapshot) cancels the pending
+        # effect — and BOTH hop targets alias to the root, so a repeat under
+        # the final aid still hits the cancelled record.
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(42, [5801], 1, 1), bf={5801: 1})
+        )
+        executor._apply_counter_annotations(
+            _ann_snap(3, _id_change(92, 5801, 5802), _id_change(93, 5802, 5803),
+                      bf={5803: 1})
+        )
+        assert (42, 5801) in executor._cancelled_counter_effects
+        assert executor._canonical_aid(5803) == 5801
+        assert executor._canonical_aid(5802) == 5801
+
+        perm = _FakePermanent(4002)
+        _place(executor, perm, 5803)
+        executor._apply_counter_annotations(
+            _ann_snap(4, _counter_ann(42, [5803], 1, 1), bf={5803: 1})
+        )
+        assert perm.plus_one_counters == 0
+        assert not executor._pending_counter_effects
+        assert len(executor._unresolved_counter_effects) == 1

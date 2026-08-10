@@ -28,7 +28,6 @@ class DrakeHatcher(Creature):
         kwargs.setdefault('base_toughness', 3)
         kwargs.setdefault('rules_text', 'Vigilance, prowess\nWhenever this creature deals combat damage to a player, put that many incubation counters on it.\nRemove three incubation counters from this creature: Create a 2/2 blue Drake creature token with flying.')
         super().__init__(**kwargs)
-        self.incubation_counters: int = 0
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register combat damage trigger: add incubation counters."""
@@ -50,8 +49,12 @@ class DrakeHatcher(Creature):
             return True
 
         def _damage_effect(game: 'GameState') -> None:
+            from engine.game import add_counter
             amount = _captured.get('amount', getattr(source, 'power', source.modified_power))
-            source.incubation_counters = getattr(source, 'incubation_counters', 0) + amount
+            # "incubation" counters live in the engine counter system (readable
+            # via `.counters`, syncable by the replay executor's CounterAdded
+            # consumption) — not a card-private attribute.
+            add_counter(game, source, 'incubation', amount)
         game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_damage_condition, effect=_damage_effect, source=self, controller=controller))
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:
@@ -59,10 +62,11 @@ class DrakeHatcher(Creature):
         source = self
 
         def _cost(game: Any, src: Any) -> bool:
-            counters = getattr(src, 'incubation_counters', 0)
+            from engine.game import remove_counter
+            counters = src.counters.get('incubation', 0)
             if counters < 3:
                 return False
-            src.incubation_counters -= 3
+            remove_counter(game, src, 'incubation', 3)
             return True
 
         def _effect(game: Any) -> None:

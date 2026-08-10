@@ -43,9 +43,10 @@ class RuneScarredDemon(Creature):
         controller.zones[Zone.HAND].add(chosen)
         library.shuffle()
 
-    def on_resolve(self, game: 'GameState') -> None:
-        """Tutor on resolve (for direct invocation / test compatibility)."""
-        self._tutor(game)
+    # The tutor is handled by the self-ETB trigger below. Phase F flipped the
+    # engine order so an own-enters trigger registers before the ETB event
+    # fires (rule 603.3a); the old on_resolve self-tutor workaround was removed
+    # to avoid tutoring twice on this creature's own entry.
 
     def register_triggers(self, game: 'GameState') -> None:
         """ETB: search library for any card, put into hand, shuffle."""

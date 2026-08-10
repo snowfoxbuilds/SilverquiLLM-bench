@@ -132,6 +132,11 @@ class GameRefsRegistry:
         self._obj_by_id: dict[int, Any] = {}  # instance id -> game object
         self._player_by_seat: dict[int, Any] = {}  # seat -> engine Player
         self._counter: int = 0
+        # object identity -> monotonic count of engine zone changes. Bumped by
+        # note_zone_change (i.e. by every real move_to_zone transition), so it
+        # advances even for stints no query ever observes — a flicker's exile
+        # leg, or a leave-and-return completed between two observations.
+        self._zone_epoch: dict[int, int] = {}
 
     def instance_id(self, obj: Any, zone: Any) -> int:
         """Return the opaque instance id for ``obj``'s current stint in ``zone``.
@@ -157,8 +162,28 @@ class GameRefsRegistry:
         continuity: a flickered object whose exile stint no query ever sees
         must not get its pre-flicker id back on return. Minting stays lazy —
         the next observation re-mints.
+
+        Also advances the object's :meth:`zone_epoch`, the side-effect-free
+        transition signal external observers (the replay executor's counter
+        reconciliation) use to detect a real zone change without minting ids.
         """
         self._current.pop(id(obj), None)
+        key = id(obj)
+        epoch = self._zone_epoch.get(key, 0) + 1
+        self._zone_epoch[key] = epoch
+        if epoch == 1:
+            # Keep the object alive so id() (the epoch key) is never reused.
+            self._retain.append(obj)
+
+    def zone_epoch(self, obj: Any) -> int:
+        """Monotonic count of ``obj``'s engine zone changes — a pure read.
+
+        Two equal reads bracket a window containing NO real zone transition;
+        an increased value proves at least one occurred, even when the object
+        is back in its original zone (an atomic flicker). Never mints or
+        perturbs instance ids — safe to call at any observation point.
+        """
+        return self._zone_epoch.get(id(obj), 0)
 
     # ------------------------------------------------------------------
     # Player registration / reverse lookup

@@ -31,4 +31,6 @@ class BannerOfKinship(Artifact):
         )
         super().__init__(**kwargs)
         self.chosen_type: str | None = None
-        self.fellowship_counters: int = 0
+        # Fellowship counters, when this card's counter mechanic is implemented,
+        # live in the engine counter system (`add_counter` / `.counters`), not a
+        # card-private attribute.

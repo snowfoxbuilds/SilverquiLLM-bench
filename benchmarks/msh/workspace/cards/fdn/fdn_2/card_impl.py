@@ -37,19 +37,11 @@ class ArahboTheFirstFang(Creature):
         super().__init__(**kwargs)
         self._lord_effect_ref: ContinuousEffect | None = None
 
-    def on_resolve(self, game: 'GameState') -> None:
-        """Handle Arahbo's own ETB — create a 1/1 Cat token.
-
-        Per KEY_DECISIONS: ENTERS_BATTLEFIELD fires BEFORE register_triggers(),
-        so the self-entry event has already happened by the time the trigger is
-        registered. Self-ETB must therefore be handled here in on_resolve().
-        """
-        from engine.game import create_token
-        controller = self.controller
-        if controller is None:
-            return
-        token = Creature(name='Cat', subtypes={'Cat'}, base_power=1, base_toughness=1)
-        create_token(game, controller, token)
+    # Arahbo's own entry is handled by the "Arahbo or another nontoken Cat"
+    # trigger below (its condition returns True for ``permanent is source``).
+    # Phase F flipped the engine order so an own-enters trigger registers
+    # before the ETB event fires (rule 603.3a); the old on_resolve self-mint
+    # workaround was removed to avoid double-minting on Arahbo's own entry.
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register the lord effect and Cat-ETB token trigger."""

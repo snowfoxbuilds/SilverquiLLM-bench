@@ -29,7 +29,6 @@ class RavenousAmulet(Artifact):
             "the number of soul counters on this artifact.",
         )
         super().__init__(**kwargs)
-        self.soul_counters: int = 0
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:
         source = self
@@ -52,11 +51,13 @@ class RavenousAmulet(Artifact):
             return True
 
         def _sac_creature_effect(game: Any) -> None:
-            from engine.game import draw_card
+            from engine.game import draw_card, add_counter
             controller = source.controller
             if controller is not None:
                 draw_card(game, controller)
-                source.soul_counters += 1
+                # Soul counters live in the engine counter system (readable via
+                # `.counters`), not a card-private attribute.
+                add_counter(game, source, 'soul', 1)
 
         def _drain_cost(game: Any, src: Any) -> bool:
             if getattr(src, "is_tapped", False):
@@ -69,11 +70,12 @@ class RavenousAmulet(Artifact):
             controller = source.controller
             if controller is not None:
                 # Sacrifice this artifact
+                soul = source.counters.get('soul', 0)
                 sacrifice(game, controller, source)
                 for p in game.players:
                     if p is not controller:
                         from engine.game import lose_life
-                        lose_life(game, p, source.soul_counters)
+                        lose_life(game, p, soul)
 
         return [
             ActivatedAbility(
