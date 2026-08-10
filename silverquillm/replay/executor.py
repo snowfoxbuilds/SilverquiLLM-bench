@@ -585,18 +585,33 @@ class ReplayExecutor:
         #   anchor_obj / anchor_okey — the engine candidate the effect was
         #     first positively correlated to (resolved AND validated), pinning
         #     the ENGINE identity the effect may fold onto,
-        #   bf_epochs — engine counter key -> zone epoch at that object's
-        #     EARLIEST observation on the engine battlefield during this
-        #     effect's pendency (bf_pins holds the observed objects so a key
-        #     is never reused while its evidence exists). A fold (or churn
-        #     continuation) requires the candidate's CURRENT epoch to equal
-        #     its earliest observed one: equality brackets a window with no
+        #   pending_since — the reconciliation pass on which this effect was
+        #     first processed (the start of its pendency window),
+        #   bf_epochs — engine counter key -> (zone epoch, reconciliation
+        #     pass) at that object's EARLIEST observation on the engine
+        #     battlefield during this effect's pendency (bf_pins holds the
+        #     observed objects so a key is never reused while its evidence
+        #     exists). A fold (or churn continuation) requires the candidate's
+        #     CURRENT epoch to equal its earliest observed one AND — for an
+        #     effect that was already pending before the current pass — that
+        #     earliest observation to come from an EARLIER pass: two equal
+        #     epoch reads prove continuity only when the first read predates
+        #     the retry. A candidate first observed at the endpoint (created,
+        #     resync-injected, or returned after pendency began) has no
+        #     historical baseline, so its current epoch proves nothing — the
+        #     effect is cancelled as unproven, never folded speculatively.
+        #     With a prior baseline, epoch equality brackets a window with no
         #     real zone transition, so an atomic leave-and-return during
         #     pendency can never receive the old effect — however GRE renders
         #     it (same aid kept, one direct rename, or a rename chain).
         # Expiration (see _advance_pending_effect): an effect whose GRE stint
         # provably ended before correlation is CANCELLED, never applied late.
         self._pending_counter_effects: dict[tuple[int, int], dict[str, Any]] = {}
+        # Monotonic count of counter-reconciliation passes (one per
+        # _apply_counter_annotations call). Evidence and pendency windows are
+        # stamped with it so "observed on an earlier pass" is a decidable
+        # predicate — never inferred from a current-pass insertion.
+        self._counter_recon_pass: int = 0
         # Canonical keys of cancelled effects — a persistent-slot repeat of a
         # cancelled annotation (under any rename alias) must not re-enqueue it.
         self._cancelled_counter_effects: set[tuple[int, int]] = set()
@@ -1835,22 +1850,25 @@ class ReplayExecutor:
     def _update_pending_epoch_evidence(
         self, payload: dict[str, Any], bf_stints: dict[tuple[Any, int], tuple[int, Any]]
     ) -> None:
-        """Record each engine battlefield object's epoch at its EARLIEST
-        observation during this effect's pendency (never overwritten).
+        """Record each engine battlefield object's ``(epoch, pass)`` at its
+        EARLIEST observation during this effect's pendency (never overwritten).
 
         Recorded for ALL current battlefield objects — not just a resolved
         candidate — because the affected object is typically still
         uncorrelated while pending: when it later resolves, its pre-recorded
         earliest epoch is what proves (or refutes) stint continuity across
-        the whole pendency window. Each newly observed object is PINNED
-        (``bf_pins``) for the payload's lifetime so its counter key cannot be
-        reused by a different object while this evidence exists.
+        the whole pendency window. The reconciliation pass is stored with the
+        epoch because an observation is historical evidence only when it
+        PREDATES the pass that consumes it — a first observation made on the
+        consuming pass itself brackets nothing. Each newly observed object is
+        PINNED (``bf_pins``) for the payload's lifetime so its counter key
+        cannot be reused by a different object while this evidence exists.
         """
         known = payload.setdefault("bf_epochs", {})
         pins = payload.setdefault("bf_pins", [])
         for okey, (epoch, obj) in bf_stints.items():
             if okey not in known:
-                known[okey] = epoch
+                known[okey] = (epoch, self._counter_recon_pass)
                 pins.append(obj)
 
     @staticmethod
@@ -1897,10 +1915,17 @@ class ReplayExecutor:
         affected id) effect is folded exactly once; an effect whose id is not
         yet correlated is deferred and retried under the expiration rules of
         ``_advance_pending_effect``, never silently dropped and never applied
-        to a stint other than the one GRE attested.
+        to a stint other than the one GRE attested. A deferred retry folds
+        only onto a candidate already observed on the engine battlefield in an
+        EARLIER pass of the effect's pendency with an unchanged zone epoch — a
+        candidate first appearing on the retry pass carries no historical
+        proof and cancels as unproven (``_fold_counter_effect``).
         """
         from silverquillm.replay.state import extract_object_id_changes
 
+        # One reconciliation pass per snapshot: the unit in which "observed on
+        # an EARLIER pass" is judged for continuity evidence.
+        self._counter_recon_pass += 1
         bf_stints = self._engine_bf_stints()
         # Retire counters for objects whose battlefield stint ended (departed,
         # or an epoch change proving an atomic leave-and-return). Runs before
@@ -1947,6 +1972,7 @@ class ReplayExecutor:
                         "current_aid": aid,
                         "ctx": None,
                         "seen_on_battlefield": False,
+                        "pending_since": self._counter_recon_pass,
                     }
                 changed |= self._fold_counter_effect(
                     key, payload, snapshot, gre_bf, bf_stints
@@ -2110,11 +2136,14 @@ class ReplayExecutor:
         Requires all of: the effect was previously anchored to an engine
         candidate (positively correlated and validated while the GRE identity
         thread was intact); that candidate is on the engine battlefield right
-        now; and its current zone epoch equals its earliest observation during
-        this effect's pendency — proving no real zone transition (blink,
-        bounce, death, reanimation) occurred in between, which mere GRE-side
-        identity consistency cannot. Absence of any part of this evidence is
-        absence of proof, never a pass.
+        now; its earliest epoch observation during this effect's pendency was
+        made on an EARLIER reconciliation pass (an observation first made on
+        the current pass is the endpoint measuring itself — no historical
+        baseline); and its current zone epoch equals that earlier observation
+        — proving no real zone transition (blink, bounce, death, reanimation)
+        occurred in between, which mere GRE-side identity consistency cannot.
+        Absence of any part of this evidence is absence of proof, never a
+        pass.
         """
         anchor_okey = payload.get("anchor_okey")
         if anchor_okey is None:
@@ -2122,8 +2151,11 @@ class ReplayExecutor:
         stint = bf_stints.get(anchor_okey)
         if stint is None:  # anchored object not on the engine bf now
             return False
-        expected = payload.get("bf_epochs", {}).get(anchor_okey)
-        return expected is not None and stint[0] == expected
+        observed = payload.get("bf_epochs", {}).get(anchor_okey)
+        if observed is None:
+            return False
+        obs_epoch, obs_pass = observed
+        return obs_pass < self._counter_recon_pass and stint[0] == obs_epoch
 
     def _cancel_counter_effect(
         self, key: tuple[int, int], payload: dict[str, Any], reason: str
@@ -2138,6 +2170,7 @@ class ReplayExecutor:
             "name": payload.get("name"),
             "is_add": payload.get("is_add"),
             "amount": payload.get("amount"),
+            "pending_since": payload.get("pending_since"),
             "reason": reason,
         })
         logger.debug(
@@ -2197,23 +2230,39 @@ class ReplayExecutor:
         - the candidate does not contradict the effect's anchor (the engine
           object it was FIRST positively correlated to — a later re-binding to
           a different object is identity confusion → cancel, never a guess);
-        - the candidate's zone epoch equals its earliest observation during
-          this effect's pendency — an advanced epoch proves a real zone
-          transition happened while the effect was pending, so the returned
-          stint must never receive it (cancel), regardless of whether GRE kept
-          the aid, renamed it once, or renamed it through a chain.
+        - the effect's pendency window is bracketed by evidence: an annotation
+          first processed THIS pass may fold onto a candidate validated in the
+          same pass (zero-width window — same-snapshot creation), but an
+          effect that was already pending before this pass folds only when the
+          candidate was ALSO observed on the engine battlefield during an
+          EARLIER pass of its pendency AND its current zone epoch equals that
+          earlier observation. Two equal epoch reads prove continuity only
+          when the first read predates the retry: a candidate first observed
+          on the retry pass (created, resync-injected, or returned after
+          pendency began) supplies only its current epoch — the endpoint
+          measuring itself — so it is cancelled as unproven, never folded
+          speculatively. An advanced epoch against a genuine earlier baseline
+          proves a real zone transition happened while the effect was pending,
+          so the returned stint must never receive it (cancel), regardless of
+          whether GRE kept the aid, renamed it once, or renamed it through a
+          chain.
 
         A GRE-side gap defers the effect (deduped by canonical key, retried
         under ``_advance_pending_effect``'s expiration rules) — never marked
         applied, never guessed onto an unproven object. Engine-side
-        counter-evidence (anchor contradiction, advanced epoch) CANCELS it —
-        the missing counter then stays visible in comparison.
+        counter-evidence (anchor contradiction, missing prior observation,
+        advanced epoch) CANCELS it — the missing counter then stays visible
+        in comparison.
         """
         if key in self._applied_counter_effects:
             self._pending_counter_effects.pop(key, None)
             return False
         if key in self._cancelled_counter_effects:
             return False
+        # The pass on which this effect was first processed opens its pendency
+        # window (stamped at payload creation; the setdefault only covers
+        # payloads handed in directly, and never advances an existing stamp).
+        payload.setdefault("pending_since", self._counter_recon_pass)
         # Accumulate engine-side epoch evidence for this pendency window —
         # recorded for all current battlefield objects (the affected one is
         # typically still uncorrelated), BEFORE any defer/cancel branch.
@@ -2260,8 +2309,26 @@ class ReplayExecutor:
             return False
         okey = self._counter_key(obj)
         epoch = self._object_zone_epoch(obj)
-        known = payload.setdefault("bf_epochs", {})
-        if epoch != known.setdefault(okey, epoch):
+        observed = payload.get("bf_epochs", {}).get(okey)
+        deferred = payload["pending_since"] < self._counter_recon_pass
+        if observed is None or (deferred and observed[1] >= self._counter_recon_pass):
+            # A deferred effect whose candidate was first observed only on the
+            # retry pass has no baseline predating the retry: the current
+            # epoch is the endpoint measuring itself, not historical proof
+            # that the candidate survived the pendency window without a zone
+            # transition. Never fold speculatively — a newly created,
+            # resync-injected, or returned object must not inherit the old
+            # effect. (``observed is None`` is unreachable after candidate
+            # validation, which requires current battlefield membership — the
+            # same sweep the evidence update just recorded; fail closed.)
+            self._cancel_counter_effect(
+                key,
+                payload,
+                "candidate first observed after pendency began; "
+                "same-stint continuity unproven",
+            )
+            return False
+        if epoch != observed[0]:
             # The candidate changed zones during this effect's pendency (its
             # epoch advanced past the earliest observed value): the stint GRE
             # attested is over, and a returned stint must never receive the

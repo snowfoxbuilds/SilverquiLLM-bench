@@ -1178,26 +1178,69 @@ class TestCounterDeferral:
     unavailable; each affected id is tracked independently and applied
     exactly once."""
 
-    def test_new_permanent_same_snapshot_deferred_then_applied(
+    def test_uncorrelated_battlefield_resident_late_correlation_applies(
         self, executor: ReplayExecutor
     ) -> None:
-        # A CounterAdded targeting a permanent GRE already shows on the
-        # battlefield but that is not yet in _engine_cards (the map is only
-        # rebuilt post-comparison) is deferred, then applied once correlation
-        # is available — while the GRE stint persists.
+        # Valid late correlation: the engine object IS on the engine
+        # battlefield during the first reconciliation pass (its epoch is
+        # swept into the pendency evidence then) but not yet in _engine_cards
+        # (the map is only rebuilt post-comparison). The deferred retry may
+        # fold because the prior-pass observation plus an unchanged epoch
+        # bracket the pendency window.
+        from engine.types import Zone
+
+        perm = _FakePermanent(3000)
+        executor.players[1].zones[Zone.BATTLEFIELD].add(perm)  # present, unmapped
         executor._apply_counter_annotations(
             _ann_snap(2, _counter_ann(30, [7001], 1, 1), bf={7001: 1})
         )
         assert (30, 7001) in executor._pending_counter_effects
         assert (30, 7001) not in executor._applied_counter_effects
+        payload = executor._pending_counter_effects[(30, 7001)]
+        okey = executor._counter_key(perm)
+        # Evidence observation pass 1 — the sweep that saw the object BEFORE
+        # the retry; this is what licenses the deferred fold below.
+        assert payload["bf_epochs"][okey] == (0, 1)
+        assert payload["pending_since"] == 1
 
         # The post-comparison rebuild correlates the permanent; retry applies.
-        perm = _FakePermanent(3000)
-        _place(executor, perm, 7001)
+        executor._engine_cards[7001] = perm
         executor._apply_counter_annotations(_ann_snap(3, bf={7001: 1}))  # no repeat
         assert perm.plus_one_counters == 1
         assert (30, 7001) in executor._applied_counter_effects
         assert (30, 7001) not in executor._pending_counter_effects
+
+    def test_candidate_created_only_on_retry_pass_cancels_unproven(
+        self, executor: ReplayExecutor
+    ) -> None:
+        # The annotation pends with NO candidate on the engine battlefield;
+        # the engine object is created (and correlated) only on the retry
+        # pass. Its current epoch is then the endpoint measuring itself — not
+        # proof it survived the pendency window — so the effect cancels as
+        # unproven instead of folding onto the newcomer, and the missing
+        # counter stays visible in comparison.
+        executor._apply_counter_annotations(
+            _ann_snap(2, _counter_ann(37, [7005], 1, 1), bf={7005: 1})
+        )
+        assert (37, 7005) in executor._pending_counter_effects
+        payload = executor._pending_counter_effects[(37, 7005)]
+        assert payload["pending_since"] == 1
+
+        perm = _FakePermanent(3050)
+        _place(executor, perm, 7005)  # created + correlated only NOW
+        executor._apply_counter_annotations(_ann_snap(3, bf={7005: 1}))
+        assert perm.plus_one_counters == 0
+        assert (37, 7005) in executor._cancelled_counter_effects
+        assert (37, 7005) not in executor._applied_counter_effects
+        assert (37, 7005) not in executor._pending_counter_effects
+        # First (and only) observation of the newcomer is the retry pass.
+        assert payload["bf_epochs"][executor._counter_key(perm)] == (0, 2)
+        [rec] = [
+            r for r in executor._unresolved_counter_effects
+            if r["annotation_id"] == 37
+        ]
+        assert "first observed after pendency began" in rec["reason"]
+        assert rec["pending_since"] == 1
 
     def test_engine_minted_token_same_snapshot_correlated_and_countered(
         self, executor: ReplayExecutor
@@ -1229,14 +1272,29 @@ class TestCounterDeferral:
         )
         assert token.plus_one_counters == 1
 
+        # Persistent-slot repeat: the same-snapshot minted-token correlation
+        # stays exactly-once.
+        executor._apply_counter_annotations(
+            _ann_snap(3, _counter_ann(31, [7100], 1, 1),
+                      bf={7100: 1}, grp={7100: 90001})
+        )
+        assert token.plus_one_counters == 1
+        assert (31, 7100) in executor._applied_counter_effects
+
     def test_multi_affected_ids_apply_each_once(
         self, executor: ReplayExecutor
     ) -> None:
-        # One annotation with two affected ids: one correlates immediately, the
-        # other later. Each effect applies exactly once; the already-handled id
-        # is not double-applied when the annotation is retried.
+        # One annotation with two affected ids: one correlates immediately,
+        # the other later (battlefield-resident from the first sweep, so its
+        # prior-pass evidence licenses the deferred fold). Each effect applies
+        # exactly once; the already-handled id is not double-applied when the
+        # annotation is retried.
+        from engine.types import Zone
+
         perm_a = _FakePermanent(3100)
         _place(executor, perm_a, 7200)  # correlated now
+        perm_b = _FakePermanent(3101)
+        executor.players[1].zones[Zone.BATTLEFIELD].add(perm_b)  # present, unmapped
         executor._apply_counter_annotations(
             _ann_snap(2, _counter_ann(32, [7200, 7201], 1, 1),
                       bf={7200: 1, 7201: 1})
@@ -1246,8 +1304,7 @@ class TestCounterDeferral:
         assert (32, 7201) in executor._pending_counter_effects  # not yet
 
         # 7201 correlates; retry applies only that effect, 7200 stays at 1.
-        perm_b = _FakePermanent(3101)
-        _place(executor, perm_b, 7201)
+        executor._engine_cards[7201] = perm_b
         executor._apply_counter_annotations(
             _ann_snap(3, _counter_ann(32, [7200, 7201], 1, 1),  # repeat
                       bf={7200: 1, 7201: 1})
