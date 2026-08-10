@@ -19,24 +19,23 @@ def _get_chosen_target(card: Any, game: Any) -> Any:
     """Retrieve the first chosen target for a spell.
 
     Looks for ``chosen_targets`` (set by :func:`cast_spell` during the
-    real casting pipeline) first, then falls back to the test-backdoor
-    attribute ``_resolve_target``.
+    real casting pipeline) first.
     """
     chosen = getattr(card, "chosen_targets", None)
     if chosen:
         return chosen[0]
-    return getattr(card, "_resolve_target", None)
+    return None
 def _get_chosen_target_idx(card: Any, game: Any, idx: int) -> Any:
     """Retrieve the *idx*-th chosen target for a spell (0-indexed)."""
     chosen = getattr(card, "chosen_targets", None)
     if chosen and len(chosen) > idx:
         return chosen[idx]
     # Fall back to list-based test backdoor
-    targets = getattr(card, "_resolve_targets", None)
+    targets = None
     if targets and len(targets) > idx:
         return targets[idx]
     if idx == 0:
-        return getattr(card, "_resolve_target", None)
+        return None
     return None
 
 class BiteDown(Instant):

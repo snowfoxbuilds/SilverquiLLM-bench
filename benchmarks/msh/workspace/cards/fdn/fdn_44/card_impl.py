@@ -2,12 +2,27 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature, LoyaltyAbility, Planeswalker
+from engine.card_queries import choose_object
+from engine.stack import surviving_targets
+from engine.continuous_effects import (
+    DURATION_END_OF_TURN,
+    ContinuousEffect,
+    Layer,
+)
 from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
 from engine.events import DealsDamageTriggeredEvent, SpellCastTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
     from engine.player import Player
     from cards.registry import CardRegistry
+
+
+def _on_battlefield(game: Any, obj: Any) -> bool:
+    """Return ``True`` if *obj* is on any player's battlefield."""
+    for player in game.players:
+        if game.get_battlefield(player).contains(obj):
+            return True
+    return False
 
 class KaitoCunningInfiltrator(Planeswalker):
     """Kaito, Cunning Infiltrator — {1}{U}{U} — 3 loyalty.
@@ -64,15 +79,63 @@ class KaitoCunningInfiltrator(Planeswalker):
     def get_loyalty_abilities(self) -> list[LoyaltyAbility]:
         pw = self
 
-        def _plus1(game: Any) -> None:
-            """Up to one target creature can't be blocked. Draw then discard."""
+        def _plus1_targeting(
+            game: Any, source: Any, controller: Any
+        ) -> list[Any] | None:
+            """Up to one **target creature you control** — optional; the ability
+            still activates (draw/discard) with no target chosen (returns [])."""
+            creatures = [
+                obj
+                for obj in game.get_battlefield(controller).get_all()
+                if CardType.CREATURE in getattr(obj, "card_types", set())
+                and getattr(obj, "controller", None) is controller
+            ]
+            if not creatures:
+                return []
+            chosen = choose_object(
+                game,
+                controller,
+                creatures,
+                "Up to one target creature you control can't be blocked this turn",
+                source_card=source,
+                optional=True,
+            )
+            if chosen is None:
+                return []
+            return [chosen]
+
+        def _plus1(game: Any, targets: list[Any], context: Any = None) -> None:
+            """Up to one target creature you control can't be blocked. Draw then
+            discard. "You" and "you control" are relative to the ability's
+            activation-time controller (rule 602.2)."""
             from engine.game import discard, draw_card
-            target = getattr(pw, '_resolve_target', None)
+
+            controller = context.controller if context is not None else pw.controller
+            legal = surviving_targets(
+                game, context, targets,
+                is_legal=lambda t: (
+                    CardType.CREATURE in getattr(t, "card_types", set())
+                    and getattr(t, "controller", None) is controller
+                ),
+            )
+            target = legal[0] if legal else None
             if target is not None:
+                def _apply(g: Any) -> None:
+                    target._cant_be_blocked = True
+
+                # Until-end-of-turn flag — reset on every apply_all(); re-set it
+                # via a continuous effect so it survives re-derivation.
                 target._cant_be_blocked = True
-            controller = pw.controller
+                game.effect_manager.add(
+                    ContinuousEffect(
+                        source=pw,
+                        layer=Layer.ABILITY,
+                        apply=_apply,
+                        duration=DURATION_END_OF_TURN,
+                    )
+                )
             if controller is not None:
-                drawn = draw_card(game, controller)
+                draw_card(game, controller)
                 hand = controller.zones[Zone.HAND]
                 cards_in_hand = hand.get_all()
                 if cards_in_hand:
@@ -105,4 +168,21 @@ class KaitoCunningInfiltrator(Planeswalker):
                 token = Creature(name='Ninja', base_power=2, base_toughness=1, subtypes={'Ninja'})
                 create_token(game, controller, token)
             game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_spell_cast_condition, effect=_spell_cast_effect, source=emblem, controller=controller))
-        return [LoyaltyAbility(loyalty_cost=+1, effect=_plus1, description="+1: Up to one target creature can't be blocked. Draw, then discard."), LoyaltyAbility(loyalty_cost=-2, effect=_minus2, description='−2: Create a 2/1 blue Ninja creature token.'), LoyaltyAbility(loyalty_cost=-9, effect=_minus9, description='−9: Emblem — whenever a player casts a spell, create 2/1 Ninja token.')]
+        return [
+            LoyaltyAbility(
+                loyalty_cost=+1,
+                effect=_plus1,
+                targeting=_plus1_targeting,
+                description="+1: Up to one target creature you control can't be blocked. Draw, then discard.",
+            ),
+            LoyaltyAbility(
+                loyalty_cost=-2,
+                effect=_minus2,
+                description='−2: Create a 2/1 blue Ninja creature token.',
+            ),
+            LoyaltyAbility(
+                loyalty_cost=-9,
+                effect=_minus9,
+                description='−9: Emblem — whenever a player casts a spell, create 2/1 Ninja token.',
+            ),
+        ]

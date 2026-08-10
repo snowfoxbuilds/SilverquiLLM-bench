@@ -57,7 +57,7 @@ class FleetingFlight(Instant):
     def on_resolve(self, game: "GameState") -> None:
         """Put +1/+1 counter, grant flying until EOT, prevent combat damage."""
         chosen = getattr(self, "chosen_targets", None)
-        target = chosen[0] if chosen else getattr(self, "_resolve_target", None)
+        target = chosen[0] if chosen else None
         if target is None:
             return
 

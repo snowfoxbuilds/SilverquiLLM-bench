@@ -54,16 +54,21 @@ class FelidarSavior(Creature):
                 return False
             return getattr(obj, "controller", None) is controller
 
+        # "Up to two" → two optional requirements; the engine picks distinct
+        # creatures (rule 601.2c) and the ETB stays castable with fewer than two
+        # (or zero) other creatures you control.
         return [
             TargetRequirement(
                 filter_fn=_filter,
                 description="first of up to two other target creatures you control",
                 zone=Zone.BATTLEFIELD,
+                optional=True,
             ),
             TargetRequirement(
                 filter_fn=_filter,
                 description="second of up to two other target creatures you control",
                 zone=Zone.BATTLEFIELD,
+                optional=True,
             ),
         ]
 

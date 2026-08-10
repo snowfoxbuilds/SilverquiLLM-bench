@@ -16,7 +16,7 @@ def _get_chosen_target(card: Any, game: Any) -> Any:
     chosen = getattr(card, "chosen_targets", None)
     if chosen:
         return chosen[0]
-    return getattr(card, "_resolve_target", None)
+    return None
 
 
 def _counter_spell(game: "GameState", stack_obj: Any) -> None:

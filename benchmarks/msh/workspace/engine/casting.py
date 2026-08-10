@@ -25,7 +25,11 @@ import inspect
 from typing import TYPE_CHECKING, Any
 
 from engine.card import CardImpl
-from engine.stack import StackObject
+from engine.stack import (
+    StackObject,
+    capture_activation_context,
+    stint_checked_targets,
+)
 from engine.types import CardType, Keyword, ManaCost, Phase, Zone
 from engine.zones import move_zone
 
@@ -52,9 +56,42 @@ class CastingError(Exception):
 # ------------------------------------------------------------------
 
 
-def _safe_filter(filter_fn: Any, obj: Any) -> bool:
-    """Evaluate a lazy target ``filter_fn`` defensively (illegal → excluded)."""
+def _filter_wants_chosen(filter_fn: Any) -> bool:
+    """Return ``True`` if *filter_fn* requires the already-chosen targets as a
+    *second* positional argument — a *dependent* target filter (rule 601.2c
+    dependent requirements), e.g. "target Equipment attached to *that creature*"
+    whose legality depends on the creature chosen earlier in the same cast.
+
+    A dependent filter is exactly ``(obj, chosen)`` — **two required positional
+    parameters, neither defaulted**. The common one-argument filter ``(obj)``
+    returns ``False``. Crucially, the loop-binding idiom
+    ``lambda obj, _c=controller: ...`` also returns ``False``: its second
+    parameter has a *default*, so it is not a dependent filter and must still be
+    called with the object alone (never with the chosen list bound to ``_c``).
+    """
     try:
+        params = list(inspect.signature(filter_fn).parameters.values())
+    except (TypeError, ValueError):
+        return False
+    required_positional = [
+        p
+        for p in params
+        if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+        and p.default is p.empty
+    ]
+    return len(required_positional) >= 2
+
+
+def _safe_filter(filter_fn: Any, obj: Any, chosen: Any = ()) -> bool:
+    """Evaluate a lazy target ``filter_fn`` defensively (illegal → excluded).
+
+    Supports both the ``(obj)`` signature and the dependent ``(obj, chosen)``
+    signature, where *chosen* is the list of targets already selected for
+    earlier requirements of this same cast (see :func:`_filter_wants_chosen`).
+    """
+    try:
+        if _filter_wants_chosen(filter_fn):
+            return bool(filter_fn(obj, list(chosen)))
         return bool(filter_fn(obj))
     except Exception:
         return False
@@ -89,18 +126,51 @@ def _source_decision(game: GameState, card: Any) -> Any:
     )
 
 
-def _query_target(game: GameState, player: Player, card: CardImpl, spec: Any) -> Any:
+def _query_target(
+    game: GameState,
+    player: Player,
+    card: CardImpl,
+    spec: Any,
+    exclude: Any = (),
+    protect_from: Any = None,
+) -> Any:
     """Raise a Player Query for one target spec; return the chosen game object.
 
     The engine enumerates the legal option set (objects in ``spec.zone`` across
     both players, plus the players themselves), offers only those, and maps the
-    Answer back to the game object via the Game Refs registry. A required spec
-    with no legal target raises :class:`CastingError`.
+    Answer back to the game object via the Game Refs registry.
+
+    A **required** spec (``optional`` unset/``False``) keeps a mandatory
+    ``min == 1`` query and raises :class:`CastingError` when no legal target
+    exists. An **optional** spec ("up to one target"; ``optional == True``) is
+    declinable: an empty candidate set returns ``None`` without raising, and the
+    query is offered with ``min == 0`` so the player may decline (also ``None``).
+    ``None`` means "no target for this spec" — the caller adds nothing to
+    ``chosen_targets``.
+
+    *exclude* holds the objects already chosen for earlier target specs of this
+    same cast; they are dropped from the candidate set so a multi-target spell
+    picks **distinct** objects (rule 601.2c). For an optional spec this can
+    empty the option set, which then declines cleanly rather than raising.
+
+    *protect_from*, when given, is the spell/source whose *protection* legality
+    is folded into the option set: a candidate with protection from it (rule
+    509.1b — the *T* in DEBT) is **absent from the offered options**, never merely
+    rejected after selection. Normal casting leaves this ``None`` (its option set
+    is unchanged; protection is enforced by the post-selection check in
+    :func:`cast_spell`); the shared :func:`query_spell_target` path pins it so a
+    spell copy re-choosing targets can never be offered a permanent protected
+    from that spell.
     """
     from engine.queries import PlayerQuery, ask
 
     filter_fn = getattr(spec, "filter_fn", None)
     zone = getattr(spec, "zone", None)
+    optional = bool(getattr(spec, "optional", False))
+
+    _has_protection = None
+    if protect_from is not None:
+        from engine.protection import has_protection_from as _has_protection
 
     candidates: list[Any] = []
     if zone is not None:
@@ -112,7 +182,15 @@ def _query_target(game: GameState, player: Player, card: CardImpl, spec: Any) ->
     options: list[Any] = []
     by_decision: dict[Any, Any] = {}
     for candidate in candidates:
-        if filter_fn is not None and not _safe_filter(filter_fn, candidate):
+        if any(candidate is chosen for chosen in exclude):
+            continue
+        # *exclude* is also the already-chosen target list for this cast, so a
+        # dependent filter (rule 601.2c) sees the earlier targets it depends on.
+        if filter_fn is not None and not _safe_filter(filter_fn, candidate, exclude):
+            continue
+        # Protection (rule 509.1b): a candidate protected from *protect_from* is
+        # not a legal target and is dropped from the option set entirely.
+        if _has_protection is not None and _has_protection(candidate, protect_from):
             continue
         decision = _candidate_decision(game, candidate, zone)
         if decision in by_decision:
@@ -121,6 +199,8 @@ def _query_target(game: GameState, player: Player, card: CardImpl, spec: Any) ->
         by_decision[decision] = candidate
 
     if not options:
+        if optional:
+            return None
         raise CastingError(
             f"Cannot cast {card.name!r} — no legal target for "
             f"{getattr(spec, 'description', 'target')!r}"
@@ -130,11 +210,50 @@ def _query_target(game: GameState, player: Player, card: CardImpl, spec: Any) ->
         source=(_source_decision(game, card),),
         prompt=getattr(spec, "description", "choose target"),
         options=tuple(options),
-        min=1,
+        min=0 if optional else 1,
         max=1,
     )
     answer = ask(player, query)
+    if not answer.selected:
+        # A declined optional target (min == 0) — no object chosen.
+        return None
     return by_decision[answer.selected[0]]
+
+
+def query_spell_target(
+    game: GameState,
+    player: Player,
+    spell: CardImpl,
+    spec: Any,
+    exclude: Any = (),
+) -> Any:
+    """Choose one target for *spell* applying the **complete** target-legality
+    contract normal casting uses — the single reusable spell-retargeting path.
+
+    *spell* is the spell on the stack doing the targeting: a spell **copy**
+    re-choosing its targets (Thousand-Year Storm), or the original spell being
+    copied (they share every protection-relevant characteristic). The contract:
+
+    * **Zone** — only objects in ``spec.zone`` (plus players) are candidates.
+    * **Target requirement** — ``spec.filter_fn``, evaluated arity-aware so a
+      *dependent* target (rule 601.2c, e.g. "Equipment attached to *that*
+      creature") sees the targets already chosen for this same retarget.
+    * **Distinctness** — *exclude* (also the already-chosen list) removes prior
+      picks so multiple requirements select distinct objects.
+    * **Protection** — a permanent with protection from *spell* is **absent from
+      the offered option set**, not offered then rejected at resolution (rule
+      509.1b). Protection is judged against *spell* (the copied spell), never the
+      permanent that created the copy.
+    * **Provenance** — the query is raised *as* *spell* (a stack-zone spell), so
+      routing/records identify the copied spell rather than mislabelling a
+      battlefield source (Thousand-Year Storm) as a spell on the stack.
+
+    Returns the chosen game object, or ``None`` when the spec is optional and the
+    player declines / no legal candidate exists — the caller then keeps the
+    original target for that position. Reuses :func:`_query_target`; the only
+    addition over normal casting is that protection is pinned to *spell*.
+    """
+    return _query_target(game, player, spell, spec, exclude=exclude, protect_from=spell)
 
 
 # ------------------------------------------------------------------
@@ -306,6 +425,37 @@ def _apply_cost_reduction(cost: ManaCost, reduction: int) -> ManaCost:
 
 
 # ------------------------------------------------------------------
+# Spell-cast history (per-player, per-turn) — authoritative record
+# ------------------------------------------------------------------
+
+_INSTANT_SORCERY: frozenset[CardType] = frozenset({CardType.INSTANT, CardType.SORCERY})
+
+
+def _record_spell_cast(game: GameState, player: Player, card: CardImpl) -> int | None:
+    """Record *card* in *player*'s per-turn instant/sorcery cast history.
+
+    This is the single authoritative point at which a cast is counted (rule
+    601.2i — the spell has become cast). It runs once per cast, for both the
+    normal and free-cast paths, and only for instant and sorcery spells — so
+    creatures, artifacts, enchantments, planeswalkers, and lands never affect the
+    count. Recording here (not in any trigger's capture hook) is what keeps the
+    count correct when several observers — e.g. two Thousand-Year Storms — watch
+    the same cast: the history is incremented exactly once regardless of how many
+    triggers fire. See :meth:`engine.player.Player.record_instant_or_sorcery_cast`.
+
+    Returns the immutable prior-qualifying-cast count for this occurrence — the
+    number of instant/sorcery spells *player* had already cast this turn before
+    this one — or ``None`` for a non-qualifying spell (which is not recorded).
+    The caller stamps this onto the cast's :class:`~engine.stack.StackObject`, so
+    the count travels with this exact occurrence rather than being reconstructed
+    later by excluding the triggering spell from history by object identity.
+    """
+    if card.card_types & _INSTANT_SORCERY:
+        return player.record_instant_or_sorcery_cast(card, game.turn_number)
+    return None
+
+
+# ------------------------------------------------------------------
 # Cast spell
 # ------------------------------------------------------------------
 
@@ -362,17 +512,23 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     chosen_targets: list[Any] = []
     if target_specs:
         for spec in target_specs:
-            target = _query_target(game, player, card, spec)
-            # Validate against filter_fn if the spec provides one
+            target = _query_target(game, player, card, spec, exclude=chosen_targets)
+            if target is None:
+                # An optional "up to one target" that was declined or had no
+                # legal candidate — it contributes no target.
+                continue
+            # Validate against filter_fn if the spec provides one (arity-aware,
+            # so a dependent target is checked against the earlier targets).
             filter_fn = getattr(spec, "filter_fn", None)
-            if filter_fn is not None and target is not None:
-                if not filter_fn(target):
-                    stack_zone.remove(card)
-                    hand.add(card)
-                    raise CastingError(
-                        f"Cannot cast {card.name!r} — chosen target does not "
-                        f"satisfy filter: {getattr(spec, 'description', '')}"
-                    )
+            if filter_fn is not None and not _safe_filter(
+                filter_fn, target, chosen_targets
+            ):
+                stack_zone.remove(card)
+                hand.add(card)
+                raise CastingError(
+                    f"Cannot cast {card.name!r} — chosen target does not "
+                    f"satisfy filter: {getattr(spec, 'description', '')}"
+                )
             chosen_targets.append(target)
 
     # 5b. Protection check — reject targets that have protection from this
@@ -388,8 +544,15 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
                 f"Cannot cast {card.name!r} — target has protection from this spell"
             )
 
-    # Targets are stored on the StackObject (not the card) and passed
-    # through the resolve pipeline via on_resolve(game, targets=...).
+    # 5c. Capture the casting controller and each chosen target's zone-stint
+    #     NOW — immediately after target selection and protection validation, and
+    #     *before* any cost payment or on_cast side effect can move a target (rule
+    #     601.2b/608.2b). A target that then leaves its selected zone and returns
+    #     before resolution (a new object in the same Python instance) is rejected
+    #     at resolution. Targets live on the StackObject, not the card.
+    activation_context = capture_activation_context(
+        game, card, player, chosen_targets
+    )
 
     # 6. Mana check / payment (rollback on failure)
     # Ensure the card knows its controller so that cost_reduction() hooks
@@ -435,12 +598,26 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     # 7. Call on_cast hook
     card.on_cast(game)
 
-    # 8. Build on_resolve callback and push StackObject
+    # 7b. The spell has now become cast (rule 601.2i). Record it in the caster's
+    #     authoritative per-turn instant/sorcery history exactly once — before the
+    #     cast-triggered event fires, so a cast-triggered ability (Thousand-Year
+    #     Storm) reading the history sees this spell already counted. The prior
+    #     count returned here is the number of qualifying spells cast *before* this
+    #     occurrence — carried onto this cast's StackObject below (``None`` for a
+    #     non-qualifying spell).
+    prior_qualifying_casts = _record_spell_cast(game, player, card)
+
+    # 8. Build on_resolve callback and push StackObject with the context captured
+    #    at target-selection time (step 5c). The StackObject is the stack
+    #    representation of this one cast occurrence, so it carries the occurrence's
+    #    immutable prior-cast count.
     stack_obj = StackObject(
         source=card,
         controller=player,
         targets=chosen_targets,
         on_resolve=lambda g: None,  # replaced below
+        activation_context=activation_context,
+        prior_qualifying_casts=prior_qualifying_casts,
     )
 
     def _on_resolve(g: GameState) -> None:
@@ -532,15 +709,21 @@ def cast_spell_free(
         chosen_targets: list[Any] = []
         if target_specs:
             for spec in target_specs:
-                target = _query_target(game, player, card, spec)
-                # Validate against filter_fn if the spec provides one
+                target = _query_target(game, player, card, spec, exclude=chosen_targets)
+                if target is None:
+                    # An optional "up to one target" declined or with no legal
+                    # candidate — it contributes no target.
+                    continue
+                # Validate against filter_fn if the spec provides one (arity-aware,
+                # so a dependent target is checked against the earlier targets).
                 filter_fn = getattr(spec, "filter_fn", None)
-                if filter_fn is not None and target is not None:
-                    if not filter_fn(target):
-                        raise CastingError(
-                            f"Cannot cast {card.name!r} — chosen target does not "
-                            f"satisfy filter: {getattr(spec, 'description', '')}"
-                        )
+                if filter_fn is not None and not _safe_filter(
+                    filter_fn, target, chosen_targets
+                ):
+                    raise CastingError(
+                        f"Cannot cast {card.name!r} — chosen target does not "
+                        f"satisfy filter: {getattr(spec, 'description', '')}"
+                    )
                 chosen_targets.append(target)
 
         # Protection check — reject targets that have protection from this spell
@@ -557,15 +740,37 @@ def cast_spell_free(
         source_zone_container.add(card)
         raise CastingError(str(exc)) from exc
 
+    # 3b. Capture the casting controller + chosen target zone-stints NOW —
+    #     immediately after target selection and protection validation, before
+    #     the on_cast side effect (same discipline as cast_spell step 5c) — so a
+    #     leave-and-return target is rejected at resolution on the free-cast path
+    #     (cascade / Etali / exile casting).
+    activation_context = capture_activation_context(
+        game, card, player, chosen_targets
+    )
+
     # 4. Call on_cast hook
     card.on_cast(game)
 
-    # 5. Build on_resolve callback and push StackObject
+    # 4b. The free-cast spell has become cast (rule 601.2i); record it in the
+    #     caster's per-turn instant/sorcery history exactly once, the same as the
+    #     normal path — a spell cast without paying its cost (cascade, Etali, exile
+    #     casting) still counts toward "spells you've cast this turn". Its prior
+    #     count is carried onto this cast's StackObject below, exactly as on the
+    #     normal path.
+    prior_qualifying_casts = _record_spell_cast(game, player, card)
+
+    # 5. Build on_resolve callback and push StackObject with the context captured
+    #    at target-selection time (step 3b). This StackObject is the stack
+    #    representation of this one cast occurrence and carries its immutable
+    #    prior-cast count.
     stack_obj = StackObject(
         source=card,
         controller=player,
         targets=chosen_targets,
         on_resolve=lambda g: None,  # replaced below
+        activation_context=activation_context,
+        prior_qualifying_casts=prior_qualifying_casts,
     )
 
     def _on_resolve(g: GameState) -> None:
@@ -599,8 +804,19 @@ def _resolve_spell(
     # Read targets from the StackObject — the single source of truth.
     # Set chosen_targets on the card just before resolution so that
     # _get_chosen_target helpers (which read via getattr) work.
+    #
+    # First apply the shared zone-stint check (rule 608.2b): a target that left
+    # its selected zone before resolution — whether it stayed gone or left and
+    # returned (a new object in the same Python instance) — is nulled at its
+    # position. Position is preserved so heterogeneous/dependent targets still
+    # read by index; the card's own predicate re-check then handles a ``None`` (a
+    # target still present but no longer satisfying its restriction is caught
+    # there). A stack object with no captured context (``activation_context is
+    # None``) passes through unchanged; spell copies carry their own context and
+    # are revalidated the same way (see :func:`~engine.stack.copy_spell`).
     targets = stack_obj.targets
     if targets is not None:
+        targets = stint_checked_targets(game, stack_obj.activation_context, targets)
         card.chosen_targets = targets  # type: ignore[attr-defined]
 
     card.on_resolve(game)

@@ -6,6 +6,8 @@ import copy
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
+from engine.types import Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
     from engine.player import Player
@@ -55,6 +57,25 @@ class StackObject:
         activation_context: For activated abilities, the immutable
             :class:`ActivationContext` captured at activation (``None`` for
             spells and untargeted abilities that need no revalidation).
+        event_state: Immutable per-fire state a triggered ability captured when
+            it was put on the stack (rule 603.3), via its
+            :attr:`~engine.triggers.TriggerRegistration.capture` hook — e.g.
+            Thousand-Year Storm's triggering-spell StackObject and copy count.
+            ``None`` for spells and triggers with no capture hook. Owned by this
+            one trigger instance, so two pending triggers of the same source do
+            not share or clobber it.
+        prior_qualifying_casts: For a spell StackObject that is an instant or
+            sorcery cast, the number of instant/sorcery spells its controller had
+            already cast this turn *before* this one — the immutable prior-cast
+            count of this exact cast occurrence, captured at the authoritative
+            cast site (:func:`engine.casting.cast_spell` / ``cast_spell_free``)
+            from :meth:`engine.player.Player.record_instant_or_sorcery_cast`.
+            Because each cast mints a new StackObject (a recast object leaves and
+            returns), this count belongs to the occurrence, not the mutable card,
+            and is read directly by Thousand-Year Storm rather than reconstructed
+            by excluding the triggering spell from cast history by identity.
+            ``None`` for anything that is not a qualifying-spell cast (copies —
+            which are not casts — abilities, triggers, and permanent spells).
     """
 
     source: Any
@@ -63,6 +84,160 @@ class StackObject:
     on_resolve: Callable[[GameState], None] = field(default=lambda _game: None)
     is_mana_ability: bool = False
     activation_context: ActivationContext | None = None
+    event_state: Any = None
+    prior_qualifying_casts: int | None = None
+
+
+# ---------------------------------------------------------------------------
+# Activation-time identity: stint capture and resolution-time revalidation
+# ---------------------------------------------------------------------------
+#
+# These are the *single* shared mechanism for capturing an activated/triggered
+# ability's activation-time identity and revalidating its captured targets when
+# it resolves (rule 602.2 / 608.2b / 608.2c). Every targeted activated ability,
+# loyalty ability, and triggered ability captures its context through
+# :func:`capture_activation_context` and, at resolution, keeps only the targets
+# :func:`surviving_targets` returns — the targets are never re-selected.
+#
+# A zone change mints a fresh *stint* id (see ``GameRefsRegistry.instance_id``),
+# so comparing a target's current-zone stint id against the one captured at
+# activation is what distinguishes "the same object I targeted" from "a new
+# object in the same Python instance" after a leave-and-return (invariant: a
+# battlefield object that leaves and returns is a new object for targeting).
+
+
+def object_current_zone(game: GameState, obj: Any) -> str | None:
+    """Return the zone value (e.g. ``"battlefield"``) *obj* currently occupies,
+    or ``None`` if it is in no player's zone.
+
+    Zone-generic on purpose: a captured target may be a battlefield permanent
+    (creatures) or a card in a graveyard (Scavenging Ooze), and both must be
+    revalidated by the same helper.
+    """
+    for player in game.players:
+        zones = player.zones
+        for zone in Zone:
+            if zone in zones and zones[zone].contains(obj):
+                return zone.value
+    return None
+
+
+def object_stint_id(game: GameState, obj: Any) -> int | None:
+    """Return the instance id of *obj*'s current-zone stint, or ``None`` if it
+    is in no zone. Used to snapshot a target's identity at activation."""
+    zone_value = object_current_zone(game, obj)
+    if zone_value is None:
+        return None
+    return game.refs.instance_id(obj, zone_value)
+
+
+def battlefield_stint_id(game: GameState, obj: Any) -> int | None:
+    """Return the instance id of *obj*'s current battlefield stint, or ``None``
+    if it is not on any player's battlefield (used to snapshot the source)."""
+    for player in game.players:
+        if game.get_battlefield(player).contains(obj):
+            return game.refs.instance_id(obj, Zone.BATTLEFIELD.value)
+    return None
+
+
+def capture_activation_context(
+    game: GameState,
+    source: Any,
+    controller: Any,
+    targets: list[Any],
+) -> ActivationContext:
+    """Snapshot the activation-time controller and the source/target stints
+    (rule 602.2). Stored on the :class:`StackObject`, never on the mutable
+    source. Target stints are captured zone-generically so a graveyard-card
+    target is revalidated the same way a battlefield permanent is."""
+    return ActivationContext(
+        controller=controller,
+        source_instance_id=battlefield_stint_id(game, source),
+        target_instance_ids=tuple(object_stint_id(game, t) for t in targets),
+    )
+
+
+def same_stint(game: GameState, obj: Any, stint_id: int | None) -> bool:
+    """Return ``True`` if *obj* is currently in the *same* zone-stint captured
+    as *stint_id* at activation.
+
+    ``False`` when *obj* has left its zone, or left and returned (a new stint,
+    hence a new instance id). A ``stint_id`` of ``None`` — the object was in no
+    zone at activation — never matches, **except** for a player: players are not
+    zone residents and their identity is stable, so a targeted player is always
+    "the same" (any legality restriction is left to the caller's predicate).
+    """
+    if any(obj is player for player in game.players):
+        return True
+    if stint_id is None:
+        return False
+    zone_value = object_current_zone(game, obj)
+    if zone_value is None:
+        return False
+    return game.refs.instance_id(obj, zone_value) == stint_id
+
+
+def surviving_targets(
+    game: GameState,
+    context: ActivationContext | None,
+    targets: list[Any],
+    is_legal: Callable[[Any], bool] | None = None,
+) -> list[Any]:
+    """Return the subset of *targets* still legal at resolution (rule 608.2b/2c).
+
+    A target survives iff **both**:
+
+    1. it is in the *same zone-stint* captured at activation
+       (:func:`same_stint`) — a leave-and-return mints a new stint and fails
+       this, so a departed-and-returned object is rejected; and
+    2. it satisfies *is_legal* — a predicate expressing the *complete*
+       targeting restriction, evaluated relative to ``context.controller`` for
+       "you control"-style requirements (never the source's mutable current
+       controller).
+
+    Callers apply the effect only to the returned targets. When the list is
+    empty every target was illegal and the effect does nothing (rule 608.2c).
+    """
+    survivors: list[Any] = []
+    ids = context.target_instance_ids if context is not None else ()
+    for i, target in enumerate(targets):
+        stint = ids[i] if i < len(ids) else None
+        if not same_stint(game, target, stint):
+            continue
+        if is_legal is not None and not is_legal(target):
+            continue
+        survivors.append(target)
+    return survivors
+
+
+def stint_checked_targets(
+    game: GameState,
+    context: ActivationContext | None,
+    targets: list[Any],
+) -> list[Any]:
+    """Return a **position-preserving** copy of *targets* in which any target no
+    longer in the same zone-stint captured at activation is replaced by ``None``.
+
+    Unlike :func:`surviving_targets` (which drops illegal targets and is used by
+    activated/loyalty/triggered abilities that iterate a flat legal list), this
+    keeps each target at its original index so a spell with **heterogeneous or
+    dependent** targets — e.g. Fiery Annihilation's ``[creature, Equipment]`` —
+    can still read ``chosen[0]`` / ``chosen[1]`` by position after a
+    leave-and-return nulls one of them. A ``None`` at a position reads as "that
+    target is illegal": the object's own predicate re-check (``getattr(None,
+    …)`` yields empty) then does nothing for it. When *context* is ``None`` (a
+    stack object that captured none) the targets are returned unchanged; spell
+    copies **do** carry their own context (see :func:`copy_spell`) and are
+    revalidated by this same pass.
+    """
+    if context is None:
+        return list(targets)
+    ids = context.target_instance_ids
+    checked: list[Any] = []
+    for i, target in enumerate(targets):
+        stint = ids[i] if i < len(ids) else None
+        checked.append(target if same_stint(game, target, stint) else None)
+    return checked
 
 
 class Stack:
@@ -133,6 +308,19 @@ def copy_spell(
     on_resolve to call the copied card's on_resolve directly — no zone
     movement, which is correct for spell copies.
 
+    The copy carries its own :class:`ActivationContext` so its targets are
+    stint-revalidated at resolution exactly like a normally-cast spell (rule
+    608.2b):
+
+    * **Retaining the original's targets** (``new_targets is None``) — the copy
+      *inherits the original's captured target stint ids* (not fresh ones), so a
+      retained target that left and returned between the original's cast and the
+      copy's resolution is rejected. The context's controller is the copy's
+      controller ("you control" is judged for the copy's controller).
+    * **Choosing new targets** (``new_targets`` given) — the copy captures those
+      new targets' *current* stints, since they were selected as the copy was
+      created.
+
     Args:
         game: The current game state.
         original: The StackObject being copied.
@@ -147,16 +335,42 @@ def copy_spell(
     copied_card.controller = controller
     copied_card.owner = getattr(original.source, "owner", controller)
 
-    targets = new_targets if new_targets is not None else list(original.targets)
+    if new_targets is not None:
+        # New targets chosen for the copy — capture their current stints.
+        targets = list(new_targets)
+        context: ActivationContext | None = capture_activation_context(
+            game, copied_card, controller, targets
+        )
+    else:
+        # Retained targets — inherit the original's captured stint ids so a
+        # leave-and-return is still rejected. Fall back to a fresh capture if the
+        # original carried no context (e.g. an ability copy).
+        targets = list(original.targets)
+        orig_ctx = original.activation_context
+        if orig_ctx is not None:
+            context = ActivationContext(
+                controller=controller,
+                source_instance_id=orig_ctx.source_instance_id,
+                target_instance_ids=orig_ctx.target_instance_ids,
+            )
+        else:
+            context = capture_activation_context(
+                game, copied_card, controller, targets
+            )
 
     copy_obj = StackObject(
         source=copied_card,
         controller=controller,
         targets=targets,
+        activation_context=context,
     )
 
     def _copy_resolve(g: GameState) -> None:
-        copied_card.chosen_targets = copy_obj.targets
+        # Stint-revalidate (position-preserving) before the copy resolves, the
+        # same check _resolve_spell applies to a normal cast.
+        copied_card.chosen_targets = stint_checked_targets(
+            g, copy_obj.activation_context, copy_obj.targets
+        )
         copied_card.on_resolve(g)
 
     copy_obj.on_resolve = _copy_resolve

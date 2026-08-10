@@ -48,13 +48,12 @@ class LootExuberantExplorer(Creature):
             controller = getattr(src, 'controller', None)
             if controller is None:
                 return False
-            if getattr(src, 'is_tapped', False) or getattr(src, 'tapped', False):
+            if getattr(src, 'is_tapped', False):
                 return False
             if controller.mana_pool.total() < 6:
                 return False
             controller.mana_pool.pay(ManaCost(generic=6))
             src.is_tapped = True
-            src.tapped = True
             return True
 
         def _effect(game: Any) -> None:

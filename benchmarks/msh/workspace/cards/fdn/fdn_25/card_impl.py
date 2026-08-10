@@ -82,7 +82,7 @@ class SunBlessedHealer(Creature):
         from engine.zones import move_to_zone
 
         chosen = getattr(self, "chosen_targets", None)
-        target = chosen[0] if chosen else getattr(self, "_resolve_target", None)
+        target = chosen[0] if chosen else None
         if target is None:
             return
 

@@ -19,15 +19,14 @@ def _get_chosen_target(card: Any, game: Any) -> Any:
     """Retrieve the first chosen target for a spell.
 
     Looks for ``chosen_targets`` (set by :func:`cast_spell` during the
-    real casting pipeline) first, then falls back to the test-backdoor
-    attribute ``_resolve_target``.
+    real casting pipeline) first.
     """
     # Real pipeline: targets stored by cast_spell on the card
     chosen = getattr(card, "chosen_targets", None)
     if chosen:
         return chosen[0]
     # Test backdoor: attribute set directly by test code
-    return getattr(card, "_resolve_target", None)
+    return None
 
 class BurstLightning(Instant):
     """Burst Lightning — {R} — Deal 2 damage to any target (base mode).

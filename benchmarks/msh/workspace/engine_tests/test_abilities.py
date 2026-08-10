@@ -972,3 +972,104 @@ class TestLoyaltyStackObject:
         top = game.stack.peek()
         top.on_resolve(game)
         assert resolved == ["done"]
+
+
+# ---------------------------------------------------------------------------
+# LoyaltyAbility — targeting channel (Phase D)
+# ---------------------------------------------------------------------------
+
+
+class TestLoyaltyTargeting:
+    """A loyalty ability may carry a ``targeting`` hook: targets are chosen
+    before the loyalty cost is paid, stored on the stack object, and passed to
+    ``effect(game, targets, context)`` at resolution."""
+
+    def _walker_on_bf(self, game, player, loyalty=5):
+        from engine.types import Zone
+
+        pw = Planeswalker(name="Walker", starting_loyalty=loyalty)
+        pw.owner = player
+        pw.controller = player
+        player.zones[Zone.BATTLEFIELD].add(pw)
+        pw.instance_id = game.refs.instance_id(pw, Zone.BATTLEFIELD.value)
+        return pw
+
+    def _creature_on_bf(self, game, player, name="Bear"):
+        from engine.card import Creature
+        from engine.types import Zone
+
+        c = Creature(name=name, base_power=2, base_toughness=2,
+                     owner=player, controller=player)
+        player.zones[Zone.BATTLEFIELD].add(c)
+        c.instance_id = game.refs.instance_id(c, Zone.BATTLEFIELD.value)
+        return c
+
+    def test_targets_and_context_passed_to_effect(self):
+        game = _sorcery_speed_game()
+        player = game.players[0]
+        pw = self._walker_on_bf(game, player, loyalty=5)
+        bear = self._creature_on_bf(game, player)
+        seen = {}
+
+        def _targeting(g, source, controller):
+            return [bear]
+
+        def _effect(g, targets, context):
+            seen["targets"] = list(targets)
+            seen["context"] = context
+
+        ability = LoyaltyAbilityInstance(
+            source=pw, controller=player, loyalty_cost=-3,
+            effect=_effect, targeting=_targeting,
+        )
+        activate_ability(game, player, ability)
+        assert pw.loyalty == 2                     # loyalty paid
+        top = game.stack.peek()
+        assert top.targets == [bear]
+        assert top.activation_context is not None
+        assert top.activation_context.controller is player
+        top.on_resolve(game)
+        assert seen["targets"] == [bear]
+        assert seen["context"] is top.activation_context
+
+    def test_required_target_none_aborts_without_spending_loyalty(self):
+        game = _sorcery_speed_game()
+        player = game.players[0]
+        pw = self._walker_on_bf(game, player, loyalty=5)
+
+        ability = LoyaltyAbilityInstance(
+            source=pw, controller=player, loyalty_cost=-3,
+            effect=lambda g, t, c: None,
+            targeting=lambda g, s, c: None,   # no legal target
+        )
+        with pytest.raises(AbilityError, match="no legal target"):
+            activate_ability(game, player, ability)
+        assert pw.loyalty == 5                     # loyalty NOT spent
+        assert game.stack.is_empty()               # nothing pushed
+
+    def test_optional_empty_list_activates_with_no_target(self):
+        game = _sorcery_speed_game()
+        player = game.players[0]
+        pw = self._walker_on_bf(game, player, loyalty=5)
+
+        ability = LoyaltyAbilityInstance(
+            source=pw, controller=player, loyalty_cost=1,
+            effect=lambda g, t, c: None,
+            targeting=lambda g, s, c: [],   # "up to one target", none chosen
+        )
+        activate_ability(game, player, ability)
+        assert pw.loyalty == 6
+        assert game.stack.peek().targets == []
+
+    def test_mismatched_controller_rejected_before_payment(self):
+        game = _sorcery_speed_game()
+        p1, p2 = game.players
+        pw = self._walker_on_bf(game, p1, loyalty=5)
+        ability = LoyaltyAbilityInstance(
+            source=pw, controller=p1, loyalty_cost=-3,
+            effect=lambda g: None,
+        )
+        with pytest.raises(AbilityError, match="not the"):
+            activate_ability(game, p2, ability)   # caller p2 != controller p1
+        assert pw.loyalty == 5
+        assert game.stack.is_empty()

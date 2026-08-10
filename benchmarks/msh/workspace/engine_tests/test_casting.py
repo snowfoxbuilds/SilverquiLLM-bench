@@ -979,3 +979,546 @@ class TestCastResolveIntegration:
 
         top = game.stack.peek()
         assert top.targets == [target_creature]
+
+
+# ---------------------------------------------------------------------------
+# Optional targets — "up to one target X" (TargetRequirement.optional)
+# ---------------------------------------------------------------------------
+
+class TestOptionalTargets:
+    """`TargetRequirement.optional` makes a target query declinable (min == 0)
+    and lets an empty candidate set skip the requirement instead of raising —
+    so "up to N target X" is castable with fewer than N (or zero) candidates."""
+
+    @staticmethod
+    def _creature_spec(*, optional: bool):
+        from engine.types import TargetRequirement, Zone
+
+        return TargetRequirement(
+            filter_fn=lambda obj: CardType.CREATURE
+            in getattr(obj, "card_types", set()),
+            description="up to one target creature" if optional else "target creature",
+            zone=Zone.BATTLEFIELD,
+            optional=optional,
+        )
+
+    def _spell_class(self, specs):
+        class _Spell(Instant):
+            def get_targets(self, game):
+                return specs
+
+        return _Spell
+
+    def _place_creature(self, game, player_idx, name):
+        from engine.types import Zone
+
+        p = game.players[player_idx]
+        c = Creature(name=name, mana_cost=ManaCost(pips={ManaType.GREEN: 1}),
+                     base_power=2, base_toughness=2)
+        c.owner = p
+        c.controller = p
+        p.zones[Zone.BATTLEFIELD].add(c)
+        c.instance_id = game.refs.instance_id(c, Zone.BATTLEFIELD.value)
+        return c
+
+    def test_optional_empty_candidate_set_casts_without_target(self):
+        """No legal candidate + optional: the spell casts, raises no query, and
+        goes on the stack with no target (rather than raising CastingError)."""
+        Spell = self._spell_class([self._creature_spec(optional=True)])
+        game = _make_game()
+        player = game.players[0]
+        card = Spell(name="Optional Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        _add_to_hand(game, 0, card)
+        _add_mana(player, ManaType.RED, 1)
+        # No creatures anywhere; no intent needed — the empty option set skips.
+        cast_spell(game, player, card)
+        top = game.stack.peek()
+        assert top is not None and top.source is card
+        assert top.targets == []
+
+    def test_required_empty_candidate_set_still_raises(self):
+        """The required-target boundary is unchanged: an empty candidate set for
+        a non-optional spec still raises CastingError, and no StackObject is
+        pushed (a candidate present would instead cast — see other tests)."""
+        Spell = self._spell_class([self._creature_spec(optional=False)])
+        game = _make_game()
+        player = game.players[0]
+        card = Spell(name="Required Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        _add_to_hand(game, 0, card)
+        _add_mana(player, ManaType.RED, 1)
+        with pytest.raises(CastingError):
+            cast_spell(game, player, card)
+        assert game.stack.is_empty()   # nothing pushed onto the stack
+
+    def test_optional_declined_when_candidate_present(self):
+        """Candidate present but declined (intent with no matching preference,
+        min == 0): the spell casts with no target."""
+        Spell = self._spell_class([self._creature_spec(optional=True)])
+        game = _make_game()
+        player = game.players[0]
+        self._place_creature(game, 1, "Bystander")
+        card = Spell(name="Optional Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        _add_to_hand(game, 0, card)
+        _add_mana(player, ManaType.RED, 1)
+        # Intent routes to the spell but prefers nothing → decline at min == 0.
+        player.start_intent("bolt", Intent(
+            pattern=GameRef(card=frozenset({("name", "Optional Bolt")})),
+            preferences=(),
+        ))
+        cast_spell(game, player, card)
+        player.end_intent("bolt")
+        assert game.stack.peek().targets == []
+
+    def test_optional_chosen_when_preferred(self):
+        """An optional target IS captured when the intent prefers a candidate."""
+        Spell = self._spell_class([self._creature_spec(optional=True)])
+        game = _make_game()
+        player = game.players[0]
+        victim = self._place_creature(game, 1, "Victim")
+        card = Spell(name="Optional Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        _add_to_hand(game, 0, card)
+        _add_mana(player, ManaType.RED, 1)
+        player.start_intent("bolt", Intent(
+            pattern=GameRef(card=frozenset({("name", "Optional Bolt")})),
+            preferences=(Decision.obj(instance=victim.instance_id),),
+        ))
+        cast_spell(game, player, card)
+        player.end_intent("bolt")
+        assert game.stack.peek().targets == [victim]
+
+    def test_up_to_two_picks_distinct_targets(self):
+        """Two optional specs + an intent preferring both creatures capture two
+        DISTINCT targets — the second query excludes the first pick."""
+        Spell = self._spell_class([
+            self._creature_spec(optional=True),
+            self._creature_spec(optional=True),
+        ])
+        game = _make_game()
+        player = game.players[0]
+        a = self._place_creature(game, 1, "A")
+        b = self._place_creature(game, 1, "B")
+        card = Spell(name="Twin Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        _add_to_hand(game, 0, card)
+        _add_mana(player, ManaType.RED, 1)
+        player.start_intent("bolt", Intent(
+            pattern=GameRef(card=frozenset({("name", "Twin Bolt")})),
+            preferences=(
+                Decision.obj(instance=a.instance_id),
+                Decision.obj(instance=b.instance_id),
+            ),
+        ))
+        cast_spell(game, player, card)
+        player.end_intent("bolt")
+        targets = game.stack.peek().targets
+        assert set(id(t) for t in targets) == {id(a), id(b)}
+        assert len(targets) == 2   # distinct, no duplicate
+
+    def test_up_to_two_with_one_candidate_casts_with_one(self):
+        """Two optional specs but only one candidate: casts with a single target
+        (the second spec's option set is empty after excluding the first)."""
+        Spell = self._spell_class([
+            self._creature_spec(optional=True),
+            self._creature_spec(optional=True),
+        ])
+        game = _make_game()
+        player = game.players[0]
+        only = self._place_creature(game, 1, "Only")
+        card = Spell(name="Twin Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        _add_to_hand(game, 0, card)
+        _add_mana(player, ManaType.RED, 1)
+        player.start_intent("bolt", Intent(
+            pattern=GameRef(card=frozenset({("name", "Twin Bolt")})),
+            preferences=(Decision.obj(instance=only.instance_id),),
+        ))
+        cast_spell(game, player, card)
+        player.end_intent("bolt")
+        assert game.stack.peek().targets == [only]
+
+
+class TestDependentTargetFilterArity:
+    """`_safe_filter` supports both (obj) and dependent (obj, chosen) filter
+    signatures, so a target's legality can depend on targets already chosen this
+    cast (rule 601.2c dependent requirements) without a card-specific backdoor."""
+
+    def test_filter_wants_chosen_detects_arity(self):
+        from engine.casting import _filter_wants_chosen
+        assert _filter_wants_chosen(lambda obj: True) is False
+        assert _filter_wants_chosen(lambda obj, chosen: True) is True
+        # The loop-binding idiom `lambda obj, _c=controller` has a DEFAULTED
+        # second parameter — it is NOT a dependent filter and must be called with
+        # the object alone (regression: binding `chosen` to `_c` broke ~8 cards).
+        _controller = object()
+        assert _filter_wants_chosen(lambda obj, _c=_controller: True) is False
+        assert _filter_wants_chosen(lambda obj, g=None, ctrl=None: True) is False
+        # `*rest` is not a required second positional — treated as single-arg.
+        assert _filter_wants_chosen(lambda obj, *rest: True) is False
+
+        class _C:
+            def one(self, obj):
+                return True
+
+            def two(self, obj, chosen):
+                return True
+
+            def bound_default(self, obj, _c=None):
+                return True
+
+        # Bound methods: `self` is excluded from the counted parameters.
+        assert _filter_wants_chosen(_C().one) is False
+        assert _filter_wants_chosen(_C().two) is True
+        assert _filter_wants_chosen(_C().bound_default) is False
+
+    def test_single_arg_filter_called_with_object_only(self):
+        from engine.casting import _safe_filter
+        seen = {}
+
+        def _f(obj):
+            seen["obj"] = obj
+            return obj == "x"
+
+        assert _safe_filter(_f, "x", ["ignored"]) is True
+        assert _safe_filter(_f, "y", []) is False
+        assert seen["obj"] == "y"
+
+    def test_dependent_filter_receives_chosen(self):
+        from engine.casting import _safe_filter
+        captured = {}
+
+        def _f(obj, chosen):
+            captured["chosen"] = list(chosen)
+            return obj in chosen
+
+        assert _safe_filter(_f, "a", ["a", "b"]) is True
+        assert _safe_filter(_f, "z", ["a", "b"]) is False
+        assert captured["chosen"] == ["a", "b"]
+
+    def test_raising_filter_is_excluded_not_propagated(self):
+        from engine.casting import _safe_filter
+
+        def _boom(obj, chosen):
+            raise RuntimeError("nope")
+
+        assert _safe_filter(_boom, "a", []) is False
+
+
+class TestSpellTargetStintRevalidation:
+    """cast_spell / cast_spell_free capture the casting controller + each chosen
+    target's zone-stint on the StackObject; a target that leaves its selected
+    zone and returns before resolution (a new object in the same Python instance)
+    is rejected at resolution."""
+
+    def _mark_spell(self, owner):
+        from engine.card import Instant
+        from engine.types import CardType, TargetRequirement, Zone as _Z
+
+        class _MarkCreature(Instant):
+            def get_targets(self, game):
+                return [TargetRequirement(
+                    filter_fn=lambda o: CardType.CREATURE in getattr(o, "card_types", set()),
+                    description="target creature",
+                    zone=_Z.BATTLEFIELD,
+                )]
+
+            def on_resolve(self, game):
+                chosen = getattr(self, "chosen_targets", None) or []
+                target = chosen[0] if chosen else None
+                if target is not None:
+                    target._marked = True
+
+        return _MarkCreature(name="Mark Creature", owner=owner, controller=owner)
+
+    def _cast_free_no_resolve(self, game, player, card, target, from_zone):
+        from engine.casting import cast_spell_free
+        from engine.decisions import Decision, GameRef
+        from engine.intent_player import Intent
+        from engine.types import Zone as _Z
+        inst = game.refs.instance_id(target, _Z.BATTLEFIELD.value)
+        player.start_intent("free", Intent(
+            pattern=GameRef(card=frozenset({("name", card.name)})),
+            preferences=(Decision.obj(instance=inst),),
+        ))
+        try:
+            cast_spell_free(game, player, card, from_zone)
+        finally:
+            player.end_intent("free")
+
+    def test_free_cast_marks_target_normally(self):
+        from engine.card import Creature
+        from engine.stack import resolve_top_of_stack
+        from engine.types import Zone
+        from test_utils import create_game, set_board_state
+        game = create_game()
+        p1, p2 = game.players
+        bear = Creature(name="Bear", base_power=2, base_toughness=2, owner=p2, controller=p2)
+        spell = self._mark_spell(p1)
+        set_board_state(game, 1, battlefield=[bear])
+        p1.zones[Zone.EXILE].add(spell)
+        spell.instance_id = game.refs.instance_id(spell, Zone.EXILE.value)
+        self._cast_free_no_resolve(game, p1, spell, bear, Zone.EXILE)
+        resolve_top_of_stack(game)
+        assert getattr(bear, "_marked", False) is True
+
+    def test_free_cast_leave_and_return_rejected(self):
+        from engine.card import Creature
+        from engine.stack import resolve_top_of_stack
+        from engine.types import Zone
+        from engine.zones import move_to_zone
+        from test_utils import create_game, set_board_state
+        game = create_game()
+        p1, p2 = game.players
+        bear = Creature(name="Bear", base_power=2, base_toughness=2, owner=p2, controller=p2)
+        spell = self._mark_spell(p1)
+        set_board_state(game, 1, battlefield=[bear])
+        p1.zones[Zone.EXILE].add(spell)
+        spell.instance_id = game.refs.instance_id(spell, Zone.EXILE.value)
+        self._cast_free_no_resolve(game, p1, spell, bear, Zone.EXILE)
+        move_to_zone(game, bear, Zone.BATTLEFIELD, Zone.GRAVEYARD)
+        move_to_zone(game, bear, Zone.GRAVEYARD, Zone.BATTLEFIELD)  # new stint
+        resolve_top_of_stack(game)
+        assert getattr(bear, "_marked", False) is False            # rejected by stint
+
+    def test_normal_cast_context_stored_on_stack_object(self):
+        from engine.card import Creature
+        from engine.casting import cast_spell as engine_cast_spell
+        from engine.decisions import Decision, GameRef
+        from engine.intent_player import Intent
+        from engine.types import Phase, Zone
+        from test_utils import create_game, set_board_state
+        game = create_game()
+        p1, p2 = game.players
+        bear = Creature(name="Bear", base_power=2, base_toughness=2, owner=p2, controller=p2)
+        spell = self._mark_spell(p1)
+        set_board_state(game, 0, hand=[spell])
+        set_board_state(game, 1, battlefield=[bear])
+        game.active_player_index = 0
+        game.phase = Phase.PRECOMBAT_MAIN
+        inst = game.refs.instance_id(bear, Zone.BATTLEFIELD.value)
+        p1.start_intent("c", Intent(
+            pattern=GameRef(card=frozenset({("name", spell.name)})),
+            preferences=(Decision.obj(instance=inst),),
+        ))
+        try:
+            engine_cast_spell(game, p1, spell)
+        finally:
+            p1.end_intent("c")
+        top = game.stack.peek()
+        # The casting controller and the target stint are captured on the stack.
+        assert top.activation_context is not None
+        assert top.activation_context.controller is p1
+        assert top.activation_context.target_instance_ids[0] == inst
+
+
+# ---------------------------------------------------------------------------
+# Spell-cast history — authoritative per-player, per-turn record
+# ---------------------------------------------------------------------------
+
+
+class TestSpellCastHistoryRecord:
+    """The turn-stamped record on :class:`~engine.player.Player` itself.
+
+    This is the authoritative surface a cast-triggered ability (Thousand-Year
+    Storm) reads its copy count from. It belongs to the player/turn lifecycle:
+    per-player, resettable at the turn boundary, and never owned by a trigger
+    source.
+    """
+
+    def test_record_and_read_round_trips_in_cast_order(self):
+        p = DeterministicPlayer("Alice")
+        s1, s2 = object(), object()
+        p.record_instant_or_sorcery_cast(s1, 3)
+        p.record_instant_or_sorcery_cast(s2, 3)
+        assert p.instant_or_sorcery_casts_this_turn(3) == [s1, s2]
+
+    def test_read_returns_a_copy_not_the_backing_list(self):
+        p = DeterministicPlayer("Alice")
+        s1 = object()
+        p.record_instant_or_sorcery_cast(s1, 1)
+        out = p.instant_or_sorcery_casts_this_turn(1)
+        out.append(object())
+        assert p.instant_or_sorcery_casts_this_turn(1) == [s1]
+
+    def test_stale_turn_reads_empty(self):
+        p = DeterministicPlayer("Alice")
+        p.record_instant_or_sorcery_cast(object(), 1)
+        assert p.instant_or_sorcery_casts_this_turn(2) == []
+
+    def test_recording_on_a_new_turn_resets_before_appending(self):
+        p = DeterministicPlayer("Alice")
+        s1, s2 = object(), object()
+        p.record_instant_or_sorcery_cast(s1, 1)
+        p.record_instant_or_sorcery_cast(s2, 2)  # new turn — resets, then appends
+        assert p.instant_or_sorcery_casts_this_turn(1) == []
+        assert p.instant_or_sorcery_casts_this_turn(2) == [s2]
+
+    def test_players_keep_separate_records(self):
+        p1 = DeterministicPlayer("Alice")
+        p2 = DeterministicPlayer("Bob")
+        a, b = object(), object()
+        p1.record_instant_or_sorcery_cast(a, 1)
+        p2.record_instant_or_sorcery_cast(b, 1)
+        assert p1.instant_or_sorcery_casts_this_turn(1) == [a]
+        assert p2.instant_or_sorcery_casts_this_turn(1) == [b]
+
+    def test_record_returns_prior_qualifying_cast_count(self):
+        # Each recording reports how many qualifying casts came before it this
+        # turn — the immutable prior-cast count for that occurrence.
+        p = DeterministicPlayer("Alice")
+        s1, s2, s3 = object(), object(), object()
+        assert p.record_instant_or_sorcery_cast(s1, 1) == 0
+        assert p.record_instant_or_sorcery_cast(s2, 1) == 1
+        assert p.record_instant_or_sorcery_cast(s3, 1) == 2
+
+    def test_record_counts_a_recast_object_as_a_new_occurrence(self):
+        # The SAME object recorded twice this turn is two occurrences: the second
+        # recording reports one prior cast, not zero. Excluding "the current cast"
+        # by identity would instead treat both entries as the current cast.
+        p = DeterministicPlayer("Alice")
+        obj = object()
+        assert p.record_instant_or_sorcery_cast(obj, 1) == 0
+        assert p.record_instant_or_sorcery_cast(obj, 1) == 1
+        assert p.instant_or_sorcery_casts_this_turn(1) == [obj, obj]
+
+    def test_record_prior_count_restarts_at_the_turn_boundary(self):
+        p = DeterministicPlayer("Alice")
+        p.record_instant_or_sorcery_cast(object(), 1)
+        assert p.record_instant_or_sorcery_cast(object(), 1) == 1
+        # A new turn resets the record, so the count restarts from zero.
+        assert p.record_instant_or_sorcery_cast(object(), 2) == 0
+
+
+class TestSpellCastHistoryPipeline:
+    """The casting pipeline records qualifying casts exactly once, at the single
+    authoritative cast site, and only for instant/sorcery spells."""
+
+    def _fresh(self) -> tuple[GameState, DeterministicPlayer]:
+        game = _make_game()
+        return game, game.players[0]
+
+    def test_cast_instant_is_recorded(self):
+        game, p = self._fresh()
+        bolt = Instant(name="Bolt", mana_cost=ManaCost.parse("{0}"), owner=p)
+        _add_to_hand(game, 0, bolt)
+        cast_spell(game, p, bolt)
+        assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == [bolt]
+
+    def test_cast_sorcery_is_recorded(self):
+        game, p = self._fresh()
+        ritual = Sorcery(name="Ritual", mana_cost=ManaCost.parse("{0}"), owner=p)
+        _add_to_hand(game, 0, ritual)
+        cast_spell(game, p, ritual)
+        assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == [ritual]
+
+    def test_instant_is_recorded_exactly_once(self):
+        game, p = self._fresh()
+        bolt = Instant(name="Bolt", mana_cost=ManaCost.parse("{0}"), owner=p)
+        _add_to_hand(game, 0, bolt)
+        cast_spell(game, p, bolt)
+        history = p.instant_or_sorcery_casts_this_turn(game.turn_number)
+        assert history.count(bolt) == 1
+
+    def test_nonqualifying_spells_do_not_record(self):
+        # A creature, artifact, enchantment, and planeswalker each cast in a
+        # fresh game (empty stack for sorcery-speed timing) — none is recorded.
+        nonqualifying = [
+            Creature(name="Bear", base_power=2, base_toughness=2,
+                     mana_cost=ManaCost.parse("{0}")),
+            Artifact(name="Rock", mana_cost=ManaCost.parse("{0}")),
+            Enchantment(name="Glow", mana_cost=ManaCost.parse("{0}")),
+            Planeswalker(name="Walker", mana_cost=ManaCost.parse("{0}"),
+                         starting_loyalty=3),
+        ]
+        for card in nonqualifying:
+            game, p = self._fresh()
+            card.owner = p
+            _add_to_hand(game, 0, card)
+            cast_spell(game, p, card)
+            assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == [], (
+                f"{card.name} should not be recorded"
+            )
+
+    def test_playing_a_land_does_not_record(self):
+        # Lands are played via a special action (never through cast_spell), so
+        # they are structurally excluded from the record.
+        game, p = self._fresh()
+        forest = Land(name="Forest", owner=p)
+        _add_to_hand(game, 0, forest)
+        play_land(game, p, forest)
+        assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == []
+
+    def test_two_players_get_separate_histories_through_the_pipeline(self):
+        game = _make_game()
+        p1, p2 = game.players
+        a = Instant(name="A", mana_cost=ManaCost.parse("{0}"), owner=p1)
+        b = Instant(name="B", mana_cost=ManaCost.parse("{0}"), owner=p2)
+        _add_to_hand(game, 0, a)
+        _add_to_hand(game, 1, b)
+        cast_spell(game, p1, a)
+        cast_spell(game, p2, b)  # non-active player, but instant speed is legal
+        t = game.turn_number
+        assert p1.instant_or_sorcery_casts_this_turn(t) == [a]
+        assert p2.instant_or_sorcery_casts_this_turn(t) == [b]
+
+    def test_free_cast_is_recorded(self):
+        from engine.casting import cast_spell_free
+        from engine.types import Zone
+
+        game, p = self._fresh()
+        bolt = Instant(name="FreeBolt", mana_cost=ManaCost.parse("{5}"), owner=p)
+        p.zones[Zone.HAND].add(bolt)
+        cast_spell_free(game, p, bolt, Zone.HAND)
+        assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == [bolt]
+
+    def test_turn_rollover_resets_through_the_pipeline(self):
+        game, p = self._fresh()
+        a = Instant(name="A", mana_cost=ManaCost.parse("{0}"), owner=p)
+        b = Instant(name="B", mana_cost=ManaCost.parse("{0}"), owner=p)
+        _add_to_hand(game, 0, a)
+        _add_to_hand(game, 0, b)
+        cast_spell(game, p, a)
+        t1 = game.turn_number
+        assert p.instant_or_sorcery_casts_this_turn(t1) == [a]
+        game.turn_number += 1
+        # A new turn: last turn's cast no longer contributes.
+        assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == []
+        cast_spell(game, p, b)
+        assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == [b]
+        assert p.instant_or_sorcery_casts_this_turn(t1) == []
+
+    def test_cast_stamps_prior_qualifying_count_on_the_stack_object(self):
+        # The cast's StackObject — the stack representation of that one occurrence
+        # — carries the immutable prior-qualifying-cast count read at record time.
+        game, p = self._fresh()
+        a = Instant(name="A", mana_cost=ManaCost.parse("{0}"), owner=p)
+        b = Instant(name="B", mana_cost=ManaCost.parse("{0}"), owner=p)
+        _add_to_hand(game, 0, a)
+        _add_to_hand(game, 0, b)
+        cast_spell(game, p, a)
+        cast_spell(game, p, b)
+        stamp = {so.source: so.prior_qualifying_casts for so in game.stack._items}
+        assert stamp[a] == 0
+        assert stamp[b] == 1
+
+    def test_free_cast_stamps_prior_qualifying_count_on_the_stack_object(self):
+        from engine.casting import cast_spell_free
+        from engine.types import Zone
+
+        game, p = self._fresh()
+        a = Instant(name="A", mana_cost=ManaCost.parse("{0}"), owner=p)
+        b = Instant(name="B", mana_cost=ManaCost.parse("{5}"), owner=p)
+        _add_to_hand(game, 0, a)
+        p.zones[Zone.HAND].add(b)
+        cast_spell(game, p, a)
+        cast_spell_free(game, p, b, Zone.HAND)   # b is the second qualifying cast
+        stamp = {so.source: so.prior_qualifying_casts for so in game.stack._items}
+        assert stamp[a] == 0
+        assert stamp[b] == 1
+
+    def test_nonqualifying_cast_stamps_no_prior_count(self):
+        # A creature is not a qualifying cast, so its StackObject carries no count.
+        game, p = self._fresh()
+        bear = Creature(name="Bear", base_power=2, base_toughness=2,
+                        mana_cost=ManaCost.parse("{0}"), owner=p)
+        _add_to_hand(game, 0, bear)
+        cast_spell(game, p, bear)
+        (so,) = [s for s in game.stack._items if s.source is bear]
+        assert so.prior_qualifying_casts is None

@@ -1,29 +1,18 @@
 """Card implementation for Angel of Finality."""
+
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
-from engine.card import ArtifactCreature, Creature
-from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
-from engine.types import CardType, Keyword, ManaCost, Zone
-from engine.events import EntersBattlefieldTriggeredEvent
+
+from engine.card import Creature
+from engine.types import Keyword, ManaCost, TargetRequirement, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
-    from cards.registry import CardRegistry
 
-def _self_etb_condition(source: Any):
-    """Return a condition callable that matches only when *source* enters."""
-
-    def _condition(game: Any, event: dict) -> bool:
-        return event.permanent is source
-    return _condition
-
-def _get_chosen_target(card: Any, game: Any) -> Any:
-    chosen = getattr(card, 'chosen_targets', None)
-    if chosen:
-        return chosen[0]
-    return getattr(card, '_resolve_target', None)
 
 class AngelOfFinality(Creature):
-    """Angel of Finality — {3}{W} — 3/4 — Angel — Flying
+    """Angel of Finality — {3}{W} — 3/4 — Angel — Flying.
 
     When this creature enters, exile target player's graveyard.
 
@@ -31,34 +20,38 @@ class AngelOfFinality(Creature):
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        kwargs.setdefault('name', 'Angel of Finality')
-        kwargs.setdefault('mana_cost', ManaCost.parse('{3}{W}'))
-        kwargs.setdefault('subtypes', {'Angel'})
-        kwargs.setdefault('keywords', Keyword.FLYING)
-        kwargs.setdefault('base_power', 3)
-        kwargs.setdefault('base_toughness', 4)
-        kwargs.setdefault('rules_text', "Flying\nWhen this creature enters, exile target player's graveyard.")
+        kwargs.setdefault("name", "Angel of Finality")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{3}{W}"))
+        kwargs.setdefault("subtypes", {"Angel"})
+        kwargs.setdefault("keywords", Keyword.FLYING)
+        kwargs.setdefault("base_power", 3)
+        kwargs.setdefault("base_toughness", 4)
+        kwargs.setdefault(
+            "rules_text",
+            "Flying\nWhen this creature enters, exile target player's graveyard.",
+        )
         super().__init__(**kwargs)
 
-    def register_triggers(self, game: GameState) -> None:
-        from engine.triggers import TriggerRegistration
-        source = self
+    def get_targets(self, game: "GameState") -> list[Any]:
+        """ETB targets a player (whose graveyard is then exiled)."""
+        players = list(game.players)
+        return [
+            TargetRequirement(
+                filter_fn=lambda obj: any(obj is p for p in players),
+                description="target player",
+                zone=Zone.BATTLEFIELD,
+            )
+        ]
 
-        def _effect(game: GameState) -> None:
-            target = _get_chosen_target(source, game)
-            if target is None:
-                controller = getattr(source, 'controller', None)
-                for player in game.players:
-                    if player is not controller:
-                        target = player
-                        break
-            if target is None:
-                return
-            if hasattr(target, 'zones'):
-                gy = target.zones[Zone.GRAVEYARD]
-                exile = target.zones[Zone.EXILE]
-                for card in gy.get_all():
-                    gy.remove(card)
-                    exile.add(card)
-        controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller))
+    def on_resolve(self, game: "GameState") -> None:
+        """Exile every card in the target player's graveyard."""
+        from engine.game import exile
+
+        chosen = getattr(self, "chosen_targets", None) or []
+        target = chosen[0] if chosen else None
+        if target is None or not hasattr(target, "zones"):
+            return
+        graveyard = target.zones[Zone.GRAVEYARD]
+        # Snapshot first — exile mutates the graveyard container as it moves cards.
+        for card in list(graveyard.get_all()):
+            exile(game, card)

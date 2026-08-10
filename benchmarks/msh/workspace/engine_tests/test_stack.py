@@ -457,3 +457,87 @@ class TestRunTurnWithStack:
         game = _make_game()
         run_turn(game)
         assert game.stack.is_empty()
+
+
+class TestCopySpellStintRevalidation:
+    """copy_spell carries an ActivationContext so a copied spell stint-revalidates
+    its targets at resolution — retained targets inherit the original's stint
+    ids; newly chosen targets capture their current stints; either is rejected on
+    a leave-and-return."""
+
+    def _mark_spell(self, owner):
+        from engine.card import Instant
+
+        class _MarkCreature(Instant):
+            def on_resolve(self, game):
+                chosen = getattr(self, "chosen_targets", None) or []
+                target = chosen[0] if chosen else None
+                if target is not None:
+                    target._marked = True
+
+        return _MarkCreature(name="Mark Copy", owner=owner, controller=owner)
+
+    def _board(self):
+        from test_utils import create_game, set_board_state
+        from engine.card import Creature
+        game = create_game()
+        p1, p2 = game.players
+        bear = Creature(name="Bear", base_power=2, base_toughness=2, owner=p2, controller=p2)
+        other = Creature(name="Other", base_power=2, base_toughness=2, owner=p2, controller=p2)
+        set_board_state(game, 1, battlefield=[bear, other])
+        return game, p1, p2, bear, other
+
+    def _original(self, game, p1, spell, targets):
+        from engine.stack import StackObject, capture_activation_context
+        return StackObject(
+            source=spell,
+            controller=p1,
+            targets=list(targets),
+            activation_context=capture_activation_context(game, spell, p1, list(targets)),
+        )
+
+    def test_retained_targets_copy_marks_when_target_stays(self):
+        from engine.stack import copy_spell, resolve_top_of_stack
+        game, p1, p2, bear, other = self._board()
+        spell = self._mark_spell(p1)
+        original = self._original(game, p1, spell, [bear])
+        game.stack.push(copy_spell(game, original, p1))   # retain targets
+        resolve_top_of_stack(game)
+        assert getattr(bear, "_marked", False) is True
+
+    def test_retained_targets_copy_rejects_leave_and_return(self):
+        from engine.stack import copy_spell, resolve_top_of_stack
+        from engine.types import Zone
+        from engine.zones import move_to_zone
+        game, p1, p2, bear, other = self._board()
+        spell = self._mark_spell(p1)
+        original = self._original(game, p1, spell, [bear])
+        game.stack.push(copy_spell(game, original, p1))   # inherits bear's stint id
+        move_to_zone(game, bear, Zone.BATTLEFIELD, Zone.EXILE)
+        move_to_zone(game, bear, Zone.EXILE, Zone.BATTLEFIELD)  # new stint
+        resolve_top_of_stack(game)
+        assert getattr(bear, "_marked", False) is False   # rejected by inherited stint
+
+    def test_new_targets_copy_marks_when_target_stays(self):
+        from engine.stack import copy_spell, resolve_top_of_stack
+        game, p1, p2, bear, other = self._board()
+        spell = self._mark_spell(p1)
+        original = self._original(game, p1, spell, [bear])
+        # Copy chooses a NEW target (other) — its current stint is captured.
+        game.stack.push(copy_spell(game, original, p1, new_targets=[other]))
+        resolve_top_of_stack(game)
+        assert getattr(other, "_marked", False) is True
+        assert getattr(bear, "_marked", False) is False   # original target untouched
+
+    def test_new_targets_copy_rejects_leave_and_return(self):
+        from engine.stack import copy_spell, resolve_top_of_stack
+        from engine.types import Zone
+        from engine.zones import move_to_zone
+        game, p1, p2, bear, other = self._board()
+        spell = self._mark_spell(p1)
+        original = self._original(game, p1, spell, [bear])
+        game.stack.push(copy_spell(game, original, p1, new_targets=[other]))
+        move_to_zone(game, other, Zone.BATTLEFIELD, Zone.EXILE)
+        move_to_zone(game, other, Zone.EXILE, Zone.BATTLEFIELD)  # new stint
+        resolve_top_of_stack(game)
+        assert getattr(other, "_marked", False) is False  # rejected by captured stint

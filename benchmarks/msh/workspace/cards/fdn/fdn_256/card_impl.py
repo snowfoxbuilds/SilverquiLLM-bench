@@ -1,59 +1,77 @@
 """Card implementation for Meteor Golem."""
+
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
-from engine.card import ArtifactCreature, Creature
-from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
-from engine.types import CardType, Keyword, ManaCost, Zone
-from engine.events import EntersBattlefieldTriggeredEvent
+
+from engine.card import ArtifactCreature
+from engine.types import CardType, ManaCost, TargetRequirement, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
-    from cards.registry import CardRegistry
 
-def _self_etb_condition(source: Any):
-    """Return a condition callable that matches only when *source* enters."""
 
-    def _condition(game: Any, event: dict) -> bool:
-        return event.permanent is source
-    return _condition
+def _on_battlefield(game: Any, obj: Any) -> bool:
+    return any(game.get_battlefield(p).contains(obj) for p in game.players)
 
-def _get_chosen_target(card: Any, game: Any) -> Any:
-    chosen = getattr(card, 'chosen_targets', None)
-    if chosen:
-        return chosen[0]
-    return getattr(card, '_resolve_target', None)
-
-def _is_on_battlefield(game: Any, card: Any) -> bool:
-    """Check if *card* is on any player's battlefield."""
-    for player in game.players:
-        if game.get_battlefield(player).contains(card):
-            return True
-    return False
 
 class MeteorGolem(ArtifactCreature):
-    """Meteor Golem — {7} — 3/3 — Golem
+    """Meteor Golem — {7} — 3/3 — Golem.
 
-    When this creature enters, destroy target nonland permanent an opponent controls.
+    When this creature enters, destroy target nonland permanent an opponent
+    controls.
 
     FDN collector number 256.
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        kwargs.setdefault('name', 'Meteor Golem')
-        kwargs.setdefault('mana_cost', ManaCost.parse('{7}'))
-        kwargs.setdefault('subtypes', {'Golem'})
-        kwargs.setdefault('base_power', 3)
-        kwargs.setdefault('base_toughness', 3)
-        kwargs.setdefault('rules_text', 'When this creature enters, destroy target nonland permanent an opponent controls.')
+        kwargs.setdefault("name", "Meteor Golem")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{7}"))
+        kwargs.setdefault("subtypes", {"Golem"})
+        kwargs.setdefault("base_power", 3)
+        kwargs.setdefault("base_toughness", 3)
+        kwargs.setdefault(
+            "rules_text",
+            "When this creature enters, destroy target nonland permanent an "
+            "opponent controls.",
+        )
         super().__init__(**kwargs)
 
-    def register_triggers(self, game: GameState) -> None:
-        from engine.triggers import TriggerRegistration
-        from engine.game import destroy
-        source = self
+    def _is_opponent_nonland_permanent(self, obj: Any) -> bool:
+        """Legal target: a nonland permanent controlled by a player other than
+        the caster. Shared by ``get_targets`` and the resolution revalidation."""
+        controller = self.controller or getattr(self, "owner", None)
+        if CardType.LAND in getattr(obj, "card_types", set()):
+            return False
+        obj_controller = getattr(obj, "controller", None)
+        return obj_controller is not None and obj_controller is not controller
 
-        def _effect(game: GameState) -> None:
-            target = _get_chosen_target(source, game)
-            if target is not None and _is_on_battlefield(game, target):
-                destroy(game, target)
-        controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller))
+    def get_targets(self, game: "GameState") -> list[Any]:
+        """Required target: a nonland permanent an opponent controls."""
+        return [
+            TargetRequirement(
+                filter_fn=self._is_opponent_nonland_permanent,
+                description="target nonland permanent an opponent controls",
+                zone=Zone.BATTLEFIELD,
+            )
+        ]
+
+    def on_resolve(self, game: "GameState") -> None:
+        """Destroy the targeted permanent.
+
+        Revalidate the COMPLETE predicate at resolution: still a *nonland*
+        permanent an *opponent* controls, on the battlefield. If it became a
+        land, came under the caster's control, or left play before resolution,
+        it is illegal and is not destroyed.
+        """
+        from engine.game import destroy
+
+        chosen = getattr(self, "chosen_targets", None) or []
+        target = chosen[0] if chosen else None
+        if target is None:
+            return
+        if not _on_battlefield(game, target):
+            return
+        if not self._is_opponent_nonland_permanent(target):
+            return
+        destroy(game, target)

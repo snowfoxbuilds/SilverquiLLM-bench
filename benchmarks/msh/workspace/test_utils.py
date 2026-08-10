@@ -380,6 +380,41 @@ def activate_card_ability(
     activate_ability(game, player, instance)
 
 
+def activate_loyalty_ability(
+    game: GameState,
+    player: Any,
+    source_card: Any,
+    index: int = 0,
+) -> None:
+    """Activate ``source_card``'s loyalty ability ``index`` through the real
+    engine path.
+
+    Builds a :class:`~engine.abilities.LoyaltyAbilityInstance` from the
+    planeswalker's :class:`~engine.card.LoyaltyAbility` (threading its
+    ``targeting`` hook) and calls :func:`~engine.abilities.activate_ability`,
+    which enforces sorcery-speed timing and once-per-turn, chooses the ability's
+    targets **before** paying the loyalty cost, stores them on the stack object,
+    and pushes the effect. The caller resolves the stack afterward (e.g. via
+    :func:`resolve_stack`) to run the ability's effect.
+
+    Raises :class:`~engine.abilities.AbilityError` when the ability cannot be
+    activated (wrong timing, already activated this turn, insufficient loyalty,
+    or a required target with no legal choice) — no loyalty is spent in that case.
+    """
+    from engine.abilities import LoyaltyAbilityInstance, activate_ability
+
+    ability = source_card.get_loyalty_abilities()[index]
+    instance = LoyaltyAbilityInstance(
+        source=source_card,
+        controller=player,
+        loyalty_cost=ability.loyalty_cost,
+        effect=ability.effect,
+        description=ability.description,
+        targeting=getattr(ability, "targeting", None),
+    )
+    activate_ability(game, player, instance)
+
+
 def _resolve_top_of_stack(game: GameState) -> None:
     """Resolve the whole stack via the engine's resolution primitive.
 

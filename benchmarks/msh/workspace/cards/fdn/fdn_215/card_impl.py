@@ -1,39 +1,34 @@
 """Card implementation for Bushwhack."""
 
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature, Instant, Mode, Sorcery
-from engine.continuous_effects import (
-    ContinuousEffect,
-    DURATION_END_OF_TURN,
-    Layer,
-    SubLayer,
-)
-from engine.types import CardType, Keyword, ManaCost, Zone
+
+from engine.card import Mode, Sorcery
+from engine.card_queries import choose_mode, choose_object
+from engine.types import CardType, ManaCost, Supertype, TargetRequirement, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
-    from cards.registry import CardRegistry
 
-def _get_controller(card: Any) -> Any:
-    """Return the controller of a card, or None."""
-    return getattr(card, "controller", None)
-def _get_target(card: Any) -> Any:
-    """Return the first chosen target or the _resolve_target fallback."""
-    chosen = getattr(card, "chosen_targets", None)
-    if chosen:
-        return chosen[0]
-    return getattr(card, "_resolve_target", None)
-def _get_targets(card: Any) -> list[Any]:
-    """Return chosen targets list."""
-    return getattr(card, "chosen_targets", []) or []
+def _on_battlefield(game: Any, obj: Any) -> bool:
+    return any(game.get_battlefield(p).contains(obj) for p in game.players)
+
+
+# Mode indices.
+_MODE_SEARCH = 0
+_MODE_FIGHT = 1
+_MODE_NAMES = ["Search", "Fight"]
+
 
 class Bushwhack(Sorcery):
-    """Bushwhack — {G} — Choose one.
+    """Bushwhack — {G} — Sorcery.
 
-    - Search your library for a basic land card, reveal it, put it into
-      your hand, then shuffle.
-    - Target creature you control fights target creature you don't control.
+    Choose one —
+    • Search your library for a basic land card, reveal it, put it into your
+      hand, then shuffle.
+    • Target creature you control fights target creature you don't control.
 
     FDN collector number 215.
     """
@@ -44,43 +39,118 @@ class Bushwhack(Sorcery):
         kwargs.setdefault(
             "rules_text",
             "Choose one —\n"
-            "• Search your library for a basic land card, reveal it, put it into your hand, then shuffle.\n"
-            "• Target creature you control fights target creature you don't control.",
+            "• Search your library for a basic land card, reveal it, put it "
+            "into your hand, then shuffle.\n"
+            "• Target creature you control fights target creature you don't "
+            "control. (Each deals damage equal to its power to the other.)",
         )
         super().__init__(**kwargs)
-        self.chosen_mode: int | None = None
+        self._chosen_mode_index: int | None = None
 
     def get_modes(self) -> list[Mode]:
         return [
-            Mode(name="Land Search", description="Search your library for a basic land card, reveal it, put it into your hand, then shuffle."),
-            Mode(name="Fight", description="Target creature you control fights target creature you don't control."),
+            Mode(
+                name="Search",
+                description="Search your library for a basic land card, reveal "
+                "it, put it into your hand, then shuffle.",
+            ),
+            Mode(
+                name="Fight",
+                description="Target creature you control fights target creature "
+                "you don't control.",
+            ),
         ]
 
-    def on_resolve(self, game: GameState) -> None:
-        mode = self.chosen_mode
-        if mode is None:
-            return
-        controller = _get_controller(self)
+    def get_targets(self, game: "GameState") -> list[Any]:
+        """Choose the mode. Fight targets two creatures; Search is non-target."""
+        controller = self.controller or getattr(self, "owner", None)
+        chosen = choose_mode(game, controller, _MODE_NAMES, "Choose one", source_card=self)
+        self._chosen_mode_index = _MODE_NAMES.index(chosen)
+
+        if self._chosen_mode_index != _MODE_FIGHT:
+            # Search mode chooses its basic land at resolution (non-target).
+            return []
+
+        return [
+            TargetRequirement(
+                filter_fn=self._is_your_creature,
+                description="target creature you control",
+                zone=Zone.BATTLEFIELD,
+            ),
+            TargetRequirement(
+                filter_fn=self._is_their_creature,
+                description="target creature you don't control",
+                zone=Zone.BATTLEFIELD,
+            ),
+        ]
+
+    def _is_your_creature(self, obj: Any) -> bool:
+        """A creature the caster controls (shared cast/resolution predicate)."""
+        controller = self.controller or getattr(self, "owner", None)
+        return (
+            CardType.CREATURE in getattr(obj, "card_types", set())
+            and getattr(obj, "controller", None) is controller
+        )
+
+    def _is_their_creature(self, obj: Any) -> bool:
+        """A creature the caster does not control (shared cast/resolution)."""
+        controller = self.controller or getattr(self, "owner", None)
+        return (
+            CardType.CREATURE in getattr(obj, "card_types", set())
+            and getattr(obj, "controller", None) is not controller
+        )
+
+    def on_resolve(self, game: "GameState") -> None:
+        if self._chosen_mode_index == _MODE_SEARCH:
+            self._resolve_search(game)
+        elif self._chosen_mode_index == _MODE_FIGHT:
+            self._resolve_fight(game)
+
+    def _resolve_search(self, game: "GameState") -> None:
+        """Search the controller's library for a basic land → hand, then shuffle."""
+        controller = self.controller or getattr(self, "owner", None)
         if controller is None:
             return
-        if mode == 0:
-            # Search library for a basic land.
-            from engine.types import Supertype
-            library = controller.zones[Zone.LIBRARY]
-            found = False
-            for card in library.get_all():
-                if (CardType.LAND in getattr(card, "card_types", set())
-                        and Supertype.BASIC in getattr(card, "supertypes", set())):
-                    library.remove(card)
-                    controller.zones[Zone.HAND].add(card)
-                    found = True
-                    break
-            library.shuffle()
-        elif mode == 1:
-            # Fight
-            from engine.game import deal_damage
-            targets = _get_targets(self)
-            if len(targets) >= 2:
-                a, b = targets[0], targets[1]
-                deal_damage(game, a, b, getattr(a, "power", 0))
-                deal_damage(game, b, a, getattr(b, "power", 0))
+        library = controller.zones[Zone.LIBRARY]
+        basics = [
+            c
+            for c in library.get_all()
+            if CardType.LAND in getattr(c, "card_types", set())
+            and Supertype.BASIC in getattr(c, "supertypes", set())
+        ]
+        if basics:
+            # "Search" may fail to find, so the choice is declinable.
+            chosen = choose_object(
+                game,
+                controller,
+                basics,
+                "Search your library for a basic land card",
+                source_card=self,
+                optional=True,
+            )
+            if chosen is not None and library.contains(chosen):
+                library.remove(chosen)
+                controller.zones[Zone.HAND].add(chosen)
+        library.shuffle()
+
+    def _resolve_fight(self, game: "GameState") -> None:
+        """The two targeted creatures each deal damage equal to their power."""
+        from engine.game import deal_damage
+
+        chosen = getattr(self, "chosen_targets", None) or []
+        if len(chosen) < 2:
+            return
+        yours, theirs = chosen[0], chosen[1]
+        # Revalidate the COMPLETE predicate for BOTH targets (rule 608.2b): each
+        # must still be on the battlefield and a creature with the correct
+        # control relationship. If either changed control or ceased to be a
+        # creature, that target is illegal; a fight needs both, so it does
+        # nothing (rule 608.2c — the fight cannot happen with an illegal target).
+        if not (_on_battlefield(game, yours) and _on_battlefield(game, theirs)):
+            return
+        if not (self._is_your_creature(yours) and self._is_their_creature(theirs)):
+            return
+        yours_power = getattr(yours, "power", getattr(yours, "base_power", 0))
+        theirs_power = getattr(theirs, "power", getattr(theirs, "base_power", 0))
+        deal_damage(game, yours, theirs, yours_power)
+        deal_damage(game, theirs, yours, theirs_power)

@@ -60,7 +60,7 @@ class ChandraFlameshaper(Planeswalker):
             """Create a token copy of target creature (with haste, sacrifice at end step)."""
             from engine.game import create_token
             from engine.triggers import TriggerRegistration
-            target = getattr(pw, '_resolve_target', None)
+            target = None
             controller = pw.controller
             if target is None or controller is None:
                 return

@@ -577,3 +577,303 @@ class TestAutoTriggerUnregistrationViaLeave:
         assert len(game.trigger_manager.get_triggers_for_source(card)) == 0
         game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent())
         assert game.stack.is_empty()
+
+
+class TestTriggeredTargetChannel:
+    """The optional TriggerRegistration.targeting hook: targets are chosen as the
+    trigger is put on the stack, captured with an ActivationContext, and passed
+    to effect(game, targets, context) — never re-selected at resolution."""
+
+    def _game(self):
+        from test_utils import create_game, set_board_state
+        game = create_game()
+        p1, p2 = game.players
+        a = Creature(name="A", base_power=1, base_toughness=1, owner=p1, controller=p1)
+        b = Creature(name="B", base_power=1, base_toughness=1, owner=p1, controller=p1)
+        set_board_state(game, 0, battlefield=[a, b])
+        game.active_player_index = 0
+        return game, p1, p2, a, b
+
+    def test_targets_and_context_captured_on_fire(self):
+        game, p1, p2, a, b = self._game()
+        seen = {}
+
+        def _targeting(g, event, controller):
+            return [a, b]
+
+        def _effect(g, targets, context):
+            seen["targets"] = list(targets)
+            seen["context"] = context
+
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=_effect, source=a, controller=p1,
+            targeting=_targeting,
+        ))
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        top = game.stack.peek()
+        assert top.targets == [a, b]                       # fixed as it went up
+        assert top.activation_context is not None
+        assert top.activation_context.controller is p1
+        from engine.stack import resolve_top_of_stack
+        resolve_top_of_stack(game)
+        assert seen["targets"] == [a, b]                   # effect got the fixed targets
+        assert seen["context"] is top.activation_context
+
+    def test_controller_determined_at_fire_time(self):
+        """The source changes controller after registration but before the
+        trigger fires: the fire-time controller (not the registration one) is
+        passed to targeting and used for the stack object + ActivationContext
+        (rule 603.3e)."""
+        game, p1, p2, a, b = self._game()
+        seen = {}
+
+        def _targeting(g, event, controller):
+            seen["target_controller"] = controller
+            return []
+
+        def _effect(g, targets, context):
+            pass
+
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=_effect, source=a, controller=p1,
+            targeting=_targeting,
+        ))
+        a.controller = p2  # source changes hands after registration
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        top = game.stack.peek()
+        assert seen["target_controller"] is p2             # targeting saw p2
+        assert top.controller is p2                        # stack object is p2's
+        assert top.activation_context.controller is p2     # context is p2
+
+    def test_required_target_none_not_put_on_stack(self):
+        """A required targeted trigger whose targeting returns None (no legal
+        target) is NOT put on the stack (rule 603.3c)."""
+        game, p1, p2, a, b = self._game()
+
+        def _targeting(g, event, controller):
+            return None  # required target, none legal
+
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=lambda g, t, c: None, source=a, controller=p1,
+            targeting=_targeting,
+        ))
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        assert game.stack.is_empty()                       # nothing pushed
+
+    def test_empty_list_target_still_put_on_stack(self):
+        """An "up to N" targeted trigger that chooses zero targets returns [] and
+        is still put on the stack (distinct from the required-None case)."""
+        game, p1, p2, a, b = self._game()
+
+        def _targeting(g, event, controller):
+            return []  # up-to-N with none chosen — legal
+
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=lambda g, t, c: None, source=a, controller=p1,
+            targeting=_targeting,
+        ))
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        assert not game.stack.is_empty()                   # pushed with 0 targets
+        assert game.stack.peek().targets == []
+
+    def test_untargeted_trigger_unchanged(self):
+        game, p1, p2, a, b = self._game()
+        calls = []
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=lambda g: calls.append(True), source=a, controller=p1,
+        ))
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        top = game.stack.peek()
+        assert top.targets == []
+        assert top.activation_context is None              # no context for untargeted
+        from engine.stack import resolve_top_of_stack
+        resolve_top_of_stack(game)
+        assert calls == [True]                             # effect(game) still fired
+
+
+class TestFireTimeControllerPipeline:
+    """The fire-time controller (source's current controller) is used
+    consistently across the whole trigger pipeline: APNAP grouping, targeted and
+    untargeted stack objects, target selection, and the ActivationContext."""
+
+    def _game(self):
+        from test_utils import create_game
+        game = create_game()
+        game.active_player_index = 0  # players[0] is active
+        return game, game.players[0], game.players[1]
+
+    def test_untargeted_trigger_uses_fire_time_controller(self):
+        """An UNTARGETED trigger whose source changed controller after
+        registration builds its stack object with the fire-time controller."""
+        game, p1, p2 = self._game()
+        src = Creature(name="Src", owner=p1, controller=p1)
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=lambda g: None, source=src, controller=p1,
+        ))
+        src.controller = p2  # source changes hands after registration
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        assert game.stack.peek().controller is p2  # fire-time controller
+
+    def test_apnap_grouping_uses_fire_time_controller(self):
+        """Two simultaneous triggers; one source changed controller after
+        registration. APNAP grouping uses the fire-time controllers, so the
+        regrouped trigger orders as its NEW controller's and its stack object
+        carries that controller."""
+        game, p1, p2 = self._game()          # p1 active, p2 non-active
+        a = Creature(name="SrcA", owner=p2, controller=p2)  # p2's (non-active)
+        b = Creature(name="SrcB", owner=p1, controller=p1)  # registered as p1's
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=lambda g: None, source=a, controller=p2))
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=lambda g: None, source=b, controller=p1))
+        b.controller = p2                    # b changes hands after registration
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        objs = game.stack.objects()          # top → bottom
+        assert len(objs) == 2
+        # Both are now p2's (non-active), ordered in registration order (a, b),
+        # so b is pushed last and sits on top. Under registration-time grouping b
+        # would have been the active player's and ordered before a — this asserts
+        # the fire-time regrouping.
+        assert objs[0].source is b and objs[0].controller is p2
+        assert objs[1].source is a and objs[1].controller is p2
+
+    def test_untargeted_controller_effect_uses_immutable_fire_time_controller(self):
+        """A controller-sensitive UNTARGETED effect (effect(game, controller)) is
+        threaded the fire-time controller, captured immutably when the trigger
+        goes on the stack — not re-read from source.controller at resolution.
+        Regression: the source changes hands twice (once before fire, once before
+        resolution); the effect must see the controller from fire time."""
+        from engine.stack import resolve_top_of_stack
+        game, p1, p2 = self._game()
+        src = Creature(name="Src", owner=p1, controller=p1)
+        seen = {}
+
+        def _effect(g, controller):          # controller-sensitive, 2-arg
+            seen["controller"] = controller
+
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=_effect, source=src, controller=p1))
+        src.controller = p2                  # changes hands BEFORE the trigger fires
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        assert game.stack.peek().controller is p2
+        src.controller = p1                  # changes AGAIN before resolution
+        resolve_top_of_stack(game)
+        assert seen["controller"] is p2      # fire-time controller, not resolution-time
+
+    def test_one_arg_untargeted_effect_still_called_with_game_only(self):
+        """A controller-insensitive untargeted effect keeps the effect(game)
+        signature and is never passed a controller (backward compatibility)."""
+        from engine.stack import resolve_top_of_stack
+        game, p1, p2 = self._game()
+        src = Creature(name="Src", owner=p1, controller=p1)
+        calls = []
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None, effect=lambda g: calls.append("ran"), source=src, controller=p1))
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        resolve_top_of_stack(game)
+        assert calls == ["ran"]
+
+
+class TestTriggerCaptureChannel:
+    """The `capture` channel fixes per-fire event state on each trigger's own
+    StackObject (rule 603.3) and passes it — with the fire-time controller — to
+    the effect, so a source's later firings never clobber an earlier trigger's
+    state. This is the mechanism Thousand-Year Storm uses to correlate a trigger
+    to its triggering spell + copy count."""
+
+    def _game(self):
+        from test_utils import create_game
+        game = create_game()
+        game.active_player_index = 0
+        return game, game.players[0], game.players[1]
+
+    def test_capture_runs_at_fire_time_and_threads_state_and_controller(self):
+        """`capture(game, event, controller)` runs when the trigger goes on the
+        stack; its result is stored as event_state and passed to
+        effect(game, controller, event_state) at resolution."""
+        from engine.stack import resolve_top_of_stack
+        game, p1, p2 = self._game()
+        src = Creature(name="Src", owner=p1, controller=p1)
+        captured_at_fire = {}
+        seen = {}
+
+        def _capture(g, event, controller):
+            captured_at_fire["controller"] = controller
+            return {"tag": "fire-state", "amount": event.amount}
+
+        def _effect(g, controller, state):
+            seen["controller"] = controller
+            seen["state"] = state
+
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=DealsDamageTriggeredEvent,
+            condition=None, effect=_effect, source=src, controller=p1,
+            capture=_capture))
+        game.trigger_manager.fire_event(game, DealsDamageTriggeredEvent(amount=7))
+        # State is captured at fire time and stored on the stack object.
+        so = game.stack.peek()
+        assert so.event_state == {"tag": "fire-state", "amount": 7}
+        assert captured_at_fire["controller"] is p1
+        resolve_top_of_stack(game)
+        assert seen["controller"] is p1
+        assert seen["state"] == {"tag": "fire-state", "amount": 7}
+
+    def test_capture_uses_immutable_fire_time_controller(self):
+        """The controller passed to capture/effect is the fire-time controller,
+        even if the source changes hands before resolution."""
+        from engine.stack import resolve_top_of_stack
+        game, p1, p2 = self._game()
+        src = Creature(name="Src", owner=p1, controller=p1)
+        seen = {}
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None,
+            effect=lambda g, c, s: seen.setdefault("controller", c),
+            source=src, controller=p1,
+            capture=lambda g, e, c: c))
+        src.controller = p2                       # changes hands before fire
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        assert game.stack.peek().controller is p2
+        assert game.stack.peek().event_state is p2
+        src.controller = p1                       # changes AGAIN before resolution
+        resolve_top_of_stack(game)
+        assert seen["controller"] is p2           # fire-time, not resolution-time
+
+    def test_two_pending_captures_are_independent(self):
+        """Two firings of the same source's trigger capture independent state on
+        their own stack objects — a later firing never overwrites an earlier
+        trigger's captured facts."""
+        from engine.stack import resolve_top_of_stack
+        game, p1, p2 = self._game()
+        src = Creature(name="Src", owner=p1, controller=p1)
+        counter = {"n": 0}
+        results = []
+
+        def _capture(g, event, controller):
+            counter["n"] += 1
+            return counter["n"]                   # 1 on the first fire, 2 on the second
+
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=BeginningOfUpkeepTriggeredEvent,
+            condition=None,
+            effect=lambda g, c, s: results.append(s),
+            source=src, controller=p1,
+            capture=_capture))
+
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())  # state 1
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())  # state 2
+        pending = [so.event_state for so in game.stack._items]
+        assert sorted(pending) == [1, 2]          # independent, not both 2
+        resolve_top_of_stack(game)                # LIFO: the second fire (state 2)
+        resolve_top_of_stack(game)                # then the first (state 1)
+        assert results == [2, 1]

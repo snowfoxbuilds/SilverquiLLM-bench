@@ -50,7 +50,7 @@ class UnchartedVoyage(Instant):
 
         # Get target creature
         chosen = getattr(self, "chosen_targets", None)
-        target = chosen[0] if chosen else getattr(self, "_resolve_target", None)
+        target = chosen[0] if chosen else None
 
         # Single-target spell fizzles if target is illegal or left battlefield
         if target is None:

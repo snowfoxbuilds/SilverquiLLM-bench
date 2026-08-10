@@ -20,8 +20,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
 from engine.casting import is_sorcery_speed
-from engine.stack import ActivationContext, StackObject
-from engine.types import Zone
+from engine.stack import (
+    ActivationContext,
+    StackObject,
+    capture_activation_context,
+)
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -104,11 +107,22 @@ class LoyaltyAbilityInstance:
 
     Attributes:
         source: The planeswalker permanent.
-        controller: The player who controls the planeswalker.
+        controller: The player activating the ability — its authoritative
+            controller (rule 602.2). :func:`activate_ability` must be called with
+            this same player; a mismatch is rejected before any target query,
+            loyalty payment, or stack push.
         loyalty_cost: The loyalty adjustment (positive for ``+N``,
             negative for ``−N``, zero for ``0``).
-        effect: A callable ``(game) -> None`` for the ability's effect.
+        effect: A callable for the ability's effect. Invoked ``effect(game)`` for
+            an untargeted ability, or ``effect(game, targets, context)`` when
+            ``targeting`` is set — the targets chosen at activation and the
+            :class:`~engine.stack.ActivationContext` captured then.
         description: Human-readable description.
+        targeting: Optional callable ``(game, source, controller) -> list | None``
+            run **at activation, before the loyalty cost is paid**. Returns the
+            chosen targets (possibly an empty list for an "up to one target"
+            ability), or ``None`` when a *required* target has no legal choice
+            (the ability then cannot be activated and no loyalty is spent).
     """
 
     source: Any
@@ -116,6 +130,7 @@ class LoyaltyAbilityInstance:
     loyalty_cost: int = 0
     effect: Callable[..., None] = field(default=lambda _game: None)
     description: str = ""
+    targeting: Callable[..., Any] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -224,38 +239,6 @@ def activate_ability(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _battlefield_instance_id(game: GameState, obj: Any) -> int | None:
-    """Return *obj*'s current battlefield stint id, or ``None`` if it is not on
-    any player's battlefield.
-
-    A zone change mints a fresh stint id (see ``GameRefsRegistry.instance_id``),
-    so a snapshot taken here at activation lets a resolving effect tell whether
-    the same Python object is still the *same* battlefield permanent it was when
-    the ability was activated — a leave-and-return yields a different id.
-    """
-    for player in game.players:
-        if game.get_battlefield(player).contains(obj):
-            return game.refs.instance_id(obj, Zone.BATTLEFIELD.value)
-    return None
-
-
-def _capture_activation_context(
-    game: GameState,
-    source: Any,
-    controller: Any,
-    targets: list[Any],
-) -> ActivationContext:
-    """Snapshot the activation-time controller and source/target stints (rule
-    602.2). Stored on the :class:`StackObject`, never on the mutable source."""
-    return ActivationContext(
-        controller=controller,
-        source_instance_id=_battlefield_instance_id(game, source),
-        target_instance_ids=tuple(
-            _battlefield_instance_id(game, t) for t in targets
-        ),
-    )
-
-
 def _activate_regular_ability(
     game: GameState,
     player: Any,
@@ -321,7 +304,7 @@ def _activate_regular_ability(
         # 5. Capture the immutable activation context (authorized controller +
         #    source/target stints) now, while the source and targets are in
         #    their activation zones, and before the cost mutates anything.
-        context = _capture_activation_context(game, source, controller, chosen_targets)
+        context = capture_activation_context(game, source, controller, chosen_targets)
 
     # 6. Pay costs
     cost_paid = ability.cost(game, source)
@@ -360,23 +343,53 @@ def _activate_loyalty_ability(
     player: Any,
     ability: LoyaltyAbilityInstance,
 ) -> None:
-    """Activate a planeswalker loyalty ability."""
+    """Activate a planeswalker loyalty ability.
+
+    Sequence (rule 602.2, mirroring the activated-ability path): authorization →
+    legality (sorcery-speed timing + once-per-turn) → target selection → loyalty
+    payment → push. Targets are chosen *before* the loyalty cost is paid, so a
+    required-target ability with no legal target spends no loyalty.
+    """
     source = ability.source
 
-    # 1. Timing — loyalty abilities are sorcery speed only.
-    if not is_sorcery_speed(game, player):
+    # 1. Authorization — the activating player is the ability's controller.
+    controller = ability.controller if ability.controller is not None else player
+    if player is not controller:
+        raise AbilityError(
+            "Cannot activate loyalty ability — the activating player is not the "
+            "ability's controller"
+        )
+
+    # 2. Timing — loyalty abilities are sorcery speed only.
+    if not is_sorcery_speed(game, controller):
         raise AbilityError(
             "Cannot activate loyalty ability — sorcery-speed timing not met"
         )
 
-    # 2. Once-per-turn restriction.
+    # 3. Once-per-turn restriction.
     turn_number = getattr(game, "turn_number", 0)
     if _has_activated_loyalty_this_turn(source, turn_number):
         raise AbilityError(
             "Cannot activate loyalty ability — already activated this turn"
         )
 
-    # 3. Pay loyalty cost.
+    # 4. Choose targets (before paying the loyalty cost). ``None`` means a
+    #    required target has no legal choice — abort without spending loyalty.
+    #    An empty list is legal ("up to one target" with nothing chosen).
+    chosen_targets: list[Any] = []
+    context: ActivationContext | None = None
+    if ability.targeting is not None:
+        chosen = ability.targeting(game, source, controller)
+        if chosen is None:
+            raise AbilityError(
+                "Cannot activate loyalty ability — no legal target"
+            )
+        chosen_targets = list(chosen)
+        context = capture_activation_context(
+            game, source, controller, chosen_targets
+        )
+
+    # 5. Pay loyalty cost.
     current_loyalty = getattr(source, "loyalty", 0)
     new_loyalty = current_loyalty + ability.loyalty_cost
     if new_loyalty < 0:
@@ -386,14 +399,24 @@ def _activate_loyalty_ability(
         )
     source.loyalty = new_loyalty
 
-    # 4. Mark as activated this turn.
+    # 6. Mark as activated this turn.
     _mark_loyalty_activated(source, turn_number)
 
-    # 5. Push to stack.
+    # 7. Push to stack.
     stack_obj = StackObject(
         source=source,
-        controller=player,
-        on_resolve=ability.effect,
+        controller=controller,
+        targets=chosen_targets,
         is_mana_ability=False,
+        activation_context=context,
     )
+    if ability.targeting is not None:
+        effect = ability.effect
+        stack_obj.on_resolve = (
+            lambda g, _obj=stack_obj, _effect=effect: _effect(
+                g, _obj.targets, _obj.activation_context
+            )
+        )
+    else:
+        stack_obj.on_resolve = ability.effect
     game.stack.push(stack_obj)
