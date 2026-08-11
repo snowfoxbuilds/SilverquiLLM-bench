@@ -30,3 +30,4 @@ aggregated_results.csv
 validation.json
 
 benchmarks/*/analysis/*.json
+benchmarks/*/analysis/*.md
