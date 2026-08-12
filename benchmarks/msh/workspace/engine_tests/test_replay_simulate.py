@@ -3925,3 +3925,62 @@ class TestGoldenGame:
             "ENGINE_ERROR": 6,
             "MISSING_CARD": 4,
         }
+
+
+class TestTriageSmoke:
+    """The triage tool understands real pipeline output end-to-end.
+
+    Runs the full simulate pipeline over the equipment golden fixture (the
+    bucket-richest one: three state categories + ENGINE_ERROR + ILLEGAL_ACTION
+    + MISSING_CARD), serializes it through the simulate-mode aggregate
+    serializer, and triages the result in memory: the cluster partition must
+    be exact with ZERO unparsed records — i.e. every description template the
+    pipeline emits has a working parser — and the bucket totals must follow
+    the issue #40 counted-once convention (ILLEGAL_ACTION by type, unlike
+    ``_fingerprint``'s ``by_category`` which folds it into state categories).
+
+    Existing golden fingerprints are deliberately untouched by this class.
+    """
+
+    def test_triage_partitions_real_report_exactly(self):
+        import importlib.util
+        import sys
+
+        from silverquillm.replay.cli import _aggregate_reports
+
+        report, by_type, _by_category = TestGoldenGame._fingerprint(
+            TestGoldenGame.FIXTURE_EQUIP
+        )
+        report.source = "golden/fdn_equipment_funding.json"
+        summary = _aggregate_reports([report], {}, simulate=True)
+
+        script = REPO_ROOT / "scripts" / "triage_divergences.py"
+        spec = importlib.util.spec_from_file_location("triage_divergences", script)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["triage_divergences"] = mod
+        spec.loader.exec_module(mod)
+
+        name_of = mod.build_name_resolver(
+            mod._load_json(mod.CARD_ID_MAP_PATH),
+            mod._load_json(mod.TOKEN_ID_MAP_PATH),
+        )
+        triage = mod.build_triage(summary, name_of)
+        recon = triage["reconciliation"]
+
+        assert recon["exact"] is True
+        assert recon["unparsed_records"] == 0
+        assert triage["attribution_available"] is True
+
+        by_bucket = triage["totals"]["by_bucket"]
+        assert sum(by_bucket.values()) == sum(by_type.values())
+        # Operational buckets counted by type (the issue convention).
+        assert by_bucket["ILLEGAL_ACTION"] == by_type["ILLEGAL_ACTION"]
+        assert by_bucket["ENGINE_ERROR"] == by_type["ENGINE_ERROR"]
+        assert by_bucket["MISSING_CARD"] == by_type["MISSING_CARD"]
+        # State categories partition exactly the STATE_MISMATCH records.
+        state_sum = sum(
+            count
+            for bucket, count in by_bucket.items()
+            if bucket in ("zone_contents", "power_toughness", "life_total", "tapped_state")
+        )
+        assert state_sum == by_type["STATE_MISMATCH"]

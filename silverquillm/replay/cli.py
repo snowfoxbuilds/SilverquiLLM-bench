@@ -167,9 +167,36 @@ def _replay_contains_cards(
     return False
 
 
+def _divergence_record(
+    report: ValidationReport,
+    divergence: Divergence,
+    simulate: bool,
+) -> dict[str, Any]:
+    """Serialize one divergence for the aggregate report.
+
+    Simulate mode appends the attribution fields triage tooling needs
+    (source game, turn, co-occurring action). Observer mode keeps the
+    original four-key record so its report stays byte-identical.
+    """
+    record: dict[str, Any] = {
+        "game_state_id": divergence.game_state_id,
+        "type": divergence.divergence_type.value,
+        "description": divergence.description,
+        "involved_grp_ids": divergence.involved_grp_ids,
+    }
+    if simulate:
+        action = divergence.action
+        record["game"] = report.source or None
+        record["turn_number"] = action.turn_number if action else None
+        record["action_type"] = action.action_type if action else None
+        record["action_card"] = (action.card_name or None) if action else None
+    return record
+
+
 def _aggregate_reports(
     reports: list[ValidationReport],
     card_id_map: dict[int, str],
+    simulate: bool = False,
 ) -> dict[str, Any]:
     """Aggregate multiple ValidationReports into a summary dict."""
     games_attempted = len(reports)
@@ -219,12 +246,7 @@ def _aggregate_reports(
         "top_divergence_causes": top_causes,
         "per_card_rates": per_card_rates,
         "divergences": [
-            {
-                "game_state_id": d.game_state_id,
-                "type": d.divergence_type.value,
-                "description": d.description,
-                "involved_grp_ids": d.involved_grp_ids,
-            }
+            _divergence_record(r, d, simulate)
             for r in reports
             for d in r.divergences
         ],
@@ -360,10 +382,16 @@ def validate(
     # Process each replay
     reports: list[ValidationReport] = []
     stopped_early = False
+    corpus_root = path if path.is_dir() else path.parent
 
     for replay_file in replay_files:
         if verbose:
             click.echo(f"\n--- Validating: {replay_file.name} ---")
+
+        try:
+            source = str(replay_file.relative_to(corpus_root))
+        except ValueError:
+            source = replay_file.name
 
         try:
             replay = parse_replay(replay_file, card_id_map=card_id_map)
@@ -381,6 +409,7 @@ def validate(
                         involved_grp_ids=[],
                     )
                 ],
+                source=source,
             )
             reports.append(failed_report)
             continue
@@ -398,6 +427,7 @@ def validate(
             stop_on_first=stop_on_divergence,
             step_callback=_make_verbose_callback() if verbose else None,
         )
+        report.source = source
         reports.append(report)
 
         if verbose:
@@ -413,7 +443,7 @@ def validate(
             break
 
     # Build aggregate summary
-    summary = _aggregate_reports(reports, card_id_map)
+    summary = _aggregate_reports(reports, card_id_map, simulate=simulate)
     if registry is not None:
         summary["registry"] = {"registered": len(registry)}
 

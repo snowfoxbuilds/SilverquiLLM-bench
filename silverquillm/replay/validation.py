@@ -111,6 +111,10 @@ class ValidationReport:
     successful_comparisons: int = 0
     divergences: list[Divergence] = field(default_factory=list)
     card_appearances: dict[int, int] = field(default_factory=dict)
+    # Which replay produced this report (path relative to the corpus root).
+    # gameStateIds restart per game, so without this the aggregate report's
+    # flat divergence list cannot be traced back to a transcript.
+    source: str = ""
 
     @property
     def divergence_count(self) -> int:
