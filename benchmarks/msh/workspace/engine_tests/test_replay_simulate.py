@@ -3899,23 +3899,24 @@ class TestGoldenGame:
         remaining P/T is dynamic-P/T cards (e.g. Consuming Aberration) the sync
         does not model.
 
-        Phase G (arrival-aligned resolution) moves this pin, intentionally:
-        resolving each pending permanent the snapshot GRE first lists it on the
-        battlefield clears the run-length-1 zone transients — zone_contents 32
-        -> 15, successful comparisons 728 -> 745. life/P_T/MISSING are unchanged
-        (this game's residual is dynamic-P/T CDAs and counter timing, not
-        arrival cadence)."""
+        Phase G moves this pin, intentionally, on two axes:
+        arrival-aligned resolution clears the run-length-1 zone transients
+        (zone_contents 32 -> 15), and the gain-life-tapland trigger conversion
+        (life applied at trigger resolution, not land-play drive time) clears
+        this game's tapland life transients (life_total 14 -> 10). Together:
+        STATE_MISMATCH 57 -> 36, successful comparisons 728 -> 749. P/T (12,
+        dynamic-P/T CDAs) and MISSING (1) are unchanged."""
         report, by_type, by_category = self._fingerprint(self.FIXTURE_COUNTERS)
         assert report.total_snapshots == 770
-        assert report.successful_comparisons == 745
+        assert report.successful_comparisons == 749
         assert dict(by_type) == {
-            "STATE_MISMATCH": 40,
+            "STATE_MISMATCH": 36,
             "ILLEGAL_ACTION": 1,
             "MISSING_CARD": 1,
         }
         assert dict(by_category) == {
             "zone_contents": 15,
-            "life_total": 14,
+            "life_total": 10,
             "power_toughness": 12,
             "MISSING_CARD": 1,
         }

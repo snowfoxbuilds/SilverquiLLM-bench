@@ -42,26 +42,58 @@ def make_gainlife_tapland(
             kwargs.setdefault("rules_text", rules_text)
             super().__init__(**kwargs)
 
-        def on_resolve(self, game: "GameState") -> None:
-            """Enter tapped; the enters trigger has its controller gain 1 life."""
-            self.is_tapped = True
-            controller = self.controller or self.owner
-            if controller is not None:
-                from engine.game import gain_life
+        def on_resolve(self, game: GameState) -> None:
+            """Enter tapped (a static as-enters effect, applied at drive time).
 
-                gain_life(game, controller, 1)
+            The "you gain 1 life" clause is a triggered ability, NOT an
+            as-enters effect: it is registered as a real EntersBattlefield
+            trigger (see :meth:`register_triggers`) so it goes on the stack when
+            the land enters and resolves at its own cadence — matching how GRE
+            reports it (an ``ability_activation`` then a later
+            ``ability_resolution``), instead of applying the life immediately at
+            land-play drive time.
+            """
+            self.is_tapped = True
+
+        def register_triggers(self, game: GameState) -> None:
+            """Register the "when this enters, you gain 1 life" ETB trigger."""
+            from engine.events import EntersBattlefieldTriggeredEvent
+            from engine.game import gain_life
+            from engine.triggers import TriggerRegistration
+
+            source = self
+            controller = getattr(self, "controller", None) or getattr(
+                self, "owner", None
+            ) or game.active_player
+
+            def _condition(game: GameState, event: Any) -> bool:
+                return event.permanent is source
+
+            def _effect(game: GameState, controller: Any) -> None:
+                if controller is not None:
+                    gain_life(game, controller, 1)
+
+            game.trigger_manager.register(
+                TriggerRegistration(
+                    event_type=EntersBattlefieldTriggeredEvent,
+                    condition=_condition,
+                    effect=_effect,
+                    source=self,
+                    controller=controller,
+                )
+            )
 
         def get_mana_abilities(self) -> list[ManaAbility]:
             source = self
 
-            def _tap_cost(game: "GameState", src: Any) -> bool:
+            def _tap_cost(game: GameState, src: Any) -> bool:
                 if getattr(src, "is_tapped", False):
                     return False
                 src.is_tapped = True
                 return True
 
             def _make_add(mana_type: ManaType):
-                def _add(game: "GameState") -> None:
+                def _add(game: GameState) -> None:
                     controller = source.controller
                     if controller is not None:
                         controller.mana_pool.add(mana_type, 1)

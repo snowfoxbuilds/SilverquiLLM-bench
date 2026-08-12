@@ -714,3 +714,9 @@ old int did, so the conversion is behavior-preserving. The AST guard gains rule
 private stash, with revert-proving self-tests. — Rejected: leaving card-private
 counter ints (unreadable by the engine and the CounterAdded sync; the exact gap
 that left Drake Hatcher's cost unpayable in replay).
+
+## replay-gap Phase G — gain-life tapland ETB trigger (issue #42)
+
+Format: date — decision — why — rejected alternative.
+
+- 2026-08-12 — The FDN gain-life tapland cycle (`cards/fdn/gainlife_taplands.py`) registers "when this enters, you gain 1 life" as a real `EntersBattlefieldTriggeredEvent` trigger (a self-ETB `condition = event.permanent is source`, `effect(game, controller)` gaining 1 life for the fire-time controller, `source = self`), instead of gaining the life inside `on_resolve`. `on_resolve` keeps only "enters tapped" (a genuine as-enters effect). — "You gain 1 life" is a triggered ability by the rules (603.2), so it belongs on the stack, and putting it there lets its resolution cadence be driven — the replay executor resolves it at GRE's observed `ability_resolution`, and normal-game play resolves it via the stack in `priority_loop`. The Phase F own-ETB ordering (603.3a: register own triggers before firing the ETB event) is what makes a self-ETB trigger fire at all. — Rejected: keeping the life in `on_resolve` (applies at land-play drive time, a snapshot or two before GRE's trigger resolution — the run-length-1 life transient Phase G's replay layer aligns; a card-fidelity bug, not just a replay artifact).
