@@ -1638,3 +1638,54 @@ class TestArrivalAlignedResolution:
         ex = self._sim_executor()
         ex._resolve_arrived_spells(self._bf_snapshot(2, [500]), StepResult(snapshot_id=2))
         assert ex.game.stack.is_empty()
+
+
+class TestNoncastZoneCastEngineCompat:
+    """_simulate_noncast_zone_cast states the cast mode explicitly when the
+    engine supports cast modes, and degrades cleanly when it does not.
+
+    The root suite binds the frozen SOS workspace engine, whose
+    ``cast_spell_free`` has no ``mode`` parameter and whose ``StackObject``
+    has no flashback disposition: a graveyard->stack free cast of a
+    flashback-capable card must still succeed there, with no mode passed and
+    no disposition stamped.
+    """
+
+    def _sim_executor(self) -> ReplayExecutor:
+        snap0 = _make_minimal_snapshot(game_state_id=1)
+        replay = ReplayGame(seat_id=1, opponent_seat_id=2, snapshots=[snap0])
+        ex = ReplayExecutor(
+            replay,
+            card_id_map={MOUNTAIN: "Mountain", PLAINS: "Plains"},
+            simulate=True,
+        )
+        ex.initialize(snap0)
+        return ex
+
+    def test_graveyard_cast_of_flashback_capable_card_succeeds(self):
+        from engine.card import Instant
+        from engine.types import ManaCost, Zone
+
+        ex = self._sim_executor()
+        player = ex.players[1]
+        card = Instant(name="Recall", mana_cost=ManaCost.parse("{1}{U}"), owner=player)
+        card.controller = player
+        card.flashback_cost = ManaCost.parse("{2}{U}")
+        player.zones[Zone.GRAVEYARD].add(card)
+
+        action = ReplayAction(
+            action_type="zone_transition", player_seat_id=1,
+            card_name="Recall", instance_id=501,
+            source_zone="ZoneType_Graveyard", dest_zone="ZoneType_Stack",
+        )
+        snap = _make_minimal_snapshot(game_state_id=2)
+        result = StepResult(snapshot_id=2)
+        ex._simulate_noncast_zone_cast(action, snap, snap, card, result)
+
+        assert not result.engine_failures, result.engine_failures
+        (so,) = [s for s in ex.game.stack._items if s.source is card]
+        # Engine-agnostic: an engine without cast modes stamps no disposition;
+        # an engine with them would only do so under an explicit FLASHBACK
+        # mode, which this executor path selects only when the engine offers
+        # it (covered MSH-side in engine_tests/test_replay_simulate.py).
+        assert getattr(so, "departure_zone", None) in (None, Zone.EXILE)

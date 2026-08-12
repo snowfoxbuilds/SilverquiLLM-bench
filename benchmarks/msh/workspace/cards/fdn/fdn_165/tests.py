@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from cards.fdn.fdn_165.card_impl import ThinkTwice
 from engine.card import Creature, Instant
-from engine.casting import cast_spell_free
+from engine.casting import CastMode, cast_spell_free
 from engine.stack import resolve_top_of_stack
 from engine.types import ManaCost, Zone
 from test_utils import create_game, set_board_state
@@ -43,7 +43,7 @@ class TestThinkTwiceFlashbackExile:
     def test_flashback_cast_exiles_on_resolution(self) -> None:
         game, p1, card = self._game_with_flashbackable_think_twice()
 
-        cast_spell_free(game, p1, card, Zone.GRAVEYARD)
+        cast_spell_free(game, p1, card, Zone.GRAVEYARD, mode=CastMode.FLASHBACK)
         resolve_top_of_stack(game)
 
         assert game.get_exile(p1).contains(card)
@@ -53,10 +53,22 @@ class TestThinkTwiceFlashbackExile:
         game, p1, card = self._game_with_flashbackable_think_twice()
         hand_before = len(game.get_hand(p1))
 
-        cast_spell_free(game, p1, card, Zone.GRAVEYARD)
+        cast_spell_free(game, p1, card, Zone.GRAVEYARD, mode=CastMode.FLASHBACK)
         resolve_top_of_stack(game)
 
         assert len(game.get_hand(p1)) == hand_before + 1
+
+    def test_graveyard_cast_without_flashback_mode_keeps_graveyard(self) -> None:
+        """Flashback is an explicit cast mode, never inferred: Think Twice
+        free-cast from the graveyard WITHOUT selecting flashback still draws
+        but returns to the graveyard — no silent exile."""
+        game, p1, card = self._game_with_flashbackable_think_twice()
+
+        cast_spell_free(game, p1, card, Zone.GRAVEYARD)
+        resolve_top_of_stack(game)
+
+        assert game.get_graveyard(p1).contains(card)
+        assert not game.get_exile(p1).contains(card)
 
     def test_normal_resolution_goes_to_graveyard(self) -> None:
         """The disposition override is flashback-only: a normal on_resolve draws

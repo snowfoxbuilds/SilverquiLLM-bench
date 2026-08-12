@@ -21,35 +21,18 @@ def _get_chosen_target(card: Any, game: Any) -> Any:
 
 
 def _counter_spell(game: "GameState", stack_obj: Any) -> None:
-    """Counter a spell — remove from stack and move card to graveyard."""
-    from engine.stack import StackObject
+    """Counter a spell via the engine's shared stack-departure primitive.
+
+    :func:`engine.stack.move_spell_off_stack` removes exactly *stack_obj* and
+    puts an ordinary spell in its owner's graveyard — or exiles it when the
+    cast stamped a departure replacement (a flashback cast, rule 702.34a).
+    If *stack_obj* already left the stack, nothing happens (fizzle).
+    """
+    from engine.stack import StackObject, move_spell_off_stack
 
     if not isinstance(stack_obj, StackObject):
         return
-
-    card = stack_obj.source
-    stack_items = game.stack._items  # noqa: SLF001
-    found = False
-    for i, item in enumerate(stack_items):
-        if item is stack_obj:
-            stack_items.pop(i)
-            found = True
-            break
-
-    if not found:
-        return
-
-    controller = stack_obj.controller
-    owner = getattr(card, "owner", controller)
-
-    if controller is not None:
-        stack_zone = controller.zones[Zone.STACK]
-        if stack_zone.contains(card):
-            stack_zone.remove(card)
-
-    if owner is not None:
-        graveyard = owner.zones[Zone.GRAVEYARD]
-        graveyard.add(card)
+    move_spell_off_stack(game, stack_obj)
 
 
 class Refute(Instant):

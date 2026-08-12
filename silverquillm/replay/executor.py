@@ -2862,14 +2862,36 @@ class ReplayExecutor:
         from engine.casting import cast_spell_free
         from engine.types import Zone
 
+        try:
+            from engine.casting import CastMode
+        except ImportError:
+            # Engine without explicit cast modes (the frozen SOS workspace):
+            # cast without a mode — that engine has no flashback disposition.
+            CastMode = None
+
         player = self.players.get(action.player_seat_id) or getattr(card, "owner", None)
         if player is None or self.game is None:
             return
         src = _GRE_ZONE_TO_ENGINE.get(action.source_zone)
+        # Select the cast mode explicitly: the GRE stream attests a
+        # graveyard->stack cast and the card's own flashback cost attests the
+        # capability, which together identify a flashback cast (its later
+        # graveyard->exile transition confirms it). The engine's generic
+        # free-cast helper never infers this; the executor must state it.
+        cast_kwargs: dict[str, Any] = {}
+        if (
+            CastMode is not None
+            and src is not None
+            and Zone(src) is Zone.GRAVEYARD
+            and getattr(card, "flashback_cost", None) is not None
+        ):
+            cast_kwargs["mode"] = CastMode.FLASHBACK
         try:
             self._with_target_intent(
                 action, prev_snapshot, curr_snapshot,
-                lambda: cast_spell_free(self.game, player, card, Zone(src)),
+                lambda: cast_spell_free(
+                    self.game, player, card, Zone(src), **cast_kwargs
+                ),
             )
         except Exception as exc:
             result.engine_failures.append(

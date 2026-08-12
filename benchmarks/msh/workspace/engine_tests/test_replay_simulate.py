@@ -4010,3 +4010,64 @@ class TestTriageSmoke:
             if bucket in ("zone_contents", "power_toughness", "life_total", "tapped_state")
         )
         assert state_sum == by_type["STATE_MISMATCH"]
+
+
+class TestNoncastZoneCastModeSelection:
+    """_simulate_noncast_zone_cast selects CastMode.FLASHBACK explicitly, and
+    only when BOTH attestations hold: the GRE transition is graveyard->stack
+    AND the card itself carries a flashback cost. The engine's generic
+    free-cast helper never infers the mode from card attributes — the
+    executor states it, and the engine validates it.
+    """
+
+    def _executor(self) -> ReplayExecutor:
+        return make_executor([snapshot(1)])
+
+    def _instant(self, ex: ReplayExecutor, *, flashback: bool):
+        from engine.card import Instant
+        from engine.types import ManaCost
+
+        player = ex.players[1]
+        card = Instant(name="Recall", mana_cost=ManaCost.parse("{1}{U}"), owner=player)
+        card.controller = player
+        if flashback:
+            card.flashback_cost = ManaCost.parse("{2}{U}")
+        return card
+
+    def _drive(self, ex: ReplayExecutor, card, gre_zone: str, engine_zone):
+        ex.players[1].zones[engine_zone].add(card)
+        action = ReplayAction(
+            action_type="zone_transition", player_seat_id=1,
+            card_name="Recall", instance_id=501,
+            source_zone=gre_zone, dest_zone="ZoneType_Stack",
+        )
+        snap = snapshot(2)
+        result = StepResult(snapshot_id=2)
+        ex._simulate_noncast_zone_cast(action, snap, snap, card, result)
+        assert not result.engine_failures, result.engine_failures
+        (so,) = [s for s in ex.game.stack._items if s.source is card]
+        return so
+
+    def test_graveyard_cast_of_flashback_card_selects_flashback(self):
+        from engine.types import Zone as EngineZone
+
+        ex = self._executor()
+        card = self._instant(ex, flashback=True)
+        so = self._drive(ex, card, "ZoneType_Graveyard", EngineZone.GRAVEYARD)
+        assert so.departure_zone == EngineZone.EXILE
+
+    def test_graveyard_cast_without_flashback_cost_stays_normal(self):
+        from engine.types import Zone as EngineZone
+
+        ex = self._executor()
+        card = self._instant(ex, flashback=False)
+        so = self._drive(ex, card, "ZoneType_Graveyard", EngineZone.GRAVEYARD)
+        assert so.departure_zone is None
+
+    def test_exile_cast_of_flashback_capable_card_stays_normal(self):
+        from engine.types import Zone as EngineZone
+
+        ex = self._executor()
+        card = self._instant(ex, flashback=True)
+        so = self._drive(ex, card, "ZoneType_Exile", EngineZone.EXILE)
+        assert so.departure_zone is None

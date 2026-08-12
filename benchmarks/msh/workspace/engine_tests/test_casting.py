@@ -1525,9 +1525,14 @@ class TestSpellCastHistoryPipeline:
 
 
 class TestFlashbackDisposition:
-    """cast_spell_free overrides a non-permanent spell's post-resolution zone
-    to exile when the card is flashed back (a flashback-cost card cast from the
-    graveyard, rule 702.34e); every other free cast keeps the graveyard default.
+    """Flashback is an EXPLICIT cast mode: ``cast_spell_free(...,
+    mode=CastMode.FLASHBACK)`` validates the claim (graveyard source + a real
+    flashback cost) and stamps ``departure_zone = Zone.EXILE`` on that cast's
+    StackObject, which :func:`engine.stack.move_spell_off_stack` honours any
+    time the spell leaves the stack (rule 702.34a). The generic free-cast
+    helper never infers the mode from card attributes: a flashback-capable
+    card free-cast from the graveyard WITHOUT the mode keeps the graveyard
+    default.
     """
 
     def _flashback_instant(self, player):
@@ -1536,7 +1541,29 @@ class TestFlashbackDisposition:
         card.flashback_cost = ManaCost.parse("{2}{U}")
         return card
 
-    def test_flashback_from_graveyard_exiles(self):
+    def test_flashback_mode_from_graveyard_exiles(self):
+        from engine.casting import CastMode, cast_spell_free
+        from engine.stack import resolve_top_of_stack
+        from engine.types import Zone
+
+        game = _make_game()
+        p = game.players[0]
+        card = self._flashback_instant(p)
+        game.get_graveyard(p).add(card)
+
+        cast_spell_free(game, p, card, Zone.GRAVEYARD, mode=CastMode.FLASHBACK)
+        # The disposition rides on this cast's StackObject.
+        (so,) = [s for s in game.stack._items if s.source is card]
+        assert so.departure_zone == Zone.EXILE
+
+        resolve_top_of_stack(game)
+        assert game.get_exile(p).contains(card)
+        assert not game.get_graveyard(p).contains(card)
+
+    def test_flashback_capable_graveyard_cast_without_mode_keeps_graveyard(self):
+        """The mode is never inferred: the SAME flashback-capable card,
+        free-cast from the graveyard without selecting flashback (a
+        Underworld-Breach-style graveyard cast), is NOT exiled."""
         from engine.casting import cast_spell_free
         from engine.stack import resolve_top_of_stack
         from engine.types import Zone
@@ -1547,13 +1574,12 @@ class TestFlashbackDisposition:
         game.get_graveyard(p).add(card)
 
         cast_spell_free(game, p, card, Zone.GRAVEYARD)
-        # The disposition rides on the cast's StackObject.
         (so,) = [s for s in game.stack._items if s.source is card]
-        assert so.resolution_zone == Zone.EXILE
+        assert so.departure_zone is None
 
         resolve_top_of_stack(game)
-        assert game.get_exile(p).contains(card)
-        assert not game.get_graveyard(p).contains(card)
+        assert game.get_graveyard(p).contains(card)
+        assert not game.get_exile(p).contains(card)
 
     def test_non_flashback_free_cast_keeps_graveyard(self):
         """A card with no flashback cost, free-cast from the graveyard, keeps the
@@ -1570,16 +1596,16 @@ class TestFlashbackDisposition:
 
         cast_spell_free(game, p, card, Zone.GRAVEYARD)
         (so,) = [s for s in game.stack._items if s.source is card]
-        assert so.resolution_zone is None
+        assert so.departure_zone is None
 
         resolve_top_of_stack(game)
         assert game.get_graveyard(p).contains(card)
         assert not game.get_exile(p).contains(card)
 
     def test_flashback_card_from_exile_keeps_graveyard(self):
-        """The exile disposition is graveyard-cast-specific: a flashback-cost
-        card free-cast from EXILE (cascade/Etali style) is NOT a flashback and
-        keeps the graveyard default."""
+        """A flashback-cost card free-cast from EXILE in the default mode
+        (cascade/Etali style) is not a flashback cast and keeps the graveyard
+        default."""
         from engine.casting import cast_spell_free
         from engine.stack import resolve_top_of_stack
         from engine.types import Zone
@@ -1591,7 +1617,44 @@ class TestFlashbackDisposition:
 
         cast_spell_free(game, p, card, Zone.EXILE)
         (so,) = [s for s in game.stack._items if s.source is card]
-        assert so.resolution_zone is None
+        assert so.departure_zone is None
 
         resolve_top_of_stack(game)
         assert game.get_graveyard(p).contains(card)
+        assert not game.get_exile(p).contains(card)
+
+    def test_flashback_mode_from_non_graveyard_zone_rejected(self):
+        """CastMode.FLASHBACK is validated: flashback casts from the graveyard
+        only, so claiming it for an exile cast is a CastingError before any
+        mutation."""
+        from engine.casting import CastingError, CastMode, cast_spell_free
+        from engine.types import Zone
+
+        game = _make_game()
+        p = game.players[0]
+        card = self._flashback_instant(p)
+        game.get_exile(p).add(card)
+
+        with pytest.raises(CastingError):
+            cast_spell_free(game, p, card, Zone.EXILE, mode=CastMode.FLASHBACK)
+
+        assert game.get_exile(p).contains(card)  # untouched
+        assert game.stack.is_empty()
+
+    def test_flashback_mode_without_flashback_cost_rejected(self):
+        """CastMode.FLASHBACK on a card with no flashback cost is a
+        CastingError before any mutation."""
+        from engine.casting import CastingError, CastMode, cast_spell_free
+        from engine.types import Zone
+
+        game = _make_game()
+        p = game.players[0]
+        card = Instant(name="Plain", mana_cost=ManaCost.parse("{U}"), owner=p)
+        card.controller = p
+        game.get_graveyard(p).add(card)
+
+        with pytest.raises(CastingError):
+            cast_spell_free(game, p, card, Zone.GRAVEYARD, mode=CastMode.FLASHBACK)
+
+        assert game.get_graveyard(p).contains(card)  # untouched
+        assert game.stack.is_empty()

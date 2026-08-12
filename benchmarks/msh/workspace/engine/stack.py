@@ -76,12 +76,19 @@ class StackObject:
             by excluding the triggering spell from cast history by identity.
             ``None`` for anything that is not a qualifying-spell cast (copies —
             which are not casts — abilities, triggers, and permanent spells).
-        resolution_zone: For a spell whose post-resolution destination is
-            overridden by the way it was cast — a flashback spell exiles instead
-            of going to the graveyard (rule 702.34e) — the zone the resolving
-            spell is put into instead of its default. ``None`` uses the default
-            (permanents → battlefield, other spells → graveyard). Read by
-            :func:`engine.casting._resolve_spell`.
+        departure_zone: For a spell whose *stack-departure* destination is
+            overridden by the way it was cast: a spell cast via flashback is
+            exiled instead of being put anywhere else **any time it would leave
+            the stack** (rule 702.34a) — when it resolves, when it is countered,
+            and when it fizzles alike. The override is a property of this one
+            cast occurrence, so it rides on the StackObject (like
+            ``activation_context`` / ``prior_qualifying_casts``), never on the
+            mutable card. ``None`` uses the caller's default (permanents →
+            battlefield on resolution, otherwise → owner's graveyard). Set only
+            by an explicit cast mode (``cast_spell_free(...,
+            mode=CastMode.FLASHBACK)``) and applied by
+            :func:`move_spell_off_stack` — the single primitive through which
+            every spell leaves the stack.
     """
 
     source: Any
@@ -92,7 +99,7 @@ class StackObject:
     activation_context: ActivationContext | None = None
     event_state: Any = None
     prior_qualifying_casts: int | None = None
-    resolution_zone: Zone | None = None
+    departure_zone: Zone | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -300,6 +307,73 @@ class Stack:
             if self._items[i].source is source:
                 return self._items.pop(i)
         return None
+
+
+def move_spell_off_stack(
+    game: GameState,
+    stack_obj: StackObject,
+    to_zone: Zone = Zone.GRAVEYARD,
+    *,
+    resolving: bool = False,
+) -> bool:
+    """Move the spell represented by *stack_obj* off the stack.
+
+    The single engine primitive for **every** way a spell leaves the stack, so
+    the cast's departure replacement (``StackObject.departure_zone`` — a
+    flashback spell is exiled any time it would leave the stack, rule 702.34a)
+    is honoured uniformly. Two callers:
+
+    * **Resolution** (``resolving=True``) — :func:`engine.casting._resolve_spell`,
+      after the resolver has already popped *stack_obj*. *to_zone* is the
+      type-default destination (battlefield for a permanent spell, graveyard
+      otherwise).
+    * **Countering** (``resolving=False``, the default) — a counterspell effect,
+      with *stack_obj* still on the stack. The default *to_zone* sends an
+      ordinary countered spell to its owner's graveyard (rule 701.5a).
+
+    Contract:
+
+    1. If *stack_obj* is still on the stack it is removed — exactly that object,
+       by identity, exactly once. When ``resolving=False`` and *stack_obj* is
+       **not** on the stack, the spell has already departed (it resolved or was
+       countered earlier): nothing happens and ``False`` is returned, so a
+       fizzled counter can never move a card that has since been re-cast (the
+       card's stack-zone presence belongs to the new cast occurrence, not this
+       one).
+    2. The destination is ``stack_obj.departure_zone or to_zone`` — the
+       flashback exile replacement applies to resolution and countering alike.
+    3. The card is moved through :func:`engine.zones.move_to_zone`
+       (STACK → destination): removed from whichever player's stack zone holds
+       it and added to its **owner's** destination zone (its controller's for
+       battlefield entry), advancing its zone epoch.
+    4. The card is moved at most once. If it occupies no stack zone — the
+       resolution effect already moved it, or *stack_obj* is a spell copy
+       (whose card object never occupies a stack zone; copies cease to exist,
+       rule 707.10a) — nothing moves.
+
+    Returns:
+        ``True`` if *stack_obj* departed the stack via this call (including a
+        copy, which departs without a card move); ``False`` only on the
+        countering fizzle path (``resolving=False`` with *stack_obj* no longer
+        on the stack).
+    """
+    from engine.zones import move_to_zone
+
+    on_stack = any(item is stack_obj for item in game.stack._items)
+    if on_stack:
+        for i, item in enumerate(game.stack._items):
+            if item is stack_obj:
+                game.stack._items.pop(i)
+                break
+    elif not resolving:
+        # Countering fizzle: this occurrence already left the stack.
+        return False
+
+    card = stack_obj.source
+    if any(p.zones[Zone.STACK].contains(card) for p in game.players):
+        destination = stack_obj.departure_zone or to_zone
+        move_to_zone(game, card, Zone.STACK, destination)
+    return True
 
 
 def copy_spell(
