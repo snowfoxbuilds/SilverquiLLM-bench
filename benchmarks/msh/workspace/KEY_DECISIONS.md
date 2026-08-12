@@ -41,13 +41,53 @@ by `(object_id, id(obj))` with pinned references). Re-minting inside the
 impls or `_place_token` was deliberately NOT done as part of the replay
 correction: `object_id` feeds per-object ability keying (`abilities.py`), so
 changing it would alter shared-ability-state semantics for copies — an engine
-change that deserves its own issue, not a side effect of a replay-layer fix. —
+change deferred to its own issue (**resolved in Phase L / issue #47 — see
+below**), not folded into a replay-layer fix. —
 Rejected: exposing stint identity via `instance_id` (minting side effect);
 storing the epoch as an attribute on game objects (collides with card-impl
 attribute space and the AST guard's write rules); a battlefield-departure-only
 counter in `move_to_zone` (the generic zone-change epoch is strictly more
 informative and needs no zone-specific branching — any move by an object that
 was on the battlefield necessarily begins with a battlefield departure).
+
+**Resolved — Phase L (issue #47): `mint_token_copy`, the copiable-values clone.**
+The engine now exposes `engine.game.mint_token_copy(original)` — the single token-
+cloning primitive (rules 707.2 / 611.2). It re-mints `object_id`, sets
+`is_token`, de-aliases the copy's own mutable characteristic containers
+(`card_types`/`subtypes`/`supertypes`/`colors` sets + `_generic_counters` dict),
+and resets the copy's own per-object numeric state that copiable values exclude
+(counters + `_base_*` shadows, marked damage, tapped state). `_clone_token` (the
+Doubling-Season multiplication path) now delegates to it, so there is one cloning
+truth. fdn_154 (Extravagant Replication) and fdn_163 (Self-Reflection) mint
+through it instead of `copy.copy`, so a copy no longer shares its original's
+`object_id` while both are live — closing the latent per-object-ability bug (the
+`object_id`-keyed loyalty-activated-this-turn tracker in `abilities.py` had
+conflated a copy with its original). AST-guard rule (i) now bans
+`copy.copy`/`copy.deepcopy` in card impls, pointing at the primitive. The
+executor's composite counter key `(object_id, id(obj))` STAYS — now
+belt-and-braces (a unique `object_id` already suffices; the pinned reference is
+defense-in-depth, and the ledger keys are in-memory per run, so no persistence
+concern).
+
+Two fields the issue's design sketch listed for reset are instead **preserved**,
+each an investigated corpus finding (resetting them was NOT corpus-neutral —
+the simulate report moved +6, all in the three copy-token-card games): (1)
+`_grp_id` is the card-DEFINITION grpId, which a copy legitimately shares (the GRE
+shows original and copy under the same grpId) — resetting it de-correlated the
+copy into an anonymous `0` token; (2) `attached_to` — the oracle keeps a token
+copy of an attached aura on the battlefield (the strict-rules "unattached aura
+dies to SBA 704.5m" reading diverges from Arena), so preserving the host keeps it
+alive and correlating. Both are cross-object identity/relationship, not the
+copy's own aliased state; `object_id` (per-object instance identity) is still
+re-minted, so the copy is a new *object* of the same *card* in the same
+*relationship*. With both preserved, the corpus is neutral (two md5-identical
+simulate runs vs baseline; observer byte-identical; goldens unchanged). —
+Rejected: silently re-minting the supplied token inside `create_token` or
+`_place_token` (would leave copy-token callers holding a stale reference — they
+do `token = copy.copy(x); create_token(...)` then use `token` — so the re-mint
+must be an explicit call the caller binds, not a hidden side effect); resetting
+`_grp_id`/`attached_to` per the original sketch and accepting the +6 (it made the
+engine LESS oracle-faithful, the opposite of the benchmark's goal).
 
 ## replay-gap Phase C — engine primitives (issue #30)
 

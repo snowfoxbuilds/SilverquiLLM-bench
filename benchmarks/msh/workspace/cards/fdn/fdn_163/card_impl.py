@@ -46,9 +46,7 @@ class SelfReflection(Sorcery):
 
     def on_resolve(self, game: "GameState") -> None:
         """Create a token copy of target creature you control."""
-        import copy
-
-        from engine.game import create_token
+        from engine.game import create_token, mint_token_copy
 
         chosen = getattr(self, "chosen_targets", None)
         target = chosen[0] if chosen else None
@@ -57,7 +55,8 @@ class SelfReflection(Sorcery):
         controller = self.controller
         if controller is None:
             return
-        # Create token copy
-        token = copy.copy(target)
-        token.is_token = True
+        # A token copy is a new object carrying only the copiable characteristics
+        # (rule 707.2): mint_token_copy re-mints identity and drops the target's
+        # counters/damage/tap, unlike a bare copy.copy.
+        token = mint_token_copy(target)
         create_token(game, controller, token)

@@ -7,7 +7,8 @@ runs during a real game (the ``NameError: EventType`` / ``AttributeError:
 Layer.ABILITY_ADDING`` class of bug that this phase fixed).
 
 This guard walks each ``card_impl.py`` with :mod:`ast` — no execution — and
-fails on seven defect classes:
+fails on the following defect classes (plus (h), the text-gated
+enters-with-counters revert, checked separately below):
 
   (a) a ``Layer.X`` / ``SubLayer.X`` attribute that is not a real enum member;
   (b) a bare name that is referenced (loaded) but never bound or imported
@@ -35,6 +36,14 @@ fails on seven defect classes:
       Use ``engine.game.add_counter`` / ``remove_counter`` (read via
       ``.counters``). Covers the plain, augmented, and *annotated* assignment
       forms (``self.x_counters: int = 0``).
+  (i) a ``copy.copy(...)`` / ``copy.deepcopy(...)`` call. Copying a card/permanent
+      this way skips ``__init__``, so the clone shares the original's
+      ``object_id`` (a latent bug for the ``object_id``-keyed per-turn loyalty
+      tracker in ``abilities.py``) and — for ``copy.copy`` — aliases its mutable
+      characteristic containers. Token copies go through
+      ``engine.game.mint_token_copy`` (fresh identity, de-aliased containers,
+      counters/damage/tap reset per rule 707.2); plain containers copy with
+      ``list()`` / ``dict()`` / ``set()``.
 
 It is intentionally AST-based, not execution-based, so it catches paths that
 only run mid-game. It is fast (well under 2s over the full set) and every
@@ -234,6 +243,29 @@ def find_impl_defects(source: str) -> list[tuple[int, str]]:
                 node.lineno,
                 (f"dead-target backdoor read '{node.attr}' — targets flow "
                  "through get_targets / targeting / choose_object"),
+            ))
+
+        # (i) copy.copy / copy.deepcopy of a game object. A shallow/deep copy
+        #     skips ``__init__``, so the clone shares the original's ``object_id``
+        #     (a latent bug for per-object ability tracking — two objects count as
+        #     one for the once-per-turn loyalty limit) and, for copy.copy, aliases
+        #     the original's mutable characteristic containers. Token copies must
+        #     go through engine.game.mint_token_copy (fresh identity, de-aliased
+        #     containers, counters/damage/tap reset per rule 707.2); plain
+        #     containers copy with list() / dict() / set().
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in ("copy", "deepcopy")
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "copy"
+        ):
+            findings.append((
+                node.lineno,
+                (f"copy.{node.func.attr}(...) — a shallow/deep copy skips "
+                 "__init__, so the clone shares the original's object_id; mint "
+                 "token copies via engine.game.mint_token_copy (copy plain "
+                 "containers with list() / dict() / set())"),
             ))
 
         # (e'/f') the same defects via getattr/setattr string literals.
@@ -579,6 +611,57 @@ class TestGuardCatchesEachOriginalDefect:
         # Reading the sanctioned `.counters` view is the correct pattern.
         src = "def f(self, src):\n    return src.counters.get('soul', 0)\n"
         assert not any("counter stash" in m for m in self._messages(src))
+
+    # (i) copy.copy / copy.deepcopy of a game object.
+    def test_fdn_154_copy_copy_revert_is_flagged(self) -> None:
+        # Reverting Extravagant Replication to a bare shallow copy of the chosen
+        # permanent must be caught (the copy would share the original's object_id).
+        src = (
+            "import copy\n"
+            "def f(game, ctrl, chosen):\n"
+            "    from engine.game import create_token\n"
+            "    token = copy.copy(chosen)\n"
+            "    token.is_token = True\n"
+            "    create_token(game, ctrl, token)\n"
+        )
+        assert any("copy.copy(...)" in m for m in self._messages(src))
+
+    def test_fdn_163_copy_copy_revert_is_flagged(self) -> None:
+        # Reverting Self-Reflection to a bare shallow copy of the target creature.
+        src = (
+            "import copy\n"
+            "def on_resolve(self, game):\n"
+            "    from engine.game import create_token\n"
+            "    token = copy.copy(self.chosen_targets[0])\n"
+            "    create_token(game, self.controller, token)\n"
+        )
+        assert any("copy.copy(...)" in m for m in self._messages(src))
+
+    def test_copy_deepcopy_is_flagged(self) -> None:
+        # A deep copy also skips __init__ (shared object_id) — likewise banned.
+        src = "import copy\ndef f(x):\n    return copy.deepcopy(x)\n"
+        assert any("copy.deepcopy(...)" in m for m in self._messages(src))
+
+    def test_mint_token_copy_is_not_flagged(self) -> None:
+        # The sanctioned primitive must NOT be flagged.
+        src = (
+            "def f(game, ctrl, chosen):\n"
+            "    from engine.game import create_token, mint_token_copy\n"
+            "    token = mint_token_copy(chosen)\n"
+            "    create_token(game, ctrl, token)\n"
+        )
+        assert not any("copy." in m for m in self._messages(src))
+
+    def test_plain_container_copies_are_not_flagged(self) -> None:
+        # Copying plain containers with the builtins is fine — only copy.copy /
+        # copy.deepcopy are banned, not a set()/dict()/list() of an attribute.
+        src = (
+            "def f(self, obj):\n"
+            "    types = set(obj.card_types)\n"
+            "    counts = dict(obj._generic_counters)\n"
+            "    return list(types) + list(counts)\n"
+        )
+        assert find_impl_defects(src) == []
 
 
 @pytest.mark.parametrize(

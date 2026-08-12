@@ -38,6 +38,7 @@ from engine.game import (
     discard,
     draw_card,
     exile,
+    mint_token_copy,
     remove_counter,
     run_game,
     sacrifice,
@@ -497,6 +498,138 @@ class TestCreateToken:
         create_token(game, p1, token)
         assert token.owner is p1
         assert token.controller is p1
+
+
+# ===========================================================================
+# mint_token_copy — the copiable-values cloning primitive (rule 707.2)
+# ===========================================================================
+class TestMintTokenCopy:
+    """Tests for mint_token_copy(): fresh identity, de-aliased containers, and
+    reset per-object state, keeping only the copiable characteristics."""
+
+    def test_fresh_object_id(self) -> None:
+        """A copy is a new object — it gets its own object_id (rule 707.2)."""
+        original = _make_creature("Bear")
+        copy_tok = mint_token_copy(original)
+        assert copy_tok.object_id != original.object_id
+
+    def test_original_and_two_copies_all_distinct(self) -> None:
+        """Original plus two copies each have a distinct object_id (the shared-id
+        bug the bare copy.copy exhibited: the copy aliased the original's id)."""
+        original = _make_creature("Bear")
+        a = mint_token_copy(original)
+        b = mint_token_copy(original)
+        ids = {original.object_id, a.object_id, b.object_id}
+        assert len(ids) == 3
+
+    def test_copiable_characteristics_preserved(self) -> None:
+        """Name, printed P/T, keywords, and types survive the copy."""
+        original = Creature(
+            name="Grizzly",
+            base_power=2,
+            base_toughness=3,
+            keywords=Keyword.TRAMPLE,
+            subtypes={"Bear"},
+        )
+        copy_tok = mint_token_copy(original)
+        assert copy_tok.name == "Grizzly"
+        assert copy_tok.base_power == 2
+        assert copy_tok.base_toughness == 3
+        assert copy_tok.keywords == original.keywords
+        assert copy_tok.card_types == original.card_types
+        assert copy_tok.subtypes == {"Bear"}
+
+    def test_is_token_flag_set(self) -> None:
+        """The mint produces a token even when copying a non-token permanent."""
+        original = _make_creature("Bear")
+        assert original.is_token is False
+        copy_tok = mint_token_copy(original)
+        assert copy_tok.is_token is True
+        # The original is untouched.
+        assert original.is_token is False
+
+    def test_containers_are_de_aliased(self) -> None:
+        """The copy's mutable characteristic containers are distinct objects, so
+        mutating the copy never mutates the original (a shallow copy aliases)."""
+        original = _make_creature("Bear")
+        original.subtypes = {"Bear"}
+        copy_tok = mint_token_copy(original)
+        assert copy_tok.card_types is not original.card_types
+        assert copy_tok.subtypes is not original.subtypes
+        assert copy_tok._generic_counters is not original._generic_counters
+        copy_tok.subtypes.add("Zombie")
+        assert "Zombie" not in original.subtypes
+
+    def test_counters_are_reset(self) -> None:
+        """Counters are not copiable (rule 707.2) — the copy has none, even when
+        the original carries +1/+1, -1/-1, and generic counters."""
+        game, _, _ = _make_bare_game()
+        original = _make_creature("Bear")
+        add_counter(game, original, "+1/+1", 3)
+        add_counter(game, original, "-1/-1", 1)
+        add_counter(game, original, "charge", 2)
+        copy_tok = mint_token_copy(original)
+        assert copy_tok.plus_one_counters == 0
+        assert copy_tok.minus_one_counters == 0
+        assert copy_tok._base_plus_one_counters == 0
+        assert copy_tok._base_minus_one_counters == 0
+        assert copy_tok._generic_counters == {}
+        assert copy_tok.counters == {}
+        # The original keeps its counters.
+        assert original.plus_one_counters == 3
+
+    def test_marked_damage_and_tap_are_reset(self) -> None:
+        """Marked damage and tapped state are per-object, not copiable."""
+        original = _make_creature("Bear")
+        original.damage_marked = 2
+        original.is_tapped = True
+        copy_tok = mint_token_copy(original)
+        assert copy_tok.damage_marked == 0
+        assert copy_tok.is_tapped is False
+
+    def test_grp_id_definition_hook_is_preserved(self) -> None:
+        """The card-definition replay hook is preserved: a copy shares the copied
+        card's grpId (the GRE represents a copy token under the copied object's
+        grpId), unlike the per-object object_id which is re-minted."""
+        original = _make_creature("Bear")
+        original._grp_id = 12345
+        copy_tok = mint_token_copy(original)
+        assert copy_tok._grp_id == 12345
+        # ...while the per-object identity is still fresh.
+        assert copy_tok.object_id != original.object_id
+
+    def test_attached_to_is_preserved_for_aura(self) -> None:
+        """A token copy of an attached aura enters attached to the same host —
+        the oracle keeps such a copy on the battlefield rather than letting it die
+        unattached, so the attachment reference is preserved (not the copy's own
+        aliased state — a reference to another object)."""
+        from engine.card import Enchantment
+
+        host = _make_creature("Host")
+        aura = Enchantment(name="Aura", attached_to=host)
+        copy_tok = mint_token_copy(aura)
+        assert copy_tok.attached_to is host
+        assert aura.attached_to is host
+
+    def test_loyalty_tracking_is_independent(self) -> None:
+        """The object_id-keyed per-turn loyalty tracker treats the original and
+        its copy independently — the latent bug a shared object_id caused (two
+        objects counting as one for the once-per-turn limit)."""
+        from engine.abilities import (
+            _has_activated_loyalty_this_turn,
+            _mark_loyalty_activated,
+            clear_loyalty_tracking,
+        )
+
+        clear_loyalty_tracking()
+        original = _make_creature("Walker")
+        copy_tok = mint_token_copy(original)
+        turn = 1
+        _mark_loyalty_activated(original, turn)
+        assert _has_activated_loyalty_this_turn(original, turn) is True
+        # With a fresh object_id, the copy is NOT considered already-activated.
+        assert _has_activated_loyalty_this_turn(copy_tok, turn) is False
+        clear_loyalty_tracking()
 
 
 # ===========================================================================
