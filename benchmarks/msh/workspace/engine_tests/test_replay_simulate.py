@@ -3806,6 +3806,8 @@ class TestGoldenGame:
     FIXTURE_TOKENS = REPO_ROOT / "data" / "replays" / "golden" / "fdn_tokens_prideful.json"
     FIXTURE_COUNTERS = REPO_ROOT / "data" / "replays" / "golden" / "fdn_counters_dynamic_pt.json"
     FIXTURE_EQUIP = REPO_ROOT / "data" / "replays" / "golden" / "fdn_equipment_funding.json"
+    # Phase I addition — anchors the newly-fired dormant events.
+    FIXTURE_DORMANT = REPO_ROOT / "data" / "replays" / "golden" / "fdn_dormant_events.json"
 
     @staticmethod
     def _fingerprint(fixture):
@@ -3968,6 +3970,35 @@ class TestGoldenGame:
             "life_total": 15,
             "ENGINE_ERROR": 1,
             "MISSING_CARD": 2,
+        }
+
+    def test_dormant_events_fingerprint(self):
+        """Prowess/anthem/attack-trigger-dense game — the Phase I (#44) regression
+        anchor for the newly-fired dormant events. It exercises all three firing
+        sites: SpellCastTriggeredEvent (Balmor's cast-anthem, Heartfire
+        Immolator's prowess), AttacksTriggeredEvent (Dauntless Veteran's team
+        buff), and combat DealsDamageTriggeredEvent. Before Phase I every one was
+        dormant, so this game's dynamic P/T diverged pervasively; now the buffs
+        apply and the fingerprint is dominated by the residual trigger-resolution
+        timing (power_toughness 22 — a buff queued on the engine stack that
+        resolves a snapshot late vs GRE at a comparison point), the honest
+        limitation attributed in the PR. A regression that un-fires any of the
+        three events would blow this pin up. ENGINE_ERROR 3 is bounded funding /
+        counter-timing residue (not a dormant event)."""
+        report, by_type, by_category = self._fingerprint(self.FIXTURE_DORMANT)
+        assert report.total_snapshots == 460
+        assert report.successful_comparisons == 444
+        assert dict(by_type) == {
+            "STATE_MISMATCH": 26,
+            "ENGINE_ERROR": 3,
+            "MISSING_CARD": 1,
+        }
+        assert dict(by_category) == {
+            "power_toughness": 22,
+            "zone_contents": 3,
+            "life_total": 1,
+            "ENGINE_ERROR": 3,
+            "MISSING_CARD": 1,
         }
 
 
