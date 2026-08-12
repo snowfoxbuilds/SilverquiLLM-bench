@@ -12,7 +12,7 @@ subtypes (e.g. ``CreatureDiesReplacementEvent``).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -200,3 +200,33 @@ class AddCounterReplacementEvent(ReplacementEvent):
     permanent: Any = None
     amount: int = 1
     counter_type: Any = None
+
+
+@dataclass
+class EntersBattlefieldReplacementEvent(ReplacementEvent):
+    """A permanent about to enter the battlefield (rule 614.1c).
+
+    Consulted **before** the permanent is placed, so "enters with N counters"
+    replacements land the counters AS the permanent enters — it never exists at
+    0/0 and never dies to the 0-toughness state-based action.
+
+    ``counters`` maps ``counter_type -> amount`` and is populated by two
+    channels, both while the entering permanent is still off the battlefield:
+
+    * the entering card's own ``enters_battlefield_with(game, event)`` self-hook
+      (its registry effects are not yet registered at this point, so the hook is
+      called directly on the object); and
+    * third-party replacement effects registered on this event type — e.g.
+      *Giada, Font of Hope* granting each other Angel an extra +1/+1 counter for
+      each Angel already controlled.
+
+    The engine then lands ``counters`` through the shared counter helper (so
+    *Doubling Season* et al. still double them via ``AddCounterReplacementEvent``)
+    after placement but before the ETB event and the first SBA pass, and fires
+    one ``CounterAddedTriggeredEvent`` per counter type afterward.
+    """
+
+    permanent: Any = None
+    controller: Any = None
+    from_zone: Any = None
+    counters: dict = field(default_factory=dict)

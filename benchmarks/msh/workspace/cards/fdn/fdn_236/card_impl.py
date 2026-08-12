@@ -27,26 +27,25 @@ class WildwoodScourge(Creature):
         super().__init__(**kwargs)
         self.x_value: int = 0
 
-    def on_resolve(self, game: 'GameState') -> None:
-        """Enter with X +1/+1 counters."""
-        from engine.game import add_counter
+    def enters_battlefield_with(self, game: 'GameState', event: Any) -> None:
+        """Enter with X +1/+1 counters (rule 614.1c replacement).
+
+        ``x_value`` is the value chosen for {X} when the spell was cast; the
+        replay executor derives it from the observed cast funding before
+        resolution. When no X evidence is available it stays 0 and the creature
+        honestly enters at 0/0 and dies to SBAs — no counter is fabricated.
+        """
         if self.x_value > 0:
-            add_counter(game, self, '+1/+1', self.x_value)
+            event.counters['+1/+1'] = event.counters.get('+1/+1', 0) + self.x_value
 
     def register_triggers(self, game: 'GameState') -> None:
-        """Register +1/+1 counter synergy trigger.
+        """Register the +1/+1 counter synergy trigger.
 
         Whenever one or more +1/+1 counters are put on another non-Hydra
-        creature you control, put a +1/+1 counter on this creature.
-
-        ENGINE LIMITATION: ``CounterAddedTriggeredEvent`` is declared in
-        ``engine.events`` but ``engine.game.add_counter`` does not yet fire
-        it, so this subscription is registered correctly but will not fire
-        until the engine-primitives phase wires ``add_counter`` to emit the
-        event. The registration itself is real; the trigger is dormant. (The
-        previous ``hasattr(EventType, 'COUNTER_ADDED')`` guard referenced an
-        undefined ``EventType`` name and crashed ``register_triggers`` with a
-        NameError.)
+        creature you control, put a +1/+1 counter on this creature. A creature
+        that *enters* with +1/+1 counters counts as having counters put on it
+        (rule 614.1c), so the enters-with-counters primitive fires
+        ``CounterAddedTriggeredEvent`` for it and this synergy sees it.
         """
         from engine.game import add_counter
         from engine.triggers import TriggerRegistration

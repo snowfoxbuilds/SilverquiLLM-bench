@@ -5,11 +5,9 @@ The crash surface is **trigger registration on a permanent entering play**:
 on an undefined ``EventType`` name, so registration raised ``NameError``
 (`register_triggers Wildwood Scourge` in the replay layer). This test drives
 ``register_triggers`` and asserts it completes and subscribes to the declared
-``CounterAddedTriggeredEvent``.
-
-Note the documented dependency: ``engine.game.add_counter`` does not yet emit
-``CounterAddedTriggeredEvent``, so the trigger is registered correctly but
-dormant until the engine-primitives phase.
+``CounterAddedTriggeredEvent``. The X entry counters are now supplied by the
+enters-with-counters primitive (``enters_battlefield_with``) rather than
+``on_resolve``, so they are on the creature as it enters.
 """
 
 from __future__ import annotations
@@ -30,13 +28,28 @@ class TestWildwoodScourgeProperties:
         assert card.mana_cost == ManaCost.parse("{X}{G}")
 
     def test_enters_with_x_counters(self) -> None:
+        # Enters-with-counters primitive: X +1/+1 counters land AS the creature
+        # enters, so a 0/0 with X=3 is a 3/3 the moment it is on the battlefield.
         game = create_game()
         p1 = game.players[0]
         card = WildwoodScourge(owner=p1, controller=p1)
         card.x_value = 3
-        set_board_state(game, 0, battlefield=[card])
-        card.on_resolve(game)
+        set_board_state(game, 0, hand=[card])
+        move_to_zone(game, card, Zone.HAND, Zone.BATTLEFIELD)
         assert card.plus_one_counters == 3
+        assert card.power == 3
+        assert card.toughness == 3
+
+    def test_x_zero_enters_at_zero_zero_no_fabrication(self) -> None:
+        # No X evidence → x_value stays 0 → the creature honestly enters at 0/0
+        # (and would die to the 0-toughness SBA). No counter is invented.
+        game = create_game()
+        p1 = game.players[0]
+        card = WildwoodScourge(owner=p1, controller=p1)
+        set_board_state(game, 0, hand=[card])
+        move_to_zone(game, card, Zone.HAND, Zone.BATTLEFIELD)
+        assert card.plus_one_counters == 0
+        assert card.toughness == 0
 
 
 class TestWildwoodScourgeTriggerRegistration:

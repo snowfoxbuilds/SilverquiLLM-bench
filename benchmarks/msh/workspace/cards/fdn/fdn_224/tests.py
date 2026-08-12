@@ -13,7 +13,8 @@ from __future__ import annotations
 from cards.fdn.fdn_224.card_impl import GnarlidColony
 from engine.card import Creature
 from engine.continuous_effects import Layer
-from engine.types import Keyword, ManaCost
+from engine.types import Keyword, ManaCost, Zone
+from engine.zones import move_to_zone
 from test_utils import create_game, set_board_state
 
 
@@ -23,6 +24,32 @@ class TestGnarlidColonyProperties:
         assert card.name == "Gnarlid Colony"
         assert card.mana_cost == ManaCost.parse("{1}{G}")
         assert (card.base_power, card.base_toughness) == (2, 2)
+
+
+class TestGnarlidColonyKickerEntry:
+    """Kicker: enters with two +1/+1 counters if it was kicked (rule 614.1c)."""
+
+    def test_kicked_enters_as_four_four(self) -> None:
+        game = create_game()
+        p1 = game.players[0]
+        card = GnarlidColony(owner=p1, controller=p1)
+        card.kicked = True
+        set_board_state(game, 0, hand=[card])
+        move_to_zone(game, card, Zone.HAND, Zone.BATTLEFIELD)
+        assert card.plus_one_counters == 2
+        assert card.power == 4
+        assert card.toughness == 4
+
+    def test_unkicked_enters_as_two_two(self) -> None:
+        game = create_game()
+        p1 = game.players[0]
+        card = GnarlidColony(owner=p1, controller=p1)
+        # kicked defaults to False; no evidence => no counters fabricated.
+        set_board_state(game, 0, hand=[card])
+        move_to_zone(game, card, Zone.HAND, Zone.BATTLEFIELD)
+        assert card.plus_one_counters == 0
+        assert card.power == 2
+        assert card.toughness == 2
 
 
 class TestGnarlidColonyContinuousEffect:

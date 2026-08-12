@@ -276,6 +276,24 @@ def move_to_zone(
     else:
         dest_player = owner
 
+    # --- Enters-with-counters: resolve entry counters BEFORE placement ---
+    # (rule 614.1c) so a 0/0 that enters with N +1/+1 counters is never a
+    # transient 0/0 that dies to SBAs. The card's own registry effects are not
+    # registered until after placement, so its entry counters come through the
+    # direct ``enters_battlefield_with`` self-hook; third-party effects (Giada)
+    # contribute via the replacement manager. The entering card is still off the
+    # battlefield here, so "for each Angel you already control" counts correctly.
+    enters_event = None
+    if entering_battlefield:
+        from engine.game import build_enters_battlefield_event
+
+        enters_event = build_enters_battlefield_event(
+            game,
+            card,
+            controller=dest_player,
+            from_zone=from_zone,
+        )
+
     dest_player.zones[dest_zone].add(card)
 
     # A zone change yields a new object: break instance-id continuity in the
@@ -334,6 +352,17 @@ def move_to_zone(
 
     # --- Entering battlefield hooks ---
     if entering_battlefield:
+        from engine.game import (
+            apply_entry_counter_values,
+            fire_entry_counters_added,
+        )
+
+        # Land the entry counters BEFORE registering triggers, firing the ETB
+        # event, or the first SBA pass (rule 614.1c) — the permanent already
+        # holds its counters, so a 0/0 "enters with N +1/+1 counters" is never a
+        # transient 0/0. Values only here; the CounterAdded triggers fire below.
+        landed_counters = apply_entry_counter_values(game, card, enters_event)
+
         # Register the card's own triggers/replacement effects *before* firing
         # the ENTERS_BATTLEFIELD event, so a permanent's own enters-trigger
         # fires on its own entry (rule 603.3a — a permanent's own
@@ -352,6 +381,10 @@ def move_to_zone(
                 controller=controller if controller is not None else owner,
             ),
         )
+
+        # Entering counters count as "put on" (rule 614.1c + 603): fire one
+        # CounterAddedTriggeredEvent per type, after the ETB event.
+        fire_entry_counters_added(game, card, landed_counters)
 
     # --- Re-derive continuous effects on any battlefield change ---
     # A lord/anthem entering mid-turn buffs the team now; a departed source's

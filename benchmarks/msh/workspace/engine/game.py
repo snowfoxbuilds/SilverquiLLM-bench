@@ -421,8 +421,19 @@ def _place_token(game: GameState, player: Player, token: Any, grp_id: Any) -> No
     # replacement effects *before* firing the ETB event, so a token's own
     # enters-trigger fires on its own entry (rule 603.3a). An "another …"
     # ability must exclude the source in its own condition filter.
+    #
+    # Enters-with-counters (rule 614.1c): resolve entry counters BEFORE placement
+    # (the token's own enters_battlefield_with hook + third-party replacements
+    # such as Giada buffing an Angel token), land the values right after
+    # placement so the token is never a transient 0/0, then fire the CounterAdded
+    # triggers after the ETB event.
+    enters_event = build_enters_battlefield_event(
+        game, token, controller=player, from_zone=None
+    )
     battlefield = game.get_battlefield(player)
     battlefield.add(token)
+
+    landed_counters = apply_entry_counter_values(game, token, enters_event)
 
     if hasattr(token, "register_triggers"):
         token.register_triggers(game)
@@ -434,6 +445,8 @@ def _place_token(game: GameState, player: Player, token: Any, grp_id: Any) -> No
             game,
             EntersBattlefieldTriggeredEvent(permanent=token, controller=player),
         )
+
+    fire_entry_counters_added(game, token, landed_counters)
 
     # Re-derive continuous effects so anthems/lords buff the new token
     # immediately (and the token's own static effect, if any, is applied).
@@ -560,8 +573,41 @@ def add_counter(
             ``"loyalty"``, ``"charge"``).
         amount: Number of counters to add (default 1).
     """
-    if amount <= 0:
+    landed = _land_counter_amount(game, permanent, counter_type, amount)
+    if landed <= 0:
         return
+
+    # Fire the counter-added trigger after the counters have landed.
+    if hasattr(game, "trigger_manager"):
+        game.trigger_manager.fire_event(
+            game,
+            CounterAddedTriggeredEvent(
+                permanent=permanent, counter_type=counter_type, amount=landed
+            ),
+        )
+
+
+def _land_counter_amount(
+    game: GameState,
+    permanent: Any,
+    counter_type: str,
+    amount: int,
+) -> int:
+    """Land *amount* counters of *counter_type* onto *permanent* — the shared
+    counter-writing core of :func:`add_counter`.
+
+    Consults :class:`AddCounterReplacementEvent` first (so *Doubling Season* et
+    al. can adjust the amount), writes the counter fields **and** their
+    ``_base_*`` shadows, and returns the amount actually landed after
+    replacement (``0`` if nothing landed). It deliberately does **not** fire
+    :class:`CounterAddedTriggeredEvent`: callers that represent a discrete
+    "counters were put on" event fire it themselves *after* landing, so that the
+    enters-with-counters path (:func:`land_enters_with_counters`) can order the
+    counter-added trigger after the ETB event while still having the counters
+    present before the first SBA pass.
+    """
+    if amount <= 0:
+        return 0
 
     # Replacement effects (Doubling Season et al.) may change the amount.
     if hasattr(game, "replacement_manager"):
@@ -573,7 +619,7 @@ def add_counter(
         )
         amount = getattr(event, "amount", amount)
         if amount <= 0:
-            return
+            return 0
 
     if counter_type == "+1/+1" and hasattr(permanent, "plus_one_counters"):
         permanent.plus_one_counters += amount
@@ -593,8 +639,84 @@ def add_counter(
             permanent._generic_counters = store
         store[counter_type] = store.get(counter_type, 0) + amount
 
-    # Fire the counter-added trigger after the counters have landed.
-    if hasattr(game, "trigger_manager"):
+    return amount
+
+
+def build_enters_battlefield_event(
+    game: GameState,
+    permanent: Any,
+    *,
+    controller: Any,
+    from_zone: Any,
+) -> Any:
+    """Build the :class:`EntersBattlefieldReplacementEvent` for *permanent*.
+
+    Populates ``event.counters`` from the two entry-counter channels, both while
+    *permanent* is still off the battlefield (rule 614.1c — the counters are on
+    it *as* it enters):
+
+    1. the permanent's own ``enters_battlefield_with(game, event)`` self-hook,
+       if it defines one (its registry effects are not registered until after
+       placement, so this cannot go through the replacement manager); and
+    2. already-registered third-party replacement effects on this event type
+       (e.g. *Giada, Font of Hope*).
+
+    Called by :func:`engine.zones.move_to_zone` and :func:`_place_token` before
+    the card is added to the battlefield. Returns the (possibly replacement-
+    modified) event; land its counters with :func:`land_enters_with_counters`
+    after placement.
+    """
+    from engine.events import EntersBattlefieldReplacementEvent
+
+    event = EntersBattlefieldReplacementEvent(
+        permanent=permanent, controller=controller, from_zone=from_zone
+    )
+    hook = getattr(permanent, "enters_battlefield_with", None)
+    if callable(hook):
+        hook(game, event)
+    if hasattr(game, "replacement_manager"):
+        event = game.replacement_manager.apply(game, event)
+    return event
+
+
+def apply_entry_counter_values(
+    game: GameState, permanent: Any, event: Any
+) -> dict[str, int]:
+    """Write *event*'s entry counters onto *permanent* (values only, no trigger).
+
+    Run right after the permanent is added to the battlefield and **before** the
+    ETB event / first SBA pass, so a 0/0 that "enters with N +1/+1 counters" is
+    never a transient 0/0. Consults :class:`AddCounterReplacementEvent` per type
+    (doublers) and writes the ``_base_*`` shadows. Returns the per-type amounts
+    actually landed (post-replacement); pass them to
+    :func:`fire_entry_counters_added` **after** the ETB event.
+    """
+    counters = getattr(event, "counters", None)
+    if not counters:
+        return {}
+    landed: dict[str, int] = {}
+    for counter_type, amount in counters.items():
+        got = _land_counter_amount(game, permanent, counter_type, amount)
+        if got > 0:
+            landed[counter_type] = landed.get(counter_type, 0) + got
+    return landed
+
+
+def fire_entry_counters_added(
+    game: GameState, permanent: Any, landed: dict[str, int]
+) -> None:
+    """Fire one :class:`CounterAddedTriggeredEvent` per entry-counter type.
+
+    Called **after** the ETB event with the dict returned by
+    :func:`apply_entry_counter_values`. Entering with counters counts as those
+    counters being "put on" (rule 614.1c + 603), so "whenever one or more
+    counters are put on…" abilities trigger; firing after the ETB event fixes a
+    deterministic ETB-then-counter ordering among the entering permanent's own
+    simultaneous triggers.
+    """
+    if not landed or not hasattr(game, "trigger_manager"):
+        return
+    for counter_type, amount in landed.items():
         game.trigger_manager.fire_event(
             game,
             CounterAddedTriggeredEvent(

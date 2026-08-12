@@ -33,11 +33,19 @@ class GoblinBoarders(Creature):
         )
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: "GameState") -> None:
-        """ETB: Raid — enters with a +1/+1 counter if attacked this turn."""
-        from engine.game import add_counter
+    def enters_battlefield_with(self, game: "GameState", event: Any) -> None:
+        """Raid — enters with a +1/+1 counter if you attacked this turn (614.1c).
 
-        controller = self.controller
+        The Raid condition is read from game state as the creature enters, so
+        the counter is on it *as* it enters rather than added one step late.
+        Reads ``attacked_this_turn`` (per-player, else the game-level flag or the
+        live combat's attackers). In replay this flag is not driven: GRE applies
+        Goblin Boarders' raid counter one snapshot *after* entry (a counter
+        cadence, issue #42), so entering with it at engine-entry-time would
+        diverge from GRE by a snapshot — the raid counter is left as a cadence
+        divergence rather than fabricated here.
+        """
+        controller = event.controller
         if controller is None:
             return
 
@@ -54,4 +62,4 @@ class GoblinBoarders(Creature):
             attacked_this_turn = getattr(controller, "attacked_this_turn", False)
 
         if attacked_this_turn:
-            add_counter(game, self, "+1/+1")
+            event.counters["+1/+1"] = event.counters.get("+1/+1", 0) + 1
