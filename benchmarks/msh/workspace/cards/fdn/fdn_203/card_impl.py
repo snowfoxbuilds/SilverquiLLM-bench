@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import CardImpl, Sorcery
+from engine.card import Sorcery
 from engine.continuous_effects import (
     ContinuousEffect,
     DURATION_END_OF_TURN,
@@ -106,12 +106,5 @@ class InvoluntaryEmployment(Sorcery):
 
         # Create a Treasure token
         if controller is not None:
-            treasure = CardImpl(
-                name="Treasure",
-                mana_cost=ManaCost(generic=0),
-                rules_text="{T}, Sacrifice this token: Add one mana of any color.",
-            )
-            treasure.card_types = {CardType.ARTIFACT}
-            treasure.subtypes = {"Treasure"}
-            treasure.is_token = True
-            create_token(game, controller, treasure)
+            from cards.fdn.tokens import make_treasure_token
+            create_token(game, controller, make_treasure_token())

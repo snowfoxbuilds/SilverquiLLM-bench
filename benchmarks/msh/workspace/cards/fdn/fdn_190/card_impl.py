@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import CardImpl, Sorcery
+from engine.card import Sorcery
 from engine.types import CardType, ManaCost
 
 if TYPE_CHECKING:
@@ -42,13 +42,8 @@ class BrasssBounty(Sorcery):
             if CardType.LAND in getattr(perm, "card_types", set()):
                 land_count += 1
 
-        for _ in range(land_count):
-            treasure = CardImpl(
-                name="Treasure",
-                mana_cost=ManaCost(generic=0),
-                rules_text="{T}, Sacrifice this token: Add one mana of any color.",
+        if land_count > 0:
+            from cards.fdn.tokens import make_treasure_token
+            create_token(
+                game, controller, factory=make_treasure_token, count=land_count
             )
-            treasure.card_types = {CardType.ARTIFACT}
-            treasure.subtypes = {"Treasure"}
-            treasure.is_token = True
-            create_token(game, controller, treasure)

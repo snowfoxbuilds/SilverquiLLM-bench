@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Instant
-from engine.types import CardType, ManaCost, TargetRequirement, Zone
+from engine.types import ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -102,14 +102,7 @@ class AnOfferYouCantRefuse(Instant):
 
         # Create two Treasure tokens for the spell's controller
         if spell_controller is not None:
-            for _ in range(2):
-                from engine.card import CardImpl
-                treasure = CardImpl(
-                    name="Treasure",
-                    mana_cost=ManaCost(generic=0),
-                    rules_text="{T}, Sacrifice this token: Add one mana of any color.",
-                )
-                treasure.card_types = {CardType.ARTIFACT}
-                treasure.subtypes = {"Treasure"}
-                treasure.is_token = True
-                create_token(game, spell_controller, treasure)
+            from cards.fdn.tokens import make_treasure_token
+            create_token(
+                game, spell_controller, factory=make_treasure_token, count=2
+            )

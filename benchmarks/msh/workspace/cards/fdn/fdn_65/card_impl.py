@@ -40,9 +40,8 @@ class MidnightSnack(Enchantment):
             controller = getattr(source, 'controller', None)
             if controller is None:
                 return
-            from engine.card import Artifact
-            food = Artifact(name='Food', subtypes={'Food'}, is_token=True)
-            create_token(game, controller, food)
+            from cards.fdn.tokens import make_food_token
+            create_token(game, controller, make_food_token())
         controller = getattr(self, 'controller', None) or game.active_player
         game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
 

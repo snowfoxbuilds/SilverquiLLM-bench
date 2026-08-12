@@ -27,15 +27,11 @@ def _get_chosen_target(card: Any, game: Any) -> Any:
     return None
 def _create_food_token(game: GameState, player: Any) -> Any:
     """Create a Food artifact token on *player*'s battlefield."""
-    from engine.card import Artifact
     from engine.game import create_token
 
-    token = Artifact(
-        name="Food Token",
-        mana_cost=ManaCost(),
-        rules_text='{2}, {T}, Sacrifice this token: You gain 3 life.',
-    )
-    token.card_types = {CardType.ARTIFACT}
+    from cards.fdn.tokens import make_food_token
+
+    token = make_food_token()
     create_token(game, player, token)
     return token
 

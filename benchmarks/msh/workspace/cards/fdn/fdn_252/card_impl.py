@@ -42,8 +42,7 @@ class GleamingBarrier(ArtifactCreature):
             controller = getattr(source, 'controller', None) or getattr(source, 'owner', None)
             if controller is None:
                 return
-            from engine.card import Artifact
-            token = Artifact(name='Treasure', subtypes={'Treasure'})
-            create_token(game, controller, token)
+            from cards.fdn.tokens import make_treasure_token
+            create_token(game, controller, make_treasure_token())
         controller = getattr(self, 'controller', None) or game.active_player
         game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_effect, source=self, controller=controller))
