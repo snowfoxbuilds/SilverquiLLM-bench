@@ -57,12 +57,21 @@ class FakeYourOwnDeath(Instant):
 
         def _death_effect(game: 'GameState') -> None:
             owner = getattr(creature_ref, 'owner', spell_controller)
+            # "... and you create a Treasure token": "you" is the granted
+            # ability's controller — the creature's controller when it died —
+            # not the player who cast Fake Your Own Death. Capture it before
+            # the return-to-battlefield reassigns control to the owner.
+            dying_controller = (
+                getattr(creature_ref, 'controller', None)
+                or owner
+                or spell_controller
+            )
             move_to_zone(game, creature_ref, Zone.GRAVEYARD, Zone.BATTLEFIELD)
             creature_ref.is_tapped = True
             creature_ref.controller = owner
-            if spell_controller is not None:
+            if dying_controller is not None:
                 from cards.fdn.tokens import make_treasure_token
-                create_token(game, spell_controller, make_treasure_token())
+                create_token(game, dying_controller, make_treasure_token())
         controller = getattr(self, 'controller', None) or game.active_player
 
         class _DeathTriggerSentinel:

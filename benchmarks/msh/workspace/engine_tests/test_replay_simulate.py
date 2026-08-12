@@ -3936,14 +3936,16 @@ class TestGoldenGame:
         86 -> 73, successful comparisons 809 -> 826, with the ENGINE_ERROR
         funding limitation (6) untouched.
 
-        Phase H (token minters) moves it again, intentionally: this game's
-        Treasure/Food-style tokens now mint through the shared factory with the
-        exact map characteristics, so they correlate and become producible
-        instead of showing as anonymous shells. STATE_MISMATCH 73 -> 69
+        Phase H (token minters) moves it again, intentionally: the cleared
+        identity is the 1/1 white Soldier 94161 — Resolute Reinforcements'
+        subtype fix ({Human, Soldier} -> {Soldier}) lets its token correlate
+        and become producible. (Food 94177 and Treasure 94178 remain MISSING
+        in this game: their only minter here, Goldvein Pick, sits on a dormant
+        combat-damage trigger — issue #44.) STATE_MISMATCH 73 -> 69
         (zone_contents 41 -> 37, the correlated token shadows), MISSING_CARD
-        4 -> 3 (one token identity now produced), successful comparisons
-        826 -> 830. The ENGINE_ERROR funding limitation (6) is STILL untouched,
-        so a funding fix or regression stays visible; tapped/life unchanged."""
+        4 -> 3 (the Soldier), successful comparisons 826 -> 830. The
+        ENGINE_ERROR funding limitation (6) is STILL untouched, so a funding
+        fix or regression stays visible; tapped/life unchanged."""
         report, by_type, by_category = self._fingerprint(self.FIXTURE_EQUIP)
         assert report.total_snapshots == 894
         assert report.successful_comparisons == 830

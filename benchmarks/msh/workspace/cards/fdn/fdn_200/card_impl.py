@@ -74,5 +74,4 @@ class GoblinSurprise(Instant):
             from engine.game import create_token
             for _ in range(2):
                 token = make_creature_token("Goblin", {"Goblin"}, [Color.RED], 1, 1)
-                token.is_token = True
                 create_token(game, controller, token)

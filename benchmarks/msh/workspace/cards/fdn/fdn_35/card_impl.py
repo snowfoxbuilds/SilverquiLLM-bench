@@ -70,10 +70,14 @@ class DrakeHatcher(Creature):
             return True
 
         def _effect(game: Any) -> None:
+            from cards.fdn.tokens import make_creature_token
             from engine.game import create_token
+            from engine.types import Color
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return
-            token = Creature(name='Drake', subtypes={'Drake'}, keywords=Keyword.FLYING, base_power=2, base_toughness=2)
+            token = make_creature_token(
+                'Drake', {'Drake'}, [Color.BLUE], 2, 2, keywords=Keyword.FLYING
+            )
             create_token(game, ctrl, token)
         return [ActivatedAbility(cost=_cost, effect=_effect, description='Remove three incubation counters from this creature: Create a 2/2 blue Drake creature token with flying.')]

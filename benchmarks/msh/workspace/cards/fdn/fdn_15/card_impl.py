@@ -67,15 +67,10 @@ class HareApparent(Creature):
             and getattr(obj, "name", None) == "Hare Apparent"
         )
 
+        from cards.fdn.tokens import make_creature_token
+
         for _ in range(count):
-            token = Creature(
-                name="Rabbit",
-                subtypes={"Rabbit"},
-                base_power=1,
-                base_toughness=1,
-            )
-            # A token has no mana cost, so its printed colour must be stated
-            # explicitly (get_colors reads an explicit ``colors`` attribute
-            # before falling back to coloured mana pips). The Rabbit is white.
-            token.colors = {Color.WHITE}
+            # Route through the shared factory so the 1/1 white Rabbit's
+            # identity (grpId 94160) has its single definition there.
+            token = make_creature_token("Rabbit", {"Rabbit"}, [Color.WHITE], 1, 1)
             create_token(game, controller, token)

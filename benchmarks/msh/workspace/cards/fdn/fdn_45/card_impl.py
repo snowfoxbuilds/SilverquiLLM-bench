@@ -71,7 +71,9 @@ class KioraTheRisingTide(Creature):
                 return
             create_scion = query_yes_no(game, ctrl, 'Create Scion of the Deep token?', source_card=source)
             if create_scion:
-                token = make_creature_token('Scion of the Deep', {'Octopus'}, [Color.BLUE], 8, 8)
-                token.supertypes = {Supertype.LEGENDARY}
+                token = make_creature_token(
+                    'Scion of the Deep', {'Octopus'}, [Color.BLUE], 8, 8,
+                    supertypes={Supertype.LEGENDARY},
+                )
                 create_token(game, ctrl, token)
         game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller))

@@ -50,7 +50,6 @@ class HeroicReinforcements(Sorcery):
             token = make_creature_token(
                 "Soldier", {"Soldier"}, [Color.WHITE], 1, 1
             )
-            token.is_token = True
             create_token(game, controller, token)
 
         # +1/+1 until end of turn

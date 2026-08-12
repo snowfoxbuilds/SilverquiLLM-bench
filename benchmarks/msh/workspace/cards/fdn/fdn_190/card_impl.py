@@ -42,8 +42,9 @@ class BrasssBounty(Sorcery):
             if CardType.LAND in getattr(perm, "card_types", set()):
                 land_count += 1
 
-        if land_count > 0:
-            from cards.fdn.tokens import make_treasure_token
-            create_token(
-                game, controller, factory=make_treasure_token, count=land_count
-            )
+        from cards.fdn.tokens import make_treasure_token
+
+        # create_token no-ops for count <= 0, so no zero-land guard is needed.
+        create_token(
+            game, controller, factory=make_treasure_token, count=land_count
+        )

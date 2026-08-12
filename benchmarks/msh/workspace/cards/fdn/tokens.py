@@ -30,18 +30,26 @@ from collections.abc import Iterable
 from typing import Any
 
 from engine.card import ActivatedAbility, Artifact, Creature, ManaAbility
-from engine.types import Color, Keyword, ManaCost, ManaType
+from engine.types import Color, Keyword, ManaCost, ManaType, Supertype
 
-_MANATYPE_BY_LETTER = {
-    m.value: m
-    for m in (
-        ManaType.WHITE,
-        ManaType.BLUE,
-        ManaType.BLACK,
-        ManaType.RED,
-        ManaType.GREEN,
-    )
-}
+
+def _controller_of(obj: Any) -> Any:
+    """The player who controls *obj* (falling back to its owner)."""
+    return getattr(obj, "controller", None) or getattr(obj, "owner", None)
+
+
+def _on_controllers_battlefield(game: Any, obj: Any) -> bool:
+    """True when *obj* sits on its controller's battlefield.
+
+    ``engine.game.sacrifice`` silently no-ops for a permanent that is not on
+    its controller's battlefield, so a sacrifice-as-cost MUST verify presence
+    first or the cost would report "paid" without the token ever leaving play
+    (rule 602.2a: activation legality includes the source's zone).
+    """
+    controller = _controller_of(obj)
+    if controller is None:
+        return False
+    return game.get_battlefield(controller).contains(obj)
 
 
 class FoodToken(Artifact):
@@ -66,11 +74,18 @@ class FoodToken(Artifact):
     def get_activated_abilities(self) -> list[ActivatedAbility]:
         source = self
 
+        def _can_activate(game: Any, src: Any, controller: Any) -> bool:
+            # Rule 602.2a zone gate, checked by activate_ability before any
+            # cost is paid: the Food must be on its controller's battlefield.
+            return _on_controllers_battlefield(game, src)
+
         def _cost(game: Any, src: Any) -> bool:
-            controller = getattr(src, "controller", None) or getattr(
-                src, "owner", None
-            )
+            controller = _controller_of(src)
             if controller is None or getattr(src, "is_tapped", False):
+                return False
+            if not _on_controllers_battlefield(game, src):
+                # Belt and braces for direct cost() drivers that skip the
+                # can_activate gate: never pay {2} for an unsacrificeable token.
                 return False
             two = ManaCost.parse("{2}")
             if not controller.mana_pool.can_pay(two):
@@ -86,9 +101,9 @@ class FoodToken(Artifact):
             return True
 
         def _effect(game: Any) -> None:
-            controller = getattr(source, "_food_gain_controller", None) or getattr(
-                source, "owner", None
-            )
+            controller = getattr(
+                source, "_food_gain_controller", None
+            ) or _controller_of(source)
             if controller is not None:
                 from engine.game import gain_life
 
@@ -98,6 +113,7 @@ class FoodToken(Artifact):
             ActivatedAbility(
                 cost=_cost,
                 effect=_effect,
+                can_activate=_can_activate,
                 description="{2}, {T}, Sacrifice this token: You gain 3 life.",
             )
         ]
@@ -125,21 +141,28 @@ class TreasureToken(Artifact):
         source = self
 
         def _cost(game: Any, src: Any) -> bool:
-            controller = getattr(src, "controller", None) or getattr(
-                src, "owner", None
-            )
+            controller = _controller_of(src)
             if controller is None or getattr(src, "is_tapped", False):
+                return False
+            if not _on_controllers_battlefield(game, src):
+                # ManaAbility has no can_activate hook, so the rule-602.2a
+                # zone gate lives in the cost: never report a sacrifice paid
+                # when engine.game.sacrifice would silently no-op.
                 return False
             src.is_tapped = True
             from engine.game import sacrifice
 
+            # Remember who paid so the mana lands in *their* pool even if the
+            # token's controller attribute drifts after it leaves play
+            # (mirrors FoodToken's beneficiary snapshot).
+            src._treasure_mana_controller = controller
             sacrifice(game, controller, src)
             return True
 
         def _mana(game: Any) -> None:
-            controller = getattr(source, "controller", None) or getattr(
-                source, "owner", None
-            )
+            controller = getattr(
+                source, "_treasure_mana_controller", None
+            ) or _controller_of(source)
             if controller is None:
                 return
             from engine.card_queries import choose_color
@@ -148,10 +171,9 @@ class TreasureToken(Artifact):
                 game,
                 controller,
                 "Choose a color of mana to add",
-                colors=tuple(_MANATYPE_BY_LETTER),
                 source_card=source,
             )
-            controller.mana_pool.add(_MANATYPE_BY_LETTER[letter], 1)
+            controller.mana_pool.add(ManaType(letter), 1)
 
         return [
             ManaAbility(
@@ -180,6 +202,7 @@ def make_creature_token(
     toughness: int,
     *,
     keywords: Keyword | None = None,
+    supertypes: Iterable[Supertype] | None = None,
 ) -> Creature:
     """Build a creature token with an explicit colour identity.
 
@@ -194,7 +217,8 @@ def make_creature_token(
         subtypes=set(subtypes),
         base_power=power,
         base_toughness=toughness,
-        keywords=keywords if keywords is not None else Keyword(0),
+        keywords=keywords,
+        supertypes=set(supertypes) if supertypes is not None else None,
     )
     token.colors = set(colors)
     token.is_token = True

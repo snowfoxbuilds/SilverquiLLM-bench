@@ -61,7 +61,6 @@ class KrenkoMobBoss(Creature):
                     goblin_count += 1
             for _ in range(goblin_count):
                 token = make_creature_token("Goblin", {"Goblin"}, [Color.RED], 1, 1)
-                token.is_token = True
                 create_token(game, controller, token)
 
         return [ActivatedAbility(

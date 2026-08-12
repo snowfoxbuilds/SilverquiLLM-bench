@@ -62,14 +62,11 @@ class LilianaDreadhordeGeneral(Planeswalker):
             )
 
         def _minus4(game: Any) -> None:
-            # Each player draws cards equal to creatures they control.
-            from engine.game import draw_card
-            from engine.types import CardType as CT
-            for p in game.players:
-                bf = game.get_battlefield(p)
-                count = sum(1 for obj in bf.get_all() if CT.CREATURE in getattr(obj, "card_types", set()))
-                for _ in range(count):
-                    draw_card(game, p)
+            # -4: Each player sacrifices two creatures of their choice
+            # (simplified stub, like -9 — the previous body implemented a
+            # DIFFERENT Liliana's -4, mass card draw, which actively mutated
+            # hands/libraries the real card never touches).
+            pass
 
         def _minus9(game: Any) -> None:
             # Opponents keep one of each permanent type, sacrifice rest (simplified stub).
@@ -77,6 +74,6 @@ class LilianaDreadhordeGeneral(Planeswalker):
 
         return [
             LoyaltyAbility(loyalty_cost=+1, effect=_plus1, description="+1: Create a 2/2 black Zombie creature token."),
-            LoyaltyAbility(loyalty_cost=-4, effect=_minus4, description="-4: Draw/discard based on creatures."),
+            LoyaltyAbility(loyalty_cost=-4, effect=_minus4, description="-4: Each player sacrifices two creatures of their choice."),
             LoyaltyAbility(loyalty_cost=-9, effect=_minus9, description="-9: Opponents keep one of each type, sacrifice rest."),
         ]

@@ -31,7 +31,6 @@ def _create_human_token(game: GameState, player: Any) -> Any:
     from engine.game import create_token
 
     token = make_creature_token("Human", {"Human"}, [Color.WHITE], 1, 1)
-    token.card_types = {CardType.CREATURE}
     create_token(game, player, token)
     return token
 

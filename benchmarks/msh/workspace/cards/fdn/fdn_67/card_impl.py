@@ -50,6 +50,7 @@ class RevengeOfTheRats(Sorcery):
 
         for _ in range(creature_count):
             token = make_creature_token("Rat", {"Rat"}, [Color.BLACK], 1, 1)
-            create_token(game, controller, token)
-            # Token enters tapped
+            # Token enters tapped: set BEFORE create_token so ETB observers see
+            # the tapped state and replacement-multiplied clones inherit it.
             token.is_tapped = True
+            create_token(game, controller, token)
