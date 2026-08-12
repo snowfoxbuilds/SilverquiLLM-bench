@@ -13,11 +13,17 @@ from silverquillm.replay.types import (
     GameInfo,
     GameObject,
     GameSnapshot,
+    ManaPoolEntry,
     PlayerInfo,
     ReplayAction,
     TurnInfo,
     Zone,
 )
+
+
+def _parse_mana_pool(p: dict[str, Any]) -> list[ManaPoolEntry]:
+    """Parse a player message's manaPool (absent key = empty pool)."""
+    return [ManaPoolEntry.from_dict(m) for m in p.get("manaPool", [])]
 
 
 def build_game_info(raw: dict[str, Any]) -> GameInfo:
@@ -66,6 +72,7 @@ def apply_full_state(gsm: dict[str, Any]) -> GameSnapshot:
             life_total=p.get("lifeTotal", 20),
             status=p.get("status", "PlayerStatus_InGame"),
             max_hand_size=p.get("maxHandSize", 7),
+            mana_pool=_parse_mana_pool(p),
         )
 
     # turnInfo
@@ -162,12 +169,18 @@ def apply_diff(prev: GameSnapshot, gsm: dict[str, Any]) -> GameSnapshot:
                 existing.status = p["status"]
             if "maxHandSize" in p:
                 existing.max_hand_size = p["maxHandSize"]
+            # manaPool follows REPLACE semantics, not field-merge: a present
+            # player message re-sends the complete player object (protobuf
+            # default-omission), so an omitted manaPool means the pool is now
+            # empty — set it unconditionally from whatever this message carries.
+            existing.mana_pool = _parse_mana_pool(p)
         else:
             snapshot.players[seat] = PlayerInfo(
                 seat_id=seat,
                 life_total=p.get("lifeTotal", 20),
                 status=p.get("status", "PlayerStatus_InGame"),
                 max_hand_size=p.get("maxHandSize", 7),
+                mana_pool=_parse_mana_pool(p),
             )
 
     # turnInfo — merge fields if present (empty {} means no change)

@@ -7,6 +7,37 @@ from typing import Any
 
 
 @dataclass
+class ManaPoolEntry:
+    """One floating-mana object in a player's GRE ``manaPool``.
+
+    GRE attests unspent (floating) mana as a list of these objects on the
+    player message: each is a specific ``(mana_id, color, src_instance_id)``
+    triple — the exact mana produced by a source and not yet spent. The
+    executor SETs the engine pool from these (simulate mode) instead of
+    reconstructing floating-mana accounting.
+    """
+
+    mana_id: int
+    color: str = ""  # "ManaColor_Red" etc.; "" if omitted
+    src_instance_id: int = 0
+    ability_grp_id: int = 0
+    count: int = 1
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> ManaPoolEntry:
+        color = d.get("color", "")
+        if isinstance(color, list):
+            color = color[0] if color else ""
+        return cls(
+            mana_id=d.get("manaId", 0),
+            color=color,
+            src_instance_id=d.get("srcInstanceId", 0),
+            ability_grp_id=d.get("abilityGrpId", 0),
+            count=d.get("count", 1),
+        )
+
+
+@dataclass
 class PlayerInfo:
     """Player information from replay data."""
 
@@ -14,6 +45,11 @@ class PlayerInfo:
     life_total: int = 20
     status: str = "PlayerStatus_InGame"
     max_hand_size: int = 7
+    # Floating mana attested by GRE (protobuf default-omission: absent =
+    # empty pool — a present player message re-sends the complete player
+    # object, so an omitted manaPool means the pool is empty, verified by a
+    # corpus scan: zero partial player messages).
+    mana_pool: list[ManaPoolEntry] = field(default_factory=list)
 
 
 @dataclass
