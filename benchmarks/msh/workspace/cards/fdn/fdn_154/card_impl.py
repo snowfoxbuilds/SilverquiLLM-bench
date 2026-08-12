@@ -25,7 +25,7 @@ class ExtravagantReplication(Enchantment):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register upkeep trigger to copy a nonland permanent."""
-        from engine.game import create_token
+        from engine.game import create_token, mint_token_copy
         from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
@@ -53,8 +53,9 @@ class ExtravagantReplication(Enchantment):
             chosen = choose_object(game, ctrl, candidates, 'Choose a nonland permanent to copy', source_card=source)
             if chosen is None:
                 return
-            import copy
-            token = copy.copy(chosen)
-            token.is_token = True
+            # A token copy is a new object with only the copiable characteristics
+            # (rule 707.2): mint_token_copy re-mints identity and drops the
+            # original's counters/damage/tap, unlike a bare copy.copy.
+            token = mint_token_copy(chosen)
             create_token(game, ctrl, token)
         game.trigger_manager.register(TriggerRegistration(event_type=BeginningOfUpkeepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

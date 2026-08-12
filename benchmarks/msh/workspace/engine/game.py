@@ -454,31 +454,111 @@ def _place_token(game: GameState, player: Player, token: Any, grp_id: Any) -> No
         game.effect_manager.apply_all(game)
 
 
-def _clone_token(token: Any) -> Any:
-    """Return a fresh shallow copy of *token* with an independent identity.
+def mint_token_copy(original: Any) -> Any:
+    """Return a token that is a copy of *original* with a fresh, independent identity.
 
-    Used when a creation-replacement effect (Doubling Season) multiplies a
-    single supplied token object into several. Assigns a new ``object_id`` and
-    copies the mutable characteristic containers so the copies do not alias.
+    The copiable-values model (rules 707.2 / 611.2): the returned token shares
+    *original*'s copiable characteristics — name, mana cost, colour, card types,
+    subtypes, supertypes, rules text, printed power/toughness, keywords — but is a
+    **distinct game object**. Specifically it gets
+
+    * a fresh ``object_id`` (rule 707.2 — a copy is a new object), so per-object
+      ability bookkeeping keyed on ``object_id`` — the loyalty-activated-this-turn
+      tracker in :mod:`engine.abilities` — treats the copy and its original
+      independently instead of conflating them (a shared id is a latent bug: two
+      objects would count as one for the once-per-turn loyalty limit);
+    * de-aliased mutable characteristic containers (the ``card_types`` /
+      ``subtypes`` / ``supertypes`` / ``colors`` sets and the ``_generic_counters``
+      dict), so mutating the copy's characteristics never mutates the original's —
+      a plain shallow copy shares the very same set/dict objects; and
+    * reset the copy's own per-object numeric state, which copiable values exclude:
+      counters of every kind (the ``+1/+1`` / ``-1/-1`` fields and their
+      ``_base_*`` shadows, and the generic-counter dict), marked damage, and
+      tapped state. Counters, damage, and tap are not characteristics, so a copy
+      has none of them regardless of the original's.
+
+    Two cross-object identities are deliberately **preserved**, not reset — the
+    copy is a new *object* of the same *card* in the same *relationship*:
+
+    * ``_grp_id``, the replay-identity hook, holds the card-DEFINITION grpId (many
+      objects legitimately share it — every copy of a card carries the same one),
+      and a token that's a copy of a permanent IS that card definition. The GRE
+      represents a copy token under the copied object's grpId (the oracle shows
+      original and copy under the same grpId), so inheriting it is what makes the
+      copy correlate; dropping it would leave the copy an anonymous token. This is
+      distinct from ``object_id`` (per-object instance identity, re-minted above).
+    * ``attached_to`` — a token copy of an attached aura/equipment enters attached
+      to what the original was attached to. The oracle keeps such a copy on the
+      battlefield (rather than the strict-rules reading where an unattached aura
+      dies to SBA 704.5m the instant it enters), so preserving the reference keeps
+      the copy alive and correlating; it is a reference to *another* object, not
+      the copy's own aliased container.
+
+    This is the single cloning primitive: :func:`_clone_token` (the token-
+    multiplication path Doubling Season et al. drive) delegates here, and
+    copy-token card impls (Extravagant Replication, Self-Reflection) call it
+    directly instead of a bare ``copy.copy`` that skipped ``__init__`` and left
+    the copy sharing the original's ``object_id`` and container objects.
     """
     import copy as _copy
 
     from engine.card import GameObject
 
-    clone = _copy.copy(token)
-    clone.object_id = GameObject._next_id
+    token = _copy.copy(original)
+
+    # Fresh construction-time identity — a copy is a new object (rule 707.2).
+    token.object_id = GameObject._next_id
     GameObject._next_id += 1
-    # Break aliasing of mutable containers shared by the shallow copy.
+    token.is_token = True
+
+    # Break aliasing of mutable characteristic containers a shallow copy shares.
     # ("colors" is the explicit colour identity factory-minted tokens carry —
     # see cards/fdn/tokens.py — and is as mutable as the other three.)
     for attr in ("card_types", "subtypes", "supertypes", "colors"):
-        val = getattr(clone, attr, None)
+        val = getattr(token, attr, None)
         if isinstance(val, set):
-            setattr(clone, attr, set(val))
-    if isinstance(getattr(clone, "_generic_counters", None), dict):
-        clone._generic_counters = dict(clone._generic_counters)
-    clone._grp_id = None
-    return clone
+            setattr(token, attr, set(val))
+
+    # Counters are not copiable (rule 707.2) — a copy has none. Reset every
+    # counter channel, including the ``_base_*`` shadows the continuous-effect
+    # recalculation restores +1/+1 / -1/-1 counts from.
+    for attr in (
+        "plus_one_counters",
+        "minus_one_counters",
+        "_base_plus_one_counters",
+        "_base_minus_one_counters",
+    ):
+        if hasattr(token, attr):
+            setattr(token, attr, 0)
+    if hasattr(token, "_generic_counters"):
+        token._generic_counters = {}
+
+    # Marked damage and tap state are per-object, not copiable.
+    if hasattr(token, "damage_marked"):
+        token.damage_marked = 0
+    if hasattr(token, "is_tapped"):
+        token.is_tapped = False
+
+    # NB: ``_grp_id`` (card-definition grpId) and ``attached_to`` (aura/equipment
+    # host) are intentionally left as the shallow copy carried them — the copy
+    # shares the original's card definition and enters in its attachment
+    # relationship (see docstring).
+    return token
+
+
+def _clone_token(token: Any) -> Any:
+    """Return a fresh independent copy of *token* for token multiplication.
+
+    A creation-replacement effect (Doubling Season) multiplies one supplied token
+    object into several; each copy needs a distinct identity. Delegates to
+    :func:`mint_token_copy` so multiplication clones and copy-token card impls
+    share one definition of "a distinct copy" (rule 707.2). For a freshly built
+    token the reset of counters/damage/tap is a no-op — the values are already
+    empty — but it also means each multiplied token lands its own entry counters
+    (rule 614.1c) through its own placement rather than carrying the first
+    token's.
+    """
+    return mint_token_copy(token)
 
 
 def create_token(
