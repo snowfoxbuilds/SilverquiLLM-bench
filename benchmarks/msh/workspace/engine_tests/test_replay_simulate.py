@@ -3906,6 +3906,10 @@ class TestGoldenGame:
     # draw-resilience / Consuming Aberration hidden-library-mill path.
     FIXTURE_DORMANT = REPO_ROOT / "data" / "replays" / "golden" / "fdn_dormant_events.json"
     FIXTURE_MILL = REPO_ROOT / "data" / "replays" / "golden" / "fdn_consuming_aberration_mill.json"
+    # Phase M addition — anchors the unfunded-activation floor: Adventuring Gear
+    # equip activations the stream funds from off-window / reused mana it never
+    # re-annotates, so the executor rejects them as unpayable.
+    FIXTURE_UNFUNDED = REPO_ROOT / "data" / "replays" / "golden" / "fdn_unfunded_activation.json"
 
     @staticmethod
     def _fingerprint(fixture):
@@ -4136,6 +4140,32 @@ class TestGoldenGame:
             "power_toughness": 20,
             "life_total": 13,
             "tapped_state": 1,
+            "MISSING_CARD": 1,
+        }
+
+    def test_unfunded_activation_fingerprint(self):
+        """Adventuring Gear game — anchors the Phase M unfunded-activation floor.
+        Five equip activations reject with 'cost could not be paid': the stream
+        carries no ManaPaid referencing them and no attested manaPool anywhere
+        (proven by ``TestLimitationEvidence`` in test_replay_limitations.py), so
+        no faithful engine could fund them. The five ENGINE_ERROR are the pin —
+        a regression that silently funded them (fabricating mana) would drop the
+        count; a regression that suppressed the game would drop successful
+        comparisons far below 378."""
+        report, by_type, by_category = self._fingerprint(self.FIXTURE_UNFUNDED)
+        assert report.total_snapshots == 393
+        assert report.successful_comparisons == 378
+        assert dict(by_type) == {
+            "ENGINE_ERROR": 5,
+            "STATE_MISMATCH": 14,
+            "ILLEGAL_ACTION": 2,
+            "MISSING_CARD": 1,
+        }
+        assert dict(by_category) == {
+            "ENGINE_ERROR": 5,
+            "power_toughness": 7,
+            "zone_contents": 7,
+            "life_total": 2,
             "MISSING_CARD": 1,
         }
 

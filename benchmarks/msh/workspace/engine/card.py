@@ -42,6 +42,58 @@ class Mode:
 
 
 @dataclass
+class PredictedOutcome:
+    """A declarative, side-effect-free prediction of what an activated ability
+    would do to the surfaces the replay validator compares.
+
+    Used ONLY by the replay executor (Phase M) to disambiguate a source that
+    exposes more than one activated ability: the executor evaluates each
+    candidate's prediction against the observed prev->curr GRE delta and drives
+    the ability only when exactly one candidate's prediction matches. The engine
+    itself never consults it — activation still runs the real ``cost``/``effect``.
+
+    Every field is optional; an empty ``PredictedOutcome`` predicts no change on
+    any compared surface (e.g. a subtype-only ability). A ``predicted_outcome``
+    callable returns ``None`` to signal the ability is **not currently
+    applicable** (its own gate would no-op), which excludes it from
+    disambiguation entirely — distinct from returning an empty prediction.
+
+    The prediction must be PURE: it reads game state and returns this value, and
+    must not mutate anything (the closures capture live objects, so a mutation
+    here would corrupt the real game — a deep-copy sandbox was rejected for the
+    same reason, see KEY_DECISIONS).
+
+    Attributes:
+        taps: engine objects the ability would tap.
+        leaves_battlefield: engine objects the ability would move off the
+            battlefield (sacrifice/exile/destroy) — matched by identity.
+        life_deltas: ``player -> signed life delta`` (negative = loses life).
+        pt_sets: ``object -> (power, toughness)`` the ability sets an object to.
+        counter_deltas: ``(object, counter_type) -> signed delta``.
+    """
+
+    taps: list[Any] = None  # type: ignore[assignment]
+    leaves_battlefield: list[Any] = None  # type: ignore[assignment]
+    life_deltas: dict[Any, int] = None  # type: ignore[assignment]
+    pt_sets: dict[Any, tuple[int, int]] = None  # type: ignore[assignment]
+    counter_deltas: dict[Any, int] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        # Mutable defaults are normalised here so callers can pass only the
+        # fields they predict without sharing a single class-level list/dict.
+        if self.taps is None:
+            self.taps = []
+        if self.leaves_battlefield is None:
+            self.leaves_battlefield = []
+        if self.life_deltas is None:
+            self.life_deltas = {}
+        if self.pt_sets is None:
+            self.pt_sets = {}
+        if self.counter_deltas is None:
+            self.counter_deltas = {}
+
+
+@dataclass
 class ActivatedAbility:
     """An activated ability on a permanent.
 
@@ -65,6 +117,11 @@ class ActivatedAbility:
             verifying source-zone and timing restrictions with no side effects.
             Checked **before** any target query or cost payment (rule 602.2a), so
             an illegal activation raises no query and spends nothing.
+        predicted_outcome: Optional pure callable ``(game, source) ->
+            PredictedOutcome | None`` used only by the replay executor to
+            disambiguate a multi-ability source (Phase M). Returns a declarative
+            :class:`PredictedOutcome` on the compared surfaces, or ``None`` when
+            the ability is not currently applicable. Must not mutate game state.
         description: Human-readable description of the ability.
     """
 
@@ -73,6 +130,7 @@ class ActivatedAbility:
     description: str = ""
     targeting: Callable[..., Any] | None = None
     can_activate: Callable[..., Any] | None = None
+    predicted_outcome: Callable[..., Any] | None = None
 
 
 @dataclass
