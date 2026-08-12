@@ -13,7 +13,7 @@ from collections import Counter
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from silverquillm.replay.types import (
     GameSnapshot,
@@ -497,6 +497,12 @@ class ReplayExecutor:
         # after the cast event; the cast handler applies them by look-ahead
         # and this set keeps the per-snapshot pass from re-applying).
         self._seen_mana_payments: set[int] = set()
+        # manaIds SET into the engine pools by the current snapshot's
+        # ``_sync_mana_pools`` from GRE's attested ``manaPool``. When a later
+        # ManaPaid annotation consumes one of these, the source is tapped but
+        # the pool is NOT re-credited (the mana was already synced) — no
+        # double-credit. Reset each ``_sync_mana_pools`` call.
+        self._synced_mana_ids: set[int] = set()
         # --- GRE CounterAdded/Removed reconciliation (simulate-only) ---------
         # A counter is an oracle-derived pre-comparison correction: only the
         # state the GRE annotation stream explicitly attests is ever written,
@@ -1138,6 +1144,19 @@ class ReplayExecutor:
         """
         self._current_snapshot = curr_snapshot
 
+        # At a GRE phase/step transition, SET the engine pools to the mana GRE
+        # attests was still floating at the end of the previous step (its
+        # manaPool), replacing the old *unconditional* pool-empty at that
+        # boundary. Floating mana carries exactly as far as GRE holds it (empty
+        # when GRE attests empty — the mundane step-end case, byte-identical to
+        # the old empty). WITHIN a step the pool is left to accumulate as
+        # before: casts/activations pay engine-known costs and the ManaPaid
+        # look-ahead pre-credits their payments across snapshots, so emptying
+        # mid-step would strand a payment already credited for a later cast.
+        prev_ti, curr_ti = prev_snapshot.turn_info, curr_snapshot.turn_info
+        if (curr_ti.phase, curr_ti.step) != (prev_ti.phase, prev_ti.step):
+            self._sync_mana_pools(prev_snapshot)
+
         # Mana payments (ManaPaid annotations) tap the paying lands and fill
         # the payer's pool before any cast in this step tries to pay.
         self._apply_mana_payments(curr_snapshot, result)
@@ -1657,18 +1676,85 @@ class ReplayExecutor:
         1: "W", 2: "U", 3: "B", 4: "R", 5: "G", 6: "C",
     }
 
+    # GRE manaPool color strings → engine ManaType tokens.
+    _GRE_MANA_POOL_COLOR: ClassVar[dict[str, str]] = {
+        "ManaColor_White": "W",
+        "ManaColor_Blue": "U",
+        "ManaColor_Black": "B",
+        "ManaColor_Red": "R",
+        "ManaColor_Green": "G",
+        "ManaColor_Colorless": "C",
+    }
+
+    def _sync_mana_pools(self, snapshot: GameSnapshot) -> None:
+        """SET each engine ManaPool to GRE's attested floating mana (simulate).
+
+        Replaces the unconditional pool-empty at GRE phase/step transitions
+        with sync-to-attested: the engine pool is set to exactly the
+        ``manaPool`` GRE attests on *snapshot* — floating mana carried across
+        as GRE holds it, empty when GRE attests empty. The carry window is
+        therefore whatever GRE attests; there is no guessed carry rule (this
+        is categorically not per-turn floating-mana reconstruction — every
+        credited mana is a specific attested ``(manaId, color, source)``
+        object in the player message, exactly like the life-total sync).
+
+        SET, never additive: the pool is emptied first, so this never creates
+        mana the snapshot does not attest. The source lands are tapped (GRE
+        shows them tapped the moment they float mana), and each synced manaId
+        is recorded so the ManaPaid pass that later consumes it taps the
+        source but does NOT re-credit the pool (:meth:`_apply_one_mana_payment`).
+
+        Called with the PREVIOUS snapshot: its attested pool is the floating
+        mana available going into the current snapshot's casts/activations
+        (mana consumed within a snapshot is already gone from that snapshot's
+        own attestation). A no-op for engine-known debits, which the next
+        snapshot's SET re-trues from GRE.
+        """
+        from engine.types import ManaType
+
+        self._synced_mana_ids = set()
+        for seat, pinfo in snapshot.players.items():
+            player = self.players.get(seat)
+            if player is None:
+                continue
+            pool = getattr(player, "mana_pool", None)
+            if pool is None:
+                continue
+            pool.empty()
+            for entry in pinfo.mana_pool:
+                token = self._GRE_MANA_POOL_COLOR.get(entry.color)
+                if token is None:
+                    # Unknown color: cannot represent it without fabricating —
+                    # leave it out (the activation stays honestly unfunded).
+                    continue
+                pool.add(ManaType(token), max(entry.count, 0))
+                self._synced_mana_ids.add(entry.mana_id)
+                src = self._engine_cards.get(entry.src_instance_id)
+                if src is not None:
+                    src.is_tapped = True
+
     def _apply_mana_payments(self, snapshot: GameSnapshot, result: StepResult) -> None:
         """Replicate ManaPaid annotations: tap the source, credit the pool.
 
         ``affectorId`` is the paying permanent's GRE instance id; ``color``
         is the Arena color enum. The payer's pool is credited so the
-        subsequent cast_spell in this step can pay its cost; pools empty at
-        the next step transition, so overshoot never leaks across steps.
+        subsequent cast_spell in this step can pay its cost. Mana that was
+        already floating (SET into the pool by :meth:`_sync_mana_pools` from
+        GRE's attested ``manaPool``) is not re-credited here — its manaId is
+        retired instead — so a float-then-spend never double-credits.
         """
         for ann in snapshot.annotations:
             if "AnnotationType_ManaPaid" not in ann.type:
                 continue
             self._apply_one_mana_payment(ann)
+
+    @staticmethod
+    def _ann_mana_id(ann: Any) -> int | None:
+        """The consumed manaId a ManaPaid annotation carries in ``details.id``."""
+        mana_id = ann.details.get("id")
+        if isinstance(mana_id, list):
+            mana_id = mana_id[0] if mana_id else None
+        return mana_id
 
     def _apply_one_mana_payment(self, ann: Any, tap: bool = True) -> None:
         """Credit the payer's pool (once per annotation) and tap the source.
@@ -1679,6 +1765,12 @@ class ReplayExecutor:
         home snapshot, so tapping early would mis-compare that snapshot and
         the dedup would then leave the land untapped when GRE taps it. The
         per-snapshot pass taps at exactly the GRE-observed moment.
+
+        When the consumed mana was already SET into the pool by
+        :meth:`_sync_mana_pools` (its manaId is in ``_synced_mana_ids``), the
+        source is still tapped but the pool is NOT credited — the mana is
+        already there — and the manaId is retired so it cannot be skipped
+        twice. This is the no-double-credit rule for float-then-spend.
         """
         from engine.types import ManaType
 
@@ -1690,6 +1782,11 @@ class ReplayExecutor:
         if ann.id in self._seen_mana_payments:
             return
         self._seen_mana_payments.add(ann.id)
+        mana_id = self._ann_mana_id(ann)
+        if mana_id is not None and mana_id in self._synced_mana_ids:
+            # Already floating in the pool via _sync_mana_pools — tap only.
+            self._synced_mana_ids.discard(mana_id)
+            return
         controller = getattr(source, "controller", None)
         pool = getattr(controller, "mana_pool", None)
         if pool is None:
@@ -4814,13 +4911,12 @@ class ReplayExecutor:
         if curr_turn.step != prev_turn.step:
             self._fire_step_events(curr_turn, result)
 
-        # Mana pools empty as steps and phases end. Casting pays costs
-        # atomically within a step, so emptying on every transition is safe.
-        if (curr_turn.phase, curr_turn.step) != (prev_turn.phase, prev_turn.step):
-            for player in self.players.values():
-                pool = getattr(player, "mana_pool", None)
-                if pool is not None:
-                    pool.empty()
+        # Mana pools are no longer emptied here on every phase/step transition.
+        # _execute_step_simulate SETs each pool to GRE's attested manaPool
+        # (_sync_mana_pools) every snapshot, so the pool empties exactly when
+        # GRE attests it empty and floating mana carries exactly as far as GRE
+        # holds it — the window bound is whatever GRE attests, not a guessed
+        # transition rule. Observer mode never funds a pool, so nothing to do.
 
     def _fallback_untap(self, result: StepResult | None = None) -> bool:
         """Deterministically restore untap invariants after ``untap_step`` raised.

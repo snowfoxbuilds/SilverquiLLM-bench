@@ -23,6 +23,7 @@ from silverquillm.replay.types import (
     Annotation,
     GameObject,
     GameSnapshot,
+    ManaPoolEntry,
     PlayerInfo,
     ReplayAction,
     ReplayGame,
@@ -149,6 +150,101 @@ class TestManaLookahead:
         ex._apply_spell_mana_lookahead(200, s0)
         ex._apply_spell_mana_lookahead(200, s0)
         assert ex.players[1].mana_pool.total() == 1
+
+
+class TestManaPoolSync:
+    """`_sync_mana_pools` SETs the engine pool to GRE's attested floating
+    mana (issue #46), replacing the old unconditional pool-empty at phase/step
+    transitions. Every credited mana is a specific attested
+    ``(manaId, color, source)`` object — no reconstruction, no fabrication.
+    """
+
+    @staticmethod
+    def _floated(gsid, seat, entries, *, land_iid=100, step=""):
+        """A snapshot whose *seat* has *entries* floating and a src land in play."""
+        land = card_obj(land_iid, FOREST, seat, BF1, card_types=["CardType_Land"])
+        snap = snapshot(gsid, step=step, battlefield={seat: [land_iid]}, objects={land_iid: land})
+        snap.players[seat].mana_pool = list(entries)
+        return snap
+
+    def test_sync_sets_pool_and_taps_source(self):
+        from engine.types import ManaType
+
+        entry = ManaPoolEntry(mana_id=953, color="ManaColor_Green", src_instance_id=100)
+        prev = self._floated(1, 1, [entry])
+        ex = make_executor([prev, snapshot(2)])
+        ex._sync_mana_pools(prev)
+        pool = ex.players[1].mana_pool
+        assert pool.total() == 1
+        assert pool.get(ManaType.GREEN) == 1
+        assert ex._engine_cards[100].is_tapped  # source land tapped at float time
+        assert 953 in ex._synced_mana_ids
+
+    def test_sync_empties_when_attested_empty(self):
+        entry = ManaPoolEntry(mana_id=953, color="ManaColor_Green", src_instance_id=100)
+        prev = self._floated(1, 1, [entry])
+        empty = snapshot(2)  # no floating mana attested
+        ex = make_executor([prev, empty])
+        ex._sync_mana_pools(prev)
+        assert ex.players[1].mana_pool.total() == 1
+        ex._sync_mana_pools(empty)
+        assert ex.players[1].mana_pool.total() == 0
+        assert ex._synced_mana_ids == set()
+
+    def test_sync_is_set_not_additive(self):
+        """A second sync REPLACES the pool, never stacks on the first."""
+        from engine.types import ManaType
+
+        e1 = ManaPoolEntry(mana_id=1, color="ManaColor_Red", src_instance_id=100)
+        e2 = ManaPoolEntry(mana_id=2, color="ManaColor_White", src_instance_id=100)
+        prev = self._floated(1, 1, [e1])
+        ex = make_executor([prev, snapshot(2)])
+        ex.players[1].mana_pool.add(ManaType.BLUE, 3)  # stale engine mana
+        ex._sync_mana_pools(self._floated(2, 1, [e2]))
+        pool = ex.players[1].mana_pool
+        assert pool.total() == 1
+        assert pool.get(ManaType.WHITE) == 1
+        assert pool.get(ManaType.BLUE) == 0  # stale mana wiped, not kept
+
+    def test_synced_mana_not_double_credited(self):
+        """A ManaPaid consuming already-synced mana taps but does NOT re-credit."""
+        entry = ManaPoolEntry(mana_id=7144, color="ManaColor_Green", src_instance_id=100)
+        prev = self._floated(1, 1, [entry])
+        ex = make_executor([prev, snapshot(2)])
+        ex._sync_mana_pools(prev)
+        assert ex.players[1].mana_pool.total() == 1
+        pay = Annotation(
+            id=901, affector_id=100, affected_ids=[200],
+            type=["AnnotationType_ManaPaid"], details={"id": [7144], "color": [5]},
+        )
+        ex._apply_one_mana_payment(pay)
+        # Still 1 (the synced mana), not 2 — no double-credit; id retired.
+        assert ex.players[1].mana_pool.total() == 1
+        assert ex._engine_cards[100].is_tapped
+        assert 7144 not in ex._synced_mana_ids
+
+    def test_unsynced_manapaid_credits_normally(self):
+        """A ManaPaid whose manaId was NOT synced credits the pool as before
+        (the same-snapshot produce-and-spend case, unchanged)."""
+        land = card_obj(100, FOREST, 1, BF1, card_types=["CardType_Land"])
+        s0 = snapshot(1, battlefield={1: [100]}, objects={100: land})
+        ex = make_executor([s0, snapshot(2)])
+        ex._sync_mana_pools(s0)  # nothing floating → empty, empty synced set
+        pay = Annotation(
+            id=901, affector_id=100, affected_ids=[200],
+            type=["AnnotationType_ManaPaid"], details={"id": [5555], "color": [5]},
+        )
+        ex._apply_one_mana_payment(pay)
+        assert ex.players[1].mana_pool.total() == 1  # credited
+
+    def test_unknown_color_not_fabricated(self):
+        """An entry whose color cannot be mapped is left out — never invented."""
+        entry = ManaPoolEntry(mana_id=1, color="ManaColor_Bogus", src_instance_id=100)
+        prev = self._floated(1, 1, [entry])
+        ex = make_executor([prev, snapshot(2)])
+        ex._sync_mana_pools(prev)
+        assert ex.players[1].mana_pool.total() == 0
+        assert 1 not in ex._synced_mana_ids
 
 
 class _CounterPerm:
@@ -3956,7 +4052,19 @@ class TestGoldenGame:
         6 -> 1: exactly ONE genuine equip-funding error remains (the bounded
         GRE-data limitation this fixture still isolates). STATE_MISMATCH 69 ->
         64 (zone_contents 37 -> 32 — the correlated Treasure shadows), ok
-        comparisons 830 -> 840; tapped/life unchanged."""
+        comparisons 830 -> 840; tapped/life unchanged.
+
+        Phase K (attested manaPool sync — issue #46) leaves this pin BYTE-
+        IDENTICAL, deliberately. This game carries 15 GRE manaPool attestations
+        (the fixture with the most), so it anchors that the SET-from-attested
+        sync neither funds nor breaks anything here: every floating manaId is
+        consumed within its step by a ManaPaid the executor already credits,
+        none carries across a phase/step transition, and the surviving
+        ENGINE_ERROR is a Vampire Soulcaller targeting failure — not mana
+        funding, which the manaPool evidence cannot and does not touch. A
+        regression that mis-carried or double-credited floating mana would move
+        this fingerprint. The sync mechanism itself is pinned by
+        ``TestManaPoolSync`` and its parse by ``TestManaPoolParsing``."""
         report, by_type, by_category = self._fingerprint(self.FIXTURE_EQUIP)
         assert report.total_snapshots == 894
         assert report.successful_comparisons == 840
