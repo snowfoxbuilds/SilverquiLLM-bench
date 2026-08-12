@@ -27,6 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from engine.events import AttacksTriggeredEvent, DealsDamageTriggeredEvent
 from engine.types import Keyword
 
 if TYPE_CHECKING:
@@ -187,17 +188,36 @@ def _deal_damage(
     combat_state.damage_assignments[source].append((target, amount))
 
     # Apply damage
+    is_damage_recipient = False
     if hasattr(target, "life"):
         # Target is a player
         target.life -= amount
+        is_damage_recipient = True
     elif hasattr(target, "damage_marked"):
         # Target is a creature
         target.damage_marked += amount
+        is_damage_recipient = True
 
         # Track deathtouch damage for SBA rule 704.5h
         source_kw_dt = getattr(source, "keywords", Keyword(0))
         if Keyword.DEATHTOUCH in source_kw_dt:
             target.dealt_deathtouch_damage = True
+
+    # Fire the combat-damage trigger (rule 510.2 — after damage is dealt, its
+    # triggered abilities go on the stack). ``is_combat``/``combat`` both mark
+    # this as combat damage so a subscriber that gates on it (Drake Hatcher's
+    # incubation, prowess-of-combat, etc.) fires here but stays dormant for
+    # non-combat damage, which fires the same event from engine.game.deal_damage
+    # with those flags left False. Fired from the engine's combat site (the sole
+    # combat-damage path) — never synthesized from snapshot deltas.
+    if is_damage_recipient:
+        game.trigger_manager.fire_event(
+            game,
+            DealsDamageTriggeredEvent(
+                source=source, target=target, amount=amount,
+                is_combat=True, combat=True,
+            ),
+        )
 
     # Lifelink: controller gains life equal to damage dealt
     source_kw = getattr(source, "keywords", Keyword(0))
@@ -278,6 +298,7 @@ def declare_attackers_step(game: GameState, attackers: Any = None) -> None:
     chosen = list(attackers) if attackers else []
 
     # Validate and register attackers
+    declared: list[Any] = []
     for attacker in chosen:
         if attacker not in eligible:
             continue
@@ -287,11 +308,22 @@ def declare_attackers_step(game: GameState, attackers: Any = None) -> None:
         combat.attackers[attacker] = defending
         combat.attacker_blockers[attacker] = []
         attacker.is_attacking = True
+        declared.append(attacker)
 
         # Tap the attacker unless it has vigilance
         kw = getattr(attacker, "keywords", Keyword(0))
         if Keyword.VIGILANCE not in kw:
             attacker.is_tapped = True
+
+    # All attackers are declared simultaneously (rule 508.1); only after the
+    # whole set is registered do "whenever ~ attacks" abilities go on the stack
+    # (rule 508.2), so a trigger reading "each other attacking creature"
+    # (Dauntless Veteran) sees the complete set. Fire once per attacker in
+    # declaration order (APNAP within the active player = registration order).
+    for attacker in declared:
+        game.trigger_manager.fire_event(
+            game, AttacksTriggeredEvent(creature=attacker, attacker=attacker)
+        )
 
 
 def declare_blockers_step(game: GameState, block_assignments: Any = None) -> None:

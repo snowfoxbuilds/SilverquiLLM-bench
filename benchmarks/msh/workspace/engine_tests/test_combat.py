@@ -30,6 +30,7 @@ from engine.combat import (
     CombatState,
     _can_attack,
     _can_block,
+    _deal_damage,
     _get_lethal_damage,
     combat_damage_step,
     declare_attackers_step,
@@ -37,8 +38,10 @@ from engine.combat import (
     end_combat_step,
 )
 from engine.decisions import Decision, GameRef
+from engine.events import AttacksTriggeredEvent, DealsDamageTriggeredEvent
 from engine.game_state import GameState
 from engine.intent_player import DeterministicPlayer, Intent
+from engine.triggers import TriggerRegistration
 from engine.types import Keyword, Zone
 
 
@@ -939,3 +942,161 @@ class TestCombatIntegration:
         # First striker should NOT have taken damage from blocker
         # (blocker died before normal damage step)
         assert first_striker.damage_marked == 0
+
+
+# ---------------------------------------------------------------------------
+# Dormant-event firing (Phase I, issue #44): combat damage and attacks
+# ---------------------------------------------------------------------------
+
+def _record_events(game: GameState, event_type: type) -> list:
+    """Register a spy trigger recording every fired *event_type*.
+
+    The spy's condition appends the event and returns ``False`` so the event's
+    facts are observed at the firing site without the trigger going on the
+    stack — keeping these tests focused on *whether/what* fires, not resolution.
+    Returns the list the spy appends to.
+    """
+    events: list = []
+
+    def _cond(_g: GameState, event: object) -> bool:
+        events.append(event)
+        return False
+
+    game.trigger_manager.register(
+        TriggerRegistration(
+            event_type=event_type,
+            condition=_cond,
+            effect=lambda _g: None,
+            source=object(),
+            controller=game.active_player,
+        )
+    )
+    return events
+
+
+class TestCombatDamageFiresEvent:
+    """engine/combat.py::_deal_damage fires DealsDamageTriggeredEvent (Phase I).
+
+    Before Phase I combat damage fired no event, so every combat-damage trigger
+    (Drake Hatcher's incubation, Goldvein Pick's Treasure, prowess-of-combat)
+    was dormant. It now fires with ``is_combat``/``combat`` both True, so a
+    subscriber can distinguish combat from the non-combat damage that
+    engine.game.deal_damage fires with those flags False.
+    """
+
+    def test_damage_to_player_fires_combat_flagged_event(self) -> None:
+        game = _make_game()
+        attacker = _make_creature("Raider", 3, 3)
+        _place_on_battlefield(game.players[0], attacker, game)
+        events = _record_events(game, DealsDamageTriggeredEvent)
+        _deal_damage(attacker, game.players[1], 3, game, game.combat_state)
+        assert len(events) == 1
+        (e,) = events
+        assert e.source is attacker
+        assert e.target is game.players[1]
+        assert e.amount == 3
+        assert e.is_combat is True
+        assert e.combat is True
+
+    def test_damage_to_creature_fires_combat_flagged_event(self) -> None:
+        game = _make_game()
+        attacker = _make_creature("Raider", 3, 3)
+        blocker = _make_creature("Wall", 0, 4)
+        _place_on_battlefield(game.players[0], attacker, game)
+        _place_on_battlefield(game.players[1], blocker, game)
+        events = _record_events(game, DealsDamageTriggeredEvent)
+        _deal_damage(attacker, blocker, 3, game, game.combat_state)
+        assert len(events) == 1
+        assert events[0].target is blocker
+        assert events[0].is_combat is True and events[0].combat is True
+
+    def test_zero_and_prevented_damage_fires_nothing(self) -> None:
+        game = _make_game()
+        attacker = _make_creature("Raider", 2, 2)
+        _place_on_battlefield(game.players[0], attacker, game)
+        events = _record_events(game, DealsDamageTriggeredEvent)
+        # amount <= 0 short-circuits before the event
+        _deal_damage(attacker, game.players[1], 0, game, game.combat_state)
+        assert events == []
+
+    def test_combat_damage_step_fires_for_unblocked_attacker(self) -> None:
+        """Integration: driving combat_damage_step fires the event once for an
+        unblocked attacker hitting the defending player — the executor path."""
+        game = _make_game()
+        attacker = _make_creature("Raider", 2, 2)
+        _place_on_battlefield(game.players[0], attacker, game)
+        declare_attackers_step(game, [attacker])
+        events = _record_events(game, DealsDamageTriggeredEvent)
+        combat_damage_step(game)
+        combat_hits = [
+            e for e in events
+            if e.is_combat and e.target is game.players[1] and e.source is attacker
+        ]
+        assert len(combat_hits) == 1
+        assert combat_hits[0].amount == 2
+
+
+class TestAttacksFiresEvent:
+    """engine/combat.py::declare_attackers_step fires AttacksTriggeredEvent
+    once per declared attacker, after the full set is registered (Phase I)."""
+
+    def test_fires_once_per_attacker_with_both_fields(self) -> None:
+        game = _make_game()
+        a1 = _make_creature("A1", 2, 2)
+        a2 = _make_creature("A2", 2, 2)
+        _place_on_battlefield(game.players[0], a1, game)
+        _place_on_battlefield(game.players[0], a2, game)
+        events = _record_events(game, AttacksTriggeredEvent)
+        declare_attackers_step(game, [a1, a2])
+        assert len(events) == 2
+        assert {e.attacker for e in events} == {a1, a2}
+        # Both fields carry the attacking creature (subscribers read either).
+        for e in events:
+            assert e.creature is e.attacker
+
+    def test_fires_after_full_declaration(self) -> None:
+        """Every fire sees the COMPLETE attacker set in combat_state — the event
+        fires only after the whole set is registered (rule 508.2), so a
+        "each other attacking creature" trigger (Dauntless Veteran) is correct."""
+        game = _make_game()
+        a1 = _make_creature("A1", 2, 2)
+        a2 = _make_creature("A2", 2, 2)
+        _place_on_battlefield(game.players[0], a1, game)
+        _place_on_battlefield(game.players[0], a2, game)
+        counts: list[int] = []
+
+        def _cond(g: GameState, _event: object) -> bool:
+            counts.append(len(g.combat_state.attackers))
+            return False
+
+        game.trigger_manager.register(
+            TriggerRegistration(
+                event_type=AttacksTriggeredEvent,
+                condition=_cond,
+                effect=lambda _g: None,
+                source=object(),
+                controller=game.active_player,
+            )
+        )
+        declare_attackers_step(game, [a1, a2])
+        assert counts == [2, 2]
+
+    def test_no_attackers_declared_fires_nothing(self) -> None:
+        game = _make_game()
+        a1 = _make_creature("A1", 2, 2)
+        _place_on_battlefield(game.players[0], a1, game)  # eligible, but not declared
+        events = _record_events(game, AttacksTriggeredEvent)
+        declare_attackers_step(game, [])
+        assert events == []
+
+    def test_ineligible_creature_does_not_fire(self) -> None:
+        """A tapped creature passed as an attacker is rejected (not registered),
+        so it fires no attacks event."""
+        game = _make_game()
+        a1 = _make_creature("A1", 2, 2)
+        tapped = _make_creature("Tapped", 2, 2, is_tapped=True)
+        _place_on_battlefield(game.players[0], a1, game)
+        _place_on_battlefield(game.players[0], tapped, game)
+        events = _record_events(game, AttacksTriggeredEvent)
+        declare_attackers_step(game, [a1, tapped])
+        assert {e.attacker for e in events} == {a1}

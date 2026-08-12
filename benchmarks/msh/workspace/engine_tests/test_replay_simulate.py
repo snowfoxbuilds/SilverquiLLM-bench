@@ -3936,31 +3936,38 @@ class TestGoldenGame:
         86 -> 73, successful comparisons 809 -> 826, with the ENGINE_ERROR
         funding limitation (6) untouched.
 
-        Phase H (token minters) moves it again, intentionally: the cleared
-        identity is the 1/1 white Soldier 94161 — Resolute Reinforcements'
-        subtype fix ({Human, Soldier} -> {Soldier}) lets its token correlate
-        and become producible. (Food 94177 and Treasure 94178 remain MISSING
-        in this game: their only minter here, Goldvein Pick, sits on a dormant
-        combat-damage trigger — issue #44.) STATE_MISMATCH 73 -> 69
-        (zone_contents 41 -> 37, the correlated token shadows), MISSING_CARD
-        4 -> 3 (the Soldier), successful comparisons 826 -> 830. The
-        ENGINE_ERROR funding limitation (6) is STILL untouched, so a funding
-        fix or regression stays visible; tapped/life unchanged."""
+        Phase H (token minters) moved it: the cleared identity was the 1/1
+        white Soldier 94161 — Resolute Reinforcements' subtype fix ({Human,
+        Soldier} -> {Soldier}) let its token correlate and become producible.
+
+        Phase I (dormant events — issue #44) moves it again, intentionally, and
+        RE-SCOPES the "funding limitation": firing the combat-damage event
+        (engine/combat.py::_deal_damage) makes Goldvein Pick's Treasure trigger
+        fire, so (1) the Treasure token 94178 now mints and correlates —
+        MISSING_CARD 3 -> 2; and (2) the executor's ``_stack_has_source`` guard
+        now sees Goldvein's combat-damage trigger on the stack and stops
+        MIS-DRIVING it as Goldvein's equip ability, so five of the six
+        ENGINE_ERRORs were never a funding gap at all — they were the dormant
+        combat-damage trigger reported as an unpayable activation. ENGINE_ERROR
+        6 -> 1: exactly ONE genuine equip-funding error remains (the bounded
+        GRE-data limitation this fixture still isolates). STATE_MISMATCH 69 ->
+        64 (zone_contents 37 -> 32 — the correlated Treasure shadows), ok
+        comparisons 830 -> 840; tapped/life unchanged."""
         report, by_type, by_category = self._fingerprint(self.FIXTURE_EQUIP)
         assert report.total_snapshots == 894
-        assert report.successful_comparisons == 830
+        assert report.successful_comparisons == 840
         assert dict(by_type) == {
-            "STATE_MISMATCH": 69,
-            "ENGINE_ERROR": 6,
+            "STATE_MISMATCH": 64,
+            "ENGINE_ERROR": 1,
             "ILLEGAL_ACTION": 4,
-            "MISSING_CARD": 3,
+            "MISSING_CARD": 2,
         }
         assert dict(by_category) == {
-            "zone_contents": 37,
+            "zone_contents": 32,
             "tapped_state": 21,
             "life_total": 15,
-            "ENGINE_ERROR": 6,
-            "MISSING_CARD": 3,
+            "ENGINE_ERROR": 1,
+            "MISSING_CARD": 2,
         }
 
 
