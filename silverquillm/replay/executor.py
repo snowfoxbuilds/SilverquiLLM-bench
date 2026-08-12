@@ -1481,6 +1481,7 @@ class ReplayExecutor:
         the shell is materialized into the real card so later casts exercise
         the actual implementation.
         """
+        from engine.card import CardImpl
         from engine.game import draw_card
         from engine.types import Zone
         from silverquillm.replay.state import extract_object_id_changes
@@ -1544,12 +1545,32 @@ class ReplayExecutor:
                         f"draw_card (seat {seat}): {type(exc).__name__}: {exc}"
                     )
                     continue
-                if drawn is None:
-                    result.infra_failures.append(
-                        f"draw (seat {seat}): engine library empty"
-                    )
-                    continue
                 obj = curr_snapshot.game_objects.get(iid)
+                if drawn is None:
+                    # The engine library ran dry before GRE's did. This is an
+                    # executor-side artifact: a library-manipulating effect
+                    # resolving against the engine's own library — most often
+                    # Consuming Aberration's per-cast mill, now that the
+                    # spell-cast event fires — depletes it at a depth that
+                    # cannot mirror GRE's hidden library order. GRE attests the
+                    # draw happened, so reconstruct the drawn card into hand (a
+                    # zone reconciliation, like _sync_zones — no draw trigger is
+                    # fired, since draw_card performed no engine draw): the
+                    # revealed identity when GRE gives one, else the same
+                    # ``Unknown_0`` shell the initial deal uses for a hidden
+                    # card. Either way the hand count stays correct and the only
+                    # residue is an honest engine-library-count divergence,
+                    # never a crash that suppresses the rest of the game.
+                    hand = player.zones[Zone.HAND]
+                    if obj is not None and obj.grp_id:
+                        real = self._create_card_from_object(obj, player)
+                    else:
+                        real = CardImpl(
+                            name="Unknown_0", owner=player, controller=player
+                        )
+                    hand.add(real)
+                    self._engine_cards[iid] = real
+                    continue
                 if obj is not None and obj.grp_id:
                     # Materialize the revealed identity in place of the shell.
                     hand = player.zones[Zone.HAND]
