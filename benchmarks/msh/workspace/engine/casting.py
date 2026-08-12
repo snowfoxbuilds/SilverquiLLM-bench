@@ -29,6 +29,7 @@ import inspect
 from typing import TYPE_CHECKING, Any
 
 from engine.card import CardImpl
+from engine.events import SpellCastTriggeredEvent
 from engine.stack import (
     StackObject,
     capture_activation_context,
@@ -506,6 +507,30 @@ def _record_spell_cast(game: GameState, player: Player, card: CardImpl) -> int |
     return None
 
 
+def _fire_spell_cast_event(
+    game: GameState, player: Player, card: CardImpl
+) -> None:
+    """Fire :class:`~engine.events.SpellCastTriggeredEvent` for this cast.
+
+    Called from both cast paths **once** per cast, immediately after the
+    spell's :class:`~engine.stack.StackObject` is on the stack — the spell has
+    become cast (rule 601.2i) and the event occurs, so "whenever a player casts
+    a spell" abilities (prowess, Thousand-Year Storm, cast-count triggers) queue
+    their triggered abilities on top of it (rule 603.3). Every registered
+    subscriber reads ``event.spell`` as the cast *card* (its ``card_types``) and
+    ``event.player``/``event.controller`` as the caster, so we populate the card
+    on both ``spell`` and ``card`` and the caster on both ``player`` and
+    ``controller``. Firing once here — not from any trigger's own hook — keeps
+    the event count correct no matter how many abilities observe the cast.
+    """
+    game.trigger_manager.fire_event(
+        game,
+        SpellCastTriggeredEvent(
+            spell=card, card=card, player=player, controller=player
+        ),
+    )
+
+
 # ------------------------------------------------------------------
 # Cast spell
 # ------------------------------------------------------------------
@@ -684,6 +709,13 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> StackObject:
 
     stack_obj.on_resolve = _on_resolve
     game.stack.push(stack_obj)
+
+    # 9. The spell is now on the stack (rule 601.2i complete). Fire the
+    #    cast-triggered event so "whenever you cast …" abilities queue on top of
+    #    it (rule 603.3) — after the StackObject exists so a subscriber (Storm)
+    #    can correlate to this exact occurrence, and after the cast history is
+    #    recorded so a cast-count reader sees this spell counted.
+    _fire_spell_cast_event(game, player, card)
     return stack_obj
 
 
@@ -906,6 +938,12 @@ def cast_spell_free(
 
     stack_obj.on_resolve = _on_resolve
     game.stack.push(stack_obj)
+
+    # 6. The free-cast spell is on the stack (rule 601.2i complete). Fire the
+    #    cast-triggered event, exactly as on the normal path — a spell cast
+    #    without paying its cost still counts as cast, so cast-triggered
+    #    abilities queue on top of it.
+    _fire_spell_cast_event(game, player, card)
     return stack_obj
 
 

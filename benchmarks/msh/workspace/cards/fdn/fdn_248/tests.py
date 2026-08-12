@@ -28,7 +28,6 @@ from cards.fdn.fdn_86.card_impl import FieryAnnihilation
 from engine.card import Creature, Equipment, Instant
 from engine.casting import cast_spell as engine_cast_spell, cast_spell_free
 from engine.decisions import Decision, DecisionKind, GameRef
-from engine.events import SpellCastTriggeredEvent
 from engine.intent_player import Intent
 from engine.protection import ProtectionAbility
 from engine.stack import resolve_top_of_stack
@@ -133,11 +132,17 @@ def _cast(game, p1, spell, target_prefs=None):
 
 
 def _fire(game, p1, spell):
-    """Fire the spell-cast event so Storm's trigger (if any) goes on the stack —
-    exactly what the game/replay pipeline does after a spell is cast."""
-    game.trigger_manager.fire_event(
-        game, SpellCastTriggeredEvent(spell=spell, player=p1)
-    )
+    """No-op retained for call-site readability.
+
+    ``cast_spell``/``cast_spell_free`` now fire ``SpellCastTriggeredEvent``
+    themselves, once, immediately after the spell is on the stack (rule 601.2i /
+    603.3) — so ``_cast`` above already puts Storm's trigger on the stack with
+    its capture correlated to the just-cast occurrence. Firing again here would
+    double every Storm trigger, so this helper no longer fires; it is kept only
+    so the paired ``_cast(...); _fire(...)`` call sites and their per-spell
+    copy-count comments still read as the cast→trigger sequence they document.
+    """
+    return None
 
 
 def _resolve_top_collect_new(game):
@@ -581,8 +586,12 @@ class TestStormAuthoritativeCount:
         _cast(game, p1, s3)
         _fire(game, p1, s3)               # both Storms observe this one cast
 
-        (early,) = _storm_triggers(game, storm_early)
-        (late,) = _storm_triggers(game, storm_late)
+        # s1 and s2 each also triggered storm_early as they were cast (the cast
+        # pipeline fires the event); select each Storm's s3 trigger specifically.
+        (early,) = [so for so in _storm_triggers(game, storm_early)
+                    if so.event_state.spell is s3]
+        (late,) = [so for so in _storm_triggers(game, storm_late)
+                   if so.event_state.spell is s3]
         assert early.event_state.copies == 2
         assert late.event_state.copies == 2       # late Storm is NOT under-counted
         # The history was incremented exactly once for s3 (two observers, no
@@ -607,7 +616,9 @@ class TestStormAuthoritativeCount:
         storm.controller = p1             # ...and returns to P1
         _cast(game, p1, s2)
         _fire(game, p1, s2)
-        (trig,) = _storm_triggers(game, storm)
+        # s1's cast also put a Storm trigger on the stack; select s2's trigger.
+        (trig,) = [so for so in _storm_triggers(game, storm)
+                   if so.event_state.spell is s2]
         assert trig.event_state.copies == 1       # s1 still counts for P1
         assert trig.event_state.spell is s2
 

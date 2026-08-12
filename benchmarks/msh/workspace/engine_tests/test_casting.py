@@ -29,14 +29,17 @@ from engine.casting import (
     _PERMANENT_TYPES,
     can_cast_at_instant_speed,
     cast_spell,
+    cast_spell_free,
     is_sorcery_speed,
     play_land,
 )
 from engine.decisions import Decision, GameRef
+from engine.events import SpellCastTriggeredEvent
 from engine.game_state import GameState
 from engine.intent_player import DeterministicPlayer, Intent
 from engine.stack import StackObject
-from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step
+from engine.triggers import TriggerRegistration
+from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Zone
 
 
 # ---------------------------------------------------------------------------
@@ -1927,3 +1930,127 @@ class TestStackOccurrenceTargeting:
         assert sum(1 for o in game.get_graveyard(p2).get_all() if o is spell) == 1
         assert not game.get_exile(p2).contains(spell)
         assert game.stack.is_empty()
+
+
+# ---------------------------------------------------------------------------
+# Dormant-event firing (Phase I, issue #44): SpellCastTriggeredEvent
+# ---------------------------------------------------------------------------
+
+class TestSpellCastEventFiring:
+    """cast_spell / cast_spell_free fire SpellCastTriggeredEvent exactly once,
+    after the spell is on the stack (Phase I).
+
+    Before Phase I neither cast path fired the event, so every "whenever you
+    cast ..." trigger (prowess, Thousand-Year Storm, Consuming Aberration's
+    mill) was dormant. The event carries the cast *card* on both ``spell`` and
+    ``card`` (subscribers read ``event.spell.card_types``) and the caster on
+    both ``player`` and ``controller``.
+    """
+
+    @staticmethod
+    def _spy(game: GameState) -> list:
+        events: list = []
+
+        def _cond(_g: GameState, event: object) -> bool:
+            events.append(event)
+            return False  # observe only; don't put a trigger on the stack
+
+        game.trigger_manager.register(
+            TriggerRegistration(
+                event_type=SpellCastTriggeredEvent,
+                condition=_cond,
+                effect=lambda _g: None,
+                source=object(),
+                controller=game.players[0],
+            )
+        )
+        return events
+
+    def test_cast_instant_fires_once_with_card_and_caster(self):
+        game = _make_game()
+        player = game.players[0]
+        bolt = Instant(name="Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        _add_to_hand(game, 0, bolt)
+        _add_mana(player, ManaType.RED, 1)
+        events = self._spy(game)
+
+        cast_spell(game, player, bolt)
+
+        assert len(events) == 1
+        e = events[0]
+        assert e.spell is bolt          # subscribers read event.spell.card_types
+        assert e.card is bolt
+        assert e.player is player
+        assert e.controller is player
+
+    def test_event_fires_after_spell_is_on_the_stack(self):
+        """A subscriber's condition must see the just-cast spell already on the
+        stack (rule 601.2i complete before 603.3)."""
+        game = _make_game()
+        player = game.players[0]
+        bolt = Instant(name="Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        _add_to_hand(game, 0, bolt)
+        _add_mana(player, ManaType.RED, 1)
+        on_stack_at_fire: list = []
+
+        def _cond(g: GameState, event: object) -> bool:
+            on_stack_at_fire.append(
+                any(so.source is event.spell for so in g.stack._items)
+            )
+            return False
+
+        game.trigger_manager.register(
+            TriggerRegistration(
+                event_type=SpellCastTriggeredEvent, condition=_cond,
+                effect=lambda _g: None, source=object(), controller=player,
+            )
+        )
+        cast_spell(game, player, bolt)
+        assert on_stack_at_fire == [True]
+
+    def test_cast_creature_also_fires_event(self):
+        """The event fires for a NON-instant/sorcery spell too — subscribers
+        filter on card type in their own condition, so the fire is unconditional
+        (a creature-cast still triggers Kykar / Consuming Aberration)."""
+        game = _make_game()
+        player = game.players[0]
+        bear = Creature(name="Bear", base_power=2, base_toughness=2,
+                        mana_cost=ManaCost(generic=2))
+        _add_to_hand(game, 0, bear)
+        _add_mana(player, ManaType.GREEN, 2)
+        events = self._spy(game)
+
+        cast_spell(game, player, bear)
+
+        assert len(events) == 1
+        assert events[0].spell is bear
+
+    def test_cast_spell_free_fires_once(self):
+        game = _make_game()
+        player = game.players[0]
+        bolt = Instant(name="Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        game.get_hand(player).add(bolt)
+        events = self._spy(game)
+
+        cast_spell_free(game, player, bolt, Zone.HAND)
+
+        assert len(events) == 1
+        assert events[0].spell is bolt
+        assert events[0].player is player
+
+    def test_two_casts_fire_two_events_never_double(self):
+        """Each cast fires exactly one event — two casts, two events (no
+        double-fire that would double-count a Storm)."""
+        game = _make_game()
+        player = game.players[0]
+        a = Instant(name="A", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        b = Instant(name="B", mana_cost=ManaCost(pips={ManaType.RED: 1}))
+        _add_to_hand(game, 0, a)
+        _add_to_hand(game, 0, b)
+        _add_mana(player, ManaType.RED, 2)
+        events = self._spy(game)
+
+        cast_spell(game, player, a)
+        cast_spell(game, player, b)
+
+        assert [e.spell for e in events] == [a, b]

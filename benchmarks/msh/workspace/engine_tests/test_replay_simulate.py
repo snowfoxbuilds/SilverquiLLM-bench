@@ -3806,6 +3806,10 @@ class TestGoldenGame:
     FIXTURE_TOKENS = REPO_ROOT / "data" / "replays" / "golden" / "fdn_tokens_prideful.json"
     FIXTURE_COUNTERS = REPO_ROOT / "data" / "replays" / "golden" / "fdn_counters_dynamic_pt.json"
     FIXTURE_EQUIP = REPO_ROOT / "data" / "replays" / "golden" / "fdn_equipment_funding.json"
+    # Phase I additions — anchor the newly-fired dormant events and the
+    # draw-resilience / Consuming Aberration hidden-library-mill path.
+    FIXTURE_DORMANT = REPO_ROOT / "data" / "replays" / "golden" / "fdn_dormant_events.json"
+    FIXTURE_MILL = REPO_ROOT / "data" / "replays" / "golden" / "fdn_consuming_aberration_mill.json"
 
     @staticmethod
     def _fingerprint(fixture):
@@ -3936,31 +3940,95 @@ class TestGoldenGame:
         86 -> 73, successful comparisons 809 -> 826, with the ENGINE_ERROR
         funding limitation (6) untouched.
 
-        Phase H (token minters) moves it again, intentionally: the cleared
-        identity is the 1/1 white Soldier 94161 — Resolute Reinforcements'
-        subtype fix ({Human, Soldier} -> {Soldier}) lets its token correlate
-        and become producible. (Food 94177 and Treasure 94178 remain MISSING
-        in this game: their only minter here, Goldvein Pick, sits on a dormant
-        combat-damage trigger — issue #44.) STATE_MISMATCH 73 -> 69
-        (zone_contents 41 -> 37, the correlated token shadows), MISSING_CARD
-        4 -> 3 (the Soldier), successful comparisons 826 -> 830. The
-        ENGINE_ERROR funding limitation (6) is STILL untouched, so a funding
-        fix or regression stays visible; tapped/life unchanged."""
+        Phase H (token minters) moved it: the cleared identity was the 1/1
+        white Soldier 94161 — Resolute Reinforcements' subtype fix ({Human,
+        Soldier} -> {Soldier}) let its token correlate and become producible.
+
+        Phase I (dormant events — issue #44) moves it again, intentionally, and
+        RE-SCOPES the "funding limitation": firing the combat-damage event
+        (engine/combat.py::_deal_damage) makes Goldvein Pick's Treasure trigger
+        fire, so (1) the Treasure token 94178 now mints and correlates —
+        MISSING_CARD 3 -> 2; and (2) the executor's ``_stack_has_source`` guard
+        now sees Goldvein's combat-damage trigger on the stack and stops
+        MIS-DRIVING it as Goldvein's equip ability, so five of the six
+        ENGINE_ERRORs were never a funding gap at all — they were the dormant
+        combat-damage trigger reported as an unpayable activation. ENGINE_ERROR
+        6 -> 1: exactly ONE genuine equip-funding error remains (the bounded
+        GRE-data limitation this fixture still isolates). STATE_MISMATCH 69 ->
+        64 (zone_contents 37 -> 32 — the correlated Treasure shadows), ok
+        comparisons 830 -> 840; tapped/life unchanged."""
         report, by_type, by_category = self._fingerprint(self.FIXTURE_EQUIP)
         assert report.total_snapshots == 894
-        assert report.successful_comparisons == 830
+        assert report.successful_comparisons == 840
         assert dict(by_type) == {
-            "STATE_MISMATCH": 69,
-            "ENGINE_ERROR": 6,
+            "STATE_MISMATCH": 64,
+            "ENGINE_ERROR": 1,
             "ILLEGAL_ACTION": 4,
-            "MISSING_CARD": 3,
+            "MISSING_CARD": 2,
         }
         assert dict(by_category) == {
-            "zone_contents": 37,
+            "zone_contents": 32,
             "tapped_state": 21,
             "life_total": 15,
-            "ENGINE_ERROR": 6,
-            "MISSING_CARD": 3,
+            "ENGINE_ERROR": 1,
+            "MISSING_CARD": 2,
+        }
+
+    def test_dormant_events_fingerprint(self):
+        """Prowess/anthem/attack-trigger-dense game — the Phase I (#44) regression
+        anchor for the newly-fired dormant events. It exercises all three firing
+        sites: SpellCastTriggeredEvent (Balmor's cast-anthem, Heartfire
+        Immolator's prowess), AttacksTriggeredEvent (Dauntless Veteran's team
+        buff), and combat DealsDamageTriggeredEvent. Before Phase I every one was
+        dormant, so this game's dynamic P/T diverged pervasively; now the buffs
+        apply and the fingerprint is dominated by the residual trigger-resolution
+        timing (power_toughness 22 — a buff queued on the engine stack that
+        resolves a snapshot late vs GRE at a comparison point), the honest
+        limitation attributed in the PR. A regression that un-fires any of the
+        three events would blow this pin up. ENGINE_ERROR 3 is bounded funding /
+        counter-timing residue (not a dormant event)."""
+        report, by_type, by_category = self._fingerprint(self.FIXTURE_DORMANT)
+        assert report.total_snapshots == 460
+        assert report.successful_comparisons == 444
+        assert dict(by_type) == {
+            "STATE_MISMATCH": 26,
+            "ENGINE_ERROR": 3,
+            "MISSING_CARD": 1,
+        }
+        assert dict(by_category) == {
+            "power_toughness": 22,
+            "zone_contents": 3,
+            "life_total": 1,
+            "ENGINE_ERROR": 3,
+            "MISSING_CARD": 1,
+        }
+
+    def test_consuming_aberration_mill_fingerprint(self):
+        """Consuming Aberration game — anchors the Phase I (#44) draw-resilience
+        fix and the hidden-library-mill attribution. Firing SpellCastTriggeredEvent
+        makes Consuming Aberration's per-cast mill run against the engine's own
+        (hidden-order) library; this game previously CRASHED with a REPLAY_INFRA
+        "engine library empty" that suppressed the rest of it, because the mill
+        drained the library past a GRE-attested draw. The draw-resilience fix
+        reconstructs the draw instead, so the game completes with ZERO
+        REPLAY_INFRA — a regression that restores the crash would drop
+        ``successful_comparisons`` far below 706 and resurrect REPLAY_INFRA. The
+        residual (zone_contents 29 = milled graveyard shells; power_toughness 20 =
+        the CDA opponents'-graveyard count off vs GRE) is the hidden-library
+        unfaithfulness attributed in the PR, not a fixable divergence."""
+        report, by_type, by_category = self._fingerprint(self.FIXTURE_MILL)
+        assert report.total_snapshots == 737
+        assert report.successful_comparisons == 706
+        assert dict(by_type) == {
+            "STATE_MISMATCH": 63,
+            "MISSING_CARD": 1,
+        }
+        assert dict(by_category) == {
+            "zone_contents": 29,
+            "power_toughness": 20,
+            "life_total": 13,
+            "tapped_state": 1,
+            "MISSING_CARD": 1,
         }
 
 
