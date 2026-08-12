@@ -392,6 +392,66 @@ class TestBuildTriage:
         assert all(c["top_games"] == {"unknown": c["count"]} for c in triage["clusters"])
 
 
+def _tagged_report() -> dict:
+    game = "draft/match0_game0.json"
+    return {
+        "total_divergences": 3,
+        "divergences": [
+            _record("[life_total] Player 1 life mismatch: engine=20, snapshot=19",
+                    game=game, limitation="resolution-cadence"),
+            _record("[power_toughness] Consuming Aberration power mismatch: engine=1, snapshot=2",
+                    game=game, gsid=11, limitation="hidden-information"),
+            _record("activate_ability Adventuring Gear (seat 2): AbilityError: cost could not be paid",
+                    dtype="ENGINE_ERROR", game=game, gsid=12, limitation="unfunded-activation"),
+        ],
+    }
+
+
+class TestLimitationReconciliation:
+    def test_all_records_tagged_is_complete(self):
+        triage = build_triage(_tagged_report(), _NAME_OF)
+        lim = triage["limitation_reconciliation"]
+        assert lim["available"] is True
+        assert lim["complete"] is True
+        assert lim["tagged"] == 3 and lim["untagged"] == 0
+        assert lim["by_tag"] == {
+            "hidden-information": 1,
+            "resolution-cadence": 1,
+            "unfunded-activation": 1,
+        }
+        # floor = the stream-limited subset (hidden + unfunded here).
+        assert lim["floor_records"] == 2
+        assert set(lim["floor_tags"]) == {"hidden-information", "unfunded-activation"}
+
+    def test_untagged_record_breaks_completeness(self):
+        report = _tagged_report()
+        report["divergences"][0].pop("limitation")  # leave one untagged
+        lim = build_triage(report, _NAME_OF)["limitation_reconciliation"]
+        assert lim["available"] is True
+        assert lim["complete"] is False
+        assert lim["untagged"] == 1
+
+    def test_unknown_tag_flagged(self):
+        report = _tagged_report()
+        report["divergences"][0]["limitation"] = "not-a-real-tag"
+        lim = build_triage(report, _NAME_OF)["limitation_reconciliation"]
+        assert lim["unknown_tags"] == ["not-a-real-tag"]
+        assert lim["complete"] is False
+
+    def test_untagged_report_is_not_available(self):
+        # A legacy / observer report carries no tags; completeness is not
+        # enforced (available False), so the tool does not false-fail.
+        lim = build_triage(_synthetic_report(), _NAME_OF)["limitation_reconciliation"]
+        assert lim["available"] is False
+        assert lim["complete"] is False
+
+    def test_deterministic_with_tags(self):
+        a = build_triage(_tagged_report(), _NAME_OF)
+        b = build_triage(_tagged_report(), _NAME_OF)
+        assert json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
+        assert render_markdown(a, 200) == render_markdown(b, 200)
+
+
 # ---------------------------------------------------------------------------
 # Serializer: observer byte-identity + simulate attribution fields
 # ---------------------------------------------------------------------------
@@ -462,12 +522,15 @@ class TestAggregateReportsSerializer:
             "turn_number": 4,
             "action_type": "spell_cast",
             "action_card": "Bite Down",
+            # Phase M: the machine-checked limitation tag (simulate-only).
+            "limitation": "resolution-cadence",
         }
         # No action attached → attribution fields degrade to None, key set identical.
         assert second["game"] == "draft/match0_game0.json"
         assert second["turn_number"] is None
         assert second["action_type"] is None
         assert second["action_card"] is None
+        assert second["limitation"] == "driving-context"  # bare ENGINE_ERROR
         assert set(first) == set(second)
 
     def test_missing_source_degrades_to_none(self):

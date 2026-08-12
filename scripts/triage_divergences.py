@@ -72,6 +72,20 @@ DEFAULT_OUT_DIR = REPO_ROOT / "benchmarks" / "msh" / "analysis"
 
 CONVENTION = "issue40-counted-once"
 
+# Phase M limitation taxonomy — imported from the shared classifier so the
+# triage reconciliation validates against the same tag set the serializer
+# emits. Falls back to an empty set when the package is not importable (the
+# script still clusters; only the tag-reconciliation completeness check needs
+# it), so a bare-script invocation never crashes.
+try:
+    from silverquillm.replay.limitations import FLOOR_TAGS, LIMITATION_TAGS
+
+    _KNOWN_LIMITATION_TAGS = frozenset(LIMITATION_TAGS)
+    _FLOOR_LIMITATION_TAGS = frozenset(FLOOR_TAGS)
+except Exception:  # noqa: BLE001 — standalone invocation without the package
+    _KNOWN_LIMITATION_TAGS = frozenset()
+    _FLOOR_LIMITATION_TAGS = frozenset()
+
 # Records with any other type are bucketed by type (operational buckets).
 STATE_MISMATCH_TYPE = "STATE_MISMATCH"
 
@@ -441,6 +455,42 @@ def _run_length_histograms(
     return runs
 
 
+def _limitation_reconciliation(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Reconcile the machine-checked ``limitation`` tags (Phase M).
+
+    The report serializer tags every simulate-mode divergence with exactly one
+    limitation class. This block proves that partition: every record carries a
+    known tag (``complete``), the per-tag counts sum to the record total, and
+    no unknown tag slipped in. Reports produced before Phase M (observer mode,
+    or older simulate reports) carry no tags — ``available`` is then False and
+    completeness is not enforced.
+    """
+    tags = [rec.get("limitation") for rec in records]
+    available = any(t is not None for t in tags)
+    by_tag: Counter[str] = Counter(t for t in tags if t is not None)
+    untagged = sum(1 for t in tags if t is None)
+    # Only validate against the known set when it could be imported; otherwise
+    # a standalone run cannot judge tag validity and must not false-flag.
+    known = set(_KNOWN_LIMITATION_TAGS)
+    unknown_tags = (
+        sorted({t for t in tags if t is not None and t not in known})
+        if known
+        else []
+    )
+    floor = sorted(t for t in by_tag if t in _FLOOR_LIMITATION_TAGS)
+    return {
+        "available": available,
+        "records": len(records),
+        "tagged": len(records) - untagged,
+        "untagged": untagged,
+        "by_tag": dict(sorted(by_tag.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "floor_tags": floor,
+        "floor_records": sum(by_tag[t] for t in floor),
+        "unknown_tags": unknown_tags,
+        "complete": available and untagged == 0 and not unknown_tags,
+    }
+
+
 def build_triage(
     report: dict[str, Any],
     name_of: Callable[[int], str],
@@ -568,6 +618,7 @@ def build_triage(
             "by_bucket": dict(sorted(bucket_totals.items(), key=lambda kv: (-kv[1], kv[0]))),
         },
         "reconciliation": reconciliation,
+        "limitation_reconciliation": _limitation_reconciliation(records),
         "clusters": clusters,
         "zone_card_involvement": involvement,
     }
@@ -683,6 +734,34 @@ def render_markdown(triage: dict[str, Any], md_rows: int) -> str:
             f"exact partition: **{recon['exact']}**; "
             f"unparsed records: **{recon['unparsed_records']}**."
         ),
+    ]
+
+    lim = triage.get("limitation_reconciliation", {})
+    if lim.get("available"):
+        lines += [
+            "",
+            "## Limitation attribution (Phase M)",
+            "",
+            (
+                f"Every record tagged: **{lim['complete']}** "
+                f"({lim['tagged']}/{lim['records']}); "
+                f"untagged: **{lim['untagged']}**; "
+                f"floor (stream-limited): **{lim['floor_records']}** "
+                f"across {lim['floor_tags']}."
+            ),
+            "",
+            "| Limitation | Records | Kind |",
+            "|---|---:|---|",
+        ]
+        for tag, count in lim["by_tag"].items():
+            kind = "floor" if tag in _FLOOR_LIMITATION_TAGS else "family"
+            lines.append(f"| {tag} | {count} | {kind} |")
+        if lim["unknown_tags"]:
+            lines.append(
+                f"| **UNKNOWN** | — | {', '.join(lim['unknown_tags'])} |"
+            )
+
+    lines += [
         "",
         "## Clusters",
         "",
@@ -786,6 +865,7 @@ def main(argv: list[str] | None = None) -> int:
     md_path.write_text(render_markdown(triage, args.md_rows))
 
     recon = triage["reconciliation"]
+    lim = triage["limitation_reconciliation"]
     print(f"Wrote {json_path}")
     print(f"Wrote {md_path}")
     print(
@@ -793,9 +873,24 @@ def main(argv: list[str] | None = None) -> int:
         f"clustered={recon['clusters_sum']} unparsed={recon['unparsed_records']} "
         f"exact={recon['exact']}"
     )
+    if lim["available"]:
+        print(
+            f"limitation: tagged={lim['tagged']}/{lim['records']} "
+            f"floor={lim['floor_records']} complete={lim['complete']} "
+            f"untagged={lim['untagged']} unknown={lim['unknown_tags']}"
+        )
     if not recon["exact"]:
         print("error: cluster partition does not reconcile", file=sys.stderr)
         return 1
+    # A tagged report that leaves any divergence untagged (or carries an
+    # unknown tag) fails the Phase M acceptance gate: zero untagged survivors.
+    if lim["available"] and not lim["complete"]:
+        print(
+            "error: limitation attribution incomplete "
+            f"(untagged={lim['untagged']} unknown={lim['unknown_tags']})",
+            file=sys.stderr,
+        )
+        return 4
     if recon["unparsed_records"]:
         print("warning: UNPARSED records present (see clusters)", file=sys.stderr)
         return 3

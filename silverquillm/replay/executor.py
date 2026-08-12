@@ -671,6 +671,14 @@ class ReplayExecutor:
         self._combat_damage_passes: set[str] = set()
         # game_state_id -> snapshot list index, for bounded look-ahead.
         self._gsid_index: dict[int, int] = {}
+        # Simulate mode (Phase M): names of multi-ability sources whose driven
+        # activation the executor could NOT disambiguate from the observed GRE
+        # delta (>=2 candidate predictions matched, or none did). Their surviving
+        # state mismatches carry the ``ambiguous-ability`` limitation tag — the
+        # stream lacks a per-card ability-grpId map, so the exact ability driven
+        # is unrecoverable. Recorded at the refusal site, consumed by the
+        # validation layer's classifier.
+        self._ambiguous_sources: set[str] = set()
 
         # Results
         self.results: list[StepResult] = []
@@ -3346,39 +3354,56 @@ class ReplayExecutor:
         curr_snapshot: GameSnapshot,
         result: StepResult,
     ) -> None:
-        """Activate *source_card*'s single activated ability, if unambiguous.
+        """Activate *source_card*'s activated ability, driving it when unambiguous.
 
-        Only the one-ability case is driven. Multi-ability disambiguation
-        (task 5) was investigated and is not cleanly answerable: GRE ability
-        objects DO carry an ability grpId, but there is no per-card map from
-        that grpId to a specific engine ability; and ``ActivatedAbility.cost``
-        is an opaque callable with side effects (pay mana, tap, sacrifice), so
-        it cannot be dry-run to select by cost-payability without mutating
-        state. Rather than guess-and-drive the wrong ability — which would push
-        a wrong effect and manufacture a divergence — a multi-ability (or
-        zero-ability) source falls through to the resync, which records the
-        real divergence via state comparison. Genuine multi-ability activations
-        are rare in the corpus (Ravenous Amulet, Kellan). Zero-ability sources
-        here are triggered abilities the parser labeled ``ability_activation``;
-        the resolution path (or resync) handles them.
+        The single-ability case is driven directly. For a **multi-ability**
+        source, the exact ability is not recoverable from the stream alone: GRE
+        ability objects carry an ability grpId, but there is no per-card map from
+        that grpId to a specific engine ability, and ``ActivatedAbility.cost`` is
+        an opaque, side-effecting callable that cannot be dry-run to select by
+        cost-payability. Phase M adds the evidence-based path sanctioned by #40:
+        each ability may expose a pure ``predicted_outcome(game, source)``
+        declaring its effect on the compared surfaces; the executor drives an
+        ability only when **exactly one** candidate's prediction matches the
+        observed prev->curr GRE delta (:meth:`_disambiguate_multi_ability`).
+
+        A tie (>=2 predictions match), an empty match set, or a source with no
+        predictions falls through to the resync — recording the real divergence
+        via state comparison rather than guessing — and marks the source
+        ``ambiguous`` so its surviving mismatches are attributed to the
+        stream-limitation floor. Zero-ability sources here are triggered
+        abilities the parser labeled ``ability_activation``; the resolution path
+        (or resync) handles them.
         """
         try:
             abilities = list(source_card.get_activated_abilities() or [])
         except Exception:
             abilities = []
-        if len(abilities) != 1:
+        if not abilities:
             return
+        if len(abilities) == 1:
+            chosen = abilities[0]
+        else:
+            chosen = self._disambiguate_multi_ability(
+                source_card, abilities, prev_snapshot, curr_snapshot
+            )
+            if chosen is None:
+                # Ambiguity residue: refuse to guess. Record the source so the
+                # validation layer tags its mismatches as an attributed
+                # stream limitation, then fall through to the resync.
+                self._ambiguous_sources.add(getattr(source_card, "name", "?"))
+                return
         from engine.abilities import ActivatedAbilityInstance, activate_ability
 
         instance = ActivatedAbilityInstance(
             source=source_card,
             controller=player,
-            cost=abilities[0].cost,
-            effect=abilities[0].effect,
+            cost=chosen.cost,
+            effect=chosen.effect,
             is_mana_ability=False,
-            description=abilities[0].description,
-            targeting=getattr(abilities[0], "targeting", None),
-            can_activate=getattr(abilities[0], "can_activate", None),
+            description=chosen.description,
+            targeting=getattr(chosen, "targeting", None),
+            can_activate=getattr(chosen, "can_activate", None),
         )
         name = action.card_name or getattr(source_card, "name", "?")
         try:
@@ -3392,6 +3417,128 @@ class ReplayExecutor:
                 f"activate_ability {name} (seat {action.player_seat_id}): "
                 f"{type(exc).__name__}: {exc}"
             )
+
+    def _disambiguate_multi_ability(
+        self,
+        source_card: Any,
+        abilities: list[Any],
+        prev_snapshot: GameSnapshot,
+        curr_snapshot: GameSnapshot,
+    ) -> Any | None:
+        """Select the one ability whose prediction matches the observed delta.
+
+        Evaluates each candidate's pure ``predicted_outcome(game, source)``
+        against the observed prev->curr GRE delta for *source_card*. Returns the
+        unique matching :class:`~engine.card.ActivatedAbility`, or ``None`` when
+        the choice is not uniquely evidenced (no predictions, an ability without
+        a prediction hook, a tie, or an empty match set) — the honest
+        fall-through. Never mutates game state; predictions are read-only.
+        """
+        # Every candidate must expose a prediction hook, else we cannot compare
+        # like with like — refuse rather than partially guess.
+        predictors = [getattr(a, "predicted_outcome", None) for a in abilities]
+        if any(p is None for p in predictors):
+            return None
+        observed = self._observed_source_delta(
+            source_card, prev_snapshot, curr_snapshot
+        )
+        if observed is None:
+            return None
+        matches: list[Any] = []
+        for ability, predict in zip(abilities, predictors):
+            try:
+                prediction = predict(self.game, source_card)
+            except Exception:  # noqa: BLE001 — a raising predictor is not trustworthy evidence
+                return None
+            if prediction is None:
+                continue  # ability not currently applicable
+            if self._prediction_matches(prediction, source_card, observed):
+                matches.append(ability)
+        return matches[0] if len(matches) == 1 else None
+
+    def _observed_source_delta(
+        self, source_card: Any, prev: GameSnapshot, curr: GameSnapshot
+    ) -> dict[str, Any] | None:
+        """Read the GRE prev->curr delta for *source_card* on compared surfaces.
+
+        Returns a dict describing what GRE observed happened around this source
+        — whether it left the battlefield, its resulting P/T, and each player's
+        life delta — or ``None`` when the source cannot be located in the GRE
+        stream (no evidence to match against). Pure: reads snapshots only.
+        """
+        gre_iid = next(
+            (iid for iid, c in self._engine_cards.items() if c is source_card),
+            None,
+        )
+        if gre_iid is None:
+            return None
+
+        def _on_battlefield(snap: GameSnapshot, iid: int) -> bool:
+            obj = snap.game_objects.get(iid)
+            if obj is None:
+                return False
+            zone = snap.zones.get(obj.zone_id)
+            return bool(zone and zone.type == "ZoneType_Battlefield")
+
+        source_prev_bf = _on_battlefield(prev, gre_iid)
+        source_curr_bf = _on_battlefield(curr, gre_iid)
+        curr_obj = curr.game_objects.get(gre_iid)
+        curr_pt = (
+            (curr_obj.power, curr_obj.toughness)
+            if curr_obj is not None
+            and curr_obj.power is not None
+            and curr_obj.toughness is not None
+            else None
+        )
+        life_deltas = {
+            seat: curr.get_player_life(seat) - prev.get_player_life(seat)
+            for seat in curr.players
+            if seat in prev.players
+        }
+        return {
+            "source_left_bf": source_prev_bf and not source_curr_bf,
+            "source_present": source_prev_bf,
+            "source_curr_pt": curr_pt,
+            "life_deltas": life_deltas,
+        }
+
+    def _prediction_matches(
+        self, prediction: Any, source_card: Any, observed: dict[str, Any]
+    ) -> bool:
+        """True when *prediction* is consistent with the observed GRE delta.
+
+        Checks the discriminating compared surfaces: whether the source leaves
+        the battlefield (decisive — every activated ability at least involves its
+        source, so a predicted leave that did not happen, or a stay that did,
+        rules the candidate out), the source's resulting P/T if the ability sets
+        it, and the sign of any predicted opponent life loss. Extra observed
+        changes (from unrelated same-snapshot effects) never disqualify a
+        candidate — only contradicted predictions do.
+        """
+        leaves = source_card in (prediction.leaves_battlefield or [])
+        if observed["source_present"] and observed["source_left_bf"] != leaves:
+            return False
+        want_pt = (prediction.pt_sets or {}).get(source_card)
+        if want_pt is not None:
+            if observed["source_curr_pt"] is None:
+                return False
+            if tuple(observed["source_curr_pt"]) != tuple(want_pt):
+                return False
+        seat_of = {
+            p: seat for seat, p in getattr(self, "players", {}).items()
+        }
+        for target, delta in (prediction.life_deltas or {}).items():
+            if delta == 0:
+                continue
+            seat = seat_of.get(target)
+            if seat is None:
+                continue
+            observed_delta = observed["life_deltas"].get(seat)
+            if observed_delta is None:
+                continue
+            if (observed_delta < 0) != (delta < 0):
+                return False
+        return True
 
     def _with_target_intent(
         self,

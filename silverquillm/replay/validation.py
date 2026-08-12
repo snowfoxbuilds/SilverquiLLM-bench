@@ -84,6 +84,10 @@ class Divergence:
     action: ReplayAction | None = None
     severity: DivergenceType | None = None  # alias for divergence_type
     involved_grp_ids: list[int] = field(default_factory=list)
+    # Phase M: machine-checked stream-limitation attribution, assigned
+    # simulate-only at report serialization (see silverquillm.replay.limitations).
+    # None until classified; observer mode never serializes it.
+    limitation: str | None = None
 
     def __post_init__(self) -> None:
         # severity mirrors divergence_type for backward compat
@@ -115,6 +119,10 @@ class ValidationReport:
     # gameStateIds restart per game, so without this the aggregate report's
     # flat divergence list cannot be traced back to a transcript.
     source: str = ""
+    # Phase M: names of multi-ability sources the executor refused to drive
+    # (ambiguous). The report serializer reads this to tag their surviving
+    # state mismatches as the ``ambiguous-ability`` floor. Simulate-only.
+    ambiguous_sources: frozenset[str] = field(default_factory=frozenset)
 
     @property
     def divergence_count(self) -> int:
@@ -353,11 +361,17 @@ class ValidatingExecutor:
     def report(self) -> ValidationReport:
         """Produce a ValidationReport summarizing the execution."""
         self._finalize_token_missing()
+        # Phase M: carry the executor's ambiguous multi-ability refusals so the
+        # simulate-mode serializer can floor-tag their surviving mismatches.
+        ambiguous = frozenset(
+            getattr(self.executor, "_ambiguous_sources", frozenset())
+        )
         return ValidationReport(
             total_snapshots=self._snapshots_processed,
             successful_comparisons=self._successful,
             divergences=list(self.divergences),
             card_appearances=dict(self._card_appearances),
+            ambiguous_sources=ambiguous,
         )
 
     def record_divergence(self, divergence: Divergence) -> None:

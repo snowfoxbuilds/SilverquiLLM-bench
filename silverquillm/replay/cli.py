@@ -13,7 +13,15 @@ from typing import Any
 
 import click
 
-from silverquillm.replay.executor import ReplayExecutor, load_card_id_map
+from silverquillm.replay.executor import (
+    ReplayExecutor,
+    load_card_id_map,
+    load_token_id_map,
+)
+from silverquillm.replay.limitations import (
+    LimitationContext,
+    classify_limitation,
+)
 from silverquillm.replay.parser import parse_replay
 import sys
 
@@ -171,12 +179,14 @@ def _divergence_record(
     report: ValidationReport,
     divergence: Divergence,
     simulate: bool,
+    context: LimitationContext | None = None,
 ) -> dict[str, Any]:
     """Serialize one divergence for the aggregate report.
 
     Simulate mode appends the attribution fields triage tooling needs
-    (source game, turn, co-occurring action). Observer mode keeps the
-    original four-key record so its report stays byte-identical.
+    (source game, turn, co-occurring action) and the machine-checked
+    ``limitation`` tag (Phase M). Observer mode keeps the original four-key
+    record so its report stays byte-identical.
     """
     record: dict[str, Any] = {
         "game_state_id": divergence.game_state_id,
@@ -190,6 +200,9 @@ def _divergence_record(
         record["turn_number"] = action.turn_number if action else None
         record["action_type"] = action.action_type if action else None
         record["action_card"] = (action.card_name or None) if action else None
+        record["limitation"] = classify_limitation(
+            record, context or LimitationContext()
+        )
     return record
 
 
@@ -197,6 +210,7 @@ def _aggregate_reports(
     reports: list[ValidationReport],
     card_id_map: dict[int, str],
     simulate: bool = False,
+    token_grp_ids: frozenset[int] = frozenset(),
 ) -> dict[str, Any]:
     """Aggregate multiple ValidationReports into a summary dict."""
     games_attempted = len(reports)
@@ -246,7 +260,15 @@ def _aggregate_reports(
         "top_divergence_causes": top_causes,
         "per_card_rates": per_card_rates,
         "divergences": [
-            _divergence_record(r, d, simulate)
+            _divergence_record(
+                r,
+                d,
+                simulate,
+                LimitationContext(
+                    ambiguous_sources=r.ambiguous_sources,
+                    token_grp_ids=token_grp_ids,
+                ),
+            )
             for r in reports
             for d in r.divergences
         ],
@@ -442,8 +464,15 @@ def validate(
             stopped_early = True
             break
 
-    # Build aggregate summary
-    summary = _aggregate_reports(reports, card_id_map, simulate=simulate)
+    # Build aggregate summary. Simulate mode tags every divergence with a
+    # machine-checked limitation class; the token grpIds tell an unminted GRE
+    # token from a real card whose zone timing merely lags.
+    token_grp_ids = (
+        frozenset(load_token_id_map().known_grp_ids()) if simulate else frozenset()
+    )
+    summary = _aggregate_reports(
+        reports, card_id_map, simulate=simulate, token_grp_ids=token_grp_ids
+    )
     if registry is not None:
         summary["registry"] = {"registered": len(registry)}
 
