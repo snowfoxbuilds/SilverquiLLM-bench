@@ -1,9 +1,10 @@
 """Card implementation for Prideful Parent."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
+from cards.fdn.tokens import make_creature_token
 from engine.card import ArtifactCreature, Creature
 from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
-from engine.types import CardType, Keyword, ManaCost, Zone
+from engine.types import CardType, Color, Keyword, ManaCost, Zone
 from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -42,7 +43,7 @@ class PridefulParent(Creature):
         def _effect(game: GameState) -> None:
             controller = getattr(source, 'controller', None)
             if controller is not None:
-                token = Creature(name='Cat', subtypes={'Cat'}, base_power=1, base_toughness=1, owner=controller, controller=controller)
+                token = make_creature_token("Cat", {"Cat"}, [Color.WHITE], 1, 1)
                 create_token(game, controller, token)
         controller = getattr(self, 'controller', None) or game.active_player
         game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller))

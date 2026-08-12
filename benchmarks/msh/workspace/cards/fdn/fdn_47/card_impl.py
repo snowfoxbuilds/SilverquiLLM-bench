@@ -1,8 +1,9 @@
 """Card implementation for Mischievous Mystic."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
+from cards.fdn.tokens import make_creature_token
 from engine.card import Creature
-from engine.types import Keyword, ManaCost
+from engine.types import Color, Keyword, ManaCost
 from engine.events import DrawsCardTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -52,6 +53,6 @@ class MischievousMystic(Creature):
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return
-            token = Creature(name='Faerie', subtypes={'Faerie'}, keywords=Keyword.FLYING, base_power=1, base_toughness=1)
+            token = make_creature_token('Faerie', {'Faerie'}, [Color.BLUE], 1, 1, keywords=Keyword.FLYING)
             create_token(game, ctrl, token)
         game.trigger_manager.register(TriggerRegistration(event_type=DrawsCardTriggeredEvent, condition=_draw_condition, effect=_draw_effect, source=self, controller=controller))

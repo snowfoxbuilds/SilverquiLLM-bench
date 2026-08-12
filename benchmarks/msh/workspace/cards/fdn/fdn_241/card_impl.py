@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import CardImpl, Creature, Sorcery
+from engine.card import CardImpl, Sorcery
 from engine.continuous_effects import (
     ContinuousEffect,
     DURATION_END_OF_TURN,
     Layer,
     SubLayer,
 )
-from engine.types import CardType, Keyword, ManaCost
+from engine.types import CardType, Color, Keyword, ManaCost
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -38,6 +38,7 @@ class HeroicReinforcements(Sorcery):
 
     def on_resolve(self, game: "GameState") -> None:
         """Create 2 Soldier tokens, then pump and grant haste."""
+        from cards.fdn.tokens import make_creature_token
         from engine.game import create_token
 
         controller = self.controller
@@ -46,11 +47,8 @@ class HeroicReinforcements(Sorcery):
 
         # Create two 1/1 white Soldier tokens
         for _ in range(2):
-            token = Creature(
-                name="Soldier",
-                base_power=1,
-                base_toughness=1,
-                subtypes={"Soldier"},
+            token = make_creature_token(
+                "Soldier", {"Soldier"}, [Color.WHITE], 1, 1
             )
             token.is_token = True
             create_token(game, controller, token)

@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature, Instant, Mode, Sorcery
+from engine.card import Instant, Mode, Sorcery
 from engine.continuous_effects import (
     ContinuousEffect,
     DURATION_END_OF_TURN,
     Layer,
     SubLayer,
 )
-from engine.types import CardType, Keyword, ManaCost, Zone
+from engine.types import CardType, Color, Keyword, ManaCost, Zone
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
@@ -70,13 +70,9 @@ class GoblinSurprise(Instant):
                 duration=DURATION_END_OF_TURN,
             ))
         elif mode == 1:
+            from cards.fdn.tokens import make_creature_token
             from engine.game import create_token
             for _ in range(2):
-                token = Creature(
-                    name="Goblin",
-                    base_power=1,
-                    base_toughness=1,
-                    subtypes={"Goblin"},
-                )
+                token = make_creature_token("Goblin", {"Goblin"}, [Color.RED], 1, 1)
                 token.is_token = True
                 create_token(game, controller, token)

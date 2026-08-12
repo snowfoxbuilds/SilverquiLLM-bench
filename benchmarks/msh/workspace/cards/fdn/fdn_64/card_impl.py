@@ -1,8 +1,9 @@
 """Card implementation for Infestation Sage."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
+from cards.fdn.tokens import make_creature_token
 from engine.card import ArtifactCreature, Creature
-from engine.types import CardType, Keyword, ManaCost, Supertype, Zone
+from engine.types import CardType, Color, Keyword, ManaCost, Supertype, Zone
 from engine.events import CreatureDiesTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -42,7 +43,7 @@ class InfestationSage(Creature):
             controller = getattr(source, 'controller', None) or getattr(source, 'owner', None)
             if controller is None:
                 return
-            token = Creature(name='Insect', subtypes={'Insect'}, base_power=1, base_toughness=1, keywords=Keyword.FLYING)
+            token = make_creature_token("Insect", {"Insect"}, [Color.BLACK, Color.GREEN], 1, 1, keywords=Keyword.FLYING)
             create_token(game, controller, token)
         controller = getattr(self, 'controller', None) or game.active_player
         game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_effect, source=self, controller=controller))

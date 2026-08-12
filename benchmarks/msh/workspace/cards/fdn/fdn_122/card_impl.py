@@ -1,9 +1,10 @@
 """Card implementation for Kykar, Zephyr Awakener."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
+from cards.fdn.tokens import make_creature_token
 from engine.card import Creature
 from engine.card_queries import choose_mode, choose_object
-from engine.types import CardType, Keyword, ManaCost, Zone
+from engine.types import CardType, Color, Keyword, ManaCost, Zone
 from engine.events import EndStepTriggeredEvent, SpellCastTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -34,7 +35,6 @@ class KykarZephyrAwakener(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register noncreature spell cast trigger."""
-        from engine.card import Creature as _Creature
         from engine.game import create_token
         from engine.triggers import TriggerRegistration
         from engine.zones import move_to_zone
@@ -82,6 +82,6 @@ class KykarZephyrAwakener(Creature):
                         move_to_zone(game, _exiled_card, Zone.EXILE, Zone.BATTLEFIELD)
                     game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_return_condition, effect=_return_effect, source=source, controller=ctrl))
             else:
-                token = _Creature(name='Spirit', subtypes={'Spirit'}, keywords=Keyword.FLYING, base_power=1, base_toughness=1)
+                token = make_creature_token("Spirit", {"Spirit"}, [Color.WHITE], 1, 1, keywords=Keyword.FLYING)
                 create_token(game, ctrl, token)
         game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

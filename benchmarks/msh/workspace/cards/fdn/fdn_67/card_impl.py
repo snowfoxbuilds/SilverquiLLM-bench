@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Creature, Sorcery
-from engine.types import CardType, ManaCost, Zone
+from cards.fdn.tokens import make_creature_token
+from engine.card import Sorcery
+from engine.types import CardType, Color, ManaCost, Zone
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -48,12 +49,7 @@ class RevengeOfTheRats(Sorcery):
         )
 
         for _ in range(creature_count):
-            token = Creature(
-                name="Rat",
-                subtypes={"Rat"},
-                base_power=1,
-                base_toughness=1,
-            )
+            token = make_creature_token("Rat", {"Rat"}, [Color.BLACK], 1, 1)
             create_token(game, controller, token)
             # Token enters tapped
             token.is_tapped = True

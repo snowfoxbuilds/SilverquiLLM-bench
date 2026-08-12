@@ -1,8 +1,9 @@
 """Card implementation for Lathril, Blade of the Elves."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
+from cards.fdn.tokens import make_creature_token
 from engine.card import ActivatedAbility, Creature
-from engine.types import CardType, Keyword, ManaCost, Supertype
+from engine.types import CardType, Color, Keyword, ManaCost, Supertype
 from engine.events import DealsDamageTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -57,8 +58,7 @@ class LathrilBladeOfTheElves(Creature):
                 return
             amount = _damage_queue.pop(0)
             for _ in range(amount):
-                token = Creature(name='Elf Warrior', base_power=1, base_toughness=1, subtypes={'Elf', 'Warrior'})
-                token.is_token = True
+                token = make_creature_token('Elf Warrior', {'Elf', 'Warrior'}, [Color.GREEN], 1, 1)
                 create_token(game, ctrl, token)
         game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
 

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Creature, Sorcery
-from engine.types import CardType, ManaCost, TargetRequirement, Zone
+from engine.card import Sorcery
+from engine.types import CardType, Color, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -44,6 +44,7 @@ class GoblinNegotiation(Sorcery):
 
     def on_resolve(self, game: "GameState") -> None:
         """Deal X damage, create Goblin tokens for excess damage."""
+        from cards.fdn.tokens import make_creature_token
         from engine.game import create_token, deal_damage
 
         chosen = getattr(self, "chosen_targets", None)
@@ -72,10 +73,5 @@ class GoblinNegotiation(Sorcery):
 
         # Create Goblin tokens for excess
         for _ in range(excess):
-            token = Creature(
-                name="Goblin",
-                subtypes={"Goblin"},
-                base_power=1,
-                base_toughness=1,
-            )
+            token = make_creature_token("Goblin", {"Goblin"}, [Color.RED], 1, 1)
             create_token(game, controller, token)

@@ -1,8 +1,9 @@
 """Card implementation for Koma, World-Eater."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
+from cards.fdn.tokens import make_creature_token
 from engine.card import Creature
-from engine.types import Keyword, ManaCost
+from engine.types import Color, Keyword, ManaCost
 from engine.events import DealsDamageTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -32,7 +33,6 @@ class KomaWorldEater(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register combat damage trigger for Serpent token creation."""
-        from engine.card import Creature as _Creature
         from engine.game import create_token
         from engine.triggers import TriggerRegistration
         source = self
@@ -51,6 +51,6 @@ class KomaWorldEater(Creature):
             if ctrl is None:
                 return
             for _ in range(4):
-                token = _Creature(name="Koma's Coil", subtypes={'Serpent'}, base_power=3, base_toughness=3)
+                token = make_creature_token("Koma's Coil", {'Serpent'}, [Color.BLUE], 3, 3)
                 create_token(game, ctrl, token)
         game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

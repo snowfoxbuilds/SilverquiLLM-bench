@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import ArtifactCreature, Creature
 from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
-from engine.types import CardType, Keyword, ManaCost, Zone
+from engine.types import CardType, Color, Keyword, ManaCost, Zone
 from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -36,6 +36,7 @@ class GuardedHeir(Creature):
 
     def register_triggers(self, game: GameState) -> None:
         from engine.triggers import TriggerRegistration
+        from cards.fdn.tokens import make_creature_token
         from engine.game import create_token
         source = self
 
@@ -43,7 +44,7 @@ class GuardedHeir(Creature):
             controller = getattr(source, 'controller', None)
             if controller is not None:
                 for _ in range(2):
-                    token = Creature(name='Knight', subtypes={'Knight'}, base_power=3, base_toughness=3, owner=controller, controller=controller)
+                    token = make_creature_token('Knight', {'Knight'}, [Color.WHITE], 3, 3)
                     create_token(game, controller, token)
         controller = getattr(self, 'controller', None) or game.active_player
         game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller))

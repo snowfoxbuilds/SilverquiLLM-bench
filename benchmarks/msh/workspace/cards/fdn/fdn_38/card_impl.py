@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Creature, Instant
-from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+from cards.fdn.tokens import make_creature_token
+from engine.card import Instant
+from engine.types import CardType, Color, Keyword, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -65,12 +66,13 @@ class FaebloomTrick(Instant):
 
         # Create two 1/1 blue Faerie tokens with flying.
         for _ in range(2):
-            token = Creature(
-                name="Faerie",
-                subtypes={"Faerie"},
+            token = make_creature_token(
+                "Faerie",
+                {"Faerie"},
+                [Color.BLUE],
+                1,
+                1,
                 keywords=Keyword.FLYING,
-                base_power=1,
-                base_toughness=1,
             )
             create_token(game, controller, token)
 

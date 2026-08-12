@@ -4,7 +4,7 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING, Any
 from engine.card import ActivatedAbility, ArtifactCreature, Creature, ManaAbility
-from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
+from engine.types import CardType, Color, Keyword, ManaCost, ManaType, Supertype, Zone
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
@@ -47,6 +47,7 @@ class KrenkoMobBoss(Creature):
             return _tap_cost(game, src)
 
         def _effect(game: Any) -> None:
+            from cards.fdn.tokens import make_creature_token
             from engine.game import create_token
 
             controller = source.controller
@@ -59,12 +60,7 @@ class KrenkoMobBoss(Creature):
                 if "Goblin" in getattr(card, "subtypes", set()):
                     goblin_count += 1
             for _ in range(goblin_count):
-                token = Creature(
-                    name="Goblin",
-                    base_power=1,
-                    base_toughness=1,
-                    subtypes={"Goblin"},
-                )
+                token = make_creature_token("Goblin", {"Goblin"}, [Color.RED], 1, 1)
                 token.is_token = True
                 create_token(game, controller, token)
 

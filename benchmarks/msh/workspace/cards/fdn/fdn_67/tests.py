@@ -10,7 +10,8 @@ from __future__ import annotations
 
 from cards.fdn.fdn_67.card_impl import RevengeOfTheRats
 from engine.card import Creature
-from engine.types import CardType, ManaCost, ManaType
+from engine.protection import get_colors
+from engine.types import CardType, Color, ManaCost, ManaType
 from test_utils import cast_spell, create_game, set_board_state
 
 
@@ -45,6 +46,25 @@ class TestRevengeOfTheRatsResolve:
         for r in rats:
             assert (r.base_power, r.base_toughness) == (1, 1)
             assert r.is_tapped is True  # tokens enter tapped
+
+    def test_minted_rat_has_spec_characteristics(self):
+        """Each Rat is a 1/1 black Rat creature token (via
+        ``make_creature_token``) and enters tapped. Colour is explicit so
+        ``get_colors`` reads black — a token has no mana cost to derive it."""
+        game = create_game()
+        p1 = game.players[0]
+        revenge = RevengeOfTheRats(owner=p1, controller=p1)
+        set_board_state(game, 0, hand=[revenge], graveyard=[_creature("A")],
+                        mana={ManaType.BLACK: 4})
+        cast_spell(game, 0, "Revenge of the Rats")
+        rats = _rats(game, p1)
+        assert len(rats) == 1
+        rat = rats[0]
+        assert rat.subtypes == {"Rat"}
+        assert (rat.base_power, rat.base_toughness) == (1, 1)
+        assert rat.is_token is True
+        assert rat.is_tapped is True
+        assert get_colors(rat) == {Color.BLACK}
 
     def test_no_creatures_in_graveyard_makes_no_rats(self):
         game = create_game()
