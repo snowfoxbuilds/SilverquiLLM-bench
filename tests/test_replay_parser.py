@@ -18,6 +18,7 @@ from silverquillm.replay.types import (
     Annotation,
     GameInfo,
     GameObject,
+    ManaPoolEntry,
     PlayerInfo,
     TurnInfo,
     Zone,
@@ -34,6 +35,15 @@ FOREST = 95199
 SWAMP = 95195
 SAVANNAH_LIONS = 93859
 LLANOWAR_ELVES = 93940
+
+# A representative GRE manaPool entry (from data/replays/golden/fdn_equipment_funding.json).
+MANA_POOL_ENTRY = {
+    "manaId": 953,
+    "color": "ManaColor_Red",
+    "srcInstanceId": 239,
+    "abilityGrpId": 1004,
+    "count": 1,
+}
 
 
 @pytest.fixture
@@ -180,6 +190,101 @@ class TestStateReconstruction:
         # Each event with a valid GSM produces a snapshot
         ids = [s.game_state_id for s in parsed_game.snapshots]
         assert ids == sorted(ids)  # Should be in order
+
+
+class TestManaPoolParsing:
+    """GRE ``manaPool`` floating-mana attestation parsing (issue #46).
+
+    A player message carries floating (unspent) mana as a list of
+    ``{manaId, color, srcInstanceId, abilityGrpId, count}`` objects. The
+    field was previously dropped; it is now parsed onto ``PlayerInfo`` and
+    follows REPLACE semantics (a present player message re-sends the complete
+    player object, so an omitted ``manaPool`` means the pool is now empty).
+    """
+
+    ENTRY = MANA_POOL_ENTRY
+
+    @staticmethod
+    def _full(mana_pool=None):
+        p1 = {"systemSeatNumber": 1, "lifeTotal": 20}
+        if mana_pool is not None:
+            p1["manaPool"] = mana_pool
+        return {
+            "gameStateId": 1,
+            "players": [p1, {"systemSeatNumber": 2, "lifeTotal": 20}],
+        }
+
+    def test_entry_from_dict(self):
+        entry = ManaPoolEntry.from_dict(self.ENTRY)
+        assert entry.mana_id == 953
+        assert entry.color == "ManaColor_Red"
+        assert entry.src_instance_id == 239
+        assert entry.ability_grp_id == 1004
+        assert entry.count == 1
+
+    def test_entry_defaults_count_to_one(self):
+        entry = ManaPoolEntry.from_dict({"manaId": 7, "color": "ManaColor_Blue"})
+        assert entry.count == 1
+        assert entry.src_instance_id == 0
+
+    def test_full_state_parses_pool(self):
+        snap = apply_full_state(self._full([self.ENTRY]))
+        pool = snap.players[1].mana_pool
+        assert [e.mana_id for e in pool] == [953]
+        assert snap.players[2].mana_pool == []
+
+    def test_full_state_absent_key_is_empty(self):
+        snap = apply_full_state(self._full(None))
+        assert snap.players[1].mana_pool == []
+
+    def test_diff_present_message_replaces_pool(self):
+        """A present player message SETs the pool (REPLACE, not field-merge)."""
+        e1 = {"manaId": 1, "color": "ManaColor_Green", "srcInstanceId": 10}
+        e2 = {"manaId": 2, "color": "ManaColor_Green", "srcInstanceId": 11}
+        snap0 = apply_full_state(self._full([e1, e2]))
+        assert len(snap0.players[1].mana_pool) == 2
+        diff = {
+            "gameStateId": 2,
+            "players": [{"systemSeatNumber": 1, "lifeTotal": 20, "manaPool": [e1]}],
+        }
+        snap1 = apply_diff(snap0, diff)
+        assert [e.mana_id for e in snap1.players[1].mana_pool] == [1]
+
+    def test_diff_absent_mana_pool_empties(self):
+        """Absent manaPool on a present player message = empty pool (calibrated)."""
+        e1 = {"manaId": 1, "color": "ManaColor_Black", "srcInstanceId": 10}
+        snap0 = apply_full_state(self._full([e1]))
+        assert len(snap0.players[1].mana_pool) == 1
+        diff = {"gameStateId": 2, "players": [{"systemSeatNumber": 1, "lifeTotal": 20}]}
+        snap1 = apply_diff(snap0, diff)
+        assert snap1.players[1].mana_pool == []
+
+    def test_diff_absent_player_keeps_pool(self):
+        """A player NOT mentioned in the diff keeps their prior pool (carry-over)."""
+        e1 = {"manaId": 1, "color": "ManaColor_White", "srcInstanceId": 10}
+        snap0 = apply_full_state(self._full([e1]))
+        diff = {"gameStateId": 2, "players": [{"systemSeatNumber": 2, "lifeTotal": 19}]}
+        snap1 = apply_diff(snap0, diff)
+        assert [e.mana_id for e in snap1.players[1].mana_pool] == [1]
+
+    def test_golden_round_trip_carries_float_across_snapshots(self):
+        """On a real fixture, a floating manaId carries across the snapshots
+        between its first attestation and its consumption (the player message
+        is only re-sent when state changes)."""
+        game = parse_replay(
+            Path(__file__).parent.parent
+            / "data" / "replays" / "golden" / "fdn_equipment_funding.json",
+            card_id_map=load_card_id_map(CARD_ID_MAP_PATH),
+        )
+        # manaId 953 first floats at gsid 175 and is consumed at 178; it must
+        # be present in the reconstructed pool at 175, 176 and 177.
+        floating = {
+            s.game_state_id
+            for s in game.snapshots
+            if any(e.mana_id == 953 for e in s.players[1].mana_pool)
+        }
+        assert {175, 176, 177} <= floating
+        assert 178 not in floating
 
 
 class TestLandPlays:
