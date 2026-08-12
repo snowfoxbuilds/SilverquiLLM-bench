@@ -3806,8 +3806,10 @@ class TestGoldenGame:
     FIXTURE_TOKENS = REPO_ROOT / "data" / "replays" / "golden" / "fdn_tokens_prideful.json"
     FIXTURE_COUNTERS = REPO_ROOT / "data" / "replays" / "golden" / "fdn_counters_dynamic_pt.json"
     FIXTURE_EQUIP = REPO_ROOT / "data" / "replays" / "golden" / "fdn_equipment_funding.json"
-    # Phase I addition — anchors the newly-fired dormant events.
+    # Phase I additions — anchor the newly-fired dormant events and the
+    # draw-resilience / Consuming Aberration hidden-library-mill path.
     FIXTURE_DORMANT = REPO_ROOT / "data" / "replays" / "golden" / "fdn_dormant_events.json"
+    FIXTURE_MILL = REPO_ROOT / "data" / "replays" / "golden" / "fdn_consuming_aberration_mill.json"
 
     @staticmethod
     def _fingerprint(fixture):
@@ -3998,6 +4000,34 @@ class TestGoldenGame:
             "zone_contents": 3,
             "life_total": 1,
             "ENGINE_ERROR": 3,
+            "MISSING_CARD": 1,
+        }
+
+    def test_consuming_aberration_mill_fingerprint(self):
+        """Consuming Aberration game — anchors the Phase I (#44) draw-resilience
+        fix and the hidden-library-mill attribution. Firing SpellCastTriggeredEvent
+        makes Consuming Aberration's per-cast mill run against the engine's own
+        (hidden-order) library; this game previously CRASHED with a REPLAY_INFRA
+        "engine library empty" that suppressed the rest of it, because the mill
+        drained the library past a GRE-attested draw. The draw-resilience fix
+        reconstructs the draw instead, so the game completes with ZERO
+        REPLAY_INFRA — a regression that restores the crash would drop
+        ``successful_comparisons`` far below 706 and resurrect REPLAY_INFRA. The
+        residual (zone_contents 29 = milled graveyard shells; power_toughness 20 =
+        the CDA opponents'-graveyard count off vs GRE) is the hidden-library
+        unfaithfulness attributed in the PR, not a fixable divergence."""
+        report, by_type, by_category = self._fingerprint(self.FIXTURE_MILL)
+        assert report.total_snapshots == 737
+        assert report.successful_comparisons == 706
+        assert dict(by_type) == {
+            "STATE_MISMATCH": 63,
+            "MISSING_CARD": 1,
+        }
+        assert dict(by_category) == {
+            "zone_contents": 29,
+            "power_toughness": 20,
+            "life_total": 13,
+            "tapped_state": 1,
             "MISSING_CARD": 1,
         }
 
