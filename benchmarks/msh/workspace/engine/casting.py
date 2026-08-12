@@ -760,6 +760,16 @@ def cast_spell_free(
     #     normal path.
     prior_qualifying_casts = _record_spell_cast(game, player, card)
 
+    # 4c. Flashback disposition (rule 702.34e): a card with a flashback cost
+    #     cast from the graveyard is exiled as it resolves instead of going to
+    #     the graveyard. In this engine a flashback card is only free-cast from
+    #     the graveyard to flash it back, so the override rides on this cast's
+    #     StackObject (not the card) and is read by _resolve_spell. A free cast
+    #     from any other zone (cascade / Etali from exile) keeps the default.
+    resolution_zone: Zone | None = None
+    if from_zone == Zone.GRAVEYARD and getattr(card, "flashback_cost", None) is not None:
+        resolution_zone = Zone.EXILE
+
     # 5. Build on_resolve callback and push StackObject with the context captured
     #    at target-selection time (step 3b). This StackObject is the stack
     #    representation of this one cast occurrence and carries its immutable
@@ -771,6 +781,7 @@ def cast_spell_free(
         on_resolve=lambda g: None,  # replaced below
         activation_context=activation_context,
         prior_qualifying_casts=prior_qualifying_casts,
+        resolution_zone=resolution_zone,
     )
 
     def _on_resolve(g: GameState) -> None:
@@ -826,8 +837,11 @@ def _resolve_spell(
         # trigger/replacement-effect registration and ENTERS_BATTLEFIELD event.
         move_to_zone(game, card, Zone.STACK, Zone.BATTLEFIELD)
     else:
-        # Instant/sorcery: move from stack to graveyard via move_to_zone.
-        move_to_zone(game, card, Zone.STACK, Zone.GRAVEYARD)
+        # Instant/sorcery: move from stack to graveyard via move_to_zone —
+        # unless the cast overrode the disposition (a flashback spell exiles
+        # instead of going to the graveyard, rule 702.34e).
+        destination = stack_obj.resolution_zone or Zone.GRAVEYARD
+        move_to_zone(game, card, Zone.STACK, destination)
 
 
 # ------------------------------------------------------------------

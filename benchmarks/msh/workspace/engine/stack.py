@@ -76,6 +76,12 @@ class StackObject:
             by excluding the triggering spell from cast history by identity.
             ``None`` for anything that is not a qualifying-spell cast (copies —
             which are not casts — abilities, triggers, and permanent spells).
+        resolution_zone: For a spell whose post-resolution destination is
+            overridden by the way it was cast — a flashback spell exiles instead
+            of going to the graveyard (rule 702.34e) — the zone the resolving
+            spell is put into instead of its default. ``None`` uses the default
+            (permanents → battlefield, other spells → graveyard). Read by
+            :func:`engine.casting._resolve_spell`.
     """
 
     source: Any
@@ -86,6 +92,7 @@ class StackObject:
     activation_context: ActivationContext | None = None
     event_state: Any = None
     prior_qualifying_casts: int | None = None
+    resolution_zone: Zone | None = None
 
 
 # ---------------------------------------------------------------------------
