@@ -14,13 +14,17 @@ Resolution is embedded in the :class:`StackObject` ``on_resolve`` callback
 created by :func:`cast_spell`:
 
 - Call ``card.on_resolve(game)``.
-- Permanents (creature / enchantment / artifact / planeswalker) move from
-  the stack to the battlefield.
-- Non-permanents (instant / sorcery) move to the graveyard.
+- The spell then leaves the stack through the shared departure primitive
+  :func:`engine.stack.move_spell_off_stack`: permanents (creature /
+  enchantment / artifact / planeswalker) to the battlefield, non-permanents
+  (instant / sorcery) to the owner's graveyard — unless the cast stamped a
+  departure replacement (a ``CastMode.FLASHBACK`` cast is exiled any time it
+  leaves the stack, rule 702.34a).
 """
 
 from __future__ import annotations
 
+import enum
 import inspect
 from typing import TYPE_CHECKING, Any
 
@@ -28,6 +32,7 @@ from engine.card import CardImpl
 from engine.stack import (
     StackObject,
     capture_activation_context,
+    move_spell_off_stack,
     stint_checked_targets,
 )
 from engine.types import CardType, Keyword, ManaCost, Phase, Zone
@@ -49,6 +54,27 @@ _PERMANENT_TYPES: frozenset[CardType] = frozenset({
 
 class CastingError(Exception):
     """Raised when a spell cast or land play is illegal."""
+
+
+class CastMode(enum.Enum):
+    """How a spell is being cast, when the manner of casting changes its
+    disposition.
+
+    ``FLASHBACK`` (rule 702.34): the spell is being cast from its owner's
+    graveyard via its flashback ability, so it is exiled instead of being put
+    anywhere else any time it would leave the stack (702.34a) — the cast's
+    ``StackObject.departure_zone`` is set to ``Zone.EXILE``.
+
+    The mode is always selected **explicitly by the caller** that knows *how*
+    the spell is being cast (a card effect, the replay executor attesting a
+    GRE graveyard→stack cast of a flashback-capable card, a test). The generic
+    casting API never infers it from card attributes: a flashback-capable card
+    can legally be cast from the graveyard by other means (a future
+    Underworld-Breach-style effect), and that cast must not exile.
+    """
+
+    NORMAL = "normal"
+    FLASHBACK = "flashback"
 
 
 # ------------------------------------------------------------------
@@ -105,9 +131,25 @@ def _seat_of(game: GameState, player: Any) -> int | None:
 
 
 def _candidate_decision(game: GameState, candidate: Any, zone: Any) -> Any:
-    """Build the OBJECT/PLAYER decision for a legal target candidate."""
+    """Build the OBJECT/PLAYER decision for a legal target candidate.
+
+    A :class:`~engine.stack.StackObject` candidate (a spell on the stack — the
+    ``Zone.STACK`` enumeration offers exact cast occurrences, never source
+    cards) is identified by the **occurrence**: the instance id is minted for
+    the StackObject itself, so two casts/copies of the same card are distinct
+    options, while the presented attrs (name/types/colors) come from its source
+    card so name-routed intents still match.
+    """
     if any(candidate is p for p in game.players):
         return game.refs.player_decision(candidate, seat=_seat_of(game, candidate))
+    if isinstance(candidate, StackObject):
+        controller = candidate.controller
+        return game.refs.object_decision(
+            candidate,
+            zone=Zone.STACK.value,
+            controller_seat=_seat_of(game, controller) if controller is not None else None,
+            attrs_from=candidate.source,
+        )
     controller = getattr(candidate, "controller", None)
     return game.refs.object_decision(
         candidate,
@@ -173,7 +215,16 @@ def _query_target(
         from engine.protection import has_protection_from as _has_protection
 
     candidates: list[Any] = []
-    if zone is not None:
+    if zone == Zone.STACK:
+        # Stack targets are exact StackObject occurrences (top to bottom), not
+        # source cards: two casts/copies of the same card are distinct targets,
+        # a trigger sharing a spell's source card is not that spell, and a
+        # chosen occurrence stays legal only while IT is on game.stack (the
+        # zone-stint revalidation treats the occurrence's stack presence as its
+        # stint). Recovering an occurrence from its card at resolution would be
+        # ambiguous for copies/recasts, so the occurrence is the target.
+        candidates.extend(game.stack.objects())
+    elif zone is not None:
         for p in game.players:
             if zone in p.zones:
                 candidates.extend(p.zones[zone].get_all())
@@ -459,7 +510,7 @@ def _record_spell_cast(game: GameState, player: Player, card: CardImpl) -> int |
 # Cast spell
 # ------------------------------------------------------------------
 
-def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
+def cast_spell(game: GameState, player: Player, card: CardImpl) -> StackObject:
     """Cast *card* from *player*'s hand.
 
     Pipeline
@@ -479,6 +530,13 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     7. **Call on_cast** — invoke the card's ``on_cast`` hook.
     8. **Push StackObject** — push a :class:`StackObject` whose
        ``on_resolve`` callback handles resolution.
+
+    Returns:
+        The pushed :class:`StackObject` — the stack identity of this one cast
+        occurrence, for callers (tests, the replay executor) that must later
+        refer to exactly this pending spell rather than its mutable source
+        card (which a copy, a recast, or the card's own triggered abilities
+        can make ambiguous).
 
     Raises:
         CastingError: If any legality check fails.
@@ -618,6 +676,7 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
         on_resolve=lambda g: None,  # replaced below
         activation_context=activation_context,
         prior_qualifying_casts=prior_qualifying_casts,
+        is_spell=True,
     )
 
     def _on_resolve(g: GameState) -> None:
@@ -625,6 +684,7 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
 
     stack_obj.on_resolve = _on_resolve
     game.stack.push(stack_obj)
+    return stack_obj
 
 
 # ------------------------------------------------------------------
@@ -637,12 +697,28 @@ def cast_spell_free(
     player: Player,
     card: CardImpl,
     from_zone: Zone,
-) -> None:
+    *,
+    mode: CastMode = CastMode.NORMAL,
+) -> StackObject:
     """Cast *card* without paying its mana cost, using the stack.
 
     This is used by effects that allow casting from zones other than hand
     (e.g. exile) without paying mana costs — such as Etali, Primal Storm
-    or cascade.
+    or cascade — and, with ``mode=CastMode.FLASHBACK``, for a flashback cast
+    from the graveyard (the replay executor's attested graveyard→stack path).
+
+    The cast *mode* is the caller's explicit statement of how the spell is
+    being cast; this helper never infers it from card attributes.
+    ``CastMode.FLASHBACK`` requires the card to be in **the casting player's
+    own graveyard** with compatible ownership (rule 702.34a casts it from its
+    owner's graveyard, so a card owned by another player is rejected) and to
+    have a real ``flashback_cost``. Every FLASHBACK check runs **before any
+    mutation** — a rejected mode claim leaves controller, owner, zones, cast
+    history, and stack state exactly as they were. A validated flashback cast
+    stamps ``departure_zone = Zone.EXILE`` on the cast's StackObject so the
+    spell is exiled any time it leaves the stack (rule 702.34a) — on
+    resolution and on being countered alike (see
+    :func:`engine.stack.move_spell_off_stack`).
 
     Pipeline
     --------
@@ -665,13 +741,51 @@ def cast_spell_free(
         game: The current game state.
         player: The player casting the spell.
         card: The card to cast.
-        from_zone: The zone the card is currently in.
+        from_zone: The zone the card is currently in. ``NORMAL`` mode keeps
+            the historical permissiveness: the card may sit in any player's
+            *from_zone* container (existing callers intentionally free-cast
+            another player's card), and ownership is not constrained.
+        mode: How the spell is being cast (keyword-only). Defaults to
+            :attr:`CastMode.NORMAL`; pass :attr:`CastMode.FLASHBACK` for a
+            flashback cast from the caster's own graveyard.
+
+    Returns:
+        The pushed :class:`StackObject` — the stack identity of this one cast
+        occurrence (see :func:`cast_spell`).
 
     Raises:
-        CastingError: If the card cannot be found in *from_zone* or
-            legality checks fail.
+        CastingError: If the card cannot be found in *from_zone*, legality
+            checks fail, or *mode* is ``FLASHBACK`` for a card/zone/owner that
+            does not support it.
     """
-    from engine.zones import move_to_zone
+    # 0. Cast-mode legality — every FLASHBACK check runs before ANY mutation
+    #    (including the controller/owner defaults below), so a rejected mode
+    #    claim leaves all observable state untouched. The caller's mode claim
+    #    is validated, never trusted blindly: flashback casts from the casting
+    #    player's OWN graveyard (rule 702.34a — its owner's graveyard), needs a
+    #    real flashback cost, and the caster must be able to own the cast
+    #    (a card owned by someone else is not flashback-castable by *player*).
+    if mode is CastMode.FLASHBACK:
+        if from_zone != Zone.GRAVEYARD:
+            raise CastingError(
+                f"Cannot flashback {card.name!r} — flashback casts from the "
+                f"graveyard, not {from_zone.name}"
+            )
+        if getattr(card, "flashback_cost", None) is None:
+            raise CastingError(
+                f"Cannot flashback {card.name!r} — card has no flashback cost"
+            )
+        owner = card.owner
+        if owner is not None and owner is not player:
+            raise CastingError(
+                f"Cannot flashback {card.name!r} — owned by another player "
+                f"(flashback casts from its owner's graveyard)"
+            )
+        if not player.zones[Zone.GRAVEYARD].contains(card):
+            raise CastingError(
+                f"Cannot flashback {card.name!r} — not in "
+                f"{player.name!r}'s graveyard"
+            )
 
     # Ensure controller is set
     card.controller = player
@@ -760,6 +874,18 @@ def cast_spell_free(
     #     normal path.
     prior_qualifying_casts = _record_spell_cast(game, player, card)
 
+    # 4c. Stack-departure disposition. A FLASHBACK cast (explicitly selected
+    #     by the caller and validated in step 0 — never inferred from the
+    #     card's attributes) is exiled any time it leaves the stack (rule
+    #     702.34a), so the override rides on this cast's StackObject (not the
+    #     card) and is applied by move_spell_off_stack on resolution and on
+    #     countering alike. Every other free cast — including a NORMAL-mode
+    #     cast of a flashback-capable card from the graveyard, and casts from
+    #     exile (cascade / Etali) — keeps the default disposition.
+    departure_zone: Zone | None = (
+        Zone.EXILE if mode is CastMode.FLASHBACK else None
+    )
+
     # 5. Build on_resolve callback and push StackObject with the context captured
     #    at target-selection time (step 3b). This StackObject is the stack
     #    representation of this one cast occurrence and carries its immutable
@@ -771,6 +897,8 @@ def cast_spell_free(
         on_resolve=lambda g: None,  # replaced below
         activation_context=activation_context,
         prior_qualifying_casts=prior_qualifying_casts,
+        departure_zone=departure_zone,
+        is_spell=True,
     )
 
     def _on_resolve(g: GameState) -> None:
@@ -778,6 +906,7 @@ def cast_spell_free(
 
     stack_obj.on_resolve = _on_resolve
     game.stack.push(stack_obj)
+    return stack_obj
 
 
 # ------------------------------------------------------------------
@@ -793,13 +922,14 @@ def _resolve_spell(
     """Resolve *card* cast by *player*.
 
     1. Call ``card.on_resolve(game, targets=targets)``.
-    2. Remove the card from the stack zone.
-    3. If the card is a permanent type, move it to the battlefield via
-       :func:`~engine.zones.move_to_zone` (which handles trigger/effect
-       registration and the ETB event).
-    4. Otherwise (instant / sorcery), move it to the owner's graveyard.
+    2. Move the card off the stack through the shared departure primitive
+       :func:`engine.stack.move_spell_off_stack`: a permanent type goes to the
+       battlefield (via :func:`~engine.zones.move_to_zone`, which handles
+       trigger/effect registration and the ETB event), an instant/sorcery to
+       its owner's graveyard — unless the cast stamped a ``departure_zone``
+       (a flashback cast is exiled instead, rule 702.34a). If ``on_resolve``
+       already moved the card out of the stack zone, nothing moves twice.
     """
-    from engine.zones import move_to_zone
 
     # Read targets from the StackObject — the single source of truth.
     # Set chosen_targets on the card just before resolution so that
@@ -821,13 +951,15 @@ def _resolve_spell(
 
     card.on_resolve(game)
 
-    if card.card_types & _PERMANENT_TYPES:
-        # Move from stack to battlefield via move_to_zone, which handles
-        # trigger/replacement-effect registration and ENTERS_BATTLEFIELD event.
-        move_to_zone(game, card, Zone.STACK, Zone.BATTLEFIELD)
-    else:
-        # Instant/sorcery: move from stack to graveyard via move_to_zone.
-        move_to_zone(game, card, Zone.STACK, Zone.GRAVEYARD)
+    # Depart the stack through the single shared primitive (the resolver has
+    # already popped the StackObject): type-default destination, with the
+    # cast's departure replacement (flashback → exile) applied there.
+    default_zone = (
+        Zone.BATTLEFIELD
+        if card.card_types & _PERMANENT_TYPES
+        else Zone.GRAVEYARD
+    )
+    move_spell_off_stack(game, stack_obj, default_zone, resolving=True)
 
 
 # ------------------------------------------------------------------

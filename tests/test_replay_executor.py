@@ -1482,3 +1482,301 @@ class TestCounterCanonicalAliases:
         assert perm.plus_one_counters == 0
         assert not executor._pending_counter_effects
         assert len(executor._unresolved_counter_effects) == 1
+
+
+# ---------------------------------------------------------------------------
+# Arrival-aligned resolution (Phase G — cadence alignment)
+# ---------------------------------------------------------------------------
+
+
+class TestArrivalAlignedResolution:
+    """_resolve_arrived_spells resolves a pending engine spell the snapshot GRE
+    first attests its permanent on the battlefield — pulling a silent
+    stack->battlefield resolution forward to before comparison.
+
+    The trigger is strict GRE battlefield attestation of the exact pending
+    StackObject OCCURRENCE (never its source card — a trigger may share the
+    card), and resolution runs only from the top of the engine stack, so
+    nothing is ever resolved on speculation or out of stack order.
+    """
+
+    def _sim_executor(self) -> ReplayExecutor:
+        snap0 = _make_minimal_snapshot(game_state_id=1)
+        replay = ReplayGame(seat_id=1, opponent_seat_id=2, snapshots=[snap0])
+        ex = ReplayExecutor(
+            replay,
+            card_id_map={MOUNTAIN: "Mountain", PLAINS: "Plains"},
+            simulate=True,
+        )
+        ex.initialize(snap0)
+        return ex
+
+    def _push_pending_spell(
+        self, ex: ReplayExecutor, gre_id: int, seat: int = 1, grp: int = MOUNTAIN
+    ):
+        """A card on the engine STACK whose StackObject resolves it onto the
+        battlefield, registered in _pending_stack (card) and
+        _pending_stack_objs (exact occurrence) under *gre_id* — mirrors the
+        state _simulate_spell_cast leaves after driving a cast."""
+        from engine.stack import StackObject
+        from engine.types import Zone
+
+        player = ex.players[seat]
+        card = ex._create_card(grp, player)
+        card._grp_id = grp
+        player.zones[Zone.STACK].add(card)
+
+        def _resolve(game, c=card, p=player):
+            if p.zones[Zone.STACK].contains(c):
+                p.zones[Zone.STACK].remove(c)
+            p.zones[Zone.BATTLEFIELD].add(c)
+
+        stack_obj = StackObject(source=card, controller=player, on_resolve=_resolve)
+        ex.game.stack.push(stack_obj)
+        ex._engine_cards[gre_id] = card
+        ex._pending_stack[gre_id] = card
+        ex._record_pending_occurrence(gre_id, card, stack_obj)
+        assert ex._pending_stack_objs[gre_id] is stack_obj
+        return card
+
+    def _bf_snapshot(
+        self, gsid: int, bf_ids, id_changes: dict | None = None, seat: int = 1
+    ) -> GameSnapshot:
+        snap = GameSnapshot(game_state_id=gsid)
+        snap.players = {
+            1: PlayerInfo(seat_id=1, life_total=20),
+            2: PlayerInfo(seat_id=2, life_total=20),
+        }
+        snap.zones[30] = ReplayZone(
+            zone_id=30, type="ZoneType_Battlefield", owner_seat_id=seat,
+            object_instance_ids=list(bf_ids),
+        )
+        for iid in bf_ids:
+            snap.game_objects[iid] = GameObject(
+                instance_id=iid, grp_id=MOUNTAIN, type="GameObjectType_Card",
+                zone_id=30, owner_seat_id=seat, controller_seat_id=seat,
+            )
+        if id_changes:
+            for i, (orig, new) in enumerate(id_changes.items()):
+                snap.annotations.append(_id_change(9000 + i, orig, new))
+        return snap
+
+    @staticmethod
+    def _on_bf(ex: ReplayExecutor, card, seat: int = 1) -> bool:
+        from engine.types import Zone
+
+        return ex.players[seat].zones[Zone.BATTLEFIELD].contains(card)
+
+    def test_attested_spell_resolves(self) -> None:
+        """GRE attests the permanent on the battlefield → the pending object
+        resolves before comparison; the stack empties and it clears _pending."""
+        ex = self._sim_executor()
+        card = self._push_pending_spell(ex, gre_id=500)
+
+        ex._resolve_arrived_spells(self._bf_snapshot(2, [500]), StepResult(snapshot_id=2))
+
+        assert self._on_bf(ex, card)
+        assert ex.game.stack.is_empty()
+        assert 500 not in ex._pending_stack
+
+    def test_unattested_spell_stays_pending(self) -> None:
+        """No battlefield attestation → the object stays on the stack and the
+        divergence stands honestly (never resolve on speculation)."""
+        ex = self._sim_executor()
+        card = self._push_pending_spell(ex, gre_id=500)
+
+        ex._resolve_arrived_spells(self._bf_snapshot(2, []), StepResult(snapshot_id=2))
+
+        assert not self._on_bf(ex, card)
+        assert not ex.game.stack.is_empty()
+        assert 500 in ex._pending_stack
+
+    def test_stack_order_respected_top_unattested_blocks(self) -> None:
+        """When the top of the stack is NOT attested, nothing resolves — even a
+        lower object GRE does attest is left, so stack order is never violated."""
+        ex = self._sim_executor()
+        bottom = self._push_pending_spell(ex, gre_id=500)  # pushed first (bottom)
+        top = self._push_pending_spell(ex, gre_id=501)     # pushed last (top)
+
+        # GRE attests only the bottom object.
+        ex._resolve_arrived_spells(self._bf_snapshot(2, [500]), StepResult(snapshot_id=2))
+
+        assert not self._on_bf(ex, bottom)
+        assert not self._on_bf(ex, top)
+        assert len(ex.game.stack) == 2
+        assert 500 in ex._pending_stack and 501 in ex._pending_stack
+
+    def test_both_attested_resolve_lifo(self) -> None:
+        """Both objects attested → both resolve (top-down); the stack empties."""
+        ex = self._sim_executor()
+        bottom = self._push_pending_spell(ex, gre_id=500)
+        top = self._push_pending_spell(ex, gre_id=501)
+
+        ex._resolve_arrived_spells(
+            self._bf_snapshot(2, [500, 501]), StepResult(snapshot_id=2)
+        )
+
+        assert self._on_bf(ex, bottom) and self._on_bf(ex, top)
+        assert ex.game.stack.is_empty()
+        assert not ex._pending_stack
+
+    def test_id_change_successor_attestation_resolves(self) -> None:
+        """A spell whose id changed to its battlefield stint this snapshot is
+        traced through ObjectIdChanged and resolved (cast id 500 -> bf id 600)."""
+        ex = self._sim_executor()
+        card = self._push_pending_spell(ex, gre_id=500)
+
+        snap = self._bf_snapshot(2, [600], id_changes={500: 600})
+        ex._resolve_arrived_spells(snap, StepResult(snapshot_id=2))
+
+        assert self._on_bf(ex, card)
+        assert ex.game.stack.is_empty()
+        assert 500 not in ex._pending_stack
+        # _engine_cards points at the resolved card under both the cast id and
+        # its battlefield successor, so later comparison finds it either way.
+        assert ex._engine_cards.get(600) is card
+
+    def test_empty_stack_is_noop(self) -> None:
+        """No pending stack objects → nothing happens (no crash, no resolution)."""
+        ex = self._sim_executor()
+        ex._resolve_arrived_spells(self._bf_snapshot(2, [500]), StepResult(snapshot_id=2))
+        assert ex.game.stack.is_empty()
+
+    def test_pushed_trigger_sharing_source_is_not_resolved(self) -> None:
+        """An ETB trigger the resolution pushes stays on the stack: it shares
+        its SOURCE card with the just-resolved spell, but it is not the pending
+        occurrence, so the loop halts on it. Its effect runs only when its own
+        machinery resolves it later — exactly once."""
+        from engine.stack import StackObject
+        from engine.types import Zone
+
+        ex = self._sim_executor()
+        player = ex.players[1]
+        card = ex._create_card(MOUNTAIN, player)
+        card._grp_id = MOUNTAIN
+        player.zones[Zone.STACK].add(card)
+        fired: list[str] = []
+
+        def _trigger_effect(game):
+            fired.append("etb")
+
+        def _resolve(game, c=card, p=player):
+            if p.zones[Zone.STACK].contains(c):
+                p.zones[Zone.STACK].remove(c)
+            p.zones[Zone.BATTLEFIELD].add(c)
+            # The permanent's own ETB trigger: SAME source card, new occurrence.
+            game.stack.push(
+                StackObject(source=c, controller=p, on_resolve=_trigger_effect)
+            )
+
+        spell_obj = StackObject(source=card, controller=player, on_resolve=_resolve)
+        ex.game.stack.push(spell_obj)
+        ex._engine_cards[500] = card
+        ex._pending_stack[500] = card
+        ex._record_pending_occurrence(500, card, spell_obj)
+
+        ex._resolve_arrived_spells(self._bf_snapshot(2, [500]), StepResult(snapshot_id=2))
+
+        # The permanent resolved; its trigger did NOT — it remains on the stack
+        # with its effect unapplied, awaiting its own GRE-driven resolution.
+        assert self._on_bf(ex, card)
+        assert fired == []
+        assert len(ex.game.stack) == 1
+        assert ex.game.stack.peek().source is card
+        assert 500 not in ex._pending_stack
+        assert 500 not in ex._pending_stack_objs
+
+        # Resolving the trigger later applies the effect exactly once.
+        ex.game.stack.pop().on_resolve(ex.game)
+        assert fired == ["etb"]
+
+    def test_non_pending_top_sharing_source_blocks_lower_spell(self) -> None:
+        """A stack object that is NOT a pending cast occurrence (a trigger or
+        ability, even one sourced by the same card as an attested pending
+        spell below it) blocks the loop: stack order is never violated by
+        resolving around it."""
+        from engine.stack import StackObject
+        from engine.types import Zone
+
+        ex = self._sim_executor()
+        card = self._push_pending_spell(ex, gre_id=500)
+        player = ex.players[1]
+        # Same source card, but never registered as a pending occurrence.
+        ex.game.stack.push(
+            StackObject(source=card, controller=player, on_resolve=lambda g: None)
+        )
+
+        ex._resolve_arrived_spells(self._bf_snapshot(2, [500]), StepResult(snapshot_id=2))
+
+        assert not self._on_bf(ex, card)
+        assert not player.zones[Zone.BATTLEFIELD].contains(card)
+        assert len(ex.game.stack) == 2
+        assert 500 in ex._pending_stack and 500 in ex._pending_stack_objs
+
+    def test_record_pending_occurrence_none_fallback(self) -> None:
+        """An engine whose cast helpers return None (the frozen SOS workspace)
+        still gets its occurrence retained: the topmost stack object sourced by
+        the card immediately after the executor's own cast is that cast."""
+        from engine.stack import StackObject
+        from engine.types import Zone
+
+        ex = self._sim_executor()
+        player = ex.players[1]
+        card = ex._create_card(MOUNTAIN, player)
+        player.zones[Zone.STACK].add(card)
+        so = StackObject(source=card, controller=player, on_resolve=lambda g: None)
+        ex.game.stack.push(so)
+
+        ex._record_pending_occurrence(600, card, None)
+        assert ex._pending_stack_objs[600] is so
+
+
+class TestNoncastZoneCastEngineCompat:
+    """_simulate_noncast_zone_cast states the cast mode explicitly when the
+    engine supports cast modes, and degrades cleanly when it does not.
+
+    The root suite binds the frozen SOS workspace engine, whose
+    ``cast_spell_free`` has no ``mode`` parameter and whose ``StackObject``
+    has no flashback disposition: a graveyard->stack free cast of a
+    flashback-capable card must still succeed there, with no mode passed and
+    no disposition stamped.
+    """
+
+    def _sim_executor(self) -> ReplayExecutor:
+        snap0 = _make_minimal_snapshot(game_state_id=1)
+        replay = ReplayGame(seat_id=1, opponent_seat_id=2, snapshots=[snap0])
+        ex = ReplayExecutor(
+            replay,
+            card_id_map={MOUNTAIN: "Mountain", PLAINS: "Plains"},
+            simulate=True,
+        )
+        ex.initialize(snap0)
+        return ex
+
+    def test_graveyard_cast_of_flashback_capable_card_succeeds(self):
+        from engine.card import Instant
+        from engine.types import ManaCost, Zone
+
+        ex = self._sim_executor()
+        player = ex.players[1]
+        card = Instant(name="Recall", mana_cost=ManaCost.parse("{1}{U}"), owner=player)
+        card.controller = player
+        card.flashback_cost = ManaCost.parse("{2}{U}")
+        player.zones[Zone.GRAVEYARD].add(card)
+
+        action = ReplayAction(
+            action_type="zone_transition", player_seat_id=1,
+            card_name="Recall", instance_id=501,
+            source_zone="ZoneType_Graveyard", dest_zone="ZoneType_Stack",
+        )
+        snap = _make_minimal_snapshot(game_state_id=2)
+        result = StepResult(snapshot_id=2)
+        ex._simulate_noncast_zone_cast(action, snap, snap, card, result)
+
+        assert not result.engine_failures, result.engine_failures
+        (so,) = [s for s in ex.game.stack._items if s.source is card]
+        # Engine-agnostic: an engine without cast modes stamps no disposition;
+        # an engine with them would only do so under an explicit FLASHBACK
+        # mode, which this executor path selects only when the engine offers
+        # it (covered MSH-side in engine_tests/test_replay_simulate.py).
+        assert getattr(so, "departure_zone", None) in (None, Zone.EXILE)

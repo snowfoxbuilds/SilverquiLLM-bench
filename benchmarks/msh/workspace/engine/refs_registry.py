@@ -224,6 +224,7 @@ class GameRefsRegistry:
         zone: Any,
         controller_seat: int | None = None,
         card: Mapping[str, Hashable] | None = None,
+        attrs_from: Any | None = None,
     ) -> PlayerDecision:
         """Build the OBJECT decision for ``obj`` and record the correlation.
 
@@ -231,15 +232,23 @@ class GameRefsRegistry:
         intrinsic blessed facts (name/colors/types/subtypes/keywords/p/t/tapped)
         plus controller seat. The ref carries the instance (for binding) and the
         card name (printed identity, for routing).
+
+        ``attrs_from`` (optional) is the object whose printed characteristics
+        populate the decision attrs and card-name provenance when the *identity*
+        being offered is not itself a card — a spell occurrence on the stack is
+        identified by its :class:`~engine.stack.StackObject` (so two casts of
+        the same card mint distinct instance ids) but presents its **source
+        card's** name/types/colors. Defaults to ``obj``.
         """
         iid = self.instance_id(obj, zone)
         ztoken = _zone_token(zone)
+        presented = obj if attrs_from is None else attrs_from
         attrs: list[tuple[str, Hashable]] = [("instance", iid), ("zone", ztoken)]
-        attrs.extend(multi_attrs(obj))
+        attrs.extend(multi_attrs(presented))
         if controller_seat is not None:
             attrs.append(("controller", controller_seat))
         card_ref: dict[str, Hashable] = dict(card or {})
-        name = getattr(obj, "name", None)
+        name = getattr(presented, "name", None)
         if isinstance(name, str) and name and "name" not in card_ref:
             card_ref["name"] = name
         ref = GameRef(

@@ -1522,3 +1522,408 @@ class TestSpellCastHistoryPipeline:
         cast_spell(game, p, bear)
         (so,) = [s for s in game.stack._items if s.source is bear]
         assert so.prior_qualifying_casts is None
+
+
+class TestFlashbackDisposition:
+    """Flashback is an EXPLICIT cast mode: ``cast_spell_free(...,
+    mode=CastMode.FLASHBACK)`` validates the claim (graveyard source + a real
+    flashback cost) and stamps ``departure_zone = Zone.EXILE`` on that cast's
+    StackObject, which :func:`engine.stack.move_spell_off_stack` honours any
+    time the spell leaves the stack (rule 702.34a). The generic free-cast
+    helper never infers the mode from card attributes: a flashback-capable
+    card free-cast from the graveyard WITHOUT the mode keeps the graveyard
+    default.
+    """
+
+    def _flashback_instant(self, player):
+        card = Instant(name="Recall", mana_cost=ManaCost.parse("{1}{U}"), owner=player)
+        card.controller = player
+        card.flashback_cost = ManaCost.parse("{2}{U}")
+        return card
+
+    def test_flashback_mode_from_graveyard_exiles(self):
+        from engine.casting import CastMode, cast_spell_free
+        from engine.stack import resolve_top_of_stack
+        from engine.types import Zone
+
+        game = _make_game()
+        p = game.players[0]
+        card = self._flashback_instant(p)
+        game.get_graveyard(p).add(card)
+
+        cast_spell_free(game, p, card, Zone.GRAVEYARD, mode=CastMode.FLASHBACK)
+        # The disposition rides on this cast's StackObject.
+        (so,) = [s for s in game.stack._items if s.source is card]
+        assert so.departure_zone == Zone.EXILE
+
+        resolve_top_of_stack(game)
+        assert game.get_exile(p).contains(card)
+        assert not game.get_graveyard(p).contains(card)
+
+    def test_flashback_capable_graveyard_cast_without_mode_keeps_graveyard(self):
+        """The mode is never inferred: the SAME flashback-capable card,
+        free-cast from the graveyard without selecting flashback (a
+        Underworld-Breach-style graveyard cast), is NOT exiled."""
+        from engine.casting import cast_spell_free
+        from engine.stack import resolve_top_of_stack
+        from engine.types import Zone
+
+        game = _make_game()
+        p = game.players[0]
+        card = self._flashback_instant(p)
+        game.get_graveyard(p).add(card)
+
+        cast_spell_free(game, p, card, Zone.GRAVEYARD)
+        (so,) = [s for s in game.stack._items if s.source is card]
+        assert so.departure_zone is None
+
+        resolve_top_of_stack(game)
+        assert game.get_graveyard(p).contains(card)
+        assert not game.get_exile(p).contains(card)
+
+    def test_non_flashback_free_cast_keeps_graveyard(self):
+        """A card with no flashback cost, free-cast from the graveyard, keeps the
+        default graveyard disposition (no silent exile)."""
+        from engine.casting import cast_spell_free
+        from engine.stack import resolve_top_of_stack
+        from engine.types import Zone
+
+        game = _make_game()
+        p = game.players[0]
+        card = Instant(name="Plain", mana_cost=ManaCost.parse("{U}"), owner=p)
+        card.controller = p
+        game.get_graveyard(p).add(card)
+
+        cast_spell_free(game, p, card, Zone.GRAVEYARD)
+        (so,) = [s for s in game.stack._items if s.source is card]
+        assert so.departure_zone is None
+
+        resolve_top_of_stack(game)
+        assert game.get_graveyard(p).contains(card)
+        assert not game.get_exile(p).contains(card)
+
+    def test_flashback_card_from_exile_keeps_graveyard(self):
+        """A flashback-cost card free-cast from EXILE in the default mode
+        (cascade/Etali style) is not a flashback cast and keeps the graveyard
+        default."""
+        from engine.casting import cast_spell_free
+        from engine.stack import resolve_top_of_stack
+        from engine.types import Zone
+
+        game = _make_game()
+        p = game.players[0]
+        card = self._flashback_instant(p)
+        game.get_exile(p).add(card)
+
+        cast_spell_free(game, p, card, Zone.EXILE)
+        (so,) = [s for s in game.stack._items if s.source is card]
+        assert so.departure_zone is None
+
+        resolve_top_of_stack(game)
+        assert game.get_graveyard(p).contains(card)
+        assert not game.get_exile(p).contains(card)
+
+    # -- rejected mode claims are ATOMIC: every check runs before any mutation,
+    #    so controller, owner, zones, stack, cast history, and target state are
+    #    byte-for-byte what they were. Each negative test snapshots that state
+    #    before the claim and asserts it unchanged after the CastingError.
+
+    @staticmethod
+    def _observable_state(game, card):
+        """Snapshot everything a rejected flashback claim must leave untouched."""
+        from engine.types import Zone
+
+        return {
+            "controller": card.controller,
+            "owner": card.owner,
+            "zones": [
+                (i, zone.name, tuple(id(o) for o in player.zones[zone].get_all()))
+                for i, player in enumerate(game.players)
+                for zone in Zone
+                if zone in player.zones
+            ],
+            "stack": tuple(id(so) for so in game.stack._items),
+            "cast_history": [
+                (
+                    tuple(id(s) for s in player._instant_sorcery_casts),
+                    player._instant_sorcery_cast_turn,
+                )
+                for player in game.players
+            ],
+            "chosen_targets": getattr(card, "chosen_targets", None),
+            "is_tapped": getattr(card, "is_tapped", None),
+        }
+
+    def _assert_rejected_claim_untouched(self, game, player, card, from_zone):
+        """The FLASHBACK claim raises CastingError and mutates nothing."""
+        from engine.casting import CastingError, CastMode, cast_spell_free
+
+        before = self._observable_state(game, card)
+        with pytest.raises(CastingError):
+            cast_spell_free(game, player, card, from_zone, mode=CastMode.FLASHBACK)
+        assert self._observable_state(game, card) == before
+
+    def test_flashback_mode_from_exile_rejected(self):
+        """Flashback casts from the graveyard only: an exile claim is rejected
+        atomically (the card had no controller — it must still have none)."""
+        from engine.types import Zone
+
+        game = _make_game()
+        p = game.players[0]
+        card = Instant(name="Recall", mana_cost=ManaCost.parse("{1}{U}"))
+        card.owner = p  # owner without the constructor's controller default
+        card.flashback_cost = ManaCost.parse("{2}{U}")
+        assert card.controller is None  # would be mutated by a non-atomic cast
+        game.get_exile(p).add(card)
+
+        self._assert_rejected_claim_untouched(game, p, card, Zone.EXILE)
+        assert game.get_exile(p).contains(card)
+        assert card.controller is None
+
+    def test_flashback_mode_from_hand_rejected(self):
+        """A hand claim is rejected atomically — flashback never casts from
+        hand, whatever the card's flashback cost says."""
+        from engine.types import Zone
+
+        game = _make_game()
+        p = game.players[0]
+        card = self._flashback_instant(p)
+        game.get_hand(p).add(card)
+
+        self._assert_rejected_claim_untouched(game, p, card, Zone.HAND)
+        assert game.get_hand(p).contains(card)
+
+    def test_flashback_mode_without_flashback_cost_rejected(self):
+        """CastMode.FLASHBACK on a card with no flashback cost is rejected
+        atomically (controller stays unset — validation precedes the
+        controller/owner defaults)."""
+        from engine.types import Zone
+
+        game = _make_game()
+        p = game.players[0]
+        card = Instant(name="Plain", mana_cost=ManaCost.parse("{U}"))
+        card.owner = p  # owner without the constructor's controller default
+        assert card.controller is None
+        game.get_graveyard(p).add(card)
+
+        self._assert_rejected_claim_untouched(game, p, card, Zone.GRAVEYARD)
+        assert game.get_graveyard(p).contains(card)
+        assert card.controller is None
+
+    def test_flashback_mode_from_another_players_graveyard_rejected(self):
+        """Flashback is owner-scoped: the card must be in the CASTING player's
+        own graveyard. A flashback claim on a card sitting in the opponent's
+        graveyard is rejected atomically — even when the card's owner field
+        would permit the caster (owner is None here)."""
+        from engine.types import Zone
+
+        game = _make_game()
+        p1, p2 = game.players
+        card = Instant(name="Recall", mana_cost=ManaCost.parse("{1}{U}"))
+        card.flashback_cost = ManaCost.parse("{2}{U}")
+        assert card.owner is None and card.controller is None
+        game.get_graveyard(p2).add(card)
+
+        self._assert_rejected_claim_untouched(game, p1, card, Zone.GRAVEYARD)
+        assert game.get_graveyard(p2).contains(card)
+        assert card.owner is None and card.controller is None
+
+    def test_flashback_mode_wrong_ownership_rejected(self):
+        """Flashback is ownership-compatible: a card OWNED by another player is
+        not flashback-castable, even from a graveyard the caster can reach
+        (rule 702.34a casts from its owner's graveyard). Rejected atomically."""
+        from engine.types import Zone
+
+        game = _make_game()
+        p1, p2 = game.players
+        card = self._flashback_instant(p2)  # owned (and controlled) by p2
+        game.get_graveyard(p1).add(card)  # misplaced into p1's graveyard
+
+        self._assert_rejected_claim_untouched(game, p1, card, Zone.GRAVEYARD)
+        assert game.get_graveyard(p1).contains(card)
+        assert card.owner is p2
+        assert card.controller is p2
+
+    def test_flashback_mode_own_card_in_own_graveyard_accepted(self):
+        """The owner-scoped checks accept the legal case: the caster's own card
+        in the caster's own graveyard flashes back and exiles on resolution."""
+        from engine.casting import CastMode, cast_spell_free
+        from engine.stack import resolve_top_of_stack
+        from engine.types import Zone
+
+        game = _make_game()
+        p = game.players[0]
+        card = self._flashback_instant(p)
+        game.get_graveyard(p).add(card)
+
+        so = cast_spell_free(game, p, card, Zone.GRAVEYARD, mode=CastMode.FLASHBACK)
+        assert so.departure_zone == Zone.EXILE
+        resolve_top_of_stack(game)
+        assert game.get_exile(p).contains(card)
+
+
+class TestStackOccurrenceTargeting:
+    """Zone.STACK target requirements enumerate exact StackObject OCCURRENCES.
+
+    A spell on the stack is targeted as its StackObject, never its source card:
+    two casts/copies of the same card are distinct targets, a triggered ability
+    sharing a spell's source card is not that spell, and a chosen occurrence
+    stays legal only while IT is on ``game.stack`` — a departed occurrence is
+    nulled by the resolution-time stint check even when its card was re-cast
+    (the card's new stack presence belongs to the new occurrence).
+    """
+
+    class _Counter(Instant):
+        """Minimal engine-level 'counter target spell' instant."""
+
+        def __init__(self, **kwargs):
+            kwargs.setdefault("name", "Test Counter")
+            kwargs.setdefault("mana_cost", ManaCost.parse("{U}"))
+            super().__init__(**kwargs)
+            self.countered = None
+
+        def get_targets(self, game):
+            from engine.types import TargetRequirement, Zone
+
+            return [
+                TargetRequirement(
+                    filter_fn=lambda obj: getattr(obj, "is_spell", False)
+                    and getattr(obj, "source", None) is not self,
+                    description="target spell",
+                    zone=Zone.STACK,
+                )
+            ]
+
+        def on_resolve(self, game):
+            from engine.stack import move_spell_off_stack
+
+            chosen = getattr(self, "chosen_targets", None)
+            target = chosen[0] if chosen else None
+            if isinstance(target, StackObject):
+                move_spell_off_stack(game, target)
+                self.countered = target
+
+    def _game(self):
+        game = _make_game()
+        return game, game.players[0], game.players[1]
+
+    def _spell(self, owner, name="Zap"):
+        card = Instant(name=name, mana_cost=ManaCost.parse("{U}"), owner=owner)
+        card.controller = owner
+        return card
+
+    def _cast_counter_at(self, game, player, occurrence):
+        """Cast a _Counter through the REAL pipeline, selecting *occurrence*
+        by its engine-minted stack instance id (the occurrence's own identity,
+        matching what the Zone.STACK enumeration offers)."""
+        from engine.casting import cast_spell_free
+        from engine.types import Zone
+
+        counter = self._Counter(owner=player, controller=player)
+        game.get_hand(player).add(counter)
+        occ_iid = game.refs.instance_id(occurrence, Zone.STACK.value)
+        player.start_intent("counter", Intent(
+            pattern=GameRef(card=frozenset({("name", counter.name)})),
+            preferences=(Decision.obj(instance=occ_iid),),
+        ))
+        try:
+            counter_so = cast_spell_free(game, player, counter, Zone.HAND)
+        finally:
+            player.end_intent("counter")
+        return counter, counter_so
+
+    def test_real_pipeline_targets_exact_occurrence(self):
+        """The chosen target IS the StackObject occurrence, not the source
+        card; countering moves the card to its owner's graveyard."""
+        from engine.casting import cast_spell_free
+        from engine.stack import resolve_top_of_stack
+        from engine.types import Zone
+
+        game, p1, p2 = self._game()
+        spell = self._spell(p2)
+        game.get_hand(p2).add(spell)
+        spell_so = cast_spell_free(game, p2, spell, Zone.HAND)
+
+        counter, counter_so = self._cast_counter_at(game, p1, spell_so)
+        assert counter_so.targets[0] is spell_so  # the occurrence, not the card
+
+        resolve_top_of_stack(game)  # counter resolves
+        assert counter.countered is spell_so
+        assert game.get_graveyard(p2).contains(spell)
+        assert game.stack.is_empty()
+
+    def test_ability_sharing_source_card_is_not_targetable(self):
+        """A non-spell stack object (a trigger/ability) is never offered as a
+        'target spell', even though it has a source card: with only it on the
+        stack the counter has no legal target and the cast is rejected."""
+        from engine.casting import CastingError, cast_spell_free
+        from engine.types import Zone
+
+        game, p1, p2 = self._game()
+        permanent = Creature(name="Watcher", base_power=2, base_toughness=2, owner=p2)
+        permanent.controller = p2
+        game.get_battlefield(p2).add(permanent)
+        trigger = StackObject(source=permanent, controller=p2)  # is_spell=False
+        game.stack.push(trigger)
+
+        counter = self._Counter(owner=p1, controller=p1)
+        game.get_hand(p1).add(counter)
+        with pytest.raises(CastingError):
+            cast_spell_free(game, p1, counter, Zone.HAND)
+        assert game.get_hand(p1).contains(counter)  # rolled back
+        assert game.stack.contains(trigger)
+
+    def test_copy_occurrence_targeted_distinctly_from_original(self):
+        """A spell COPY is a distinct occurrence: targeting and countering the
+        copy leaves the original cast (and its card) untouched."""
+        from engine.casting import cast_spell_free
+        from engine.stack import copy_spell, resolve_top_of_stack
+        from engine.types import Zone
+
+        game, p1, p2 = self._game()
+        spell = self._spell(p2)
+        game.get_hand(p2).add(spell)
+        spell_so = cast_spell_free(game, p2, spell, Zone.HAND)
+        copy_so = copy_spell(game, spell_so, p2)
+        game.stack.push(copy_so)
+
+        counter, counter_so = self._cast_counter_at(game, p1, copy_so)
+        assert counter_so.targets[0] is copy_so
+
+        resolve_top_of_stack(game)  # counter resolves, countering the copy
+        assert counter.countered is copy_so
+        assert not game.stack.contains(copy_so)
+        assert game.stack.contains(spell_so)  # original untouched
+        assert p2.zones[Zone.STACK].contains(spell)  # card still cast
+        assert not game.get_graveyard(p2).contains(spell)
+
+    def test_departed_occurrence_fizzles_even_after_recast(self):
+        """Once the targeted occurrence leaves the stack, the counter fizzles
+        at resolution — a re-cast of the SAME card (a new occurrence) is never
+        recovered from the source card and is not touched."""
+        from engine.casting import cast_spell_free
+        from engine.stack import move_spell_off_stack, resolve_top_of_stack
+        from engine.types import Zone
+
+        game, p1, p2 = self._game()
+        spell = self._spell(p2)
+        game.get_hand(p2).add(spell)
+        spell_so = cast_spell_free(game, p2, spell, Zone.HAND)
+
+        counter, _ = self._cast_counter_at(game, p1, spell_so)
+
+        # The targeted occurrence departs (countered by something else) …
+        assert move_spell_off_stack(game, spell_so) is True
+        assert game.get_graveyard(p2).contains(spell)
+        # … and the same card is re-cast: a NEW occurrence.
+        recast_so = cast_spell_free(game, p2, spell, Zone.GRAVEYARD)
+        assert recast_so is not spell_so
+
+        resolve_top_of_stack(game)  # the recast resolves (instant → graveyard)
+        assert game.get_graveyard(p2).contains(spell)
+
+        resolve_top_of_stack(game)  # the counter resolves — and fizzles
+        assert counter.countered is None
+        assert sum(1 for o in game.get_graveyard(p2).get_all() if o is spell) == 1
+        assert not game.get_exile(p2).contains(spell)
+        assert game.stack.is_empty()

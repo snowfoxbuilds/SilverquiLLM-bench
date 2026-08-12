@@ -3838,28 +3838,28 @@ class TestGoldenGame:
         from collections import Counter  # noqa: F401 — used via _fingerprint
 
         report, by_type, by_category = self._fingerprint(self.FIXTURE)
-        # MISSING_CARD is one divergence per (game, identity). Hare Apparent
-        # (FDN #15) is implemented, so its occurrences never registered as a
-        # missing card; the last remaining missing identity was the engine-minted
-        # Rabbit token arrival grpId_94160. Phase E token correlation now stamps
-        # that engine token with its GRE grpId (94160) and the MISSING_CARD
-        # semantics treat a token the engine actually produces as producible, so
-        # it clears: MISSING_CARD 1 -> 0.
+        # Phase G (arrival-aligned resolution) moves this pin, intentionally.
+        # GRE resolves this game's creature spells silently (stack->battlefield
+        # with no ObjectIdChanged / action); Phase G resolves each pending engine
+        # spell the snapshot GRE first lists its permanent on the battlefield,
+        # instead of one snapshot later at the resync flush. That clears the
+        # run-length-1 battlefield ``snapshot_extra`` transients: STATE_MISMATCH
+        # 10 -> 6 (zone_contents 8 -> 6, and the life/tapped transients that
+        # rode the same one-snapshot skew both clear), successful comparisons
+        # 109 -> 112.
         #
-        # The 10 STATE_MISMATCH are unchanged and token-independent: the one
-        # battlefield entry that mentions 94160 (gsid 93) is a resolution-TIMING
-        # divergence — GRE shows the Rabbit a step before the engine's Hare
-        # Apparent ETB mints it — not a correlation gap, so it correctly persists
-        # (the engine has no Rabbit to correlate at that step). The corpus-wide
-        # token zone/P_T cluster is where correlation moves numbers; this game
-        # has a single token.
+        # MISSING_CARD 0 -> 1 is the honest token knock-on: Hare Apparent's
+        # Rabbit token (grpId_94160) is now minted a snapshot earlier — at the
+        # step GRE places Hare Apparent, before GRE lists the Rabbit — so the
+        # engine holds a token GRE has not yet attested and it surfaces as a
+        # producible-but-unattested MISSING_CARD (token cadence, phase-H/L
+        # territory) rather than being cleaned by the resync before comparison.
         assert report.total_snapshots == 116
-        assert report.successful_comparisons == 109
-        assert dict(by_type) == {"STATE_MISMATCH": 10}
+        assert report.successful_comparisons == 112
+        assert dict(by_type) == {"STATE_MISMATCH": 6, "MISSING_CARD": 1}
         assert dict(by_category) == {
-            "zone_contents": 8,
-            "life_total": 1,
-            "tapped_state": 1,
+            "zone_contents": 6,
+            "MISSING_CARD": 1,
         }
 
     def test_tokens_prideful_fingerprint(self):
@@ -3867,17 +3867,31 @@ class TestGoldenGame:
         makes Prideful Parent's Cat tokens mint on their own entry; the minted
         tokens correlate and enter the battlefield, so the residual here is the
         token zone-timing surface (GRE shows a token a step before/after the
-        engine mints it), not outright MISSING_CARD. Unchanged by the Phase-F
-        counter correction: the correction anchors the ledger to the engine
-        object (not the GRE aid), so this game's counters land exactly as
-        before."""
+        engine mints it), not outright MISSING_CARD.
+
+        Phase G (arrival-aligned resolution) moves this pin, intentionally:
+        resolving Prideful Parent the snapshot GRE first lists it on the
+        battlefield clears the parent's run-length-1 ``snapshot_extra``
+        transients — STATE_MISMATCH 24 -> 15 (zone_contents 22 -> 14, one P/T
+        transient clears), successful comparisons 313 -> 322. The occurrence
+        gate is what keeps the Cat tokens clean: the arrival loop resolves only
+        the exact pending cast StackObject, so the parent's newly pushed ETB
+        trigger (same source card, different occurrence) stays on the stack and
+        mints its Cat at the trigger's own GRE-driven resolution — no
+        early-minted producible-but-unattested MISSING_CARD (an earlier cut of
+        the loop matched the top by source card, resolved the trigger in the
+        same arrival step, and pinned a MISSING_CARD +1 here as an
+        'inevitable' token knock-on; it was this loop's own artifact)."""
         report, by_type, by_category = self._fingerprint(self.FIXTURE_TOKENS)
         assert report.total_snapshots == 332
-        assert report.successful_comparisons == 313
-        assert dict(by_type) == {"STATE_MISMATCH": 24, "ILLEGAL_ACTION": 2}
+        assert report.successful_comparisons == 322
+        assert dict(by_type) == {
+            "STATE_MISMATCH": 15,
+            "ILLEGAL_ACTION": 2,
+        }
         assert dict(by_category) == {
-            "zone_contents": 22,
-            "power_toughness": 2,
+            "zone_contents": 14,
+            "power_toughness": 1,
             "tapped_state": 2,
         }
 
@@ -3886,18 +3900,26 @@ class TestGoldenGame:
         counters on the correlated permanents, so power_toughness stays bounded
         (12) rather than tracking every counter the executor never fired; the
         remaining P/T is dynamic-P/T cards (e.g. Consuming Aberration) the sync
-        does not model."""
+        does not model.
+
+        Phase G moves this pin, intentionally, on two axes:
+        arrival-aligned resolution clears the run-length-1 zone transients
+        (zone_contents 32 -> 15), and the gain-life-tapland trigger conversion
+        (life applied at trigger resolution, not land-play drive time) clears
+        this game's tapland life transients (life_total 14 -> 10). Together:
+        STATE_MISMATCH 57 -> 36, successful comparisons 728 -> 749. P/T (12,
+        dynamic-P/T CDAs) and MISSING (1) are unchanged."""
         report, by_type, by_category = self._fingerprint(self.FIXTURE_COUNTERS)
         assert report.total_snapshots == 770
-        assert report.successful_comparisons == 728
+        assert report.successful_comparisons == 749
         assert dict(by_type) == {
-            "STATE_MISMATCH": 57,
+            "STATE_MISMATCH": 36,
             "ILLEGAL_ACTION": 1,
             "MISSING_CARD": 1,
         }
         assert dict(by_category) == {
-            "zone_contents": 32,
-            "life_total": 14,
+            "zone_contents": 15,
+            "life_total": 10,
             "power_toughness": 12,
             "MISSING_CARD": 1,
         }
@@ -3908,19 +3930,29 @@ class TestGoldenGame:
         equip activations whose mana GRE recorded only against the equipment's
         cast (or floating/reused, never re-annotated) cannot be funded without
         fabrication, so the equip cost stays unpayable. This fixture pins that
-        limitation so a future funding fix (or regression) is visible."""
+        limitation so a future funding fix (or regression) is visible.
+
+        Phase G (arrival-aligned resolution) moves this pin, intentionally:
+        arrival-aligned resolution clears the run-length-1 zone transients —
+        STATE_MISMATCH 86 -> 73, successful comparisons 809 -> 826. The
+        occurrence gate contributes the last leg (77 -> 73 / 823 -> 826): ETB
+        triggers pushed by an arriving permanent are no longer resolved in the
+        same arrival step, so their effects land at their own GRE-driven
+        cadence. The ENGINE_ERROR funding limitation (6) is untouched, so a
+        funding fix or regression stays visible; tapped/life shift within the
+        transient set as the arrival-step comparisons resolve."""
         report, by_type, by_category = self._fingerprint(self.FIXTURE_EQUIP)
         assert report.total_snapshots == 894
-        assert report.successful_comparisons == 809
+        assert report.successful_comparisons == 826
         assert dict(by_type) == {
-            "STATE_MISMATCH": 86,
+            "STATE_MISMATCH": 73,
             "ENGINE_ERROR": 6,
             "ILLEGAL_ACTION": 4,
             "MISSING_CARD": 4,
         }
         assert dict(by_category) == {
-            "zone_contents": 56,
-            "tapped_state": 19,
+            "zone_contents": 41,
+            "tapped_state": 21,
             "life_total": 15,
             "ENGINE_ERROR": 6,
             "MISSING_CARD": 4,
@@ -3984,3 +4016,131 @@ class TestTriageSmoke:
             if bucket in ("zone_contents", "power_toughness", "life_total", "tapped_state")
         )
         assert state_sum == by_type["STATE_MISMATCH"]
+
+
+class TestNoncastZoneCastModeSelection:
+    """_simulate_noncast_zone_cast selects CastMode.FLASHBACK explicitly, and
+    only when BOTH attestations hold: the GRE transition is graveyard->stack
+    AND the card itself carries a flashback cost. The engine's generic
+    free-cast helper never infers the mode from card attributes — the
+    executor states it, and the engine validates it.
+    """
+
+    def _executor(self) -> ReplayExecutor:
+        return make_executor([snapshot(1)])
+
+    def _instant(self, ex: ReplayExecutor, *, flashback: bool):
+        from engine.card import Instant
+        from engine.types import ManaCost
+
+        player = ex.players[1]
+        card = Instant(name="Recall", mana_cost=ManaCost.parse("{1}{U}"), owner=player)
+        card.controller = player
+        if flashback:
+            card.flashback_cost = ManaCost.parse("{2}{U}")
+        return card
+
+    def _drive(self, ex: ReplayExecutor, card, gre_zone: str, engine_zone):
+        ex.players[1].zones[engine_zone].add(card)
+        action = ReplayAction(
+            action_type="zone_transition", player_seat_id=1,
+            card_name="Recall", instance_id=501,
+            source_zone=gre_zone, dest_zone="ZoneType_Stack",
+        )
+        snap = snapshot(2)
+        result = StepResult(snapshot_id=2)
+        ex._simulate_noncast_zone_cast(action, snap, snap, card, result)
+        assert not result.engine_failures, result.engine_failures
+        (so,) = [s for s in ex.game.stack._items if s.source is card]
+        return so
+
+    def test_graveyard_cast_of_flashback_card_selects_flashback(self):
+        from engine.types import Zone as EngineZone
+
+        ex = self._executor()
+        card = self._instant(ex, flashback=True)
+        so = self._drive(ex, card, "ZoneType_Graveyard", EngineZone.GRAVEYARD)
+        assert so.departure_zone == EngineZone.EXILE
+
+    def test_graveyard_cast_without_flashback_cost_stays_normal(self):
+        from engine.types import Zone as EngineZone
+
+        ex = self._executor()
+        card = self._instant(ex, flashback=False)
+        so = self._drive(ex, card, "ZoneType_Graveyard", EngineZone.GRAVEYARD)
+        assert so.departure_zone is None
+
+    def test_exile_cast_of_flashback_capable_card_stays_normal(self):
+        from engine.types import Zone as EngineZone
+
+        ex = self._executor()
+        card = self._instant(ex, flashback=True)
+        so = self._drive(ex, card, "ZoneType_Exile", EngineZone.EXILE)
+        assert so.departure_zone is None
+
+
+class TestArrivalOccurrenceSafety:
+    """_resolve_arrived_spells resolves the exact pending StackObject
+    occurrence — never anything merely sharing its source card.
+
+    The real-card proof: Prideful Parent (FDN 21), a permanent spell with a
+    self-ETB trigger. Resolving the arrived spell pushes its trigger onto the
+    engine stack with the SAME source card; the trigger is not a pending cast
+    occurrence, so the arrival loop halts on it. The ETB effect (the Cat
+    token) happens exactly once — at the trigger's own later resolution —
+    never at arrival time.
+    """
+
+    def test_prideful_parent_trigger_stays_pending_effect_once(self):
+        from cards.fdn.fdn_21.card_impl import PridefulParent
+        from engine.casting import cast_spell_free
+        from engine.stack import resolve_top_of_stack
+        from engine.types import Zone as EngineZone
+
+        ex = make_executor([snapshot(1)])
+        player = ex.players[1]
+        card = PridefulParent(owner=player, controller=player)
+        player.zones[EngineZone.HAND].add(card)
+
+        # A real cast: the pending occurrence is the cast's own StackObject,
+        # registered exactly as _simulate_spell_cast registers it.
+        so = cast_spell_free(ex.game, player, card, EngineZone.HAND)
+        ex._engine_cards[501] = card
+        ex._pending_stack[501] = card
+        ex._record_pending_occurrence(501, card, so)
+
+        def _cats():
+            return [
+                c
+                for c in player.zones[EngineZone.BATTLEFIELD].get_all()
+                if getattr(c, "name", "") == "Cat"
+            ]
+
+        # GRE attests the permanent on the battlefield this snapshot.
+        attested = snapshot(2, battlefield={1: [501]})
+        result = StepResult(snapshot_id=2)
+        ex._resolve_arrived_spells(attested, result)
+        assert not result.engine_failures, result.engine_failures
+
+        # The permanent resolved …
+        assert player.zones[EngineZone.BATTLEFIELD].contains(card)
+        assert 501 not in ex._pending_stack
+        assert 501 not in ex._pending_stack_objs
+        # … but its ETB effect has NOT happened: the trigger remains on the
+        # stack (same source card, different occurrence), unresolved.
+        assert _cats() == []
+        assert len(ex.game.stack) == 1
+        trigger = ex.game.stack.peek()
+        assert trigger is not so
+        assert trigger.source is card
+
+        # A second arrival pass with the same attestation must not consume
+        # the trigger either (it is not a pending cast occurrence).
+        ex._resolve_arrived_spells(attested, StepResult(snapshot_id=2))
+        assert len(ex.game.stack) == 1
+        assert _cats() == []
+
+        # The trigger's own resolution applies the effect exactly once.
+        resolve_top_of_stack(ex.game)
+        assert len(_cats()) == 1
+        assert ex.game.stack.is_empty()

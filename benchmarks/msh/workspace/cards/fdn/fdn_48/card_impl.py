@@ -21,35 +21,18 @@ def _get_chosen_target(card: Any, game: Any) -> Any:
 
 
 def _counter_spell(game: "GameState", stack_obj: Any) -> None:
-    """Counter a spell — remove from stack and move card to graveyard."""
-    from engine.stack import StackObject
+    """Counter a spell via the engine's shared stack-departure primitive.
+
+    :func:`engine.stack.move_spell_off_stack` removes exactly *stack_obj* and
+    puts an ordinary spell in its owner's graveyard — or exiles it when the
+    cast stamped a departure replacement (a flashback cast, rule 702.34a).
+    If *stack_obj* already left the stack, nothing happens (fizzle).
+    """
+    from engine.stack import StackObject, move_spell_off_stack
 
     if not isinstance(stack_obj, StackObject):
         return
-
-    card = stack_obj.source
-    stack_items = game.stack._items  # noqa: SLF001
-    found = False
-    for i, item in enumerate(stack_items):
-        if item is stack_obj:
-            stack_items.pop(i)
-            found = True
-            break
-
-    if not found:
-        return
-
-    controller = stack_obj.controller
-    owner = getattr(card, "owner", controller)
-
-    if controller is not None:
-        stack_zone = controller.zones[Zone.STACK]
-        if stack_zone.contains(card):
-            stack_zone.remove(card)
-
-    if owner is not None:
-        graveyard = owner.zones[Zone.GRAVEYARD]
-        graveyard.add(card)
+    move_spell_off_stack(game, stack_obj)
 
 
 class Refute(Instant):
@@ -69,35 +52,30 @@ class Refute(Instant):
         )
         super().__init__(**kwargs)
 
+    def _is_counterable_spell(self, stack_obj: Any) -> bool:
+        """True iff *stack_obj* is a spell OCCURRENCE this Refute may counter.
+
+        ``StackObject.is_spell`` is the discriminator: a triggered or activated
+        ability may share its source card with a pending spell but is not that
+        spell, and must never be offered as a "target spell". Own-cast
+        exclusion is by source identity (this card's own occurrence).
+        """
+        return (
+            getattr(stack_obj, "is_spell", False)
+            and getattr(stack_obj, "source", None) is not self
+        )
+
     def can_cast(self, game: "GameState") -> bool:
         """Cannot cast unless there's a spell on the stack to counter."""
-        from engine.stack import StackObject
-
-        for stack_obj in game.stack.objects():
-            source = stack_obj.source
-            if source is self:
-                continue
-            # Only target spells (not triggered/activated abilities)
-            if getattr(stack_obj, "is_spell", True):
-                return True
-        return False
+        return any(self._is_counterable_spell(so) for so in game.stack.objects())
 
     def get_targets(self, game: "GameState") -> list:
-        """Target spell on the stack."""
-        from engine.stack import StackObject
-
-        targets = []
-        for stack_obj in game.stack.objects():
-            source = stack_obj.source
-            if source is self:
-                continue
-            if getattr(stack_obj, "is_spell", True):
-                targets.append(stack_obj)
-        if not targets:
+        """Target spell on the stack — an exact StackObject occurrence."""
+        if not self.can_cast(game):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj: obj is not self and getattr(obj, "is_spell", True),
+                filter_fn=self._is_counterable_spell,
                 description="target spell",
                 zone=Zone.STACK,
             )

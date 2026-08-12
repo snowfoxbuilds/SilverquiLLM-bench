@@ -541,3 +541,237 @@ class TestCopySpellStintRevalidation:
         move_to_zone(game, other, Zone.EXILE, Zone.BATTLEFIELD)  # new stint
         resolve_top_of_stack(game)
         assert getattr(other, "_marked", False) is False  # rejected by captured stint
+
+
+class TestMoveSpellOffStack:
+    """move_spell_off_stack is the single primitive through which every spell
+    leaves the stack. Countering (default) removes exactly the given
+    StackObject and puts an ordinary spell in its owner's graveyard; the cast's
+    departure replacement (flashback -> exile, rule 702.34a) is honoured for
+    resolution and countering alike; a card is never moved twice; and a
+    fizzled counter never moves a re-cast card."""
+
+    def _instant(self, owner, name="Zap", *, flashback=False):
+        from engine.card import Instant
+        from engine.types import ManaCost
+
+        card = Instant(name=name, mana_cost=ManaCost.parse("{U}"), owner=owner)
+        card.controller = owner
+        if flashback:
+            card.flashback_cost = ManaCost.parse("{2}{U}")
+        return card
+
+    def _cast(self, game, player, card, from_zone, mode=None):
+        """Free-cast *card* and return its StackObject (the cast helper's own
+        return value — the occurrence identity of this one cast)."""
+        from engine.casting import cast_spell_free
+
+        if mode is None:
+            so = cast_spell_free(game, player, card, from_zone)
+        else:
+            so = cast_spell_free(game, player, card, from_zone, mode=mode)
+        assert so is game.stack.peek()  # the just-pushed occurrence
+        assert so.source is card
+        return so
+
+    def test_countered_ordinary_spell_to_owner_graveyard(self):
+        from engine.stack import move_spell_off_stack
+        from engine.types import Zone
+        from test_utils import create_game
+
+        game = create_game()
+        p = game.players[0]
+        card = self._instant(p)
+        game.get_hand(p).add(card)
+        so = self._cast(game, p, card, Zone.HAND)
+
+        assert move_spell_off_stack(game, so) is True
+        assert game.stack.is_empty()
+        assert game.get_graveyard(p).contains(card)
+        assert not p.zones[Zone.STACK].contains(card)
+
+    def test_countered_spell_owned_by_other_player_goes_to_owner(self):
+        """Owner/controller split: the countered card goes to its OWNER's
+        graveyard even when another player cast (controls) it."""
+        from engine.stack import move_spell_off_stack
+        from engine.types import Zone
+        from test_utils import create_game
+
+        game = create_game()
+        p1, p2 = game.players
+        card = self._instant(p2)          # owned by p2
+        game.get_hand(p1).add(card)       # but cast out of p1's hand
+        so = self._cast(game, p1, card, Zone.HAND)
+        assert so.controller is p1
+
+        assert move_spell_off_stack(game, so) is True
+        assert game.get_graveyard(p2).contains(card)
+        assert not game.get_graveyard(p1).contains(card)
+
+    def test_countered_flashback_cast_exiled(self):
+        """A spell cast via flashback is exiled when countered, not sent to
+        the graveyard (rule 702.34a: any time it would leave the stack)."""
+        from engine.casting import CastMode
+        from engine.stack import move_spell_off_stack
+        from engine.types import Zone
+        from test_utils import create_game
+
+        game = create_game()
+        p = game.players[0]
+        card = self._instant(p, flashback=True)
+        game.get_graveyard(p).add(card)
+        so = self._cast(game, p, card, Zone.GRAVEYARD, mode=CastMode.FLASHBACK)
+
+        assert move_spell_off_stack(game, so) is True
+        assert game.get_exile(p).contains(card)
+        assert not game.get_graveyard(p).contains(card)
+
+    def test_counter_fizzles_after_departure(self):
+        """A StackObject that already left the stack (it resolved) is not
+        processed again: no removal, no card move, returns False."""
+        from engine.stack import move_spell_off_stack, resolve_top_of_stack
+        from engine.types import Zone
+        from test_utils import create_game
+
+        game = create_game()
+        p = game.players[0]
+        card = self._instant(p)
+        game.get_hand(p).add(card)
+        so = self._cast(game, p, card, Zone.HAND)
+        resolve_top_of_stack(game)
+        assert game.get_graveyard(p).contains(card)
+
+        assert move_spell_off_stack(game, so) is False
+        # Exactly one graveyard occupancy, nothing exiled.
+        assert sum(1 for o in game.get_graveyard(p).get_all() if o is card) == 1
+        assert not game.get_exile(p).contains(card)
+
+    def test_fizzled_counter_never_moves_recast_card(self):
+        """After the targeted occurrence resolved and the same card was re-cast,
+        countering the OLD occurrence moves nothing: the card's stack-zone
+        presence belongs to the new cast."""
+        from engine.stack import move_spell_off_stack, resolve_top_of_stack
+        from engine.types import Zone
+        from test_utils import create_game
+
+        game = create_game()
+        p = game.players[0]
+        card = self._instant(p)
+        game.get_hand(p).add(card)
+        so_first = self._cast(game, p, card, Zone.HAND)
+        resolve_top_of_stack(game)                       # -> graveyard
+        so_second = self._cast(game, p, card, Zone.GRAVEYARD)  # re-cast
+        assert p.zones[Zone.STACK].contains(card)
+
+        assert move_spell_off_stack(game, so_first) is False
+        # The new occurrence is untouched: still on the stack, card still in
+        # the stack zone.
+        assert any(item is so_second for item in game.stack._items)
+        assert p.zones[Zone.STACK].contains(card)
+        assert not game.get_graveyard(p).contains(card)
+
+        resolve_top_of_stack(game)
+        assert game.get_graveyard(p).contains(card)
+
+    def test_resolution_does_not_move_twice_when_on_resolve_moved(self):
+        """resolving=True duplicate-move guard: an on_resolve that already
+        moved its card out of the stack zone leaves nothing for the departure
+        primitive to move."""
+        from engine.card import Instant
+        from engine.stack import resolve_top_of_stack
+        from engine.types import ManaCost, Zone
+        from test_utils import create_game
+
+        class _SelfBouncer(Instant):
+            def on_resolve(self, game):
+                from engine.zones import move_to_zone
+
+                move_to_zone(game, self, Zone.STACK, Zone.HAND)
+
+        game = create_game()
+        p = game.players[0]
+        card = _SelfBouncer(name="Boomerang Trick", mana_cost=ManaCost.parse("{U}"), owner=p)
+        card.controller = p
+        game.get_hand(p).add(card)
+        self._cast(game, p, card, Zone.HAND)
+
+        resolve_top_of_stack(game)
+        assert sum(1 for o in game.get_hand(p).get_all() if o is card) == 1
+        assert not game.get_graveyard(p).contains(card)
+        assert not game.get_exile(p).contains(card)
+
+    def test_countering_copy_departs_without_card_move(self):
+        """Countering a spell COPY removes its StackObject; a copy's card
+        object occupies no stack zone (copies cease to exist, rule 707.10a),
+        so no card moves and the original cast is untouched."""
+        from engine.stack import copy_spell, move_spell_off_stack
+        from engine.types import Zone
+        from test_utils import create_game
+
+        game = create_game()
+        p = game.players[0]
+        card = self._instant(p)
+        game.get_hand(p).add(card)
+        so = self._cast(game, p, card, Zone.HAND)
+        copy_obj = copy_spell(game, so, p)
+        game.stack.push(copy_obj)
+
+        assert move_spell_off_stack(game, copy_obj) is True
+        assert not any(item is copy_obj for item in game.stack._items)
+        # The original occurrence is untouched.
+        assert any(item is so for item in game.stack._items)
+        assert p.zones[Zone.STACK].contains(card)
+        assert not game.get_graveyard(p).contains(card)
+        assert not game.get_graveyard(p).contains(copy_obj.source)
+
+    def test_copy_of_flashback_cast_is_unaffected(self):
+        """Disposition is per cast occurrence: a COPY of a flashback cast is
+        not itself a flashback cast — it carries no departure_zone, and
+        resolving it never moves (or exiles) the original card."""
+        from engine.casting import CastMode
+        from engine.stack import copy_spell, resolve_top_of_stack
+        from engine.types import Zone
+        from test_utils import create_game
+
+        game = create_game()
+        p = game.players[0]
+        card = self._instant(p, flashback=True)
+        game.get_graveyard(p).add(card)
+        so = self._cast(game, p, card, Zone.GRAVEYARD, mode=CastMode.FLASHBACK)
+        copy_obj = copy_spell(game, so, p)
+        game.stack.push(copy_obj)
+        assert copy_obj.departure_zone is None
+
+        resolve_top_of_stack(game)                 # resolves the copy
+        assert p.zones[Zone.STACK].contains(card)  # original still cast
+        assert not game.get_exile(p).contains(card)
+
+        resolve_top_of_stack(game)                 # resolves the original
+        assert game.get_exile(p).contains(card)    # flashback exile intact
+
+    def test_disposition_is_per_cast_occurrence(self):
+        """The exile override belongs to the flashback OCCURRENCE, never the
+        card: after a flashback cast is countered into exile, a later NORMAL
+        graveyard cast of the same card keeps the graveyard default."""
+        from engine.casting import CastMode
+        from engine.stack import move_spell_off_stack, resolve_top_of_stack
+        from engine.types import Zone
+        from test_utils import create_game
+
+        game = create_game()
+        p = game.players[0]
+        card = self._instant(p, flashback=True)
+        game.get_graveyard(p).add(card)
+        so_flash = self._cast(game, p, card, Zone.GRAVEYARD, mode=CastMode.FLASHBACK)
+        assert move_spell_off_stack(game, so_flash) is True
+        assert game.get_exile(p).contains(card)
+
+        # Test scaffolding: put the card back in the graveyard.
+        game.get_exile(p).remove(card)
+        game.get_graveyard(p).add(card)
+
+        so_normal = self._cast(game, p, card, Zone.GRAVEYARD)
+        assert so_normal.departure_zone is None
+        resolve_top_of_stack(game)
+        assert game.get_graveyard(p).contains(card)
+        assert not game.get_exile(p).contains(card)

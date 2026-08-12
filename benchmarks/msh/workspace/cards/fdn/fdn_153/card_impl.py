@@ -26,39 +26,18 @@ def _get_chosen_target(card: Any, game: Any) -> Any:
         return chosen[0]
     return None
 def _counter_spell(game: GameState, stack_obj: Any) -> None:
-    """Counter a spell — remove it from the stack and move the card to
-    its owner's graveyard.
+    """Counter a spell via the engine's shared stack-departure primitive.
+
+    :func:`engine.stack.move_spell_off_stack` removes exactly *stack_obj* and
+    puts an ordinary spell in its owner's graveyard — or exiles it when the
+    cast stamped a departure replacement (a flashback cast, rule 702.34a).
+    If *stack_obj* already left the stack, nothing happens (fizzle).
     """
-    from engine.stack import StackObject
+    from engine.stack import StackObject, move_spell_off_stack
 
     if not isinstance(stack_obj, StackObject):
         return
-
-    card = stack_obj.source
-
-    # Check if the stack object is actually on the stack; if not, fizzle.
-    stack_items = game.stack._items  # noqa: SLF001
-    found = False
-    for i, item in enumerate(stack_items):
-        if item is stack_obj:
-            stack_items.pop(i)
-            found = True
-            break
-
-    if not found:
-        return
-
-    controller = stack_obj.controller
-    owner = getattr(card, "owner", controller)
-
-    if controller is not None:
-        stack_zone = controller.zones[Zone.STACK]
-        if stack_zone.contains(card):
-            stack_zone.remove(card)
-
-    if owner is not None:
-        graveyard = owner.zones[Zone.GRAVEYARD]
-        graveyard.add(card)
+    move_spell_off_stack(game, stack_obj)
 
 class EssenceScatter(Instant):
     """Essence Scatter — {1}{U} — Counter target creature spell.
@@ -72,32 +51,31 @@ class EssenceScatter(Instant):
         kwargs.setdefault("rules_text", "Counter target creature spell.")
         super().__init__(**kwargs)
 
+    def _is_creature_spell(self, stack_obj: Any) -> bool:
+        """True iff *stack_obj* is a creature-spell OCCURRENCE (not this cast).
+
+        ``StackObject.is_spell`` is the discriminator: an ability on the stack
+        may share its source card with a creature spell (or be sourced by a
+        battlefield creature) but is not itself a creature spell.
+        """
+        if not getattr(stack_obj, "is_spell", False):
+            return False
+        source = getattr(stack_obj, "source", None)
+        if source is self:
+            return False
+        return CardType.CREATURE in getattr(source, "card_types", set())
+
     def can_cast(self, game: GameState) -> bool:
         """Cannot cast unless a creature spell is on the stack."""
-        for stack_obj in game.stack.objects():
-            source = stack_obj.source
-            if source is self:
-                continue
-            card_types = getattr(source, "card_types", set())
-            if CardType.CREATURE in card_types:
-                return True
-        return False
+        return any(self._is_creature_spell(so) for so in game.stack.objects())
 
     def get_targets(self, game: GameState) -> list[Any]:
-        """Target creature spell on the stack."""
-        targets: list[Any] = []
-        for stack_obj in game.stack.objects():
-            source = stack_obj.source
-            if source is self:
-                continue
-            card_types = getattr(source, "card_types", set())
-            if CardType.CREATURE in card_types:
-                targets.append(stack_obj)
-        if not targets:
+        """Target creature spell on the stack — an exact StackObject occurrence."""
+        if not self.can_cast(game):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj: CardType.CREATURE in getattr(getattr(obj, "source", obj), "card_types", set()),
+                filter_fn=self._is_creature_spell,
                 description="target creature spell",
                 zone=Zone.STACK,
             )
