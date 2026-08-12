@@ -1482,3 +1482,159 @@ class TestCounterCanonicalAliases:
         assert perm.plus_one_counters == 0
         assert not executor._pending_counter_effects
         assert len(executor._unresolved_counter_effects) == 1
+
+
+# ---------------------------------------------------------------------------
+# Arrival-aligned resolution (Phase G — cadence alignment)
+# ---------------------------------------------------------------------------
+
+
+class TestArrivalAlignedResolution:
+    """_resolve_arrived_spells resolves a pending engine spell the snapshot GRE
+    first attests its permanent on the battlefield — pulling a silent
+    stack->battlefield resolution forward to before comparison.
+
+    The trigger is strict GRE battlefield attestation, and resolution runs only
+    from the top of the engine stack, so nothing is ever resolved on speculation
+    or out of stack order.
+    """
+
+    def _sim_executor(self) -> ReplayExecutor:
+        snap0 = _make_minimal_snapshot(game_state_id=1)
+        replay = ReplayGame(seat_id=1, opponent_seat_id=2, snapshots=[snap0])
+        ex = ReplayExecutor(
+            replay,
+            card_id_map={MOUNTAIN: "Mountain", PLAINS: "Plains"},
+            simulate=True,
+        )
+        ex.initialize(snap0)
+        return ex
+
+    def _push_pending_spell(
+        self, ex: ReplayExecutor, gre_id: int, seat: int = 1, grp: int = MOUNTAIN
+    ):
+        """A card on the engine STACK whose StackObject resolves it onto the
+        battlefield, registered in _pending_stack under *gre_id* (mirrors the
+        state _simulate_spell_cast leaves after driving a cast)."""
+        from engine.stack import StackObject
+        from engine.types import Zone
+
+        player = ex.players[seat]
+        card = ex._create_card(grp, player)
+        card._grp_id = grp
+        player.zones[Zone.STACK].add(card)
+
+        def _resolve(game, c=card, p=player):
+            if p.zones[Zone.STACK].contains(c):
+                p.zones[Zone.STACK].remove(c)
+            p.zones[Zone.BATTLEFIELD].add(c)
+
+        ex.game.stack.push(
+            StackObject(source=card, controller=player, on_resolve=_resolve)
+        )
+        ex._engine_cards[gre_id] = card
+        ex._pending_stack[gre_id] = card
+        return card
+
+    def _bf_snapshot(
+        self, gsid: int, bf_ids, id_changes: dict | None = None, seat: int = 1
+    ) -> GameSnapshot:
+        snap = GameSnapshot(game_state_id=gsid)
+        snap.players = {
+            1: PlayerInfo(seat_id=1, life_total=20),
+            2: PlayerInfo(seat_id=2, life_total=20),
+        }
+        snap.zones[30] = ReplayZone(
+            zone_id=30, type="ZoneType_Battlefield", owner_seat_id=seat,
+            object_instance_ids=list(bf_ids),
+        )
+        for iid in bf_ids:
+            snap.game_objects[iid] = GameObject(
+                instance_id=iid, grp_id=MOUNTAIN, type="GameObjectType_Card",
+                zone_id=30, owner_seat_id=seat, controller_seat_id=seat,
+            )
+        if id_changes:
+            for i, (orig, new) in enumerate(id_changes.items()):
+                snap.annotations.append(_id_change(9000 + i, orig, new))
+        return snap
+
+    @staticmethod
+    def _on_bf(ex: ReplayExecutor, card, seat: int = 1) -> bool:
+        from engine.types import Zone
+
+        return ex.players[seat].zones[Zone.BATTLEFIELD].contains(card)
+
+    def test_attested_spell_resolves(self) -> None:
+        """GRE attests the permanent on the battlefield → the pending object
+        resolves before comparison; the stack empties and it clears _pending."""
+        ex = self._sim_executor()
+        card = self._push_pending_spell(ex, gre_id=500)
+
+        ex._resolve_arrived_spells(self._bf_snapshot(2, [500]), StepResult(snapshot_id=2))
+
+        assert self._on_bf(ex, card)
+        assert ex.game.stack.is_empty()
+        assert 500 not in ex._pending_stack
+
+    def test_unattested_spell_stays_pending(self) -> None:
+        """No battlefield attestation → the object stays on the stack and the
+        divergence stands honestly (never resolve on speculation)."""
+        ex = self._sim_executor()
+        card = self._push_pending_spell(ex, gre_id=500)
+
+        ex._resolve_arrived_spells(self._bf_snapshot(2, []), StepResult(snapshot_id=2))
+
+        assert not self._on_bf(ex, card)
+        assert not ex.game.stack.is_empty()
+        assert 500 in ex._pending_stack
+
+    def test_stack_order_respected_top_unattested_blocks(self) -> None:
+        """When the top of the stack is NOT attested, nothing resolves — even a
+        lower object GRE does attest is left, so stack order is never violated."""
+        ex = self._sim_executor()
+        bottom = self._push_pending_spell(ex, gre_id=500)  # pushed first (bottom)
+        top = self._push_pending_spell(ex, gre_id=501)     # pushed last (top)
+
+        # GRE attests only the bottom object.
+        ex._resolve_arrived_spells(self._bf_snapshot(2, [500]), StepResult(snapshot_id=2))
+
+        assert not self._on_bf(ex, bottom)
+        assert not self._on_bf(ex, top)
+        assert len(ex.game.stack) == 2
+        assert 500 in ex._pending_stack and 501 in ex._pending_stack
+
+    def test_both_attested_resolve_lifo(self) -> None:
+        """Both objects attested → both resolve (top-down); the stack empties."""
+        ex = self._sim_executor()
+        bottom = self._push_pending_spell(ex, gre_id=500)
+        top = self._push_pending_spell(ex, gre_id=501)
+
+        ex._resolve_arrived_spells(
+            self._bf_snapshot(2, [500, 501]), StepResult(snapshot_id=2)
+        )
+
+        assert self._on_bf(ex, bottom) and self._on_bf(ex, top)
+        assert ex.game.stack.is_empty()
+        assert not ex._pending_stack
+
+    def test_id_change_successor_attestation_resolves(self) -> None:
+        """A spell whose id changed to its battlefield stint this snapshot is
+        traced through ObjectIdChanged and resolved (cast id 500 -> bf id 600)."""
+        ex = self._sim_executor()
+        card = self._push_pending_spell(ex, gre_id=500)
+
+        snap = self._bf_snapshot(2, [600], id_changes={500: 600})
+        ex._resolve_arrived_spells(snap, StepResult(snapshot_id=2))
+
+        assert self._on_bf(ex, card)
+        assert ex.game.stack.is_empty()
+        assert 500 not in ex._pending_stack
+        # _engine_cards points at the resolved card under both the cast id and
+        # its battlefield successor, so later comparison finds it either way.
+        assert ex._engine_cards.get(600) is card
+
+    def test_empty_stack_is_noop(self) -> None:
+        """No pending stack objects → nothing happens (no crash, no resolution)."""
+        ex = self._sim_executor()
+        ex._resolve_arrived_spells(self._bf_snapshot(2, [500]), StepResult(snapshot_id=2))
+        assert ex.game.stack.is_empty()

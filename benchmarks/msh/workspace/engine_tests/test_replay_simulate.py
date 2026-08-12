@@ -3838,28 +3838,28 @@ class TestGoldenGame:
         from collections import Counter  # noqa: F401 — used via _fingerprint
 
         report, by_type, by_category = self._fingerprint(self.FIXTURE)
-        # MISSING_CARD is one divergence per (game, identity). Hare Apparent
-        # (FDN #15) is implemented, so its occurrences never registered as a
-        # missing card; the last remaining missing identity was the engine-minted
-        # Rabbit token arrival grpId_94160. Phase E token correlation now stamps
-        # that engine token with its GRE grpId (94160) and the MISSING_CARD
-        # semantics treat a token the engine actually produces as producible, so
-        # it clears: MISSING_CARD 1 -> 0.
+        # Phase G (arrival-aligned resolution) moves this pin, intentionally.
+        # GRE resolves this game's creature spells silently (stack->battlefield
+        # with no ObjectIdChanged / action); Phase G resolves each pending engine
+        # spell the snapshot GRE first lists its permanent on the battlefield,
+        # instead of one snapshot later at the resync flush. That clears the
+        # run-length-1 battlefield ``snapshot_extra`` transients: STATE_MISMATCH
+        # 10 -> 6 (zone_contents 8 -> 6, and the life/tapped transients that
+        # rode the same one-snapshot skew both clear), successful comparisons
+        # 109 -> 112.
         #
-        # The 10 STATE_MISMATCH are unchanged and token-independent: the one
-        # battlefield entry that mentions 94160 (gsid 93) is a resolution-TIMING
-        # divergence — GRE shows the Rabbit a step before the engine's Hare
-        # Apparent ETB mints it — not a correlation gap, so it correctly persists
-        # (the engine has no Rabbit to correlate at that step). The corpus-wide
-        # token zone/P_T cluster is where correlation moves numbers; this game
-        # has a single token.
+        # MISSING_CARD 0 -> 1 is the honest token knock-on: Hare Apparent's
+        # Rabbit token (grpId_94160) is now minted a snapshot earlier — at the
+        # step GRE places Hare Apparent, before GRE lists the Rabbit — so the
+        # engine holds a token GRE has not yet attested and it surfaces as a
+        # producible-but-unattested MISSING_CARD (token cadence, phase-H/L
+        # territory) rather than being cleaned by the resync before comparison.
         assert report.total_snapshots == 116
-        assert report.successful_comparisons == 109
-        assert dict(by_type) == {"STATE_MISMATCH": 10}
+        assert report.successful_comparisons == 112
+        assert dict(by_type) == {"STATE_MISMATCH": 6, "MISSING_CARD": 1}
         assert dict(by_category) == {
-            "zone_contents": 8,
-            "life_total": 1,
-            "tapped_state": 1,
+            "zone_contents": 6,
+            "MISSING_CARD": 1,
         }
 
     def test_tokens_prideful_fingerprint(self):
@@ -3867,18 +3867,29 @@ class TestGoldenGame:
         makes Prideful Parent's Cat tokens mint on their own entry; the minted
         tokens correlate and enter the battlefield, so the residual here is the
         token zone-timing surface (GRE shows a token a step before/after the
-        engine mints it), not outright MISSING_CARD. Unchanged by the Phase-F
-        counter correction: the correction anchors the ledger to the engine
-        object (not the GRE aid), so this game's counters land exactly as
-        before."""
+        engine mints it), not outright MISSING_CARD.
+
+        Phase G (arrival-aligned resolution) moves this pin, intentionally:
+        resolving Prideful Parent the snapshot GRE first lists it on the
+        battlefield clears the parent's run-length-1 ``snapshot_extra``
+        transients — STATE_MISMATCH 24 -> 17 (zone_contents 22 -> 16, one P/T
+        transient clears), successful comparisons 313 -> 320. MISSING_CARD 0 ->
+        1 is the honest token knock-on: a Cat token now minted a snapshot before
+        GRE attests it surfaces as producible-but-unattested (token cadence,
+        phase-H territory)."""
         report, by_type, by_category = self._fingerprint(self.FIXTURE_TOKENS)
         assert report.total_snapshots == 332
-        assert report.successful_comparisons == 313
-        assert dict(by_type) == {"STATE_MISMATCH": 24, "ILLEGAL_ACTION": 2}
+        assert report.successful_comparisons == 320
+        assert dict(by_type) == {
+            "STATE_MISMATCH": 17,
+            "ILLEGAL_ACTION": 2,
+            "MISSING_CARD": 1,
+        }
         assert dict(by_category) == {
-            "zone_contents": 22,
-            "power_toughness": 2,
+            "zone_contents": 16,
+            "power_toughness": 1,
             "tapped_state": 2,
+            "MISSING_CARD": 1,
         }
 
     def test_counters_dynamic_pt_fingerprint(self):
@@ -3886,17 +3897,24 @@ class TestGoldenGame:
         counters on the correlated permanents, so power_toughness stays bounded
         (12) rather than tracking every counter the executor never fired; the
         remaining P/T is dynamic-P/T cards (e.g. Consuming Aberration) the sync
-        does not model."""
+        does not model.
+
+        Phase G (arrival-aligned resolution) moves this pin, intentionally:
+        resolving each pending permanent the snapshot GRE first lists it on the
+        battlefield clears the run-length-1 zone transients — zone_contents 32
+        -> 15, successful comparisons 728 -> 745. life/P_T/MISSING are unchanged
+        (this game's residual is dynamic-P/T CDAs and counter timing, not
+        arrival cadence)."""
         report, by_type, by_category = self._fingerprint(self.FIXTURE_COUNTERS)
         assert report.total_snapshots == 770
-        assert report.successful_comparisons == 728
+        assert report.successful_comparisons == 745
         assert dict(by_type) == {
-            "STATE_MISMATCH": 57,
+            "STATE_MISMATCH": 40,
             "ILLEGAL_ACTION": 1,
             "MISSING_CARD": 1,
         }
         assert dict(by_category) == {
-            "zone_contents": 32,
+            "zone_contents": 15,
             "life_total": 14,
             "power_toughness": 12,
             "MISSING_CARD": 1,
@@ -3908,19 +3926,26 @@ class TestGoldenGame:
         equip activations whose mana GRE recorded only against the equipment's
         cast (or floating/reused, never re-annotated) cannot be funded without
         fabrication, so the equip cost stays unpayable. This fixture pins that
-        limitation so a future funding fix (or regression) is visible."""
+        limitation so a future funding fix (or regression) is visible.
+
+        Phase G (arrival-aligned resolution) moves this pin, intentionally:
+        arrival-aligned resolution clears the run-length-1 zone transients —
+        STATE_MISMATCH 86 -> 77, successful comparisons 809 -> 823. The
+        ENGINE_ERROR funding limitation (6) is untouched, so a funding fix or
+        regression stays visible; tapped/life shift within the transient set as
+        the arrival-step comparisons resolve."""
         report, by_type, by_category = self._fingerprint(self.FIXTURE_EQUIP)
         assert report.total_snapshots == 894
-        assert report.successful_comparisons == 809
+        assert report.successful_comparisons == 823
         assert dict(by_type) == {
-            "STATE_MISMATCH": 86,
+            "STATE_MISMATCH": 77,
             "ENGINE_ERROR": 6,
             "ILLEGAL_ACTION": 4,
             "MISSING_CARD": 4,
         }
         assert dict(by_category) == {
-            "zone_contents": 56,
-            "tapped_state": 19,
+            "zone_contents": 45,
+            "tapped_state": 21,
             "life_total": 15,
             "ENGINE_ERROR": 6,
             "MISSING_CARD": 4,

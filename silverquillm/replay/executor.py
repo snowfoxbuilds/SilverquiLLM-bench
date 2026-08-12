@@ -1176,6 +1176,15 @@ class ReplayExecutor:
         if not actions:
             result.action_type = "phase_transition"
 
+        # Arrival-aligned resolution: GRE routinely resolves a permanent spell
+        # SILENTLY — the card moves stack->battlefield with no ObjectIdChanged
+        # and no action, so infer_actions sees nothing and the engine spell
+        # would sit on the stack until this step's post-comparison resync flush,
+        # one snapshot too late. When the current snapshot already attests a
+        # cast spell's permanent on the battlefield, that IS its resolution
+        # evidence: resolve that specific pending object now, before comparison.
+        self._resolve_arrived_spells(curr_snapshot, result)
+
         # Correlate engine-minted tokens to their GRE grpId before comparing, so
         # a token the engine correctly minted reads as its real identity instead
         # of an anonymous id-0 shell that mis-compares against the GRE token.
@@ -2681,6 +2690,87 @@ class ReplayExecutor:
             return False
         stack_obj.on_resolve(self.game)
         return True
+
+    def _resolve_arrived_spells(
+        self, snapshot: GameSnapshot, result: StepResult
+    ) -> None:
+        """Resolve pending engine spells GRE already attests on the battlefield.
+
+        The executor drives ``cast_spell`` at the cast event; the engine spell
+        then sits on the engine stack until GRE reports its resolution. For a
+        permanent spell GRE frequently resolves it SILENTLY — the card appears in
+        the battlefield zone listing with no ObjectIdChanged and no action — so
+        ``infer_actions`` produces nothing and the pending object would resolve
+        only in this step's post-comparison resync flush, one snapshot after GRE
+        showed the permanent. That one-snapshot skew is the dominant divergence
+        family: a ``zone_contents`` battlefield ``snapshot_extra`` that
+        self-corrects the very next snapshot.
+
+        The trigger is strict, evidence-aligned GRE attestation: a pending spell
+        is resolved only when the CURRENT snapshot lists its object on a
+        battlefield (by the id it was cast under, or that id's ObjectIdChanged
+        successor this snapshot). No attestation → the object stays pending and
+        the divergence stands honestly (a countered/fizzled spell GRE never
+        places on the battlefield is never speculatively resolved here).
+
+        Stack order is respected: only the top of the engine stack is resolved,
+        and the loop stops at the first object GRE has not attested, so nothing
+        is ever resolved out from under an object above it. In the common case
+        the engine stack holds exactly the one just-cast spell. An ETB effect the
+        resolution registers (a trigger pushed onto the stack, an enters-with
+        counter) is left for its own machinery — a trigger newly on top is not a
+        pending spell, so the loop halts on it.
+        """
+        game = self.game
+        if game is None or game.stack.is_empty():
+            return
+        from silverquillm.replay.state import extract_object_id_changes
+
+        bf_ids = self._gre_battlefield_aids(snapshot)
+        id_changes = extract_object_id_changes(snapshot.annotations)
+
+        # Reverse map each pending spell's engine card to the GRE id(s) it was
+        # cast under, so a battlefield object can be traced back to its spell.
+        card_gre_ids: dict[int, set[int]] = {}
+        for gre_id, card in self._pending_stack.items():
+            if card is not None:
+                card_gre_ids.setdefault(id(card), set()).add(gre_id)
+
+        def attested(card: Any) -> bool:
+            for gid in card_gre_ids.get(id(card), ()):
+                if gid in bf_ids:
+                    return True
+                succ = id_changes.get(gid)
+                if succ is not None and succ in bf_ids:
+                    return True
+            return False
+
+        guard = 0
+        while not game.stack.is_empty() and guard < 50:
+            guard += 1
+            top = game.stack.peek()
+            card = getattr(top, "source", None)
+            if card is None or not attested(card):
+                break  # respect stack order — stop at the first non-arrived top
+            game.stack.pop()
+            try:
+                top.on_resolve(game)
+            except Exception as exc:
+                if _is_protocol_exception(exc):
+                    raise
+                result.engine_failures.append(
+                    f"arrival resolution {getattr(card, 'name', '?')}: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+            # The pending object is now resolved: drop it from the pending map
+            # and point _engine_cards at the resolved card under every id it was
+            # known by (including the battlefield id it may have changed into).
+            for gid in list(card_gre_ids.get(id(card), ())):
+                self._pending_stack.pop(gid, None)
+                self._engine_cards[gid] = card
+                succ = id_changes.get(gid)
+                if succ is not None:
+                    self._engine_cards[succ] = card
 
     def _simulate_zone_transition(
         self,
