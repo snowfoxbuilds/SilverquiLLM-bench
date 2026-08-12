@@ -1780,3 +1780,200 @@ class TestNoncastZoneCastEngineCompat:
         # mode, which this executor path selects only when the engine offers
         # it (covered MSH-side in engine_tests/test_replay_simulate.py).
         assert getattr(so, "departure_zone", None) in (None, Zone.EXILE)
+
+
+# ---------------------------------------------------------------------------
+# Cast-time evidence (Phase J) — X / kicker stamped onto entry-counter cards
+# before the cast, from ManaPaid / CastingTimeOption annotations.
+#
+# Engine-agnostic fakes are used (the root suite binds the SOS engine, whose
+# ManaCost differs from the MSH workspace's); the executor logic under test —
+# _apply_cast_time_evidence / _count_cast_mana_paid / _cast_declared_kicker —
+# lives in the shared replay layer.
+# ---------------------------------------------------------------------------
+
+
+class _FakeManaCost:
+    def __init__(self, x_count: int, cmc: int) -> None:
+        self.x_count = x_count
+        self.cmc = cmc
+
+
+class _FakeEntryXCard:
+    """An entry-counter consumer with {X} in its cost (a Wildwood shape)."""
+
+    def __init__(self, x_count: int = 1, cmc: int = 1) -> None:
+        self.name = "Fake X Creature"
+        self.x_value = 0
+        self.mana_cost = _FakeManaCost(x_count, cmc)
+
+    def enters_battlefield_with(self, game, event):  # marks it a consumer
+        pass
+
+
+class _FakeEntryKickerCard:
+    """An entry-counter consumer with kicker (a Gnarlid shape)."""
+
+    def __init__(self) -> None:
+        self.name = "Fake Kicker Creature"
+        self.kicked = False
+
+    def enters_battlefield_with(self, game, event):
+        pass
+
+
+def _mana_paid_ann(ann_id: int, spell_iid: int, color: int = 5) -> _Annotation:
+    """One ManaPaid annotation funding *spell_iid* (one mana; color 5 = green)."""
+    return _Annotation(
+        id=ann_id, affector_id=0, affected_ids=[spell_iid],
+        type=["AnnotationType_ManaPaid"], details={"color": [color]},
+    )
+
+
+def _casting_option_ann(
+    ann_id: int, spell_iid: int, *, kicker: bool = False
+) -> _Annotation:
+    details: dict = {"castAbilityGrpId": [1], "type": [13]}
+    if kicker:
+        details["kickerAbilityGrpId"] = [999]
+    return _Annotation(
+        id=ann_id, affector_id=spell_iid, affected_ids=[spell_iid],
+        type=["AnnotationType_CastingTimeOption"], details=details,
+    )
+
+
+def _evidence_executor(*snaps: GameSnapshot) -> ReplayExecutor:
+    """A ReplayExecutor whose look-ahead sees *snaps*, without full init."""
+    ex = ReplayExecutor(ReplayGame(seat_id=1, opponent_seat_id=2,
+                                   snapshots=list(snaps)))
+    ex._gsid_index = {s.game_state_id: i for i, s in enumerate(snaps)}
+    return ex
+
+
+class TestCastTimeEvidenceX:
+    """X is derived from the count of ManaPaid annotations minus the non-X cost,
+    and stamped only onto a permanent that consumes entry counters."""
+
+    def test_x_from_mana_paid_count(self) -> None:
+        # {X}{G} funded by 4 mana => X = 4 - 1 = 3.
+        cast = GameSnapshot(game_state_id=100)
+        cast.annotations = [_mana_paid_ann(i, 55) for i in range(1, 5)]
+        ex = _evidence_executor(cast)
+        card = _FakeEntryXCard()
+        ex._apply_cast_time_evidence(card, 55, cast)
+        assert card.x_value == 3
+
+    def test_x_counts_across_lookahead_snapshots(self) -> None:
+        cast = GameSnapshot(game_state_id=100)
+        cast.annotations = [_mana_paid_ann(1, 55), _mana_paid_ann(2, 55)]
+        later = GameSnapshot(game_state_id=101)
+        later.annotations = [_mana_paid_ann(3, 55)]
+        ex = _evidence_executor(cast, later)
+        card = _FakeEntryXCard()
+        ex._apply_cast_time_evidence(card, 55, cast)
+        assert card.x_value == 2  # 3 mana - 1 (the {G})
+
+    def test_duplicate_annotation_ids_counted_once(self) -> None:
+        cast = GameSnapshot(game_state_id=100)
+        later = GameSnapshot(game_state_id=101)
+        cast.annotations = [_mana_paid_ann(1, 55), _mana_paid_ann(2, 55)]
+        later.annotations = [_mana_paid_ann(2, 55)]  # same id re-sent
+        ex = _evidence_executor(cast, later)
+        card = _FakeEntryXCard()
+        ex._apply_cast_time_evidence(card, 55, cast)
+        assert card.x_value == 1  # 2 distinct mana - 1
+
+    def test_two_x_symbols_divide_evenly(self) -> None:
+        # {X}{X}{G} funded by 7 mana => (7 - 1) / 2 = 3.
+        cast = GameSnapshot(game_state_id=100)
+        cast.annotations = [_mana_paid_ann(i, 55) for i in range(1, 8)]
+        ex = _evidence_executor(cast)
+        card = _FakeEntryXCard(x_count=2, cmc=1)
+        ex._apply_cast_time_evidence(card, 55, cast)
+        assert card.x_value == 3
+
+    def test_uneven_remainder_refuses(self) -> None:
+        # {X}{X}{G} funded by 6 mana => (6 - 1) not divisible by 2 => refuse.
+        cast = GameSnapshot(game_state_id=100)
+        cast.annotations = [_mana_paid_ann(i, 55) for i in range(1, 7)]
+        ex = _evidence_executor(cast)
+        card = _FakeEntryXCard(x_count=2, cmc=1)
+        ex._apply_cast_time_evidence(card, 55, cast)
+        assert card.x_value == 0
+
+    def test_no_mana_evidence_leaves_x_zero(self) -> None:
+        cast = GameSnapshot(game_state_id=100)
+        ex = _evidence_executor(cast)
+        card = _FakeEntryXCard()
+        ex._apply_cast_time_evidence(card, 55, cast)
+        assert card.x_value == 0  # honest refusal — no X fabricated
+
+    def test_mana_for_other_spell_does_not_count(self) -> None:
+        cast = GameSnapshot(game_state_id=100)
+        cast.annotations = [_mana_paid_ann(i, 999) for i in range(1, 5)]
+        ex = _evidence_executor(cast)
+        card = _FakeEntryXCard()
+        ex._apply_cast_time_evidence(card, 55, cast)
+        assert card.x_value == 0
+
+    def test_x_not_stamped_on_non_entry_x_spell(self) -> None:
+        # An X spell with no enters_battlefield_with hook (an X burn/drain
+        # sorcery) is out of scope — the executor never stamps its x_value.
+        class _XSorcery:
+            def __init__(self) -> None:
+                self.name = "X Sorcery"
+                self.x_value = 0
+                self.mana_cost = _FakeManaCost(1, 1)
+            # deliberately NO enters_battlefield_with
+
+        cast = GameSnapshot(game_state_id=100)
+        cast.annotations = [_mana_paid_ann(i, 55) for i in range(1, 5)]
+        ex = _evidence_executor(cast)
+        card = _XSorcery()
+        ex._apply_cast_time_evidence(card, 55, cast)
+        assert card.x_value == 0
+
+
+class TestCastTimeEvidenceKicker:
+    """Kicker is set from a CastingTimeOption carrying kickerAbilityGrpId, only
+    for an entry-counter consumer."""
+
+    def test_kicked_from_casting_time_option(self) -> None:
+        cast = GameSnapshot(game_state_id=100)
+        cast.annotations = [_casting_option_ann(1, 55, kicker=True)]
+        ex = _evidence_executor(cast)
+        card = _FakeEntryKickerCard()
+        ex._apply_cast_time_evidence(card, 55, cast)
+        assert card.kicked is True
+
+    def test_not_kicked_without_kicker_option(self) -> None:
+        cast = GameSnapshot(game_state_id=100)
+        cast.annotations = [_casting_option_ann(1, 55, kicker=False)]
+        ex = _evidence_executor(cast)
+        card = _FakeEntryKickerCard()
+        ex._apply_cast_time_evidence(card, 55, cast)
+        assert card.kicked is False
+
+    def test_no_annotation_leaves_unkicked(self) -> None:
+        cast = GameSnapshot(game_state_id=100)
+        ex = _evidence_executor(cast)
+        card = _FakeEntryKickerCard()
+        ex._apply_cast_time_evidence(card, 55, cast)
+        assert card.kicked is False
+
+    def test_kicker_not_applied_to_non_entry_kicker_card(self) -> None:
+        # A kicker card that is NOT an entry-counter consumer (its kicker drives
+        # a graveyard return / extra land / team buff) must not be switched on
+        # from replay evidence here.
+        class _OtherKicker:
+            def __init__(self) -> None:
+                self.name = "Other Kicker"
+                self.kicked = False
+            # deliberately NO enters_battlefield_with
+
+        cast = GameSnapshot(game_state_id=100)
+        cast.annotations = [_casting_option_ann(1, 55, kicker=True)]
+        ex = _evidence_executor(cast)
+        card = _OtherKicker()
+        ex._apply_cast_time_evidence(card, 55, cast)
+        assert card.kicked is False

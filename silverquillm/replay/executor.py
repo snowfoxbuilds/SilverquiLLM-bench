@@ -1725,6 +1725,102 @@ class ReplayExecutor:
                     # snapshot, when GRE also shows the source tapped.
                     self._apply_one_mana_payment(ann, tap=False)
 
+    def _apply_cast_time_evidence(
+        self, card: Any, spell_iid: int, curr_snapshot: GameSnapshot
+    ) -> None:
+        """Stamp observed cast-time choices onto *card* before it is cast.
+
+        Feeds the enters-with-counters primitive (rule 614.1c) the evidence its
+        ``enters_battlefield_with`` hook reads:
+
+        * **X** — the value chosen for ``{X}`` in the cast, derived from the
+          count of ManaPaid annotations funding this cast minus the printed
+          non-X mana cost, divided by the number of ``{X}`` symbols. Scoped to
+          entry-counter consumers (a permanent whose impl defines
+          ``enters_battlefield_with`` and whose cost has ``{X}``) so that X
+          burn/drain sorceries — which also read ``x_value`` but resolve to the
+          graveyard and are out of this phase's scope — are never driven.
+        * **kicker** — set when a CastingTimeOption annotation funding this cast
+          carries a ``kickerAbilityGrpId``.
+
+        Absent or ambiguous evidence leaves the card's defaults untouched: no X
+        is invented (the creature honestly enters at 0/0 and dies), no kicker is
+        assumed. Values live on the card object, which is the same instance the
+        engine later resolves, so they survive to entry.
+        """
+        if not spell_iid:
+            return
+
+        # --- X evidence (entry-counter consumers only) ---
+        mana_cost = getattr(card, "mana_cost", None)
+        x_count = getattr(mana_cost, "x_count", 0) if mana_cost is not None else 0
+        if (
+            x_count > 0
+            and hasattr(card, "x_value")
+            and hasattr(card, "enters_battlefield_with")
+        ):
+            paid = self._count_cast_mana_paid(spell_iid, curr_snapshot)
+            non_x = getattr(mana_cost, "cmc", 0)
+            # cmc already excludes {X}; a clean nonnegative remainder that
+            # divides evenly among the {X} symbols is the observed X.
+            if paid >= non_x and (paid - non_x) % x_count == 0:
+                x_value = (paid - non_x) // x_count
+                if x_value > 0:
+                    card.x_value = x_value
+
+        # --- Kicker evidence (entry-counter consumers only) ---
+        # Scoped to a permanent whose impl consumes entry counters
+        # (``enters_battlefield_with``), so other kicker cards — whose kicker
+        # option drives a graveyard return / extra land / team buff, out of this
+        # phase's scope — are never switched on from replay evidence here.
+        if (
+            hasattr(card, "kicked")
+            and hasattr(card, "enters_battlefield_with")
+            and self._cast_declared_kicker(spell_iid, curr_snapshot)
+        ):
+            card.kicked = True
+
+    def _count_cast_mana_paid(
+        self, spell_iid: int, curr_snapshot: GameSnapshot
+    ) -> int:
+        """Count distinct ManaPaid annotations funding *spell_iid* (look-ahead).
+
+        One ManaPaid annotation credits one mana (the executor's payment model),
+        so the distinct-by-id count over the same look-ahead window used to
+        credit the pool is the total mana spent on this cast.
+        """
+        start = self._gsid_index.get(curr_snapshot.game_state_id, 0)
+        seen: set[int] = set()
+        for snap in self.replay.snapshots[start : start + _ANNOTATION_LOOKAHEAD]:
+            for ann in snap.annotations:
+                if (
+                    "AnnotationType_ManaPaid" in ann.type
+                    and spell_iid in ann.affected_ids
+                    and ann.id not in seen
+                ):
+                    seen.add(ann.id)
+        return len(seen)
+
+    def _cast_declared_kicker(
+        self, spell_iid: int, curr_snapshot: GameSnapshot
+    ) -> bool:
+        """True if a CastingTimeOption funding *spell_iid* names a kicker.
+
+        Arena tags a kicked cast with an ``AnnotationType_CastingTimeOption``
+        whose details carry ``kickerAbilityGrpId``, keyed (via ``affectedIds``)
+        to the cast's stack instance id.
+        """
+        start = self._gsid_index.get(curr_snapshot.game_state_id, 0)
+        for snap in self.replay.snapshots[start : start + _ANNOTATION_LOOKAHEAD]:
+            for ann in snap.annotations:
+                if (
+                    "AnnotationType_CastingTimeOption" in ann.type
+                    and spell_iid in ann.affected_ids
+                    and "kickerAbilityGrpId" in ann.details
+                ):
+                    return True
+        return False
+
     @staticmethod
     def _parse_counter_annotation(ann: Any) -> tuple[bool, str, int] | None:
         """Decode a CounterAdded/Removed annotation to ``(is_add, name, amount)``.
@@ -2703,6 +2799,9 @@ class ReplayExecutor:
 
         card = self._take_from_hand(player, action, curr_snapshot)
         self._apply_spell_mana_lookahead(action.instance_id, curr_snapshot)
+        # Supply cast-time evidence (chosen X, kicker) to the enters-with-counters
+        # primitive BEFORE the spell is cast, so the counters land as it enters.
+        self._apply_cast_time_evidence(card, action.instance_id, curr_snapshot)
         preferences = self._derive_target_preferences(
             action.player_seat_id, prev_snapshot, curr_snapshot,
             spell_iid=action.instance_id,
