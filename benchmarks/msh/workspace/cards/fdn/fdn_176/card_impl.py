@@ -13,13 +13,15 @@ if TYPE_CHECKING:
 class LilianaDreadhordeGeneral(Planeswalker):
     """Liliana, Dreadhorde General — {4}{B}{B} — 6 loyalty.
 
-    +1: Each opponent sacrifices a creature.
-    -4: Each player draws cards equal to the number of creatures they control,
-        then each opponent discards that many cards.
+    Whenever a creature you control dies, draw a card.
+    +1: Create a 2/2 black Zombie creature token.
+    -4: Each player sacrifices two creatures of their choice.
     -9: Each opponent chooses a permanent they control of each permanent type
         and sacrifices the rest.
 
-    (Simplified: abilities are stubs that adjust loyalty only.)
+    Phase H implements the +1 Zombie-token minter (grpId 94170). The passive
+    dies-trigger draw and the -4/-9 abilities remain simplified stubs (not
+    token-related, out of Phase H scope).
     """
 
     def __init__(self, **kwargs: Any) -> None:
@@ -32,10 +34,11 @@ class LilianaDreadhordeGeneral(Planeswalker):
         kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Liliana"}
         kwargs.setdefault(
             "rules_text",
-            "+1: Each opponent sacrifices a creature.\n"
-            "-4: Each player draws cards equal to creatures they control, "
-            "then each opponent discards that many.\n"
-            "-9: Each opponent keeps one of each permanent type, sacrifices the rest.",
+            "Whenever a creature you control dies, draw a card.\n"
+            "+1: Create a 2/2 black Zombie creature token.\n"
+            "-4: Each player sacrifices two creatures of their choice.\n"
+            "-9: Each opponent chooses a permanent they control of each "
+            "permanent type and sacrifices the rest.",
         )
         super().__init__(**kwargs)
 
@@ -43,33 +46,34 @@ class LilianaDreadhordeGeneral(Planeswalker):
         pw = self
 
         def _plus1(game: Any) -> None:
-            # Each opponent sacrifices a creature.
-            from engine.game import sacrifice
-            for p in game.players:
-                if p is not pw.controller:
-                    from engine.types import CardType as CT
-                    bf = game.get_battlefield(p)
-                    for obj in bf.get_all():
-                        if CT.CREATURE in getattr(obj, "card_types", set()):
-                            sacrifice(game, p, obj)
-                            break
+            # +1: Create a 2/2 black Zombie creature token.
+            from engine.game import create_token
+
+            from cards.fdn.tokens import make_creature_token
+            from engine.types import Color
+
+            controller = getattr(pw, "controller", None)
+            if controller is None:
+                return
+            create_token(
+                game,
+                controller,
+                make_creature_token("Zombie", {"Zombie"}, [Color.BLACK], 2, 2),
+            )
 
         def _minus4(game: Any) -> None:
-            # Each player draws cards equal to creatures they control.
-            from engine.game import draw_card
-            from engine.types import CardType as CT
-            for p in game.players:
-                bf = game.get_battlefield(p)
-                count = sum(1 for obj in bf.get_all() if CT.CREATURE in getattr(obj, "card_types", set()))
-                for _ in range(count):
-                    draw_card(game, p)
+            # -4: Each player sacrifices two creatures of their choice
+            # (simplified stub, like -9 — the previous body implemented a
+            # DIFFERENT Liliana's -4, mass card draw, which actively mutated
+            # hands/libraries the real card never touches).
+            pass
 
         def _minus9(game: Any) -> None:
             # Opponents keep one of each permanent type, sacrifice rest (simplified stub).
             pass
 
         return [
-            LoyaltyAbility(loyalty_cost=+1, effect=_plus1, description="+1: Each opponent sacrifices a creature."),
-            LoyaltyAbility(loyalty_cost=-4, effect=_minus4, description="-4: Draw/discard based on creatures."),
+            LoyaltyAbility(loyalty_cost=+1, effect=_plus1, description="+1: Create a 2/2 black Zombie creature token."),
+            LoyaltyAbility(loyalty_cost=-4, effect=_minus4, description="-4: Each player sacrifices two creatures of their choice."),
             LoyaltyAbility(loyalty_cost=-9, effect=_minus9, description="-9: Opponents keep one of each type, sacrifice rest."),
         ]

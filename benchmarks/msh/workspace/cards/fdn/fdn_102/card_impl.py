@@ -1,23 +1,11 @@
 """Card implementation for Eager Trufflesnout."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Artifact, Creature
-from engine.types import CardType, Keyword, ManaCost
+from engine.card import Creature
+from engine.types import Keyword, ManaCost
 from engine.events import DealsDamageTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
-
-def _make_food_token() -> Artifact:
-    """Create a Food artifact token.
-
-    ENGINE LIMITATION: The Food token's activated ability ({2}, {T},
-    Sacrifice this token: You gain 3 life) is not fully functional because
-    the engine does not support sacrifice-as-cost or life-gain activated
-    abilities on tokens. The token is created with correct type/subtype.
-    """
-    from engine.card import Artifact
-    token = Artifact(name='Food', subtypes={'Food'}, rules_text='{2}, {T}, Sacrifice this artifact: You gain 3 life.')
-    return token
 
 class EagerTrufflesnout(Creature):
     """Eager Trufflesnout — {2}{G} — 4/2 — Boar — Trample.
@@ -54,9 +42,9 @@ class EagerTrufflesnout(Creature):
             return isinstance(target, Player)
 
         def _effect(game: 'GameState') -> None:
+            from cards.fdn.tokens import make_food_token
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return
-            food = _make_food_token()
-            create_token(game, ctrl, food)
+            create_token(game, ctrl, make_food_token())
         game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

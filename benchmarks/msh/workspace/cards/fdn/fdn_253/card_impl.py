@@ -79,15 +79,14 @@ class GoldveinPick(Equipment):
             )
 
         def _effect(g: "GameState") -> None:
-            from engine.card import Artifact
             from engine.game import create_token
+
+            from cards.fdn.tokens import make_treasure_token
 
             controller = source.controller
             if controller is None:
                 return
-            treasure = Artifact(name="Treasure", subtypes={"Treasure"})
-            treasure.is_token = True
-            create_token(g, controller, treasure)
+            create_token(g, controller, make_treasure_token())
 
         controller = getattr(self, "controller", None) or game.active_player
         game.trigger_manager.register(

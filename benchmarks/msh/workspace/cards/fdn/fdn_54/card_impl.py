@@ -86,13 +86,16 @@ class AbyssalHarvester(Creature):
             # Copy card types (already Creature from constructor)
             if hasattr(chosen, "keywords") and chosen.keywords:
                 token_kwargs["keywords"] = chosen.keywords
-            if hasattr(chosen, "colors"):
-                token_kwargs["colors"] = chosen.colors
             if hasattr(chosen, "mana_cost") and chosen.mana_cost:
                 token_kwargs["mana_cost"] = chosen.mana_cost
             if hasattr(chosen, "rules_text"):
                 token_kwargs["rules_text"] = chosen.rules_text
             token = Creature(**token_kwargs)
+            # ``colors`` is an explicit instance attribute (see
+            # cards/fdn/tokens.py), not a Creature constructor kwarg — copy it
+            # after construction.
+            if getattr(chosen, "colors", None) is not None:
+                token.colors = set(chosen.colors)
             create_token(game, controller, token)
 
             # Exile all other Nightmare tokens you control

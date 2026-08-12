@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Creature, LoyaltyAbility, Planeswalker
+from engine.card import LoyaltyAbility, Planeswalker
 from engine.card_queries import choose_object
 from engine.stack import surviving_targets
 from engine.continuous_effects import (
@@ -12,7 +12,7 @@ from engine.continuous_effects import (
     ContinuousEffect,
     Layer,
 )
-from engine.types import CardType, Keyword, ManaCost, Supertype
+from engine.types import CardType, Color, Keyword, ManaCost, Supertype
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -160,14 +160,13 @@ class AjaniCallerOfThePride(Planeswalker):
             life = max(0, getattr(controller, "life", 0))
             if life <= 0:
                 return
+            from cards.fdn.tokens import make_creature_token
+
             create_token(
                 game,
                 controller,
-                factory=lambda: Creature(
-                    name="Cat",
-                    base_power=2,
-                    base_toughness=2,
-                    subtypes={"Cat"},
+                factory=lambda: make_creature_token(
+                    "Cat", {"Cat"}, [Color.WHITE], 2, 2
                 ),
                 count=life,
             )

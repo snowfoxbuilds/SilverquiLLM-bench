@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature
-from engine.types import ManaCost
+from engine.types import Color, ManaCost
 from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -44,11 +44,11 @@ class SearslicerGoblin(Creature):
             return attacked
 
         def _effect(game: 'GameState') -> None:
-            from engine.card import Creature as _Creature
+            from cards.fdn.tokens import make_creature_token
             from engine.game import create_token
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return
-            token = _Creature(name='Goblin', subtypes={'Goblin'}, base_power=1, base_toughness=1)
+            token = make_creature_token('Goblin', {'Goblin'}, [Color.RED], 1, 1)
             create_token(game, ctrl, token)
         game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

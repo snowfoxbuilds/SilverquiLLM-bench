@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from cards.fdn.tokens import make_creature_token
 from engine.card import CardImpl, Creature
-from engine.types import CardType, ManaCost
+from engine.types import CardType, Color, ManaCost
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -51,11 +52,11 @@ class DwynensElite(Creature):
                 break
 
         if has_other_elf:
-            token = Creature(
-                name="Elf Warrior",
-                base_power=1,
-                base_toughness=1,
-                subtypes={"Elf", "Warrior"},
+            token = make_creature_token(
+                "Elf Warrior",
+                {"Elf", "Warrior"},
+                [Color.GREEN],
+                1,
+                1,
             )
-            token.is_token = True
             create_token(game, controller, token)

@@ -456,7 +456,9 @@ def _clone_token(token: Any) -> Any:
     clone.object_id = GameObject._next_id
     GameObject._next_id += 1
     # Break aliasing of mutable containers shared by the shallow copy.
-    for attr in ("card_types", "subtypes", "supertypes"):
+    # ("colors" is the explicit colour identity factory-minted tokens carry —
+    # see cards/fdn/tokens.py — and is as mutable as the other three.)
+    for attr in ("card_types", "subtypes", "supertypes", "colors"):
         val = getattr(clone, attr, None)
         if isinstance(val, set):
             setattr(clone, attr, set(val))

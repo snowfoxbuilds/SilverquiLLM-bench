@@ -9,7 +9,7 @@ from engine.continuous_effects import (
     Layer,
     SubLayer,
 )
-from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+from engine.types import CardType, Color, Keyword, ManaCost, TargetRequirement, Zone
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
@@ -27,17 +27,10 @@ def _get_chosen_target(card: Any, game: Any) -> Any:
     return None
 def _create_human_token(game: GameState, player: Any) -> Any:
     """Create a 1/1 white Human creature token on *player*'s battlefield."""
-    from engine.card import Creature
+    from cards.fdn.tokens import make_creature_token
     from engine.game import create_token
 
-    token = Creature(
-        name="Human Token",
-        mana_cost=ManaCost(),
-        rules_text="",
-        base_power=1,
-        base_toughness=1,
-    )
-    token.card_types = {CardType.CREATURE}
+    token = make_creature_token("Human", {"Human"}, [Color.WHITE], 1, 1)
     create_token(game, player, token)
     return token
 

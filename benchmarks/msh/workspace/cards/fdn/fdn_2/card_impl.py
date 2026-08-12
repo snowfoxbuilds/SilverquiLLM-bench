@@ -1,9 +1,10 @@
 """Card implementation for Arahbo, the First Fang."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
+from cards.fdn.tokens import make_creature_token
 from engine.card import Creature
 from engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
-from engine.types import CardType, Keyword, ManaCost, Supertype
+from engine.types import CardType, Color, Keyword, ManaCost, Supertype
 from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -86,6 +87,6 @@ class ArahboTheFirstFang(Creature):
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return
-            token = Creature(name='Cat', subtypes={'Cat'}, base_power=1, base_toughness=1)
+            token = make_creature_token("Cat", {"Cat"}, [Color.WHITE], 1, 1)
             create_token(game, ctrl, token)
         game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_etb_condition, effect=_etb_effect, source=self, controller=controller))

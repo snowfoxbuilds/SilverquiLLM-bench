@@ -14,9 +14,11 @@ from engine.card import Creature
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, GameRef
 from engine.intent_player import Intent
+from engine.protection import get_colors
 from engine.stack import resolve_top_of_stack
 from engine.types import (
     CardType,
+    Color,
     Keyword,
     ManaCost,
     ManaType,
@@ -135,3 +137,26 @@ class TestFaebloomTrickRevalidation:
         # Tap did nothing; the tokens still appeared.
         assert their_bear.is_tapped is False
         assert len(_faeries(game, p1)) == 2
+
+
+class TestFaebloomTrickTokenIdentity:
+    """The two minted tokens carry the exact 1/1 blue flying Faerie identity
+    (subtypes, explicit blue colour, base P/T, flying, ``is_token``) that
+    replay correlation keys to the Faerie grpId."""
+
+    def test_tokens_are_blue_flying_faeries(self):
+        game = create_game()
+        p1 = game.players[0]
+        trick = FaebloomTrick(owner=p1, controller=p1)
+        # No opponent creature / no chosen target: the reflexive tap is a no-op
+        # and only the two-token mint runs.
+        trick.on_resolve(game)
+
+        faeries = _faeries(game, p1)
+        assert len(faeries) == 2
+        for tok in faeries:
+            assert tok.subtypes == {"Faerie"}
+            assert get_colors(tok) == {Color.BLUE}
+            assert (tok.base_power, tok.base_toughness) == (1, 1)
+            assert Keyword.FLYING & tok.keywords
+            assert tok.is_token is True

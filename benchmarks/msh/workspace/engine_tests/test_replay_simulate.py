@@ -3932,30 +3932,35 @@ class TestGoldenGame:
         fabrication, so the equip cost stays unpayable. This fixture pins that
         limitation so a future funding fix (or regression) is visible.
 
-        Phase G (arrival-aligned resolution) moves this pin, intentionally:
-        arrival-aligned resolution clears the run-length-1 zone transients —
-        STATE_MISMATCH 86 -> 73, successful comparisons 809 -> 826. The
-        occurrence gate contributes the last leg (77 -> 73 / 823 -> 826): ETB
-        triggers pushed by an arriving permanent are no longer resolved in the
-        same arrival step, so their effects land at their own GRE-driven
-        cadence. The ENGINE_ERROR funding limitation (6) is untouched, so a
-        funding fix or regression stays visible; tapped/life shift within the
-        transient set as the arrival-step comparisons resolve."""
+        Phase G (arrival-aligned resolution) moved this pin: STATE_MISMATCH
+        86 -> 73, successful comparisons 809 -> 826, with the ENGINE_ERROR
+        funding limitation (6) untouched.
+
+        Phase H (token minters) moves it again, intentionally: the cleared
+        identity is the 1/1 white Soldier 94161 — Resolute Reinforcements'
+        subtype fix ({Human, Soldier} -> {Soldier}) lets its token correlate
+        and become producible. (Food 94177 and Treasure 94178 remain MISSING
+        in this game: their only minter here, Goldvein Pick, sits on a dormant
+        combat-damage trigger — issue #44.) STATE_MISMATCH 73 -> 69
+        (zone_contents 41 -> 37, the correlated token shadows), MISSING_CARD
+        4 -> 3 (the Soldier), successful comparisons 826 -> 830. The
+        ENGINE_ERROR funding limitation (6) is STILL untouched, so a funding
+        fix or regression stays visible; tapped/life unchanged."""
         report, by_type, by_category = self._fingerprint(self.FIXTURE_EQUIP)
         assert report.total_snapshots == 894
-        assert report.successful_comparisons == 826
+        assert report.successful_comparisons == 830
         assert dict(by_type) == {
-            "STATE_MISMATCH": 73,
+            "STATE_MISMATCH": 69,
             "ENGINE_ERROR": 6,
             "ILLEGAL_ACTION": 4,
-            "MISSING_CARD": 4,
+            "MISSING_CARD": 3,
         }
         assert dict(by_category) == {
-            "zone_contents": 41,
+            "zone_contents": 37,
             "tapped_state": 21,
             "life_total": 15,
             "ENGINE_ERROR": 6,
-            "MISSING_CARD": 4,
+            "MISSING_CARD": 3,
         }
 
 

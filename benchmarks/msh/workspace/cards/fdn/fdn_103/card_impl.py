@@ -1,8 +1,9 @@
 """Card implementation for Elfsworn Giant."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
+from cards.fdn.tokens import make_creature_token
 from engine.card import Creature
-from engine.types import CardType, Keyword, ManaCost
+from engine.types import CardType, Color, Keyword, ManaCost
 from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -52,6 +53,6 @@ class ElfswornGiant(Creature):
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
                 return
-            token = Creature(name='Elf Warrior', subtypes={'Elf', 'Warrior'}, base_power=1, base_toughness=1, rules_text='')
+            token = make_creature_token('Elf Warrior', {'Elf', 'Warrior'}, [Color.GREEN], 1, 1)
             create_token(game, ctrl, token)
         game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_landfall_condition, effect=_landfall_effect, source=self, controller=controller))

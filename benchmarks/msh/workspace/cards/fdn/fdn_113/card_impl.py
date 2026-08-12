@@ -1,9 +1,10 @@
 """Card implementation for Sylvan Scavenging."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature, Enchantment
+from cards.fdn.tokens import make_creature_token
+from engine.card import Enchantment
 from engine.card_queries import choose_mode, choose_object
-from engine.types import CardType, ManaCost, Zone
+from engine.types import CardType, Color, ManaCost, Zone
 from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -66,6 +67,6 @@ class SylvanScavenging(Enchantment):
                 if target is not None and _is_on_battlefield(game, target):
                     add_counter(game, target, '+1/+1')
             elif chosen_mode == 'token' and has_power_4:
-                token = Creature(name='Raccoon', subtypes={'Raccoon'}, base_power=3, base_toughness=3, rules_text='')
+                token = make_creature_token('Raccoon', {'Raccoon'}, [Color.GREEN], 3, 3)
                 create_token(game, ctrl, token)
         game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

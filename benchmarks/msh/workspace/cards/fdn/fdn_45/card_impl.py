@@ -1,9 +1,10 @@
 """Card implementation for Kiora, the Rising Tide."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
+from cards.fdn.tokens import make_creature_token
 from engine.card import Creature
 from engine.card_queries import choose_object, query_yes_no
-from engine.types import Keyword, ManaCost, Supertype, Zone
+from engine.types import Color, Keyword, ManaCost, Supertype, Zone
 from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -70,6 +71,9 @@ class KioraTheRisingTide(Creature):
                 return
             create_scion = query_yes_no(game, ctrl, 'Create Scion of the Deep token?', source_card=source)
             if create_scion:
-                token = Creature(name='Scion of the Deep', supertypes={Supertype.LEGENDARY}, subtypes={'Octopus'}, base_power=8, base_toughness=8)
+                token = make_creature_token(
+                    'Scion of the Deep', {'Octopus'}, [Color.BLUE], 8, 8,
+                    supertypes={Supertype.LEGENDARY},
+                )
                 create_token(game, ctrl, token)
         game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller))

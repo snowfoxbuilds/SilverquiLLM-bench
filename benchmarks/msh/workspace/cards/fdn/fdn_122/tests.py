@@ -17,7 +17,8 @@ from engine.card import Creature, Instant
 from engine.decisions import Decision, GameRef, UnmatchedQueryError
 from engine.events import EndStepTriggeredEvent, SpellCastTriggeredEvent
 from engine.intent_player import Intent
-from engine.types import ManaCost, Zone
+from engine.protection import get_colors
+from engine.types import Color, Keyword, ManaCost, Zone
 from test_utils import create_game, set_board_state
 
 
@@ -118,3 +119,29 @@ class TestKykarFlicker:
         assert any(getattr(c, "name", "") == "Spirit" for c in bf)
         assert p1.zones[Zone.BATTLEFIELD].contains(bear)
         assert not p1.zones[Zone.EXILE].contains(bear)
+
+
+class TestKykarSpiritToken:
+    """The token leg mints a 1/1 white Spirit creature token with flying."""
+
+    def test_spirit_token_has_spec_characteristics(self) -> None:
+        game, p1, kykar, bear = _flicker_setup()
+        p1.start_intent("kykar", Intent(
+            pattern=GameRef(card=frozenset({("name", "Kykar, Zephyr Awakener")})),
+            preferences=(Decision.mode("token"),),
+        ))
+        _cast_noncreature(game, p1)
+        p1.end_intent("kykar")
+
+        spirits = [
+            c
+            for c in p1.zones[Zone.BATTLEFIELD].get_all()
+            if getattr(c, "is_token", False) and getattr(c, "name", "") == "Spirit"
+        ]
+        assert len(spirits) == 1
+        spirit = spirits[0]
+        assert spirit.subtypes == {"Spirit"}
+        assert (spirit.base_power, spirit.base_toughness) == (1, 1)
+        assert spirit.is_token is True
+        assert get_colors(spirit) == {Color.WHITE}
+        assert Keyword.FLYING in spirit.keywords

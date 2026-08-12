@@ -43,13 +43,15 @@ class Electroduplicate(Sorcery):
         if controller is None:
             return
         token_kwargs: dict[str, Any] = {'name': getattr(target, 'name', 'Token'), 'subtypes': set(getattr(target, 'subtypes', set())), 'keywords': (getattr(target, 'keywords', None) or Keyword(0)) | Keyword.HASTE, 'base_power': getattr(target, 'base_power', 0), 'base_toughness': getattr(target, 'base_toughness', 0)}
-        if hasattr(target, 'colors'):
-            token_kwargs['colors'] = target.colors
         if hasattr(target, 'mana_cost') and target.mana_cost:
             token_kwargs['mana_cost'] = target.mana_cost
         if hasattr(target, 'rules_text'):
             token_kwargs['rules_text'] = target.rules_text
         token = Creature(**token_kwargs)
+        # ``colors`` is an explicit instance attribute (see cards/fdn/tokens.py),
+        # not a Creature constructor kwarg — copy it after construction.
+        if getattr(target, 'colors', None) is not None:
+            token.colors = set(target.colors)
         if hasattr(target, 'card_types'):
             token.card_types = set(target.card_types)
         create_token(game, controller, token)
