@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Creature, ManaAbility
 from engine.types import CardType, Keyword, ManaCost, Zone
-from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
@@ -29,42 +28,54 @@ class GiadaFontOfHope(Creature):
         super().__init__(**kwargs)
         self.is_legendary = True
 
-    def register_triggers(self, game: 'GameState') -> None:
-        """Register ETB trigger for other Angels entering."""
-        from collections import deque
-        from engine.game import add_counter
-        from engine.triggers import TriggerRegistration
+    def register_replacement_effects(self, game: 'GameState') -> None:
+        """Each other Angel you control enters with additional +1/+1 counters.
+
+        This is a genuine "enters with additional counters" replacement (rule
+        614.1c), not a triggered ability: it contributes to the entering Angel's
+        :class:`~engine.events.EntersBattlefieldReplacementEvent` while that
+        Angel is still off the battlefield, so the extra counters are on it *as*
+        it enters. The bonus is one +1/+1 counter for each Angel Giada's
+        controller *already* controls (the entering Angel is not yet on the
+        battlefield, so it is naturally excluded from the count).
+        """
+        from engine.events import EntersBattlefieldReplacementEvent
+        from engine.replacement_effects import ReplacementEffect
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
-        _angel_queue: deque = deque()
 
-        def _cond_with_capture(game: Any, event: dict) -> bool:
+        def _condition(game: Any, event: Any) -> bool:
             permanent = event.permanent
             if permanent is None or permanent is source:
                 return False
             ctrl = getattr(source, 'controller', None)
-            if getattr(permanent, 'controller', None) is not ctrl:
+            if getattr(event, 'controller', None) is not ctrl:
                 return False
-            if 'Angel' not in getattr(permanent, 'subtypes', set()):
-                return False
-            _angel_queue.append(permanent)
-            return True
+            return 'Angel' in getattr(permanent, 'subtypes', set())
 
-        def _final_effect(game: 'GameState') -> None:
+        def _replacement(game: 'GameState', event: Any) -> Any:
             ctrl = getattr(source, 'controller', None)
             if ctrl is None:
-                return
-            if not _angel_queue:
-                return
-            target = _angel_queue.popleft()
+                return event
             bf = game.get_battlefield(ctrl)
-            angel_count = 0
-            for obj in bf.get_all():
-                if 'Angel' in getattr(obj, 'subtypes', set()) and obj is not target:
-                    angel_count += 1
+            angel_count = sum(
+                1 for obj in bf.get_all()
+                if 'Angel' in getattr(obj, 'subtypes', set())
+                and obj is not event.permanent
+            )
             if angel_count > 0:
-                add_counter(game, target, '+1/+1', angel_count)
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_cond_with_capture, effect=_final_effect, source=self, controller=controller))
+                event.counters['+1/+1'] = (
+                    event.counters.get('+1/+1', 0) + angel_count
+                )
+            return event
+
+        game.replacement_manager.register(ReplacementEffect(
+            event_type=EntersBattlefieldReplacementEvent,
+            source=self,
+            condition=_condition,
+            replacement=_replacement,
+            controller=controller,
+        ))
 
     def get_mana_abilities(self) -> list:
         """Return the tap-for-white mana ability."""

@@ -123,6 +123,39 @@ def _collect_bound_names(tree: ast.AST) -> tuple[set[str], bool]:
     return bound, saw_wildcard
 
 
+def _iter_add_counter_calls(node: ast.AST):
+    """Yield ``add_counter(...)`` call nodes anywhere under *node*."""
+    for n in ast.walk(node):
+        if isinstance(n, ast.Call):
+            fn = n.func
+            if (isinstance(fn, ast.Name) and fn.id == "add_counter") or (
+                isinstance(fn, ast.Attribute) and fn.attr == "add_counter"
+            ):
+                yield n
+
+
+def _has_self_etb_marker(node: ast.AST) -> bool:
+    """True if *node* contains a self-ETB identity check ``<x>.permanent is <name>``.
+
+    This is the signature of a "this permanent enters" trigger condition (rule
+    603.3a self-entry), e.g. ``event.permanent is source``. It deliberately does
+    NOT match ``permanent is None`` (a bare-name None guard) or a landfall/other
+    condition that inspects the *entering* object's characteristics, so a
+    legitimate "whenever a land you control enters" doubler is not flagged.
+    """
+    for n in ast.walk(node):
+        if isinstance(n, ast.Compare) and len(n.ops) == 1 and isinstance(n.ops[0], ast.Is):
+            left = n.left
+            comp = n.comparators[0]
+            if (
+                isinstance(left, ast.Attribute)
+                and left.attr == "permanent"
+                and isinstance(comp, ast.Name)
+            ):
+                return True
+    return False
+
+
 def find_impl_defects(source: str) -> list[tuple[int, str]]:
     """Return ``(lineno, message)`` findings for one card-impl source string.
 
@@ -245,6 +278,39 @@ def find_impl_defects(source: str) -> list[tuple[int, str]]:
         ):
             findings.append((node.lineno, f"undefined name '{node.id}'"))
 
+    # (h) enters-with-counters revert: a card whose oracle text says it "enters
+    # with … counter(s)" (rule 614.1c) must land those counters through the
+    # enters_battlefield_with replacement hook — never re-add them via on_resolve
+    # or a self-ETB trigger (both let the permanent exist transiently without the
+    # counters, so a 0/0 dies to SBAs before they land). The text gate keeps this
+    # off cards that only add counters later (landfall doublers, +1/+1 synergy).
+    low = source.lower()
+    if "enters with" in low and "counter" in low:
+        for fn in ast.walk(tree):
+            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if fn.name == "on_resolve":
+                for call in _iter_add_counter_calls(fn):
+                    findings.append((
+                        call.lineno,
+                        (
+                            "(h) entry counters via on_resolve add_counter — an "
+                            "'enters with … counter(s)' card must land them "
+                            "through the enters_battlefield_with hook (rule "
+                            "614.1c), not on_resolve"
+                        ),
+                    ))
+            elif fn.name == "register_triggers" and _has_self_etb_marker(fn):
+                for call in _iter_add_counter_calls(fn):
+                    findings.append((
+                        call.lineno,
+                        (
+                            "(h) entry counters via a self-ETB trigger "
+                            "add_counter — use the enters_battlefield_with hook "
+                            "(rule 614.1c), not a self-entering triggered ability"
+                        ),
+                    ))
+
     findings.sort()
     return findings
 
@@ -323,6 +389,77 @@ class TestGuardCatchesEachOriginalDefect:
             "sublayer=SubLayer.MODIFICATION, apply=_apply)\n"
         )
         assert any("SubLayer.MODIFICATION" in m for m in self._messages(src))
+
+    def test_h_enters_with_counters_on_resolve_revert_is_flagged(self) -> None:
+        # Reverting Wildwood/Mossborn/Goblin Boarders to landing entry counters
+        # in on_resolve must be caught.
+        src = (
+            "class C:\n"
+            "    '''This creature enters with X +1/+1 counters on it.'''\n"
+            "    def on_resolve(self, game):\n"
+            "        from engine.game import add_counter\n"
+            "        add_counter(game, self, '+1/+1', self.x_value)\n"
+        )
+        assert any(
+            "enters_battlefield_with hook" in m and "on_resolve" in m
+            for m in self._messages(src)
+        )
+
+    def test_h_enters_with_counters_self_etb_trigger_revert_is_flagged(self) -> None:
+        # Reverting Gnarlid to a self-ETB trigger that adds the entry counters.
+        src = (
+            "class C:\n"
+            "    '''If this creature was kicked, it enters with two +1/+1 "
+            "counters on it.'''\n"
+            "    def register_triggers(self, game):\n"
+            "        from engine.game import add_counter\n"
+            "        from engine.triggers import TriggerRegistration\n"
+            "        source = self\n"
+            "        def _cond(game, event):\n"
+            "            return event.permanent is source\n"
+            "        def _eff(g):\n"
+            "            add_counter(g, source, '+1/+1', 2)\n"
+            "        game.trigger_manager.register(TriggerRegistration(\n"
+            "            event_type=None, condition=_cond, effect=_eff, source=self))\n"
+        )
+        assert any(
+            "enters_battlefield_with hook" in m and "self-ETB" in m
+            for m in self._messages(src)
+        )
+
+    def test_h_landfall_doubler_to_self_is_not_flagged(self) -> None:
+        # Mossborn's landfall doubling adds counters to itself when a LAND
+        # enters — legitimate, not an entry counter. No self-ETB identity marker,
+        # so it must NOT be flagged even though the text says "enters with".
+        src = (
+            "class C:\n"
+            "    '''This creature enters with a +1/+1 counter on it. Landfall — "
+            "double its +1/+1 counters.'''\n"
+            "    def enters_battlefield_with(self, game, event):\n"
+            "        event.counters['+1/+1'] = 1\n"
+            "    def register_triggers(self, game):\n"
+            "        from engine.game import add_counter\n"
+            "        source = self\n"
+            "        def _cond(game, event):\n"
+            "            permanent = event.permanent\n"
+            "            if permanent is None:\n"
+            "                return False\n"
+            "            return 'land' in permanent.card_types\n"
+            "        def _eff(g):\n"
+            "            add_counter(g, source, '+1/+1', source.plus_one_counters)\n"
+        )
+        assert not any("enters_battlefield_with hook" in m for m in self._messages(src))
+
+    def test_h_enters_with_counters_hook_form_is_not_flagged(self) -> None:
+        # The sanctioned form — landing entry counters on the replacement event.
+        src = (
+            "class C:\n"
+            "    '''This creature enters with X +1/+1 counters on it.'''\n"
+            "    def enters_battlefield_with(self, game, event):\n"
+            "        if self.x_value > 0:\n"
+            "            event.counters['+1/+1'] = self.x_value\n"
+        )
+        assert not any("enters_battlefield_with hook" in m for m in self._messages(src))
 
     def test_direct_life_augassign_is_flagged(self) -> None:
         # player.life += N and player.life -= N both bypass the life triggers.

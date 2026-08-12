@@ -27,10 +27,13 @@ class MossbornHydra(Creature):
         kwargs.setdefault('rules_text', 'Trample\nThis creature enters with a +1/+1 counter on it.\nLandfall — Whenever a land you control enters, double the number of +1/+1 counters on this creature.')
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: 'GameState') -> None:
-        """ETB: enters with a +1/+1 counter."""
-        from engine.game import add_counter
-        add_counter(game, self, '+1/+1')
+    def enters_battlefield_with(self, game: 'GameState', event: Any) -> None:
+        """Enters with a +1/+1 counter (rule 614.1c replacement).
+
+        Unconditional, so the primitive alone fixes it — the 0/0 never exists
+        transiently. The Landfall trigger below then doubles from a nonzero base.
+        """
+        event.counters['+1/+1'] = event.counters.get('+1/+1', 0) + 1
 
     def register_triggers(self, game: 'GameState') -> None:
         from engine.triggers import TriggerRegistration

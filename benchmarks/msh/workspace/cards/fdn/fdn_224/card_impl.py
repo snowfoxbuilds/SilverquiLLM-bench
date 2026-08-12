@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, Any
 from engine.card import Creature, Instant, Mode, Sorcery
 from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
 from engine.types import CardType, Keyword, ManaCost, Zone
-from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
@@ -12,13 +11,6 @@ if TYPE_CHECKING:
 def _get_controller(card: Any) -> Any:
     """Return the controller of a card, or None."""
     return getattr(card, 'controller', None)
-
-def _self_etb_condition(source: Any):
-    """Return a condition callable that matches only when *source* enters."""
-
-    def _condition(game: Any, event: dict) -> bool:
-        return event.permanent is source
-    return _condition
 
 class GnarlidColony(Creature):
     """Gnarlid Colony — {1}{G} — 2/2 — Beast
@@ -40,15 +32,16 @@ class GnarlidColony(Creature):
         self.kicked: bool = False
         self.kicker_cost: ManaCost = ManaCost.parse('{2}{G}')
 
-    def register_triggers(self, game: GameState) -> None:
-        from engine.triggers import TriggerRegistration
+    def enters_battlefield_with(self, game: GameState, event: Any) -> None:
+        """Kicker: enters with two +1/+1 counters if it was kicked (614.1c).
 
-        def _etb_effect(g: GameState) -> None:
-            if self.kicked:
-                from engine.game import add_counter
-                add_counter(g, self, "+1/+1", 2)
-        reg = TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_etb_effect, source=self, controller=self.controller or self.owner)
-        game.trigger_manager.register(reg)
+        ``kicked`` is set from the cast's kicker option; the replay executor
+        derives it from the observed CastingTimeOption annotation. Absent
+        evidence it stays False and the creature enters as a plain 2/2 — no
+        counters are fabricated.
+        """
+        if self.kicked:
+            event.counters['+1/+1'] = event.counters.get('+1/+1', 0) + 2
 
     def get_continuous_effects(self) -> list[Any]:
         """Grant trample to each creature you control with a +1/+1 counter."""
