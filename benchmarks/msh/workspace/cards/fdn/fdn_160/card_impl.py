@@ -53,37 +53,34 @@ class AnOfferYouCantRefuse(Instant):
         )
         super().__init__(**kwargs)
 
+    def _is_noncreature_spell(self, stack_obj: Any) -> bool:
+        """True iff *stack_obj* is a noncreature-spell OCCURRENCE (not this cast).
+
+        ``StackObject.is_spell`` is the discriminator: a triggered/activated
+        ability may share its source card with a pending spell but is not
+        itself a spell, and must never be offered as a "target noncreature
+        spell".
+        """
+        from engine.types import CardType
+
+        if not getattr(stack_obj, "is_spell", False):
+            return False
+        source = getattr(stack_obj, "source", None)
+        if source is self:
+            return False
+        return CardType.CREATURE not in getattr(source, "card_types", set())
+
     def can_cast(self, game: "GameState") -> bool:
         """Cannot cast unless there's a noncreature spell on the stack."""
-        from engine.types import CardType
-
-        for stack_obj in game.stack.objects():
-            source = stack_obj.source
-            if source is self:
-                continue
-            card_types = getattr(source, "card_types", set())
-            # Must be a spell (has spell card types) and not a creature
-            is_spell = bool(card_types - {CardType.LAND})
-            if is_spell and CardType.CREATURE not in card_types:
-                return True
-        return False
+        return any(self._is_noncreature_spell(so) for so in game.stack.objects())
 
     def get_targets(self, game: "GameState") -> list:
-        """Target noncreature spell on the stack."""
-        from engine.types import CardType
-
-        def _filter(obj: Any) -> bool:
-            if obj is self:
-                return False
-            source = getattr(obj, "source", obj)
-            card_types = getattr(source, "card_types", set())
-            # Must be a spell (has spell card types, not just a land) and noncreature
-            is_spell = bool(card_types - {CardType.LAND})
-            return is_spell and CardType.CREATURE not in card_types
-
+        """Target noncreature spell on the stack — an exact StackObject occurrence."""
+        if not self.can_cast(game):
+            return []
         return [
             TargetRequirement(
-                filter_fn=_filter,
+                filter_fn=self._is_noncreature_spell,
                 description="target noncreature spell",
                 zone=Zone.STACK,
             )

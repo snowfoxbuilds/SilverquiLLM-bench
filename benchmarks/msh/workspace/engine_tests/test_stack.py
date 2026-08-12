@@ -562,14 +562,16 @@ class TestMoveSpellOffStack:
         return card
 
     def _cast(self, game, player, card, from_zone, mode=None):
-        """Free-cast *card* and return its StackObject."""
-        from engine.casting import CastMode, cast_spell_free
+        """Free-cast *card* and return its StackObject (the cast helper's own
+        return value — the occurrence identity of this one cast)."""
+        from engine.casting import cast_spell_free
 
         if mode is None:
-            cast_spell_free(game, player, card, from_zone)
+            so = cast_spell_free(game, player, card, from_zone)
         else:
-            cast_spell_free(game, player, card, from_zone, mode=mode)
-        (so,) = [s for s in game.stack._items if s.source is card]
+            so = cast_spell_free(game, player, card, from_zone, mode=mode)
+        assert so is game.stack.peek()  # the just-pushed occurrence
+        assert so.source is card
         return so
 
     def test_countered_ordinary_spell_to_owner_graveyard(self):

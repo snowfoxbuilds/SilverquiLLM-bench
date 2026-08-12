@@ -89,6 +89,15 @@ class StackObject:
             mode=CastMode.FLASHBACK)``) and applied by
             :func:`move_spell_off_stack` — the single primitive through which
             every spell leaves the stack.
+        is_spell: ``True`` iff this stack object is a **spell** — a cast
+            occurrence pushed by :func:`engine.casting.cast_spell` /
+            ``cast_spell_free``, or a spell copy from :func:`copy_spell`
+            (a copy of a spell is a spell on the stack, rule 707.10a).
+            Triggered and activated abilities keep the default ``False``: an
+            ability may share its ``source`` card with a pending spell, but it
+            is not that spell — "counter target spell" effects and
+            ``Zone.STACK`` target enumeration select spell occurrences by this
+            flag, never by inspecting the shared source card.
     """
 
     source: Any
@@ -100,6 +109,7 @@ class StackObject:
     event_state: Any = None
     prior_qualifying_casts: int | None = None
     departure_zone: Zone | None = None
+    is_spell: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +137,16 @@ def object_current_zone(game: GameState, obj: Any) -> str | None:
     Zone-generic on purpose: a captured target may be a battlefield permanent
     (creatures) or a card in a graveyard (Scavenging Ooze), and both must be
     revalidated by the same helper.
+
+    A :class:`StackObject` target (a spell targeted on the stack — counterspell
+    targets are exact cast occurrences, never source cards) occupies ``"stack"``
+    exactly while **that occurrence** is on ``game.stack`` (identity), and no
+    zone once it departs. A StackObject never re-enters the stack — a recast
+    mints a new occurrence — so the same-stint check makes a departed occurrence
+    permanently illegal even when its source card is back in a stack zone.
     """
+    if isinstance(obj, StackObject):
+        return Zone.STACK.value if game.stack.contains(obj) else None
     for player in game.players:
         zones = player.zones
         for zone in Zone:
@@ -292,6 +311,28 @@ class Stack:
         """Return all stack objects ordered from top to bottom."""
         return list(reversed(self._items))
 
+    def contains(self, obj: Any) -> bool:
+        """Return ``True`` iff exactly *obj* is on the stack, by **identity**.
+
+        Never by equality — StackObject is a dataclass whose ``==`` compares
+        fields, and two casts of the same card are distinct occurrences that
+        must never be conflated.
+        """
+        return any(item is obj for item in self._items)
+
+    def remove_object(self, obj: Any) -> bool:
+        """Remove exactly *obj* from the stack, by **identity**, at most once.
+
+        Returns ``True`` if it was found and removed, ``False`` otherwise.
+        The identity-based counterpart of ``list.remove`` (which would use
+        dataclass field equality and could remove a different occurrence).
+        """
+        for i, item in enumerate(self._items):
+            if item is obj:
+                self._items.pop(i)
+                return True
+        return False
+
     def has_source(self, source: Any) -> bool:
         """Return ``True`` if any stack object's source is *source* (identity)."""
         return any(obj.source is source for obj in self._items)
@@ -359,13 +400,7 @@ def move_spell_off_stack(
     """
     from engine.zones import move_to_zone
 
-    on_stack = any(item is stack_obj for item in game.stack._items)
-    if on_stack:
-        for i, item in enumerate(game.stack._items):
-            if item is stack_obj:
-                game.stack._items.pop(i)
-                break
-    elif not resolving:
+    if not game.stack.remove_object(stack_obj) and not resolving:
         # Countering fizzle: this occurrence already left the stack.
         return False
 
@@ -444,6 +479,10 @@ def copy_spell(
         controller=controller,
         targets=targets,
         activation_context=context,
+        # A copy of a spell is a spell on the stack (rule 707.10a): it can be
+        # targeted/countered like the original. Its departure_zone stays None —
+        # a copy is not a flashback cast even when the original was.
+        is_spell=True,
     )
 
     def _copy_resolve(g: GameState) -> None:

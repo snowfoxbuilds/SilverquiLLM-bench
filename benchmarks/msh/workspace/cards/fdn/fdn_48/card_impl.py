@@ -52,35 +52,30 @@ class Refute(Instant):
         )
         super().__init__(**kwargs)
 
+    def _is_counterable_spell(self, stack_obj: Any) -> bool:
+        """True iff *stack_obj* is a spell OCCURRENCE this Refute may counter.
+
+        ``StackObject.is_spell`` is the discriminator: a triggered or activated
+        ability may share its source card with a pending spell but is not that
+        spell, and must never be offered as a "target spell". Own-cast
+        exclusion is by source identity (this card's own occurrence).
+        """
+        return (
+            getattr(stack_obj, "is_spell", False)
+            and getattr(stack_obj, "source", None) is not self
+        )
+
     def can_cast(self, game: "GameState") -> bool:
         """Cannot cast unless there's a spell on the stack to counter."""
-        from engine.stack import StackObject
-
-        for stack_obj in game.stack.objects():
-            source = stack_obj.source
-            if source is self:
-                continue
-            # Only target spells (not triggered/activated abilities)
-            if getattr(stack_obj, "is_spell", True):
-                return True
-        return False
+        return any(self._is_counterable_spell(so) for so in game.stack.objects())
 
     def get_targets(self, game: "GameState") -> list:
-        """Target spell on the stack."""
-        from engine.stack import StackObject
-
-        targets = []
-        for stack_obj in game.stack.objects():
-            source = stack_obj.source
-            if source is self:
-                continue
-            if getattr(stack_obj, "is_spell", True):
-                targets.append(stack_obj)
-        if not targets:
+        """Target spell on the stack — an exact StackObject occurrence."""
+        if not self.can_cast(game):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj: obj is not self and getattr(obj, "is_spell", True),
+                filter_fn=self._is_counterable_spell,
                 description="target spell",
                 zone=Zone.STACK,
             )

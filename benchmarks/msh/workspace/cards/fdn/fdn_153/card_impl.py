@@ -51,32 +51,31 @@ class EssenceScatter(Instant):
         kwargs.setdefault("rules_text", "Counter target creature spell.")
         super().__init__(**kwargs)
 
+    def _is_creature_spell(self, stack_obj: Any) -> bool:
+        """True iff *stack_obj* is a creature-spell OCCURRENCE (not this cast).
+
+        ``StackObject.is_spell`` is the discriminator: an ability on the stack
+        may share its source card with a creature spell (or be sourced by a
+        battlefield creature) but is not itself a creature spell.
+        """
+        if not getattr(stack_obj, "is_spell", False):
+            return False
+        source = getattr(stack_obj, "source", None)
+        if source is self:
+            return False
+        return CardType.CREATURE in getattr(source, "card_types", set())
+
     def can_cast(self, game: GameState) -> bool:
         """Cannot cast unless a creature spell is on the stack."""
-        for stack_obj in game.stack.objects():
-            source = stack_obj.source
-            if source is self:
-                continue
-            card_types = getattr(source, "card_types", set())
-            if CardType.CREATURE in card_types:
-                return True
-        return False
+        return any(self._is_creature_spell(so) for so in game.stack.objects())
 
     def get_targets(self, game: GameState) -> list[Any]:
-        """Target creature spell on the stack."""
-        targets: list[Any] = []
-        for stack_obj in game.stack.objects():
-            source = stack_obj.source
-            if source is self:
-                continue
-            card_types = getattr(source, "card_types", set())
-            if CardType.CREATURE in card_types:
-                targets.append(stack_obj)
-        if not targets:
+        """Target creature spell on the stack — an exact StackObject occurrence."""
+        if not self.can_cast(game):
             return []
         return [
             TargetRequirement(
-                filter_fn=lambda obj: CardType.CREATURE in getattr(getattr(obj, "source", obj), "card_types", set()),
+                filter_fn=self._is_creature_spell,
                 description="target creature spell",
                 zone=Zone.STACK,
             )

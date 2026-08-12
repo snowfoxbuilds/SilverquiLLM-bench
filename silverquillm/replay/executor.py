@@ -648,6 +648,16 @@ class ReplayExecutor:
         # from _engine_cards because the instance-map rebuild (each resync)
         # clears that dict and skips stack zones.
         self._pending_stack: dict[int, Any] = {}
+        # GRE stack iid -> the exact engine StackObject the executor's cast
+        # pushed for that GRE cast identity. The card map above cannot answer
+        # "is THIS pending spell still on the engine stack?": a source card is
+        # not a unique occurrence — a triggered ability the resolution pushes
+        # shares the card, and copies/recasts mint new occurrences of it. Every
+        # lifecycle decision (arrival resolution, stack-exit resolution, target
+        # preference binding) uses this occurrence identity; the card map is
+        # kept for consumers that need the card (zone moves, _engine_cards
+        # updates). Entries are popped together with _pending_stack.
+        self._pending_stack_objs: dict[int, Any] = {}
         # Combat state machine (simulate mode): one declaration, one block
         # assignment, and one damage pass per GRE damage step per combat.
         self._combat_active: bool = False
@@ -2595,6 +2605,17 @@ class ReplayExecutor:
             if tid in self.players:
                 preferences.append(Decision.player(seat=tid))
                 continue
+            # A target that is a pending spell binds to its exact StackObject
+            # occurrence: Zone.STACK target queries offer occurrences (not
+            # source cards), so the preference must name the occurrence's own
+            # minted instance id — a card-stint or name preference could match
+            # a different cast/copy of the same card.
+            so = self._pending_stack_objs.get(tid)
+            if so is not None and self._occurrence_on_stack(so):
+                occ_iid = self._stack_occurrence_instance_id(so)
+                if occ_iid is not None:
+                    preferences.append(Decision.obj(instance=occ_iid))
+                    continue
             target = self._engine_cards.get(tid)
             if target is None:
                 continue
@@ -2616,6 +2637,20 @@ class ReplayExecutor:
                 if player.zones[zone].contains(card):
                     return self.game.refs.instance_id(card, zone)
         return None
+
+    def _stack_occurrence_instance_id(self, stack_obj: Any) -> int | None:
+        """The engine-minted instance id of a StackObject occurrence itself.
+
+        Matches the id the engine's Zone.STACK target enumeration mints for the
+        occurrence (``refs.instance_id(stack_obj, "stack")``), so a preference
+        built here selects exactly that occurrence among the offered options.
+        ``None`` for an engine without a refs registry.
+        """
+        if self.game is None or not hasattr(self.game, "refs"):
+            return None
+        from engine.types import Zone
+
+        return self.game.refs.instance_id(stack_obj, Zone.STACK.value)
 
     def _simulate_spell_cast(
         self,
@@ -2658,8 +2693,9 @@ class ReplayExecutor:
                 pattern=GameRef(card=frozenset({("name", card.name)})),
                 preferences=preferences,
             ))
+        stack_obj = None
         try:
-            cast_spell(self.game, player, card)
+            stack_obj = cast_spell(self.game, player, card)
         except Exception as exc:
             result.engine_failures.append(
                 f"cast_spell {action.card_name} (seat {action.player_seat_id}): "
@@ -2680,6 +2716,7 @@ class ReplayExecutor:
         if action.instance_id:
             self._engine_cards[action.instance_id] = card
             self._pending_stack[action.instance_id] = card
+            self._record_pending_occurrence(action.instance_id, card, stack_obj)
 
     def _resolve_stack_object_for(self, card: Any) -> bool:
         """Resolve the engine StackObject whose source is *card*, if any."""
@@ -2690,6 +2727,47 @@ class ReplayExecutor:
             return False
         stack_obj.on_resolve(self.game)
         return True
+
+    def _record_pending_occurrence(
+        self, gre_iid: int, card: Any, stack_obj: Any
+    ) -> None:
+        """Retain the exact StackObject pushed for a driven cast under *gre_iid*.
+
+        *stack_obj* is the cast helper's return value. An engine whose cast
+        helpers predate the occurrence return (the frozen SOS workspace)
+        returns ``None`` — then recover the occurrence as the topmost stack
+        object sourced by *card*, which immediately after THIS executor's own
+        cast call is unambiguous (the spell is pushed last; anything a cast
+        trigger pushed sits below it). If none exists (oracle-fallback cast:
+        the card sits in a stack zone with no StackObject), no occurrence is
+        recorded and the occurrence-gated paths (arrival resolution, exact
+        stack-exit resolution, stack-target preferences) never fire for this
+        id — the resync reconciles instead.
+        """
+        game = self.game
+        if stack_obj is None and game is not None:
+            stack_obj = next(
+                (
+                    o
+                    for o in reversed(game.stack._items)
+                    if getattr(o, "source", None) is card
+                ),
+                None,
+            )
+        if stack_obj is not None:
+            self._pending_stack_objs[gre_iid] = stack_obj
+
+    def _occurrence_on_stack(self, stack_obj: Any) -> bool:
+        """True iff exactly *stack_obj* is on the engine stack, by identity.
+
+        Never by equality (StackObject is a field-compared dataclass) and never
+        by source card (a trigger may share the card; copies/recasts mint new
+        occurrences).
+        """
+        game = self.game
+        if game is None or stack_obj is None:
+            return False
+        return any(item is stack_obj for item in game.stack._items)
 
     def _resolve_arrived_spells(
         self, snapshot: GameSnapshot, result: StepResult
@@ -2706,20 +2784,27 @@ class ReplayExecutor:
         family: a ``zone_contents`` battlefield ``snapshot_extra`` that
         self-corrects the very next snapshot.
 
-        The trigger is strict, evidence-aligned GRE attestation: a pending spell
-        is resolved only when the CURRENT snapshot lists its object on a
-        battlefield (by the id it was cast under, or that id's ObjectIdChanged
-        successor this snapshot). No attestation → the object stays pending and
-        the divergence stands honestly (a countered/fizzled spell GRE never
-        places on the battlefield is never speculatively resolved here).
+        The trigger is strict, evidence-aligned GRE attestation of the exact
+        occurrence: the top of the engine stack is resolved only when it IS a
+        retained pending-spell StackObject (``_pending_stack_objs`` — identity,
+        never ``top.source``: a triggered ability may share its source card
+        with the spell, and copies/recasts mint new occurrences of it) AND the
+        CURRENT snapshot lists that occurrence's object on a battlefield (by
+        the id it was cast under, or that id's ObjectIdChanged successor this
+        snapshot). No attestation → the object stays pending and the divergence
+        stands honestly (a countered/fizzled spell GRE never places on the
+        battlefield is never speculatively resolved here).
 
         Stack order is respected: only the top of the engine stack is resolved,
-        and the loop stops at the first object GRE has not attested, so nothing
-        is ever resolved out from under an object above it. In the common case
-        the engine stack holds exactly the one just-cast spell. An ETB effect the
-        resolution registers (a trigger pushed onto the stack, an enters-with
-        counter) is left for its own machinery — a trigger newly on top is not a
-        pending spell, so the loop halts on it.
+        and the loop stops at the first top that is not an attested pending
+        spell, so nothing is ever resolved out from under an object above it.
+        In the common case the engine stack holds exactly the one just-cast
+        spell. An ETB effect the resolution registers (a trigger pushed onto
+        the stack, an enters-with counter) is left for its own machinery — a
+        newly pushed trigger is not in the pending-occurrence map (even though
+        its ``source`` is the just-resolved card), so the loop halts on it and
+        the trigger resolves only when its own GRE evidence (an
+        ``ability_resolution`` action or the resync flush) drives it.
         """
         game = self.game
         if game is None or game.stack.is_empty():
@@ -2729,15 +2814,16 @@ class ReplayExecutor:
         bf_ids = self._gre_battlefield_aids(snapshot)
         id_changes = extract_object_id_changes(snapshot.annotations)
 
-        # Reverse map each pending spell's engine card to the GRE id(s) it was
-        # cast under, so a battlefield object can be traced back to its spell.
-        card_gre_ids: dict[int, set[int]] = {}
-        for gre_id, card in self._pending_stack.items():
-            if card is not None:
-                card_gre_ids.setdefault(id(card), set()).add(gre_id)
+        # Reverse map each pending OCCURRENCE to the GRE id(s) it was cast
+        # under, so the top of the stack can be recognized as a specific
+        # pending spell (id(...) keys are safe: the map holds the references).
+        occurrence_gre_ids: dict[int, set[int]] = {}
+        for gre_id, so in self._pending_stack_objs.items():
+            if so is not None:
+                occurrence_gre_ids.setdefault(id(so), set()).add(gre_id)
 
-        def attested(card: Any) -> bool:
-            for gid in card_gre_ids.get(id(card), ()):
+        def attested(gids: set[int]) -> bool:
+            for gid in gids:
                 if gid in bf_ids:
                     return True
                 succ = id_changes.get(gid)
@@ -2749,9 +2835,14 @@ class ReplayExecutor:
         while not game.stack.is_empty() and guard < 50:
             guard += 1
             top = game.stack.peek()
+            gids = occurrence_gre_ids.get(id(top), set())
+            if not gids or not attested(gids):
+                # Respect stack order — stop at the first top that is not an
+                # attested pending spell (an unattested spell, or any object
+                # that is not a pending cast occurrence at all: a trigger, an
+                # ability, a copy the executor did not cast).
+                break
             card = getattr(top, "source", None)
-            if card is None or not attested(card):
-                break  # respect stack order — stop at the first non-arrived top
             game.stack.pop()
             try:
                 top.on_resolve(game)
@@ -2762,11 +2853,13 @@ class ReplayExecutor:
                     f"arrival resolution {getattr(card, 'name', '?')}: "
                     f"{type(exc).__name__}: {exc}"
                 )
-            # The pending object is now resolved: drop it from the pending map
-            # and point _engine_cards at the resolved card under every id it was
-            # known by (including the battlefield id it may have changed into).
-            for gid in list(card_gre_ids.get(id(card), ())):
+            # The pending occurrence is now resolved: drop it from both pending
+            # maps and point _engine_cards at the resolved card under every id
+            # it was known by (including the battlefield id it may have changed
+            # into).
+            for gid in gids:
                 self._pending_stack.pop(gid, None)
+                self._pending_stack_objs.pop(gid, None)
                 self._engine_cards[gid] = card
                 succ = id_changes.get(gid)
                 if succ is not None:
@@ -2793,10 +2886,14 @@ class ReplayExecutor:
             (o for o, n in id_changes.items() if n == action.instance_id), None
         )
         card = None
+        stack_obj = None
         if orig_iid is not None:
             card = self._pending_stack.pop(orig_iid, None) or self._engine_cards.get(orig_iid)
+            stack_obj = self._pending_stack_objs.pop(orig_iid, None)
         if card is None:
             card = self._pending_stack.pop(action.instance_id, None) or self._engine_cards.get(action.instance_id)
+        if stack_obj is None:
+            stack_obj = self._pending_stack_objs.pop(action.instance_id, None)
 
         if (
             action.dest_zone == "ZoneType_Stack"
@@ -2813,8 +2910,27 @@ class ReplayExecutor:
 
         if action.source_zone == "ZoneType_Stack" and card is not None:
             # Spell resolution — run the queued engine resolution if present.
+            # Prefer the exact retained occurrence for this GRE id: popping by
+            # source card would be ambiguous when the card is shared (a pending
+            # trigger, a copy, a recast under another id). Fall back to
+            # pop_by_source only when no occurrence was retained (oracle
+            # fallback) or it already left the stack (arrival-resolved earlier
+            # this step — then no same-source object should be consumed here).
             try:
-                resolved = self._resolve_stack_object_for(card)
+                if stack_obj is not None:
+                    items = self.game.stack._items
+                    idx = next(
+                        (i for i, item in enumerate(items) if item is stack_obj),
+                        None,
+                    )
+                    if idx is not None:
+                        items.pop(idx)
+                        stack_obj.on_resolve(self.game)
+                    # else: the exact occurrence already departed (resolved or
+                    # countered earlier); its card needs no zone move here.
+                    resolved = True
+                else:
+                    resolved = self._resolve_stack_object_for(card)
             except Exception as exc:
                 # Per-action failure, not a step abort (audit: this was the
                 # second unguarded on_resolve site). The stack object was
@@ -2887,7 +3003,7 @@ class ReplayExecutor:
         ):
             cast_kwargs["mode"] = CastMode.FLASHBACK
         try:
-            self._with_target_intent(
+            stack_obj = self._with_target_intent(
                 action, prev_snapshot, curr_snapshot,
                 lambda: cast_spell_free(
                     self.game, player, card, Zone(src), **cast_kwargs
@@ -2903,6 +3019,7 @@ class ReplayExecutor:
         if action.instance_id:
             self._engine_cards[action.instance_id] = card
             self._pending_stack[action.instance_id] = card
+            self._record_pending_occurrence(action.instance_id, card, stack_obj)
 
     def _simulate_ability_resolution(
         self,

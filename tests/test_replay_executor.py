@@ -1494,9 +1494,10 @@ class TestArrivalAlignedResolution:
     first attests its permanent on the battlefield — pulling a silent
     stack->battlefield resolution forward to before comparison.
 
-    The trigger is strict GRE battlefield attestation, and resolution runs only
-    from the top of the engine stack, so nothing is ever resolved on speculation
-    or out of stack order.
+    The trigger is strict GRE battlefield attestation of the exact pending
+    StackObject OCCURRENCE (never its source card — a trigger may share the
+    card), and resolution runs only from the top of the engine stack, so
+    nothing is ever resolved on speculation or out of stack order.
     """
 
     def _sim_executor(self) -> ReplayExecutor:
@@ -1514,8 +1515,9 @@ class TestArrivalAlignedResolution:
         self, ex: ReplayExecutor, gre_id: int, seat: int = 1, grp: int = MOUNTAIN
     ):
         """A card on the engine STACK whose StackObject resolves it onto the
-        battlefield, registered in _pending_stack under *gre_id* (mirrors the
-        state _simulate_spell_cast leaves after driving a cast)."""
+        battlefield, registered in _pending_stack (card) and
+        _pending_stack_objs (exact occurrence) under *gre_id* — mirrors the
+        state _simulate_spell_cast leaves after driving a cast."""
         from engine.stack import StackObject
         from engine.types import Zone
 
@@ -1529,11 +1531,12 @@ class TestArrivalAlignedResolution:
                 p.zones[Zone.STACK].remove(c)
             p.zones[Zone.BATTLEFIELD].add(c)
 
-        ex.game.stack.push(
-            StackObject(source=card, controller=player, on_resolve=_resolve)
-        )
+        stack_obj = StackObject(source=card, controller=player, on_resolve=_resolve)
+        ex.game.stack.push(stack_obj)
         ex._engine_cards[gre_id] = card
         ex._pending_stack[gre_id] = card
+        ex._record_pending_occurrence(gre_id, card, stack_obj)
+        assert ex._pending_stack_objs[gre_id] is stack_obj
         return card
 
     def _bf_snapshot(
@@ -1638,6 +1641,94 @@ class TestArrivalAlignedResolution:
         ex = self._sim_executor()
         ex._resolve_arrived_spells(self._bf_snapshot(2, [500]), StepResult(snapshot_id=2))
         assert ex.game.stack.is_empty()
+
+    def test_pushed_trigger_sharing_source_is_not_resolved(self) -> None:
+        """An ETB trigger the resolution pushes stays on the stack: it shares
+        its SOURCE card with the just-resolved spell, but it is not the pending
+        occurrence, so the loop halts on it. Its effect runs only when its own
+        machinery resolves it later — exactly once."""
+        from engine.stack import StackObject
+        from engine.types import Zone
+
+        ex = self._sim_executor()
+        player = ex.players[1]
+        card = ex._create_card(MOUNTAIN, player)
+        card._grp_id = MOUNTAIN
+        player.zones[Zone.STACK].add(card)
+        fired: list[str] = []
+
+        def _trigger_effect(game):
+            fired.append("etb")
+
+        def _resolve(game, c=card, p=player):
+            if p.zones[Zone.STACK].contains(c):
+                p.zones[Zone.STACK].remove(c)
+            p.zones[Zone.BATTLEFIELD].add(c)
+            # The permanent's own ETB trigger: SAME source card, new occurrence.
+            game.stack.push(
+                StackObject(source=c, controller=p, on_resolve=_trigger_effect)
+            )
+
+        spell_obj = StackObject(source=card, controller=player, on_resolve=_resolve)
+        ex.game.stack.push(spell_obj)
+        ex._engine_cards[500] = card
+        ex._pending_stack[500] = card
+        ex._record_pending_occurrence(500, card, spell_obj)
+
+        ex._resolve_arrived_spells(self._bf_snapshot(2, [500]), StepResult(snapshot_id=2))
+
+        # The permanent resolved; its trigger did NOT — it remains on the stack
+        # with its effect unapplied, awaiting its own GRE-driven resolution.
+        assert self._on_bf(ex, card)
+        assert fired == []
+        assert len(ex.game.stack) == 1
+        assert ex.game.stack.peek().source is card
+        assert 500 not in ex._pending_stack
+        assert 500 not in ex._pending_stack_objs
+
+        # Resolving the trigger later applies the effect exactly once.
+        ex.game.stack.pop().on_resolve(ex.game)
+        assert fired == ["etb"]
+
+    def test_non_pending_top_sharing_source_blocks_lower_spell(self) -> None:
+        """A stack object that is NOT a pending cast occurrence (a trigger or
+        ability, even one sourced by the same card as an attested pending
+        spell below it) blocks the loop: stack order is never violated by
+        resolving around it."""
+        from engine.stack import StackObject
+        from engine.types import Zone
+
+        ex = self._sim_executor()
+        card = self._push_pending_spell(ex, gre_id=500)
+        player = ex.players[1]
+        # Same source card, but never registered as a pending occurrence.
+        ex.game.stack.push(
+            StackObject(source=card, controller=player, on_resolve=lambda g: None)
+        )
+
+        ex._resolve_arrived_spells(self._bf_snapshot(2, [500]), StepResult(snapshot_id=2))
+
+        assert not self._on_bf(ex, card)
+        assert not player.zones[Zone.BATTLEFIELD].contains(card)
+        assert len(ex.game.stack) == 2
+        assert 500 in ex._pending_stack and 500 in ex._pending_stack_objs
+
+    def test_record_pending_occurrence_none_fallback(self) -> None:
+        """An engine whose cast helpers return None (the frozen SOS workspace)
+        still gets its occurrence retained: the topmost stack object sourced by
+        the card immediately after the executor's own cast is that cast."""
+        from engine.stack import StackObject
+        from engine.types import Zone
+
+        ex = self._sim_executor()
+        player = ex.players[1]
+        card = ex._create_card(MOUNTAIN, player)
+        player.zones[Zone.STACK].add(card)
+        so = StackObject(source=card, controller=player, on_resolve=lambda g: None)
+        ex.game.stack.push(so)
+
+        ex._record_pending_occurrence(600, card, None)
+        assert ex._pending_stack_objs[600] is so
 
 
 class TestNoncastZoneCastEngineCompat:

@@ -131,9 +131,25 @@ def _seat_of(game: GameState, player: Any) -> int | None:
 
 
 def _candidate_decision(game: GameState, candidate: Any, zone: Any) -> Any:
-    """Build the OBJECT/PLAYER decision for a legal target candidate."""
+    """Build the OBJECT/PLAYER decision for a legal target candidate.
+
+    A :class:`~engine.stack.StackObject` candidate (a spell on the stack — the
+    ``Zone.STACK`` enumeration offers exact cast occurrences, never source
+    cards) is identified by the **occurrence**: the instance id is minted for
+    the StackObject itself, so two casts/copies of the same card are distinct
+    options, while the presented attrs (name/types/colors) come from its source
+    card so name-routed intents still match.
+    """
     if any(candidate is p for p in game.players):
         return game.refs.player_decision(candidate, seat=_seat_of(game, candidate))
+    if isinstance(candidate, StackObject):
+        controller = candidate.controller
+        return game.refs.object_decision(
+            candidate,
+            zone=Zone.STACK.value,
+            controller_seat=_seat_of(game, controller) if controller is not None else None,
+            attrs_from=candidate.source,
+        )
     controller = getattr(candidate, "controller", None)
     return game.refs.object_decision(
         candidate,
@@ -199,7 +215,16 @@ def _query_target(
         from engine.protection import has_protection_from as _has_protection
 
     candidates: list[Any] = []
-    if zone is not None:
+    if zone == Zone.STACK:
+        # Stack targets are exact StackObject occurrences (top to bottom), not
+        # source cards: two casts/copies of the same card are distinct targets,
+        # a trigger sharing a spell's source card is not that spell, and a
+        # chosen occurrence stays legal only while IT is on game.stack (the
+        # zone-stint revalidation treats the occurrence's stack presence as its
+        # stint). Recovering an occurrence from its card at resolution would be
+        # ambiguous for copies/recasts, so the occurrence is the target.
+        candidates.extend(game.stack.objects())
+    elif zone is not None:
         for p in game.players:
             if zone in p.zones:
                 candidates.extend(p.zones[zone].get_all())
@@ -485,7 +510,7 @@ def _record_spell_cast(game: GameState, player: Player, card: CardImpl) -> int |
 # Cast spell
 # ------------------------------------------------------------------
 
-def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
+def cast_spell(game: GameState, player: Player, card: CardImpl) -> StackObject:
     """Cast *card* from *player*'s hand.
 
     Pipeline
@@ -505,6 +530,13 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
     7. **Call on_cast** — invoke the card's ``on_cast`` hook.
     8. **Push StackObject** — push a :class:`StackObject` whose
        ``on_resolve`` callback handles resolution.
+
+    Returns:
+        The pushed :class:`StackObject` — the stack identity of this one cast
+        occurrence, for callers (tests, the replay executor) that must later
+        refer to exactly this pending spell rather than its mutable source
+        card (which a copy, a recast, or the card's own triggered abilities
+        can make ambiguous).
 
     Raises:
         CastingError: If any legality check fails.
@@ -644,6 +676,7 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
         on_resolve=lambda g: None,  # replaced below
         activation_context=activation_context,
         prior_qualifying_casts=prior_qualifying_casts,
+        is_spell=True,
     )
 
     def _on_resolve(g: GameState) -> None:
@@ -651,6 +684,7 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> None:
 
     stack_obj.on_resolve = _on_resolve
     game.stack.push(stack_obj)
+    return stack_obj
 
 
 # ------------------------------------------------------------------
@@ -665,7 +699,7 @@ def cast_spell_free(
     from_zone: Zone,
     *,
     mode: CastMode = CastMode.NORMAL,
-) -> None:
+) -> StackObject:
     """Cast *card* without paying its mana cost, using the stack.
 
     This is used by effects that allow casting from zones other than hand
@@ -675,11 +709,16 @@ def cast_spell_free(
 
     The cast *mode* is the caller's explicit statement of how the spell is
     being cast; this helper never infers it from card attributes.
-    ``CastMode.FLASHBACK`` requires ``from_zone == Zone.GRAVEYARD`` and a card
-    that actually has a ``flashback_cost`` (both are validated), and stamps
-    ``departure_zone = Zone.EXILE`` on the cast's StackObject so the spell is
-    exiled any time it leaves the stack (rule 702.34a) — on resolution and on
-    being countered alike (see :func:`engine.stack.move_spell_off_stack`).
+    ``CastMode.FLASHBACK`` requires the card to be in **the casting player's
+    own graveyard** with compatible ownership (rule 702.34a casts it from its
+    owner's graveyard, so a card owned by another player is rejected) and to
+    have a real ``flashback_cost``. Every FLASHBACK check runs **before any
+    mutation** — a rejected mode claim leaves controller, owner, zones, cast
+    history, and stack state exactly as they were. A validated flashback cast
+    stamps ``departure_zone = Zone.EXILE`` on the cast's StackObject so the
+    spell is exiled any time it leaves the stack (rule 702.34a) — on
+    resolution and on being countered alike (see
+    :func:`engine.stack.move_spell_off_stack`).
 
     Pipeline
     --------
@@ -702,25 +741,30 @@ def cast_spell_free(
         game: The current game state.
         player: The player casting the spell.
         card: The card to cast.
-        from_zone: The zone the card is currently in.
+        from_zone: The zone the card is currently in. ``NORMAL`` mode keeps
+            the historical permissiveness: the card may sit in any player's
+            *from_zone* container (existing callers intentionally free-cast
+            another player's card), and ownership is not constrained.
         mode: How the spell is being cast (keyword-only). Defaults to
             :attr:`CastMode.NORMAL`; pass :attr:`CastMode.FLASHBACK` for a
-            flashback cast from the graveyard.
+            flashback cast from the caster's own graveyard.
+
+    Returns:
+        The pushed :class:`StackObject` — the stack identity of this one cast
+        occurrence (see :func:`cast_spell`).
 
     Raises:
         CastingError: If the card cannot be found in *from_zone*, legality
-            checks fail, or *mode* is ``FLASHBACK`` for a card/zone that does
-            not support it.
+            checks fail, or *mode* is ``FLASHBACK`` for a card/zone/owner that
+            does not support it.
     """
-    # Ensure controller is set
-    card.controller = player
-    if card.owner is None:
-        card.owner = player
-
-    # 0. Cast-mode legality — before any mutation. A FLASHBACK cast is only
-    #    legal from the graveyard and only for a card that has a flashback
-    #    cost (rule 702.34a); the caller's mode claim is validated, never
-    #    trusted blindly.
+    # 0. Cast-mode legality — every FLASHBACK check runs before ANY mutation
+    #    (including the controller/owner defaults below), so a rejected mode
+    #    claim leaves all observable state untouched. The caller's mode claim
+    #    is validated, never trusted blindly: flashback casts from the casting
+    #    player's OWN graveyard (rule 702.34a — its owner's graveyard), needs a
+    #    real flashback cost, and the caster must be able to own the cast
+    #    (a card owned by someone else is not flashback-castable by *player*).
     if mode is CastMode.FLASHBACK:
         if from_zone != Zone.GRAVEYARD:
             raise CastingError(
@@ -731,6 +775,22 @@ def cast_spell_free(
             raise CastingError(
                 f"Cannot flashback {card.name!r} — card has no flashback cost"
             )
+        owner = card.owner
+        if owner is not None and owner is not player:
+            raise CastingError(
+                f"Cannot flashback {card.name!r} — owned by another player "
+                f"(flashback casts from its owner's graveyard)"
+            )
+        if not player.zones[Zone.GRAVEYARD].contains(card):
+            raise CastingError(
+                f"Cannot flashback {card.name!r} — not in "
+                f"{player.name!r}'s graveyard"
+            )
+
+    # Ensure controller is set
+    card.controller = player
+    if card.owner is None:
+        card.owner = player
 
     # 1. can_cast legality (same as cast_spell but skipping mana/timing)
     if not card.can_cast(game):
@@ -838,6 +898,7 @@ def cast_spell_free(
         activation_context=activation_context,
         prior_qualifying_casts=prior_qualifying_casts,
         departure_zone=departure_zone,
+        is_spell=True,
     )
 
     def _on_resolve(g: GameState) -> None:
@@ -845,6 +906,7 @@ def cast_spell_free(
 
     stack_obj.on_resolve = _on_resolve
     game.stack.push(stack_obj)
+    return stack_obj
 
 
 # ------------------------------------------------------------------
