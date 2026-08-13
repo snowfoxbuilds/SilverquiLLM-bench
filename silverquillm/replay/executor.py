@@ -15,6 +15,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
 
+# Backward-compatibility re-export. The single implementation of
+# ``load_card_id_map`` lives in ``silverquillm.replay.parser`` (see
+# DIRECTORY_SUMMARY.md); this module has historically exposed it, so the
+# ``silverquillm.replay.executor.load_card_id_map`` import path is kept working
+# for downstream callers without duplicating the loader here.
+from silverquillm.replay.parser import load_card_id_map  # noqa: F401  (re-export)
 from silverquillm.replay.types import (
     GameSnapshot,
     ReplayAction,
