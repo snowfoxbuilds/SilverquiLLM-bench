@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -36,7 +37,7 @@ from silverquillm._bootstrap import ensure_workspace_on_path
 # resolve in the CLI process and in subprocesses that inherit our env.
 ensure_workspace_on_path()
 
-from silverquillm.card_loader import is_template, load_all_card_specs
+from silverquillm.card_loader import load_all_card_specs
 from silverquillm.card_names import build_card_name_map
 from silverquillm.replay.cli import validate as _replay_validate
 from silverquillm.runner import ContainerLifecycle
@@ -52,31 +53,6 @@ __all__ = ["main"]
 # TUI display singleton (None until a display layer is wired; patchable for tests)
 _display = None
 
-
-# ---------------------------------------------------------------------------
-# Logging helpers
-# ---------------------------------------------------------------------------
-
-
-def _redact_cmd(cmd: list[str]) -> str:
-    """Join *cmd* into a string, masking values of ``-e KEY=…`` arguments."""
-    parts: list[str] = []
-    redact_next = False
-    for token in cmd:
-        if redact_next:
-            # token is "KEY=value" – keep KEY, mask value
-            if "=" in token:
-                key, _, _val = token.partition("=")
-                parts.append(f"{key}=***")
-            else:
-                parts.append(token)
-            redact_next = False
-        elif token == "-e":
-            parts.append(token)
-            redact_next = True
-        else:
-            parts.append(token)
-    return " ".join(parts)
 
 # ---------------------------------------------------------------------------
 # Runner log helper
@@ -362,6 +338,67 @@ def _emit_token_report(run_dir: Path) -> None:
         _runner_log(f"Failed to write tokens.md: {exc}", err=True)
 
 
+def _make_snapshot_callback(workspace: Path, run_dir: Path) -> Callable[[], None]:
+    """Build the per-snapshot telemetry callback for a container run.
+
+    On each call the callback counts agent-touched files (workspace
+    ``card_impl.py`` + ``engine/`` files that differ from the staged baseline,
+    via ``git status --porcelain``), appends a telemetry record to
+    ``run_dir/snapshot_telemetry.jsonl``, and notifies the TUI ``_display`` if
+    one is wired. Shared by the ``run`` and ``resume`` commands.
+    """
+    state: dict = {"index": 0, "start": time.monotonic()}
+    telemetry_path = run_dir / "snapshot_telemetry.jsonl"
+
+    def _snapshot_callback() -> None:
+        state["index"] += 1
+        idx = state["index"]
+        elapsed = time.monotonic() - state["start"]
+        # files_changed = workspace card_impl.py + engine/ files differing
+        # from the staged baseline. stage_workspace() git-inits + commits
+        # the workspace, so `git status --porcelain` reports anything the
+        # agent touched (modified-tracked + new untracked). We filter to
+        # the two file groups that meaningfully represent agent work.
+        try:
+            # --untracked-files=all expands untracked directories so each
+            # contained file is reported individually (needed to catch a
+            # new card_impl.py in a brand-new card dir).
+            status = subprocess.run(
+                ["git", "status", "--porcelain", "-z", "--untracked-files=all"],
+                cwd=workspace,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            paths = (
+                [p for p in status.stdout.split("\0") if p]
+                if status.returncode == 0
+                else []
+            )
+            # Porcelain v1 prefixes each entry with a two-char status + space.
+            files_changed = sum(
+                1
+                for entry in paths
+                for path in [entry[3:] if len(entry) > 3 else entry]
+                if path.endswith("/card_impl.py") or path.startswith("engine/")
+            )
+        except (OSError, subprocess.SubprocessError):
+            files_changed = 0
+        record = {
+            "ts": datetime.now(tz=timezone.utc).isoformat(timespec="milliseconds"),
+            "snapshot_index": idx,
+            "files_changed": files_changed,
+            "elapsed_s": round(elapsed, 3),
+        }
+        with open(telemetry_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
+        # Notify TUI display if available
+        if _display is not None:
+            _display.emit_snapshot(idx)
+
+    return _snapshot_callback
+
+
 def _write_card_statuses(
     workspace: Path,
     run_dir: Path,
@@ -434,8 +471,7 @@ def _evaluate_results(run_dir: Path, card_filter: list[str] | None = None) -> No
         When set, only evaluate cards in this list. When ``None``, evaluate all
         completed cards.
     """
-    from silverquillm.evaluator import evaluate, CardResult
-    from dataclasses import asdict
+    from silverquillm.evaluator import evaluate
 
     cards_dir = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards"
     engine_dir = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "engine"
@@ -699,54 +735,7 @@ def run(
         pass  # _display is read from module-level silverquillm.cli._display
 
         # Build snapshot callback closure
-        _snapshot_state: dict = {"index": 0, "start": time.monotonic()}
-        _snapshot_telemetry_path = run_dir / "snapshot_telemetry.jsonl"
-
-        def _snapshot_callback() -> None:
-            _snapshot_state["index"] += 1
-            idx = _snapshot_state["index"]
-            elapsed = time.monotonic() - _snapshot_state["start"]
-            # files_changed = workspace card_impl.py + engine/ files differing
-            # from the staged baseline. stage_workspace() git-inits + commits
-            # the workspace, so `git status --porcelain` reports anything the
-            # agent touched (modified-tracked + new untracked). We filter to
-            # the two file groups that meaningfully represent agent work.
-            try:
-                # --untracked-files=all expands untracked directories so each
-                # contained file is reported individually (needed to catch a
-                # new card_impl.py in a brand-new card dir).
-                status = subprocess.run(
-                    ["git", "status", "--porcelain", "-z", "--untracked-files=all"],
-                    cwd=workspace,
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                paths = (
-                    [p for p in status.stdout.split("\0") if p]
-                    if status.returncode == 0
-                    else []
-                )
-                # Porcelain v1 prefixes each entry with a two-char status + space.
-                files_changed = sum(
-                    1
-                    for entry in paths
-                    for path in [entry[3:] if len(entry) > 3 else entry]
-                    if path.endswith("/card_impl.py") or path.startswith("engine/")
-                )
-            except (OSError, subprocess.SubprocessError):
-                files_changed = 0
-            record = {
-                "ts": datetime.now(tz=timezone.utc).isoformat(timespec="milliseconds"),
-                "snapshot_index": idx,
-                "files_changed": files_changed,
-                "elapsed_s": round(elapsed, 3),
-            }
-            with open(_snapshot_telemetry_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(record) + "\n")
-            # Notify TUI display if available
-            if _display is not None:
-                _display.emit_snapshot(idx)
+        _snapshot_callback = _make_snapshot_callback(workspace, run_dir)
 
         lifecycle = ContainerLifecycle(
             image=image,
@@ -1211,9 +1200,9 @@ def resume(
         prior_status = prior_summary.get("run_status")
         if prior_status == "no_viable_output_produced":
             raise click.ClickException(
-                f"Prior run is unresumable: run_status is "
-                f"'no_viable_output_produced'. A future --from-snapshots "
-                f"opt-in may allow recovery via the latest viable snapshot."
+                "Prior run is unresumable: run_status is "
+                "'no_viable_output_produced'. A future --from-snapshots "
+                "opt-in may allow recovery via the latest viable snapshot."
             )
 
     # ---- Resolve image (with cross-check) ----
@@ -1333,44 +1322,7 @@ def resume(
         run_dir = results_dir / run_name
         run_dir.mkdir(parents=True, exist_ok=True)
 
-        _snapshot_state: dict = {"index": 0, "start": time.monotonic()}
-        _snapshot_telemetry_path = run_dir / "snapshot_telemetry.jsonl"
-
-        def _snapshot_callback() -> None:
-            _snapshot_state["index"] += 1
-            idx = _snapshot_state["index"]
-            elapsed = time.monotonic() - _snapshot_state["start"]
-            try:
-                status = subprocess.run(
-                    ["git", "status", "--porcelain", "-z", "--untracked-files=all"],
-                    cwd=workspace,
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                paths = (
-                    [p for p in status.stdout.split("\0") if p]
-                    if status.returncode == 0
-                    else []
-                )
-                files_changed = sum(
-                    1
-                    for entry in paths
-                    for path in [entry[3:] if len(entry) > 3 else entry]
-                    if path.endswith("/card_impl.py") or path.startswith("engine/")
-                )
-            except (OSError, subprocess.SubprocessError):
-                files_changed = 0
-            record = {
-                "ts": datetime.now(tz=timezone.utc).isoformat(timespec="milliseconds"),
-                "snapshot_index": idx,
-                "files_changed": files_changed,
-                "elapsed_s": round(elapsed, 3),
-            }
-            with open(_snapshot_telemetry_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(record) + "\n")
-            if _display is not None:
-                _display.emit_snapshot(idx)
+        _snapshot_callback = _make_snapshot_callback(workspace, run_dir)
 
         lifecycle = ContainerLifecycle(
             image=chosen_image,

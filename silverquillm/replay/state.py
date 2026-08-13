@@ -26,6 +26,22 @@ def _parse_mana_pool(p: dict[str, Any]) -> list[ManaPoolEntry]:
     return [ManaPoolEntry.from_dict(m) for m in p.get("manaPool", [])]
 
 
+def _player_seat(p: dict[str, Any]) -> int:
+    """Seat number for a player message (systemSeatNumber, else controllerSeatId)."""
+    return p.get("systemSeatNumber", p.get("controllerSeatId", 0))
+
+
+def _build_player_info(p: dict[str, Any]) -> PlayerInfo:
+    """Build a fresh PlayerInfo from a complete player message."""
+    return PlayerInfo(
+        seat_id=_player_seat(p),
+        life_total=p.get("lifeTotal", 20),
+        status=p.get("status", "PlayerStatus_InGame"),
+        max_hand_size=p.get("maxHandSize", 7),
+        mana_pool=_parse_mana_pool(p),
+    )
+
+
 def build_game_info(raw: dict[str, Any]) -> GameInfo:
     """Build GameInfo from raw gameInfo dict."""
     deck_info = raw.get("deckConstraintInfo", {})
@@ -66,14 +82,8 @@ def apply_full_state(gsm: dict[str, Any]) -> GameSnapshot:
 
     # players
     for p in gsm.get("players", []):
-        seat = p.get("systemSeatNumber", p.get("controllerSeatId", 0))
-        snapshot.players[seat] = PlayerInfo(
-            seat_id=seat,
-            life_total=p.get("lifeTotal", 20),
-            status=p.get("status", "PlayerStatus_InGame"),
-            max_hand_size=p.get("maxHandSize", 7),
-            mana_pool=_parse_mana_pool(p),
-        )
+        info = _build_player_info(p)
+        snapshot.players[info.seat_id] = info
 
     # turnInfo
     if "turnInfo" in gsm:
@@ -160,7 +170,7 @@ def apply_diff(prev: GameSnapshot, gsm: dict[str, Any]) -> GameSnapshot:
 
     # players — upsert
     for p in gsm.get("players", []):
-        seat = p.get("systemSeatNumber", p.get("controllerSeatId", 0))
+        seat = _player_seat(p)
         if seat in snapshot.players:
             existing = snapshot.players[seat]
             if "lifeTotal" in p:
@@ -175,13 +185,7 @@ def apply_diff(prev: GameSnapshot, gsm: dict[str, Any]) -> GameSnapshot:
             # empty — set it unconditionally from whatever this message carries.
             existing.mana_pool = _parse_mana_pool(p)
         else:
-            snapshot.players[seat] = PlayerInfo(
-                seat_id=seat,
-                life_total=p.get("lifeTotal", 20),
-                status=p.get("status", "PlayerStatus_InGame"),
-                max_hand_size=p.get("maxHandSize", 7),
-                mana_pool=_parse_mana_pool(p),
-            )
+            snapshot.players[seat] = _build_player_info(p)
 
     # turnInfo — merge fields if present (empty {} means no change)
     if "turnInfo" in gsm:

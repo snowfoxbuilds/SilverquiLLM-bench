@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -12,9 +11,8 @@ from silverquillm.replay.executor import (
     StateMismatch,
     StepResult,
     TokenIdMap,
-    load_card_id_map,
 )
-from silverquillm.replay.parser import parse_replay
+from silverquillm.replay.parser import load_card_id_map, parse_replay
 from silverquillm.replay.types import (
     GameSnapshot,
     GameObject,

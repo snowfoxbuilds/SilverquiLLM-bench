@@ -231,6 +231,15 @@ class GameSnapshot:
                     result.append(obj)
         return result
 
+    def instance_ids_in_zone(self, zone_type: str) -> set[int]:
+        """Every object instance id the snapshot places in a zone of the given type."""
+        return {
+            iid
+            for zone in self.zones.values()
+            if zone.type == zone_type
+            for iid in zone.object_instance_ids
+        }
+
     def get_player_life(self, seat_id: int) -> int:
         """Get a player's life total."""
         player = self.players.get(seat_id)

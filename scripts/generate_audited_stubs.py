@@ -12,7 +12,6 @@ Usage:
 from __future__ import annotations
 
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -234,7 +233,7 @@ def generate_stubs(sos_data: list[dict]) -> str:
         lines.append(f"class {class_name}({base_class}):")
         lines.append(f'    """Stub for {name}."""')
         lines.append("")
-        lines.append(f"    def __init__(self, **kwargs):")
+        lines.append("    def __init__(self, **kwargs):")
 
         # Build kwargs for super().__init__
         init_parts = []
@@ -301,7 +300,7 @@ def generate_stubs(sos_data: list[dict]) -> str:
     lines.append("_STUB_CARDS: list[tuple[str, type, str, str, str | None, str | None, list[str], list[str], str, str, str]] = [")
 
     for entry in card_entries:
-        lines.append(f"    (")
+        lines.append("    (")
         lines.append(f"        {entry['name']!r},")
         lines.append(f"        {entry['class_name']},")
         lines.append(f"        {entry['mana_cost_str']!r},")
@@ -313,7 +312,7 @@ def generate_stubs(sos_data: list[dict]) -> str:
         lines.append(f"        {entry['rarity']!r},")
         lines.append(f"        {entry['set_code']!r},")
         lines.append(f"        {entry['collector_number']!r},")
-        lines.append(f"    ),")
+        lines.append("    ),")
 
     lines.append("]")
     lines.append("")

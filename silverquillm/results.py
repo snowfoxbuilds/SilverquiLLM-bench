@@ -230,13 +230,11 @@ def generate_run_summary(
         if result_data and isinstance(result_data, dict):
             passed = result_data.get("tests_passed", 0)
             total = result_data.get("tests_total", 0)
-            failed = result_data.get("tests_failed", 0)
             entry["audited_passed"] = passed
             entry["audited_total"] = total
         else:
             passed = 0
             total = 0
-            failed = 0
             entry["audited_passed"] = 0
             entry["audited_total"] = 0
 
