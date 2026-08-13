@@ -330,10 +330,8 @@ def is_template(card_impl_path: Path) -> bool:
         return False
 
     # Find all function/method definitions
-    has_functions = False
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            has_functions = True
             # Check if body is only pass/Ellipsis/docstring
             for stmt in node.body:
                 if isinstance(stmt, ast.Pass):

@@ -250,41 +250,17 @@ def run_tests(
         # PYTHONPATH: temp dir first (card_impl.py, test_utils.py),
         # then engine dir parent (if provided, for run-level engine state),
         # then repo root (for tests/ package and engine/ imports)
-        env = dict(__import__("os").environ)
-        existing = env.get("PYTHONPATH", "")
-        parts = [str(tmp)]
+        pythonpath_parts = [str(tmp)]
         if engine_dir is not None:
             # engine_dir is e.g. run_dir/engine; its parent must be on
             # PYTHONPATH so ``import engine as engine`` resolves to the run-level copy.
-            parts.append(str(Path(engine_dir).parent))
-        parts.append(str(_REPO_ROOT))
-        if existing:
-            parts.append(existing)
-        env["PYTHONPATH"] = ":".join(parts)
+            pythonpath_parts.append(str(Path(engine_dir).parent))
+        pythonpath_parts.append(str(_REPO_ROOT))
 
         # Run pytest on the RENAMED copy in the temp dir
-        cmd = [
-            sys.executable,
-            "-m",
-            "pytest",
-            str(tmp / "test_card.py"),
-            "--tb=short",
-            "-q",
-            "--no-header",
-        ]
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                env=env,
-            )
-            combined = result.stdout + "\n" + result.stderr
-        except subprocess.TimeoutExpired:
-            return 0, 0, 0, [f"Timeout after {timeout}s"]
-
-        return _parse_pytest_output(combined)
+        return _run_pytest_with_pythonpath(
+            tmp / "test_card.py", pythonpath_parts, timeout=timeout
+        )
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -294,21 +270,23 @@ def run_tests(
 # ---------------------------------------------------------------------------
 
 
-def run_self_eval(card_dir: Path, agent_name: str) -> EvalResult:
-    """Run *agent_name*'s blind and tested impls against its own tests.
+def _eval_impl_pair(
+    *,
+    card_id: str,
+    agent: str,
+    eval_type: str,
+    blind_impl: Path,
+    tested_impl: Path,
+    tests_file: Path,
+) -> EvalResult:
+    """Run a blind/tested impl pair against *tests_file* into an EvalResult.
 
-    Expected layout under *card_dir*::
-
-        {agent_name}/
-            blind_impl.py
-            tested_impl.py
-            tests.py
+    Shared core of :func:`run_self_eval`, :func:`run_self_eval_flat`,
+    :func:`run_cross_eval` and :func:`run_audited_eval` — those differ only in
+    how ``blind_impl`` / ``tested_impl`` / ``tests_file`` and ``eval_type`` are
+    derived. A missing impl or test file yields zero counts plus a ``Missing
+    {path}`` error rather than raising.
     """
-    agent_dir = card_dir / agent_name
-    tests_file = agent_dir / "tests.py"
-    blind_impl = agent_dir / "blind_impl.py"
-    tested_impl = agent_dir / "tested_impl.py"
-
     all_errors: list[str] = []
 
     if blind_impl.exists() and tests_file.exists():
@@ -330,9 +308,9 @@ def run_self_eval(card_dir: Path, agent_name: str) -> EvalResult:
             all_errors.append(f"Missing {tested_impl}")
 
     return EvalResult(
-        card_id=card_dir.name,
-        agent=agent_name,
-        eval_type="self",
+        card_id=card_id,
+        agent=agent,
+        eval_type=eval_type,
         blind_passed=bp,
         blind_failed=bf,
         blind_total=bt,
@@ -340,6 +318,27 @@ def run_self_eval(card_dir: Path, agent_name: str) -> EvalResult:
         tested_failed=tf,
         tested_total=tt,
         errors=all_errors,
+    )
+
+
+def run_self_eval(card_dir: Path, agent_name: str) -> EvalResult:
+    """Run *agent_name*'s blind and tested impls against its own tests.
+
+    Expected layout under *card_dir*::
+
+        {agent_name}/
+            blind_impl.py
+            tested_impl.py
+            tests.py
+    """
+    agent_dir = card_dir / agent_name
+    return _eval_impl_pair(
+        card_id=card_dir.name,
+        agent=agent_name,
+        eval_type="self",
+        blind_impl=agent_dir / "blind_impl.py",
+        tested_impl=agent_dir / "tested_impl.py",
+        tests_file=agent_dir / "tests.py",
     )
 
 
@@ -367,41 +366,13 @@ def run_self_eval_flat(card_dir: Path, agent_name: str) -> EvalResult:
     EvalResult
         Evaluation outcome for the card.
     """
-    tests_file = card_dir / "tests.py"
-    blind_impl = card_dir / "blind_impl.py"
-    tested_impl = card_dir / "tested_impl.py"
-
-    all_errors: list[str] = []
-
-    if blind_impl.exists() and tests_file.exists():
-        bp, bf, bt, be = run_tests(blind_impl, tests_file)
-        all_errors.extend(be)
-    else:
-        bp, bf, bt = 0, 0, 0
-        if not blind_impl.exists():
-            all_errors.append(f"Missing {blind_impl}")
-        if not tests_file.exists():
-            all_errors.append(f"Missing {tests_file}")
-
-    if tested_impl.exists() and tests_file.exists():
-        tp, tf, tt, te = run_tests(tested_impl, tests_file)
-        all_errors.extend(te)
-    else:
-        tp, tf, tt = 0, 0, 0
-        if not tested_impl.exists():
-            all_errors.append(f"Missing {tested_impl}")
-
-    return EvalResult(
+    return _eval_impl_pair(
         card_id=card_dir.name,
         agent=agent_name,
         eval_type="self",
-        blind_passed=bp,
-        blind_failed=bf,
-        blind_total=bt,
-        tested_passed=tp,
-        tested_failed=tf,
-        tested_total=tt,
-        errors=all_errors,
+        blind_impl=card_dir / "blind_impl.py",
+        tested_impl=card_dir / "tested_impl.py",
+        tests_file=card_dir / "tests.py",
     )
 
 
@@ -419,43 +390,14 @@ def run_cross_eval(card_dir: Path, agents: list[str]) -> list[EvalResult]:
 
             impl_dir = card_dir / impl_agent
             test_dir = card_dir / test_agent
-            tests_file = test_dir / "tests.py"
-
-            blind_impl = impl_dir / "blind_impl.py"
-            tested_impl = impl_dir / "tested_impl.py"
-
-            all_errors: list[str] = []
-
-            if blind_impl.exists() and tests_file.exists():
-                bp, bf, bt, be = run_tests(blind_impl, tests_file)
-                all_errors.extend(be)
-            else:
-                bp, bf, bt = 0, 0, 0
-                if not blind_impl.exists():
-                    all_errors.append(f"Missing {blind_impl}")
-                if not tests_file.exists():
-                    all_errors.append(f"Missing {tests_file}")
-
-            if tested_impl.exists() and tests_file.exists():
-                tp, tf, tt, te = run_tests(tested_impl, tests_file)
-                all_errors.extend(te)
-            else:
-                tp, tf, tt = 0, 0, 0
-                if not tested_impl.exists():
-                    all_errors.append(f"Missing {tested_impl}")
-
             results.append(
-                EvalResult(
+                _eval_impl_pair(
                     card_id=card_dir.name,
                     agent=impl_agent,
                     eval_type=f"cross:{test_agent}",
-                    blind_passed=bp,
-                    blind_failed=bf,
-                    blind_total=bt,
-                    tested_passed=tp,
-                    tested_failed=tf,
-                    tested_total=tt,
-                    errors=all_errors,
+                    blind_impl=impl_dir / "blind_impl.py",
+                    tested_impl=impl_dir / "tested_impl.py",
+                    tests_file=test_dir / "tests.py",
                 )
             )
     return results
@@ -473,41 +415,14 @@ def run_audited_eval(
     results: list[EvalResult] = []
     for agent_name in agents:
         agent_dir = card_dir / agent_name
-        blind_impl = agent_dir / "blind_impl.py"
-        tested_impl = agent_dir / "tested_impl.py"
-
-        all_errors: list[str] = []
-
-        if blind_impl.exists() and audited_tests.exists():
-            bp, bf, bt, be = run_tests(blind_impl, audited_tests)
-            all_errors.extend(be)
-        else:
-            bp, bf, bt = 0, 0, 0
-            if not blind_impl.exists():
-                all_errors.append(f"Missing {blind_impl}")
-            if not audited_tests.exists():
-                all_errors.append(f"Missing {audited_tests}")
-
-        if tested_impl.exists() and audited_tests.exists():
-            tp, tf, tt, te = run_tests(tested_impl, audited_tests)
-            all_errors.extend(te)
-        else:
-            tp, tf, tt = 0, 0, 0
-            if not tested_impl.exists():
-                all_errors.append(f"Missing {tested_impl}")
-
         results.append(
-            EvalResult(
+            _eval_impl_pair(
                 card_id=card_dir.name,
                 agent=agent_name,
                 eval_type="audited",
-                blind_passed=bp,
-                blind_failed=bf,
-                blind_total=bt,
-                tested_passed=tp,
-                tested_failed=tf,
-                tested_total=tt,
-                errors=all_errors,
+                blind_impl=agent_dir / "blind_impl.py",
+                tested_impl=agent_dir / "tested_impl.py",
+                tests_file=audited_tests,
             )
         )
     return results
@@ -581,32 +496,9 @@ def run_audited_eval_per_card(
             shutil.copy2(conftest, tmp / "conftest.py")
 
         # Run pytest on the copied tests.py in the temp directory
-        env = dict(__import__("os").environ)
-        existing = env.get("PYTHONPATH", "")
-        env["PYTHONPATH"] = str(tmp) + ":" + str(_REPO_ROOT) + (":" + existing if existing else "")
-
-        cmd = [
-            sys.executable,
-            "-m",
-            "pytest",
-            str(tmp / "tests.py"),
-            "--tb=short",
-            "-q",
-            "--no-header",
-        ]
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                env=env,
-            )
-            combined = result.stdout + "\n" + result.stderr
-        except subprocess.TimeoutExpired:
-            return 0, 0, 0, [f"Timeout after {timeout}s"]
-
-        return _parse_pytest_output(combined)
+        return _run_pytest_with_pythonpath(
+            tmp / "tests.py", [str(tmp), str(_REPO_ROOT)], timeout=timeout
+        )
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 

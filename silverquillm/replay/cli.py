@@ -15,14 +15,13 @@ import click
 
 from silverquillm.replay.executor import (
     ReplayExecutor,
-    load_card_id_map,
     load_token_id_map,
 )
 from silverquillm.replay.limitations import (
     LimitationContext,
     classify_limitation,
 )
-from silverquillm.replay.parser import parse_replay
+from silverquillm.replay.parser import load_card_id_map, parse_replay
 import sys
 
 from silverquillm.replay.validation import (
@@ -477,7 +476,7 @@ def validate(
         summary["registry"] = {"registered": len(registry)}
 
     # Print summary
-    click.echo(f"\n=== Validation Summary ===")
+    click.echo("\n=== Validation Summary ===")
     click.echo(f"Games attempted: {summary['games_attempted']}")
     click.echo(
         f"Games completed without divergence: "

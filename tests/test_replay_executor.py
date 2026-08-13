@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -12,9 +11,8 @@ from silverquillm.replay.executor import (
     StateMismatch,
     StepResult,
     TokenIdMap,
-    load_card_id_map,
 )
-from silverquillm.replay.parser import parse_replay
+from silverquillm.replay.parser import load_card_id_map, parse_replay
 from silverquillm.replay.types import (
     GameSnapshot,
     GameObject,
@@ -402,6 +400,30 @@ class TestCardIdMap:
     def test_load_card_id_map_missing_file(self) -> None:
         mapping = load_card_id_map("/nonexistent/path.json")
         assert mapping == {}
+
+    def test_executor_reexports_parser_load_card_id_map(self) -> None:
+        """The ``silverquillm.replay.executor.load_card_id_map`` import path is
+        retained as a backward-compat re-export of the single parser
+        implementation — importing it must succeed and it must be the *same*
+        object as ``parser.load_card_id_map`` (a re-export, never a second
+        copy of the loader that could drift)."""
+        from silverquillm.replay.executor import (
+            load_card_id_map as executor_load_card_id_map,
+        )
+        from silverquillm.replay.parser import (
+            load_card_id_map as parser_load_card_id_map,
+        )
+
+        # Re-export, not a divergent second implementation.
+        assert executor_load_card_id_map is parser_load_card_id_map
+
+        # Behaviour is intact through the compat path: real map load, the
+        # default (path=None) branch, and the missing-file branch.
+        assert executor_load_card_id_map(CARD_ID_MAP_PATH)[MOUNTAIN] == "Mountain"
+        default_map = executor_load_card_id_map()
+        assert default_map  # default path resolves to the real card_id_map.json
+        assert default_map == load_card_id_map(CARD_ID_MAP_PATH)
+        assert executor_load_card_id_map("/nonexistent/path.json") == {}
 
 
 # ---------------------------------------------------------------------------

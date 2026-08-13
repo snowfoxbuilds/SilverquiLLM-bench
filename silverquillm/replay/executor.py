@@ -15,9 +15,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
 
+# Backward-compatibility re-export. The single implementation of
+# ``load_card_id_map`` lives in ``silverquillm.replay.parser`` (see
+# DIRECTORY_SUMMARY.md); this module has historically exposed it, so the
+# ``silverquillm.replay.executor.load_card_id_map`` import path is kept working
+# for downstream callers without duplicating the loader here.
+from silverquillm.replay.parser import load_card_id_map  # noqa: F401  (re-export)
 from silverquillm.replay.types import (
     GameSnapshot,
-    GameObject,
     ReplayAction,
     ReplayGame,
     TurnInfo,
@@ -99,33 +104,6 @@ class StepResult:
     def matched(self) -> bool:
         """True if no mismatches were found."""
         return len(self.mismatches) == 0
-
-
-# ---------------------------------------------------------------------------
-# Card ID map loader (reuses parser logic but provides a standalone path)
-# ---------------------------------------------------------------------------
-
-def load_card_id_map(path: str | Path | None = None) -> dict[int, str]:
-    """Load grpId -> card name mapping from JSON file."""
-    if path is None:
-        path = Path(__file__).parent.parent.parent / "data" / "replays" / "card_id_map.json"
-    else:
-        path = Path(path)
-
-    if not path.exists():
-        return {}
-
-    with open(path) as f:
-        data = json.load(f)
-
-    result: dict[int, str] = {}
-    for grp_id_str, info in data.get("grpId_to_card", {}).items():
-        try:
-            result[int(grp_id_str)] = info["card_name"]
-        except (ValueError, KeyError):
-            continue
-
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -808,9 +786,9 @@ class ReplayExecutor:
         seat_libraries: dict[int, list[int]],
     ) -> None:
         """Set up player zones from snapshot data."""
-        from engine.card import CardImpl, Creature, Land
+        from engine.card import CardImpl
         from engine.game_state import GameState
-        from engine.types import CardType, Zone
+        from engine.types import Zone
 
         for seat_id, player in self.players.items():
             # Create hand cards (None = hidden object -> shell)
@@ -916,13 +894,10 @@ class ReplayExecutor:
 
     def _create_basic_card(self, grp_id: int, card_name: str, owner: Any) -> Any:
         """Create a basic engine card without registry."""
-        from engine.card import Creature, Land, CardImpl
-        from engine.types import CardType, ManaCost
+        from engine.card import Land, CardImpl
 
         # Use name to guess card type
-        basic_lands = {"Plains", "Island", "Swamp", "Mountain", "Forest"}
-
-        if card_name in basic_lands:
+        if card_name in self._BASIC_LAND_NAMES:
             card = Land(name=card_name, owner=owner, controller=owner)
             # Simulate-only: carry the actual GRE grpId, not the name — a basic
             # land name maps to several printings, so the name reverse-lookup in
@@ -2132,12 +2107,7 @@ class ReplayExecutor:
     @staticmethod
     def _gre_battlefield_aids(snapshot: GameSnapshot) -> set[int]:
         """Every instance id the snapshot places in a GRE battlefield zone."""
-        return {
-            iid
-            for zone in snapshot.zones.values()
-            if zone.type == "ZoneType_Battlefield"
-            for iid in zone.object_instance_ids
-        }
+        return snapshot.instance_ids_in_zone("ZoneType_Battlefield")
 
     def _seat_of_engine_player(self, player: Any) -> int | None:
         """The GRE seat controlling an engine Player (identity match)."""

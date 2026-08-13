@@ -550,11 +550,7 @@ class ValidatingExecutor:
 
     @staticmethod
     def _battlefield_instance_ids(snapshot: GameSnapshot) -> set[int]:
-        ids: set[int] = set()
-        for zone in snapshot.zones.values():
-            if zone.type == "ZoneType_Battlefield":
-                ids.update(zone.object_instance_ids)
-        return ids
+        return snapshot.instance_ids_in_zone("ZoneType_Battlefield")
 
     def _check_missing_cards(self, snapshot: GameSnapshot) -> list[Divergence]:
         """Check for cards in the snapshot that aren't implemented in the engine."""

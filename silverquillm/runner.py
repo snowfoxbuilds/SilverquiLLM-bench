@@ -7,7 +7,6 @@ timeout enforcement, and snapshot callbacks.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import threading
 import time

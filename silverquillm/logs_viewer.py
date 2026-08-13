@@ -197,7 +197,6 @@ class LogsViewer:
         _move_to(self.out, 1, 1)
         _clear_line(self.out)
         parts: list[str] = []
-        visible = self.visible_channels
         for i, ch in enumerate(self.channels):
             if ch not in self._ever_visible:
                 continue  # Hide structurally-empty channels

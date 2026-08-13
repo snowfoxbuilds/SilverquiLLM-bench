@@ -19,9 +19,7 @@ from silverquillm.replay.state import (
 )
 from silverquillm.replay.types import (
     GameSnapshot,
-    ReplayAction,
     ReplayGame,
-    Zone,
 )
 
 

@@ -21,11 +21,9 @@ from __future__ import annotations
 
 import ast
 import json
-import os
 import re
 import sys
-import textwrap
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -585,10 +583,10 @@ def main() -> None:
     delete_originals = "--delete-originals" in sys.argv
 
     mode_label = "inline" if inline_mode else "import"
-    print(f"=== port_foundations_to_fdn.py ===")
+    print("=== port_foundations_to_fdn.py ===")
     print(f"Mode: {mode_label}{'  (DRY RUN)' if dry_run else ''}")
     if delete_originals:
-        print(f"  --delete-originals: will clean up foundations source files")
+        print("  --delete-originals: will clean up foundations source files")
     print(f"Repo root: {REPO_ROOT}")
     print()
 
