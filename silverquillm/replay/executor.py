@@ -468,6 +468,28 @@ class ReplayExecutor:
         # must still surface as a named missing identity.
         self._minted_token_grpids: set[int] = set()
 
+        # Token grpIds a real engine card impl MINTED this game — whether or not
+        # the mint ever correlated to a GRE token (Phase O, issue #57).
+        # ``_minted_token_grpids`` records only tokens that co-occurred with
+        # their GRE twin at a correlation pass; but the corpus's dominant
+        # unminted-token cause is not a missing minter — it is a mint-cadence
+        # offset: the engine mints the token (create_token, correct
+        # characteristics) a snapshot before/after GRE attests it, so the
+        # overflow pass removes the still-id-less engine token before the two
+        # ever co-occur. Such a token IS producible (its impl demonstrably mints
+        # a signature-matching, uniquely-identifiable token), so the MISSING
+        # "no engine impl that mints it" claim is a false positive and its
+        # surviving zone offset is a resolution-cadence divergence, not an
+        # unimplemented-effect one. Populated in ``_correlate_tokens_in_group``
+        # from any is_token engine object whose identity resolves UNIQUELY
+        # (globally-unique signature, or a colliding signature narrowed to one
+        # by colour) — the same identity evidence stamping uses, minus the
+        # GRE-co-presence requirement. A collision colour cannot resolve (the
+        # black Rat 94169 vs the Burglar Rat copy 93883) stays out, so a genuine
+        # correlation-refused floor is never mis-credited as producible.
+        # Simulate-only (observer never correlates tokens).
+        self._impl_minted_token_grpids: set[int] = set()
+
         # Simulate mode: the snapshot currently being executed (for handlers
         # that need GRE object data, e.g. hand materialization).
         self._current_snapshot: GameSnapshot | None = None
@@ -4515,6 +4537,38 @@ class ReplayExecutor:
                 return _color_key([single_color])
             return frozenset()
 
+    def _engine_token_impl_identity(self, card: Any) -> int | None:
+        """The UNIQUE map grpId an engine-minted token resolves to, else None.
+
+        The producibility resolver behind ``_impl_minted_token_grpids`` (Phase O,
+        issue #57). It reuses EXACTLY the identity decision stamping makes in
+        ``_correlate_tokens_in_group``, minus the GRE-co-presence requirement —
+        so a token the impl mints but the overflow pass removes before it ever
+        co-occurs with its GRE twin is credited on the same evidence a
+        co-occurring one would be, and never on weaker evidence:
+
+        - a GLOBALLY-UNIQUE signature identifies the grpId outright (the same
+          count-based match stamping uses for a lone identity);
+        - a COLLIDING signature is resolved by ``_resolve_colliding_identity``,
+          which narrows by known colour AND, for a copy candidate, REQUIRES the
+          engine token's name to equal the copied card's name. A red 1/1 Human
+          named "Human" therefore does NOT establish the ``Dragon Trainer`` copy
+          93797, and a same-colour collision the evidence cannot separate (the
+          1/1 black Rat 94169 vs the Burglar Rat copy 93883) resolves to None —
+          so a genuine correlation-refused floor is never mis-credited.
+
+        Returns None for a non-token / map-miss signature.
+        """
+        if self.token_map is None:
+            return None
+        sig = self._engine_token_signature(card)
+        candidates = self.token_map.signature_candidates(sig)
+        if not candidates:
+            return None
+        if len(candidates) == 1:
+            return next(iter(candidates))
+        return self._resolve_colliding_identity(card, candidates)
+
     def _correlate_tokens_in_group(
         self, gre_objs: list[Any], engine_cards: list[Any]
     ) -> None:
@@ -4554,9 +4608,28 @@ class ReplayExecutor:
         token the map can't match stays id-0 and is handled exactly as before
         (the overflow pass may remove it). Idempotent: already-stamped tokens are
         skipped, so calling it twice a step is safe.
+
+        Producibility (Phase O, issue #57) is recorded here too, and BEFORE the
+        GRE-presence short-circuit below: every is_token engine object whose
+        identity resolves uniquely feeds ``_impl_minted_token_grpids`` even when
+        GRE attests no matching token this snapshot — the mint-cadence case where
+        the engine minted the token a snapshot before GRE shows it (the overflow
+        pass then removes the still-id-less token, so the two never co-occur at a
+        stamping pass). That token is producible regardless of whether it ever
+        correlates, so its identity must be credited independently of stamping.
         """
         if self.token_map is None:
             return
+
+        # Producibility pass (independent of GRE co-presence). Credit every
+        # engine-minted token whose identity resolves UNIQUELY, so a mint the
+        # overflow pass later removes still proves the impl produces it.
+        for card in engine_cards:
+            if not getattr(card, "is_token", False):
+                continue
+            grp_id = self._engine_token_impl_identity(card)
+            if grp_id is not None:
+                self._impl_minted_token_grpids.add(grp_id)
 
         # GRE tokens present whose grpId the map recognizes, bucketed by
         # signature; a signature may cover more than one distinct grpId. The

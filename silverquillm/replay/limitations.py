@@ -119,6 +119,19 @@ FLOOR_TAGS = frozenset(t for t, (kind, _) in LIMITATION_TAGS.items() if kind == 
 # floor is the conservative, honest direction). See the mechanism test.
 HIDDEN_PT_CARDS = frozenset({"Consuming Aberration"})
 
+# Token grpIds whose identity the stream cannot recover because a same-colour,
+# same-signature copy token collides with them map-wide, so the token correlator
+# REFUSES to guess which one a battlefield object is (the locked identity rule).
+# A genuine hidden-information floor, proven by the co-presence mechanism test:
+# these are the only tokens that appear id-less on the engine battlefield at the
+# same snapshot GRE attests them yet are never stamped. The single such identity
+# in the FDN corpus is the 1/1 black Rat 94169, indistinguishable from the 1/1
+# black Burglar Rat copy 93883 (same colour, no copy name on the generic token).
+CORRELATION_REFUSED_TOKENS = frozenset({94169})
+
+# Parses ``grpId=<n>`` out of a token MISSING_CARD description.
+_RE_MISSING_TOKEN_GRP = re.compile(r"grpId=(?P<grp>\d+)")
+
 
 @dataclass
 class LimitationContext:
@@ -126,6 +139,12 @@ class LimitationContext:
 
     ambiguous_sources: frozenset[str] = field(default_factory=frozenset)
     token_grp_ids: frozenset[int] = field(default_factory=frozenset)
+    # Phase O (issue #57): token grpIds a real engine impl minted in THIS game,
+    # whether or not the mint ever correlated. A snapshot-extra token here is a
+    # mint-cadence offset (the impl produces it; the engine merely applied it at
+    # a different snapshot boundary than GRE), so it is a resolution-cadence
+    # divergence rather than an unimplemented-effect one.
+    impl_minted_token_grpids: frozenset[int] = field(default_factory=frozenset)
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +223,12 @@ def classify_limitation(record: dict, context: LimitationContext) -> str:
     if dtype == "MISSING_CARD":
         if "out-of-set" in desc or "out-of-registry" in desc:
             return "hidden-information"
+        m = _RE_MISSING_TOKEN_GRP.search(desc)
+        if m and int(m["grp"]) in CORRELATION_REFUSED_TOKENS:
+            # A same-colour copy collision the correlator refuses to guess —
+            # its identity is unrecoverable from the stream (floor), not a
+            # missing minter.
+            return "hidden-information"
         return "unimplemented-effect"
 
     # STATE_MISMATCH and ILLEGAL_ACTION both carry a leading [category].
@@ -225,6 +250,16 @@ def classify_limitation(record: dict, context: LimitationContext) -> str:
         if diff is None:
             return "resolution-cadence"
         engine_extra, snap_extra = diff
+        # A same-colour copy collision the correlator refuses to guess -> the
+        # identity is unrecoverable from the stream (floor), not a missing minter.
+        if any(g in CORRELATION_REFUSED_TOKENS for g in snap_extra):
+            return "hidden-information"
+        # A token a real engine impl MINTED this game (Phase O) is produced -
+        # the surviving snapshot-extra is a mint-cadence offset, not a missing
+        # minter. Checked before the unimplemented rule so a producible token
+        # that merely lands a snapshot off is attributed to the cadence family.
+        if any(g in context.impl_minted_token_grpids for g in snap_extra):
+            return "resolution-cadence"
         # GRE holds a minted token the engine never produced -> unimplemented.
         if any(g in context.token_grp_ids for g in snap_extra):
             return "unimplemented-effect"

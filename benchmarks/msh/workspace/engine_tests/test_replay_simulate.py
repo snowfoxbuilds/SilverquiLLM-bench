@@ -2541,6 +2541,11 @@ class TestTokenMissingSemantics:
         # Ambiguous → neither identity marked producible.
         assert RAT_COPY_TOK not in ex._minted_token_grpids
         assert RAT_GEN_TOK not in ex._minted_token_grpids
+        # Phase O (issue #57): producibility credit is withheld too — the
+        # same-colour collision the resolver refuses is never mis-credited as
+        # impl-minted, so the generic Rat 94169 stays a genuine floor.
+        assert RAT_COPY_TOK not in ex._impl_minted_token_grpids
+        assert RAT_GEN_TOK not in ex._impl_minted_token_grpids
         # The unproven generic identity is not suppressed — it surfaces missing.
         missing = self._missing(validator)
         assert any(RAT_GEN_TOK in d.involved_grp_ids for d in missing)
@@ -2596,6 +2601,46 @@ class TestTokenMissingSemantics:
             g for d in self._missing(validator) for g in d.involved_grp_ids
         }
         assert HUMAN_COPY_TOK in grp_missing  # rejection does not suppress MISSING
+        # Phase O: the name-contradicted copy is not impl-minted either.
+        assert HUMAN_COPY_TOK not in ex._impl_minted_token_grpids
+
+    def test_impl_minted_token_credited_across_mint_cadence_offset(self):
+        """Phase O (issue #57): a token the engine mints a snapshot BEFORE GRE
+        attests it — the corpus's dominant unminted-token cause — is producible
+        even though it never correlates.
+
+        The engine mints a 1/1 white Rabbit at snapshot 1 (GRE shows no Rabbit
+        yet), so the overflow pass removes the still-id-less token before it ever
+        co-occurs with its GRE twin; GRE first lists the Rabbit at snapshot 3.
+        The two never share a stamping pass, so it is never in
+        ``_minted_token_grpids`` — but a real impl demonstrably minted a
+        uniquely-identifiable Rabbit, so ``_impl_minted_token_grpids`` credits it
+        and the false "has no engine impl that mints it" MISSING is suppressed.
+        Its surviving one-snapshot zone offset is a separate cadence divergence,
+        not a producibility claim.
+        """
+        from engine.types import Color
+
+        gre = token_obj(500, RABBIT_TOK, 1, ["Rabbit"], 1, 1)
+        snaps = [
+            snapshot(1),                                             # GRE: no Rabbit
+            snapshot(2),                                             # GRE: no Rabbit
+            snapshot(3, battlefield={1: [500]}, objects={500: gre}),  # GRE: Rabbit
+        ]
+        ex, validator = make_validator(snaps, FakeRegistry({"Plains"}))
+        # The engine mints the Rabbit early (present before GRE attests it).
+        add_engine_token(ex, 1, "Rabbit", ["Rabbit"], 1, 1, colors={Color.WHITE})
+        validator.execute_all()
+        validator.report()
+        # Never correlated (never co-present with its GRE twin) ...
+        assert RABBIT_TOK not in ex._minted_token_grpids
+        # ... but the impl demonstrably minted it, so it is producible ...
+        assert RABBIT_TOK in ex._impl_minted_token_grpids
+        # ... and the false "no engine impl that mints it" MISSING is suppressed.
+        grp_missing = {
+            g for d in self._missing(validator) for g in d.involved_grp_ids
+        }
+        assert RABBIT_TOK not in grp_missing
 
 
 class TestActivationTargetIntent:
@@ -4091,18 +4136,25 @@ class TestGoldenGame:
         # rode the same one-snapshot skew both clear), successful comparisons
         # 109 -> 112.
         #
-        # MISSING_CARD 0 -> 1 is the honest token knock-on: Hare Apparent's
-        # Rabbit token (grpId_94160) is now minted a snapshot earlier — at the
-        # step GRE places Hare Apparent, before GRE lists the Rabbit — so the
-        # engine holds a token GRE has not yet attested and it surfaces as a
-        # producible-but-unattested MISSING_CARD (token cadence, phase-H/L
-        # territory) rather than being cleaned by the resync before comparison.
+        # Phase G pinned MISSING_CARD 0 -> 1 here: Hare Apparent's Rabbit token
+        # (grpId_94160) mints a snapshot earlier — at the step GRE places Hare
+        # Apparent, before GRE lists the Rabbit — so the engine held a token GRE
+        # had not yet attested and it surfaced as a producible-but-unattested
+        # MISSING_CARD (token cadence).
+        #
+        # Phase O (issue #57) clears that MISSING_CARD 1 -> 0: the Rabbit's
+        # minting is a mint-cadence offset, not a missing minter. The impl
+        # demonstrably mints a uniquely-identifiable 1/1 white Rabbit
+        # (_impl_minted_token_grpids credits 94160 even though the overflow pass
+        # removed the still-id-less token before it co-occurred with GRE's), so
+        # "has no engine impl that mints it" was a false positive and is no
+        # longer recorded. The residual is the one-snapshot zone offset the
+        # comparison already counts (STATE_MISMATCH 6, unchanged).
         assert report.total_snapshots == 116
         assert report.successful_comparisons == 112
-        assert dict(by_type) == {"STATE_MISMATCH": 6, "MISSING_CARD": 1}
+        assert dict(by_type) == {"STATE_MISMATCH": 6}
         assert dict(by_category) == {
             "zone_contents": 6,
-            "MISSING_CARD": 1,
         }
 
     def test_tokens_prideful_fingerprint(self):
@@ -4214,7 +4266,17 @@ class TestGoldenGame:
         funding, which the manaPool evidence cannot and does not touch. A
         regression that mis-carried or double-credited floating mana would move
         this fingerprint. The sync mechanism itself is pinned by
-        ``TestManaPoolSync`` and its parse by ``TestManaPoolParsing``."""
+        ``TestManaPoolSync`` and its parse by ``TestManaPoolParsing``.
+
+        Phase O (issue #57) moves it once more: MISSING_CARD 2 -> 1. One of the
+        two remaining token MISSINGs is a token this game's impls demonstrably
+        mint (uniquely identifiable, credited in _impl_minted_token_grpids even
+        though the mint-cadence offset kept it from correlating), so "has no
+        engine impl that mints it" was a false positive and is suppressed; its
+        one-snapshot zone offset stays in STATE_MISMATCH (64, unchanged). The
+        single surviving token MISSING is an identity no impl in this game
+        produces. Comparison counts (snapshots/ok/STATE_MISMATCH/ENGINE_ERROR)
+        are untouched — the change is finalize-time producibility only."""
         report, by_type, by_category = self._fingerprint(self.FIXTURE_EQUIP)
         assert report.total_snapshots == 894
         assert report.successful_comparisons == 840
@@ -4222,14 +4284,14 @@ class TestGoldenGame:
             "STATE_MISMATCH": 64,
             "ENGINE_ERROR": 1,
             "ILLEGAL_ACTION": 4,
-            "MISSING_CARD": 2,
+            "MISSING_CARD": 1,
         }
         assert dict(by_category) == {
             "zone_contents": 32,
             "tapped_state": 21,
             "life_total": 15,
             "ENGINE_ERROR": 1,
-            "MISSING_CARD": 2,
+            "MISSING_CARD": 1,
         }
 
     def test_dormant_events_fingerprint(self):

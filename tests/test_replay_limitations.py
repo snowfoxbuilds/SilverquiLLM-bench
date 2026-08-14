@@ -187,6 +187,44 @@ class TestFamilyTags:
         )
         assert classify_limitation(rec, ctx) == "resolution-cadence"
 
+    def test_impl_minted_snapshot_extra_is_cadence(self):
+        # Phase O (issue #57): the impl DID mint this token identity this game
+        # (impl_minted), so the surviving snapshot-extra is a mint-cadence
+        # offset, not an unimplemented minter — even though its grpId is also a
+        # known token identity.
+        ctx = LimitationContext(
+            token_grp_ids=frozenset({94177}),
+            impl_minted_token_grpids=frozenset({94177}),
+        )
+        rec = _rec(
+            "STATE_MISMATCH",
+            "[zone_contents] Zone ZoneType_Battlefield (seat 2) content "
+            "mismatch: engine=[], snapshot=[94177]",
+        )
+        assert classify_limitation(rec, ctx) == "resolution-cadence"
+
+    def test_correlation_refused_token_missing_is_hidden(self):
+        # Phase O: the 1/1 black Rat 94169 collides map-wide with the Burglar Rat
+        # copy 93883 (same colour), so its identity is unrecoverable from the
+        # stream — a hidden-information floor, not a missing minter.
+        rec = _rec(
+            "MISSING_CARD",
+            "Token '1/1 black Rat token' (grpId=94169) has no engine impl "
+            "that mints it",
+        )
+        assert classify_limitation(rec, LimitationContext()) == "hidden-information"
+
+    def test_correlation_refused_snapshot_extra_is_hidden(self):
+        # The same collision-refused Rat as a zone snapshot-extra is a floor,
+        # checked before both the impl-minted and unimplemented rules.
+        ctx = LimitationContext(token_grp_ids=frozenset({94169}))
+        rec = _rec(
+            "STATE_MISMATCH",
+            "[zone_contents] Zone ZoneType_Battlefield (seat 2) content "
+            "mismatch: engine=[], snapshot=[94169]",
+        )
+        assert classify_limitation(rec, ctx) == "hidden-information"
+
     def test_life_and_tapped_and_illegal_are_cadence(self):
         for rec in (
             _rec("STATE_MISMATCH", "[life_total] Player 2 life mismatch: engine=18, snapshot=16"),
