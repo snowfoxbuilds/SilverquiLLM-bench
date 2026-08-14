@@ -18,7 +18,11 @@ from pathlib import Path
 
 import pytest
 
-from silverquillm.replay.executor import ReplayExecutor, StepResult
+from silverquillm.replay.executor import (
+    _ORACLE_PT_SOURCE,
+    ReplayExecutor,
+    StepResult,
+)
 from silverquillm.replay.types import (
     Annotation,
     GameObject,
@@ -2828,6 +2832,141 @@ class TestOraclePTCorrections:
         assert card.base_power == 2
 
 
+class TestPreComparePTRederive:
+    """Phase N (issue #56): a continuous effect a driven ability-resolution
+    registers THIS step is reflected in the compared P/T at compare time, not
+    one comparison boundary late in the post-comparison resync.
+
+    The Dauntless Veteran shape: the attack trigger resolves at gsid N (the
+    engine stack empties, matching GRE's ability_resolution), registering
+    "+1/+1 until end of turn". Before Phase N the compared power/toughness was
+    recomputed only in the resync AFTER the comparison, so the buffed creature
+    diverged at exactly gsid N and matched only at gsid N+1. Re-deriving before
+    the comparison surfaces the engine's own correct post-resolution value.
+    """
+
+    SRC = 555010  # unmapped grpId -> generic Creature shell
+
+    def _buff_step(self):
+        """Executor + (prev, curr) where driving curr's ability_resolution
+        registers a real +1/+1 continuous effect on the source creature, and
+        GRE attests the buffed 3/3 at curr. Returns (ex, card, prev, curr)."""
+        from engine.stack import StackObject
+
+        def bf(gsid: int, power: int, toughness: int) -> GameSnapshot:
+            obj = card_obj(
+                100, self.SRC, 1, BF1, card_types=["CardType_Creature"],
+                power=power, toughness=toughness,
+            )
+            return snapshot(gsid, battlefield={1: [100]}, objects={100: obj})
+
+        prev = bf(1, 2, 2)      # base 2/2, engine and GRE agree
+        curr = bf(2, 3, 3)      # GRE attests the post-resolution 3/3
+        curr.actions = [ReplayAction(
+            action_type="ability_resolution", turn_number=1, active_player=1,
+            player_seat_id=1, card_name="Dauntless-like", grp_id=self.SRC,
+            instance_id=500,
+        )]
+        ex = make_executor([prev, curr])
+        card = ex._engine_cards[100]
+
+        # The trigger's on_resolve registers a real (non-oracle) +1/+1 effect —
+        # WITHOUT running apply_all itself, exactly like a card's resolution.
+        from engine.continuous_effects import (
+            DURATION_END_OF_TURN,
+            ContinuousEffect,
+            Layer,
+            SubLayer,
+        )
+        buff_source = object()  # a real effect source, distinct from the oracle
+
+        def on_resolve(game, card=card, buff_source=buff_source):
+            def _apply(_g):
+                card.modified_power += 1
+                card.modified_toughness += 1
+            game.effect_manager.add(ContinuousEffect(
+                source=buff_source,
+                layer=Layer.POWER_TOUGHNESS,
+                sublayer=SubLayer.MODIFY_PT,
+                duration=DURATION_END_OF_TURN,
+                apply=_apply,
+            ))
+
+        ex.game.stack.push(
+            StackObject(source=card, controller=ex.players[1], on_resolve=on_resolve)
+        )
+        return ex, card, prev, curr
+
+    @staticmethod
+    def _pt(result):
+        return [m for m in result.mismatches if m.category == "power_toughness"]
+
+    def test_buff_registered_this_step_reads_at_compare_time(self):
+        """The buff the driven resolution registers is applied before the
+        comparison — the creature reads its post-resolution 3/3 at compare time,
+        so there is NO P/T divergence at the resolution snapshot."""
+        ex, card, prev, curr = self._buff_step()
+
+        result = ex.execute_step(prev, curr)
+
+        assert self._pt(result) == []          # no divergence at compare time
+        assert (card.power, card.toughness) == (3, 3)  # buff is live at compare
+        # It is the REAL effect, not an oracle patch: engine reached GRE truth
+        # on its own, so the resync installs no correction.
+        assert ex._oracle_pt_corrections() == []
+        assert (card.base_power, card.base_toughness) == (2, 2)  # printed stats intact
+
+    def test_without_pre_compare_rederive_the_buff_lags_one_boundary(self):
+        """Control: neutralise ONLY the pre-comparison re-derive. The compared
+        P/T then reads the stale pre-resolution 2/2 against GRE's 3/3 — the
+        exact one-boundary-late divergence Phase N removes. Proves the
+        pre-compare pass is what clears it (not the end-of-step resync)."""
+        ex, _card, prev, curr = self._buff_step()
+        ex._rederive_pt_pre_compare = lambda *a, **k: None  # disable Phase N only
+
+        result = ex.execute_step(prev, curr)
+
+        # The +1/+1 lags on both power and toughness: engine reads the stale
+        # pre-resolution 2/2 against GRE's 3/3 at compare time.
+        pt = self._pt(result)
+        assert len(pt) == 2
+        assert all((m.engine_value, m.snapshot_value) == (2, 3) for m in pt)
+
+    def test_gate_skips_rederive_when_no_effect_registered(self):
+        """The gate: with no new (non-oracle) effect registered this step, the
+        pre-compare pass is a no-op — it does not run apply_all, preserving the
+        resync's no-correction fast path. A standing oracle correction (the
+        engine's GRE-truth base from the previous resync) is left untouched."""
+        from engine.continuous_effects import (
+            DURATION_PERMANENT,
+            ContinuousEffect,
+            Layer,
+            SubLayer,
+        )
+
+        obj = card_obj(100, self.SRC, 1, BF1, card_types=["CardType_Creature"],
+                       power=2, toughness=2)
+        s0 = snapshot(1, battlefield={1: [100]}, objects={100: obj})
+        ex = make_executor([s0])
+        card = ex._engine_cards[100]
+
+        # Install a standing oracle correction (as the previous resync would).
+        ex.game.effect_manager.add(ContinuousEffect(
+            source=_ORACLE_PT_SOURCE, layer=Layer.POWER_TOUGHNESS,
+            sublayer=SubLayer.MODIFY_PT, duration=DURATION_PERMANENT,
+            apply=ex._make_pt_correction(card, 1, 1),
+        ))
+        pre = ex._nonoracle_effect_ids()  # no real effects -> stays constant
+        ex.game.effect_manager.apply_all(ex.game)
+        assert (card.power, card.toughness) == (3, 3)  # oracle base applied
+
+        # No real effect changed -> the gate skips the re-derive entirely.
+        ex._rederive_pt_pre_compare(StepResult(snapshot_id=1), pre)
+        assert ex._nonoracle_effect_ids() == pre                 # unchanged
+        assert len(ex._oracle_pt_corrections()) == 1             # base preserved
+        assert (card.power, card.toughness) == (3, 3)            # value undisturbed
+
+
 class TestStepAbortGuard:
     """A card crash during ability resolution is a per-action failure —
     the step's remaining actions, comparisons, and resync still run.
@@ -3985,17 +4124,24 @@ class TestGoldenGame:
         early-minted producible-but-unattested MISSING_CARD (an earlier cut of
         the loop matched the top by source card, resolved the trigger in the
         same arrival step, and pinned a MISSING_CARD +1 here as an
-        'inevitable' token knock-on; it was this loop's own artifact)."""
+        'inevitable' token knock-on; it was this loop's own artifact).
+
+        Phase N (pre-comparison P/T re-derivation — issue #56) clears this
+        game's single power_toughness transient: the buff was registered while
+        driving its step's actions but the compared P/T was recomputed only in
+        the post-comparison resync, one boundary late. Re-deriving before the
+        comparison surfaces the engine's own correct value at compare time —
+        STATE_MISMATCH 15 -> 14 (power_toughness 1 -> 0), successful comparisons
+        322 -> 323. Zone/tapped are untouched (the re-derive owns only P/T)."""
         report, by_type, by_category = self._fingerprint(self.FIXTURE_TOKENS)
         assert report.total_snapshots == 332
-        assert report.successful_comparisons == 322
+        assert report.successful_comparisons == 323
         assert dict(by_type) == {
-            "STATE_MISMATCH": 15,
+            "STATE_MISMATCH": 14,
             "ILLEGAL_ACTION": 2,
         }
         assert dict(by_category) == {
             "zone_contents": 14,
-            "power_toughness": 1,
             "tapped_state": 2,
         }
 
@@ -4098,17 +4244,31 @@ class TestGoldenGame:
         resolves a snapshot late vs GRE at a comparison point), the honest
         limitation attributed in the PR. A regression that un-fires any of the
         three events would blow this pin up. ENGINE_ERROR 3 is bounded funding /
-        counter-timing residue (not a dormant event)."""
+        counter-timing residue (not a dormant event).
+
+        Phase N (pre-comparison P/T re-derivation — issue #56) is the fixture
+        this issue was named for: Dauntless Veteran's "creatures you control get
+        +1/+1 until end of turn" attack trigger (and the other resolution-cadence
+        buffs here) registered its continuous effect while driving the
+        ability_resolution step, but the compared P/T was recomputed only in the
+        post-comparison resync — one comparison boundary late — so every buffed
+        creature diverged at exactly the resolution snapshot before the resync
+        caught up. Re-deriving before the comparison surfaces the engine's own
+        (correct) post-resolution P/T at compare time: power_toughness 22 -> 10
+        (STATE_MISMATCH 26 -> 14), successful comparisons 444 -> 448. The 10 that
+        remain are the mirror-image cadence (the engine re-derives a buff a beat
+        before GRE attests it — still resolution-cadence-tagged) plus dynamic-P/T
+        the gate does not touch. ENGINE_ERROR 3 and zone/life are untouched."""
         report, by_type, by_category = self._fingerprint(self.FIXTURE_DORMANT)
         assert report.total_snapshots == 460
-        assert report.successful_comparisons == 444
+        assert report.successful_comparisons == 448
         assert dict(by_type) == {
-            "STATE_MISMATCH": 26,
+            "STATE_MISMATCH": 14,
             "ENGINE_ERROR": 3,
             "MISSING_CARD": 1,
         }
         assert dict(by_category) == {
-            "power_toughness": 22,
+            "power_toughness": 10,
             "zone_contents": 3,
             "life_total": 1,
             "ENGINE_ERROR": 3,
@@ -4127,7 +4287,20 @@ class TestGoldenGame:
         ``successful_comparisons`` far below 706 and resurrect REPLAY_INFRA. The
         residual (zone_contents 29 = milled graveyard shells; power_toughness 20 =
         the CDA opponents'-graveyard count off vs GRE) is the hidden-library
-        unfaithfulness attributed in the PR, not a fixable divergence."""
+        unfaithfulness attributed in the PR, not a fixable divergence.
+
+        Phase N (pre-comparison P/T re-derivation — issue #56) leaves this pin
+        BYTE-IDENTICAL, by design. Consuming Aberration's power is a dynamic
+        library/graveyard count registered once as a static ability, not a
+        continuous effect the executor registers while driving a step; the Phase
+        N re-derive is GATED on a real (non-oracle) effect having registered
+        this step, so it never re-runs CDA's count against the eager engine
+        graveyard. An UNGATED re-derive (rejected option A) inflated this game's
+        CDA to 28-vs-3 (max engine P/T 18 -> 33) by counting the hidden-library
+        mill early — the gate is exactly what keeps CDA at its floor magnitude,
+        so no HIDDEN_PT_CARDS special-case was needed. power_toughness 20 here is
+        unchanged from the pre-Phase-N baseline; a regression to the ungated
+        behaviour would blow it up."""
         report, by_type, by_category = self._fingerprint(self.FIXTURE_MILL)
         assert report.total_snapshots == 737
         assert report.successful_comparisons == 706
@@ -4151,19 +4324,26 @@ class TestGoldenGame:
         no faithful engine could fund them. The five ENGINE_ERROR are the pin —
         a regression that silently funded them (fabricating mana) would drop the
         count; a regression that suppressed the game would drop successful
-        comparisons far below 378."""
+        comparisons far below 378.
+
+        Phase N (pre-comparison P/T re-derivation — issue #56) clears six of the
+        seven power_toughness divergences here: resolution-cadence buffs that
+        registered while driving their step but compared one boundary late.
+        power_toughness 7 -> 1 (STATE_MISMATCH 14 -> 8), successful comparisons
+        378 -> 381. The five unfunded-activation ENGINE_ERRORs — the actual pin
+        — are untouched, as are zone/life; the re-derive owns only P/T."""
         report, by_type, by_category = self._fingerprint(self.FIXTURE_UNFUNDED)
         assert report.total_snapshots == 393
-        assert report.successful_comparisons == 378
+        assert report.successful_comparisons == 381
         assert dict(by_type) == {
             "ENGINE_ERROR": 5,
-            "STATE_MISMATCH": 14,
+            "STATE_MISMATCH": 8,
             "ILLEGAL_ACTION": 2,
             "MISSING_CARD": 1,
         }
         assert dict(by_category) == {
             "ENGINE_ERROR": 5,
-            "power_toughness": 7,
+            "power_toughness": 1,
             "zone_contents": 7,
             "life_total": 2,
             "MISSING_CARD": 1,

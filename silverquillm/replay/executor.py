@@ -1127,6 +1127,13 @@ class ReplayExecutor:
         """
         self._current_snapshot = curr_snapshot
 
+        # Snapshot the engine's real (non-oracle) continuous effects before
+        # driving this step's actions, so the pre-comparison re-derivation below
+        # can tell whether driving REGISTERED a new effect (e.g. an attack
+        # trigger's "+1/+1 until end of turn") and only re-derive P/T when it did
+        # — the effect-attestation gate (see _rederive_pt_pre_compare).
+        pre_drive_effect_ids = self._nonoracle_effect_ids()
+
         # At a GRE phase/step transition, SET the engine pools to the mana GRE
         # attests was still floating at the end of the previous step (its
         # manaPool), replacing the old *unconditional* pool-empty at that
@@ -1207,6 +1214,18 @@ class ReplayExecutor:
         # named counters like Drake Hatcher's incubation) before comparison — an
         # authoritative SET, so no double-count with engine-driven counters.
         self._apply_counter_annotations(curr_snapshot)
+
+        # Re-derive the compared P/T BEFORE comparing, so a continuous effect a
+        # driven ability-resolution registered THIS step (e.g. Dauntless
+        # Veteran's attack trigger, "creatures you control get +1/+1 until end
+        # of turn") is reflected at compare time — instead of only landing in
+        # the post-comparison resync, one comparison boundary late. This is the
+        # triggered-ability P/T analogue of Phase G's arrival-aligned spell
+        # resolution: reach the engine's own correct value before the honest
+        # comparison, not after it. Gated on a new real effect having registered
+        # this step (see _rederive_pt_pre_compare); on a no-new-effect step the
+        # apply_all is idempotent with the previous resync's result.
+        self._rederive_pt_pre_compare(result, pre_drive_effect_ids)
 
         # Honest comparison against the state the engine actually reached.
         result.mismatches.extend(self.compare_state(curr_snapshot))
@@ -3640,6 +3659,61 @@ class ReplayExecutor:
         if effect_manager is None:
             return []
         return effect_manager.get_effects_by_source(_ORACLE_PT_SOURCE)
+
+    def _nonoracle_effect_ids(self) -> frozenset[int]:
+        """Identities of the engine's real (non-oracle) continuous effects.
+
+        Excludes the replay-owned ``_ORACLE_PT_SOURCE`` corrections, which the
+        resync installs/removes every step, so a change in this set means a
+        *real* card effect was registered or removed while driving — the
+        evidence the pre-comparison re-derivation gates on. Object identity is
+        sufficient and deterministic: the gate reads only whether the set
+        differs across a step, never the id values themselves.
+        """
+        if self.game is None:
+            return frozenset()
+        effect_manager = getattr(self.game, "effect_manager", None)
+        if effect_manager is None:
+            return frozenset()
+        return frozenset(
+            id(e) for e in effect_manager.effects if e.source is not _ORACLE_PT_SOURCE
+        )
+
+    def _rederive_pt_pre_compare(
+        self, result: StepResult, pre_drive_effect_ids: frozenset[int]
+    ) -> None:
+        """Re-derive compared P/T before comparison (pre-comparison pass).
+
+        Runs ``apply_all`` so a continuous effect a driven ability-resolution
+        registered this step lands in the compared power/toughness at compare
+        time, not one comparison boundary late in the post-comparison resync.
+        The oracle base is preserved: the corrections installed by the previous
+        step's resync stay registered, and ``apply_all`` re-applies them (as
+        +delta effects) plus any real effect registered this step, so the
+        comparison sees ``GRE-truth-base + this-step's-real-effects`` — never a
+        stripped base (which would unmask hundreds of corrected divergences).
+
+        Gated on *evidence*, not on the divergence count: only re-derive when a
+        real (non-oracle) effect was registered or removed while driving this
+        step (``_nonoracle_effect_ids`` changed). On a step that registered no
+        new effect the re-derive would be idempotent with the previous resync's
+        result anyway, so skipping it keeps ``_rederive_pt_corrections``'s
+        no-correction fast path (and its cost) on the vast majority of steps.
+
+        Skipped when the effect layer has already crashed this game
+        (``_effects_broken``): re-running ``apply_all`` would only re-crash.
+        """
+        if self.game is None:
+            return
+        effect_manager = getattr(self.game, "effect_manager", None)
+        if effect_manager is None:
+            return
+        if self._effects_broken:
+            return
+        effect_changed = self._nonoracle_effect_ids() != pre_drive_effect_ids
+        if not effect_changed:
+            return
+        self._safe_apply_all(result)
 
     def _rederive_pt_corrections(
         self, snapshot: GameSnapshot, result: StepResult | None = None
