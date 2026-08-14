@@ -123,6 +123,12 @@ class ValidationReport:
     # (ambiguous). The report serializer reads this to tag their surviving
     # state mismatches as the ``ambiguous-ability`` floor. Simulate-only.
     ambiguous_sources: frozenset[str] = field(default_factory=frozenset)
+    # Phase O (issue #57): token grpIds a real engine impl minted this game,
+    # whether or not the mint ever correlated. The serializer reads this to
+    # re-attribute a snapshot-extra token the impl DOES produce (a mint-cadence
+    # offset) as ``resolution-cadence`` rather than ``unimplemented-effect``.
+    # Simulate-only.
+    impl_minted_token_grpids: frozenset[int] = field(default_factory=frozenset)
 
     @property
     def divergence_count(self) -> int:
@@ -366,12 +372,16 @@ class ValidatingExecutor:
         ambiguous = frozenset(
             getattr(self.executor, "_ambiguous_sources", frozenset())
         )
+        impl_minted = frozenset(
+            getattr(self.executor, "_impl_minted_token_grpids", frozenset())
+        )
         return ValidationReport(
             total_snapshots=self._snapshots_processed,
             successful_comparisons=self._successful,
             divergences=list(self.divergences),
             card_appearances=dict(self._card_appearances),
             ambiguous_sources=ambiguous,
+            impl_minted_token_grpids=impl_minted,
         )
 
     def record_divergence(self, divergence: Divergence) -> None:
@@ -504,17 +514,31 @@ class ValidatingExecutor:
     def _finalize_token_missing(self) -> None:
         """Record deferred token misses the engine never produced (task 6).
 
-        A token grpId the engine minted and correlated this game (present in the
-        executor's ``_minted_token_grpids``) is producible — not a missing card.
-        One that never appears there has no engine impl that mints it and must
-        still surface, as its named token identity rather than an anonymous
-        grpId. Idempotent: dedup via ``_missing_identities`` so a second call
-        adds nothing.
+        A token grpId the engine minted this game is producible — not a missing
+        card. Producibility has TWO independent proofs, and either suffices:
+
+        * ``_minted_token_grpids`` — the engine minted the token AND it correlated
+          to its GRE twin at a stamping pass (co-presence).
+        * ``_impl_minted_token_grpids`` (Phase O, issue #57) — a real engine impl
+          minted a uniquely-identifiable token of this grpId, whether or not it
+          ever correlated. The corpus's dominant unminted-token cause is a
+          mint-cadence offset: the engine mints the token (correct
+          characteristics) a snapshot before GRE attests it, so the overflow pass
+          removes the still-id-less engine token before the two co-occur. Such a
+          token IS produced by an impl, so "has no engine impl that mints it" is a
+          false positive; its surviving zone offset is the cadence divergence,
+          recorded independently.
+
+        A grpId in neither set has no impl that mints it and must still surface,
+        as its named token identity rather than an anonymous grpId. Idempotent:
+        dedup via ``_missing_identities`` so a second call adds nothing.
         """
         minted = getattr(self.executor, "_minted_token_grpids", set())
+        impl_minted = getattr(self.executor, "_impl_minted_token_grpids", set())
+        producible = minted | impl_minted
         for grp_id in sorted(self._token_missing_candidates):
             identity, snapshot = self._token_missing_candidates[grp_id]
-            if grp_id in minted or identity in self._missing_identities:
+            if grp_id in producible or identity in self._missing_identities:
                 continue
             self._missing_identities.add(identity)
             self.divergences.append(Divergence(

@@ -266,6 +266,7 @@ def _aggregate_reports(
                 LimitationContext(
                     ambiguous_sources=r.ambiguous_sources,
                     token_grp_ids=token_grp_ids,
+                    impl_minted_token_grpids=r.impl_minted_token_grpids,
                 ),
             )
             for r in reports
