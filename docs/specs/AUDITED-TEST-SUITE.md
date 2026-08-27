@@ -18,6 +18,12 @@ Unlike traditional benchmarks with pre-built test suites, SilverquiLLM-bench has
 
 Audited tests follow **Implementation-Agnostic Testing** (see [CONTEXT.md](http://context.md/)): a test asserts *what a card does* — observable game-state outcomes — and must pass against *any* correct implementation, never coupling to one implementation's naming, internal structure, method names, or conventions. Operationally, audited tests are behavioral/outcome-based, canonical-engine-API-only, and `DeterministicPlayer`-scripted. This principle governs every Audited Test Category and Decision below.
 
+### Tests as envelope (HOB-generation)
+
+Because audited tests are behavioral and simulate gameplay (Implementation-Agnostic Testing), the audited suite **is** the agent envelope for the HOB-generation benchmarks: **any** engine modification — including renames and refactors, not just additions — is permitted, and is judged solely by its observable consequences on the three audited dimensions (HOB card correctness, FDN card regression, engine regression), all run against the harvested engine. There is no additive-only rule and no diff policing; that additive-only regime is scoped to SOS V1 (see [WORKSPACE-CONTRACT.md](WORKSPACE-CONTRACT.md) and [HOB-BENCHMARKS.md](HOB-BENCHMARKS.md) → Engine rules).
+
+Enforcement is the scoring itself: a change that breaks a symbol the audited tests import (a moved/renamed engine path or class) raises `ImportError` before assertions run, so those tests score as failing — **that scoring is the enforcement**, needing no separate diff policy or engine-churn review.
+
 ### Evaluation Architecture
 
 **Implementation Phase** (per agent):

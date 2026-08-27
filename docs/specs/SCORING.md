@@ -44,6 +44,16 @@ Measures whether the agent's engine extensions broke fundamental game mechanics.
 
 FDN Card Regression and Engine Regression are intertwined (both test the engine at different levels) but measure different things: Dimension 2 catches broken card behavior, Dimension 3 catches broken rules mechanics. An agent could pass all FDN card tests but fail engine tests if it hacked card-level workarounds that corrupt internal state.
 
+### Agent envelope (HOB-generation benchmarks)
+
+For the HOB-generation benchmarks (hob-easy/medium/hard), the Writable Engine is **freely modifiable** — there is no additive-only rule and no diff policing (a departure from the SOS V1 contract; see [WORKSPACE-CONTRACT.md](WORKSPACE-CONTRACT.md) and [HOB-BENCHMARKS.md](HOB-BENCHMARKS.md) → Engine rules). The entire judgment is the same three audited dimensions, all run against the harvested engine, with **HOB Card Correctness** replacing SOS Card Correctness for this generation:
+
+1. **HOB Card Correctness** — audited HOB tests against the agent's `card_impl.py` + harvested `/workspace/engine/`.
+2. **FDN Card Regression** — audited FDN tests against the pre-filled FDN impls + harvested `/workspace/engine/`.
+3. **Engine Regression** — core engine tests against the harvested `/workspace/engine/`.
+
+Audited tests judge card behavior by simulating gameplay (Implementation-Agnostic Testing), so **any** engine change — including renames and refactors — is permitted; it is judged solely by its observable consequences on these three dimensions. Engine churn (`engine_diff.patch`) stays a **diagnostic** metric only: it is never scored and never policed. HOB-generation benchmarks score raw pass/total — the complexity weighting below is SOS-only.
+
 ### Complexity Weighting
 
 | Tier | Criteria | Weight |
