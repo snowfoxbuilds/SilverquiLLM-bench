@@ -80,6 +80,7 @@ Fields:
 - `cards` (array) — the benchmark's canonical scored card set (collector numbers). For v1 this is the 10 audited SOS cards (`001`, `004`, `013`, `057`, `097`, `120`, `201`, `226`, `245`, `257`), and the v1 "full set" is exactly these — a leaderboard-valid run must stage all of them. Named `cards` to avoid collision with the run-level `card_filter` in `run_summary.json` (the per-run `--cards` selection, `null` when unfiltered).
 - `leaderboard.requires_full_set` (bool) — a leaderboard-valid run must stage every card in `cards`.
 - `leaderboard.requires_unfiltered` (bool) — a leaderboard-valid run must run with no narrower `--cards` filter (run-level `card_filter = null`).
+- `leaderboard.eligible` (bool, optional; default `true`) — when `false`, the benchmark is **never leaderboard-published**, whatever the run shape. Set on the smoke benchmark (`benchmarks/smoke/`), a pipeline-validation / candidate-calibration benchmark run like any other but whose results never enter a leaderboard.
 Not in config: workspace/test paths (resolved from the `_REPO_ROOT` / `_BENCHMARK_SET_ROOT` constants) and complexity weights (v1 scoring is unweighted pass/total).
 
 ## Workspace Staging

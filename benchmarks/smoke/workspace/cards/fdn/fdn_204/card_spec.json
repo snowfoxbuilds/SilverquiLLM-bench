@@ -1,0 +1,17 @@
+{
+  "name": "Krenko, Mob Boss",
+  "mana_cost": "{2}{R}{R}",
+  "type_line": "Legendary Creature — Goblin Warrior",
+  "oracle_text": "{T}: Create X 1/1 red Goblin creature tokens, where X is the number of Goblins you control.",
+  "power": "3",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "204",
+  "complexity_tier": "medium"
+}

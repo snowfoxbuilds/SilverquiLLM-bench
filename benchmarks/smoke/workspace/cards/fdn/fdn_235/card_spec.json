@@ -1,0 +1,19 @@
+{
+  "name": "Wary Thespian",
+  "mana_cost": "{1}{G}",
+  "type_line": "Creature — Cat Druid",
+  "oracle_text": "When this creature enters or dies, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)",
+  "power": "3",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Surveil"
+  ],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "235",
+  "complexity_tier": "medium"
+}

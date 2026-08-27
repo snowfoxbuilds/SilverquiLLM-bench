@@ -1,0 +1,19 @@
+{
+  "name": "Affectionate Indrik",
+  "mana_cost": "{5}{G}",
+  "type_line": "Creature — Beast",
+  "oracle_text": "When this creature enters, you may have it fight target creature you don't control. (Each deals damage equal to its power to the other.)",
+  "power": "4",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Fight"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "211",
+  "complexity_tier": "medium"
+}

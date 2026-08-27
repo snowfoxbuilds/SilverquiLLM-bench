@@ -1,1 +1,1 @@
-# Secrets of Strixhaven benchmark set
+# The Hobbit — Medium benchmark set

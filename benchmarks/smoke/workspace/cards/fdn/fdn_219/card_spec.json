@@ -1,0 +1,17 @@
+{
+  "name": "Elvish Archdruid",
+  "mana_cost": "{1}{G}{G}",
+  "type_line": "Creature — Elf Druid",
+  "oracle_text": "Other Elf creatures you control get +1/+1.\n{T}: Add {G} for each Elf you control.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "219",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Extravagant Replication",
+  "mana_cost": "{4}{U}{U}",
+  "type_line": "Enchantment",
+  "oracle_text": "At the beginning of your upkeep, create a token that's a copy of another target nonland permanent you control.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "154",
+  "complexity_tier": "medium"
+}

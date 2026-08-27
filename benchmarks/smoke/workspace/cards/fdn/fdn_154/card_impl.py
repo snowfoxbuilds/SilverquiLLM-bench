@@ -1,0 +1,61 @@
+"""Card implementation for Extravagant Replication."""
+from __future__ import annotations
+from typing import TYPE_CHECKING, Any
+from engine.card import Enchantment
+from engine.card_queries import choose_object
+from engine.types import CardType, ManaCost, Zone
+from engine.events import BeginningOfUpkeepTriggeredEvent
+if TYPE_CHECKING:
+    from engine.game_state import GameState
+
+class ExtravagantReplication(Enchantment):
+    """Extravagant Replication — {4}{U}{U} — Enchantment.
+
+    At the beginning of your upkeep, create a token that's a copy of
+    another target nonland permanent you control.
+
+    FDN collector number 154.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault('name', 'Extravagant Replication')
+        kwargs.setdefault('mana_cost', ManaCost.parse('{4}{U}{U}'))
+        kwargs.setdefault('rules_text', "At the beginning of your upkeep, create a token that's a copy of another target nonland permanent you control.")
+        super().__init__(**kwargs)
+
+    def register_triggers(self, game: 'GameState') -> None:
+        """Register upkeep trigger to copy a nonland permanent."""
+        from engine.game import create_token, mint_token_copy
+        from engine.triggers import TriggerRegistration
+        source = self
+        controller = getattr(self, 'controller', None) or game.active_player
+
+        def _condition(game: Any, event: dict) -> bool:
+            ctrl = getattr(source, 'controller', None)
+            return game.active_player is ctrl
+
+        def _effect(game: 'GameState') -> None:
+            ctrl = getattr(source, 'controller', None)
+            if ctrl is None:
+                return
+            bf = game.get_battlefield(ctrl)
+            candidates = []
+            for obj in bf.get_all():
+                if obj is source:
+                    continue
+                card_types = getattr(obj, 'card_types', set())
+                if CardType.LAND in card_types and len(card_types) == 1:
+                    continue
+                if CardType.LAND not in card_types:
+                    candidates.append(obj)
+            if not candidates:
+                return
+            chosen = choose_object(game, ctrl, candidates, 'Choose a nonland permanent to copy', source_card=source)
+            if chosen is None:
+                return
+            # A token copy is a new object with only the copiable characteristics
+            # (rule 707.2): mint_token_copy re-mints identity and drops the
+            # original's counters/damage/tap, unlike a bare copy.copy.
+            token = mint_token_copy(chosen)
+            create_token(game, ctrl, token)
+        game.trigger_manager.register(TriggerRegistration(event_type=BeginningOfUpkeepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))

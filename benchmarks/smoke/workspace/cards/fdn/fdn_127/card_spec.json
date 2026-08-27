@@ -1,0 +1,15 @@
+{
+  "name": "Banner of Kinship",
+  "mana_cost": "{5}",
+  "type_line": "Artifact",
+  "oracle_text": "As this artifact enters, choose a creature type. This artifact enters with a fellowship counter on it for each creature you control of the chosen type.\nCreatures you control of the chosen type get +1/+1 for each fellowship counter on this artifact.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "127",
+  "complexity_tier": "medium"
+}
