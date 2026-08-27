@@ -43,7 +43,7 @@ Built benchmark runner harness, test utilities, agent prompts, CLI scaffold, sco
 
 Implement all FDN cards 001–291 (limited format pool). Validate engine via Replay Validation against 17lands MTGA data. Run Pipeline Validation Runs to verify end-to-end orchestration.
 
-FDN Replay Validation is **closed** (grilling 2026-08-27): observer mode fully clean (271/271, rate 0.0); the simulate-mode residue (5,222 divergences after Phase O) is 100% machine-attributed to documented limitation families (floor 564) and is accepted — none of it is engine-attributable. No further burn-down phases; a final parity report is the closing artifact. Cadence work reopens only if a future benchmark surfaces an actual engine bug in that area.
+FDN Replay Validation is **closed** (grilling 2026-08-27): observer mode fully clean (271/271, rate 0.0); the simulate-mode residue (5,222 divergences after Phase O) is 100% machine-attributed to documented limitation families (floor 564) and is accepted — none of it is engine-attributable. No further burn-down phases; a final parity report is the closing artifact ([`benchmarks/hob-medium/FDN-REPLAY-PARITY.md`](../../benchmarks/hob-medium/FDN-REPLAY-PARITY.md)). Cadence work reopens only if a future benchmark surfaces an actual engine bug in that area.
 
 **Phase 4 — Scored Benchmark Runs** (CURRENT)
 
