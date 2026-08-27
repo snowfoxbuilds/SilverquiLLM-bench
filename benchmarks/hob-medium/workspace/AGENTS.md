@@ -2,11 +2,12 @@
 
 ## Task
 
-You are implementing MSH card implementations. Each card's implementation class
-must be placed in its assigned file:
+You are implementing HOB card implementations. Each card's implementation class
+must be placed in its assigned file under the HOB target-card tree (created in
+`cards/hob/` when the pool lands):
 
 ```
-cards/msh/{card_id}/card_impl.py
+cards/hob/{card_id}/card_impl.py
 ```
 
 Card choices go through the **Player Query / Player Decision** protocol: an
@@ -17,7 +18,7 @@ Tests answer those queries with **Intents** (see `test_utils.md`).
 ## Hard Rules
 
 1. **Card location invariant** — Each card's canonical implementation class must
-   remain in `cards/msh/{card_id}/card_impl.py`. Do not move or rename card
+   remain in `cards/hob/{card_id}/card_impl.py`. Do not move or rename card
    directories.
 
 2. **Staged-test integrity** — Treat `engine_tests/` as read-only: do not
@@ -27,7 +28,7 @@ Tests answer those queries with **Intents** (see `test_utils.md`).
    verification and learning only; the runner uses its own authoritative copies
    for grading. Editing them — including adding new files — will not change
    your score, it will only mislead you about whether your engine changes are
-   correct. Your own MSH tests belong at `cards/msh/msh_<N>/tests.py`.
+   correct. Your own HOB tests belong at `cards/hob/hob_<N>/tests.py`.
 
 3. **Additive-only engine modifications** — You may add new methods, classes,
    helpers, and files inside `engine/`. You may modify the bodies of existing
@@ -85,7 +86,7 @@ This discovers:
 - Per-card FDN reference tests at `cards/fdn/fdn_{collector_number}/tests.py`.
   Only a handful of FDN cards ship with a `tests.py` — see `PROJECT_MAP.md`
   for the canonical list, and use them as illustrative per-card test examples.
-- Per-card MSH tests you write at `cards/msh/msh_{collector_number}/tests.py`.
+- Per-card HOB tests you write at `cards/hob/hob_{collector_number}/tests.py`.
 
 The workspace `pytest.ini` configures `python_files = test_*.py tests.py` for
 discovery of all three patterns and sets a per-test timeout (5 minutes).
@@ -93,7 +94,7 @@ discovery of all three patterns and sets a per-test timeout (5 minutes).
 Standard imports inside per-card tests:
 
 ```python
-from cards.msh.msh_<N>.card_impl import <ClassName>
+from cards.hob.hob_<N>.card_impl import <ClassName>
 from engine.card import Creature, Instant                  # or whichever base
 from engine.types import CardType, Keyword, ManaCost, ManaType, Zone
 from engine.intent_player import Intent

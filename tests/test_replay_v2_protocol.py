@@ -1,4 +1,4 @@
-"""Tests for the MSH Player Query additions to the replay layer:
+"""Tests for the V2 Player Query additions to the replay layer:
 benchmark-parameterized engine selection and the QUERY_UNANSWERED /
 PROTOCOL_ERROR divergence classification.
 """
@@ -19,7 +19,7 @@ class TestNewDivergenceTypes:
 
 class TestClassifyStepException:
     # Classification matches module-qualified names in the MRO, so the fakes
-    # carry the MSH engine module — no import of MSH-only classes needed here.
+    # carry the V2 engine module — no import of V2-only classes needed here.
     def test_protocol_error_family_maps_to_protocol_error(self):
         class ProtocolError(Exception):
             __module__ = "engine.decisions"
@@ -65,7 +65,7 @@ class TestBenchmarkEngineSelection:
         with pytest.raises(click.ClickException):
             _resolve_workspace("does_not_exist", None)
 
-    def test_msh_benchmark_resolves_workspace(self):
-        ws = _resolve_workspace("msh", None)
+    def test_hob_medium_benchmark_resolves_workspace(self):
+        ws = _resolve_workspace("hob-medium", None)
         assert ws is not None
-        assert str(ws).endswith("benchmarks/msh/workspace")
+        assert str(ws).endswith("benchmarks/hob-medium/workspace")

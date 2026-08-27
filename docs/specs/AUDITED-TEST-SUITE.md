@@ -2,7 +2,7 @@ Status: SETTLED
 
 Last updated: 2026-06-10
 
-Scope: SOS (V1). The `DeterministicPlayer` scripting, two-channel host-side driver, and test-API conventions below are the frozen SOS paradigm. MSH audited tests use the Player Query / Player Decision intent protocol instead — see [DECISION-MODEL.md](https://app.notion.com/p/bea4c558a1d2493a82a7a841d85a8fb0).
+Scope: SOS (V1). The `DeterministicPlayer` scripting, two-channel host-side driver, and test-API conventions below are the frozen SOS paradigm. HOB-generation audited tests use the Player Query / Player Decision intent protocol instead — see [DECISION-MODEL.md](https://app.notion.com/p/bea4c558a1d2493a82a7a841d85a8fb0).
 
 # Audited Test Suite
 
@@ -117,7 +117,7 @@ results/{run_name}/cards/{card_id}/
 
 Engine correctness is validated by replaying recorded MTGA game data (sourced from 17lands) through the Python engine and verifying game-state checkpoints match recorded outcomes. This replaces the originally planned XMage differential testing — Replay Validation is more valuable because MTGA is WotC's own rules implementation, and cross-language Java↔Python comparison adds complexity without confidence.
 
-The Replay Validation pipeline is live (built after FDN 001–291 completed; the first benchmark runs preceded it as Pipeline Validation Runs). For MSH, the same pipeline is adapted to drive the MSH engine through the intent-based DeterministicPlayer via a benchmark-parameterized engine target — see [DECISION-MODEL.md](https://app.notion.com/p/bea4c558a1d2493a82a7a841d85a8fb0) and [MSH-BENCHMARK.md](https://app.notion.com/p/b9345f23a8054d9898d3364fe2e00837).
+The Replay Validation pipeline is live (built after FDN 001–291 completed; the first benchmark runs preceded it as Pipeline Validation Runs). For the HOB-generation benchmarks, the same pipeline is adapted to drive the V2 engine through the intent-based DeterministicPlayer via a benchmark-parameterized engine target — see [DECISION-MODEL.md](https://app.notion.com/p/bea4c558a1d2493a82a7a841d85a8fb0) and [HOB-BENCHMARKS.md](docs/specs/HOB-BENCHMARKS.md).
 
 ## Decisions
 

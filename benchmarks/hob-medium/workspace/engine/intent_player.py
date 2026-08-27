@@ -1,4 +1,4 @@
-"""DeterministicPlayer (MSH) — the intent-based test player.
+"""DeterministicPlayer (V2) — the intent-based test player.
 
 The named ``Intent`` is the scoping/lifecycle layer; answers come from
 *preferences* over Player Decisions, which generalize across query
@@ -101,7 +101,7 @@ class Transcript:
 
 
 class DeterministicPlayer(Player):
-    """Intent-based deterministic player (MSH). See module docstring."""
+    """Intent-based deterministic player (V2). See module docstring."""
 
     def __init__(self, name: str, life: int = 20) -> None:
         super().__init__(name, life)

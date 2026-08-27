@@ -1,6 +1,6 @@
 """Simulate-mode replay validation: mechanism tests + golden game.
 
-These run in the MSH workspace context (``engine`` resolves to this
+These run in the hob-medium workspace context (``engine`` resolves to this
 workspace), like the rest of engine_tests/ — the simulate executor drives
 this engine, so its mechanisms are pinned here rather than in the
 engine-agnostic root suite.

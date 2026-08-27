@@ -32,8 +32,8 @@ from silverquillm.replay.validation import (
 )
 
 # Benchmark id -> default card-set subdir under ``cards/`` whose impls back the
-# replay. MSH replays are FDN-format, so the FDN impls are what gets exercised.
-_DEFAULT_CARD_SET = {"msh": "fdn"}
+# replay. The replays are FDN-format, so the FDN impls are what gets exercised.
+_DEFAULT_CARD_SET = {"hob-medium": "fdn"}
 
 
 def _resolve_workspace(
@@ -76,7 +76,7 @@ def _resolve_card_set(
 ) -> str | None:
     """Resolve the card-set subdir whose impls populate the registry.
 
-    Explicit ``--card-set`` wins; otherwise default by benchmark (MSH → ``fdn``).
+    Explicit ``--card-set`` wins; otherwise default by benchmark (hob-medium → ``fdn``).
     A ``None`` result means "no registry" — cards become generic placeholders,
     preserving the frozen-SOS scripted-player path. The resolved set must exist
     under ``<workspace>/cards/``.
@@ -306,7 +306,7 @@ def _aggregate_reports(
     "--benchmark",
     default=None,
     help=(
-        "Benchmark id (e.g. 'msh' or 'sos'). Selects which workspace engine the "
+        "Benchmark id (e.g. 'hob-medium' or 'sos'). Selects which workspace engine the "
         "executor imports by resolving benchmarks/<id>/config.json and putting "
         "benchmarks/<id>/workspace on sys.path."
     ),
@@ -325,7 +325,7 @@ def _aggregate_reports(
     default=None,
     help=(
         "Card-set subdir under <workspace>/cards/ whose implementations populate "
-        "the registry (default: 'fdn' for --benchmark msh). Without a registry, "
+        "the registry (default: 'fdn' for --benchmark hob-medium). Without a registry, "
         "every card is a generic placeholder and no card behaviour is validated."
     ),
 )
@@ -337,7 +337,7 @@ def _aggregate_reports(
         "Drive gameplay through the engine (cast spells, fight combat, pay "
         "mana) and compare state before resyncing, instead of the default "
         "observer mode that oracle-syncs state. Requires a workspace whose "
-        "engine exposes the intent-based DeterministicPlayer (msh)."
+        "engine exposes the intent-based DeterministicPlayer (V2)."
     ),
 )
 def validate(

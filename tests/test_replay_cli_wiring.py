@@ -27,7 +27,7 @@ def test_validate_registered_in_main_cli() -> None:
 
 def test_resolve_workspace_explicit_overrides_benchmark(tmp_path) -> None:
     """An explicit --workspace wins over --benchmark."""
-    assert _resolve_workspace("msh", str(tmp_path)) == tmp_path.resolve()
+    assert _resolve_workspace("hob-medium", str(tmp_path)) == tmp_path.resolve()
 
 
 def test_resolve_workspace_none_when_neither_given() -> None:
@@ -39,21 +39,21 @@ def test_resolve_workspace_missing_explicit_raises(tmp_path) -> None:
         _resolve_workspace(None, str(tmp_path / "does-not-exist"))
 
 
-# (unknown-benchmark / msh-resolution are covered in test_replay_msh_protocol.py)
+# (unknown-benchmark / hob-medium-resolution are covered in test_replay_v2_protocol.py)
 
 
 # ---------------------------------------------------------------------------
 # _resolve_card_set
 # ---------------------------------------------------------------------------
 
-def test_card_set_defaults_to_fdn_for_msh(tmp_path) -> None:
+def test_card_set_defaults_to_fdn_for_hob_medium(tmp_path) -> None:
     (tmp_path / "cards" / "fdn").mkdir(parents=True)
-    assert _resolve_card_set("msh", None, tmp_path) == "fdn"
+    assert _resolve_card_set("hob-medium", None, tmp_path) == "fdn"
 
 
 def test_card_set_explicit_wins(tmp_path) -> None:
-    (tmp_path / "cards" / "msh").mkdir(parents=True)
-    assert _resolve_card_set("msh", "msh", tmp_path) == "msh"
+    (tmp_path / "cards" / "hob").mkdir(parents=True)
+    assert _resolve_card_set("hob-medium", "hob", tmp_path) == "hob"
 
 
 def test_card_set_none_for_sos(tmp_path) -> None:
@@ -64,4 +64,4 @@ def test_card_set_none_for_sos(tmp_path) -> None:
 def test_card_set_missing_dir_raises(tmp_path) -> None:
     """A resolved set with no matching cards/<set> dir is an error."""
     with pytest.raises(click.ClickException):
-        _resolve_card_set("msh", None, tmp_path)  # no cards/fdn under tmp_path
+        _resolve_card_set("hob-medium", None, tmp_path)  # no cards/fdn under tmp_path

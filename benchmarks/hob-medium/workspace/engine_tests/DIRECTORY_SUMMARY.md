@@ -1,8 +1,8 @@
-# Directory Summary — `benchmarks/msh/workspace/engine_tests/`
+# Directory Summary — `benchmarks/hob-medium/workspace/engine_tests/`
 
 ## Purpose
 
-Unit tests for all engine modules in `benchmarks/msh/workspace/engine/`. One test file per engine module, covering types, zones, players, mana, cards, casting, stack, combat, triggers, abilities, continuous effects, replacement effects, state-based actions, protection, game state, extra turns, lazy target evaluation, chosen_targets refactor, and the game loop. ~1,140+ test functions.
+Unit tests for all engine modules in `benchmarks/hob-medium/workspace/engine/`. One test file per engine module, covering types, zones, players, mana, cards, casting, stack, combat, triggers, abilities, continuous effects, replacement effects, state-based actions, protection, game state, extra turns, lazy target evaluation, chosen_targets refactor, and the game loop. ~1,140+ test functions.
 
 ## Key Files
 
@@ -11,7 +11,7 @@ Unit tests for all engine modules in `benchmarks/msh/workspace/engine/`. One tes
 | `__init__.py` | Package init. |
 | `test_types.py` | Enums (Color, ManaType, Zone, Phase, Keyword, etc.), ManaCost parsing and CMC. |
 | `test_zones.py` | ZoneContainer operations, identity-based lookups, move_zone. |
-| `test_intent_player.py` | The intent-based `DeterministicPlayer` (MSH): pattern routing, preference answering, Baseline Intent, ambiguity/unmatched errors, decline, ordering queries, postconditions, the query transcript. |
+| `test_intent_player.py` | The intent-based `DeterministicPlayer` (V2): pattern routing, preference answering, Baseline Intent, ambiguity/unmatched errors, decline, ordering queries, postconditions, the query transcript. |
 | `test_decisions.py` / `test_queries.py` / `test_refs_registry.py` / `test_card_queries.py` | Player Decision data layer (`satisfies`, smart constructors, exception hierarchy), Player Query + boundary/answer validation, Game Refs registry, and the card-facing query helpers. |
 | `test_mana.py` | ManaPool — add, pay, can_pay, auto-pay generic, last_payment_colors (Converge). |
 | `test_hybrid_mana.py` | Hybrid mana symbol parsing (`{W/U}`, `{R/G}`, etc.), `can_pay()`/`pay()` with backtracking hybrid resolution. |

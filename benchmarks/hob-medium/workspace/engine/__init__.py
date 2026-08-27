@@ -1,6 +1,6 @@
-"""MSH workspace engine package.
+"""The hob-medium workspace engine package.
 
-Re-exports the intent-based DeterministicPlayer (MSH) so tests and the replay
+Re-exports the intent-based DeterministicPlayer (V2) so tests and the replay
 executor import it as ``from engine import DeterministicPlayer``.
 """
 

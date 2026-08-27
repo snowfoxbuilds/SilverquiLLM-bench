@@ -1,6 +1,6 @@
 """Player Decision data layer — the Game Symbols vocabulary.
 
-Immutable, hashable, serializable structs for the MSH Player Query / Player
+Immutable, hashable, serializable structs for the V2 Player Query / Player
 Decision protocol: ``DecisionKind``, ``PlayerDecision``, ``GameRef``, the free
 function ``satisfies()``, and the engine/test exception hierarchy.
 

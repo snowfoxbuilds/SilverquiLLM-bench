@@ -1,7 +1,7 @@
 """Phase M mechanism tests: the predicted-outcome disambiguation protocol and
 the machine-checked evidence behind the stream-limitation floor.
 
-These run in the MSH workspace context (``engine`` resolves here). Two groups:
+These run in the hob-medium workspace context (``engine`` resolves here). Two groups:
 
 * :class:`TestPredictedOutcomeDisambiguation` pins the executor's evidence-based
   multi-ability driving — it drives the uniquely matching ability and refuses

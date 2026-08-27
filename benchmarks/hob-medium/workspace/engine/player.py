@@ -1,4 +1,4 @@
-"""Player interface for the MSH Player Query protocol.
+"""Player interface for the V2 Player Query protocol.
 
 The ``Player`` ABC exposes a single entry point — ``answer(query) -> Answer`` —
 the engine's native interaction surface for the *choice* layer. There is no V1

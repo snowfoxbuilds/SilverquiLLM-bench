@@ -20,18 +20,18 @@ engine/            — Canonical game engine source. Imported as `engine`.
 engine_tests/      — Engine regression tests (do not modify).
 cards/             — Card implementations.
   cards/fdn/       — Completed FDN reference cards (do not modify their tests).
-  cards/msh/       — MSH card stubs to implement.
+  cards/hob/       — HOB target-card tree to implement (created when the pool lands).
 skills/            — Workspace-local skills (e.g. `grep-rulebook/SKILL.md`).
 ```
 
 ## Card paths
 
-For an MSH card with collector number `N`:
+For a HOB card with collector number `N`:
 
 ```
-cards/msh/msh_<N>/card_spec.json   — card metadata (name, mana_cost, oracle_text, P/T, keywords, …)
-cards/msh/msh_<N>/card_impl.py     — implementation stub you complete
-cards/msh/msh_<N>/tests.py         — your tests for this card (you create this)
+cards/hob/hob_<N>/card_spec.json   — card metadata (name, mana_cost, oracle_text, P/T, keywords, …)
+cards/hob/hob_<N>/card_impl.py     — implementation stub you complete
+cards/hob/hob_<N>/tests.py         — your tests for this card (you create this)
 ```
 
 For an FDN reference card:
@@ -58,7 +58,7 @@ As of the latest workspace stage, the list is: `fdn_13`, `fdn_142`, `fdn_205`, `
 The workspace root is on `sys.path`, so use bare package imports:
 
 ```python
-from cards.msh.msh_<N>.card_impl import <ClassName>
+from cards.hob.hob_<N>.card_impl import <ClassName>
 from engine.card import CardImpl, Creature, Instant
 from engine.types import CardType, Keyword, ManaCost, ManaType, Zone
 from engine.intent_player import Intent

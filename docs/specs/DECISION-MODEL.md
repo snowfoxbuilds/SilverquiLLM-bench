@@ -2,13 +2,13 @@ Status: DRAFT
 
 Last updated: 2026-06-10
 
-# MSH Player Choice / Decision Model
+# V2 Player Choice / Decision Model
 
-A standardized, testable shape for arbitrary player choices: engines raise Player Queries; audited tests answer them through Intents choosing among Player Decisions.
+A standardized, testable shape for arbitrary player choices: engines raise Player Queries; audited tests answer them through Intents choosing among Player Decisions. Engine-level and pool-neutral (renamed from MSH-DECISION-MODEL.md at grilling 2026-08-27); it now governs the V2 engine carried into the HOB-generation benchmarks.
 
 ## Context
 
-In V1 choices were answered positionally (a flat FIFO script), so one audited test could not fairly score the many valid ways to implement a choice — "add one mana of any color" alone had 20+ incompatible implementations. Two goals in tension: minimal engine enforcement (primitives, not per-card decision logic) and accepting any implementation that produces the correct observable outcome. The query protocol is the MSH engine's native interaction surface (no V1 adapter); the intent layer serves audited tests only, and the engine itself stays deterministic and imperative.
+In V1 choices were answered positionally (a flat FIFO script), so one audited test could not fairly score the many valid ways to implement a choice — "add one mana of any color" alone had 20+ incompatible implementations. Two goals in tension: minimal engine enforcement (primitives, not per-card decision logic) and accepting any implementation that produces the correct observable outcome. The query protocol is the V2 engine's native interaction surface (no V1 adapter); the intent layer serves audited tests only, and the engine itself stays deterministic and imperative.
 
 ## Design
 

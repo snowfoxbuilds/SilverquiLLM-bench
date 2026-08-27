@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "id": "msh",
-  "display_name": "Marvel Superheroes",
+  "id": "hob-medium",
+  "display_name": "The Hobbit — Medium",
   "draft_set": {
-    "primary_set_code": "MSH",
-    "collector_range": "001-276",
+    "primary_set_code": "HOB",
+    "collector_range": "001-321",
     "extra_set_codes": []
   },
   "tier": "Beta",

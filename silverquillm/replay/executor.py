@@ -36,7 +36,7 @@ def _make_replay_player(name: str, life: int) -> Any:
 
     Benchmark-parameterized: the frozen SOS (V1) engine has a scripted
     ``engine.player.DeterministicPlayer`` (replay drives its actions, not a
-    script); the MSH engine has the intent-based ``engine.intent_player.
+    script); the hob-medium engine has the intent-based ``engine.intent_player.
     DeterministicPlayer``, which gets a permissive Baseline Intent so any query
     the replay raises is answered in GRE-observed (first-offered) order rather
     than crashing. A genuinely unanswerable query surfaces as a
@@ -367,8 +367,8 @@ def _gre_counter_name(counter_type: int | None) -> str | None:
     return f"gre_counter_{counter_type}"
 
 
-# Module-qualified names of the MSH protocol exceptions (engine/decisions.py),
-# matched via MRO so this shared code imports no MSH-only classes — the same
+# Module-qualified names of the V2 protocol exceptions (engine/decisions.py),
+# matched via MRO so this shared code imports no V2-only classes — the same
 # scheme as validation.classify_step_exception. Protocol exceptions surface
 # per the engine's contract (PROTOCOL_ERROR / QUERY_UNANSWERED); only
 # non-protocol exceptions may become per-action engine_failures records.
@@ -379,7 +379,7 @@ _PROTOCOL_EXC_QUALNAMES = {
 
 
 def _is_protocol_exception(exc: BaseException) -> bool:
-    """True for MSH Player Query protocol exceptions (and subclasses)."""
+    """True for V2 Player Query protocol exceptions (and subclasses)."""
     mro_qualnames = {(cls.__module__, cls.__name__) for cls in type(exc).__mro__}
     return bool(mro_qualnames & _PROTOCOL_EXC_QUALNAMES)
 
@@ -762,7 +762,7 @@ class ReplayExecutor:
             snapshot = self.replay.snapshots[0]
 
         # Create engine players (benchmark-parameterized: the V1 SOS engine has
-        # a scripted DeterministicPlayer; the MSH engine has the intent-based one).
+        # a scripted DeterministicPlayer; the hob-medium engine has the intent-based one).
         for seat_id, player_info in snapshot.players.items():
             player = _make_replay_player(
                 name=f"Player_{seat_id}",
