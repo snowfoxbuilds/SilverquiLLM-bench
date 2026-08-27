@@ -48,11 +48,23 @@ Synonym for Draft Set when referring to the set of cards included in a benchmark
 
 *Avoid*: "target set" (deprecated — was ambiguous about whether it meant a single Scryfall set code or the full draft pool)
 
-**Checkpoint (MSH)**
+**Checkpoint (MSH)** *(retired — grilling 2026-08-27)*
 
-A frozen, reference-validated snapshot of the whole MSH benchmark workspace taken after a card group: the engine plus accumulated additive diffs, all card implementations so far, the audited tests in scope, and the green ledger (passing cards/tests with the RNG seeds and engine version that produced it). The unit of resume, regression attribution, and bounded per-step agent context.
+Retired with the MSH benchmark: the checkpoint/capability-DAG design served bounded-context sequential implementation over a ~281-card pool; HOB problem sets (5–20 cards, one run) don't have that problem. See MSH-CHECKPOINTS.md (RETIRED). Was: a frozen, reference-validated snapshot of the whole MSH benchmark workspace taken after a card group — the unit of resume, regression attribution, and bounded per-step agent context.
 
 *Avoid*: "Output Snapshot" (runner-owned 60-second Git commits), "snapshot" alone
+
+**Candidate Bundle**
+
+The self-contained directory artifact a Benchmark Candidate is exchanged as: the worker-type definition + resolved pins (base image digest, knowledge pin) + vendored knowledge tree + adapter identity, secret values excluded. Exported by the-ozolith's tooling; the only thing `silverquillm run --candidate <path>` accepts. Candidate identity = (base image digest, instruction hash, adapter identity), recomputed and verified from the bundle — never trusted from a recorded value. Adapter-agnostic by contract: the format never hardcodes the adapter set.
+
+*Avoid*: "worker-type TOML" as the candidate input (a bare TOML is not self-contained — it references Config Repo siblings), "candidate config"
+
+**Workload** *(retired — grilling 2026-08-27)*
+
+Retired run-spec term. Formerly a card subset within a benchmark; killed because card subsets were a SOS-era hack that confuses benchmarks. One benchmark = one problem set; a run always consumes the whole set. The run spec is candidate + mode + benchmark + budget. Cheap pipeline validation uses a dedicated smoke benchmark (its own small problem set of validated FDN cards), never a subset of a real one.
+
+*Avoid*: "workload", "card subset", "filtered run"
 
 **Contamination**
 
@@ -76,11 +88,11 @@ All cards contained in draft booster packs for a given MTG release. A Draft Set 
 
 The V1 / SOS-workspace test player, frozen with SOS. Driven by two explicit, separate, ordered channels: a **directive queue** (`script` — per-priority `no_op` / `perform_action` / `perform_illegal_action`, consumed each time the player holds priority under the Host-Side Driver) and a **choice script** (`choices` — the canonical answer deque the engine consumes via `choose_target` / `choose` / `choose_yes_no` / `choose_card` / `assign_damage_order` for decisions raised mid-cast / mid-resolution). Reproducible, no AI decision-making in v1; a dry queue on *either* channel fails the test (`ScriptExhaustedError`), never hangs or auto-passes. Player-initiated casts/activations carry their own targets on the directive; engine-initiated (triggered) objects pull targets/choices from the choice script.
 
-*Avoid*: "test player", "mock player", using it unscoped — say DeterministicPlayer (SOS) or (MSH)
+*Avoid*: "test player", "mock player", using it unscoped — say DeterministicPlayer (SOS) or (V2); "(MSH)" as a scope marker (grilling 2026-08-27 — the engine generation outlives any one pool; V2 names the generation shared by all HOB tiers)
 
-**DeterministicPlayer (MSH)**
+**DeterministicPlayer (V2)**
 
-The MSH workspace's intent-driven test player — same class name as the SOS player by decision; the two live in per-benchmark workspaces that never import each other. Holds the test's active Intents, receives structured Player Queries from the engine, routes each query to an Intent by pattern-matching on source refs, and answers by preference over Player Decisions: greedy, first option that is both intended and valid in the implementation-provided order, no search. Queries matched by no card Intent fall to the Baseline Intent; matched by neither is an explicit failure. The SOS dry-script failure mode (ScriptExhaustedError) is replaced by boundary validation plus the "no offered option satisfies the intent" signal.
+The V2 (HOB-generation) workspace's intent-driven test player — same class name as the SOS player by decision; the two live in per-benchmark workspaces that never import each other. Holds the test's active Intents, receives structured Player Queries from the engine, routes each query to an Intent by pattern-matching on source refs, and answers by preference over Player Decisions: greedy, first option that is both intended and valid in the implementation-provided order, no search. Queries matched by no card Intent fall to the Baseline Intent; matched by neither is an explicit failure. The SOS dry-script failure mode (ScriptExhaustedError) is replaced by boundary validation plus the "no offered option satisfies the intent" signal.
 
 *Avoid*: "IntentPlayer" (rejected rename), "test player", "mock player", the SOS two-channel semantics (see DeterministicPlayer (SOS))
 
@@ -321,7 +333,7 @@ The `priority_loop(game)` advancer audited tests use to move the game forward by
 ## Relationships
 
 - A Benchmark Run evaluates one Agent Container (one agent + one model) against one Draft Set.
-- A Benchmark Run launches one container session. The agent receives the full workload (all SOS cards) in a single Workspace.
+- A Benchmark Run launches one container session. The agent receives the benchmark's entire problem set (every target card) in a single Workspace — one benchmark = one problem set; there is no card-subset "workload" notion (grilling 2026-08-27).
 - FDN cards are in-context examples (filled `card_impl.py` + colocated `tests.py` demonstrating the testing pattern). SOS cards are benchmark targets (SOS Card Stubs to fill in).
 - Each agent produces `card_impl.py` per SOS card. In Tested Mode, also `tests.py` per card.
 - The agent has a Writable Engine (`/workspace/engine/`) and may extend it freely throughout the run.

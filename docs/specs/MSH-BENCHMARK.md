@@ -1,4 +1,4 @@
-Status: DRAFT
+Status: ABANDONED as a benchmark (grilling 2026-08-27) — the MSH card pool is retired unused: MSH aged out as a contamination-fresh set (released 2026-06-26) and no benchmark was ever run on it, so its successor pool is HOB (The Hobbit, released 2026-08-14). Everything pool-agnostic built under `benchmarks/msh/` is **kept**: the V2 engine with the Player Query / Player Decision protocol, the intent-based DeterministicPlayer, the migrated FDN implementations, and the replay-validation substrate all carry forward into the HOB benchmarks. Pool-specific parts (card data, stubs, this spec's card-pool section) are superseded by the HOB benchmark specs.
 
 Last updated: 2026-06-10
 
@@ -16,7 +16,7 @@ SOS (V1) surfaced engine shortfalls that audited tests had to work around (turn 
 
 - Set: Magic: The Gathering | Marvel Super Heroes (MSH), the 112th Magic expansion. Release 2026-06-26; prerelease 2026-06-19 to 06-25; MTG Arena 2026-06-23.
 - Card definitions are available now via the official card image gallery and Scryfall's MSH set page, including the new set mechanics power-up and teamwork.
-- A brand-new set means no model has seen MSH implementations; the fresh mechanics are natural stress tests for the Player Choice / Decision Model (see [MSH-DECISION-MODEL.md](http://msh-decision-model.md/)).
+- A brand-new set means no model has seen MSH implementations; the fresh mechanics are natural stress tests for the Player Choice / Decision Model (see [DECISION-MODEL.md](http://msh-decision-model.md/)).
 ### Repo layout and sharing boundary
 
 - `benchmarks/msh` is fully decoupled from `benchmarks/sos`: breaking and sweeping changes are allowed immediately, with no compatibility constraints.

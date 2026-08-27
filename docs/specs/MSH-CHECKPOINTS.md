@@ -1,4 +1,4 @@
-Status: DRAFT
+Status: RETIRED (grilling 2026-08-27) — the checkpoint/capability-DAG design solved bounded-context sequential implementation over a ~281-card pool. The HOB benchmarks that succeed MSH are 5–20-card problem sets consumed in a single run, so the problem no longer exists; ADR-008/009 resume legs cover crash recovery. Nothing here is load-bearing for HOB.
 
 Last updated: 2026-06-10
 
