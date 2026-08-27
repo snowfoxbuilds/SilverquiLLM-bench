@@ -212,7 +212,7 @@ Modification or addition to `engine/` files by the agent during a benchmark run.
 
 **Workspace**
 
-The directory at `benchmarks/sos/workspace/` in the bench repo, copied wholesale to a per-run tmp path and mounted into the agent container at `/workspace/`. Contains the engine (canonical single copy, shared with bench tooling), all cards (FDN reference implementations + SOS Card Stubs), tests (`tests/conftest.py`, `tests/test_utils.py`, `tests/engine/`), agent-facing documentation (`AGENTS.md`, `PROJECT_MAP.md`, `rulebook.txt`), and supporting files (`pytest.ini`, `.gitignore`). Per-run files (`prompt.md`, `run_manifest.json`) are written into the copy at stage time, followed by an initial `git init && git commit` so the agent has clean version-control state. The resume staging variant (see Resume Chain) skips `git init` and preserves the prior run's `workspace_final/` `.git` history instead. The agent has read-write access to the entire workspace.
+The per-benchmark directory at `benchmarks/<benchmark>/workspace/` in the bench repo (e.g. `benchmarks/sos/workspace/`, `benchmarks/hob-medium/workspace/`), copied wholesale to a per-run tmp path and mounted into the agent container at `/workspace/`. Contains the engine (canonical single copy, shared with bench tooling), all cards (FDN reference implementations + SOS Card Stubs), tests (`tests/conftest.py`, `tests/test_utils.py`, `tests/engine/`), agent-facing documentation (`AGENTS.md`, `PROJECT_MAP.md`, `rulebook.txt`), and supporting files (`pytest.ini`, `.gitignore`). Per-run files (`prompt.md`, `run_manifest.json`) are written into the copy at stage time, followed by an initial `git init && git commit` so the agent has clean version-control state. The resume staging variant (see Resume Chain) skips `git init` and preserves the prior run's `workspace_final/` `.git` history instead. The agent has read-write access to the entire workspace.
 
 *Avoid*: "working directory", "sandbox", "per-card workspace" (deprecated — workspace is per-run), "staged from scratch" (deprecated — workspace is a pre-built directory copied wholesale)
 
@@ -242,7 +242,7 @@ Agent-optimization instructions baked into the Docker image's entrypoint. Contro
 
 **User Prompt**
 
-Task-specific instruction written by the runner to `/workspace/prompt.md` at staging time. Describes what the agent should implement (e.g., "Implement all SOS cards in `/workspace/cards/sos/`"). Adjusted for filtered runs to list only staged cards. Contrast with System Prompt.
+Task-specific instruction written by the runner to `/workspace/prompt.md` at staging time. Describes what the agent should implement (e.g., "Implement all SOS cards in `/workspace/cards/sos/`"). It lists the benchmark's whole target-card problem set — a Benchmark Run always stages the entire set; card-subset ("workload") runs are retired. Contrast with System Prompt.
 
 *Avoid*: "task prompt", "workspace prompt"
 

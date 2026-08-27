@@ -2,7 +2,7 @@ Status: DRAFT (rewritten for container architecture)
 
 Last updated: 2026-06-10
 
-Scope: SOS (V1). The complexity-tier weighting below applies to SOS only — MSH drops complexity tiers entirely and scores raw pass/total; see [MSH-BENCHMARK.md](https://app.notion.com/p/b9345f23a8054d9898d3364fe2e00837) → Scoring.
+Scope: SOS (V1). The complexity-tier weighting below applies to SOS only — the HOB-generation benchmarks (hob-easy/medium/hard) drop complexity tiers entirely and score raw pass/total; see [HOB-BENCHMARKS.md](HOB-BENCHMARKS.md) → Evaluation.
 
 # Scoring
 

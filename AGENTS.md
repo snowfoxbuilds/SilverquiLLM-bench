@@ -24,6 +24,8 @@ All specs, code, and agent instructions use these terms exactly.
 
 The benchmark runner stages a Workspace (engine, rulebook, FDN examples, SOS templates, prompt), launches a Docker container, waits for it to exit, materializes `workspace_final/`, and evaluates the results. The Docker image IS the full agent configuration — it bakes in the agent CLI, mode (blind/tested), strategy, model, and prompt. The runner passes only workspace/output volumes, API keys, and a timeout.
 
+A Benchmark Run is one container session that consumes the benchmark's **entire** problem set in a single Workspace; the run spec is candidate + mode + benchmark + budget (per #39). Card-subset ("workload") runs are retired — cheap validation uses the dedicated smoke benchmark.
+
 Three evaluation dimensions (all post-run, audited tests only):
 
 1. **SOS Card Correctness** — Audited SOS tests against agent's `card_impl.py` + harvested `/workspace/engine/`
@@ -44,7 +46,7 @@ Agent-written tests are harvested as artifacts but not scored in v1. Cross-eval 
 | `SCORING.md` | Three evaluation dimensions, complexity weighting, leaderboard format |
 | `AGENT-CONTAINERS.md` | Docker black-box architecture, file-based contract, entrypoint design, isolation guarantees |
 | `WORKSPACE-CONTRACT.md` | Workspace layout, card directory invariant, Run Manifest, writable engine, FDN/SOS structure |
-| `RUN-ARTIFACTS-AND-TELEMETRY.md` | workspace_final, Git snapshots, fallback, telemetry, Docker logs, filtered runs, smoke runs |
+| `RUN-ARTIFACTS-AND-TELEMETRY.md` | workspace_final, Git snapshots, fallback, telemetry, Docker logs, smoke runs (`silverquillm smoke` command vs. smoke benchmark) |
 | `TESTING-CONVENTIONS.md` | Test naming, fixtures, assertions, and conventions for audited tests |
 | `17LANDS-REPLAY-SCHEMA.md` | GRE JSON replay format for engine correctness validation |
 | `AUDITED-TEST-IMPROVEMENT-WORKFLOW.md` | Harvest script + combined investigation/discovery skill (manual v1 Test Harvester); harvest format, fault-attribution triage, promotion bar, cadence, tier gating |

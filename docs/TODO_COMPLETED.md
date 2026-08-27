@@ -1,3 +1,15 @@
+## Completed 2026-08-27
+
+MSH benchmark task #1: V2 Player Query / Player Decision engine migration (pool-agnostic, 7 acceptance criteria). Implemented the Player Query / Player Decision protocol natively in the workspace engine (`decisions.py`, `queries.py`, `refs_registry.py`, `player.py` `answer`, `intent_player.py`), replacing the V1 two-channel scripted `DeterministicPlayer` with the intent-based `DeterministicPlayer (V2)`; migrated every FDN card implementation and its colocated reference test to the new engine; and adapted FDN replay validation to drive the V2 engine through the intent-based player via the benchmark-parameterized `--benchmark` target, adding the `QUERY_UNANSWERED` / `PROTOCOL_ERROR` divergence types. The MSH pool was never picked; at grilling 2026-08-27 MSH was abandoned as a benchmark and this pool-agnostic work carried forward wholesale as `hob-medium` (issue #62). The FDN replay burn-down it enabled ran to closure (Phases A–O; final report `benchmarks/hob-medium/FDN-REPLAY-PARITY.md`).
+
+- [x] **Player Query / Player Decision protocol + Game Symbols / Game Refs / Intents (module layout locked)**
+- [x] **Replace V1 two-channel `DeterministicPlayer` with the intent-based `DeterministicPlayer (V2)`; delete the V1 helpers (no adapter)**
+- [x] **Migrate FDN card implementations + colocated reference tests to the new engine**
+- [x] **Adapt FDN replay validation to the benchmark-parameterized engine target; add `QUERY_UNANSWERED` / `PROTOCOL_ERROR`**
+- [x] **`engine_tests/` green; `DROPPED_COVERAGE.md` recorded**
+- [x] **SOS untouched; repo-level platform/validation suites green**
+- [x] **Workspace docs describe only the new API; `KEY_DECISIONS.md` logs every micro-decision**
+- [x] **FDN replay parity met and burn-down closed (Phases A–O); final parity report committed**
 ## Completed 2026-05-30
 
 Phase 18: SOS 10-card Test Audit (oracle-first) (12 items). Rewrote the audited tests for the 10-card SOS subset (sos_1, 4, 13, 57, 97, 120, 201, 226, 245, 257) to be both correct (validated against xmage-derived Test Oracle Impls in an independent Test Oracle Workspace) and generic (Implementation-Agnostic — no method-name probes, no stack bypasses, no ability-words-as-keywords). Bootstrapped the Test Oracle Workspace + validation harness (ADR-010), authored per-card oracle impls + rewritten tests (flagship sos_57 first), and added a CI regex audit for card-specific test naming. Codified the rules in [TEST-SUITE.md](http://test-suite.md/). Driven by the 2026-05-26 audit that surfaced 10 recurring bug patterns.

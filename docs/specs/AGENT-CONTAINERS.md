@@ -2,7 +2,7 @@
 
 Replaces the Python adapter layer (`silverquillm/adapters/`) with Docker-based black-box agent containers. Each agent (Pi, OpenCode, Claude Code, Aider, etc.) ships as a self-contained Docker image. The benchmark runner stages a workspace, launches the container, waits for it to exit, and harvests results. The runner has zero knowledge of agent internals.
 
-The container receives the full benchmark workload — all cards, the engine, the rulebook, and reference implementations — in a single session. This tests agents on realistic long-running coding tasks, not synthetic one-file-at-a-time prompts.
+The container receives the full benchmark problem set — all cards, the engine, the rulebook, and reference implementations — in a single session. This tests agents on realistic long-running coding tasks, not synthetic one-file-at-a-time prompts.
 
 See also:
 
@@ -91,7 +91,7 @@ The input prompt is minimal and natural — like handing a developer a codebase:
 
 > Use the completed FDN cards in `/workspace/cards/fdn/` as implementation examples. Refer to `rulebook.md` for detailed game rules and `engine_api.md` for the engine API.
 
-The prompt does not dictate ordering, strategy, or iteration approach. The agent decides how to tackle the workload. This tests planning and self-management, not just code generation.
+The prompt does not dictate ordering, strategy, or iteration approach. The agent decides how to tackle the problem set. This tests planning and self-management, not just code generation.
 
 ## Entrypoint: Orchestration Layer
 
@@ -166,7 +166,7 @@ Stdout and stderr are on the mounted `/output/` volume and can be tailed for liv
 3. **Harvest** — Runner walks `/workspace/cards/sos/*/` and collects `card_impl.py` and `tests.py` from each card directory. Diffs `/workspace/engine/` against the host baseline engine for engine patches.
 4. **Evaluate** — Runner runs the audited test suite against each harvested `card_impl.py` independently (outside the container).
 5. **Cleanup** — Runner removes workspace and output directories.
-Filtered runs may stage only a subset of SOS target card directories for debugging, but FDN examples remain staged in full. Filtered runs are development or Pipeline Validation Runs, not leaderboard-valid benchmark runs.
+[SUPERSEDED — Grilling 2026-08-27] Card-subset ("workload") runs are retired: a Benchmark Run stages the benchmark's whole problem set, and cheap validation uses the dedicated smoke benchmark (`benchmarks/smoke/`). On the legacy entrypoint lineage a filtered run could stage only a subset of SOS target card directories for debugging (FDN examples remained staged in full), as a development / Pipeline Validation Run, never a leaderboard-valid benchmark run.
 
 Implementation sketch:
 
@@ -398,7 +398,7 @@ python -m silverquillm smoke --image silverquillm-pi-blind:latest
 
 ## What This Tests (Beyond Code Generation)
 
-By giving the agent the full workload in a single session, the benchmark additionally evaluates:
+By giving the agent the full problem set in a single session, the benchmark additionally evaluates:
 
 - **Task planning** — Does the agent start with simple cards to build momentum?
 - **Knowledge accumulation** — Does implementing card 5 help with card 30?
