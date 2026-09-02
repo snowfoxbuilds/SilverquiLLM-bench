@@ -11,6 +11,7 @@ data it will actually run on.
 
 from __future__ import annotations
 
+import dataclasses
 import importlib.util
 import json
 import re
@@ -478,6 +479,118 @@ class TestPlanAndApply:
             "img-b/run-resumed: benchmark=sos mode=legacy leaderboard=INVALID — Resume Leg" in text
         )
         assert "img-a/run-ok-1: benchmark=sos mode=legacy leaderboard=valid" in text
+
+
+# ---------------------------------------------------------------------------
+# Rerun conflicts — a destination is skipped only when byte-identical
+# ---------------------------------------------------------------------------
+
+
+class TestMigrationConflicts:
+    def test_exact_existing_record_is_skipped_not_conflicting(
+        self, bench_root: Path, results_repo: Path
+    ) -> None:
+        write_legacy_run(bench_root, "img-a", "run-ok-1")
+        _mod.apply_migration(_mod.plan_migration(bench_root, results_repo), results_repo)
+        again = _mod.plan_migration(bench_root, results_repo)
+        assert again.conflicts == []
+        assert [p.already_present for p in again.planned] == [True]
+        assert _mod.apply_migration(again, results_repo) == []
+
+    def test_empty_existing_directory_is_a_conflict(
+        self, bench_root: Path, results_repo: Path
+    ) -> None:
+        write_legacy_run(bench_root, "img-a", "run-ok-1")
+        (results_repo / "results" / "img-a" / "run-ok-1").mkdir(parents=True)
+        plan = _mod.plan_migration(bench_root, results_repo)
+        assert plan.planned == []
+        assert [c.legacy.run for c in plan.conflicts] == ["run-ok-1"]
+        assert "unreadable" in plan.conflicts[0].reason
+        with pytest.raises(rr.ResultsRepoError, match="conflict"):
+            _mod.apply_migration(plan, results_repo)
+
+    def test_malformed_existing_manifest_is_a_conflict(
+        self, bench_root: Path, results_repo: Path
+    ) -> None:
+        write_legacy_run(bench_root, "img-a", "run-ok-1")
+        _mod.apply_migration(_mod.plan_migration(bench_root, results_repo), results_repo)
+        manifest = results_repo / "results" / "img-a" / "run-ok-1" / "manifest.json"
+        manifest.write_text("{not json")
+        plan = _mod.plan_migration(bench_root, results_repo)
+        assert [c.legacy.run for c in plan.conflicts] == ["run-ok-1"]
+        assert "unreadable" in plan.conflicts[0].reason
+
+    def test_incomplete_existing_record_is_a_conflict(
+        self, bench_root: Path, results_repo: Path
+    ) -> None:
+        write_legacy_run(bench_root, "img-a", "run-ok-1")
+        _mod.apply_migration(_mod.plan_migration(bench_root, results_repo), results_repo)
+        (results_repo / "results" / "img-a" / "run-ok-1" / "scores.json").unlink()
+        plan = _mod.plan_migration(bench_root, results_repo)
+        assert [c.legacy.run for c in plan.conflicts] == ["run-ok-1"]
+        assert "unreadable" in plan.conflicts[0].reason
+
+    def test_differing_valid_existing_record_is_a_conflict(
+        self, bench_root: Path, results_repo: Path
+    ) -> None:
+        write_legacy_run(bench_root, "img-a", "run-ok-1")
+        record = _mod.plan_migration(bench_root, results_repo).planned[0].record
+        altered = dataclasses.replace(record, budget_seconds=record.budget_seconds + 1)
+        rr.write_run_record(results_repo, altered)
+        before = _snapshot(results_repo)
+        plan = _mod.plan_migration(bench_root, results_repo)
+        assert [c.reason for c in plan.conflicts] == [
+            "existing record differs from the record this run would write"
+        ]
+        with pytest.raises(rr.ResultsRepoError, match="conflict"):
+            _mod.apply_migration(plan, results_repo)
+        assert _snapshot(results_repo) == before  # the differing record is never touched
+
+    def test_conflicts_block_the_missing_records_too(
+        self, bench_root: Path, results_repo: Path
+    ) -> None:
+        write_legacy_run(bench_root, "img-a", "run-ok-1")
+        write_legacy_run(bench_root, "img-a", "run-ok-2")
+        (results_repo / "results" / "img-a" / "run-ok-1").mkdir(parents=True)
+        plan = _mod.plan_migration(bench_root, results_repo)
+        assert [p.record.run_id for p in plan.planned] == ["run-ok-2"]
+        assert [c.legacy.run for c in plan.conflicts] == ["run-ok-1"]
+        before = _snapshot(results_repo)
+        with pytest.raises(rr.ResultsRepoError, match="conflict"):
+            _mod.apply_migration(plan, results_repo)
+        assert _snapshot(results_repo) == before  # run-ok-2 not written, index untouched
+        assert _mod.main(["--results-repo", str(results_repo)], repo_root=bench_root) == 1
+        assert _snapshot(results_repo) == before
+
+    def test_partial_migration_then_exact_rerun_is_byte_identical(
+        self, bench_root: Path, results_repo: Path
+    ) -> None:
+        write_legacy_run(bench_root, "img-a", "run-ok-1")
+        write_legacy_run(bench_root, "img-a", "run-ok-2")
+        first = _mod.plan_migration(bench_root, results_repo)
+        # An interrupted apply: only the first record landed, no index rebuild.
+        rr.write_run_record(results_repo, first.planned[0].record)
+        resume = _mod.plan_migration(bench_root, results_repo)
+        assert resume.conflicts == []
+        assert [p.already_present for p in resume.planned] == [True, False]
+        written = _mod.apply_migration(resume, results_repo)
+        assert [p.name for p in written] == ["run-ok-2"]
+        after = _snapshot(results_repo)
+        rerun = _mod.plan_migration(bench_root, results_repo)
+        assert _mod.apply_migration(rerun, results_repo) == []
+        assert _snapshot(results_repo) == after
+
+    def test_main_reports_conflicts_and_dry_run_flags_them(
+        self, bench_root: Path, results_repo: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        write_legacy_run(bench_root, "img-a", "run-ok-1")
+        (results_repo / "results" / "img-a" / "run-ok-1").mkdir(parents=True)
+        code = _mod.main(["--results-repo", str(results_repo), "--dry-run"], repo_root=bench_root)
+        assert code == 1
+        out, err = capsys.readouterr()
+        assert "CONFLICTS — 1 existing record(s) disagree" in out
+        assert "img-a/run-ok-1" in out
+        assert "1 migration conflict(s); nothing written" in err
 
 
 # ---------------------------------------------------------------------------

@@ -90,8 +90,10 @@ python scripts/harvest_validated_results.py --bench sos --summary
 # Private results repo (#39 §3 / #63) — a local clone of the private results repo
 export SILVERQUILLM_RESULTS_REPO=~/src/silverquillm-results   # or pass --results-repo everywhere
 # Lay out an empty clone: schema AGENTS.md + results/ + runs.jsonl
+# (refuses any non-empty target except a bare .git; a failed init rolls itself back)
 silverquillm results-init "$SILVERQUILLM_RESULTS_REPO"
-# Backfill the legacy corpus (plan first, then write; re-runs skip existing records)
+# Backfill the legacy corpus (plan first, then write; re-runs skip byte-identical
+# records and abort on any conflicting existing record — nothing is overwritten)
 python scripts/migrate_validated_results.py --dry-run
 python scripts/migrate_validated_results.py
 # Regenerate the derived index after any change under results/

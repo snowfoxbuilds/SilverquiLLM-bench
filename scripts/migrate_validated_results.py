@@ -28,7 +28,11 @@ How a legacy run maps onto a record:
 
 Runs lacking ``run_manifest.json``, ``run_summary.json`` or ``eval_result.json``
 are unparseable: they are listed loudly and skipped, never guessed.  Re-running
-is idempotent — runs already present in the results repo are skipped.
+is idempotent: a destination whose existing record is byte-identical to the one
+this run would write is skipped, while anything else already sitting there —
+an unreadable, incomplete, or differing record — is a conflict that aborts the
+whole apply before a single record is written.  Conflicting records are never
+overwritten or deleted.
 
 Usage::
 
@@ -52,16 +56,20 @@ if str(REPO_ROOT) not in sys.path:
 
 from silverquillm.results_repo import (  # noqa: E402
     LEGACY_TREE_KIND,
+    MANIFEST_FILENAME,
     RESULTS_DIRNAME,
     RESULTS_REPO_ENV,
     RUN_SUMMARY_SCORE_KEYS,
+    SCORES_FILENAME,
     CandidateIdentity,
     ResultsRepoError,
     RunRecord,
     candidate_hash,
     leaderboard_validity_reasons,
     load_benchmark_config,
+    read_run_record,
     rebuild_index,
+    record_file_texts,
     resolve_results_repo,
     write_run_record,
 )
@@ -107,10 +115,19 @@ class SkippedRun:
     reason: str
 
 
+@dataclass(frozen=True)
+class MigrationConflict:
+    """A planned destination already exists but does not hold the planned record."""
+
+    legacy: LegacyRun
+    reason: str
+
+
 @dataclass
 class MigrationPlan:
     planned: list[PlannedRecord] = field(default_factory=list)
     skipped: list[SkippedRun] = field(default_factory=list)
+    conflicts: list[MigrationConflict] = field(default_factory=list)
 
     @property
     def to_write(self) -> list[PlannedRecord]:
@@ -276,8 +293,35 @@ def _config_loader_for(repo_root: Path) -> ConfigLoader:
     return load
 
 
+def _existing_record_conflict(existing_dir: Path, record: RunRecord) -> str | None:
+    """``None`` iff *existing_dir* holds exactly *record*; else the conflict reason.
+
+    "Exactly" is byte-level: the existing files must equal the canonical texts
+    the writer would emit for *record*, so a reformatted, extended, tampered,
+    incomplete, or simply different record is a conflict, never a skip.
+    """
+    try:
+        read_run_record(existing_dir)
+    except ResultsRepoError as exc:
+        return f"existing record is unreadable: {exc}"
+    manifest_text, scores_text = record_file_texts(record)
+    try:
+        existing_manifest = (existing_dir / MANIFEST_FILENAME).read_text(encoding="utf-8")
+        existing_scores = (existing_dir / SCORES_FILENAME).read_text(encoding="utf-8")
+    except OSError as exc:
+        return f"existing record is unreadable: {exc}"
+    if existing_manifest != manifest_text or existing_scores != scores_text:
+        return "existing record differs from the record this run would write"
+    return None
+
+
 def plan_migration(repo_root: Path, results_repo: Path) -> MigrationPlan:
-    """Build every record without writing; note which already exist in *results_repo*."""
+    """Build every record without writing; verify runs already in *results_repo*.
+
+    A destination that already exists is re-read and byte-compared against the
+    record this run would write: an exact match is "present, skip"; anything
+    else is a :class:`MigrationConflict` that blocks the whole apply.
+    """
     plan = MigrationPlan()
     config_loader = _config_loader_for(repo_root)
     results_dir = Path(results_repo) / RESULTS_DIRNAME
@@ -287,13 +331,28 @@ def plan_migration(repo_root: Path, results_repo: Path) -> MigrationPlan:
         except LegacyRunUnparseable as exc:
             plan.skipped.append(SkippedRun(legacy=legacy, reason=str(exc)))
             continue
-        present = (results_dir / candidate_hash(record.candidate) / record.run_id).exists()
+        existing_dir = results_dir / candidate_hash(record.candidate) / record.run_id
+        present = existing_dir.exists()
+        if present:
+            reason = _existing_record_conflict(existing_dir, record)
+            if reason is not None:
+                plan.conflicts.append(MigrationConflict(legacy=legacy, reason=reason))
+                continue
         plan.planned.append(PlannedRecord(legacy=legacy, record=record, already_present=present))
     return plan
 
 
 def apply_migration(plan: MigrationPlan, results_repo: Path) -> list[Path]:
-    """Write every not-yet-present record, rebuild the index, return the dirs written."""
+    """Write every not-yet-present record, rebuild the index, return the dirs written.
+
+    Refuses a plan with conflicts outright: nothing is written and the index
+    is left alone until the operator resolves the conflicting records.
+    """
+    if plan.conflicts:
+        raise ResultsRepoError(
+            f"refusing to write: {len(plan.conflicts)} migration conflict(s) — "
+            "records are immutable, resolve the existing records first"
+        )
     written: list[Path] = []
     for planned in plan.to_write:
         written.append(write_run_record(results_repo, planned.record))
@@ -326,6 +385,14 @@ def format_plan(plan: MigrationPlan, *, dry_run: bool) -> str:
         lines.append(f"SKIPPED — {len(plan.skipped)} unparseable run(s), not migrated:")
         for skipped in plan.skipped:
             lines.append(f"  {skipped.legacy.image}/{skipped.legacy.run}: {skipped.reason}")
+    if plan.conflicts:
+        lines.append("")
+        lines.append(
+            f"CONFLICTS — {len(plan.conflicts)} existing record(s) disagree with the plan; "
+            "nothing will be written until they are resolved:"
+        )
+        for conflict in plan.conflicts:
+            lines.append(f"  {conflict.legacy.image}/{conflict.legacy.run}: {conflict.reason}")
     return "\n".join(lines)
 
 
@@ -370,6 +437,13 @@ def main(argv: list[str] | None = None, *, repo_root: Path | None = None) -> int
     if plan.skipped:
         # Loud on stderr too, so the list survives a piped stdout.
         print(f"warning: {len(plan.skipped)} unparseable run(s) skipped", file=sys.stderr)
+    if plan.conflicts:
+        print(
+            f"error: {len(plan.conflicts)} migration conflict(s); nothing written — "
+            "records are immutable, resolve the existing records first",
+            file=sys.stderr,
+        )
+        return 1
     if args.dry_run:
         print("\nDry run: nothing written.")
         return 0
