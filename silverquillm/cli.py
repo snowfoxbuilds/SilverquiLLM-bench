@@ -1541,6 +1541,26 @@ def rescore(run_id: str, cards: str | None) -> None:
     )
 
 
+@main.command("results-init")
+@click.argument("path", type=click.Path(file_okay=False, path_type=Path))
+def results_init(path: Path) -> None:
+    """Lay out an empty private results repo at PATH.
+
+    Writes the schema AGENTS.md (the results repo must be self-contained for
+    analysis agents), an empty results/ tree, and an empty derived index
+    runs.jsonl. PATH is typically a fresh clone of the private results repo;
+    the command refuses if AGENTS.md already exists there. Records are then
+    written by the bench (see silverquillm.results_repo) and the legacy
+    corpus is backfilled by scripts/migrate_validated_results.py.
+    """
+    from silverquillm.results_repo import ResultsRepoError, init_results_repo
+
+    try:
+        written = init_results_repo(path)
+    except ResultsRepoError as exc:
+        raise click.ClickException(str(exc)) from exc
+    for file_path in written:
+        click.echo(f"wrote {file_path}")
 
 
 if __name__ == "__main__":

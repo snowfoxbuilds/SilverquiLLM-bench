@@ -1,0 +1,640 @@
+"""Private results repo: schema, run-record writer, validity rule, derived index.
+
+Issue #39 §3 moves results out of ``docker/<image>/validated_results/`` into a
+dedicated private results repo, git-as-truth.  This module is the bench side of
+that home.  The repo is an ordinary git clone the operator owns; every function
+here takes its local path (``repo_root``) and never runs git.
+
+Layout of a results repo::
+
+    AGENTS.md                                   schema doc (results_repo_templates/)
+    runs.jsonl                                  derived index — regenerated, never authoritative
+    results/<candidate-hash>/<run-id>/manifest.json
+    results/<candidate-hash>/<run-id>/scores.json
+
+Rules the module enforces:
+
+- **Records are immutable.** :func:`write_run_record` refuses an existing
+  ``<run-id>`` directory with :class:`RunRecordExistsError` and writes
+  atomically (temp dir + rename), so a reader never sees a half-written record.
+- **The manifest records ``benchmark``, never ``workload``** (the term is
+  retired — CONTEXT.md).  ``mode`` and ``benchmark`` are run-spec parameters,
+  orthogonal to candidate identity.
+- **Scores use benchmark-neutral keys** (:data:`SCORE_DIMENSIONS`) so a migrated
+  SOS record, a smoke record, and a HOB record all have the same shape.
+- **Heavy artifacts never enter the tree.** ``artifact_pointers`` carry
+  ``{"kind", "location"}`` references only.
+- **Candidate identity is never trusted from a recorded value.**
+  ``verified`` is ``False`` until the Candidate Bundle issue (#65) recomputes it.
+- **``leaderboard_valid`` has one owner**, :func:`derive_leaderboard_valid`,
+  shared by the writer's callers and the legacy migrator.
+
+Public API
+----------
+``CandidateIdentity``, ``RunRecord``, ``candidate_hash``, ``legacy_image_dir``,
+``derive_leaderboard_valid``, ``leaderboard_validity_reasons``,
+``normalize_collector_number``, ``write_run_record``, ``read_run_record``,
+``iter_run_dirs``, ``iter_run_records``, ``rebuild_index``, ``init_results_repo``,
+``resolve_results_repo``, ``load_benchmark_config``.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import json
+import os
+import re
+import shutil
+import tempfile
+from collections.abc import Iterable, Iterator, Mapping
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+__all__ = [
+    "INDEX_FILENAME",
+    "LEGACY_SCHEME",
+    "LEGACY_TREE_KIND",
+    "MANIFEST_FILENAME",
+    "OZOLITH_SCHEME",
+    "RESULTS_DIRNAME",
+    "RESULTS_REPO_ENV",
+    "RUN_SUMMARY_SCORE_KEYS",
+    "SCHEMA_VERSION",
+    "SCORES_FILENAME",
+    "SCORE_DIMENSIONS",
+    "TEMPLATE_DIR",
+    "CandidateIdentity",
+    "InvalidRunRecordError",
+    "ResultsRepoError",
+    "RunRecord",
+    "RunRecordExistsError",
+    "candidate_hash",
+    "derive_leaderboard_valid",
+    "init_results_repo",
+    "iter_run_dirs",
+    "iter_run_records",
+    "leaderboard_validity_reasons",
+    "legacy_image_dir",
+    "load_benchmark_config",
+    "normalize_collector_number",
+    "read_run_record",
+    "rebuild_index",
+    "resolve_results_repo",
+    "write_run_record",
+]
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+SCHEMA_VERSION = 1
+
+#: Environment variable naming the results repo clone; an explicit flag wins.
+RESULTS_REPO_ENV = "SILVERQUILLM_RESULTS_REPO"
+
+RESULTS_DIRNAME = "results"
+MANIFEST_FILENAME = "manifest.json"
+SCORES_FILENAME = "scores.json"
+INDEX_FILENAME = "runs.jsonl"
+AGENTS_FILENAME = "AGENTS.md"
+
+#: Identity scheme of runs migrated from the legacy image lineage
+#: (``docker/<image>/``).  The image dir name is the whole identity.
+LEGACY_SCHEME = "legacy"
+#: Identity scheme of runs driven from a Candidate Bundle (lands with #65).
+OZOLITH_SCHEME = "ozolith-v1"
+
+#: The three audited dimensions under benchmark-neutral keys.  ``scores.json``
+#: carries exactly these keys, each holding the matching ``run_summary.json``
+#: sub-object unchanged.
+SCORE_DIMENSIONS: tuple[str, ...] = ("card_correctness", "fdn_regression", "engine_regression")
+
+#: ``run_summary.json`` block → neutral score key.  ``sos_card_correctness`` is
+#: SOS-specific and is mapped, never copied through.
+RUN_SUMMARY_SCORE_KEYS: dict[str, str] = {
+    "sos_card_correctness": "card_correctness",
+    "fdn_regression": "fdn_regression",
+    "engine_regression": "engine_regression",
+}
+
+#: ``artifact_pointers[].kind`` for a migrated run whose heavy artifacts stay
+#: in place under the bench repo's ``docker/<image>/validated_results/<run>/``.
+LEGACY_TREE_KIND = "legacy-tree"
+
+TEMPLATE_DIR = Path(__file__).resolve().parent / "results_repo_templates"
+
+_SAFE_SEGMENT_RE = re.compile(r"[^A-Za-z0-9._-]")
+_COLLECTOR_PREFIX_RE = re.compile(r"^[A-Za-z]+_")
+
+
+# ---------------------------------------------------------------------------
+# Errors
+# ---------------------------------------------------------------------------
+
+
+class ResultsRepoError(Exception):
+    """Base class for results-repo failures."""
+
+
+class RunRecordExistsError(ResultsRepoError):
+    """A record for this run-id already exists — records are immutable."""
+
+
+class InvalidRunRecordError(ResultsRepoError):
+    """A :class:`RunRecord` violates the schema."""
+
+
+# ---------------------------------------------------------------------------
+# Identity
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CandidateIdentity:
+    """Who ran: (base image digest, instruction hash, adapter identity) + scheme.
+
+    ``verified`` is ``False`` until identity is recomputed from a Candidate
+    Bundle (#65).  It is never set ``True`` from a recorded value.
+
+    Under :data:`LEGACY_SCHEME` the three hash fields all carry
+    ``legacy:<image-dir>``: in the legacy lineage the Docker image *was* the
+    whole agent configuration, so the tuple does not decompose.
+    """
+
+    base_image_digest: str
+    instruction_hash: str
+    adapter_identity: str
+    scheme: str
+    verified: bool = False
+
+    @classmethod
+    def legacy(cls, image_dir: str) -> CandidateIdentity:
+        """Identity of a run from the legacy ``docker/<image_dir>/`` lineage."""
+        if not image_dir or image_dir in {".", ".."} or "/" in image_dir:
+            raise InvalidRunRecordError(f"invalid legacy image dir: {image_dir!r}")
+        token = f"{LEGACY_SCHEME}:{image_dir}"
+        return cls(
+            base_image_digest=token,
+            instruction_hash=token,
+            adapter_identity=token,
+            scheme=LEGACY_SCHEME,
+            verified=False,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "scheme": self.scheme,
+            "base_image_digest": self.base_image_digest,
+            "instruction_hash": self.instruction_hash,
+            "adapter_identity": self.adapter_identity,
+            "verified": self.verified,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> CandidateIdentity:
+        try:
+            return cls(
+                base_image_digest=str(data["base_image_digest"]),
+                instruction_hash=str(data["instruction_hash"]),
+                adapter_identity=str(data["adapter_identity"]),
+                scheme=str(data["scheme"]),
+                verified=bool(data.get("verified", False)),
+            )
+        except KeyError as exc:
+            raise InvalidRunRecordError(f"candidate identity lacks {exc}") from exc
+
+
+def legacy_image_dir(identity: CandidateIdentity) -> str | None:
+    """Return the ``docker/<image-dir>`` name a legacy identity encodes, else ``None``."""
+    if identity.scheme != LEGACY_SCHEME:
+        return None
+    prefix = f"{LEGACY_SCHEME}:"
+    if not identity.base_image_digest.startswith(prefix):
+        return None
+    return identity.base_image_digest[len(prefix) :] or None
+
+
+def _sanitize_segment(value: str) -> str:
+    return _SAFE_SEGMENT_RE.sub("_", value)
+
+
+def candidate_hash(identity: CandidateIdentity) -> str:
+    """The ``results/<candidate-hash>/`` directory key for *identity*.
+
+    Instruction-independent: derived from the identity, not the run.  For the
+    legacy scheme it is the sanitized image dir name.  The ``ozolith-v1``
+    key is defined by the identity-hash spec that lands with #65.
+    """
+    if identity.scheme == LEGACY_SCHEME:
+        image_dir = legacy_image_dir(identity)
+        if image_dir is None:
+            raise InvalidRunRecordError(
+                "legacy identity must carry 'legacy:<image-dir>' in base_image_digest"
+            )
+        return _sanitize_segment(image_dir)
+    raise ResultsRepoError(
+        f"no candidate-hash rule for identity scheme {identity.scheme!r}; "
+        f"only {LEGACY_SCHEME!r} is defined until the Candidate Bundle issue (#65) lands"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Run record
+# ---------------------------------------------------------------------------
+
+
+def _is_safe_segment(value: str) -> bool:
+    return (
+        bool(value)
+        and value not in {".", ".."}
+        and not value.startswith(".")
+        and (_SAFE_SEGMENT_RE.search(value) is None)
+    )
+
+
+@dataclass
+class RunRecord:
+    """One Benchmark Run's record: ``manifest.json`` + ``scores.json``.
+
+    ``run_metadata`` is metadata only (adapter/product versions, run date,
+    notes) — never identity-bearing.  ``proposal_status`` is what the #64
+    driver records about ``output/proposal.json`` (``"applied"``,
+    ``"missing"``, ``"invalid"``); ``None`` for legacy runs, which had no
+    proposal.
+    """
+
+    run_id: str
+    candidate: CandidateIdentity
+    mode: str
+    benchmark: str
+    budget_seconds: int
+    leaderboard_valid: bool
+    resumed_from: str | None
+    run_metadata: dict[str, Any]
+    proposal_status: str | None
+    scores: dict[str, Any]
+    artifact_pointers: list[dict[str, str]] = field(default_factory=list)
+
+    # -- validation ---------------------------------------------------------
+
+    def validate(self) -> None:
+        """Raise :class:`InvalidRunRecordError` unless the record is well-formed."""
+        if not isinstance(self.run_id, str) or not _is_safe_segment(self.run_id):
+            raise InvalidRunRecordError(
+                f"run_id must be a single safe path segment, got {self.run_id!r}"
+            )
+        if not isinstance(self.candidate, CandidateIdentity):
+            raise InvalidRunRecordError("candidate must be a CandidateIdentity")
+        for name in ("mode", "benchmark"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value:
+                raise InvalidRunRecordError(f"{name} must be a non-empty string")
+        if isinstance(self.budget_seconds, bool) or not isinstance(self.budget_seconds, int):
+            raise InvalidRunRecordError("budget_seconds must be an int")
+        if self.budget_seconds < 0:
+            raise InvalidRunRecordError("budget_seconds must be >= 0")
+        if not isinstance(self.leaderboard_valid, bool):
+            raise InvalidRunRecordError("leaderboard_valid must be a bool")
+        if self.resumed_from is not None and (
+            not isinstance(self.resumed_from, str) or not self.resumed_from
+        ):
+            raise InvalidRunRecordError("resumed_from must be None or a non-empty string")
+        if self.proposal_status is not None and not isinstance(self.proposal_status, str):
+            raise InvalidRunRecordError("proposal_status must be None or a string")
+        if not isinstance(self.run_metadata, dict):
+            raise InvalidRunRecordError("run_metadata must be a dict")
+        if "workload" in self.run_metadata:
+            raise InvalidRunRecordError(
+                "'workload' is retired vocabulary; the manifest records 'benchmark'"
+            )
+        if not isinstance(self.scores, dict) or set(self.scores) != set(SCORE_DIMENSIONS):
+            raise InvalidRunRecordError(
+                f"scores must have exactly the keys {list(SCORE_DIMENSIONS)}, "
+                f"got {sorted(self.scores) if isinstance(self.scores, dict) else self.scores!r}"
+            )
+        for key in SCORE_DIMENSIONS:
+            if not isinstance(self.scores[key], dict):
+                raise InvalidRunRecordError(f"scores[{key!r}] must be a dict")
+        if not isinstance(self.artifact_pointers, list):
+            raise InvalidRunRecordError("artifact_pointers must be a list")
+        for pointer in self.artifact_pointers:
+            if not isinstance(pointer, dict):
+                raise InvalidRunRecordError("each artifact pointer must be a dict")
+            for key in ("kind", "location"):
+                if not isinstance(pointer.get(key), str) or not pointer[key]:
+                    raise InvalidRunRecordError(
+                        f"artifact pointer lacks a non-empty {key!r}: {pointer!r}"
+                    )
+
+    # -- serialization ------------------------------------------------------
+
+    def manifest_dict(self) -> dict[str, Any]:
+        """The ``manifest.json`` payload (everything but the scores)."""
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "run_id": self.run_id,
+            "candidate": self.candidate.to_dict(),
+            "candidate_hash": candidate_hash(self.candidate),
+            "mode": self.mode,
+            "benchmark": self.benchmark,
+            "budget_seconds": self.budget_seconds,
+            "leaderboard_valid": self.leaderboard_valid,
+            "resumed_from": self.resumed_from,
+            "proposal_status": self.proposal_status,
+            "run_metadata": self.run_metadata,
+            "artifact_pointers": self.artifact_pointers,
+        }
+
+    def scores_dict(self) -> dict[str, Any]:
+        """The ``scores.json`` payload: exactly the neutral dimension keys."""
+        return {key: self.scores[key] for key in SCORE_DIMENSIONS}
+
+    @classmethod
+    def from_dicts(cls, manifest: Mapping[str, Any], scores: Mapping[str, Any]) -> RunRecord:
+        try:
+            record = cls(
+                run_id=str(manifest["run_id"]),
+                candidate=CandidateIdentity.from_dict(manifest["candidate"]),
+                mode=str(manifest["mode"]),
+                benchmark=str(manifest["benchmark"]),
+                budget_seconds=manifest["budget_seconds"],
+                leaderboard_valid=manifest["leaderboard_valid"],
+                resumed_from=manifest.get("resumed_from"),
+                run_metadata=dict(manifest.get("run_metadata") or {}),
+                proposal_status=manifest.get("proposal_status"),
+                scores=dict(scores),
+                artifact_pointers=list(manifest.get("artifact_pointers") or []),
+            )
+        except KeyError as exc:
+            raise InvalidRunRecordError(f"manifest lacks {exc}") from exc
+        record.validate()
+        return record
+
+
+# ---------------------------------------------------------------------------
+# leaderboard_valid — the single owner of the rule
+# ---------------------------------------------------------------------------
+
+
+def normalize_collector_number(value: str | int) -> str:
+    """Collector number as an unpadded string: ``"001"``, ``"sos_001"``, ``1`` → ``"1"``.
+
+    Legacy manifests store ``"1"``; ``config.json`` stores ``"001"``;
+    ``eval_result.json`` keys are ``"sos_1"``.  Non-numeric remainders are
+    returned unchanged (minus any ``<set>_`` prefix).
+    """
+    text = str(value).strip()
+    text = _COLLECTOR_PREFIX_RE.sub("", text)
+    if text.isdigit():
+        return str(int(text))
+    return text
+
+
+def _normalized_set(values: Iterable[str | int]) -> set[str]:
+    return {normalize_collector_number(v) for v in values}
+
+
+def leaderboard_validity_reasons(
+    benchmark_config: Mapping[str, Any],
+    card_filter: Iterable[str | int] | None,
+    resumed_from: str | None,
+    scored_card_set: Iterable[str | int],
+) -> list[str]:
+    """Every reason a run is *not* leaderboard-valid; empty means valid.
+
+    Rules (in order):
+
+    1. the benchmark's ``config.json`` says ``leaderboard.eligible: false``
+       (the smoke benchmark is never leaderboard-published);
+    2. ``resumed_from`` is set — Resume Legs inherit prior-leg workspace state
+       (CONTEXT.md → Resume Leg);
+    3. a card filter is present and differs from the benchmark's ``cards``
+       set **after integer normalization** of collector numbers;
+    4. the scored card set differs from the benchmark's ``cards`` set.
+    """
+    reasons: list[str] = []
+    leaderboard = benchmark_config.get("leaderboard") or {}
+    if isinstance(leaderboard, Mapping) and leaderboard.get("eligible", True) is False:
+        reasons.append("benchmark is not leaderboard-eligible (leaderboard.eligible: false)")
+    if resumed_from:
+        reasons.append(f"Resume Leg (resumed_from={resumed_from})")
+    pool = _normalized_set(benchmark_config.get("cards") or [])
+    if card_filter is not None:
+        filtered = _normalized_set(card_filter)
+        if filtered != pool:
+            reasons.append(
+                f"card filter ({len(filtered)} cards) differs from the benchmark's "
+                f"{len(pool)}-card set"
+            )
+    scored = _normalized_set(scored_card_set)
+    if scored != pool:
+        reasons.append(
+            f"scored card set ({len(scored)} cards) differs from the benchmark's "
+            f"{len(pool)}-card set"
+        )
+    return reasons
+
+
+def derive_leaderboard_valid(
+    benchmark_config: Mapping[str, Any],
+    card_filter: Iterable[str | int] | None,
+    resumed_from: str | None,
+    scored_card_set: Iterable[str | int],
+) -> bool:
+    """``True`` iff :func:`leaderboard_validity_reasons` is empty."""
+    return not leaderboard_validity_reasons(
+        benchmark_config, card_filter, resumed_from, scored_card_set
+    )
+
+
+# ---------------------------------------------------------------------------
+# Writer / reader
+# ---------------------------------------------------------------------------
+
+
+def _dumps(payload: Any) -> str:
+    """Deterministic JSON: sorted keys, two-space indent, trailing newline."""
+    return json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+
+
+def _load_json(path: Path) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ResultsRepoError(f"cannot read {path}: {exc}") from exc
+
+
+def write_run_record(repo_root: Path, record: RunRecord) -> Path:
+    """Write ``results/<candidate-hash>/<run-id>/{manifest,scores}.json``.
+
+    Immutable: raises :class:`RunRecordExistsError` if the run-id directory
+    already exists.  Atomic: both files are written into a temporary sibling
+    directory that is renamed into place, so readers never observe a partial
+    record and a failed write leaves nothing behind.  Returns the record dir.
+    """
+    record.validate()
+    manifest_text = _dumps(record.manifest_dict())  # serialization errors surface before I/O
+    scores_text = _dumps(record.scores_dict())
+
+    candidate_dir = Path(repo_root) / RESULTS_DIRNAME / candidate_hash(record.candidate)
+    final_dir = candidate_dir / record.run_id
+    if final_dir.exists():
+        raise RunRecordExistsError(f"run record already exists: {final_dir}")
+
+    candidate_dir.mkdir(parents=True, exist_ok=True)
+    tmp_dir = Path(tempfile.mkdtemp(prefix=f".tmp-{record.run_id}-", dir=candidate_dir))
+    try:
+        (tmp_dir / MANIFEST_FILENAME).write_text(manifest_text, encoding="utf-8")
+        (tmp_dir / SCORES_FILENAME).write_text(scores_text, encoding="utf-8")
+        try:
+            tmp_dir.rename(final_dir)
+        except OSError as exc:  # lost a race: final_dir appeared after the check
+            raise RunRecordExistsError(f"run record already exists: {final_dir}") from exc
+    except BaseException:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise
+    return final_dir
+
+
+def read_run_record(run_dir: Path) -> RunRecord:
+    """Load and validate the record stored in *run_dir*."""
+    run_dir = Path(run_dir)
+    manifest = _load_json(run_dir / MANIFEST_FILENAME)
+    scores = _load_json(run_dir / SCORES_FILENAME)
+    if not isinstance(manifest, dict) or not isinstance(scores, dict):
+        raise InvalidRunRecordError(f"{run_dir}: manifest.json and scores.json must be objects")
+    if manifest.get("schema_version") != SCHEMA_VERSION:
+        raise InvalidRunRecordError(
+            f"{run_dir}: schema_version {manifest.get('schema_version')!r} != {SCHEMA_VERSION}"
+        )
+    if "workload" in manifest:
+        raise InvalidRunRecordError(f"{run_dir}: manifest carries the retired 'workload' field")
+    return RunRecord.from_dicts(manifest, scores)
+
+
+def iter_run_dirs(repo_root: Path) -> Iterator[Path]:
+    """Yield every ``results/<candidate-hash>/<run-id>/`` holding a manifest.
+
+    Deterministic order: sorted by ``(candidate-hash, run-id)``.  Dot-prefixed
+    directories (in-flight temp dirs) are skipped.
+    """
+    results_dir = Path(repo_root) / RESULTS_DIRNAME
+    if not results_dir.is_dir():
+        return
+    for candidate_dir in sorted(p for p in results_dir.iterdir() if p.is_dir()):
+        if candidate_dir.name.startswith("."):
+            continue
+        for run_dir in sorted(p for p in candidate_dir.iterdir() if p.is_dir()):
+            if run_dir.name.startswith("."):
+                continue
+            if (run_dir / MANIFEST_FILENAME).is_file():
+                yield run_dir
+
+
+def iter_run_records(repo_root: Path) -> Iterator[tuple[Path, RunRecord]]:
+    """Yield ``(run_dir, record)`` for every record, in :func:`iter_run_dirs` order."""
+    for run_dir in iter_run_dirs(repo_root):
+        yield run_dir, read_run_record(run_dir)
+
+
+# ---------------------------------------------------------------------------
+# Derived index
+# ---------------------------------------------------------------------------
+
+
+def rebuild_index(repo_root: Path) -> list[dict[str, Any]]:
+    """Regenerate ``runs.jsonl`` purely from the tree and return its rows.
+
+    One line per run — candidate hash, run id, benchmark, mode,
+    ``leaderboard_valid``, run date — in ``(candidate_hash, run_id)`` order with
+    sorted keys, so two rebuilds of the same tree are byte-identical.  The
+    index is derived: never hand-edited, never authoritative.
+    """
+    repo_root = Path(repo_root)
+    rows: list[dict[str, Any]] = []
+    for run_dir, record in iter_run_records(repo_root):
+        rows.append(
+            {
+                "candidate_hash": run_dir.parent.name,
+                "run_id": record.run_id,
+                "benchmark": record.benchmark,
+                "mode": record.mode,
+                "leaderboard_valid": record.leaderboard_valid,
+                "run_date": record.run_metadata.get("run_date"),
+            }
+        )
+    text = "".join(json.dumps(row, sort_keys=True, ensure_ascii=False) + "\n" for row in rows)
+    index_path = repo_root / INDEX_FILENAME
+    fd, tmp_name = tempfile.mkstemp(prefix=".runs-", suffix=".jsonl", dir=repo_root)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp_name, index_path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_name)
+        raise
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# Repo init / configuration
+# ---------------------------------------------------------------------------
+
+
+def init_results_repo(path: Path) -> list[Path]:
+    """Lay out an empty results repo at *path*; return the files written.
+
+    Writes the schema ``AGENTS.md`` (from :data:`TEMPLATE_DIR`), an empty
+    ``results/`` directory (kept with ``.gitkeep``) and an empty derived index.
+    Refuses if ``AGENTS.md`` already exists — the repo is not empty.
+    """
+    path = Path(path)
+    agents_md = path / AGENTS_FILENAME
+    if agents_md.exists():
+        raise ResultsRepoError(f"{path} is not an empty results repo: {AGENTS_FILENAME} exists")
+    template = TEMPLATE_DIR / AGENTS_FILENAME
+    if not template.is_file():
+        raise ResultsRepoError(f"missing packaged template: {template}")
+    path.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    agents_md.write_text(template.read_text(encoding="utf-8"), encoding="utf-8")
+    written.append(agents_md)
+    results_dir = path / RESULTS_DIRNAME
+    results_dir.mkdir(exist_ok=True)
+    gitkeep = results_dir / ".gitkeep"
+    gitkeep.write_text("", encoding="utf-8")
+    written.append(gitkeep)
+    rebuild_index(path)
+    written.append(path / INDEX_FILENAME)
+    return written
+
+
+def resolve_results_repo(
+    flag: Path | str | None,
+    env: Mapping[str, str] | None = None,
+) -> Path | None:
+    """Results repo path from the ``--results-repo`` flag or the env var; flag wins.
+
+    ``None`` means the feature is off: callers leave the legacy write path
+    untouched.
+    """
+    if flag:
+        return Path(flag)
+    environ = os.environ if env is None else env
+    value = environ.get(RESULTS_REPO_ENV, "").strip()
+    return Path(value) if value else None
+
+
+def load_benchmark_config(repo_root: Path, benchmark_id: str) -> dict[str, Any]:
+    """Load ``benchmarks/<benchmark_id>/config.json`` from the bench repo."""
+    if not _is_safe_segment(benchmark_id):
+        raise ResultsRepoError(f"invalid benchmark id: {benchmark_id!r}")
+    config_path = Path(repo_root) / "benchmarks" / benchmark_id / "config.json"
+    if not config_path.is_file():
+        raise ResultsRepoError(f"no benchmark config at {config_path}")
+    config = _load_json(config_path)
+    if not isinstance(config, dict):
+        raise ResultsRepoError(f"{config_path} is not a JSON object")
+    return config

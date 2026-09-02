@@ -77,6 +77,7 @@ silverquillm/
   card_loader.py      # card spec loading
   evaluator.py        # post-harvest test runner (3 dimensions)
   results.py          # run_summary.json generation
+  results_repo.py     # private results repo: run-record schema + writer, leaderboard_valid rule, derived index (#39 §3)
   workspace.py        # stage_workspace()
 docker/
   pi-blind/
