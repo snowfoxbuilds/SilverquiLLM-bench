@@ -51,7 +51,7 @@ Discover the current set at any time with:
 find cards/fdn -mindepth 2 -maxdepth 2 -name tests.py -printf '%h\n' | sort -V
 ```
 
-As of the latest workspace stage, the list is: `fdn_13`, `fdn_142`, `fdn_205`, `fdn_215`, `fdn_244`. If you suspect the list has grown, re-run the `find` command above — it is authoritative.
+As of the latest workspace stage, 86 FDN reference cards ship a `tests.py`. The `find` command above is authoritative — re-run it rather than trusting this count. These files are illustrative local regression coverage; the authoritative audited FDN suite the grader runs lives outside the workspace and is broader than this set.
 
 ## Imports
 

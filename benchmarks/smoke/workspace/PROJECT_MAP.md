@@ -19,19 +19,20 @@ engine/            — Canonical game engine source. Imported as `engine`.
                      (`DeterministicPlayer`, `Intent`, transcript).
 engine_tests/      — Engine regression tests (do not modify).
 cards/             — Card implementations.
-  cards/fdn/       — Completed FDN reference cards (do not modify their tests).
-  cards/hob/       — HOB target-card tree to implement (created when the pool lands).
+  cards/fdn/       — FDN cards: the smoke target stubs named in `prompt.md`
+                     (implement these) plus completed reference cards (do not
+                     modify their tests).
 skills/            — Workspace-local skills (e.g. `grep-rulebook/SKILL.md`).
 ```
 
 ## Card paths
 
-For a HOB card with collector number `N`:
+For a smoke target card with collector number `N`:
 
 ```
-cards/hob/hob_<N>/card_spec.json   — card metadata (name, mana_cost, oracle_text, P/T, keywords, …)
-cards/hob/hob_<N>/card_impl.py     — implementation stub you complete
-cards/hob/hob_<N>/tests.py         — your tests for this card (you create this)
+cards/fdn/fdn_<N>/card_spec.json   — card metadata (name, mana_cost, oracle_text, P/T, keywords, …)
+cards/fdn/fdn_<N>/card_impl.py     — implementation stub you complete
+cards/fdn/fdn_<N>/tests.py         — your tests for this card (you create this)
 ```
 
 For an FDN reference card:
@@ -51,14 +52,14 @@ Discover the current set at any time with:
 find cards/fdn -mindepth 2 -maxdepth 2 -name tests.py -printf '%h\n' | sort -V
 ```
 
-As of the latest workspace stage, the list is: `fdn_13`, `fdn_142`, `fdn_205`, `fdn_215`, `fdn_244`. If you suspect the list has grown, re-run the `find` command above — it is authoritative.
+As of the latest workspace stage, 83 FDN reference cards ship a `tests.py`. The `find` command above is authoritative — re-run it rather than trusting this count. These files are illustrative local regression coverage; the authoritative audited FDN suite the grader runs lives outside the workspace and is broader than this set.
 
 ## Imports
 
 The workspace root is on `sys.path`, so use bare package imports:
 
 ```python
-from cards.hob.hob_<N>.card_impl import <ClassName>
+from cards.fdn.fdn_<N>.card_impl import <ClassName>
 from engine.card import CardImpl, Creature, Instant
 from engine.types import CardType, Keyword, ManaCost, ManaType, Zone
 from engine.intent_player import Intent

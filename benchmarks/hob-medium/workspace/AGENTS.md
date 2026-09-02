@@ -24,17 +24,29 @@ Tests answer those queries with **Intents** (see `test_utils.md`).
 2. **Staged-test integrity** — Treat `engine_tests/` as read-only: do not
    modify, add to, or delete files in it. Likewise do not modify or delete any
    existing FDN reference test file at `cards/fdn/fdn_*/tests.py` (you may read
-   them as examples, but never edit them). These tests are for your local
-   verification and learning only; the runner uses its own authoritative copies
-   for grading. Editing them — including adding new files — will not change
+   them as examples, but never edit them). These staged tests are local
+   feedback only; grading runs the harness's own authoritative suites outside
+   this workspace. Editing them — including adding new files — cannot change
    your score, it will only mislead you about whether your engine changes are
    correct. Your own HOB tests belong at `cards/hob/hob_<N>/tests.py`.
 
-3. **Additive-only engine modifications** — You may add new methods, classes,
-   helpers, and files inside `engine/`. You may modify the bodies of existing
-   functions to implement card behavior. You MUST NOT rename, move, or delete
-   anything that already exists in `engine/` — no renaming, no refactoring.
-   Restructuring the engine will break the grader's imports and zero your score.
+3. **Engine envelope: modify freely; the audited tests are the judge** — You
+   may add, change, rename, move, refactor, or delete anything inside
+   `engine/`. There is no additive-only rule and no diff policing: your engine
+   diff is recorded as a diagnostic, never scored. The entire judgment is the
+   three audited dimensions run against your final `engine/` — target-card
+   correctness, FDN card regression, engine regression — so a change that
+   breaks behavior or public symbols the audited tests rely on (for example
+   `engine.card.CardImpl`, `engine.game`, the Player Query machinery) simply
+   shows up as failing tests. That scoring is the only enforcement. The staged
+   tests are local feedback, not the grader: `engine_tests/` is your local
+   proxy for the Engine Regression dimension, and the colocated FDN
+   `cards/fdn/fdn_*/tests.py` files give illustrative local regression
+   coverage. Authoritative evaluation runs outside this workspace against the
+   harvested engine, using its own audited FDN suite — broader than the staged
+   files, and not required to match them. Keeping the staged tests green is
+   useful evidence, not a guarantee that the audited FDN regression dimension
+   is green.
 
 4. **Life mutation goes through `gain_life` / `lose_life`** — A card
    implementation must change a player's life **only** by calling
@@ -84,8 +96,10 @@ pytest
 This discovers:
 - Engine regression tests at `engine_tests/test_*.py`.
 - Per-card FDN reference tests at `cards/fdn/fdn_{collector_number}/tests.py`.
-  Only a handful of FDN cards ship with a `tests.py` — see `PROJECT_MAP.md`
-  for the canonical list, and use them as illustrative per-card test examples.
+  Many FDN cards ship with a `tests.py` — see `PROJECT_MAP.md` for how to
+  list them, and use them as illustrative per-card test examples (local
+  coverage only; the audited FDN suite the grader runs lives outside this
+  workspace).
 - Per-card HOB tests you write at `cards/hob/hob_{collector_number}/tests.py`.
 
 The workspace `pytest.ini` configures `python_files = test_*.py tests.py` for
@@ -104,9 +118,13 @@ from test_utils import create_game, set_board_state, put_on_battlefield, cast_sp
 
 ## Engine Extension Scope
 
-- **May**: Add files, methods, classes, and helpers inside `engine/`.
-- **May**: Modify the bodies of existing functions in `engine/`.
-- **Must NOT**: Rename, move, or delete anything existing in `engine/`.
+- **May**: add, modify, rename, move, refactor, or delete anything inside
+  `engine/` — the engine is yours for the run.
+- **Judged by**: the three audited dimensions against your final `engine/`.
+  Breaking behavior or public symbols the audited tests rely on fails those
+  tests; nothing else about the engine is policed or scored.
+- **Advice**: prefer generic, reusable extensions over card-specific hacks —
+  they are far likelier to keep the FDN and engine regression dimensions green.
 
 ## Rules questions → grep RULEBOOK.txt
 
