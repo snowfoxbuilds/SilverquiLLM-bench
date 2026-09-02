@@ -4,10 +4,6 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -e ".[dev]"
 
-# sync specs
-
-python3 sync_notion_specs.py
-
 # Testing repo
 
 pytest --ignore=tests/audited/sos/
