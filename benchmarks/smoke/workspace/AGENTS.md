@@ -2,16 +2,21 @@
 
 ## Task
 
-You are implementing the smoke benchmark's target cards: a few FDN cards whose
-implementations have been reduced to stubs. `prompt.md` names the exact
-targets; each one's implementation class lives in its stub file:
+You are implementing the smoke benchmark's target cards: three FDN cards whose
+implementations have been reduced to stubs. The targets are exactly these
+files (`prompt.md` restates them per run):
 
 ```
-cards/fdn/fdn_<N>/card_impl.py
+cards/fdn/fdn_129/card_impl.py   — Leyline Axe
+cards/fdn/fdn_205/card_impl.py   — Seismic Rupture
+cards/fdn/fdn_232/card_impl.py   — Scavenging Ooze
 ```
 
-Every other card under `cards/fdn/` is a completed reference implementation —
-read them for examples.
+These three implementations are the writable targets. Their authoritative
+tests are host-side — they are not staged in this workspace and are run by the
+grader after the run. Every other `cards/fdn/` implementation is a completed
+reference (read them for examples), and the staged reference tests and
+`engine_tests/` are learning and regression material, not the target.
 
 Card choices go through the **Player Query / Player Decision** protocol: an
 implementation that needs a choice raises a Player Query through the engine's
@@ -21,8 +26,10 @@ Tests answer those queries with **Intents** (see `test_utils.md`).
 ## Hard Rules
 
 1. **Card location invariant** — Each target card's canonical implementation
-   class must remain in `cards/fdn/fdn_<N>/card_impl.py`, keeping the class
-   name the stub pins. Do not move or rename card directories.
+   class must remain in its stub file (`cards/fdn/fdn_129/card_impl.py`,
+   `cards/fdn/fdn_205/card_impl.py`, `cards/fdn/fdn_232/card_impl.py`),
+   keeping the class name the stub pins. Do not move or rename card
+   directories.
 
 2. **Staged-test integrity** — Treat `engine_tests/` as read-only: do not
    modify, add to, or delete files in it. Likewise do not modify or delete any

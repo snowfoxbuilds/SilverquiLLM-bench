@@ -19,34 +19,43 @@ engine/            — Canonical game engine source. Imported as `engine`.
                      (`DeterministicPlayer`, `Intent`, transcript).
 engine_tests/      — Engine regression tests (do not modify).
 cards/             — Card implementations.
-  cards/fdn/       — FDN cards: the smoke target stubs named in `prompt.md`
-                     (implement these) plus completed reference cards (do not
-                     modify their tests).
+  cards/fdn/       — FDN cards: the three smoke target stubs (fdn_129, fdn_205,
+                     fdn_232 — implement these) plus completed reference cards
+                     (do not modify their tests).
 skills/            — Workspace-local skills (e.g. `grep-rulebook/SKILL.md`).
 ```
 
 ## Card paths
 
-For a smoke target card with collector number `N`:
+The smoke targets are exactly these three writable stubs:
+
+```
+cards/fdn/fdn_129/card_impl.py     — Leyline Axe (Artifact — Equipment)
+cards/fdn/fdn_205/card_impl.py     — Seismic Rupture (Sorcery)
+cards/fdn/fdn_232/card_impl.py     — Scavenging Ooze (Creature)
+```
+
+For each target card with collector number `N`:
 
 ```
 cards/fdn/fdn_<N>/card_spec.json   — card metadata (name, mana_cost, oracle_text, P/T, keywords, …)
 cards/fdn/fdn_<N>/card_impl.py     — implementation stub you complete
-cards/fdn/fdn_<N>/tests.py         — your tests for this card (you create this)
+cards/fdn/fdn_<N>/tests.py         — your tests for this card (you create this; the
+                                     authoritative tests for the targets are host-side)
 ```
 
-For an FDN reference card:
+For an FDN reference card (every other `cards/fdn/fdn_<N>/`):
 
 ```
 cards/fdn/fdn_<N>/card_spec.json   — card metadata
 cards/fdn/fdn_<N>/card_impl.py     — completed reference implementation (read for examples)
-cards/fdn/fdn_<N>/tests.py         — only present for the cards listed below; read as test examples
+cards/fdn/fdn_<N>/tests.py         — present for many reference cards (see below); read as test examples
 ```
 
 ### FDN cards that ship with a `tests.py`
 
-This is the canonical list — agent prompts refer back here instead of duplicating it.
-Discover the current set at any time with:
+There is no hand-maintained list — agent prompts refer back here, and the tree
+is the source of truth. Discover the current set at any time with:
 
 ```bash
 find cards/fdn -mindepth 2 -maxdepth 2 -name tests.py -printf '%h\n' | sort -V

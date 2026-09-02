@@ -39,13 +39,13 @@ For an FDN reference card:
 ```
 cards/fdn/fdn_<N>/card_spec.json   — card metadata
 cards/fdn/fdn_<N>/card_impl.py     — completed reference implementation (read for examples)
-cards/fdn/fdn_<N>/tests.py         — only present for the cards listed below; read as test examples
+cards/fdn/fdn_<N>/tests.py         — present for many reference cards (see below); read as test examples
 ```
 
 ### FDN cards that ship with a `tests.py`
 
-This is the canonical list — agent prompts refer back here instead of duplicating it.
-Discover the current set at any time with:
+There is no hand-maintained list — agent prompts refer back here, and the tree
+is the source of truth. Discover the current set at any time with:
 
 ```bash
 find cards/fdn -mindepth 2 -maxdepth 2 -name tests.py -printf '%h\n' | sort -V
