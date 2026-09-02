@@ -50,7 +50,7 @@ The set of target cards that make up one benchmark's problem set ("problem set" 
 
 **Checkpoint (MSH)** *(retired — grilling 2026-08-27)*
 
-Retired with the MSH benchmark: the checkpoint/capability-DAG design served bounded-context sequential implementation over a ~281-card pool; HOB problem sets (5–20 cards, one run) don't have that problem. Its design page (MSH-CHECKPOINTS.md) was deleted at grilling 2026-09-02 and survives only in git history. Was: a frozen, reference-validated snapshot of the whole MSH benchmark workspace taken after a card group — the unit of resume, regression attribution, and bounded per-step agent context.
+Retired with the MSH benchmark: the checkpoint/capability-DAG design served bounded-context sequential implementation over a ~281-card pool; HOB problem sets (5–23 cards, one run) don't have that problem. Its design page (MSH-CHECKPOINTS.md) was deleted at grilling 2026-09-02 and survives only in git history. Was: a frozen, reference-validated snapshot of the whole MSH benchmark workspace taken after a card group — the unit of resume, regression attribution, and bounded per-step agent context.
 
 *Avoid*: "Output Snapshot" (runner-owned 60-second Git commits), "snapshot" alone
 
