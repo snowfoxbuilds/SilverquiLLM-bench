@@ -278,7 +278,7 @@ Lifecycle state of a benchmark controlling what may change, recorded in its benc
 
 **Validated Results**
 
-Per-run result artifacts committed under `docker/<image>/validated_results/<run-name>/`. Each run directory holds `eval_result.json` (aggregate pass/fail/total per card), a `cards/<card_id>/` subtree (`card_impl.py`, the exact `tests.py` used, and `result.json` with per-test failure node IDs and counts), plus logs, telemetry, `engine_diff.patch`, and manifests. The source corpus the harvest script reads.
+Per-run result artifacts committed under `docker/<image>/validated_results/<run-name>/`. Each run directory holds `eval_result.json` (aggregate pass/fail/total per card), a `cards/<card_id>/` subtree (`card_impl.py`, the exact `tests.py` used, and `result.json` with per-test failure node IDs and counts), plus logs, telemetry, `engine_diff.patch`, and manifests. The source corpus the harvest script reads. *Superseded as the results home by the Results Repo (#39 §3, #63)*: every run here is backfilled as a Run Record with a `legacy-tree` pointer back to this directory; the trees themselves are deleted by the retirement issue (#66), after which the pointers resolve only through git history.
 
 *Avoid*: "results" alone (ambiguous with `results/{run_name}/` run output), "validated runs"
 
@@ -287,6 +287,18 @@ Per-run result artifacts committed under `docker/<image>/validated_results/<run-
 The consolidated dataset produced by the harvest script from all Validated Results in the repo. Long-format JSONL — one row per `(image, run, card, test-node, pass/fail)`, fully denormalized, written in run-append order and grouped at query time (e.g. by `test_node`). Each row carries the `tests.py` content hash so audited-test changes across runs are detectable. Powers the combined investigation/discovery skill (the manual v1 Test Harvester).
 
 *Avoid*: "harvest" alone, "test dump"
+
+**Results Repo**
+
+The dedicated private git repository that is the home of benchmark results (#39 §3), git-as-truth: `results/<candidate-hash>/<run-id>/` holding one Run Record each, a derived `runs.jsonl` index regenerated from the tree (never hand-edited, never authoritative), and a root `AGENTS.md` carrying the full schema so the repo is self-contained for analysis agents. Heavy artifacts (transcripts, snapshots, per-card trees) never enter it — records carry pointers. Written only through `silverquillm.results_repo`; laid out by `silverquillm results-init <clone>`; the legacy Validated Results corpus is backfilled into it by `scripts/migrate_validated_results.py`.
+
+*Avoid*: "results dir" (the per-run `docker/<image>/results/` working output), "leaderboard repo" (publishing is a separate step, #66)
+
+**Run Record**
+
+One Benchmark Run's immutable entry in the Results Repo: `manifest.json` (candidate identity with `verified: false` until recomputed, `mode`, `benchmark` — never "workload" — `budget_seconds`, `leaderboard_valid`, `resumed_from`, `proposal_status`, `run_metadata`, `artifact_pointers`) plus `scores.json` (the three audited dimensions under the benchmark-neutral keys `card_correctness`, `fdn_regression`, `engine_regression`). Written once, atomically; never edited — corrections are new runs. `leaderboard_valid` has one owner, `derive_leaderboard_valid`: false for a `leaderboard.eligible: false` benchmark, a Resume Leg, a card filter that differs from the benchmark's card set after integer normalization of collector numbers, or a scored set that differs from it.
+
+*Avoid*: "run summary" (`run_summary.json` is the legacy per-run aggregate the record's scores are mapped from), "result" alone
 
 **Implementation-Agnostic Testing**
 

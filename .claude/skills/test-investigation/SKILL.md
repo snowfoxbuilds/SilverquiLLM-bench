@@ -155,7 +155,9 @@ This skill uses the capitalized terms defined in
 - **Harvested Results** — the consolidated JSONL dataset from all Validated
   Results.
 - **Validated Results** — per-run result artifacts under
-  `docker/<image>/validated_results/<run>/`.
+  `docker/<image>/validated_results/<run>/`. Also mirrored as immutable run
+  records in the private results repo; `harvest_validated_results.py
+  --results-repo <clone>` reads them from there with identical rows.
 - **Implementation-Agnostic Testing** — the principle that tests assert
   observable behavior, not implementation details.
 - **Benchmark Tier** — the lifecycle state (Beta / Benchmarking / Released)
