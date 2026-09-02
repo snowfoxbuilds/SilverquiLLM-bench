@@ -37,6 +37,8 @@ from silverquillm._bootstrap import ensure_workspace_on_path
 # resolve in the CLI process and in subprocesses that inherit our env.
 ensure_workspace_on_path()
 
+from theozolith_worker import api
+
 from silverquillm.card_loader import load_all_card_specs
 from silverquillm.card_names import build_card_name_map
 from silverquillm.jobdir import pointer_prompt
@@ -870,24 +872,39 @@ def _container_agent_runner(
 ):
     """Return an ``agent_runner`` that launches the container for a Contract Run.
 
-    The job dir is bind-mounted at ``/job``; the constant pointer prompt is
-    passed to the image via ``SILVERQUILLM_POINTER_PROMPT`` (and written to
-    ``workspace/prompt.md`` by the driver for entrypoints that read it there).
+    The job dir is bind-mounted at ``/job``; the checkout (``/job/checkout``) and
+    the Output Proposal slot (``/job/output``) live inside it, and
+    ``format-output`` is pointed at ``/job`` via ``THEOZOLITH_JOB``.  The interim
+    ``--image`` path also mounts the checkout at ``/workspace`` and forwards the
+    constant pointer prompt for candidate images predating the harness; genuine
+    harness-as-PID-1 delivery lands with the Candidate-Bundle derived images (#65).
     """
-    def _run(*, workspace: Path, output: Path, job_dir: Path) -> None:
+    def _run(*, job_dir: Path) -> api.AgentOutcome:
+        checkout = job_dir / "checkout"
+        output = job_dir / "output"
         lifecycle = ContainerLifecycle(
             image=image,
             container_name=f"sqm-{run_id}",
-            workspace=workspace,
+            workspace=checkout,
             output=output,
             hard_timeout=timeout,
             hang_timeout=hang_timeout,
-            env_args=[*_api_key_env_args(), "-e", f"SILVERQUILLM_POINTER_PROMPT={pointer_prompt()}"],
+            env_args=[
+                *_api_key_env_args(),
+                "-e", "THEOZOLITH_JOB=/job",
+                "-e", f"SILVERQUILLM_POINTER_PROMPT={pointer_prompt()}",
+            ],
             run_dir=run_dir,
             card_name_map=card_name_map or {},
             job_dir=job_dir,
         )
-        lifecycle.run()
+        result = lifecycle.run()
+        return api.AgentOutcome(
+            completed=(not result.timed_out and result.exit_code == 0),
+            timed_out=result.timed_out,
+            session_died=(not result.timed_out and (result.exit_code or 0) != 0),
+            exit_code=result.exit_code,
+        )
 
     return _run
 

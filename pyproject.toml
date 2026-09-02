@@ -12,6 +12,10 @@ dependencies = [
     "requests",
     "pyyaml",
     "click",
+    # TheOzolith's published worker package: the bench CONSUMES its Run Contract
+    # entry points (theozolith_worker.api) rather than reimplementing them
+    # (docs/specs/BENCH-CONTRACT.md).
+    "theozolith-worker>=0.3",
 ]
 
 [project.scripts]
@@ -33,9 +37,10 @@ dev = [
 include = ["silverquillm*"]
 
 [tool.setuptools.package-data]
-# The results-repo schema doc that `silverquillm results-init` writes, and the
-# Benchmark Mode task templates staged into the job dir's input/prompt.md.
-silverquillm = ["results_repo_templates/*.md", "templates/*.md"]
+# The results-repo schema doc that `silverquillm results-init` writes.  (The
+# job dir's input/prompt.md now comes from the production prompt renderer, so
+# there are no bench-side task templates to package.)
+silverquillm = ["results_repo_templates/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

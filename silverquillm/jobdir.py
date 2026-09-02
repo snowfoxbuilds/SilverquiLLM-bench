@@ -1,49 +1,67 @@
-"""Job-directory staging: the bench's imitation of TheOzolith's job dir.
+"""Job-directory staging: the bench replays TheOzolith's implementer Run Contract.
 
-A Contract Run drives a candidate through the *same* on-disk seam the
-production substrate uses (ADR-0013/0019/0046): a per-run job directory mounted
-read-write beside the workspace, holding the task the agent reads, the Context
-Tree it navigates, and the ``output/`` slot where it writes its Output Proposal.
-Benchmark evidence transfers by construction because the contract is identical.
+A Contract Run drives a candidate through the *same* on-disk seam the production
+substrate uses (BENCH-CONTRACT.md; ADR-0013/0019/0046): a per-run job directory
+mounted at ``/job`` holding the manifest, the driver-rendered task, the Context
+Tree, the checked-out repo the agent works in, and the ``output/`` slot where it
+writes its Output Proposal.  Benchmark evidence transfers by construction because
+the bench does not imitate the contract — it *consumes* TheOzolith's published
+entry points (``theozolith_worker.api``), so nothing here can drift from
+production as the templates evolve.
 
-Substrate fidelity (see the PR's Decisions Section for deliberate deviations):
+What :func:`stage_job_dir` materializes (all via the published API):
 
-- Mount point ``/job``; job I/O under ``input/`` and ``output/``.
-- ``input/manifest.json`` — serialized with ``sort_keys=True`` (deterministic).
-- ``input/prompt.md`` — the full agent-facing task (``manifest.task_path``).
-- ``input/issue.json`` + ``input/issue/`` — the Context Tree: the synthetic
-  issue split into per-item files with per-surface index files, serialized
-  deterministically, never relevance-filtered/summarized/truncated.
+- ``input/manifest.json`` — a production :class:`~theozolith_worker.api.Manifest`
+  (``mode: "run"``, ``round: 1``, stamped ``schema_version``, ``workdir:
+  "checkout"``) written with :func:`~theozolith_worker.api.write_manifest`.  The
+  real ``read_manifest`` rejects unknown keys, so the Benchmark Mode never rides
+  the manifest — it lives on the RunRecord and shapes only the synthetic task.
+- ``input/prompt.md`` — the production implementer prompt, byte-for-byte from
+  :func:`~theozolith_worker.api.render_run_prompt` (the task rides the synthetic
+  issue body it wraps, never a bench-authored template).
+- ``input/issue.json`` + ``input/issue/`` — the synthetic GitHub-style issue and
+  its Context Tree, the latter via :func:`~theozolith_worker.api.write_tree`.
+- ``checkout/`` — the benchmark workspace, git-initialized with a seed commit so
+  the driver's post-exit commit records exactly the agent's changes.
 - ``output/`` — empty; the agent writes ``output/proposal.json`` there.
 
-Determinism is a contract: :func:`stage_job_dir` is a pure function of its
-inputs — no timestamps, no run ids in the staged tree — so staging the same
-inputs twice yields a byte-identical tree.
+Staging is atomic and retry-safe: the whole tree is built in a private sibling
+and published with a single :func:`os.replace`, and an existing job dir is a
+loud conflict — a retry can never inherit a prior attempt's proposal, status,
+or checkout.
 
 Public API
 ----------
 - :class:`BenchmarkRef` — a resolved, runnable benchmark.
 - :func:`load_benchmark` — resolve ``benchmarks/<id>/config.json``.
 - :func:`stage_job_dir` — build ``run_dir/job/`` for one Contract Run.
-- :class:`BenchmarkNotRunnableError` / :class:`BenchmarkNotFoundError`.
+- :func:`pointer_prompt` — the constant-size launch pointer (interim images).
+- :class:`BenchmarkNotRunnableError` / :class:`BenchmarkNotFoundError`
+  / :class:`JobDirConflictError`.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from theozolith_worker import api
+
 from silverquillm.modes import BenchmarkMode
-from silverquillm.proposal import SCHEMA_VERSION
 
 __all__ = [
+    "CHECKOUT_DIRNAME",
     "CONTAINER_JOB_PATH",
     "BenchmarkNotFoundError",
     "BenchmarkNotRunnableError",
     "BenchmarkRef",
+    "JobDirConflictError",
     "load_benchmark",
     "pointer_prompt",
     "stage_job_dir",
@@ -52,22 +70,30 @@ __all__ = [
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 #: Where the job directory is bind-mounted inside the container (substrate parity).
-CONTAINER_JOB_PATH = "/job"
+CONTAINER_JOB_PATH = api.CONTAINER_JOB_PATH  # "/job"
+
+#: The manifest's ``workdir`` — the agent's working directory, ``/job/checkout``.
+CHECKOUT_DIRNAME = "checkout"
+
+_SEED_IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache", ".git")
+_GIT_ID = ["-c", "user.name=silverquillm", "-c", "user.email=driver@silverquillm"]
+
+_SAFE_SEGMENT_RE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._-]*\Z")
 
 
 def pointer_prompt() -> str:
-    """The constant, constant-size pointer the headless agent is launched with.
+    """The constant, constant-size pointer an interim image may be launched with.
 
-    Verbatim from the substrate harness (ADR-0019): the argv carries only this
-    pointer, never task content — the full task rides ``input/prompt.md``.
+    Production's harness passes this on argv (never task content — the full task
+    rides ``input/prompt.md``); the interim ``--image`` path forwards it via the
+    environment for candidate images that read it.  Genuine harness-as-PID-1
+    delivery lands with the Candidate-Bundle derived images (#65).
     """
-    path = f"{CONTAINER_JOB_PATH}/input/prompt.md"
+    path = f"{CONTAINER_JOB_PATH}/{api.PROMPT_FILE}"
     return (
         f"Work on the task specified in {path}. Read that file first — it is "
         "your complete assignment — then execute it exactly."
     )
-
-_SAFE_SEGMENT_RE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._-]*\Z")
 
 
 class BenchmarkNotRunnableError(Exception):
@@ -76,6 +102,10 @@ class BenchmarkNotRunnableError(Exception):
 
 class BenchmarkNotFoundError(BenchmarkNotRunnableError):
     """No benchmark with the requested id (message lists the available ones)."""
+
+
+class JobDirConflictError(Exception):
+    """A job dir already exists where a fresh Contract Run would be staged."""
 
 
 @dataclass(frozen=True)
@@ -113,9 +143,7 @@ def _available_benchmarks(repo_root: Path) -> list[str]:
     root = repo_root / "benchmarks"
     if not root.is_dir():
         return []
-    return sorted(
-        p.name for p in root.iterdir() if (p / "config.json").is_file()
-    )
+    return sorted(p.name for p in root.iterdir() if (p / "config.json").is_file())
 
 
 def load_benchmark(bench_id: str, *, repo_root: Path | None = None) -> BenchmarkRef:
@@ -157,7 +185,7 @@ def load_benchmark(bench_id: str, *, repo_root: Path | None = None) -> Benchmark
 
 
 # ---------------------------------------------------------------------------
-# Rendering
+# Synthetic task (the issue the production prompt renderer wraps)
 # ---------------------------------------------------------------------------
 
 
@@ -186,7 +214,12 @@ def _norm_cn(cn: str) -> str:
     return str(int(cn)) if cn.isdigit() else cn
 
 
-def _render_problem_statement(benchmark: BenchmarkRef) -> str:
+def _issue_body(benchmark: BenchmarkRef, mode: BenchmarkMode) -> str:
+    """The synthetic issue body: the problem statement plus the mode's addendum.
+
+    The production prompt renderer wraps this verbatim; the Benchmark Mode's
+    only prompt-side effect is this task-synthesis variation.
+    """
     set_code = benchmark.config.get("draft_set", {}).get("primary_set_code", "")
     names = _pool_names(benchmark)
     lines = [
@@ -204,92 +237,118 @@ def _render_problem_statement(benchmark: BenchmarkRef) -> str:
         name = names.get(_norm_cn(cn))
         label = f"`{set_code} #{cn}`" if set_code else f"`#{cn}`"
         lines.append(f"- {label}" + (f" — {name}" if name else ""))
-    return "\n".join(lines)
+    return "\n".join(lines) + mode.issue_addendum
 
 
-def _render_task(
-    benchmark: BenchmarkRef, mode: BenchmarkMode, issue_title: str, problem_statement: str
-) -> str:
-    text = mode.task_template.read_text(encoding="utf-8")
-    replacements = {
-        "{{ISSUE_TITLE}}": issue_title,
-        "{{PROBLEM_STATEMENT}}": problem_statement,
-        "{{TARGET_SET}}": benchmark.target_set,
-        "{{DISPLAY_NAME}}": benchmark.display_name,
-        "{{BENCHMARK_ID}}": benchmark.id,
-    }
-    for token, value in replacements.items():
-        text = text.replace(token, value)
-    return text
+def _synthetic_issue(benchmark: BenchmarkRef, mode: BenchmarkMode) -> Any:
+    """A synthetic GitHub-style :class:`~theozolith_worker.api.Issue`."""
+    return api.Issue(
+        number=0,
+        title=f"Implement the {benchmark.display_name} card pool",
+        body=_issue_body(benchmark, mode),
+        labels=set(),
+        assignees=[],
+        is_pr=False,
+    )
 
 
-def _dumps(obj: Any) -> str:
-    """Deterministic JSON: sorted keys, fixed indent, trailing newline."""
-    return json.dumps(obj, indent=2, sort_keys=True) + "\n"
+def _write_issue_metadata(job: Path, issue: Any) -> None:
+    """``input/issue.json`` in the production driver's shape (round-one)."""
+    api.atomic_write(
+        job / "input" / "issue.json",
+        json.dumps(
+            {
+                "number": issue.number,
+                "title": issue.title,
+                "body": issue.body,
+                "labels": sorted(issue.labels),
+                "round": 1,
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+    )
 
 
-def _empty_surface(label: str) -> str:
-    """An empty-but-present Context Tree index surface (substrate shape)."""
-    return f"# {label} (0)\n\n(none)\n"
+def _git_init_seed(checkout: Path) -> None:
+    import subprocess
 
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=checkout, check=True)
+    subprocess.run(["git", *_GIT_ID, "add", "-A"], cwd=checkout, check=True)
+    subprocess.run(
+        ["git", *_GIT_ID, "commit", "-q", "-m", "initial checkout"],
+        cwd=checkout,
+        check=True,
+    )
 
 
 def stage_job_dir(
     run_dir: Path,
-    workspace: Path,
     benchmark: BenchmarkRef,
     mode: BenchmarkMode,
+    *,
+    run_id: str,
     budget_seconds: int,
 ) -> Path:
     """Stage ``run_dir/job/`` for one Contract Run and return the job dir.
 
-    Deterministic: a pure function of its inputs. The staged tree carries no
-    timestamps and no run id, so staging the same inputs twice is byte-identical.
+    Builds the entire tree — manifest, prompt, issue metadata, Context Tree, the
+    git-seeded ``checkout/``, and an empty ``output/`` — in a private sibling and
+    publishes it with a single atomic rename.  An existing ``run_dir/job`` is a
+    loud :class:`JobDirConflictError`: a fresh or retried run never inherits a
+    prior attempt's proposal, status, transcript, or checkout.
     """
-    workspace = Path(workspace)
-    if not workspace.is_dir():
-        raise FileNotFoundError(f"workspace not staged at {workspace}")
+    run_dir = Path(run_dir)
+    job = run_dir / "job"
+    if job.exists():
+        raise JobDirConflictError(
+            f"a job dir already exists at {job}; a Contract Run never overwrites "
+            "another attempt's job directory (stage into a fresh run dir)"
+        )
+    src = benchmark.root / "workspace"
+    if not src.is_dir() or not any(src.iterdir()):
+        raise FileNotFoundError(f"benchmark workspace missing or empty: {src}")
 
-    job = Path(run_dir) / "job"
-    job_input = job / "input"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(dir=run_dir, prefix=".job-staging-"))
+    try:
+        # Empty input/ and output/ scaffolding (driver<->harness jobs channels).
+        (staging / "input" / "jobs").mkdir(parents=True, exist_ok=True)
+        (staging / "output" / "jobs").mkdir(parents=True, exist_ok=True)
 
-    issue_title = f"Implement the {benchmark.display_name} card pool"
-    problem_statement = _render_problem_statement(benchmark)
+        # checkout/ — the repo the agent works in (workdir).
+        checkout = staging / CHECKOUT_DIRNAME
+        shutil.copytree(src, checkout, ignore=_SEED_IGNORE)
+        _git_init_seed(checkout)
 
-    # input/manifest.json — bench manifest.  Substrate-aligned field names
-    # (agent_timeout_seconds, adapter) plus the bench-only benchmark/mode the
-    # substrate bakes into the image; schema_version stamps the proposal schema.
-    manifest = {
-        "schema_version": SCHEMA_VERSION,
-        "mode": mode.name,
-        "benchmark": benchmark.id,
-        "adapter": "claude",
-        "agent_timeout_seconds": budget_seconds,
-        "task_path": "input/prompt.md",
-    }
-    _write(job_input / "manifest.json", _dumps(manifest))
+        # input/manifest.json — a production manifest (mode: run, round 1).
+        manifest = api.Manifest(
+            run_id=run_id,
+            mode=api.MODE_RUN,
+            adapter="claude",
+            workdir=CHECKOUT_DIRNAME,
+            agent_timeout_seconds=float(budget_seconds),
+            round=1,
+            round_budget=0,
+            schema_version=api.SCHEMA_VERSION,
+        )
+        api.write_manifest(staging, manifest)
 
-    # input/prompt.md — the full rendered task the pointer prompt points at.
-    _write(job_input / "prompt.md", _render_task(benchmark, mode, issue_title, problem_statement))
+        # input/prompt.md — the production implementer prompt, byte-for-byte.
+        issue = _synthetic_issue(benchmark, mode)
+        api.atomic_write(
+            staging / api.PROMPT_FILE, api.render_run_prompt(issue, 1, None)
+        )
 
-    # Context Tree: input/issue.json + input/issue/ (per-surface index files).
-    issue = {
-        "body": problem_statement,
-        "labels": [],
-        "number": 0,
-        "round": 0,
-        "title": issue_title,
-    }
-    _write(job_input / "issue.json", _dumps(issue))
-    _write(job_input / "issue" / "body.md", problem_statement + "\n")
-    _write(job_input / "issue" / "comments" / "INDEX.md", _empty_surface("Comments"))
-    _write(job_input / "issue" / "timeline.md", _empty_surface("Timeline"))
+        # input/issue.json + input/issue/ Context Tree.
+        _write_issue_metadata(staging, issue)
+        api.write_tree(
+            staging / "input",
+            api.ContextSnapshot(issue=issue, issue_comments=[], timeline=[]),
+        )
 
-    # output/ — empty; the agent writes output/proposal.json here.
-    (job / "output").mkdir(parents=True, exist_ok=True)
-
+        os.replace(staging, job)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
     return job

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -36,49 +35,50 @@ class TestRegistry:
             assert mode.evaluation_method == EVALUATION_METHOD == "audited_eval"
 
 
-class TestTemplates:
-    def test_templates_differ_only_in_the_plan_section(self) -> None:
-        basic = get_mode("basic").task_template.read_text()
-        planned = get_mode("planned").task_template.read_text()
-        assert basic != planned
-        # planned is basic with a contiguous "## Plan first" section inserted
-        # before "## Workspace layout" — removing exactly that span recovers basic.
-        i = planned.index("## Plan first")
-        j = planned.index("## Workspace layout")
-        assert planned[:i] + planned[j:] == basic
-        assert "plan" in planned[i:j].lower()
+class TestTaskVariation:
+    def test_basic_adds_nothing(self) -> None:
+        assert get_mode("basic").issue_addendum == ""
+
+    def test_planned_adds_a_plan_first_clause(self) -> None:
+        assert "plan" in get_mode("planned").issue_addendum.lower()
 
 
-class TestStagedManifestCarriesMode:
-    def _stage(self, tmp_path: Path, mode_name: str) -> Path:
-        b = load_benchmark("smoke")
-        ws = tmp_path / mode_name / "workspace"
-        ws.mkdir(parents=True)
-        return stage_job_dir(tmp_path / mode_name, ws, b, get_mode(mode_name), 1800)
+class TestModeVariesOnlyTheTask:
+    """A Benchmark Mode varies only the synthetic task the production renderer
+    wraps — never the manifest (both modes stamp the same ``mode: run``), never
+    the candidate identity."""
 
-    def test_mode_name_in_staged_manifest(self, tmp_path: Path) -> None:
-        for name in ("basic", "planned"):
-            job = self._stage(tmp_path, name)
-            manifest = json.loads((job / "input" / "manifest.json").read_text())
-            assert manifest["mode"] == name
+    def _stage(self, run_dir: Path, mode_name: str) -> Path:
+        return stage_job_dir(
+            run_dir, load_benchmark("smoke"), get_mode(mode_name),
+            run_id="run-1", budget_seconds=1800,
+        )
 
-    def test_two_modes_differ_only_in_task_content(self, tmp_path: Path) -> None:
-        basic_job = self._stage(tmp_path, "basic")
-        planned_job = self._stage(tmp_path, "planned")
+    def test_manifest_is_identical_across_modes(self, tmp_path: Path) -> None:
+        basic = self._stage(tmp_path / "basic", "basic")
+        planned = self._stage(tmp_path / "planned", "planned")
+        assert (basic / "input" / "manifest.json").read_bytes() == (
+            planned / "input" / "manifest.json"
+        ).read_bytes()
 
-        def rels(job: Path) -> set[Path]:
-            return {p.relative_to(job) for p in job.rglob("*") if p.is_file()}
+    def test_only_task_and_synthetic_issue_differ(self, tmp_path: Path) -> None:
+        basic = self._stage(tmp_path / "basic", "basic")
+        planned = self._stage(tmp_path / "planned", "planned")
 
-        assert rels(basic_job) == rels(planned_job)
+        def input_rels(job: Path) -> set[Path]:
+            root = job / "input"
+            return {p.relative_to(job) for p in root.rglob("*") if p.is_file()}
+
+        assert input_rels(basic) == input_rels(planned)
         differing = {
-            rel for rel in rels(basic_job)
-            if (basic_job / rel).read_bytes() != (planned_job / rel).read_bytes()
+            rel for rel in input_rels(basic)
+            if (basic / rel).read_bytes() != (planned / rel).read_bytes()
         }
-        # Only the task file and the manifest's mode tag differ; the Context
-        # Tree (issue.json / body.md / index surfaces) is byte-identical.
-        assert differing == {Path("input/prompt.md"), Path("input/manifest.json")}
-        m_basic = json.loads((basic_job / "input" / "manifest.json").read_text())
-        m_planned = json.loads((planned_job / "input" / "manifest.json").read_text())
-        assert m_basic.pop("mode") == "basic"
-        assert m_planned.pop("mode") == "planned"
-        assert m_basic == m_planned, "manifests differ beyond the mode tag"
+        # Only the prompt and the synthetic issue (whose body carries the mode's
+        # plan-first addendum) differ; the manifest and the empty Context Tree
+        # index surfaces are byte-identical.
+        assert differing == {
+            Path("input/prompt.md"),
+            Path("input/issue.json"),
+            Path("input/issue/body.md"),
+        }

@@ -1,15 +1,21 @@
 """Benchmark Mode registry.
 
-A *Benchmark Mode* selects the task-file template a Contract Run stages into
-the job directory.  It is a run-spec parameter — orthogonal to the candidate
-and the benchmark, never part of candidate identity, and never encoded in an
-image name.  The registry is in-code (not filesystem-discovered) so the set of
+A *Benchmark Mode* is a bench-side run-spec parameter that varies how the
+synthetic task is synthesized.  It is orthogonal to the candidate and the
+benchmark, never part of candidate identity, and never encoded in an image
+name.  The registry is in-code (not filesystem-discovered) so the set of
 runnable modes is fixed and auditable.
 
-The substrate's execution ``mode`` (``run`` / ``review``) is a *different*
-concept — it selects the Output Proposal schema.  Reviewer runs are deferred
-(#39), so the bench only ever drives implementer sessions; the Benchmark Mode
-here therefore only varies the task prose, never the proposal contract.
+Per the Bench Contract (``docs/specs/BENCH-CONTRACT.md``), the scaffolding
+prompt always comes from TheOzolith's production renderer
+(:func:`theozolith_worker.api.render_run_prompt`) — a hand-rolled template
+would drift silently as the production prompt evolves.  A Benchmark Mode may
+therefore vary only the *synthetic issue* the renderer wraps (task synthesis),
+never the prompt scaffolding and never the substrate's execution ``mode``.
+
+The substrate's execution mode (``run`` / ``review``) is a different concept
+that selects the Output Proposal schema; bench implementer runs are always
+``mode: run`` (BENCH-CONTRACT.md).  Reviewer runs are deferred (#39).
 
 Public API
 ----------
@@ -22,7 +28,6 @@ Public API
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 __all__ = [
     "MODES",
@@ -31,15 +36,21 @@ __all__ = [
     "get_mode",
 ]
 
-#: Directory holding the task-file templates a mode renders.
-TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
-
 #: Constant driver reference stamped by every bench-driven mode.  The bench is
 #: one driver; the mode does not select a different one.
 DRIVER_REF = "bench:jobdir-v1"
 
 #: Constant evaluation method: every bench run is scored by the Audited Eval.
 EVALUATION_METHOD = "audited_eval"
+
+#: The ``planned`` mode's task-synthesis variation: a plan-first clause appended
+#: to the synthetic issue body.  The production renderer wraps it unchanged.
+_PLANNED_ADDENDUM = (
+    "\n\n## Approach\n\n"
+    "Before implementing, write a short plan: list the target cards, the engine "
+    "primitives each one needs, and the order you will implement them. Then "
+    "execute that plan."
+)
 
 
 class UnknownModeError(Exception):
@@ -48,22 +59,23 @@ class UnknownModeError(Exception):
 
 @dataclass(frozen=True)
 class BenchmarkMode:
-    """A Benchmark Mode: the task template plus the constant driver/eval refs.
+    """A Benchmark Mode: a name plus its task-synthesis variation.
 
-    ``task_template`` is the Markdown template rendered into the job dir's task
-    file (``input/prompt.md``).  ``basic`` and ``planned`` differ only in that
-    template — same driver, same evaluation method, same proposal contract.
+    ``issue_addendum`` is appended to the synthetic issue body the production
+    prompt renderer wraps (empty for no change).  ``basic`` and ``planned``
+    differ only in that addendum — same driver, same evaluation method, same
+    production prompt scaffolding, same proposal contract.
     """
 
     name: str
-    task_template: Path
+    issue_addendum: str = ""
     driver_ref: str = DRIVER_REF
     evaluation_method: str = EVALUATION_METHOD
 
 
 MODES: dict[str, BenchmarkMode] = {
-    "basic": BenchmarkMode(name="basic", task_template=TEMPLATES_DIR / "task_basic.md"),
-    "planned": BenchmarkMode(name="planned", task_template=TEMPLATES_DIR / "task_planned.md"),
+    "basic": BenchmarkMode(name="basic"),
+    "planned": BenchmarkMode(name="planned", issue_addendum=_PLANNED_ADDENDUM),
 }
 
 

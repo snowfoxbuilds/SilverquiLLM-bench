@@ -982,22 +982,42 @@ def _eval_engine(
     engine_work: Path,
     engine_tests_dir: Path,
     timeout: int = 120,
+    *,
+    test_utils: Path | None = None,
 ) -> EngineResult:
     """Dimension 3: Engine Regression.
 
-    Run core engine tests against the agent's engine_work/.
+    Run the host-authoritative engine tests against the agent's engine_work/.
+    When *test_utils* is given (the Contract Run path), the authoritative
+    ``test_utils.py`` is staged ahead of the candidate engine on ``PYTHONPATH``
+    so a candidate that tampered with its own ``test_utils`` cannot influence the
+    engine regression score; a missing authoritative copy fails visibly.  Legacy
+    callers pass ``None`` and keep the prior behavior.
     """
     if not engine_tests_dir.exists():
         return EngineResult(errors=[f"No engine tests at {engine_tests_dir}"])
 
-    pp = []
+    support_dir: str | None = None
+    pp: list[str] = []
+    if test_utils is not None:
+        if not test_utils.is_file():
+            return EngineResult(
+                errors=[f"authoritative test_utils.py not found at {test_utils}"]
+            )
+        support_dir = tempfile.mkdtemp(prefix="eval_engine_support_")
+        shutil.copy2(test_utils, Path(support_dir) / "test_utils.py")
+        pp.append(support_dir)  # authoritative test_utils FIRST
     if engine_work.exists():
         pp.append(str(engine_work.parent))
     pp.append(str(_REPO_ROOT))
 
-    passed, failed, total, errors = _run_pytest_with_pythonpath(
-        engine_tests_dir, pp, timeout=timeout,
-    )
+    try:
+        passed, failed, total, errors = _run_pytest_with_pythonpath(
+            engine_tests_dir, pp, timeout=timeout,
+        )
+    finally:
+        if support_dir is not None:
+            shutil.rmtree(support_dir, ignore_errors=True)
     return EngineResult(
         tests_passed=passed,
         tests_failed=failed,
@@ -1065,25 +1085,43 @@ def _grade_audited_card(
     test_file: Path,
     overlay: Path,
     timeout: int,
+    *,
+    test_utils: Path | None,
 ) -> CardResult:
     """Grade one card's authoritative audited suite against the agent's tree.
 
-    The audited ``tests.py`` is copied into an isolated temp dir and run with
-    the agent's workspace *overlay* on ``PYTHONPATH``, so its package-path
-    imports (``cards.<set>.<card>.card_impl``, ``engine``, ``test_utils``) all
-    resolve from the tree the agent left behind — the filesystem is the
-    evidence.
+    Grading isolation (BENCH-CONTRACT.md / #64): grading tests and grading
+    support code are host-authoritative and candidate-immutable.  The audited
+    ``tests.py`` and the *authoritative* ``test_utils.py`` are copied into an
+    isolated temp dir that precedes the agent's *overlay* on ``PYTHONPATH``, so
+    ``import test_utils`` always resolves to the host copy — a candidate that
+    overwrites, deletes, or corrupts ``workspace/test_utils.py`` cannot influence
+    the score — while the card's own ``cards.<set>.<card>.card_impl`` and
+    ``engine`` still resolve from the tree the agent left behind (the evidence).
+    A card-directory ``conftest.py`` is preserved as authoritative fixtures.
+    Missing authoritative support fails visibly rather than scoring as zero.
     """
     if not test_file.exists():
         return CardResult(
             collector_number=card_id, skipped=True,
             errors=[f"No audited tests at {test_file}"],
         )
+    if test_utils is None or not test_utils.is_file():
+        return CardResult(
+            collector_number=card_id, skipped=True,
+            errors=[f"authoritative test_utils.py not found at {test_utils}"],
+        )
     tmp_dir = tempfile.mkdtemp(prefix="eval_contract_")
     try:
         tmp = Path(tmp_dir)
+        shutil.copy2(test_utils, tmp / "test_utils.py")
+        card_conftest = test_file.parent / "conftest.py"
+        if card_conftest.is_file():
+            shutil.copy2(card_conftest, tmp / "conftest.py")
         shutil.copy2(test_file, tmp / "tests.py")
-        pp = [str(overlay), str(_REPO_ROOT)]
+        # Grading support FIRST, candidate overlay SECOND: the authoritative
+        # test_utils wins; candidate cards/engine still resolve from the overlay.
+        pp = [str(tmp), str(overlay), str(_REPO_ROOT)]
         passed, failed, total, errors, test_nodes = _run_pytest_with_pythonpath(
             tmp / "tests.py", pp, timeout=timeout, capture_test_nodes=True,
         )
@@ -1116,13 +1154,17 @@ def _eval_target_cards(
     target_cards: list[str],
     audited_target: Path,
     timeout: int,
+    *,
+    test_utils: Path | None,
 ) -> dict[str, CardResult]:
     """Dimension 1: correctness of the benchmark's target cards."""
     results: dict[str, CardResult] = {}
     for cn in target_cards:
         card_id = _target_card_id(target_set, cn, audited_target)
         test_file = audited_target / card_id / "tests.py"
-        results[card_id] = _grade_audited_card(card_id, test_file, overlay, timeout)
+        results[card_id] = _grade_audited_card(
+            card_id, test_file, overlay, timeout, test_utils=test_utils
+        )
     return results
 
 
@@ -1130,6 +1172,8 @@ def _eval_audited_dir(
     overlay: Path,
     audited_dir: Path,
     timeout: int,
+    *,
+    test_utils: Path | None,
 ) -> dict[str, CardResult]:
     """Dimension 2: every card with an audited suite under *audited_dir* graded
     against the agent's tree (FDN regression)."""
@@ -1141,7 +1185,7 @@ def _eval_audited_dir(
         if not card_dir.is_dir() or not test_file.exists():
             continue
         results[card_dir.name] = _grade_audited_card(
-            card_dir.name, test_file, overlay, timeout,
+            card_dir.name, test_file, overlay, timeout, test_utils=test_utils,
         )
     return results
 
@@ -1180,13 +1224,16 @@ def evaluate_run(
         # Dimension 1 — target-card correctness.
         result.sos_results = _eval_target_cards(
             overlay, benchmark.target_set, list(benchmark.cards),
-            paths.audited_target, timeout,
+            paths.audited_target, timeout, test_utils=paths.test_utils,
         )
         # Dimension 2 — FDN card regression.
-        result.fdn_results = _eval_audited_dir(overlay, paths.audited_fdn, timeout)
-        # Dimension 3 — engine regression (authoritative suite, agent engine).
+        result.fdn_results = _eval_audited_dir(
+            overlay, paths.audited_fdn, timeout, test_utils=paths.test_utils,
+        )
+        # Dimension 3 — engine regression (authoritative suite + support, agent engine).
         result.engine_result = _eval_engine(
             overlay / "engine", paths.engine_tests, timeout=timeout,
+            test_utils=paths.test_utils,
         )
     finally:
         shutil.rmtree(overlay_root, ignore_errors=True)
