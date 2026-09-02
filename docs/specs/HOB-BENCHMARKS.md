@@ -2,7 +2,7 @@ Status: DRAFT (created at grilling 2026-08-27; amended at grilling 2026-09-02 �
 
 # HOB Benchmarks
 
-The three HOB-generation benchmarks — hob-easy, hob-medium, hob-hard — succeeding the abandoned MSH benchmark (see MSH-BENCHMARK.md, ABANDONED).
+The three HOB-generation benchmarks — hob-easy, hob-medium, hob-hard — succeeding the abandoned MSH benchmark. The MSH pages (MSH-BENCHMARK.md, MSH-CHECKPOINTS.md) were deleted from `docs/specs/` at grilling 2026-09-02; their text survives only in git history.
 
 ## Context
 
@@ -80,7 +80,7 @@ Deliberately excluded from every pool: Sagas and Vehicles (each a whole new subs
 
 - A Benchmark Run is one container session consuming the benchmark's **entire** problem set in a single Workspace. There is no card-subset ("workload") notion — that term is retired (CONTEXT.md).
 - Cheap pipeline validation / candidate calibration uses a dedicated **smoke benchmark**: its own small problem set of already-validated FDN cards (known-good oracles and audited tests), never leaderboard-published, run like any other benchmark.
-- Checkpoints are retired (MSH-CHECKPOINTS.md, RETIRED). ADR-008/009 resume legs cover crash recovery.
+- Checkpoints are retired (the MSH-CHECKPOINTS.md design page is deleted; see git history). ADR-008/009 resume legs cover crash recovery.
 - Runs happen under the worker-type candidate contract (issue #39): run spec = candidate + mode + benchmark + budget. **No scored HOB run happens on the legacy entrypoint lineage** — the first scored HOB run is the new contract's first consumer.
 
 ## Repo layout
@@ -115,6 +115,7 @@ Oracle-first audited tests are the sole scored method for all three tiers (Audit
 - **Engine freeze at Benchmarking; oracle iterates on HOB impls/tests only.** [SETTLED — Grilling 2026-08-27]
 - **Tests-as-envelope**: engine freely modifiable; the three audited dimensions are the whole judgment. [SETTLED — Grilling 2026-08-27]
 - **Checkpoints retired.** [SETTLED — Grilling 2026-08-27]
+- **MSH spec pages deleted** (MSH-BENCHMARK.md, MSH-CHECKPOINTS.md) — succession recorded here; text in git history. [SETTLED — Grilling 2026-09-02]
 - **Instruction docs**: tier conventions doc + per-card `instructions.md`, oracle-derived, locked with the tier. [SETTLED — Grilling 2026-08-27]
 - **Engine-change depth is the difficulty knob** (easy little/none, medium some, hard extensive). [SETTLED — Grilling 2026-08-27]
 - **Pools picked for all three tiers** (see Pools); hob-easy is 23 cards, not the 20 first targeted. [SETTLED — Grilling 2026-09-02]
