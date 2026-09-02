@@ -13,7 +13,7 @@ Usage::
 
     python scripts/triage_divergences.py REPORT.json \
         [--corpus /mnt/data/benchmark-replays/fdn] \
-        [--out-dir benchmarks/msh/analysis] [--top 40] \
+        [--out-dir benchmarks/hob-medium/analysis] [--top 40] \
         [--md-rows 200] [--no-slices]
 
 Outputs ``triage_<report-stem>.json`` (machine artifact: ranked clusters,
@@ -68,7 +68,7 @@ DEFAULT_CORPUS = Path("/mnt/data/benchmark-replays/fdn")
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CARD_ID_MAP_PATH = REPO_ROOT / "data" / "replays" / "card_id_map.json"
 TOKEN_ID_MAP_PATH = REPO_ROOT / "data" / "replays" / "token_id_map.json"
-DEFAULT_OUT_DIR = REPO_ROOT / "benchmarks" / "msh" / "analysis"
+DEFAULT_OUT_DIR = REPO_ROOT / "benchmarks" / "hob-medium" / "analysis"
 
 CONVENTION = "issue40-counted-once"
 

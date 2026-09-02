@@ -23,9 +23,10 @@ dev = [
     "pytest",
     "pytest-cov",
     "pytest-timeout",
-    "ruff",
+    # Pinned: tests/test_ruff_phase_g_regression.py budgets Ruff findings per
+    # rule, measured with this exact version. Bumping it means re-measuring.
+    "ruff==0.16.1",
     "mypy",
-
 ]
 
 [tool.setuptools.packages.find]

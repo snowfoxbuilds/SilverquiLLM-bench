@@ -6,6 +6,8 @@ Last updated: 2026-05-30
 
 Orchestration harness for the end-to-end benchmark. The runner stages a workspace, launches an agent container, harvests results, and runs evaluation. It has no knowledge of agent internals.
 
+**Run shape**: a Benchmark Run is one container session that consumes the benchmark's **entire** problem set in a single Workspace (run spec = candidate + mode + benchmark + budget, per #39). Card-subset ("workload") runs are retired (Grilling 2026-08-27); cheap validation uses the dedicated smoke benchmark (`benchmarks/smoke/`).
+
 ## Context
 
 The runner is the host-side orchestrator. It prepares everything the agent needs, launches a Docker container, waits for it to finish, and evaluates the results. All agent-internal orchestration (prompt handling, mode selection, iteration strategy) lives inside the container's entrypoint. See [AGENT-CONTAINERS.md](https://app.notion.com/p/07182a53c93641b7831fe9d240403de3) for the container architecture.
@@ -13,7 +15,7 @@ The runner is the host-side orchestrator. It prepares everything the agent needs
 Detailed contracts are split into focused specs:
 
 - [WORKSPACE-CONTRACT.md](https://app.notion.com/p/ad4d407fda954387adf7eb4ba8674371) defines the Workspace layout, Run Manifest, card directory invariant, and in-place engine editing model.
-- [RUN-ARTIFACTS-AND-TELEMETRY.md](https://app.notion.com/p/1ffe911b65564fa6860b2a91dcc94fb5) defines `workspace_final/`, snapshot fallback, telemetry, Docker logs, filtered runs, and smoke runs.
+- [RUN-ARTIFACTS-AND-TELEMETRY.md](https://app.notion.com/p/1ffe911b65564fa6860b2a91dcc94fb5) defines `workspace_final/`, snapshot fallback, telemetry, Docker logs, and smoke runs (the `silverquillm smoke` command vs. the smoke benchmark).
 ## Architecture
 
 ```mermaid
@@ -41,7 +43,7 @@ python -m silverquillm run \
 | `--image` | Docker image to run (encodes agent + mode + strategy) |
 | `--timeout` | Hard Timeout: total run time limit in seconds |
 | `--hang-timeout` | Hang Timeout: seconds of no file activity before stopping (default: 900) |
-| `--cards` | Comma-separated SOS collector numbers to stage (default: all). Filtered runs are not leaderboard-valid |
+| `--cards` | [SUPERSEDED — Grilling 2026-08-27] Legacy entrypoint lineage only (retired in #66): comma-separated SOS collector numbers to stage. Card-subset runs are retired; a Benchmark Run stages the whole problem set |
 
 The workspace source directory is a repo-relative constant (`./benchmarks/sos/workspace/`); it is not configurable via CLI flags.
 
@@ -78,6 +80,7 @@ Fields:
 - `cards` (array) — the benchmark's canonical scored card set (collector numbers). For v1 this is the 10 audited SOS cards (`001`, `004`, `013`, `057`, `097`, `120`, `201`, `226`, `245`, `257`), and the v1 "full set" is exactly these — a leaderboard-valid run must stage all of them. Named `cards` to avoid collision with the run-level `card_filter` in `run_summary.json` (the per-run `--cards` selection, `null` when unfiltered).
 - `leaderboard.requires_full_set` (bool) — a leaderboard-valid run must stage every card in `cards`.
 - `leaderboard.requires_unfiltered` (bool) — a leaderboard-valid run must run with no narrower `--cards` filter (run-level `card_filter = null`).
+- `leaderboard.eligible` (bool, optional; default `true`) — when `false`, the benchmark is **never leaderboard-published**, whatever the run shape. Set on the smoke benchmark (`benchmarks/smoke/`), a pipeline-validation / candidate-calibration benchmark run like any other but whose results never enter a leaderboard.
 Not in config: workspace/test paths (resolved from the `_REPO_ROOT` / `_BENCHMARK_SET_ROOT` constants) and complexity weights (v1 scoring is unweighted pass/total).
 
 ## Workspace Staging
@@ -386,14 +389,14 @@ The runner tracks per-run metrics (not per-card, since the agent manages its own
 - **Two timeout types: Hard Timeout + Hang Timeout**: Hard Timeout (`--timeout`) is the overall run time limit. Hang Timeout (`--hang-timeout`, default 900s) triggers when no monitored file has been modified for the configured period. Either timeout causes `docker stop -t 10`. `run_summary.json` records `timeout_reason`. [SETTLED]
 - **Hang Timeout resets on any monitored file activity**: The hang clock resets on any file modification across all monitored sources (Docker stdout/stderr dumps, `/output/system.log`, `/output/progress.jsonl`, `/output/agent_stdout.log`, `/output/agent_stderr.log`). This catches true agent death without false-positiving on long thinking pauses. [SETTLED]
 - **Cards and engine paths are repo-relative constants**: Source directories (`./cards`, `./engine`) are hardcoded repo-relative paths. No `--cards-dir` or `--engine-dir` CLI flags. [SETTLED]
-- **User Prompt is runner-written**: The runner writes `/workspace/prompt.md` (the User Prompt) at staging time. System Prompts are baked into the Docker image's entrypoint. The runner adjusts the User Prompt for filtered runs. [SETTLED]
+- **User Prompt is runner-written**: The runner writes `/workspace/prompt.md` (the User Prompt) at staging time. System Prompts are baked into the Docker image's entrypoint. [SETTLED] [SUPERSEDED — Grilling 2026-08-27: card-subset runs retired] On the legacy entrypoint lineage the runner adjusted the User Prompt for filtered runs; a current Benchmark Run always stages the whole problem set, so the prompt lists every target card.
 - **FDN and SOS share the same card directory contract**: FDN examples and SOS targets use the same `cards/{set}/{card_id}/card_spec.json` + `card_impl.py` structure. FDN implementations are filled reference code; SOS implementations start as templates. [SETTLED]
 - **FDN card implementations are mostly self-contained**: FDN card-specific logic lives in each card's `card_impl.py`. Generic reusable helpers may live in `cards/fdn/utils.py`, but avoid cross-card imports between `cards/fdn/{card_id}/card_impl.py` files so examples remain easy for agents to understand and copy. [SETTLED]
 - **Card class location is the hard contract**: Helpers are allowed, including shared `cards/{set}/utils.py` files, but each card's implementation class must live in that card's expected `cards/{set}/{card_id}/card_impl.py` file. Evaluation assumes the canonical class is importable from the expected file/folder. [SETTLED]
 - **Prompt enforces card location, not helper policy**: The agent prompt should explicitly say each card's implementation class must remain in its assigned `cards/sos/{card_id}/card_impl.py` file and that card directories must not be moved or renamed. The prompt does not need to mention shared helper files. [SETTLED]
 - **Card restructuring is usually card-level failure**: If a single card's expected `card_impl.py` is missing or moved, that card is marked no output or fails evaluation. Multiple moved cards fail individually. Only broad Workspace destruction, such as a missing `cards/sos/` tree, becomes run-level structural failure. Missing or unusable `engine/` follows engine viability and snapshot fallback flow. [SETTLED]
 - **Results stored under image directory**: Run results live at `docker/<image-dir>/results/<run_name>/`. The image directory is derived from `--image` by stripping the `silverquillm-` prefix and `:tag` suffix. The run name format is `<set_code>-<timestamp>` (e.g., `sos-2026-05-16T19-49`). This keeps results organized by the agent image that produced them. [SETTLED]
-- **Filtered runs are not leaderboard-valid**: The `--cards` filter is for development, debugging, and Pipeline Validation Runs only. It filters SOS targets; FDN examples remain staged in full. Evaluation runs only on staged SOS targets, and `run_summary.json` records the filter. Leaderboards exclude filtered runs by default; leaderboard-valid runs require run-level `card_filter = null` and every card in the benchmark's `config.json` `cards` set staged (for v1, the 10 audited SOS cards). [UPDATED]
+- **Filtered runs are not leaderboard-valid** [SUPERSEDED — Grilling 2026-08-27]: card-subset ("workload") runs are retired — a Benchmark Run consumes the benchmark's whole problem set, and cheap validation uses the dedicated smoke benchmark. The `--cards` / `card_filter` machinery survives only on the legacy entrypoint lineage until #66, and no scored HOB run happens on that lineage (#39). Superseded contract (SOS V1 legacy lineage): the `--cards` filter is for development, debugging, and Pipeline Validation Runs only. It filters SOS targets; FDN examples remain staged in full. Evaluation runs only on staged SOS targets, and `run_summary.json` records the filter. Leaderboards exclude filtered runs by default; leaderboard-valid runs require run-level `card_filter = null` and every card in the benchmark's `config.json` `cards` set staged (for v1, the 10 audited SOS cards).
 - **`_REPO_ROOT`**** constant for repo-relative paths**: Host-side modules that need to resolve repo-relative paths (`cli.py`, `workspace.py`) define `_REPO_ROOT = Path(__file__).resolve().parent.parent` as a module-level constant; all repo-relative path resolution flows through it. No `--cards-dir` / `--engine-dir` style flags. [NEW]
 - **`_BENCHMARK_SET_ROOT`**** derives from a module-level set name**: `silverquillm/workspace.py` defines `_BENCHMARK_SET_NAME = "sos"` and `_BENCHMARK_SET_ROOT = _REPO_ROOT / "benchmarks" / _BENCHMARK_SET_NAME` as module-level constants. All bench-side, set-scoped paths flow through `_BENCHMARK_SET_ROOT` (workspace source = `_BENCHMARK_SET_ROOT / "workspace"`, audited tests = `_BENCHMARK_SET_ROOT / "data" / "tests" / "audited"`). When a second target set ships (Foundations 2 etc.), promote `_BENCHMARK_SET_NAME` to a CLI flag (`--set`) with `sos` as default; no other path call sites need to change. The runner stays benchmark-agnostic by funneling all set-scoped paths through one constant. [NEW]
 - **Collector number normalization**: `--cards` accepts zero-padded collector numbers (e.g., `001`, `042`). CLI parsing normalizes via `str(int(x))` and preserves non-numeric values as-is. Card directory names use the normalized form.

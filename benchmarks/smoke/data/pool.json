@@ -1,0 +1,26 @@
+[
+  {
+    "collector_number": "129",
+    "set_code": "fdn",
+    "name": "Leyline Axe",
+    "mana_cost_str": "{4}",
+    "type_line": "Artifact — Equipment",
+    "oracle_text": "If this card is in your opening hand, you may begin the game with it on the battlefield.\nEquipped creature gets +1/+1 and has double strike and trample.\nEquip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)"
+  },
+  {
+    "collector_number": "205",
+    "set_code": "fdn",
+    "name": "Seismic Rupture",
+    "mana_cost_str": "{2}{R}",
+    "type_line": "Sorcery",
+    "oracle_text": "Seismic Rupture deals 2 damage to each creature without flying."
+  },
+  {
+    "collector_number": "232",
+    "set_code": "fdn",
+    "name": "Scavenging Ooze",
+    "mana_cost_str": "{1}{G}",
+    "type_line": "Creature — Ooze",
+    "oracle_text": "{G}: Exile target card from a graveyard. If it was a creature card, put a +1/+1 counter on this creature and you gain 1 life."
+  }
+]

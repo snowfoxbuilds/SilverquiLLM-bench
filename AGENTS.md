@@ -12,7 +12,7 @@ LLM benchmark that evaluates coding ability by tasking models with implementing 
 - License: MIT (matching XMage)
 - Card implementations: one class per card, subclassing `CardImpl`
 - Tests: pytest with `test_utils` helpers, max 30 per card. Run with `--ignore=tests/audited/` unless working on card implementations specifically. 
-- Three evaluation dimensions: SOS card correctness, FDN card regression, engine regression
+- Three evaluation dimensions: target-set card correctness (SOS card correctness for SOS; HOB card correctness for the HOB generation), FDN card regression, engine regression
 - Development phases: Phase 1 (engine port) → Phase 2 (container harness + audited tests) → Phase 3 (FDN completion + replay validation) → Phase 4 (SOS benchmark runs + leaderboard)
 ## Domain Language
 
@@ -23,6 +23,8 @@ All specs, code, and agent instructions use these terms exactly.
 ## Architecture Summary
 
 The benchmark runner stages a Workspace (engine, rulebook, FDN examples, SOS templates, prompt), launches a Docker container, waits for it to exit, materializes `workspace_final/`, and evaluates the results. The Docker image IS the full agent configuration — it bakes in the agent CLI, mode (blind/tested), strategy, model, and prompt. The runner passes only workspace/output volumes, API keys, and a timeout.
+
+A Benchmark Run is one container session that consumes the benchmark's **entire** problem set in a single Workspace; the run spec is candidate + mode + benchmark + budget (per #39). Card-subset ("workload") runs are retired — cheap validation uses the dedicated smoke benchmark.
 
 Three evaluation dimensions (all post-run, audited tests only):
 
@@ -44,14 +46,12 @@ Agent-written tests are harvested as artifacts but not scored in v1. Cross-eval 
 | `SCORING.md` | Three evaluation dimensions, complexity weighting, leaderboard format |
 | `AGENT-CONTAINERS.md` | Docker black-box architecture, file-based contract, entrypoint design, isolation guarantees |
 | `WORKSPACE-CONTRACT.md` | Workspace layout, card directory invariant, Run Manifest, writable engine, FDN/SOS structure |
-| `RUN-ARTIFACTS-AND-TELEMETRY.md` | workspace_final, Git snapshots, fallback, telemetry, Docker logs, filtered runs, smoke runs |
+| `RUN-ARTIFACTS-AND-TELEMETRY.md` | workspace_final, Git snapshots, fallback, telemetry, Docker logs, smoke runs (`silverquillm smoke` command vs. smoke benchmark) |
 | `TESTING-CONVENTIONS.md` | Test naming, fixtures, assertions, and conventions for audited tests |
 | `17LANDS-REPLAY-SCHEMA.md` | GRE JSON replay format for engine correctness validation |
 | `AUDITED-TEST-IMPROVEMENT-WORKFLOW.md` | Harvest script + combined investigation/discovery skill (manual v1 Test Harvester); harvest format, fault-attribution triage, promotion bar, cadence, tier gating |
-| `HOB-BENCHMARKS.md` | The three HOB-generation benchmarks (hob-easy/medium/hard): pools, run shape, engine freeze + tests-as-envelope, instruction docs, candidate contract |
+| `HOB-BENCHMARKS.md` | The three HOB-generation benchmarks (hob-easy/medium/hard): picked pools (23/5/5, selective subsets of the HOB set), run shape, engine freeze + tests-as-envelope, instruction docs, candidate contract |
 | `DECISION-MODEL.md` | V2 engine Player Query / Player Decision protocol, Game Symbols/Refs, Intents, DeterministicPlayer (V2) (renamed from MSH-DECISION-MODEL.md — engine-level, pool-neutral) |
-| `MSH-BENCHMARK.md` | ABANDONED as a benchmark (2026-08-27) — pool retired unused; pool-agnostic work carried into HOB |
-| `MSH-CHECKPOINTS.md` | RETIRED (2026-08-27) — checkpoint/capability-DAG design obsoleted by HOB's small single-run problem sets |
 
 ## ADRs
 

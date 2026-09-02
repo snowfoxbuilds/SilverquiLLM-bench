@@ -2,7 +2,7 @@ Status: SETTLED
 
 Last updated: 2026-06-10
 
-Scope: SOS (V1). The `DeterministicPlayer` scripting, two-channel host-side driver, and test-API conventions below are the frozen SOS paradigm. MSH audited tests use the Player Query / Player Decision intent protocol instead — see [DECISION-MODEL.md](https://app.notion.com/p/bea4c558a1d2493a82a7a841d85a8fb0).
+Scope: SOS (V1). The `DeterministicPlayer` scripting, two-channel host-side driver, and test-API conventions below are the frozen SOS paradigm. HOB-generation audited tests use the Player Query / Player Decision intent protocol instead — see [DECISION-MODEL.md](https://app.notion.com/p/bea4c558a1d2493a82a7a841d85a8fb0).
 
 # Audited Test Suite
 
@@ -17,6 +17,12 @@ Unlike traditional benchmarks with pre-built test suites, SilverquiLLM-bench has
 ### Testing Philosophy: Implementation-Agnostic Testing
 
 Audited tests follow **Implementation-Agnostic Testing** (see [CONTEXT.md](http://context.md/)): a test asserts *what a card does* — observable game-state outcomes — and must pass against *any* correct implementation, never coupling to one implementation's naming, internal structure, method names, or conventions. Operationally, audited tests are behavioral/outcome-based, canonical-engine-API-only, and `DeterministicPlayer`-scripted. This principle governs every Audited Test Category and Decision below.
+
+### Tests as envelope (HOB-generation)
+
+Because audited tests are behavioral and simulate gameplay (Implementation-Agnostic Testing), the audited suite **is** the agent envelope for the HOB-generation benchmarks: **any** engine modification — including renames and refactors, not just additions — is permitted, and is judged solely by its observable consequences on the three audited dimensions (HOB card correctness, FDN card regression, engine regression), all run against the harvested engine. There is no additive-only rule and no diff policing; that additive-only regime is scoped to SOS V1 (see [WORKSPACE-CONTRACT.md](WORKSPACE-CONTRACT.md) and [HOB-BENCHMARKS.md](HOB-BENCHMARKS.md) → Engine rules).
+
+Enforcement is the scoring itself: a change that breaks a symbol the audited tests import (a moved/renamed engine path or class) raises `ImportError` before assertions run, so those tests score as failing — **that scoring is the enforcement**, needing no separate diff policy or engine-churn review.
 
 ### Evaluation Architecture
 
@@ -117,7 +123,7 @@ results/{run_name}/cards/{card_id}/
 
 Engine correctness is validated by replaying recorded MTGA game data (sourced from 17lands) through the Python engine and verifying game-state checkpoints match recorded outcomes. This replaces the originally planned XMage differential testing — Replay Validation is more valuable because MTGA is WotC's own rules implementation, and cross-language Java↔Python comparison adds complexity without confidence.
 
-The Replay Validation pipeline is live (built after FDN 001–291 completed; the first benchmark runs preceded it as Pipeline Validation Runs). For MSH, the same pipeline is adapted to drive the MSH engine through the intent-based DeterministicPlayer via a benchmark-parameterized engine target — see [DECISION-MODEL.md](https://app.notion.com/p/bea4c558a1d2493a82a7a841d85a8fb0) and [MSH-BENCHMARK.md](https://app.notion.com/p/b9345f23a8054d9898d3364fe2e00837).
+The Replay Validation pipeline is live (built after FDN 001–291 completed; the first benchmark runs preceded it as Pipeline Validation Runs). For the HOB-generation benchmarks, the same pipeline is adapted to drive the V2 engine through the intent-based DeterministicPlayer via a benchmark-parameterized engine target — see [DECISION-MODEL.md](https://app.notion.com/p/bea4c558a1d2493a82a7a841d85a8fb0) and [HOB-BENCHMARKS.md](docs/specs/HOB-BENCHMARKS.md).
 
 ## Decisions
 

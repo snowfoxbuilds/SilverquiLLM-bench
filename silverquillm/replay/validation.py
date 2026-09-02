@@ -31,7 +31,7 @@ class DivergenceType(enum.Enum):
     ILLEGAL_ACTION = "ILLEGAL_ACTION"
     STATE_MISMATCH = "STATE_MISMATCH"
     ENGINE_ERROR = "ENGINE_ERROR"
-    # MSH Player Query protocol (intent-driven seat): a query that no
+    # V2 Player Query protocol (intent-driven seat): a query that no
     # replay-derived intent could answer, and an engine-side boundary-validation
     # failure. Both are recorded divergences — never a crash of the run.
     QUERY_UNANSWERED = "QUERY_UNANSWERED"
@@ -42,7 +42,7 @@ class DivergenceType(enum.Enum):
     REPLAY_INFRA = "REPLAY_INFRA"
 
 
-# Module-qualified names of the MSH protocol exceptions (engine/decisions.py).
+# Module-qualified names of the V2 protocol exceptions (engine/decisions.py).
 # Qualified matching keeps this shared code import-free while ruling out a
 # same-named third-party exception classifying as a protocol failure.
 _PROTOCOL_ERROR_QUALNAME = ("engine.decisions", "ProtocolError")
@@ -53,7 +53,7 @@ def classify_step_exception(exc: BaseException) -> "DivergenceType":
     """Classify an exception raised while executing a replay step.
 
     Engine-agnostic — matches on module-qualified class names in the MRO so
-    this shared code need not import the MSH-only exception classes:
+    this shared code need not import the V2-only exception classes:
       - ``engine.decisions.ProtocolError`` (boundary-validation failure) -> PROTOCOL_ERROR
       - ``engine.decisions.UnmatchedQueryError`` (no intent matched) -> QUERY_UNANSWERED
       - anything else (including a same-named foreign class) -> ENGINE_ERROR

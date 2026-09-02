@@ -1800,7 +1800,7 @@ class TestNoncastZoneCastEngineCompat:
         # Engine-agnostic: an engine without cast modes stamps no disposition;
         # an engine with them would only do so under an explicit FLASHBACK
         # mode, which this executor path selects only when the engine offers
-        # it (covered MSH-side in engine_tests/test_replay_simulate.py).
+        # it (covered on the hob-medium side in engine_tests/test_replay_simulate.py).
         assert getattr(so, "departure_zone", None) in (None, Zone.EXILE)
 
 
@@ -1809,7 +1809,7 @@ class TestNoncastZoneCastEngineCompat:
 # before the cast, from ManaPaid / CastingTimeOption annotations.
 #
 # Engine-agnostic fakes are used (the root suite binds the SOS engine, whose
-# ManaCost differs from the MSH workspace's); the executor logic under test —
+# ManaCost differs from the hob-medium workspace's); the executor logic under test —
 # _apply_cast_time_evidence / _count_cast_mana_paid / _cast_declared_kicker —
 # lives in the shared replay layer.
 # ---------------------------------------------------------------------------

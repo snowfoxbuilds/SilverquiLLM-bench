@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "hob-medium",
+  "display_name": "The Hobbit — Medium",
+  "draft_set": {
+    "primary_set_code": "HOB",
+    "collector_range": "001-321",
+    "extra_set_codes": []
+  },
+  "tier": "Beta",
+  "cards": [],
+  "leaderboard": {
+    "requires_full_set": true,
+    "requires_unfiltered": true
+  }
+}

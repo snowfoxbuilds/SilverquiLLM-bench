@@ -43,7 +43,7 @@ Built benchmark runner harness, test utilities, agent prompts, CLI scaffold, sco
 
 Implement all FDN cards 001–291 (limited format pool). Validate engine via Replay Validation against 17lands MTGA data. Run Pipeline Validation Runs to verify end-to-end orchestration.
 
-FDN Replay Validation is **closed** (grilling 2026-08-27): observer mode fully clean (271/271, rate 0.0); the simulate-mode residue (5,222 divergences after Phase O) is 100% machine-attributed to documented limitation families (floor 564) and is accepted — none of it is engine-attributable. No further burn-down phases; a final parity report is the closing artifact. Cadence work reopens only if a future benchmark surfaces an actual engine bug in that area.
+FDN Replay Validation is **closed** (grilling 2026-08-27): observer mode fully clean (271/271, rate 0.0); the simulate-mode residue (5,222 divergences after Phase O) is 100% machine-attributed to documented limitation families (floor 564) and is accepted — none of it is engine-attributable. No further burn-down phases; a final parity report is the closing artifact ([`benchmarks/hob-medium/FDN-REPLAY-PARITY.md`](../../benchmarks/hob-medium/FDN-REPLAY-PARITY.md)). Cadence work reopens only if a future benchmark surfaces an actual engine bug in that area.
 
 **Phase 4 — Scored Benchmark Runs** (CURRENT)
 
@@ -73,4 +73,5 @@ The audited SOS suite is continuously improved by cherry-picking — see [AUDITE
 - **Multi-agent support**: Docker container images per agent. Each agent ships as a self-contained image with its own entrypoint. Contamination controlled structurally via container isolation. [UPDATED]
 - **New set + no web for contamination**: Simple and effective for v1; avoids complex sandboxing. [SETTLED]
 - **Full set scope**: Captures full difficulty distribution; enables per-complexity-tier analysis. [SETTLED]
+- **Work tracking in GitHub issues, not `TODO.md`**: pending work is filed as GitHub issues (HOB-generation tracking issue #67; candidate-contract master #39); the in-repo `TODO.md` / `docs/TODO_COMPLETED.md` work queue is retired and deleted — completed work is closed issues plus git history. [SETTLED — Grilling 2026-09-02]
 - **Audited-only evaluation**: SOS card correctness (audited tests vs. agent impls), FDN card regression (audited FDN tests vs. agent's engine), engine regression (core engine tests vs. agent's engine). Self-eval and N×N cross-eval were dropped in favor of audited tests refined by cherry-picking; automated cross-eval / test-quality scoring remains a possible v2 Test Harvester. [UPDATED]

@@ -190,11 +190,16 @@ v1 ships a `silverquillm logs --run` tabbed log viewer over the per-channel file
 - telemetry/log artifact paths
 Resume Legs (Benchmark Runs with `resumed_from` set) are linked into a Resume Chain via `resumed_from`. Chain traversal is by repeated lookup; the runner does not aggregate results across legs. Resume Legs are never leaderboard-valid: any run with `resumed_from` set has `leaderboard_valid = false`.
 
-### Filtered runs
+### Filtered runs [SUPERSEDED — Grilling 2026-08-27]
 
-The `--cards` filter is for development, debugging, and Pipeline Validation Runs only.
+Card-subset ("workload") runs are **retired**. A Benchmark Run always consumes
+the benchmark's **entire** problem set in a single Workspace (HOB-BENCHMARKS.md).
+Cheap pipeline validation / candidate calibration uses the dedicated **smoke
+benchmark** (`benchmarks/smoke/`, below), not a filtered run. The `--cards` /
+`card_filter` machinery survives only on the legacy entrypoint lineage until it
+is retired (#66); no scored HOB run happens on that lineage (#39).
 
-Rules:
+The superseded contract, retained only for the SOS (V1) legacy lineage:
 
 - It filters SOS targets only.
 - FDN examples are staged in full.
@@ -204,9 +209,19 @@ Rules:
 - Leaderboard-valid runs require `card_filter = null` and every card in `config.json` `cards` staged (for v1, the 10 audited SOS cards).
 ### Smoke runs
 
-`silverquillm smoke` is container-validation only, not benchmark evaluation.
+Two distinct things share the word "smoke" — do not conflate them:
 
-Rules:
+- **The `silverquillm smoke` command** — container-boot validation only, not
+  benchmark evaluation. A tiny synthetic Workspace, no real cards; validates
+  image boot, volume mounts, basic file writing, and auth/model reachability.
+  Never enters leaderboard or benchmark summaries.
+- **The smoke *benchmark*** (`benchmarks/smoke/`) — a real, tiny benchmark of
+  already-validated FDN cards (known-good oracles + audited tests) for pipeline
+  validation / candidate calibration. It runs like any other benchmark (whole
+  problem set, one Workspace) but is never leaderboard-published
+  (`leaderboard.eligible: false`). See HOB-BENCHMARKS.md → Run shape.
+
+Rules for the `silverquillm smoke` command:
 
 - Use a tiny synthetic Workspace.
 - Do not use real SOS cards.
@@ -222,8 +237,8 @@ Rules:
 - **Telemetry is filesystem-only**: Do not parse/import agent code for telemetry.
 - **`/output/`**** is optional telemetry**: No required files; no scoring dependency.
 - **Docker logs are captured by runner**: Stream live and save split stdout/stderr logs.
-- **Filtered runs are not leaderboard-valid**: `--cards` is development/pipeline validation only.
-- **Smoke runs are not benchmark runs**: Use synthetic Workspace and exclude from scoring.
+- **Filtered runs are not leaderboard-valid** [SUPERSEDED — Grilling 2026-08-27]: card-subset ("workload") runs are retired — a Benchmark Run consumes the whole problem set. The `--cards` machinery survives only on the legacy entrypoint lineage until #66; cheap validation uses the dedicated smoke benchmark.
+- **The `silverquillm smoke` command is not a benchmark run**: it uses a synthetic Workspace and is excluded from scoring. Distinct from the smoke *benchmark* (`benchmarks/smoke/`), which IS a real benchmark run — it is simply never leaderboard-published (`leaderboard.eligible: false`).
 - **Each terminal channel has a backing file**: Every channel the runner prints is mirrored to an append-only file in the run directory (see Terminal channels above). This file-backed substrate makes the tabbed log viewer (`silverquillm logs --run`) a thin read-only consumer in both live and archived modes.
 - **v1 includes a tabbed post-run log viewer**: Originally deferred to a later version; lifted now that the runner is stable and the 2026-05-23 run surfaced concrete triage pain. Live labeled streaming remains the default for users who don't want to launch the viewer.
 - **JS entrypoint output channel pattern**: JavaScript entrypoints use a `log()` helper that writes to `/output/system.log`, tee agent output to `/output/agent_stdout.log`, and pass agent output through `process.stdout.write()` so Docker logs still capture it. Future bash entrypoints follow the same file-based channel separation.

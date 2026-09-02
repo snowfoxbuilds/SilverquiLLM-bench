@@ -12,6 +12,9 @@ replay_page*
 
 # Scryfall cache data
 data/sets/*.json
+# ...except the pinned HOB Draft Set: it is the committed, contamination-fresh
+# source every HOB benchmark derives its pool from (scripts/fetch_hob_set.py).
+!data/sets/hob.json
 .review-venv/
 dist-review/
 data/replays/*

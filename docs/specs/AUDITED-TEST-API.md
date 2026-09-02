@@ -3,7 +3,7 @@
 > 
 > **Purpose:** Define the *only* sanctioned API audited tests may use to interact with the engine. If a behavior cannot be set up, driven, or observed through this API, the API is missing something — fix the API, do not reach around it.
 > 
-> **Scope:** **SOS (V1) only.** This two-channel API is the frozen SOS paradigm. The MSH benchmark replaces it with the native Player Query / Player Decision intent protocol — see [DECISION-MODEL.md](https://app.notion.com/p/bea4c558a1d2493a82a7a841d85a8fb0). Nothing in this spec applies to `benchmarks/msh/`.
+> **Scope:** **SOS (V1) only.** This two-channel API is the frozen SOS paradigm. The HOB-generation benchmarks replace it with the native Player Query / Player Decision intent protocol — see [DECISION-MODEL.md](https://app.notion.com/p/bea4c558a1d2493a82a7a841d85a8fb0). Nothing in this spec applies to the HOB-generation benchmarks (`benchmarks/hob-*/`).
 
 ## Philosophy
 

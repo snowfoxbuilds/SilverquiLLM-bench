@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "smoke",
+  "display_name": "Smoke (FDN pipeline validation)",
+  "draft_set": {
+    "primary_set_code": "FDN",
+    "collector_range": null,
+    "extra_set_codes": []
+  },
+  "tier": "Beta",
+  "cards": ["129", "205", "232"],
+  "leaderboard": {
+    "eligible": false,
+    "requires_full_set": true,
+    "requires_unfiltered": true
+  }
+}
