@@ -17,6 +17,12 @@ Rules the module enforces:
 - **Records are immutable.** :func:`write_run_record` refuses an existing
   ``<run-id>`` directory with :class:`RunRecordExistsError` and writes
   atomically (temp dir + rename), so a reader never sees a half-written record.
+- **Every read re-proves the record.** :func:`read_run_record` requires the
+  manifest's ``run_id`` to equal the directory name, the recomputed candidate
+  hash to equal both the manifest's ``candidate_hash`` and the parent
+  directory name, and a recorded ``verified`` of exactly ``false`` — so the
+  index and the harvester fail loudly on a tampered or misplaced record
+  instead of emitting misattributed rows.
 - **The manifest records ``benchmark``, never ``workload``** (the term is
   retired — CONTEXT.md).  ``mode`` and ``benchmark`` are run-spec parameters,
   orthogonal to candidate identity.
@@ -34,8 +40,9 @@ Public API
 ``CandidateIdentity``, ``RunRecord``, ``candidate_hash``, ``legacy_image_dir``,
 ``derive_leaderboard_valid``, ``leaderboard_validity_reasons``,
 ``normalize_collector_number``, ``write_run_record``, ``read_run_record``,
-``iter_run_dirs``, ``iter_run_records``, ``rebuild_index``, ``init_results_repo``,
-``resolve_results_repo``, ``load_benchmark_config``.
+``record_file_texts``, ``iter_run_dirs``, ``iter_run_records``,
+``rebuild_index``, ``init_results_repo``, ``resolve_results_repo``,
+``load_benchmark_config``.
 """
 
 from __future__ import annotations
@@ -80,6 +87,7 @@ __all__ = [
     "normalize_collector_number",
     "read_run_record",
     "rebuild_index",
+    "record_file_texts",
     "resolve_results_repo",
     "write_run_record",
 ]
@@ -193,16 +201,53 @@ class CandidateIdentity:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> CandidateIdentity:
-        try:
-            return cls(
-                base_image_digest=str(data["base_image_digest"]),
-                instruction_hash=str(data["instruction_hash"]),
-                adapter_identity=str(data["adapter_identity"]),
-                scheme=str(data["scheme"]),
-                verified=bool(data.get("verified", False)),
+        """Deserialize a recorded identity, strictly.
+
+        A recorded value is a label, never evidence: every field must already
+        have the exact type and shape the writer emits — nothing is coerced —
+        and ``verified`` must be the literal JSON ``false``.  Recomputation
+        from a Candidate Bundle (#65) is the only path to a verified identity.
+        """
+        for key in ("scheme", "base_image_digest", "instruction_hash", "adapter_identity"):
+            value = data.get(key)
+            if not isinstance(value, str) or not value:
+                raise InvalidRunRecordError(
+                    f"candidate identity {key} must be a non-empty string, got {value!r}"
+                )
+        verified = data.get("verified")
+        if "verified" not in data or not isinstance(verified, bool):
+            raise InvalidRunRecordError(
+                f"candidate identity verified must be a JSON boolean, got {verified!r}"
             )
-        except KeyError as exc:
-            raise InvalidRunRecordError(f"candidate identity lacks {exc}") from exc
+        if verified is not False:
+            raise InvalidRunRecordError(
+                "a recorded identity is never verified; #65 recomputes identity "
+                "from the Candidate Bundle"
+            )
+        scheme = data["scheme"]
+        if scheme == LEGACY_SCHEME:
+            token = data["base_image_digest"]
+            prefix = f"{LEGACY_SCHEME}:"
+            if not token.startswith(prefix) or not token[len(prefix) :]:
+                raise InvalidRunRecordError(
+                    f"legacy identity fields must carry 'legacy:<image-dir>', got {token!r}"
+                )
+            if not (data["instruction_hash"] == data["adapter_identity"] == token):
+                raise InvalidRunRecordError(
+                    "legacy identity fields disagree; all three must carry the same "
+                    f"'legacy:<image-dir>' token, got {token!r}, "
+                    f"{data['instruction_hash']!r}, {data['adapter_identity']!r}"
+                )
+            return cls.legacy(token[len(prefix) :])
+        if scheme == OZOLITH_SCHEME:
+            return cls(
+                base_image_digest=data["base_image_digest"],
+                instruction_hash=data["instruction_hash"],
+                adapter_identity=data["adapter_identity"],
+                scheme=scheme,
+                verified=False,
+            )
+        raise InvalidRunRecordError(f"unknown candidate identity scheme: {scheme!r}")
 
 
 def legacy_image_dir(identity: CandidateIdentity) -> str | None:
@@ -354,10 +399,10 @@ class RunRecord:
     def from_dicts(cls, manifest: Mapping[str, Any], scores: Mapping[str, Any]) -> RunRecord:
         try:
             record = cls(
-                run_id=str(manifest["run_id"]),
+                run_id=manifest["run_id"],
                 candidate=CandidateIdentity.from_dict(manifest["candidate"]),
-                mode=str(manifest["mode"]),
-                benchmark=str(manifest["benchmark"]),
+                mode=manifest["mode"],
+                benchmark=manifest["benchmark"],
                 budget_seconds=manifest["budget_seconds"],
                 leaderboard_valid=manifest["leaderboard_valid"],
                 resumed_from=manifest.get("resumed_from"),
@@ -465,6 +510,16 @@ def _load_json(path: Path) -> Any:
         raise ResultsRepoError(f"cannot read {path}: {exc}") from exc
 
 
+def record_file_texts(record: RunRecord) -> tuple[str, str]:
+    """The canonical ``(manifest.json, scores.json)`` texts the writer emits.
+
+    Deterministic (sorted keys, fixed indent), so two records are exactly
+    equivalent iff these texts are byte-identical — the migrator uses this to
+    tell an already-migrated record from a conflicting one.
+    """
+    return _dumps(record.manifest_dict()), _dumps(record.scores_dict())
+
+
 def write_run_record(repo_root: Path, record: RunRecord) -> Path:
     """Write ``results/<candidate-hash>/<run-id>/{manifest,scores}.json``.
 
@@ -474,8 +529,8 @@ def write_run_record(repo_root: Path, record: RunRecord) -> Path:
     record and a failed write leaves nothing behind.  Returns the record dir.
     """
     record.validate()
-    manifest_text = _dumps(record.manifest_dict())  # serialization errors surface before I/O
-    scores_text = _dumps(record.scores_dict())
+    # Serialization errors surface before any I/O.
+    manifest_text, scores_text = record_file_texts(record)
 
     candidate_dir = Path(repo_root) / RESULTS_DIRNAME / candidate_hash(record.candidate)
     final_dir = candidate_dir / record.run_id
@@ -498,7 +553,15 @@ def write_run_record(repo_root: Path, record: RunRecord) -> Path:
 
 
 def read_run_record(run_dir: Path) -> RunRecord:
-    """Load and validate the record stored in *run_dir*."""
+    """Load and validate the record stored in *run_dir*.
+
+    Every read re-proves agreement between the path and the recorded identity:
+    the manifest's ``run_id`` must equal the directory name, and the candidate
+    hash recomputed from the recorded candidate must equal both the manifest's
+    ``candidate_hash`` and the parent directory name.  A record that fails any
+    of these is tampered or misplaced and raises :class:`InvalidRunRecordError`
+    rather than being attributed to the wrong candidate.
+    """
     run_dir = Path(run_dir)
     manifest = _load_json(run_dir / MANIFEST_FILENAME)
     scores = _load_json(run_dir / SCORES_FILENAME)
@@ -510,7 +573,30 @@ def read_run_record(run_dir: Path) -> RunRecord:
         )
     if "workload" in manifest:
         raise InvalidRunRecordError(f"{run_dir}: manifest carries the retired 'workload' field")
-    return RunRecord.from_dicts(manifest, scores)
+    record = RunRecord.from_dicts(manifest, scores)
+    if record.run_id != run_dir.name:
+        raise InvalidRunRecordError(
+            f"{run_dir}: manifest run_id {record.run_id!r} does not match the "
+            f"directory name {run_dir.name!r}"
+        )
+    recorded_hash = manifest.get("candidate_hash")
+    if not isinstance(recorded_hash, str) or not recorded_hash:
+        raise InvalidRunRecordError(
+            f"{run_dir}: manifest candidate_hash must be a non-empty string, "
+            f"got {recorded_hash!r}"
+        )
+    expected_hash = candidate_hash(record.candidate)
+    if recorded_hash != expected_hash:
+        raise InvalidRunRecordError(
+            f"{run_dir}: manifest candidate_hash {recorded_hash!r} does not match "
+            f"the recorded candidate ({expected_hash!r})"
+        )
+    if run_dir.parent.name != expected_hash:
+        raise InvalidRunRecordError(
+            f"{run_dir}: record sits under {run_dir.parent.name!r}, not its "
+            f"candidate's directory {expected_hash!r}"
+        )
+    return record
 
 
 def iter_run_dirs(repo_root: Path) -> Iterator[Path]:
@@ -588,26 +674,59 @@ def init_results_repo(path: Path) -> list[Path]:
 
     Writes the schema ``AGENTS.md`` (from :data:`TEMPLATE_DIR`), an empty
     ``results/`` directory (kept with ``.gitkeep``) and an empty derived index.
-    Refuses if ``AGENTS.md`` already exists — the repo is not empty.
+    The whole target is preflighted before the first write: *path* may not
+    exist yet, be an empty directory, or be an empty git clone (nothing but
+    ``.git`` inside).  Anything else — including a lone ``runs.jsonl``,
+    ``results/`` tree, or README — is refused, and nothing is ever
+    overwritten.  If a write fails partway, everything this call created is
+    removed again so the operator can simply retry.
     """
     path = Path(path)
-    agents_md = path / AGENTS_FILENAME
-    if agents_md.exists():
-        raise ResultsRepoError(f"{path} is not an empty results repo: {AGENTS_FILENAME} exists")
     template = TEMPLATE_DIR / AGENTS_FILENAME
     if not template.is_file():
         raise ResultsRepoError(f"missing packaged template: {template}")
-    path.mkdir(parents=True, exist_ok=True)
+    create_root = not path.exists()
+    if not create_root:
+        if not path.is_dir():
+            raise ResultsRepoError(f"{path} is not a directory")
+        entries = sorted(p.name for p in path.iterdir() if p.name != ".git")
+        if AGENTS_FILENAME in entries:
+            raise ResultsRepoError(
+                f"{path} is not an empty results repo: {AGENTS_FILENAME} exists"
+            )
+        if entries:
+            raise ResultsRepoError(
+                f"{path} is not empty; refusing to initialize over: {', '.join(entries)}"
+            )
+    created: list[Path] = []
     written: list[Path] = []
-    agents_md.write_text(template.read_text(encoding="utf-8"), encoding="utf-8")
-    written.append(agents_md)
-    results_dir = path / RESULTS_DIRNAME
-    results_dir.mkdir(exist_ok=True)
-    gitkeep = results_dir / ".gitkeep"
-    gitkeep.write_text("", encoding="utf-8")
-    written.append(gitkeep)
-    rebuild_index(path)
-    written.append(path / INDEX_FILENAME)
+    try:
+        if create_root:
+            path.mkdir(parents=True)
+            created.append(path)
+        agents_md = path / AGENTS_FILENAME
+        agents_md.write_text(template.read_text(encoding="utf-8"), encoding="utf-8")
+        created.append(agents_md)
+        written.append(agents_md)
+        results_dir = path / RESULTS_DIRNAME
+        results_dir.mkdir()
+        created.append(results_dir)
+        gitkeep = results_dir / ".gitkeep"
+        gitkeep.write_text("", encoding="utf-8")
+        created.append(gitkeep)
+        written.append(gitkeep)
+        index_path = path / INDEX_FILENAME
+        index_path.write_text("", encoding="utf-8")
+        created.append(index_path)
+        written.append(index_path)
+    except BaseException:
+        for created_path in reversed(created):
+            with contextlib.suppress(OSError):
+                if created_path.is_dir():
+                    shutil.rmtree(created_path, ignore_errors=True)
+                else:
+                    created_path.unlink()
+        raise
     return written
 
 

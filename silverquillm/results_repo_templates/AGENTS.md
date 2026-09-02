@@ -35,7 +35,10 @@ results/<candidate-hash>/<run-id>/scores.json
    and per-card trees live elsewhere; `manifest.json` carries *pointers* only.
 4. **Identity is never trusted from a recorded value.** `candidate.verified` is
    `false` until the bench recomputes identity from a Candidate Bundle. Treat
-   `verified: false` identities as labels, not proofs.
+   `verified: false` identities as labels, not proofs. The bench's reader
+   enforces this: a record whose `verified` is anything but `false`, or whose
+   directory name, `run_id`, `candidate`, and `candidate_hash` disagree, is
+   rejected on read rather than attributed to anyone.
 5. **`benchmark`, never `workload`.** One benchmark is one whole problem set; a
    run always consumes the entire set. The retired "workload" (card-subset) term
    does not appear in this repo.

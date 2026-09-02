@@ -191,9 +191,9 @@ def _discover_from_results_repo(
         )
         if pointer is None:
             continue  # no per-card detail source for this record
-        img_name = legacy_image_dir(record.candidate) or record.run_metadata.get("image_dir")
-        if not img_name:
-            continue
+        img_name = legacy_image_dir(record.candidate)
+        if img_name is None:
+            continue  # not a legacy identity: run_metadata never substitutes for identity
         run_name = record.run_id
         if image is not None and img_name != image:
             continue

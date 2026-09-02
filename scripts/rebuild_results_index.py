@@ -26,6 +26,7 @@ if str(REPO_ROOT) not in sys.path:
 from silverquillm.results_repo import (  # noqa: E402
     INDEX_FILENAME,
     RESULTS_REPO_ENV,
+    ResultsRepoError,
     rebuild_index,
     resolve_results_repo,
 )
@@ -54,7 +55,12 @@ def main(argv: list[str] | None = None) -> int:
     if not results_repo.is_dir():
         print(f"error: results repo is not a directory: {results_repo}", file=sys.stderr)
         return 2
-    rows = rebuild_index(results_repo)
+    try:
+        rows = rebuild_index(results_repo)
+    except ResultsRepoError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        print("index NOT rebuilt; the previous runs.jsonl is unchanged", file=sys.stderr)
+        return 1
     print(f"Indexed {len(rows)} run(s) into {results_repo / INDEX_FILENAME}")
     return 0
 

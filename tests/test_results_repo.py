@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +65,19 @@ def _record(**overrides: Any) -> rr.RunRecord:
     return rr.RunRecord(**fields)
 
 
+def _legacy_dict(**overrides: Any) -> dict[str, Any]:
+    """A well-formed persisted legacy identity, as the writer emits it."""
+    data: dict[str, Any] = {
+        "scheme": "legacy",
+        "base_image_digest": "legacy:img-a",
+        "instruction_hash": "legacy:img-a",
+        "adapter_identity": "legacy:img-a",
+        "verified": False,
+    }
+    data.update(overrides)
+    return data
+
+
 # ---------------------------------------------------------------------------
 # Identity
 # ---------------------------------------------------------------------------
@@ -77,19 +91,9 @@ class TestCandidateIdentity:
         assert ident.instruction_hash == "legacy:cc-opus-48-bare"
         assert ident.adapter_identity == "legacy:cc-opus-48-bare"
 
-    def test_verified_is_false_and_never_defaulted_true(self) -> None:
+    def test_verified_is_false_from_construction_and_deserialization(self) -> None:
         assert rr.CandidateIdentity.legacy("x").verified is False
-        assert (
-            rr.CandidateIdentity.from_dict(
-                {
-                    "scheme": "legacy",
-                    "base_image_digest": "legacy:x",
-                    "instruction_hash": "legacy:x",
-                    "adapter_identity": "legacy:x",
-                }
-            ).verified
-            is False
-        )
+        assert rr.CandidateIdentity.from_dict(_legacy_dict()).verified is False
 
     def test_candidate_hash_is_the_sanitized_image_dir(self) -> None:
         assert (
@@ -114,6 +118,64 @@ class TestCandidateIdentity:
     def test_dict_round_trip(self) -> None:
         ident = rr.CandidateIdentity.legacy("img-c")
         assert rr.CandidateIdentity.from_dict(ident.to_dict()) == ident
+
+    @pytest.mark.parametrize("verified", [True, "false", "true", 1, 0, None])
+    def test_recorded_verified_must_be_the_literal_false(self, verified: Any) -> None:
+        with pytest.raises(rr.InvalidRunRecordError, match="verified"):
+            rr.CandidateIdentity.from_dict(_legacy_dict(verified=verified))
+
+    def test_missing_verified_is_rejected_not_defaulted(self) -> None:
+        data = _legacy_dict()
+        del data["verified"]
+        with pytest.raises(rr.InvalidRunRecordError, match="verified"):
+            rr.CandidateIdentity.from_dict(data)
+
+    @pytest.mark.parametrize(
+        "key", ["scheme", "base_image_digest", "instruction_hash", "adapter_identity"]
+    )
+    def test_missing_identity_field_is_rejected(self, key: str) -> None:
+        data = _legacy_dict()
+        del data[key]
+        with pytest.raises(rr.InvalidRunRecordError, match=key):
+            rr.CandidateIdentity.from_dict(data)
+
+    @pytest.mark.parametrize("value", [7, None, "", ["legacy:img-a"]])
+    def test_identity_fields_are_never_coerced(self, value: Any) -> None:
+        with pytest.raises(rr.InvalidRunRecordError, match="base_image_digest"):
+            rr.CandidateIdentity.from_dict(_legacy_dict(base_image_digest=value))
+        with pytest.raises(rr.InvalidRunRecordError, match="scheme"):
+            rr.CandidateIdentity.from_dict(_legacy_dict(scheme=value))
+
+    def test_mismatched_legacy_tokens_are_rejected(self) -> None:
+        with pytest.raises(rr.InvalidRunRecordError, match="disagree"):
+            rr.CandidateIdentity.from_dict(_legacy_dict(instruction_hash="legacy:img-b"))
+        with pytest.raises(rr.InvalidRunRecordError, match="disagree"):
+            rr.CandidateIdentity.from_dict(_legacy_dict(adapter_identity="legacy:img-b"))
+
+    def test_legacy_fields_must_carry_the_token_shape(self) -> None:
+        bare = {k: "img-a" for k in ("base_image_digest", "instruction_hash", "adapter_identity")}
+        with pytest.raises(rr.InvalidRunRecordError, match="legacy:<image-dir>"):
+            rr.CandidateIdentity.from_dict(_legacy_dict(**bare))
+        hashes = ("base_image_digest", "instruction_hash", "adapter_identity")
+        empty = {k: "legacy:" for k in hashes}
+        with pytest.raises(rr.InvalidRunRecordError, match="legacy:<image-dir>"):
+            rr.CandidateIdentity.from_dict(_legacy_dict(**empty))
+
+    def test_unknown_scheme_is_rejected(self) -> None:
+        with pytest.raises(rr.InvalidRunRecordError, match="unknown candidate identity scheme"):
+            rr.CandidateIdentity.from_dict(_legacy_dict(scheme="sha-magic"))
+
+    def test_ozolith_identity_deserializes_only_unverified(self) -> None:
+        data = {
+            "scheme": rr.OZOLITH_SCHEME,
+            "base_image_digest": "sha256:abc",
+            "instruction_hash": "h",
+            "adapter_identity": "claude",
+            "verified": False,
+        }
+        assert rr.CandidateIdentity.from_dict(data).verified is False
+        with pytest.raises(rr.InvalidRunRecordError, match="#65"):
+            rr.CandidateIdentity.from_dict({**data, "verified": True})
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +312,74 @@ class TestWriteRunRecord:
         manifest_path.write_text(json.dumps(manifest))
         with pytest.raises(rr.InvalidRunRecordError, match="workload"):
             rr.read_run_record(run_dir)
+
+
+# ---------------------------------------------------------------------------
+# Read-time consistency — path, run id, identity, and hash must agree
+# ---------------------------------------------------------------------------
+
+
+class TestReadConsistency:
+    """Every read must re-prove path ↔ manifest ↔ identity agreement."""
+
+    def _edit_manifest(self, run_dir: Path, mutate: Any) -> None:
+        path = run_dir / "manifest.json"
+        manifest = json.loads(path.read_text())
+        mutate(manifest)
+        path.write_text(json.dumps(manifest))
+
+    def test_run_id_must_match_the_directory_name(self, tmp_path: Path) -> None:
+        run_dir = rr.write_run_record(tmp_path, _record())
+        moved = run_dir.parent / "some-other-run"
+        run_dir.rename(moved)
+        with pytest.raises(rr.InvalidRunRecordError, match="does not match the directory name"):
+            rr.read_run_record(moved)
+
+    def test_manifest_candidate_hash_must_match_the_identity(self, tmp_path: Path) -> None:
+        run_dir = rr.write_run_record(tmp_path, _record())
+        self._edit_manifest(run_dir, lambda m: m.update(candidate_hash="img-evil"))
+        with pytest.raises(rr.InvalidRunRecordError, match="candidate_hash 'img-evil'"):
+            rr.read_run_record(run_dir)
+
+    @pytest.mark.parametrize("bad", [None, 7, ""])
+    def test_manifest_candidate_hash_must_be_a_non_empty_string(
+        self, tmp_path: Path, bad: Any
+    ) -> None:
+        run_dir = rr.write_run_record(tmp_path, _record())
+        self._edit_manifest(run_dir, lambda m: m.update(candidate_hash=bad))
+        with pytest.raises(rr.InvalidRunRecordError, match="candidate_hash"):
+            rr.read_run_record(run_dir)
+
+    def test_record_must_sit_under_its_candidate_directory(self, tmp_path: Path) -> None:
+        run_dir = rr.write_run_record(tmp_path, _record())
+        other = tmp_path / "results" / "img-other"
+        other.mkdir()
+        moved = other / run_dir.name
+        run_dir.rename(moved)
+        with pytest.raises(rr.InvalidRunRecordError, match="candidate's directory"):
+            rr.read_run_record(moved)
+
+    def test_persisted_verified_true_is_rejected_on_read(self, tmp_path: Path) -> None:
+        run_dir = rr.write_run_record(tmp_path, _record())
+        self._edit_manifest(run_dir, lambda m: m["candidate"].update(verified=True))
+        with pytest.raises(rr.InvalidRunRecordError, match="never verified"):
+            rr.read_run_record(run_dir)
+
+    def test_iteration_and_the_index_fail_loudly_and_keep_the_old_index(
+        self, tmp_path: Path
+    ) -> None:
+        rr.write_run_record(tmp_path, _record(run_id="run-b"))
+        rr.write_run_record(tmp_path, _record())  # iterates after run-b
+        rr.rebuild_index(tmp_path)
+        before = (tmp_path / "runs.jsonl").read_bytes()
+        assert before.count(b"\n") == 2
+        tampered = tmp_path / "results" / "img-a" / _record().run_id
+        self._edit_manifest(tampered, lambda m: m.update(candidate_hash="img-evil"))
+        with pytest.raises(rr.InvalidRunRecordError):
+            list(rr.iter_run_records(tmp_path))
+        with pytest.raises(rr.InvalidRunRecordError):
+            rr.rebuild_index(tmp_path)
+        assert (tmp_path / "runs.jsonl").read_bytes() == before  # not truncated or replaced
 
 
 # ---------------------------------------------------------------------------
@@ -472,3 +602,70 @@ class TestResultsInit:
         assert (rr.TEMPLATE_DIR / "AGENTS.md").is_file()
         pyproject = (REPO_ROOT / "pyproject.toml").read_text()
         assert "results_repo_templates" in pyproject
+
+    def test_refuses_a_non_empty_target_without_agents_md(self, tmp_path: Path) -> None:
+        (tmp_path / "README.md").write_text("some other repo")
+        with pytest.raises(rr.ResultsRepoError, match="not empty"):
+            rr.init_results_repo(tmp_path)
+        assert [p.name for p in tmp_path.iterdir()] == ["README.md"]  # nothing written
+
+    def test_never_overwrites_an_existing_index_or_results_tree(self, tmp_path: Path) -> None:
+        index_only = tmp_path / "index-only"
+        index_only.mkdir()
+        (index_only / "runs.jsonl").write_text('{"run_id": "precious"}\n')
+        with pytest.raises(rr.ResultsRepoError, match=re.escape("runs.jsonl")):
+            rr.init_results_repo(index_only)
+        assert (index_only / "runs.jsonl").read_text() == '{"run_id": "precious"}\n'
+
+        results_only = tmp_path / "results-only"
+        (results_only / "results" / "img-a").mkdir(parents=True)
+        with pytest.raises(rr.ResultsRepoError, match="results"):
+            rr.init_results_repo(results_only)
+        assert (results_only / "results" / "img-a").is_dir()
+
+    def test_accepts_an_otherwise_empty_git_clone(self, tmp_path: Path) -> None:
+        clone = tmp_path / "clone"
+        (clone / ".git").mkdir(parents=True)
+        (clone / ".git" / "HEAD").write_text("ref: refs/heads/main\n")
+        written = rr.init_results_repo(clone)
+        assert len(written) == 3
+        assert (clone / "AGENTS.md").is_file()
+        assert (clone / ".git" / "HEAD").read_text() == "ref: refs/heads/main\n"
+
+    def test_a_failed_init_rolls_back_and_is_retryable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        target = tmp_path / "brand-new"
+        real_write_text = pathlib.Path.write_text
+
+        def flaky(self: Path, *args: Any, **kwargs: Any) -> int:
+            if self.name == "runs.jsonl":
+                raise OSError("disk full")
+            return real_write_text(self, *args, **kwargs)
+
+        monkeypatch.setattr(pathlib.Path, "write_text", flaky)
+        with pytest.raises(OSError, match="disk full"):
+            rr.init_results_repo(target)
+        assert not target.exists()  # everything this call created is gone
+
+        monkeypatch.undo()
+        rr.init_results_repo(target)
+        assert (target / "AGENTS.md").is_file()
+        assert (target / "runs.jsonl").read_bytes() == b""
+
+    def test_a_failed_init_leaves_a_preexisting_clone_as_it_was(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        clone = tmp_path / "clone"
+        (clone / ".git").mkdir(parents=True)
+        real_write_text = pathlib.Path.write_text
+
+        def flaky(self: Path, *args: Any, **kwargs: Any) -> int:
+            if self.name == ".gitkeep":
+                raise OSError("disk full")
+            return real_write_text(self, *args, **kwargs)
+
+        monkeypatch.setattr(pathlib.Path, "write_text", flaky)
+        with pytest.raises(OSError, match="disk full"):
+            rr.init_results_repo(clone)
+        assert sorted(p.name for p in clone.iterdir()) == [".git"]
