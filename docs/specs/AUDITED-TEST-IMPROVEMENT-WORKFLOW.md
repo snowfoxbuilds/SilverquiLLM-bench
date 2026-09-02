@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-05-30
+Last updated: 2026-09-02
 
 # Audited Test-Improvement Workflow
 
@@ -17,6 +17,7 @@ Three pieces, all gated by Benchmark Tier (ADR-011) — test edits and promotion
 
 - **Location**: `scripts/harvest_validated_results.py` (matches the existing repo script-utility pattern). May graduate to a `silverquillm harvest` subcommand later if it earns its keep.
 - **Source**: all `docker/<image>/validated_results/<run>/` directories. Per-test detail comes from each `cards/<card>/result.json` (`errors` = failed pytest node IDs, plus pass/fail/total counts) — no need to parse the multi-MB agent logs.
+- **Two homes during the transition** *(issue #63, 2026-09-02)*: results now also live in the private results repo (#39 §3) as immutable run records — `results/<candidate-hash>/<run-id>/manifest.json` + `scores.json`, schema in that repo's `AGENTS.md`, written by `silverquillm.results_repo`. `scripts/migrate_validated_results.py` backfills every legacy run into it; each migrated record points back at its `docker/` tree with a `legacy-tree` artifact pointer. `harvest_validated_results.py --results-repo <clone>` (or `$SILVERQUILLM_RESULTS_REPO`) discovers runs from the results repo and follows those pointers for per-card detail, producing rows identical to the in-repo walk (test-proven). The in-repo walk stays the default until the retirement issue (#66) deletes the `docker/` trees; after that deletion the `legacy-tree` pointers resolve only through git history, and the heavy-artifact host for new runs is the open question on #39 §3. `validated_results_to_csv.py` and `mine_promotion_candidates.py` still read the legacy tree only.
 - **Output**: `benchmarks/<bench>/analysis/harvested_results.jsonl`.
 - **Format**: long-format JSONL — one row per `(image, run, card, test-node, pass/fail)`, fully denormalized, written in run-append order and grouped at query time (DuckDB / pandas). Each row carries the `tests.py` content hash so audited-test changes across runs are detectable. Coarser rollups are query-time views; optionally load into DuckDB or emit a Parquet sibling for repeated slicing.
 ### `harvested_results.jsonl` row schema

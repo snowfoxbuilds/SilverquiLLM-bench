@@ -6,20 +6,30 @@ Discovers all Validated Results by globbing
 runs manually promoted out of ``results/`` after completing cleanly -- this
 script never reads from the ``results/`` working directory.
 
+With ``--results-repo <path>`` (or ``$SILVERQUILLM_RESULTS_REPO``) discovery
+reads the migrated private results repo instead: each run record's
+``legacy-tree`` artifact pointer leads back into the legacy tree for the
+per-card ``result.json`` / ``tests.py`` content, and the row's ``image``
+column carries the legacy identity. The row shape is identical either way.
+The in-repo walk stays the default until the legacy lineage is retired.
+
 Usage::
 
     python scripts/harvest_validated_results.py
     python scripts/harvest_validated_results.py --image cc-opus-48-bare
     python scripts/harvest_validated_results.py --run sos-cc-opus-48-bare-2026-05-30T04-02
     python scripts/harvest_validated_results.py --card sos_245
+    python scripts/harvest_validated_results.py --results-repo /path/to/results-clone
 
 CLI flags:
-    --bench   Benchmark name (default: ``sos``).
-    --output  Output JSONL path (default:
-              ``benchmarks/<bench>/analysis/harvested_results.jsonl``).
-    --image   Filter to a specific docker image name.
-    --run     Filter to a specific run name.
-    --card    Filter to runs/cards containing a matching card directory.
+    --bench         Benchmark name (default: ``sos``).
+    --output        Output JSONL path (default:
+                    ``benchmarks/<bench>/analysis/harvested_results.jsonl``).
+    --image         Filter to a specific docker image name.
+    --run           Filter to a specific run name.
+    --card          Filter to runs/cards containing a matching card directory.
+    --results-repo  Read runs from the migrated results repo (default: the
+                    ``$SILVERQUILLM_RESULTS_REPO`` env var; unset = legacy walk).
 """
 
 from __future__ import annotations
@@ -66,6 +76,7 @@ def discover_validated_runs(
     image: Optional[str] = None,
     run: Optional[str] = None,
     card: Optional[str] = None,
+    results_repo: Optional[Path] = None,
 ) -> list[ValidatedRun]:
     """Discover validated runs under ``docker/*/validated_results/*/``.
 
@@ -81,12 +92,23 @@ def discover_validated_runs(
     card:
         If given, restrict to runs whose ``cards/`` subdirectory contains
         a ``<card>/`` entry matching this name.
+    results_repo:
+        If given, discover runs from the migrated private results repo at
+        this path instead of walking ``docker/``: every run record with a
+        ``legacy-tree`` artifact pointer is followed back into the legacy
+        tree under *repo_root* for its per-card content.  Records without
+        such a pointer have no per-card detail to harvest and are skipped.
 
     Returns
     -------
     list[ValidatedRun]
         Sorted by ``(image, run)`` for deterministic output.
     """
+    if results_repo is not None:
+        return _discover_from_results_repo(
+            repo_root, Path(results_repo), image=image, run=run, card=card
+        )
+
     docker_root = repo_root / "docker"
     if not docker_root.is_dir():
         return []
@@ -109,14 +131,7 @@ def discover_validated_runs(
         if run is not None and run_name != run:
             continue
 
-        # Collect card dirs
-        cards_parent = run_dir / "cards"
-        matched_card_dirs: list[Path] = []
-        if cards_parent.is_dir():
-            for card_dir in sorted(cards_parent.iterdir()):
-                if card_dir.is_dir():
-                    if card is None or card_dir.name == card:
-                        matched_card_dirs.append(card_dir)
+        matched_card_dirs = _collect_card_dirs(run_dir, card)
 
         # Apply --card filter: skip runs with no matching cards
         if card is not None and not matched_card_dirs:
@@ -130,6 +145,81 @@ def discover_validated_runs(
         ))
 
     # Sort by (image, run) for deterministic output
+    results.sort(key=lambda vr: (vr.image, vr.run))
+    return results
+
+
+def _collect_card_dirs(run_dir: Path, card: Optional[str]) -> list[Path]:
+    """Sorted ``cards/<card>/`` dirs under *run_dir*, narrowed to *card* if given."""
+    cards_parent = run_dir / "cards"
+    matched: list[Path] = []
+    if cards_parent.is_dir():
+        for card_dir in sorted(cards_parent.iterdir()):
+            if card_dir.is_dir() and (card is None or card_dir.name == card):
+                matched.append(card_dir)
+    return matched
+
+
+def _discover_from_results_repo(
+    repo_root: Path,
+    results_repo: Path,
+    *,
+    image: Optional[str],
+    run: Optional[str],
+    card: Optional[str],
+) -> list[ValidatedRun]:
+    """Discover runs from the migrated results repo (see ``discover_validated_runs``).
+
+    The ``image`` column carries the legacy identity (``legacy:<image-dir>``
+    → ``<image-dir>``) so rows are identical to the legacy walk's.  A
+    ``legacy-tree`` location is resolved relative to *repo_root* unless it is
+    absolute; a location that no longer exists on disk is reported on stderr
+    and skipped.
+    """
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    from silverquillm.results_repo import (
+        LEGACY_TREE_KIND,
+        iter_run_records,
+        legacy_image_dir,
+    )
+
+    results: list[ValidatedRun] = []
+    for _record_dir, record in iter_run_records(results_repo):
+        pointer = next(
+            (p for p in record.artifact_pointers if p.get("kind") == LEGACY_TREE_KIND), None
+        )
+        if pointer is None:
+            continue  # no per-card detail source for this record
+        img_name = legacy_image_dir(record.candidate) or record.run_metadata.get("image_dir")
+        if not img_name:
+            continue
+        run_name = record.run_id
+        if image is not None and img_name != image:
+            continue
+        if run is not None and run_name != run:
+            continue
+
+        location = Path(pointer["location"])
+        run_dir = location if location.is_absolute() else repo_root / location
+        if not run_dir.is_dir():
+            print(
+                f"warning: {img_name}/{run_name}: legacy-tree location not found: {run_dir}",
+                file=sys.stderr,
+            )
+            continue
+
+        matched_card_dirs = _collect_card_dirs(run_dir, card)
+        if card is not None and not matched_card_dirs:
+            continue
+
+        results.append(ValidatedRun(
+            image=img_name,
+            run=run_name,
+            run_dir=run_dir,
+            card_dirs=matched_card_dirs,
+        ))
+
     results.sort(key=lambda vr: (vr.image, vr.run))
     return results
 
@@ -326,6 +416,7 @@ def harvest(
     run: Optional[str] = None,
     card: Optional[str] = None,
     harvested_at: Optional[str] = None,
+    results_repo: Optional[Path] = None,
 ) -> int:
     """Run the full harvest pipeline and write JSONL rows.
 
@@ -343,6 +434,9 @@ def harvest(
         Optional filters forwarded to :func:`discover_validated_runs`.
     harvested_at:
         ISO-8601 timestamp for all rows.  Computed automatically when *None*.
+    results_repo:
+        Optional migrated results repo to discover runs from instead of the
+        in-repo ``docker/`` walk (see :func:`discover_validated_runs`).
 
     Returns
     -------
@@ -370,6 +464,7 @@ def harvest(
         image=image,
         run=run,
         card=card,
+        results_repo=results_repo,
     )
 
     # Build and write rows (truncate-then-write for idempotency).
@@ -561,7 +656,26 @@ def _build_parser() -> argparse.ArgumentParser:
             "print a ranked report. Does NOT re-harvest."
         ),
     )
+    parser.add_argument(
+        "--results-repo",
+        default=None,
+        type=Path,
+        help=(
+            "Discover runs from the migrated private results repo at this path "
+            "instead of walking docker/*/validated_results/. Default: the "
+            "SILVERQUILLM_RESULTS_REPO env var; unset means the legacy walk."
+        ),
+    )
     return parser
+
+
+def _resolve_results_repo(flag: Optional[Path]) -> Optional[Path]:
+    """``--results-repo`` if given, else ``$SILVERQUILLM_RESULTS_REPO``, else ``None``."""
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    from silverquillm.results_repo import resolve_results_repo
+
+    return resolve_results_repo(flag)
 
 
 def main(*, repo_root: Optional[Path] = None) -> None:
@@ -578,6 +692,7 @@ def main(*, repo_root: Optional[Path] = None) -> None:
 
     parser = _build_parser()
     args = parser.parse_args()
+    results_repo = _resolve_results_repo(args.results_repo)
 
     # Resolve output path (mirrors harvest() logic).
     if args.output is not None:
@@ -616,6 +731,7 @@ def main(*, repo_root: Optional[Path] = None) -> None:
         image=args.image,
         run=args.run,
         card=args.card,
+        results_repo=results_repo,
     )
 
     # Print harvest summary
@@ -624,8 +740,10 @@ def main(*, repo_root: Optional[Path] = None) -> None:
         image=args.image,
         run=args.run,
         card=args.card,
+        results_repo=results_repo,
     )
-    print(f"Discovered {len(runs)} validated run(s):")
+    source = f"results repo {results_repo}" if results_repo else "docker/*/validated_results/"
+    print(f"Discovered {len(runs)} validated run(s) from {source}:")
     for vr in runs:
         n_cards = len(vr.card_dirs)
         print(f"  {vr.image} / {vr.run}  ({n_cards} card(s))")

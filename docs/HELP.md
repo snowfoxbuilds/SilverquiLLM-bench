@@ -85,3 +85,17 @@ ls -d docker/*/validated_results/*/ \
 python scripts/harvest_validated_results.py --bench sos
 # Cross-impl breadth summary → benchmarks/sos/analysis/harvested_summary.json
 python scripts/harvest_validated_results.py --bench sos --summary
+
+
+# Private results repo (#39 §3 / #63) — a local clone of the private results repo
+export SILVERQUILLM_RESULTS_REPO=~/src/silverquillm-results   # or pass --results-repo everywhere
+# Lay out an empty clone: schema AGENTS.md + results/ + runs.jsonl
+silverquillm results-init "$SILVERQUILLM_RESULTS_REPO"
+# Backfill the legacy corpus (plan first, then write; re-runs skip existing records)
+python scripts/migrate_validated_results.py --dry-run
+python scripts/migrate_validated_results.py
+# Regenerate the derived index after any change under results/
+python scripts/rebuild_results_index.py
+# Harvest from the results repo instead of the docker/ walk (identical rows)
+python scripts/harvest_validated_results.py --bench sos --results-repo "$SILVERQUILLM_RESULTS_REPO"
+# Then commit in the results repo clone — the writer never runs git
