@@ -139,5 +139,5 @@ def test_bushwhack_fight(game=None):
 ## Constraints
 
 - **Max 30 tests per card.**
-- Import helpers from `test_utils`; cards from `cards.hob.hob_<N>.card_impl`
-  (HOB cards) or `cards.fdn.fdn_<N>.card_impl` (FDN reference cards).
+- Import helpers from `test_utils`; cards from `cards.fdn.fdn_<N>.card_impl`
+  (target stubs and reference cards alike).

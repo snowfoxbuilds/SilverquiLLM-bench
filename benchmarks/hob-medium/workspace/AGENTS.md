@@ -30,11 +30,18 @@ Tests answer those queries with **Intents** (see `test_utils.md`).
    your score, it will only mislead you about whether your engine changes are
    correct. Your own HOB tests belong at `cards/hob/hob_<N>/tests.py`.
 
-3. **Additive-only engine modifications** — You may add new methods, classes,
-   helpers, and files inside `engine/`. You may modify the bodies of existing
-   functions to implement card behavior. You MUST NOT rename, move, or delete
-   anything that already exists in `engine/` — no renaming, no refactoring.
-   Restructuring the engine will break the grader's imports and zero your score.
+3. **Engine envelope: modify freely; the audited tests are the judge** — You
+   may add, change, rename, move, refactor, or delete anything inside
+   `engine/`. There is no additive-only rule and no diff policing: your engine
+   diff is recorded as a diagnostic, never scored. The entire judgment is the
+   three audited dimensions run against your final `engine/` — target-card
+   correctness, FDN card regression, engine regression — so a change that
+   breaks behavior or public symbols the audited tests rely on (for example
+   `engine.card.CardImpl`, `engine.game`, the Player Query machinery) simply
+   shows up as failing tests. That scoring is the only enforcement. The
+   `engine_tests/` and FDN reference tests staged here are copies of what the
+   grader runs; keeping them green is your local proxy for the two regression
+   dimensions.
 
 4. **Life mutation goes through `gain_life` / `lose_life`** — A card
    implementation must change a player's life **only** by calling
@@ -84,8 +91,8 @@ pytest
 This discovers:
 - Engine regression tests at `engine_tests/test_*.py`.
 - Per-card FDN reference tests at `cards/fdn/fdn_{collector_number}/tests.py`.
-  Only a handful of FDN cards ship with a `tests.py` — see `PROJECT_MAP.md`
-  for the canonical list, and use them as illustrative per-card test examples.
+  Most FDN cards ship with a `tests.py` — see `PROJECT_MAP.md` for how to
+  list them, and use them as illustrative per-card test examples.
 - Per-card HOB tests you write at `cards/hob/hob_{collector_number}/tests.py`.
 
 The workspace `pytest.ini` configures `python_files = test_*.py tests.py` for
@@ -104,9 +111,13 @@ from test_utils import create_game, set_board_state, put_on_battlefield, cast_sp
 
 ## Engine Extension Scope
 
-- **May**: Add files, methods, classes, and helpers inside `engine/`.
-- **May**: Modify the bodies of existing functions in `engine/`.
-- **Must NOT**: Rename, move, or delete anything existing in `engine/`.
+- **May**: add, modify, rename, move, refactor, or delete anything inside
+  `engine/` — the engine is yours for the run.
+- **Judged by**: the three audited dimensions against your final `engine/`.
+  Breaking behavior or public symbols the audited tests rely on fails those
+  tests; nothing else about the engine is policed or scored.
+- **Advice**: prefer generic, reusable extensions over card-specific hacks —
+  they are far likelier to keep the FDN and engine regression dimensions green.
 
 ## Rules questions → grep RULEBOOK.txt
 
