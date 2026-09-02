@@ -308,6 +308,56 @@ class TestResultsRepoDiscovery:
         rr.init_results_repo(tmp_path / "empty")
         assert harvest_mod.discover_validated_runs(tmp_path, results_repo=tmp_path / "empty") == []
 
+    def test_a_tampered_pointer_fails_the_harvest_loudly(
+        self, corpus: tuple[Path, Path]
+    ) -> None:
+        bench_root, results_repo = corpus
+        manifest = (
+            results_repo
+            / "results"
+            / "img-beta"
+            / "sos-img-beta-2026-06-03T00-00"
+            / "manifest.json"
+        )
+        data = json.loads(manifest.read_text())
+        data["artifact_pointers"][0]["location"] = (
+            "docker/img-alpha/validated_results/sos-img-alpha-2026-06-01T00-00/"
+        )
+        manifest.write_text(json.dumps(data))
+        with pytest.raises(rr.InvalidRunRecordError):
+            harvest_mod.discover_validated_runs(bench_root, results_repo=results_repo)
+
+    def test_the_recheck_blocks_candidate_a_labels_on_candidate_b_artifacts(
+        self, corpus: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Even a record that bypassed read-time validation cannot be followed:
+        the harvester re-proves the pointer against the record's own identity
+        immediately before touching the legacy tree."""
+        bench_root, results_repo = corpus
+        poisoned = rr.RunRecord(
+            run_id="sos-img-alpha-2026-06-01T00-00",
+            candidate=rr.CandidateIdentity.legacy("img-alpha"),
+            mode="legacy",
+            benchmark="sos",
+            budget_seconds=1,
+            leaderboard_valid=True,
+            resumed_from=None,
+            run_metadata={},
+            proposal_status=None,
+            scores={"card_correctness": {}, "fdn_regression": {}, "engine_regression": {}},
+            artifact_pointers=[
+                {
+                    "kind": "legacy-tree",
+                    "location": "docker/img-beta/validated_results/sos-img-beta-2026-06-03T00-00/",
+                }
+            ],
+        )
+        monkeypatch.setattr(
+            rr, "iter_run_records", lambda _repo: iter([(Path("/poisoned"), poisoned)])
+        )
+        with pytest.raises(rr.InvalidRunRecordError, match="canonical"):
+            harvest_mod.discover_validated_runs(bench_root, results_repo=results_repo)
+
 
 class TestCli:
     def test_parser_accepts_results_repo(self) -> None:

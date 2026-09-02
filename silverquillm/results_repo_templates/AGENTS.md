@@ -17,8 +17,11 @@ results/<candidate-hash>/<run-id>/scores.json
 
 - `<candidate-hash>` is the directory key derived from the run's candidate
   identity (instruction-independent). For the `legacy` identity scheme it is
-  the sanitized legacy image directory name; for `ozolith-v1` it is the
-  identity hash defined by the-ozolith identity-hash spec.
+  the legacy image directory name **unchanged** — legacy names must already be
+  safe path segments (`[A-Za-z0-9._-]`, no leading dot), and nothing is ever
+  sanitized, so two distinct images can never collide into one key. For
+  `ozolith-v1` it is the identity hash defined by the-ozolith identity-hash
+  spec.
 - `<run-id>` is the Benchmark Run's id (for migrated legacy runs, the original
   run directory name, e.g. `sos-cc-opus-48-bare-2026-05-30T04-02`).
 
@@ -83,7 +86,7 @@ results/<candidate-hash>/<run-id>/scores.json
 | `resumed_from` | string or null | Prior leg's run id for a Resume Leg; null for a fresh run. |
 | `proposal_status` | string or null | What the contract driver recorded about `output/proposal.json` (`applied`, `missing`, `invalid`). Null for legacy runs, which had no proposal. |
 | `run_metadata` | object | Metadata only, never identity-bearing: `run_date`, versions, `run_status`, `wall_clock_seconds`, notes. Migrated runs carry `docker_image`, `image_dir`, `harness_version`, `card_filter`, `scored_card_count`, `budget_seconds_source`, `migrated_from`, and a `validity_note` when `leaderboard_valid` is false. |
-| `artifact_pointers` | array | `{"kind", "location"}` references to heavy artifacts. `legacy-tree` locations are paths relative to the bench repo root; after the legacy trees are deleted (bench issue #66) they resolve only through the bench repo's git history. |
+| `artifact_pointers` | array | `{"kind", "location"}` references to heavy artifacts. A `legacy-tree` location is canonical and identity-bound: exactly `docker/<image-dir>/validated_results/<run-id>/` for the record's own candidate and run id, relative to the bench repo root — never absolute, never another candidate's path; the bench validates this on write, on read, and again before following the pointer. After the legacy trees are deleted (bench issue #66) these locations resolve only through the bench repo's git history. |
 
 ### `leaderboard_valid`
 

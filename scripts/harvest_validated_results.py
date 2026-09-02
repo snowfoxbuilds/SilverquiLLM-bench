@@ -172,16 +172,21 @@ def _discover_from_results_repo(
 
     The ``image`` column carries the legacy identity (``legacy:<image-dir>``
     → ``<image-dir>``) so rows are identical to the legacy walk's.  A
-    ``legacy-tree`` location is resolved relative to *repo_root* unless it is
-    absolute; a location that no longer exists on disk is reported on stderr
-    and skipped.
+    ``legacy-tree`` location must equal the canonical identity-bound path
+    (``docker/<image-dir>/validated_results/<run-id>/``) — rechecked here,
+    right before the pointer is followed, so per-card content can never be
+    harvested under another candidate's label; a mismatch raises rather than
+    warns.  A canonical location that no longer exists on disk is reported on
+    stderr and skipped.
     """
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
     from silverquillm.results_repo import (
         LEGACY_TREE_KIND,
+        InvalidRunRecordError,
         iter_run_records,
         legacy_image_dir,
+        legacy_tree_location,
     )
 
     results: list[ValidatedRun] = []
@@ -200,8 +205,17 @@ def _discover_from_results_repo(
         if run is not None and run_name != run:
             continue
 
-        location = Path(pointer["location"])
-        run_dir = location if location.is_absolute() else repo_root / location
+        location = pointer["location"]
+        expected = legacy_tree_location(img_name, run_name)
+        if location != expected:
+            # The pointer is the only bridge from a record to legacy content:
+            # following a non-canonical one could emit candidate-A rows from
+            # candidate-B artifacts, so this fails loudly, never warn-and-skip.
+            raise InvalidRunRecordError(
+                f"{img_name}/{run_name}: legacy-tree location {location!r} is not "
+                f"the canonical identity-bound path {expected!r}"
+            )
+        run_dir = repo_root / location
         if not run_dir.is_dir():
             print(
                 f"warning: {img_name}/{run_name}: legacy-tree location not found: {run_dir}",

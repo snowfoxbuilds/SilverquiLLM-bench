@@ -580,6 +580,50 @@ class TestMigrationConflicts:
         assert _mod.apply_migration(rerun, results_repo) == []
         assert _snapshot(results_repo) == after
 
+    @pytest.mark.parametrize(
+        ("field", "bad"),
+        [
+            ("candidate", "img-a"),  # valid JSON, malformed schema shape
+            ("run_metadata", [["run_date", "x"]]),
+            ("schema_version", True),
+        ],
+    )
+    def test_malformed_schema_shapes_are_conflicts_not_tracebacks(
+        self,
+        bench_root: Path,
+        results_repo: Path,
+        capsys: pytest.CaptureFixture[str],
+        field: str,
+        bad: Any,
+    ) -> None:
+        write_legacy_run(bench_root, "img-a", "run-ok-1")
+        _mod.apply_migration(_mod.plan_migration(bench_root, results_repo), results_repo)
+        manifest = results_repo / "results" / "img-a" / "run-ok-1" / "manifest.json"
+        data = json.loads(manifest.read_text())
+        data[field] = bad
+        manifest.write_text(json.dumps(data))
+        before = _snapshot(results_repo)
+        plan = _mod.plan_migration(bench_root, results_repo)  # must classify, not crash
+        assert [c.legacy.run for c in plan.conflicts] == ["run-ok-1"]
+        assert "unreadable" in plan.conflicts[0].reason
+        assert _mod.main(["--results-repo", str(results_repo)], repo_root=bench_root) == 1
+        out, err = capsys.readouterr()
+        assert "Traceback" not in out + err
+        assert "migration conflict(s); nothing written" in err
+        assert _snapshot(results_repo) == before
+
+    def test_unsafe_image_dir_is_skipped_loudly_never_sanitized(
+        self, bench_root: Path, results_repo: Path
+    ) -> None:
+        write_legacy_run(bench_root, "img a", "run-1")
+        write_legacy_run(bench_root, "img-a", "run-ok-1")
+        plan = _mod.plan_migration(bench_root, results_repo)
+        assert [p.record.run_id for p in plan.planned] == ["run-ok-1"]
+        assert [(s.legacy.image, s.legacy.run) for s in plan.skipped] == [("img a", "run-1")]
+        assert "invalid legacy image dir" in plan.skipped[0].reason
+        _mod.apply_migration(plan, results_repo)
+        assert not (results_repo / "results" / "img_a").exists()  # no sanitized key, ever
+
     def test_main_reports_conflicts_and_dry_run_flags_them(
         self, bench_root: Path, results_repo: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:

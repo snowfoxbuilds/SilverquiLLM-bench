@@ -10,7 +10,8 @@ How a legacy run maps onto a record:
 
 - **candidate**: the ``legacy`` identity scheme, ``legacy:<image-dir>`` — the
   image was the whole agent configuration.  The candidate hash (directory key)
-  is the sanitized image dir name.
+  is the image dir name unchanged; a name that is not already one safe path
+  segment is refused (skipped loudly), never sanitized into a colliding key.
 - **mode**: ``"legacy"`` for every run.  The legacy lineage encoded variants in
   image names; that is a different concept from the new mode registry, so
   nothing is parsed — the image dir in the identity is the discriminator.
@@ -62,10 +63,12 @@ from silverquillm.results_repo import (  # noqa: E402
     RUN_SUMMARY_SCORE_KEYS,
     SCORES_FILENAME,
     CandidateIdentity,
+    InvalidRunRecordError,
     ResultsRepoError,
     RunRecord,
     candidate_hash,
     leaderboard_validity_reasons,
+    legacy_tree_location,
     load_benchmark_config,
     read_run_record,
     rebuild_index,
@@ -98,8 +101,12 @@ class LegacyRun:
 
     @property
     def location(self) -> str:
-        """Bench-repo-relative location used in the ``legacy-tree`` pointer."""
-        return f"docker/{self.image}/validated_results/{self.run}/"
+        """Bench-repo-relative location used in the ``legacy-tree`` pointer.
+
+        Always the canonical identity-bound path — the same helper the
+        record validator and the harvester check against.
+        """
+        return legacy_tree_location(self.image, self.run)
 
 
 @dataclass(frozen=True)
@@ -192,6 +199,11 @@ def _legacy_card_filter(
 
 def build_legacy_record(legacy: LegacyRun, *, config_loader: ConfigLoader) -> RunRecord:
     """Build the :class:`RunRecord` for one legacy run, or raise :class:`LegacyRunUnparseable`."""
+    try:
+        candidate = CandidateIdentity.legacy(legacy.image)
+        location = legacy.location  # validates the run name as a safe segment too
+    except InvalidRunRecordError as exc:
+        raise LegacyRunUnparseable(str(exc)) from exc
     missing = [name for name in REQUIRED_FILES if not (legacy.run_dir / name).is_file()]
     if missing:
         present = sorted(p.name for p in legacy.run_dir.iterdir())
@@ -255,7 +267,7 @@ def build_legacy_record(legacy: LegacyRun, *, config_loader: ConfigLoader) -> Ru
         "card_filter": card_filter,
         "scored_card_count": len(scored_cards),
         "budget_seconds_source": budget_source,
-        "migrated_from": legacy.location,
+        "migrated_from": location,
     }
     if "resumed_image_changed" in summary:
         run_metadata["resumed_image_changed"] = summary["resumed_image_changed"]
@@ -264,7 +276,7 @@ def build_legacy_record(legacy: LegacyRun, *, config_loader: ConfigLoader) -> Ru
 
     return RunRecord(
         run_id=legacy.run,
-        candidate=CandidateIdentity.legacy(legacy.image),
+        candidate=candidate,
         mode=LEGACY_MODE,
         benchmark=benchmark,
         budget_seconds=budget,
@@ -273,7 +285,7 @@ def build_legacy_record(legacy: LegacyRun, *, config_loader: ConfigLoader) -> Ru
         run_metadata=run_metadata,
         proposal_status=None,
         scores=scores,
-        artifact_pointers=[{"kind": LEGACY_TREE_KIND, "location": legacy.location}],
+        artifact_pointers=[{"kind": LEGACY_TREE_KIND, "location": location}],
     )
 
 

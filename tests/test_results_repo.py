@@ -9,6 +9,7 @@ writer, the single-owner ``leaderboard_valid`` rule with the real ``"1"`` vs
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import pathlib
 import re
@@ -29,6 +30,31 @@ SMOKE_CONFIG = json.loads((REPO_ROOT / "benchmarks" / "smoke" / "config.json").r
 # carry the set prefix, config.json zero-pads.
 LEGACY_FILTER = ["1", "4", "13", "57", "97", "120", "201", "226", "245", "257"]
 SCORED_SOS = [f"sos_{n}" for n in LEGACY_FILTER]
+
+# Every image dir in the real Validated Results corpus.  All are already safe
+# path segments; their candidate directory keys must never change.
+REAL_CORPUS_IMAGES = [
+    "cc-fable-5-bare-high-planned",
+    "cc-fable-5-bare-medium-planned",
+    "cc-fable-5-bare-xhigh-planned",
+    "cc-opus-48-bare",
+    "cc-opus-48-bare-high-planned",
+    "cc-opus-48-bare-xhigh",
+    "cc-opus-48-bare-xhigh-planned",
+    "cc-opus-48-plan-tdd-v2-xhigh",
+    "cc-opus-48-plan-tdd-xhigh",
+    "cc-opus-48-single",
+    "cc-opus-48-single-xhigh",
+    "cc-opus-single",
+    "cc-sonnet-46-bare-high-planned",
+    "cc-sonnet-single",
+    "copilot-claude-opus-4.6",
+    "copilot-gpt-5.4",
+    "copilot-gpt54-single",
+    "copilot-gpt54-sonnet-reviewer",
+    "copilot-sonnet-gpt54-reviewer",
+    "copilot-sonnet-single",
+]
 
 
 def _scores() -> dict[str, Any]:
@@ -57,11 +83,18 @@ def _record(**overrides: Any) -> rr.RunRecord:
         "run_metadata": {"run_date": "2026-06-01T01:00:00Z"},
         "proposal_status": None,
         "scores": _scores(),
-        "artifact_pointers": [
-            {"kind": rr.LEGACY_TREE_KIND, "location": "docker/img-a/validated_results/run/"}
-        ],
     }
     fields.update(overrides)
+    if "artifact_pointers" not in fields:
+        # The canonical identity-bound pointer for whatever run_id/candidate
+        # the test chose; deliberately-broken fields get no pointer at all.
+        try:
+            location = rr.legacy_tree_location(
+                rr.legacy_image_dir(fields["candidate"]), fields["run_id"]
+            )
+            fields["artifact_pointers"] = [{"kind": rr.LEGACY_TREE_KIND, "location": location}]
+        except (rr.ResultsRepoError, AttributeError):
+            fields["artifact_pointers"] = []
     return rr.RunRecord(**fields)
 
 
@@ -95,11 +128,11 @@ class TestCandidateIdentity:
         assert rr.CandidateIdentity.legacy("x").verified is False
         assert rr.CandidateIdentity.from_dict(_legacy_dict()).verified is False
 
-    def test_candidate_hash_is_the_sanitized_image_dir(self) -> None:
+    def test_candidate_hash_is_the_image_dir_unchanged(self) -> None:
         assert (
             rr.candidate_hash(rr.CandidateIdentity.legacy("copilot-gpt-5.4")) == "copilot-gpt-5.4"
         )
-        assert rr.candidate_hash(rr.CandidateIdentity.legacy("odd name!")) == "odd_name_"
+        assert rr.candidate_hash(rr.CandidateIdentity.legacy("odd_name_")) == "odd_name_"
 
     def test_legacy_image_dir_round_trips(self) -> None:
         assert rr.legacy_image_dir(rr.CandidateIdentity.legacy("img-b")) == "img-b"
@@ -114,6 +147,37 @@ class TestCandidateIdentity:
     def test_legacy_rejects_unsafe_image_dirs(self, bad: str) -> None:
         with pytest.raises(rr.InvalidRunRecordError):
             rr.CandidateIdentity.legacy(bad)
+
+    @pytest.mark.parametrize("bad", [".hidden", "a b", "odd name!", "café", "a\tb", "a/../b"])
+    def test_names_needing_sanitization_are_rejected_not_rewritten(self, bad: str) -> None:
+        with pytest.raises(rr.InvalidRunRecordError, match="never sanitized"):
+            rr.CandidateIdentity.legacy(bad)
+
+    def test_formerly_colliding_names_cannot_share_a_directory(self) -> None:
+        # Under the retired underscore sanitization both would have keyed
+        # results/odd_name_/ — now only the already-safe spelling exists.
+        with pytest.raises(rr.InvalidRunRecordError):
+            rr.CandidateIdentity.legacy("odd name!")
+        with pytest.raises(rr.InvalidRunRecordError):
+            rr.CandidateIdentity.legacy("odd?name!")
+        assert rr.candidate_hash(rr.CandidateIdentity.legacy("odd_name_")) == "odd_name_"
+
+    def test_all_20_real_corpus_image_names_stay_accepted_and_unchanged(self) -> None:
+        assert len(REAL_CORPUS_IMAGES) == 20
+        for name in REAL_CORPUS_IMAGES:
+            assert rr.candidate_hash(rr.CandidateIdentity.legacy(name)) == name
+        live = (
+            sorted(p.parent.name for p in (REPO_ROOT / "docker").glob("*/validated_results"))
+            if (REPO_ROOT / "docker").is_dir()
+            else []
+        )
+        if live:  # the legacy trees survive until #66; while they do, pin the list
+            assert live == REAL_CORPUS_IMAGES
+
+    @pytest.mark.parametrize("bad", ["img-a", ["legacy:img-a"], 7, None])
+    def test_non_object_candidate_data_is_rejected(self, bad: Any) -> None:
+        with pytest.raises(rr.InvalidRunRecordError, match="JSON object"):
+            rr.CandidateIdentity.from_dict(bad)
 
     def test_dict_round_trip(self) -> None:
         ident = rr.CandidateIdentity.legacy("img-c")
@@ -313,6 +377,41 @@ class TestWriteRunRecord:
         with pytest.raises(rr.InvalidRunRecordError, match="workload"):
             rr.read_run_record(run_dir)
 
+    def test_write_rejects_a_verified_identity(self, tmp_path: Path) -> None:
+        forged = dataclasses.replace(rr.CandidateIdentity.legacy("img-a"), verified=True)
+        with pytest.raises(rr.InvalidRunRecordError, match="never verified"):
+            rr.write_run_record(tmp_path, _record(candidate=forged))
+        assert not (tmp_path / "results").exists()
+
+    def test_write_rejects_mismatched_legacy_tokens(self, tmp_path: Path) -> None:
+        forged = rr.CandidateIdentity(
+            base_image_digest="legacy:img-a",
+            instruction_hash="legacy:img-b",
+            adapter_identity="legacy:img-a",
+            scheme=rr.LEGACY_SCHEME,
+        )
+        with pytest.raises(rr.InvalidRunRecordError, match="disagree"):
+            rr.write_run_record(tmp_path, _record(candidate=forged))
+        assert not (tmp_path / "results").exists()
+
+    def test_anything_the_writer_accepts_reads_straight_back(self, tmp_path: Path) -> None:
+        variants = [
+            _record(),
+            _record(run_id="resumed-leg", resumed_from="prior-leg", leaderboard_valid=False),
+            _record(
+                run_id="smoke-vanilla-claude-2026-09-02T10-00",
+                candidate=rr.CandidateIdentity.legacy("vanilla-claude"),
+                mode="basic",
+                benchmark="smoke",
+                proposal_status="applied",
+                leaderboard_valid=False,
+                artifact_pointers=[],
+            ),
+        ]
+        for record in variants:
+            run_dir = rr.write_run_record(tmp_path, record)
+            assert rr.read_run_record(run_dir) == record
+
 
 # ---------------------------------------------------------------------------
 # Read-time consistency — path, run id, identity, and hash must agree
@@ -380,6 +479,172 @@ class TestReadConsistency:
         with pytest.raises(rr.InvalidRunRecordError):
             rr.rebuild_index(tmp_path)
         assert (tmp_path / "runs.jsonl").read_bytes() == before  # not truncated or replaced
+
+
+# ---------------------------------------------------------------------------
+# Strict deserialization — every field required, exact JSON types, no coercion
+# ---------------------------------------------------------------------------
+
+
+class TestStrictManifestDeserialization:
+    """Malformed persisted data raises :class:`InvalidRunRecordError`, never a
+    leaked ``AttributeError``/``TypeError``/``KeyError``, and is never
+    normalized with ``str()``/``dict()``/``list()``/truthiness."""
+
+    def _tamper(self, run_dir: Path, mutate: Any) -> None:
+        path = run_dir / "manifest.json"
+        manifest = json.loads(path.read_text())
+        mutate(manifest)
+        path.write_text(json.dumps(manifest))
+
+    @pytest.mark.parametrize(
+        "field",
+        [
+            "schema_version",
+            "run_id",
+            "candidate",
+            "candidate_hash",
+            "mode",
+            "benchmark",
+            "budget_seconds",
+            "leaderboard_valid",
+            "resumed_from",
+            "proposal_status",
+            "run_metadata",
+            "artifact_pointers",
+        ],
+    )
+    def test_every_manifest_field_is_required_individually(
+        self, tmp_path: Path, field: str
+    ) -> None:
+        run_dir = rr.write_run_record(tmp_path, _record())
+        self._tamper(run_dir, lambda m: m.pop(field))
+        with pytest.raises(rr.InvalidRunRecordError, match=f"manifest lacks.*{field}"):
+            rr.read_run_record(run_dir)
+
+    @pytest.mark.parametrize("bad", [True, False, 1.0, "1", None])
+    def test_schema_version_must_be_the_integer_1(self, tmp_path: Path, bad: Any) -> None:
+        run_dir = rr.write_run_record(tmp_path, _record())
+        self._tamper(run_dir, lambda m: m.update(schema_version=bad))
+        with pytest.raises(rr.InvalidRunRecordError, match="schema_version"):
+            rr.read_run_record(run_dir)
+
+    @pytest.mark.parametrize(
+        ("field", "bad"),
+        [
+            ("run_metadata", [["run_date", "2026-06-01"]]),  # dict()-coercible pair list
+            ("run_metadata", []),
+            ("artifact_pointers", "docker/img-a/validated_results/x/"),  # list()-coercible
+            ("artifact_pointers", {}),
+            ("candidate", "img-a"),  # .get() would raise AttributeError
+            ("candidate", ["legacy:img-a"]),
+            ("budget_seconds", "360000"),  # int()-coercible
+            ("leaderboard_valid", "true"),  # truthy
+            ("mode", 7),  # str()-coercible
+        ],
+    )
+    def test_coercible_but_wrong_json_shapes_are_rejected(
+        self, tmp_path: Path, field: str, bad: Any
+    ) -> None:
+        run_dir = rr.write_run_record(tmp_path, _record())
+        self._tamper(run_dir, lambda m: m.update({field: bad}))
+        with pytest.raises(rr.InvalidRunRecordError):
+            rr.read_run_record(run_dir)
+
+    def test_scores_file_must_be_an_object(self, tmp_path: Path) -> None:
+        run_dir = rr.write_run_record(tmp_path, _record())
+        (run_dir / "scores.json").write_text("[1, 2]")
+        with pytest.raises(rr.InvalidRunRecordError, match="objects"):
+            rr.read_run_record(run_dir)
+
+    def test_from_dicts_rejects_non_mapping_inputs(self) -> None:
+        record = _record()
+        with pytest.raises(rr.InvalidRunRecordError, match="manifest must be a JSON object"):
+            rr.RunRecord.from_dicts("not a mapping", record.scores_dict())
+        with pytest.raises(rr.InvalidRunRecordError, match="scores must be a JSON object"):
+            rr.RunRecord.from_dicts(record.manifest_dict(), [1, 2])
+
+
+# ---------------------------------------------------------------------------
+# legacy-tree pointers — identity-bound to the canonical location
+# ---------------------------------------------------------------------------
+
+
+class TestLegacyTreePointerBinding:
+    """A ``legacy-tree`` pointer must be exactly the canonical path for the
+    record's own candidate and run id — never another candidate's artifacts."""
+
+    def test_the_canonical_location_helper(self) -> None:
+        assert rr.legacy_tree_location("img-a", "run-1") == "docker/img-a/validated_results/run-1/"
+        with pytest.raises(rr.InvalidRunRecordError, match="image dir"):
+            rr.legacy_tree_location("img/../a", "run-1")
+        with pytest.raises(rr.InvalidRunRecordError, match="run id"):
+            rr.legacy_tree_location("img-a", "../run-1")
+
+    def test_the_default_record_carries_the_canonical_pointer(self) -> None:
+        record = _record()
+        assert record.artifact_pointers == [
+            {
+                "kind": "legacy-tree",
+                "location": "docker/img-a/validated_results/sos-img-a-2026-06-01T00-00/",
+            }
+        ]
+        record.validate()
+
+    @pytest.mark.parametrize(
+        "location",
+        [
+            "/docker/img-a/validated_results/sos-img-a-2026-06-01T00-00/",  # absolute
+            "/etc/passwd",  # absolute, elsewhere entirely
+            "docker/../secrets/validated_results/sos-img-a-2026-06-01T00-00/",  # traversal
+            "docker/img-a/validated_results/../sos-img-a-2026-06-01T00-00/",  # traversal
+            "docker/img-b/validated_results/sos-img-a-2026-06-01T00-00/",  # another image
+            "docker/img-a/validated_results/other-run/",  # another run
+            "docker/img-a/validated_results/sos-img-a-2026-06-01T00-00",  # no trailing slash
+            "./docker/img-a/validated_results/sos-img-a-2026-06-01T00-00/",  # dot spelling
+        ],
+    )
+    def test_non_canonical_locations_are_rejected(self, location: str) -> None:
+        record = _record(artifact_pointers=[{"kind": rr.LEGACY_TREE_KIND, "location": location}])
+        with pytest.raises(rr.InvalidRunRecordError, match="canonical"):
+            record.validate()
+
+    def test_swapping_the_pointer_to_another_run_is_rejected_on_read(
+        self, tmp_path: Path
+    ) -> None:
+        a = _record()
+        b = _record(run_id="sos-img-a-2026-06-02T00-00")
+        rr.write_run_record(tmp_path, b)
+        run_dir = rr.write_run_record(tmp_path, a)
+        path = run_dir / "manifest.json"
+        manifest = json.loads(path.read_text())
+        manifest["artifact_pointers"][0]["location"] = b.artifact_pointers[0]["location"]
+        path.write_text(json.dumps(manifest))
+        with pytest.raises(rr.InvalidRunRecordError, match="canonical"):
+            rr.read_run_record(run_dir)
+
+    def test_duplicate_legacy_tree_pointers_are_rejected(self) -> None:
+        good = _record().artifact_pointers[0]
+        record = _record(artifact_pointers=[dict(good), dict(good)])
+        with pytest.raises(rr.InvalidRunRecordError, match="duplicate"):
+            record.validate()
+
+    def test_a_legacy_tree_pointer_requires_a_legacy_identity(self) -> None:
+        ident = rr.CandidateIdentity("sha256:abc", "h", "claude", rr.OZOLITH_SCHEME)
+        record = _record(
+            candidate=ident,
+            artifact_pointers=[
+                {"kind": rr.LEGACY_TREE_KIND, "location": "docker/x/validated_results/y/"}
+            ],
+        )
+        with pytest.raises(rr.InvalidRunRecordError, match="legacy candidate identity"):
+            record.validate()
+
+    def test_records_without_a_legacy_tree_pointer_stay_valid(self) -> None:
+        _record(artifact_pointers=[]).validate()
+        _record(
+            artifact_pointers=[{"kind": "artifact-host", "location": "s3://bucket/run"}]
+        ).validate()
 
 
 # ---------------------------------------------------------------------------

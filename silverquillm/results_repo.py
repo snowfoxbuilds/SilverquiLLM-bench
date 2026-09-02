@@ -29,20 +29,27 @@ Rules the module enforces:
 - **Scores use benchmark-neutral keys** (:data:`SCORE_DIMENSIONS`) so a migrated
   SOS record, a smoke record, and a HOB record all have the same shape.
 - **Heavy artifacts never enter the tree.** ``artifact_pointers`` carry
-  ``{"kind", "location"}`` references only.
+  ``{"kind", "location"}`` references only.  A ``legacy-tree`` pointer is
+  identity-bound: its location must be exactly
+  :func:`legacy_tree_location` for the record's own candidate and run id, so
+  a pointer can never select another candidate's artifacts.
 - **Candidate identity is never trusted from a recorded value.**
   ``verified`` is ``False`` until the Candidate Bundle issue (#65) recomputes it.
+- **Legacy candidate keys are injective.** A legacy image dir must already be
+  one safe path segment (the same rule run ids obey) and is used unchanged as
+  the ``results/<candidate-hash>/`` key — nothing is sanitized, so two
+  distinct images can never collide into one directory.
 - **``leaderboard_valid`` has one owner**, :func:`derive_leaderboard_valid`,
   shared by the writer's callers and the legacy migrator.
 
 Public API
 ----------
 ``CandidateIdentity``, ``RunRecord``, ``candidate_hash``, ``legacy_image_dir``,
-``derive_leaderboard_valid``, ``leaderboard_validity_reasons``,
-``normalize_collector_number``, ``write_run_record``, ``read_run_record``,
-``record_file_texts``, ``iter_run_dirs``, ``iter_run_records``,
-``rebuild_index``, ``init_results_repo``, ``resolve_results_repo``,
-``load_benchmark_config``.
+``legacy_tree_location``, ``derive_leaderboard_valid``,
+``leaderboard_validity_reasons``, ``normalize_collector_number``,
+``write_run_record``, ``read_run_record``, ``record_file_texts``,
+``iter_run_dirs``, ``iter_run_records``, ``rebuild_index``,
+``init_results_repo``, ``resolve_results_repo``, ``load_benchmark_config``.
 """
 
 from __future__ import annotations
@@ -83,6 +90,7 @@ __all__ = [
     "iter_run_records",
     "leaderboard_validity_reasons",
     "legacy_image_dir",
+    "legacy_tree_location",
     "load_benchmark_config",
     "normalize_collector_number",
     "read_run_record",
@@ -135,6 +143,33 @@ TEMPLATE_DIR = Path(__file__).resolve().parent / "results_repo_templates"
 _SAFE_SEGMENT_RE = re.compile(r"[^A-Za-z0-9._-]")
 _COLLECTOR_PREFIX_RE = re.compile(r"^[A-Za-z]+_")
 
+#: Every field a schema-v1 ``manifest.json`` carries.  All are required on
+#: read; nothing is defaulted from an absent key.
+_MANIFEST_FIELDS: tuple[str, ...] = (
+    "schema_version",
+    "run_id",
+    "candidate",
+    "candidate_hash",
+    "mode",
+    "benchmark",
+    "budget_seconds",
+    "leaderboard_valid",
+    "resumed_from",
+    "proposal_status",
+    "run_metadata",
+    "artifact_pointers",
+)
+
+
+def _is_safe_segment(value: str) -> bool:
+    """One safe path segment: no separators, no whitespace, no leading dot."""
+    return (
+        bool(value)
+        and value not in {".", ".."}
+        and not value.startswith(".")
+        and (_SAFE_SEGMENT_RE.search(value) is None)
+    )
+
 
 # ---------------------------------------------------------------------------
 # Errors
@@ -178,9 +213,18 @@ class CandidateIdentity:
 
     @classmethod
     def legacy(cls, image_dir: str) -> CandidateIdentity:
-        """Identity of a run from the legacy ``docker/<image_dir>/`` lineage."""
-        if not image_dir or image_dir in {".", ".."} or "/" in image_dir:
-            raise InvalidRunRecordError(f"invalid legacy image dir: {image_dir!r}")
+        """Identity of a run from the legacy ``docker/<image_dir>/`` lineage.
+
+        *image_dir* must already be one safe path segment (the rule run ids
+        obey): the name becomes the ``results/<candidate-hash>/`` key
+        unchanged, never sanitized, so distinct images can never collide.
+        """
+        if not isinstance(image_dir, str) or not _is_safe_segment(image_dir):
+            raise InvalidRunRecordError(
+                f"invalid legacy image dir: {image_dir!r}; must be one safe path "
+                "segment ([A-Za-z0-9._-], no leading dot) — legacy names are used "
+                "unchanged as the candidate directory key, never sanitized"
+            )
         token = f"{LEGACY_SCHEME}:{image_dir}"
         return cls(
             base_image_digest=token,
@@ -189,6 +233,47 @@ class CandidateIdentity:
             scheme=LEGACY_SCHEME,
             verified=False,
         )
+
+    def validate(self) -> None:
+        """Raise :class:`InvalidRunRecordError` unless the identity is well-formed.
+
+        The one identity rule, shared by every path an identity travels:
+        construction (:meth:`legacy`), persistence (``RunRecord.validate()``
+        runs before every write) and deserialization (:meth:`from_dict`) — so
+        the writer can never produce an identity the reader rejects.
+        """
+        for key in ("scheme", "base_image_digest", "instruction_hash", "adapter_identity"):
+            value = getattr(self, key)
+            if not isinstance(value, str) or not value:
+                raise InvalidRunRecordError(
+                    f"candidate identity {key} must be a non-empty string, got {value!r}"
+                )
+        if not isinstance(self.verified, bool):
+            raise InvalidRunRecordError(
+                f"candidate identity verified must be a JSON boolean, got {self.verified!r}"
+            )
+        if self.verified is not False:
+            raise InvalidRunRecordError(
+                "a recorded identity is never verified; #65 recomputes identity "
+                "from the Candidate Bundle"
+            )
+        if self.scheme == LEGACY_SCHEME:
+            token = self.base_image_digest
+            prefix = f"{LEGACY_SCHEME}:"
+            image_dir = token[len(prefix) :] if token.startswith(prefix) else ""
+            if not token.startswith(prefix) or not _is_safe_segment(image_dir):
+                raise InvalidRunRecordError(
+                    "legacy identity fields must carry 'legacy:<image-dir>' with a "
+                    f"safe image dir (one path segment, no leading dot), got {token!r}"
+                )
+            if not (self.instruction_hash == self.adapter_identity == token):
+                raise InvalidRunRecordError(
+                    "legacy identity fields disagree; all three must carry the same "
+                    f"'legacy:<image-dir>' token, got {token!r}, "
+                    f"{self.instruction_hash!r}, {self.adapter_identity!r}"
+                )
+        elif self.scheme != OZOLITH_SCHEME:
+            raise InvalidRunRecordError(f"unknown candidate identity scheme: {self.scheme!r}")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -203,51 +288,26 @@ class CandidateIdentity:
     def from_dict(cls, data: Mapping[str, Any]) -> CandidateIdentity:
         """Deserialize a recorded identity, strictly.
 
-        A recorded value is a label, never evidence: every field must already
-        have the exact type and shape the writer emits — nothing is coerced —
-        and ``verified`` must be the literal JSON ``false``.  Recomputation
-        from a Candidate Bundle (#65) is the only path to a verified identity.
+        A recorded value is a label, never evidence: the payload must be a
+        JSON object and every field must already have the exact type and
+        shape the writer emits — nothing is coerced — with ``verified`` the
+        literal JSON ``false``.  Recomputation from a Candidate Bundle (#65)
+        is the only path to a verified identity.  The rules are
+        :meth:`validate`, the same ones the writer enforces.
         """
-        for key in ("scheme", "base_image_digest", "instruction_hash", "adapter_identity"):
-            value = data.get(key)
-            if not isinstance(value, str) or not value:
-                raise InvalidRunRecordError(
-                    f"candidate identity {key} must be a non-empty string, got {value!r}"
-                )
-        verified = data.get("verified")
-        if "verified" not in data or not isinstance(verified, bool):
+        if not isinstance(data, Mapping):
             raise InvalidRunRecordError(
-                f"candidate identity verified must be a JSON boolean, got {verified!r}"
+                f"candidate identity must be a JSON object, got {data!r}"
             )
-        if verified is not False:
-            raise InvalidRunRecordError(
-                "a recorded identity is never verified; #65 recomputes identity "
-                "from the Candidate Bundle"
-            )
-        scheme = data["scheme"]
-        if scheme == LEGACY_SCHEME:
-            token = data["base_image_digest"]
-            prefix = f"{LEGACY_SCHEME}:"
-            if not token.startswith(prefix) or not token[len(prefix) :]:
-                raise InvalidRunRecordError(
-                    f"legacy identity fields must carry 'legacy:<image-dir>', got {token!r}"
-                )
-            if not (data["instruction_hash"] == data["adapter_identity"] == token):
-                raise InvalidRunRecordError(
-                    "legacy identity fields disagree; all three must carry the same "
-                    f"'legacy:<image-dir>' token, got {token!r}, "
-                    f"{data['instruction_hash']!r}, {data['adapter_identity']!r}"
-                )
-            return cls.legacy(token[len(prefix) :])
-        if scheme == OZOLITH_SCHEME:
-            return cls(
-                base_image_digest=data["base_image_digest"],
-                instruction_hash=data["instruction_hash"],
-                adapter_identity=data["adapter_identity"],
-                scheme=scheme,
-                verified=False,
-            )
-        raise InvalidRunRecordError(f"unknown candidate identity scheme: {scheme!r}")
+        identity = cls(
+            base_image_digest=data.get("base_image_digest"),
+            instruction_hash=data.get("instruction_hash"),
+            adapter_identity=data.get("adapter_identity"),
+            scheme=data.get("scheme"),
+            verified=data.get("verified"),
+        )
+        identity.validate()
+        return identity
 
 
 def legacy_image_dir(identity: CandidateIdentity) -> str | None:
@@ -260,42 +320,45 @@ def legacy_image_dir(identity: CandidateIdentity) -> str | None:
     return identity.base_image_digest[len(prefix) :] or None
 
 
-def _sanitize_segment(value: str) -> str:
-    return _SAFE_SEGMENT_RE.sub("_", value)
-
-
 def candidate_hash(identity: CandidateIdentity) -> str:
     """The ``results/<candidate-hash>/`` directory key for *identity*.
 
-    Instruction-independent: derived from the identity, not the run.  For the
-    legacy scheme it is the sanitized image dir name.  The ``ozolith-v1``
-    key is defined by the identity-hash spec that lands with #65.
+    Instruction-independent: derived from the identity, not the run, and
+    defined only for a valid identity (*identity* is validated first).  For
+    the legacy scheme it is the image dir name **unchanged** — legacy names
+    are already safe path segments, so the mapping is injective and two
+    distinct images can never share a directory.  The ``ozolith-v1`` key is
+    defined by the identity-hash spec that lands with #65.
     """
+    identity.validate()
     if identity.scheme == LEGACY_SCHEME:
-        image_dir = legacy_image_dir(identity)
-        if image_dir is None:
-            raise InvalidRunRecordError(
-                "legacy identity must carry 'legacy:<image-dir>' in base_image_digest"
-            )
-        return _sanitize_segment(image_dir)
+        return identity.base_image_digest[len(f"{LEGACY_SCHEME}:") :]
     raise ResultsRepoError(
         f"no candidate-hash rule for identity scheme {identity.scheme!r}; "
         f"only {LEGACY_SCHEME!r} is defined until the Candidate Bundle issue (#65) lands"
     )
 
 
+def legacy_tree_location(image_dir: str, run_id: str) -> str:
+    """The canonical bench-repo-relative ``legacy-tree`` pointer location.
+
+    Exactly ``docker/<image-dir>/validated_results/<run-id>/``.  Both parts
+    must be safe path segments, so the location can never be absolute, escape
+    the bench root, or name another candidate's artifacts.  A record's
+    ``legacy-tree`` pointer must equal this string for the record's own
+    candidate and run id — validated on write, on read, and again by the
+    harvester before the pointer is followed.
+    """
+    if not isinstance(image_dir, str) or not _is_safe_segment(image_dir):
+        raise InvalidRunRecordError(f"invalid legacy image dir: {image_dir!r}")
+    if not isinstance(run_id, str) or not _is_safe_segment(run_id):
+        raise InvalidRunRecordError(f"invalid run id: {run_id!r}")
+    return f"docker/{image_dir}/validated_results/{run_id}/"
+
+
 # ---------------------------------------------------------------------------
 # Run record
 # ---------------------------------------------------------------------------
-
-
-def _is_safe_segment(value: str) -> bool:
-    return (
-        bool(value)
-        and value not in {".", ".."}
-        and not value.startswith(".")
-        and (_SAFE_SEGMENT_RE.search(value) is None)
-    )
 
 
 @dataclass
@@ -331,6 +394,7 @@ class RunRecord:
             )
         if not isinstance(self.candidate, CandidateIdentity):
             raise InvalidRunRecordError("candidate must be a CandidateIdentity")
+        self.candidate.validate()
         for name in ("mode", "benchmark"):
             value = getattr(self, name)
             if not isinstance(value, str) or not value:
@@ -371,6 +435,25 @@ class RunRecord:
                     raise InvalidRunRecordError(
                         f"artifact pointer lacks a non-empty {key!r}: {pointer!r}"
                     )
+        legacy_pointers = [p for p in self.artifact_pointers if p["kind"] == LEGACY_TREE_KIND]
+        if legacy_pointers:
+            image_dir = legacy_image_dir(self.candidate)
+            if image_dir is None:
+                raise InvalidRunRecordError(
+                    "a legacy-tree pointer requires a legacy candidate identity"
+                )
+            expected = legacy_tree_location(image_dir, self.run_id)
+            if len(legacy_pointers) > 1:
+                raise InvalidRunRecordError(
+                    f"duplicate legacy-tree pointers; a record carries at most one, "
+                    f"at exactly {expected!r}"
+                )
+            location = legacy_pointers[0]["location"]
+            if location != expected:
+                raise InvalidRunRecordError(
+                    f"legacy-tree location must be exactly the canonical identity-bound "
+                    f"path {expected!r}, got {location!r}"
+                )
 
     # -- serialization ------------------------------------------------------
 
@@ -397,23 +480,69 @@ class RunRecord:
 
     @classmethod
     def from_dicts(cls, manifest: Mapping[str, Any], scores: Mapping[str, Any]) -> RunRecord:
-        try:
-            record = cls(
-                run_id=manifest["run_id"],
-                candidate=CandidateIdentity.from_dict(manifest["candidate"]),
-                mode=manifest["mode"],
-                benchmark=manifest["benchmark"],
-                budget_seconds=manifest["budget_seconds"],
-                leaderboard_valid=manifest["leaderboard_valid"],
-                resumed_from=manifest.get("resumed_from"),
-                run_metadata=dict(manifest.get("run_metadata") or {}),
-                proposal_status=manifest.get("proposal_status"),
-                scores=dict(scores),
-                artifact_pointers=list(manifest.get("artifact_pointers") or []),
+        """Deserialize a persisted record, strictly.
+
+        Every schema-v1 manifest field must be present with the exact JSON
+        type the writer emits — no default fills in for an absent key, and
+        no malformed value is normalized with ``str()``, ``dict()``,
+        ``list()`` or truthiness.  Any violation is
+        :class:`InvalidRunRecordError`; malformed persisted data never
+        surfaces as ``AttributeError``, ``TypeError`` or a raw ``KeyError``.
+        """
+        if not isinstance(manifest, Mapping):
+            raise InvalidRunRecordError(f"manifest must be a JSON object, got {manifest!r}")
+        if not isinstance(scores, Mapping):
+            raise InvalidRunRecordError(f"scores must be a JSON object, got {scores!r}")
+        missing = [key for key in _MANIFEST_FIELDS if key not in manifest]
+        if missing:
+            raise InvalidRunRecordError(f"manifest lacks {', '.join(missing)}")
+        version = manifest["schema_version"]
+        if isinstance(version, bool) or not isinstance(version, int) or version != SCHEMA_VERSION:
+            raise InvalidRunRecordError(
+                f"schema_version must be the integer {SCHEMA_VERSION}, got {version!r}"
             )
-        except KeyError as exc:
-            raise InvalidRunRecordError(f"manifest lacks {exc}") from exc
+        if "workload" in manifest:
+            raise InvalidRunRecordError("manifest carries the retired 'workload' field")
+        candidate_data = manifest["candidate"]
+        if not isinstance(candidate_data, Mapping):
+            raise InvalidRunRecordError(
+                f"manifest candidate must be a JSON object, got {candidate_data!r}"
+            )
+        run_metadata = manifest["run_metadata"]
+        if not isinstance(run_metadata, dict):
+            raise InvalidRunRecordError(
+                f"run_metadata must be a JSON object, got {run_metadata!r}"
+            )
+        artifact_pointers = manifest["artifact_pointers"]
+        if not isinstance(artifact_pointers, list):
+            raise InvalidRunRecordError(
+                f"artifact_pointers must be a JSON array, got {artifact_pointers!r}"
+            )
+        record = cls(
+            run_id=manifest["run_id"],
+            candidate=CandidateIdentity.from_dict(candidate_data),
+            mode=manifest["mode"],
+            benchmark=manifest["benchmark"],
+            budget_seconds=manifest["budget_seconds"],
+            leaderboard_valid=manifest["leaderboard_valid"],
+            resumed_from=manifest["resumed_from"],
+            run_metadata=run_metadata,
+            proposal_status=manifest["proposal_status"],
+            scores=dict(scores),
+            artifact_pointers=artifact_pointers,
+        )
         record.validate()
+        recorded_hash = manifest["candidate_hash"]
+        if not isinstance(recorded_hash, str) or not recorded_hash:
+            raise InvalidRunRecordError(
+                f"manifest candidate_hash must be a non-empty string, got {recorded_hash!r}"
+            )
+        expected_hash = candidate_hash(record.candidate)
+        if recorded_hash != expected_hash:
+            raise InvalidRunRecordError(
+                f"manifest candidate_hash {recorded_hash!r} does not match "
+                f"the recorded candidate ({expected_hash!r})"
+            )
         return record
 
 
@@ -567,30 +696,16 @@ def read_run_record(run_dir: Path) -> RunRecord:
     scores = _load_json(run_dir / SCORES_FILENAME)
     if not isinstance(manifest, dict) or not isinstance(scores, dict):
         raise InvalidRunRecordError(f"{run_dir}: manifest.json and scores.json must be objects")
-    if manifest.get("schema_version") != SCHEMA_VERSION:
-        raise InvalidRunRecordError(
-            f"{run_dir}: schema_version {manifest.get('schema_version')!r} != {SCHEMA_VERSION}"
-        )
-    if "workload" in manifest:
-        raise InvalidRunRecordError(f"{run_dir}: manifest carries the retired 'workload' field")
-    record = RunRecord.from_dicts(manifest, scores)
+    try:
+        record = RunRecord.from_dicts(manifest, scores)
+    except InvalidRunRecordError as exc:
+        raise InvalidRunRecordError(f"{run_dir}: {exc}") from exc
     if record.run_id != run_dir.name:
         raise InvalidRunRecordError(
             f"{run_dir}: manifest run_id {record.run_id!r} does not match the "
             f"directory name {run_dir.name!r}"
         )
-    recorded_hash = manifest.get("candidate_hash")
-    if not isinstance(recorded_hash, str) or not recorded_hash:
-        raise InvalidRunRecordError(
-            f"{run_dir}: manifest candidate_hash must be a non-empty string, "
-            f"got {recorded_hash!r}"
-        )
     expected_hash = candidate_hash(record.candidate)
-    if recorded_hash != expected_hash:
-        raise InvalidRunRecordError(
-            f"{run_dir}: manifest candidate_hash {recorded_hash!r} does not match "
-            f"the recorded candidate ({expected_hash!r})"
-        )
     if run_dir.parent.name != expected_hash:
         raise InvalidRunRecordError(
             f"{run_dir}: record sits under {run_dir.parent.name!r}, not its "
