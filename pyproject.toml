@@ -33,8 +33,9 @@ dev = [
 include = ["silverquillm*"]
 
 [tool.setuptools.package-data]
-# The results-repo schema doc that `silverquillm results-init` writes.
-silverquillm = ["results_repo_templates/*.md"]
+# The results-repo schema doc that `silverquillm results-init` writes, and the
+# Benchmark Mode task templates staged into the job dir's input/prompt.md.
+silverquillm = ["results_repo_templates/*.md", "templates/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

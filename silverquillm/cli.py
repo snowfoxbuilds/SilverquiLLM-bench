@@ -39,6 +39,7 @@ ensure_workspace_on_path()
 
 from silverquillm.card_loader import load_all_card_specs
 from silverquillm.card_names import build_card_name_map
+from silverquillm.jobdir import pointer_prompt
 from silverquillm.replay.cli import validate as _replay_validate
 from silverquillm.runner import ContainerLifecycle
 from silverquillm.token_report import render as render_token_report
@@ -856,6 +857,119 @@ def smoke(image: str) -> None:
     finally:
         _runner_log_dir = None
         shutil.rmtree(staging_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# run-contract command (Contract Run driver)
+# ---------------------------------------------------------------------------
+
+
+def _container_agent_runner(
+    *, image: str, run_id: str, run_dir: Path, timeout: int, hang_timeout: int,
+    card_name_map: dict[str, str] | None = None,
+):
+    """Return an ``agent_runner`` that launches the container for a Contract Run.
+
+    The job dir is bind-mounted at ``/job``; the constant pointer prompt is
+    passed to the image via ``SILVERQUILLM_POINTER_PROMPT`` (and written to
+    ``workspace/prompt.md`` by the driver for entrypoints that read it there).
+    """
+    def _run(*, workspace: Path, output: Path, job_dir: Path) -> None:
+        lifecycle = ContainerLifecycle(
+            image=image,
+            container_name=f"sqm-{run_id}",
+            workspace=workspace,
+            output=output,
+            hard_timeout=timeout,
+            hang_timeout=hang_timeout,
+            env_args=[*_api_key_env_args(), "-e", f"SILVERQUILLM_POINTER_PROMPT={pointer_prompt()}"],
+            run_dir=run_dir,
+            card_name_map=card_name_map or {},
+            job_dir=job_dir,
+        )
+        lifecycle.run()
+
+    return _run
+
+
+@main.command("run-contract")
+@click.option("--image", required=True, help="Docker image name (interim; #65 adds --candidate)")
+@click.option("--benchmark", "benchmark_id", required=True, help="Benchmark id (e.g. smoke)")
+@click.option("--mode", "mode_name", default="basic", show_default=True, help="Benchmark Mode (basic|planned)")
+@click.option("--timeout", default=3600, type=int, show_default=True, help="Agent budget in seconds")
+@click.option("--hang-timeout", default=900, type=int, show_default=True, help="Hang timeout in seconds")
+@click.option(
+    "--results-dir", default=None, type=click.Path(file_okay=False, path_type=Path),
+    help="Run-artifacts directory (default: docker/<image_dir>/results/)",
+)
+@click.option(
+    "--results-repo", default=None, type=click.Path(file_okay=False, path_type=Path),
+    help="Results repo to write the RunRecord into (or $SILVERQUILLM_RESULTS_REPO)",
+)
+def run_contract(
+    image: str,
+    benchmark_id: str,
+    mode_name: str,
+    timeout: int,
+    hang_timeout: int,
+    results_dir: Path | None,
+    results_repo: Path | None,
+) -> None:
+    """Drive a candidate through the full job-dir contract against a benchmark."""
+    from silverquillm.contract import drive_contract_run
+    from silverquillm.jobdir import BenchmarkNotRunnableError, load_benchmark
+    from silverquillm.modes import UnknownModeError, get_mode
+    from silverquillm.results_repo import resolve_results_repo
+
+    global _runner_log_dir
+    try:
+        benchmark = load_benchmark(benchmark_id)
+        mode = get_mode(mode_name)
+    except (BenchmarkNotRunnableError, UnknownModeError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if results_dir is None:
+        results_dir = _image_results_dir(image)
+    run_name = _make_run_name(set_code=benchmark.id, image=image, results_dir=results_dir)
+    run_dir = results_dir / run_name
+    run_dir.mkdir(parents=True, exist_ok=True)
+    _runner_log_dir = run_dir
+
+    repo = resolve_results_repo(results_repo)
+
+    _runner_log(f"Starting contract run: {run_name}")
+    _runner_log(f"Image: {image}  Benchmark: {benchmark.id}  Mode: {mode.name}  Timeout: {timeout}s")
+
+    agent_runner = _container_agent_runner(
+        image=image, run_id=run_name, run_dir=run_dir,
+        timeout=timeout, hang_timeout=hang_timeout,
+    )
+    try:
+        result = drive_contract_run(
+            run_dir=run_dir,
+            run_id=run_name,
+            benchmark=benchmark,
+            mode=mode,
+            budget_seconds=timeout,
+            agent_runner=agent_runner,
+            results_repo=repo,
+            image=image,
+        )
+    finally:
+        _runner_log_dir = None
+
+    for warning in result.warnings:
+        _runner_log(warning, err=True)
+    _runner_log(f"Proposal status: {result.proposal_status}")
+    _runner_log(
+        "Scores — "
+        f"card_correctness={result.eval_result.sos_pass_rate:.3f} "
+        f"fdn_regression={result.eval_result.fdn_pass_rate:.3f} "
+        f"engine_regression={result.eval_result.engine_pass_rate:.3f}"
+    )
+    if result.record_dir is not None:
+        _runner_log(f"RunRecord written: {result.record_dir}")
+    _runner_log(f"Contract run complete: {run_name}")
 
 
 # ---------------------------------------------------------------------------

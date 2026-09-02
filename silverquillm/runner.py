@@ -50,11 +50,15 @@ class ContainerLifecycle:
         card_name_map: dict[str, str] | None = None,
         cpus: str = "2",
         memory: str = "16g",
+        job_dir: Path | None = None,
     ):
         self.image = image
         self.container_name = container_name
         self.workspace = Path(workspace)
         self.output = Path(output)
+        # Contract Run job directory, bind-mounted read-write at /job beside
+        # /workspace (substrate parity). None on the legacy --image path.
+        self.job_dir = Path(job_dir) if job_dir else None
         self.hard_timeout = hard_timeout
         self.hang_timeout = hang_timeout
         self.env_args = env_args or []
@@ -84,12 +88,14 @@ class ContainerLifecycle:
         """Launch container, stream output, enforce timeouts, return result."""
         self.output.mkdir(parents=True, exist_ok=True)
 
+        job_mount = ["-v", f"{self.job_dir}:/job"] if self.job_dir else []
         cmd = [
             "docker", "run", "--rm", "--name", self.container_name,
             "--runtime", "runc", "--network=host",
             "--cpus", self.cpus, "--memory", self.memory,
             "-v", f"{self.workspace}:/workspace",
             "-v", f"{self.output}:/output",
+            *job_mount,
             *self.env_args,
             self.image,
         ]

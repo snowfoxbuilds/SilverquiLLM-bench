@@ -128,6 +128,38 @@ class TestLifecycleResult:
 # ---------------------------------------------------------------------------
 
 
+class TestJobDirMount:
+    """The Contract Run job dir is bind-mounted at /job beside /workspace."""
+
+    def _docker_cmd(self, mock_proc, **kwargs) -> list[str]:
+        with patch("silverquillm.runner.subprocess.Popen", return_value=mock_proc) as popen, \
+             patch("silverquillm.runner.subprocess.run"):
+            ContainerLifecycle(hard_timeout=300, **kwargs).run()
+        return popen.call_args.args[0]
+
+    def test_job_dir_mounted_read_write_at_job(self, workspace, output, tmp_path):
+        job = tmp_path / "job"
+        job.mkdir()
+        cmd = self._docker_cmd(
+            _make_mock_popen(exit_code=0, exit_delay=0.1),
+            image="img", container_name="ctr",
+            workspace=workspace, output=output, job_dir=job,
+        )
+        assert "-v" in cmd
+        assert f"{job}:/job" in cmd
+        # /workspace and /output mounts are still present.
+        assert f"{workspace}:/workspace" in cmd
+        assert f"{output}:/output" in cmd
+
+    def test_no_job_mount_on_legacy_path(self, workspace, output):
+        cmd = self._docker_cmd(
+            _make_mock_popen(exit_code=0, exit_delay=0.1),
+            image="img", container_name="ctr",
+            workspace=workspace, output=output,
+        )
+        assert not any(m.endswith(":/job") for m in cmd)
+
+
 class TestNormalExit:
     """Mock process exits cleanly with code 0 after writing stdout data."""
 
