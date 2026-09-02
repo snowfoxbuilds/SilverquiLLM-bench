@@ -19,7 +19,6 @@ Documentation and specification files for the SilverquiLLM-bench project. Contai
 | `specs/17LANDS-REPLAY-SCHEMA.md` | 17lands replay data schema spec. |
 | `engine_api.md` | **Auto-generated** engine API reference (~5,000 tokens) — produced by `silverquillm/docs_gen.py` via AST extraction. Used as agent context. |
 | `test_utils.md` | **API reference** for test helpers: `create_game`, `set_board_state`, `cast_spell`, `advance_to_phase`, `declare_attackers`, `declare_blockers`. Import path: `from test_utils import ...` (not `tests.test_utils`). |
-| `TODO_COMPLETED.md` | Record of completed TODO items. |
 | `HELP.md` | Help and troubleshooting guide. |
 
 ## Dependencies

@@ -14,7 +14,7 @@ Docker image packaging a single coding agent with its CLI, entrypoint, mode (bli
 
 **Audited Eval**
 
-The only evaluation method in v1: audited tests run against agent output post-run. Three dimensions: SOS card correctness, FDN card regression, engine regression. Tests are LLM-drafted, then failure-reviewed by a human. The authoritative measure of correctness.
+The only evaluation method in v1: audited tests run against agent output post-run. Three dimensions: target-set card correctness (SOS card correctness for SOS; HOB card correctness for the HOB-generation benchmarks), FDN card regression, engine regression. Tests are LLM-drafted, then failure-reviewed by a human. The authoritative measure of correctness.
 
 *Avoid*: "gold eval", "human eval"
 
@@ -44,9 +44,9 @@ Classification of card difficulty: trivial (1×), simple (2×), medium (3×), co
 
 **Card Pool**
 
-Synonym for Draft Set when referring to the set of cards included in a benchmark. The SOS Card Pool = SOS Draft Set.
+The set of target cards that make up one benchmark's problem set ("problem set" is the run-shape phrasing of the same thing). For SOS the Card Pool is the whole SOS Draft Set. The HOB benchmarks' Card Pools are three **selective subsets** of the HOB set — operator-picked, listed in HOB-BENCHMARKS.md, referenced by first-printing collector number — so Card Pool is no longer a synonym for Draft Set (grilling 2026-09-02).
 
-*Avoid*: "target set" (deprecated — was ambiguous about whether it meant a single Scryfall set code or the full draft pool)
+*Avoid*: "target set" (deprecated — was ambiguous about whether it meant a single Scryfall set code or the full draft pool), "workload" (retired)
 
 **Checkpoint (MSH)** *(retired — grilling 2026-08-27)*
 
@@ -80,7 +80,7 @@ The mechanism for improving audited tests from harvested run results. **Manual v
 
 **Draft Set**
 
-All cards contained in draft booster packs for a given MTG release. A Draft Set may span multiple Scryfall set codes. The SOS Draft Set = SOS base (cn 001–271). The FDN Draft Set = FDN 001–291 + SPG 074–083. Draft Set defines the card pool for Replay Validation because 17lands replays are from draft games.
+All cards contained in draft booster packs for a given MTG release. A Draft Set may span multiple Scryfall set codes. The SOS Draft Set = SOS base (cn 001–271). The FDN Draft Set = FDN 001–291 + SPG 074–083. The HOB set (`data/sets/hob.json`) is 321 printings of 193 unique cards — first printings at HOB 001–193, alternate printings at 194–321 — and the HOB benchmarks draw selective Card Pools from it rather than using the set whole (grilling 2026-09-02). Draft Set defines the card pool for Replay Validation because 17lands replays are from draft games.
 
 *Avoid*: "target set" (deprecated), "set" alone (ambiguous — could mean a single Scryfall set code)
 
@@ -332,7 +332,7 @@ The `priority_loop(game)` advancer audited tests use to move the game forward by
 
 ## Relationships
 
-- A Benchmark Run evaluates one Agent Container (one agent + one model) against one Draft Set.
+- A Benchmark Run evaluates one Agent Container (one agent + one model) against one benchmark's Card Pool — the whole SOS Draft Set for SOS, a selective HOB subset for each HOB benchmark.
 - A Benchmark Run launches one container session. The agent receives the benchmark's entire problem set (every target card) in a single Workspace — one benchmark = one problem set; there is no card-subset "workload" notion (grilling 2026-08-27).
 - FDN cards are in-context examples (filled `card_impl.py` + colocated `tests.py` demonstrating the testing pattern). SOS cards are benchmark targets (SOS Card Stubs to fill in).
 - Each agent produces `card_impl.py` per SOS card. In Tested Mode, also `tests.py` per card.

@@ -50,7 +50,7 @@ Agent-written tests are harvested as artifacts but not scored in v1. Cross-eval 
 | `TESTING-CONVENTIONS.md` | Test naming, fixtures, assertions, and conventions for audited tests |
 | `17LANDS-REPLAY-SCHEMA.md` | GRE JSON replay format for engine correctness validation |
 | `AUDITED-TEST-IMPROVEMENT-WORKFLOW.md` | Harvest script + combined investigation/discovery skill (manual v1 Test Harvester); harvest format, fault-attribution triage, promotion bar, cadence, tier gating |
-| `HOB-BENCHMARKS.md` | The three HOB-generation benchmarks (hob-easy/medium/hard): pools, run shape, engine freeze + tests-as-envelope, instruction docs, candidate contract |
+| `HOB-BENCHMARKS.md` | The three HOB-generation benchmarks (hob-easy/medium/hard): picked pools (23/5/5, selective subsets of the HOB set), run shape, engine freeze + tests-as-envelope, instruction docs, candidate contract |
 | `DECISION-MODEL.md` | V2 engine Player Query / Player Decision protocol, Game Symbols/Refs, Intents, DeterministicPlayer (V2) (renamed from MSH-DECISION-MODEL.md — engine-level, pool-neutral) |
 | `MSH-BENCHMARK.md` | ABANDONED as a benchmark (2026-08-27) — pool retired unused; pool-agnostic work carried into HOB |
 | `MSH-CHECKPOINTS.md` | RETIRED (2026-08-27) — checkpoint/capability-DAG design obsoleted by HOB's small single-run problem sets |
