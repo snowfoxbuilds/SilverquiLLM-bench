@@ -14,7 +14,16 @@ from silverquillm import queue_view
 from silverquillm import scheduler as sched
 from silverquillm.cli import main
 from tests.candidate_fixtures import make_candidate_dir
-from tests.test_scheduler import REPO_ROOT, Clock, StubExecutor, spec, write_batch
+from tests.test_scheduler import (
+    HOST,
+    REPO_ROOT,
+    Clock,
+    FakeContainers,
+    StubExecutor,
+    leave_running,
+    spec,
+    write_batch,
+)
 
 T0 = datetime(2026, 9, 3, 12, 0, tzinfo=UTC)
 
@@ -35,39 +44,68 @@ def world(tmp_path: Path) -> dict:
     write_batch(batches, "a", [spec(candidate), spec(candidate, mode="planned")])
     write_batch(batches, "c-later", [spec(candidate, budget=999)], not_before="2027-01-01T00:00:00Z")
     (batches / "b-broken.toml").write_text("runs = 3\n", encoding="utf-8")
+    write_batch(batches, "d-nostate", [spec(candidate, budget=5)], admit=False)
     executor = StubExecutor([sched.RunOutcome(ok=False, summary="[timeout] at agent: agent timed out", failure_class="timeout")])
-    sched.Scheduler(batches, executor=executor, repo_root=REPO_ROOT, runs_root=tmp_path / "runs", now=Clock(T0), sleep=lambda s: None, log=lambda m: None).run_until_idle()
+    sched.Scheduler(
+        batches, executor=executor, container_runtime=FakeContainers(), repo_root=REPO_ROOT,
+        runs_root=tmp_path / "runs", now=Clock(T0), sleep=lambda s: None, log=lambda m: None, hostname=HOST,
+    ).run_until_idle()
     return {"batches": batches, "candidate": candidate}
 
 
 class TestQueueLs:
-    def test_shows_every_batch_state_and_the_malformed_one_without_writing(self, world: dict) -> None:
+    def test_shows_every_batch_state_the_malformed_and_the_blocked_without_writing(self, world: dict) -> None:
         batches = world["batches"]
         before = tree(batches)
-        view = queue_view.build_queue_view(batches, now=T0)
-        lines = queue_view.render_queue(view, width=200)
+        view = queue_view.build_queue_view(batches, now=T0, hostname=HOST)
+        lines = queue_view.render_queue(view, width=400)
         text = "\n".join(lines)
         assert tree(batches) == before, "queue ls is read-only"
         assert view.scheduler_running is False and "scheduler: not running" in lines[0]
         by_id = {b.id: b for b in view.batches}
-        assert list(by_id) == ["a", "b-broken", "c-later"]
-        assert by_id["a"].counts == {"pending": 0, "running": 0, "done": 1, "failed": 1}
+        assert list(by_id) == ["a", "b-broken", "c-later", "d-nostate"]
+        assert by_id["a"].counts == {"pending": 0, "running": 0, "done": 1, "failed": 1} and by_id["a"].blocked == ""
         assert [r.state for r in by_id["a"].runs] == ["failed", "done"]
         assert by_id["a"].runs[0].hash8 and by_id["a"].runs[0].run_id.startswith("smoke-fixture-claude--")
         assert "MALFORMED" in by_id["b-broken"].error and by_id["b-broken"].runs == []
         assert by_id["c-later"].due is False and by_id["c-later"].not_before == "2027-01-01T00:00:00+00:00"
         assert [r.state for r in by_id["c-later"].runs] == ["pending"] and by_id["c-later"].runs[0].budget_seconds == 999
+        # Replay protection: the batch without committed state is blocked, its
+        # entries shown pending, and the acknowledgement named.
+        assert by_id["d-nostate"].block_kind == sched.BLOCK_MISSING_STATE
+        assert [r.state for r in by_id["d-nostate"].runs] == ["pending"]
         assert "a  not_before=- due=yes  pending=0 running=0 done=1 failed=1" in text
         assert "!! MALFORMED (skipped by the scheduler)" in text
         assert "c-later  not_before=2027-01-01T00:00:00+00:00 due=no  pending=1" in text
+        assert "d-nostate  not_before=- due=yes  pending=1 running=0 done=0 failed=0  BLOCKED" in text
+        assert "!! BLOCKED [missing-state]" in text and "--replay-without-state d-nostate" in text and "REPLAY" in text
+        narrow = "\n".join(queue_view.render_queue(view, width=100))
+        assert "--replay-without-state d-nostate" in narrow, "a narrow terminal still shows the command"
         assert "agent timed out" in text and "planned" in text
+        assert str(os.getpid()) not in text and HOST not in text
 
-    def test_a_fresh_queue_creates_no_state_dir(self, tmp_path: Path) -> None:
+    def test_a_fresh_queue_creates_no_state_dir_and_reports_the_block(self, tmp_path: Path) -> None:
         batches = tmp_path / "batches"
         batches.mkdir()
-        write_batch(batches, "a", [spec("candidates/nope")])
-        queue_view.render_queue(queue_view.build_queue_view(batches))
+        write_batch(batches, "a", [spec("candidates/nope")], admit=False)
+        lines = queue_view.render_queue(queue_view.build_queue_view(batches), width=400)
         assert sorted(p.name for p in batches.iterdir()) == ["a.toml"]
+        assert any("BLOCKED [missing-state]" in line for line in lines)
+
+    def test_an_abandoned_run_from_another_host_is_reported(self, tmp_path: Path) -> None:
+        batches = tmp_path / "batches"
+        batches.mkdir()
+        candidate = make_candidate_dir(tmp_path / "cands", slug="fixture-claude")
+        write_batch(batches, "a", [spec(candidate), spec(candidate)])
+        leave_running(batches, "a", candidate, "smoke-x-2026-09-03T11-00", runtime_host=None)
+        before = tree(batches)
+        view = queue_view.build_queue_view(batches, now=T0, hostname=HOST)
+        item = view.batches[0]
+        assert item.block_kind == sched.BLOCK_ABANDONED_RUN and "--acknowledge-cleanup a" in item.blocked
+        assert [r.state for r in item.runs] == ["running", "pending"]
+        text = "\n".join(queue_view.render_queue(view, width=400))
+        assert "BLOCKED [abandoned-run]" in text
+        assert tree(batches) == before
 
     def test_reports_a_running_scheduler(self, world: dict) -> None:
         batches = world["batches"]
@@ -101,7 +139,7 @@ class TestTop:
         assert frames == 2
         text = out.getvalue()
         assert text.count("silverquillm top") == 2 and "q to quit" in text
-        assert "done=1 failed=1" in text and "MALFORMED" in text
+        assert "done=1 failed=1" in text and "MALFORMED" in text and "BLOCKED [missing-state]" in text
         assert tree(batches) == before
 
     def test_max_frames_bounds_the_loop(self, world: dict) -> None:
@@ -119,7 +157,7 @@ class TestCli:
         runner = CliRunner()
         result = runner.invoke(main, ["queue", "ls", "--batches-dir", str(world["batches"])])
         assert result.exit_code == 0, result.output
-        assert "done=1 failed=1" in result.output and "MALFORMED" in result.output
+        assert "done=1 failed=1" in result.output and "MALFORMED" in result.output and "BLOCKED [missing-state]" in result.output
         result = runner.invoke(main, ["top", "--batches-dir", str(world["batches"]), "--interval", "0.01"])
         assert result.exit_code == 0, result.output
         assert result.output.count("silverquillm top") == 1
@@ -135,7 +173,17 @@ class TestCli:
             result = runner.invoke(main, ["scheduler", "--once", "--batches-dir", str(batches)])
         assert result.exit_code == 1 and "another scheduler holds" in result.output
 
-    def test_help_lists_the_new_commands(self) -> None:
+    def test_scheduler_refuses_a_wrong_acknowledgement_and_executes_nothing(self, tmp_path: Path) -> None:
+        batches = tmp_path / "batches"
+        batches.mkdir()
+        write_batch(batches, "a", [spec("candidates/nope")], admit=False)
+        result = CliRunner().invoke(main, ["scheduler", "--once", "--batches-dir", str(batches), "--replay-without-state", "b"])
+        assert result.exit_code == 1 and "nothing executed" in result.output and "no batch file" in result.output
+        assert not (batches / "state").exists()
+
+    def test_help_lists_the_new_commands_and_flags(self) -> None:
         output = CliRunner().invoke(main, ["--help"]).output
         for command in ("scheduler", "queue", "top"):
             assert command in output
+        output = CliRunner().invoke(main, ["scheduler", "--help"]).output
+        assert "--replay-without-state" in output and "--acknowledge-cleanup" in output

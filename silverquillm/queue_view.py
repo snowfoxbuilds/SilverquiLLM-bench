@@ -1,11 +1,16 @@
 """Read-only views of the batch queue: ``silverquillm queue ls`` and ``top``.
 
-Both read the batch files (desired state) and the scheduler's state files
-(observed state) and never write either — the operator edits batch files in
-``$EDITOR``; the scheduler owns ``batches/state/``.  ``queue ls`` is a
-one-shot table; ``top`` redraws the same view on an interval in the
-alternate screen until ``q``.  A malformed batch file is shown loudly in
-both, as the scheduler skips it.
+Both read the batch files (desired state), the committed state files
+(observed state) and the host-local runtime metadata, and never write any of
+them — the operator edits batch files in ``$EDITOR``; the scheduler owns
+``batches/state/`` and ``batches/runtime/``.  ``queue ls`` is a one-shot
+table; ``top`` redraws the same view on an interval in the alternate screen
+until ``q``.  A malformed batch file is shown loudly in both, as the
+scheduler skips it, and so is a *blocked* batch — missing committed state
+(replay protection), unreadable state, or a run left running — through the
+same classification the scheduler uses (:func:`silverquillm.scheduler.inspect_batch`).
+Nothing host-local (paths, pids, hosts) is shown except the lock holder,
+which the lock file itself records.
 """
 
 from __future__ import annotations
@@ -15,6 +20,7 @@ import select
 import shutil
 import signal
 import sys
+import textwrap
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -26,11 +32,10 @@ from silverquillm.scheduler import (
     Batch,
     BatchError,
     BatchState,
-    StateError,
     batch_id_of,
+    inspect_batch,
     list_batch_files,
     load_batch,
-    load_state,
     lock_status,
 )
 
@@ -72,6 +77,9 @@ class BatchView:
     not_before: str = ""
     due: bool = True
     error: str = ""
+    blocked: str = ""
+    """Why nothing from this batch runs (empty when runnable)."""
+    block_kind: str = ""
     runs: list[RunRow] = field(default_factory=list)
     recorded: int = 0
     in_file: int = 0
@@ -132,8 +140,9 @@ def _rows(batch: Batch | None, state: BatchState) -> list[RunRow]:
     return rows
 
 
-def build_queue_view(batches_dir: Path, *, now: datetime | None = None) -> QueueView:
-    """Read every batch file and state file under *batches_dir*; write nothing."""
+def build_queue_view(batches_dir: Path, *, now: datetime | None = None, hostname: str | None = None) -> QueueView:
+    """Read every batch file, state file and runtime record under
+    *batches_dir*; write nothing."""
     batches_dir = Path(batches_dir)
     moment = now or datetime.now(UTC)
     status = lock_status(batches_dir) if batches_dir.is_dir() else None
@@ -152,11 +161,12 @@ def build_queue_view(batches_dir: Path, *, now: datetime | None = None) -> Queue
         except BatchError as exc:
             batch = None
             item.error = f"MALFORMED (skipped by the scheduler): {exc}"
-        try:
-            state = load_state(batches_dir, batch_id, batch_file=str(path))
-        except StateError as exc:
-            state = BatchState(batch=batch_id, batch_file=str(path))
-            item.error = (item.error + "; " if item.error else "") + f"state unreadable: {exc}"
+        state, block = inspect_batch(batches_dir, batch_id, hostname=hostname)
+        if block is not None:
+            item.blocked = block.message
+            item.block_kind = block.kind
+        if state is None:
+            state = BatchState(batch=batch_id, batch_file=path.name)
         if batch is not None:
             item.not_before = batch.not_before.astimezone(UTC).isoformat(timespec="seconds") if batch.not_before else ""
             item.due = batch.due(moment)
@@ -195,9 +205,20 @@ def render_queue(view: QueueView, *, width: int | None = None) -> list[str]:
         )
         if item.recorded > item.in_file and not item.error:
             header += f"  ({item.recorded} started, file now lists {item.in_file})"
+        if item.blocked:
+            header += "  BLOCKED"
         lines.append(_clip(header, width))
         if item.error:
             lines.append(_clip(f"  !! {item.error}", width))
+        if item.blocked:
+            lines.extend(
+                textwrap.wrap(
+                    f"!! BLOCKED [{item.block_kind}]: {item.blocked}",
+                    width=max(40, width - 2),
+                    initial_indent="  ",
+                    subsequent_indent="     ",
+                )
+            )
         if not item.runs:
             lines.append("  (no runs)")
             continue

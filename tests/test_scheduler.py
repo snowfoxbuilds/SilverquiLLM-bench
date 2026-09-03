@@ -1,19 +1,30 @@
 """``silverquillm.scheduler`` — the batch queue and single-writer scheduler (#66 Part B).
 
-A stubbed executor stands in for the bundle run path; everything else is
-real: batch files on disk, TheOzolith-exported fixture candidates verified at
-run start, the ``smoke`` benchmark's config, the ``flock`` lock, and the
-scheduler-owned state files.  The tests prove the #39 §5 semantics: file
+A stubbed executor stands in for the bundle run path and a fake container
+runtime for the docker CLI; everything else is real: batch files on disk,
+TheOzolith-exported fixture candidates verified at run start, the ``smoke``
+benchmark's config, the ``flock`` lock, the committed state files and the
+host-local runtime metadata.  The tests prove the #39 §5 semantics — file
 order, ``not_before`` gating, re-read before each not-yet-started run,
 identity resolved at run start, a failed run continuing the batch, lock
-exclusivity, and that a batch file is never written by the scheduler.
+exclusivity, a batch file never written by the scheduler — and the #66
+review rulings: committed state is portable (no path, pid, host, traceback
+or secret), missing state blocks a batch until a batch-scoped replay
+acknowledgement, abandoned containers are reconciled before anything runs
+(or the scheduler stops), state from another host fails closed, and no git
+command ever runs.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
+import signal
+import socket
+import subprocess
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -22,11 +33,13 @@ import pytest
 
 from silverquillm import scheduler as sched
 from silverquillm.candidate import load_candidate_bundle
+from silverquillm.contract import container_name
 from silverquillm.results_repo import candidate_hash
-from tests.candidate_fixtures import export_bundle, make_candidate_dir
+from tests.candidate_fixtures import FAKE_ANTHROPIC_KEY, export_bundle, make_candidate_dir
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 T0 = datetime(2026, 9, 3, 12, 0, tzinfo=UTC)
+HOST = "bench-host"
 
 
 class Clock:
@@ -59,7 +72,46 @@ class StubExecutor:
         return outcome
 
 
-def write_batch(batches: Path, name: str, runs: list[dict[str, Any]], *, not_before: str | None = None) -> Path:
+class FakeContainers:
+    """A container runtime double: ``present`` maps container name to status."""
+
+    def __init__(
+        self,
+        present: dict[str, str] | None = None,
+        *,
+        fail_remove: bool = False,
+        sticky: bool = False,
+        fail_status: bool = False,
+    ) -> None:
+        self.present = dict(present or {})
+        self.removed: list[str] = []
+        self.fail_remove = fail_remove
+        self.sticky = sticky
+        self.fail_status = fail_status
+
+    def status(self, name: str) -> str | None:
+        if self.fail_status:
+            raise sched.ReconciliationError("docker inspect could not run: no daemon")
+        return self.present.get(name)
+
+    def remove(self, name: str) -> None:
+        self.removed.append(name)
+        if self.fail_remove:
+            raise sched.ReconciliationError(f"docker rm --force {name} failed: permission denied")
+        if not self.sticky:
+            self.present.pop(name, None)
+
+
+class Interrupted(BaseException):
+    """Stands in for KeyboardInterrupt (which pytest would treat as its own)."""
+
+
+def write_batch(
+    batches: Path, name: str, runs: list[dict[str, Any]], *, not_before: str | None = None, admit: bool = True
+) -> Path:
+    """Write ``batches/<name>.toml``.  With *admit* (the default) an empty
+    committed state is created if none exists — the operator's acknowledgement
+    that the batch starts from entry 0 — so the batch is runnable."""
     lines = []
     if not_before is not None:
         lines.append(f"not_before = {not_before}")
@@ -70,6 +122,8 @@ def write_batch(batches: Path, name: str, runs: list[dict[str, Any]], *, not_bef
             lines.append(f"{key} = {json.dumps(value)}")
     path = batches / f"{name}.toml"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    if admit and not sched.state_path(batches, name).exists():
+        sched.save_state(batches, sched.BatchState(batch=name, batch_file=path.name), now=T0)
     return path
 
 
@@ -78,13 +132,18 @@ def spec(candidate: Path | str, mode: str = "basic", benchmark: str = "smoke", b
 
 
 def snapshot(root: Path) -> dict[str, tuple[bytes, int]]:
-    """Every regular file's bytes and mtime_ns under *root* (batch files only —
-    state/ and the lock are the scheduler's)."""
+    """Every batch file's bytes and mtime_ns under *root* (state/, runtime/
+    and the lock are the scheduler's)."""
     return {
         p.name: (p.read_bytes(), p.stat().st_mtime_ns)
         for p in sorted(root.iterdir())
         if p.is_file() and p.suffix == ".toml"
     }
+
+
+def state_files(batches: Path) -> dict[str, bytes]:
+    state_dir = batches / "state"
+    return {p.name: p.read_bytes() for p in sorted(state_dir.iterdir())} if state_dir.is_dir() else {}
 
 
 @pytest.fixture
@@ -104,13 +163,24 @@ def logs() -> list[str]:
     return []
 
 
-def make_scheduler(batches: Path, executor, *, clock: Clock | None = None, logs: list[str] | None = None, tmp: Path | None = None, **kwargs) -> sched.Scheduler:
+def make_scheduler(
+    batches: Path,
+    executor,
+    *,
+    clock: Clock | None = None,
+    logs: list[str] | None = None,
+    tmp: Path | None = None,
+    containers: FakeContainers | None = None,
+    **kwargs,
+) -> sched.Scheduler:
     clock = clock or Clock()
     kwargs.setdefault("runs_root", (tmp or batches.parent) / "runs")
+    kwargs.setdefault("repo_root", REPO_ROOT)
+    kwargs.setdefault("hostname", HOST)
     return sched.Scheduler(
         batches,
         executor=executor,
-        repo_root=REPO_ROOT,
+        container_runtime=containers if containers is not None else FakeContainers(),
         now=clock,
         sleep=lambda seconds: None,
         log=(logs if logs is not None else []).append,
@@ -119,7 +189,30 @@ def make_scheduler(batches: Path, executor, *, clock: Clock | None = None, logs:
 
 
 def load_state(batches: Path, batch_id: str) -> sched.BatchState:
-    return sched.load_state(batches, batch_id)
+    state = sched.load_state(batches, batch_id)
+    assert state is not None, f"no state for {batch_id}"
+    return state
+
+
+def leave_running(batches: Path, batch_id: str, candidate: Path, run_id: str, *, runtime_host: str | None = HOST) -> str:
+    """Commit a state with entry 0 left ``running`` (a dead scheduler), and
+    write the host-local runtime metadata for it when *runtime_host* is given.
+    Returns the run's deterministic container name."""
+    state = sched.BatchState(batch=batch_id, batch_file=f"{batch_id}.toml")
+    state.runs.append(
+        sched.RunState(index=0, spec=spec(candidate), state="running", run_id=run_id, started_at="2026-09-03T11:00:00+00:00")
+    )
+    sched.save_state(batches, state, now=T0)
+    container = container_name(run_id)
+    if runtime_host is not None:
+        sched.save_runtime(
+            batches,
+            sched.RuntimeRecord(
+                batch=batch_id, index=0, run_id=run_id, container=container, pid=424242,
+                hostname=runtime_host, started_at="2026-09-03T11:00:00+00:00",
+            ),
+        )
+    return container
 
 
 # ---------------------------------------------------------------------------
@@ -174,17 +267,27 @@ class TestBatchFiles:
         assert sched.list_batch_files(batches / "missing") == []
 
 
+# ---------------------------------------------------------------------------
+# Committed state — portable, strict, fail-closed
+# ---------------------------------------------------------------------------
+
+
 class TestState:
-    def test_round_trip_and_defaults(self, batches: Path) -> None:
-        assert sched.load_state(batches, "b").runs == []
+    def test_round_trip_and_absence(self, batches: Path) -> None:
+        assert sched.load_state(batches, "b") is None
         state = sched.BatchState(batch="b", batch_file="b.toml")
         state.runs.append(sched.RunState(index=0, spec=spec("c"), state="done", run_id="r0", identity={"scheme": "ozolith-v1"}))
         path = sched.save_state(batches, state, now=T0)
         assert path == batches / "state" / "b.json"
-        loaded = sched.load_state(batches, "b")
+        loaded = load_state(batches, "b")
         assert loaded.consumed == 1 and loaded.runs[0].run_id == "r0" and loaded.runs[0].identity == {"scheme": "ozolith-v1"}
-        assert loaded.updated_at == "2026-09-03T12:00:00+00:00"
-        assert json.loads(path.read_text())["schema_version"] == sched.STATE_SCHEMA_VERSION
+        assert loaded.updated_at == "2026-09-03T12:00:00+00:00" and loaded.batch_file == "b.toml"
+        payload = json.loads(path.read_text())
+        assert payload["schema_version"] == sched.STATE_SCHEMA_VERSION
+        assert set(payload["runs"][0]) == {
+            "index", "spec", "state", "started_at", "finished_at", "run_id", "candidate_hash",
+            "hash8", "identity", "resolved_at", "ok", "failure_class", "summary", "error",
+        }
 
     @pytest.mark.parametrize(
         "payload, message",
@@ -192,8 +295,10 @@ class TestState:
             ("{not json", "Expecting"),
             ('{"schema_version": 2, "batch": "b", "runs": []}', "schema_version"),
             ('{"schema_version": 1, "batch": "other", "runs": []}', "records batch"),
+            ('{"schema_version": 1, "batch": "b", "runs": [], "pid": 1}', "unknown field"),
             ('{"schema_version": 1, "batch": "b", "runs": [{"index": 1, "spec": {}, "state": "done"}]}', "cursor"),
             ('{"schema_version": 1, "batch": "b", "runs": [{"index": 0, "spec": {}, "state": "flying"}]}', "unknown run state"),
+            ('{"schema_version": 1, "batch": "b", "runs": [{"index": 0, "spec": {}, "state": "done", "run_dir": "/x"}]}', "unknown run field"),
         ],
     )
     def test_unreadable_state_raises(self, batches: Path, payload: str, message: str) -> None:
@@ -201,6 +306,134 @@ class TestState:
         (batches / "state" / "b.json").write_text(payload, encoding="utf-8")
         with pytest.raises(sched.StateError, match=message):
             sched.load_state(batches, "b")
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "{not json",
+            '{"schema_version": 99, "batch": "b", "runs": []}',
+            '{"schema_version": 1, "batch": "b", "runs": [{"index": 0, "spec": {}, "state": "done", "extra": 1}]}',
+        ],
+    )
+    def test_malformed_or_future_version_state_blocks_the_batch_and_executes_nothing(
+        self, batches: Path, candidate: Path, logs, payload: str
+    ) -> None:
+        write_batch(batches, "b", [spec(candidate)])
+        (batches / "state" / "b.json").write_text(payload, encoding="utf-8")
+        write_batch(batches, "c", [spec(candidate, budget=7)])
+        executor = StubExecutor()
+        assert make_scheduler(batches, executor, logs=logs).run_until_idle() == 1
+        assert [c.batch_id for c in executor.calls] == ["c"]
+        assert (batches / "state" / "b.json").read_text(encoding="utf-8") == payload, "never repaired"
+        assert any(line.startswith("BLOCKED b [unreadable-state]") for line in logs)
+        state, block = sched.inspect_batch(batches, "b", hostname=HOST)
+        assert state is None and block is not None and block.kind == sched.BLOCK_UNREADABLE_STATE
+
+    def test_committed_state_is_portable(self, tmp_path: Path, logs) -> None:
+        """No absolute path, home directory, pid, hostname, container name,
+        traceback or credential shape reaches the committed state — even when
+        the errors the scheduler records mention them."""
+        repo = tmp_path / "repo"
+        batches = repo / "batches"
+        batches.mkdir(parents=True)
+        (repo / "benchmarks").symlink_to(REPO_ROOT / "benchmarks")  # the benchmark ids resolve under the repo root
+        candidate = make_candidate_dir(repo / "candidates", slug="fixture-claude")
+        write_batch(batches, "a", [
+            spec("candidates/nope"),  # resolution error names the paths it tried
+            spec(f"candidates/{candidate.name}"),  # executor raises with a secret and a home path
+            spec(f"candidates/{candidate.name}"),
+        ])
+        leak = RuntimeError(f"boom {FAKE_ANTHROPIC_KEY} in {Path.home()}/private and {tmp_path}/x\nsecond line")
+        # Entry 0 never reaches the executor (unresolvable); entries 1 and 2 do.
+        executor = StubExecutor([leak, sched.RunOutcome(ok=False, summary=f"[timeout] at agent: log at {repo}/runs/x.log", failure_class="timeout")])
+        runner = make_scheduler(batches, executor, logs=logs, repo_root=repo, results_repo=tmp_path / "results-repo")
+        assert runner.run_until_idle() == 3
+
+        text = (batches / "state" / "a.json").read_text(encoding="utf-8")
+        payload = json.loads(text)
+        assert [r["state"] for r in payload["runs"]] == ["failed", "failed", "failed"]
+        assert payload["batch_file"] == "a.toml"
+        for forbidden in (
+            str(tmp_path), str(repo), str(Path.home()), str(os.getpid()), HOST, socket.gethostname(),
+            "Traceback", FAKE_ANTHROPIC_KEY, "silverquillm-", "pid",
+        ):
+            assert forbidden not in text, forbidden
+        assert not re.search(r'"(?:run_dir|candidate_path|record_dir|pid|hostname|container)"', text)
+        # The sanitized summaries still say what happened.
+        assert "resolves to no directory" in payload["runs"][0]["error"] and "<repo>/candidates/nope" in payload["runs"][0]["error"]
+        assert payload["runs"][1]["error"].startswith("RuntimeError: boom [redacted: Anthropic API key] in <home>/private")
+        assert payload["runs"][2]["summary"] == "[timeout] at agent: log at <runs>/x.log"
+        # Logs carry the redacted traceback for the operator, never the value.
+        joined = "\n".join(logs)
+        assert "Traceback" in joined and FAKE_ANTHROPIC_KEY not in joined and "[redacted: Anthropic API key]" in joined
+
+    def test_a_fresh_checkout_with_committed_state_resumes_at_the_recorded_cursor(self, tmp_path: Path, candidate: Path, logs) -> None:
+        batches = tmp_path / "host-a" / "batches"
+        batches.mkdir(parents=True)
+        write_batch(batches, "a", [spec(candidate, budget=1), spec(candidate, budget=2), spec(candidate, budget=3)])
+        first = StubExecutor()
+        runner = make_scheduler(batches, first, logs=logs, tmp=tmp_path / "host-a")
+        with sched.SchedulerLock(batches):
+            runner._start()
+            assert runner.run_next() is True  # one run, then "host A" is replaced
+        assert [c.spec.budget_seconds for c in first.calls] == [1]
+        # The replacement host checks out exactly what was committed: the
+        # batch file and the state file — no lock, no runtime metadata.
+        restored = tmp_path / "host-b" / "batches"
+        (restored / "state").mkdir(parents=True)
+        shutil.copy(batches / "a.toml", restored / "a.toml")
+        shutil.copy(batches / "state" / "a.json", restored / "state" / "a.json")
+        second = StubExecutor()
+        assert make_scheduler(restored, second, logs=logs, tmp=tmp_path / "host-b", hostname="host-b").run_until_idle() == 2
+        assert [(c.index, c.spec.budget_seconds) for c in second.calls] == [(1, 2), (2, 3)]
+        assert [r.state for r in load_state(restored, "a").runs] == ["done", "done", "done"]
+
+
+class TestMissingStateReplayProtection:
+    def test_a_batch_without_state_executes_nothing_and_warns_about_replay_cost(self, batches: Path, candidate: Path, logs) -> None:
+        write_batch(batches, "a", [spec(candidate), spec(candidate)], admit=False)
+        executor = StubExecutor()
+        runner = make_scheduler(batches, executor, logs=logs)
+        assert runner.run_until_idle() == 0 and executor.calls == []
+        assert not (batches / "state").exists(), "no state is created without the acknowledgement"
+        warnings = [line for line in logs if line.startswith("BLOCKED a [missing-state]")]
+        assert len(warnings) == 1, logs
+        assert "REPLAY" in warnings[0] and "costs" in warnings[0] and "--replay-without-state a" in warnings[0]
+        assert runner.run_until_idle() == 0
+        assert len([line for line in logs if line.startswith("BLOCKED a")]) == 1, "reported once per file version"
+
+    def test_only_the_ambiguous_batch_is_blocked_and_ordering_holds(self, batches: Path, candidate: Path, logs) -> None:
+        write_batch(batches, "a", [spec(candidate, budget=1)])
+        write_batch(batches, "b", [spec(candidate, budget=2)], admit=False)
+        write_batch(batches, "c", [spec(candidate, budget=3)])
+        executor = StubExecutor()
+        assert make_scheduler(batches, executor, logs=logs).run_until_idle() == 2
+        assert [(c.batch_id, c.spec.budget_seconds) for c in executor.calls] == [("a", 1), ("c", 3)]
+        assert not sched.state_path(batches, "b").exists()
+
+    def test_batch_scoped_replay_acknowledgement_creates_state_and_starts_only_that_batch(self, batches: Path, candidate: Path, logs) -> None:
+        write_batch(batches, "a", [spec(candidate, budget=1)], admit=False)
+        write_batch(batches, "b", [spec(candidate, budget=2)], admit=False)
+        executor = StubExecutor()
+        assert make_scheduler(batches, executor, logs=logs, replay_without_state=("a",)).run_until_idle() == 1
+        assert [(c.batch_id, c.index) for c in executor.calls] == [("a", 0)]
+        assert load_state(batches, "a").runs[0].state == "done"
+        assert not sched.state_path(batches, "b").exists()
+        assert any(line.startswith("REPLAY ACKNOWLEDGED a") for line in logs)
+        assert any(line.startswith("BLOCKED b [missing-state]") for line in logs)
+
+    def test_replay_acknowledgement_for_the_wrong_batch_refuses_and_executes_nothing(self, batches: Path, candidate: Path, logs) -> None:
+        write_batch(batches, "a", [spec(candidate)], admit=False)
+        write_batch(batches, "ok", [spec(candidate)])
+        executor = StubExecutor()
+        with pytest.raises(sched.AcknowledgementError, match="no batch file"):
+            make_scheduler(batches, executor, logs=logs, replay_without_state=("typo",)).run_until_idle()
+        assert executor.calls == [] and not sched.state_path(batches, "a").exists()
+        # Acknowledging a batch whose state exists is a misunderstanding, refused too.
+        with pytest.raises(sched.AcknowledgementError, match="already exists"):
+            make_scheduler(batches, executor, logs=logs, replay_without_state=("ok",)).run_until_idle()
+        assert executor.calls == []
+        assert sched.lock_status(batches).held is False
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +444,7 @@ class TestState:
 class TestLock:
     def test_a_second_scheduler_instance_refuses_to_start(self, batches: Path, candidate: Path, logs) -> None:
         write_batch(batches, "a", [spec(candidate)])
+        before = state_files(batches)
         executor = StubExecutor()
         with sched.SchedulerLock(batches):
             status = sched.lock_status(batches)
@@ -218,7 +452,7 @@ class TestLock:
             with pytest.raises(sched.SchedulerLockedError, match=f"pid {os.getpid()}"):
                 make_scheduler(batches, executor, logs=logs).run_until_idle()
             assert executor.calls == []
-            assert not (batches / "state").exists()
+            assert state_files(batches) == before
         assert sched.lock_status(batches).held is False
         assert make_scheduler(batches, executor, logs=logs).run_until_idle() == 1
 
@@ -249,18 +483,19 @@ class TestScheduler:
         assert [c.spec.budget_seconds for c in executor.calls] == [600, 900]
         state = load_state(batches, "a")
         assert [r.state for r in state.runs] == ["done", "done"]
-        assert state.batch_file == str(path)
+        assert state.batch_file == "a.toml"
         bundle = load_candidate_bundle(candidate)
         for run, resolved in zip(state.runs, executor.calls, strict=True):
             assert run.candidate_hash == bundle.candidate_hash == resolved.bundle.candidate_hash
             assert run.identity == bundle.identity.to_dict()
             assert run.run_id == resolved.run_id and run.run_id.startswith("smoke-fixture-claude--")
-            assert Path(run.run_dir) == resolved.run_dir == tmp_path / "runs" / candidate.name / run.run_id
-            assert resolved.run_dir.is_dir()
+            assert resolved.run_dir == tmp_path / "runs" / candidate.name / run.run_id and resolved.run_dir.is_dir()
+            assert resolved.container == f"silverquillm-{run.run_id}"
             assert run.started_at == "2026-09-03T12:00:00+00:00" and run.finished_at
-            assert run.ok is True and run.summary == "stub ok" and run.pid == os.getpid()
+            assert run.ok is True and run.summary == "stub ok"
         assert state.runs[0].run_id != state.runs[1].run_id
         assert any("STARTED a #0" in line for line in logs) and any("DONE a #1" in line for line in logs)
+        assert not (batches / "runtime" / "a.json").exists(), "runtime metadata is removed after the terminal transition"
 
     def test_a_failed_run_continues_the_batch(self, batches: Path, candidate: Path, logs) -> None:
         write_batch(batches, "a", [spec(candidate)] * 3)
@@ -272,8 +507,8 @@ class TestScheduler:
         state = load_state(batches, "a")
         assert [r.state for r in state.runs] == ["failed", "failed", "done"]
         assert state.runs[0].failure_class == "timeout" and state.runs[0].ok is False
-        assert state.runs[1].failure_class == "scheduler" and "executor exploded" in state.runs[1].error
-        assert "Traceback" in state.runs[1].error
+        assert state.runs[1].failure_class == "scheduler" and state.runs[1].error == "RuntimeError: executor exploded"
+        assert "Traceback" not in state.runs[1].error and any("Traceback" in line for line in logs)
         assert state.runs[2].ok is True
         assert len(executor.calls) == 3
 
@@ -306,7 +541,7 @@ class TestScheduler:
         executor = StubExecutor()
         runner = make_scheduler(batches, executor, clock=clock, logs=logs)
         assert runner.run_until_idle() == 0 and executor.calls == []
-        assert not (batches / "state" / "a.json").exists()
+        assert load_state(batches, "a").consumed == 0
         clock.advance(hours=12)
         assert runner.run_until_idle() == 1 and len(executor.calls) == 1
 
@@ -317,7 +552,7 @@ class TestScheduler:
         executor = StubExecutor()
         assert make_scheduler(batches, executor, logs=logs).run_until_idle() == 3
         assert [(c.batch_id, c.index, c.spec.budget_seconds) for c in executor.calls] == [("a", 0, 1), ("a", 1, 11), ("b", 0, 2)]
-        assert not (batches / "state" / "c.json").exists()
+        assert load_state(batches, "c").consumed == 0
 
     def test_mid_batch_edits_affect_only_not_yet_started_runs(self, batches: Path, candidate: Path, logs) -> None:
         path = write_batch(batches, "a", [spec(candidate, budget=1), spec(candidate, budget=2)])
@@ -399,18 +634,6 @@ class TestScheduler:
         assert not (batches / "state" / "a.json").exists()
         assert load_state(batches, "b").runs[0].state == "done"
 
-    def test_recover_marks_a_run_left_running_by_a_dead_scheduler_failed(self, batches: Path, candidate: Path, logs) -> None:
-        write_batch(batches, "a", [spec(candidate), spec(candidate)])
-        stale = sched.BatchState(batch="a", batch_file="a.toml")
-        stale.runs.append(sched.RunState(index=0, spec=spec(candidate), state="running", run_id="smoke-x-2026-09-03T11-00", pid=424242))
-        sched.save_state(batches, stale)
-        executor = StubExecutor()
-        assert make_scheduler(batches, executor, logs=logs).run_until_idle() == 1
-        state = load_state(batches, "a")
-        assert state.runs[0].state == "failed" and "pid 424242" in state.runs[0].error
-        assert state.runs[1].state == "done" and executor.calls[0].index == 1
-        assert any(line.startswith("RECOVERED a") for line in logs)
-
     def test_serve_polls_when_idle(self, batches: Path, logs) -> None:
         naps: list[float] = []
 
@@ -419,11 +642,196 @@ class TestScheduler:
             if len(naps) == 2:
                 raise KeyboardInterrupt
 
-        runner = sched.Scheduler(batches, executor=StubExecutor(), repo_root=REPO_ROOT, poll_seconds=7, sleep=sleep, log=logs.append)
+        runner = sched.Scheduler(
+            batches, executor=StubExecutor(), container_runtime=FakeContainers(), repo_root=REPO_ROOT,
+            poll_seconds=7, sleep=sleep, log=logs.append,
+        )
         with pytest.raises(KeyboardInterrupt):
             runner.serve()
         assert naps == [7, 7]
         assert sched.lock_status(batches).held is False
+
+
+# ---------------------------------------------------------------------------
+# Abandoned runs: reconciliation before anything else runs
+# ---------------------------------------------------------------------------
+
+
+class TestRecovery:
+    def test_same_host_recovery_removes_the_abandoned_container_before_continuing(self, batches: Path, candidate: Path, logs) -> None:
+        write_batch(batches, "a", [spec(candidate), spec(candidate)])
+        container = leave_running(batches, "a", candidate, "smoke-x-2026-09-03T11-00")
+        containers = FakeContainers({container: "running"})
+        order: list[str] = []
+        executor = StubExecutor(hook=lambda call, resolved: order.append("executed"))
+        containers_remove = containers.remove
+
+        def remove(name: str) -> None:
+            order.append("removed")
+            containers_remove(name)
+
+        containers.remove = remove  # type: ignore[method-assign]
+        assert make_scheduler(batches, executor, logs=logs, containers=containers).run_until_idle() == 1
+        assert order == ["removed", "executed"], "the abandoned container goes before any new work"
+        assert containers.removed == [container] and containers.present == {}
+        state = load_state(batches, "a")
+        assert state.runs[0].state == "failed" and state.runs[0].failure_class == "abandoned"
+        assert "removed (running)" in state.runs[0].error and "424242" not in state.runs[0].error
+        assert state.runs[1].state == "done" and executor.calls[0].index == 1
+        assert not (batches / "runtime" / "a.json").exists()
+        assert any(line.startswith("RECOVERED a #0") for line in logs)
+
+    def test_an_already_exited_or_absent_container_is_reconciled_too(self, batches: Path, candidate: Path, logs) -> None:
+        write_batch(batches, "a", [spec(candidate), spec(candidate)])
+        container = leave_running(batches, "a", candidate, "smoke-x-2026-09-03T11-00")
+        containers = FakeContainers({container: "exited"})
+        assert make_scheduler(batches, StubExecutor(), logs=logs, containers=containers).run_until_idle() == 1
+        assert containers.removed == [container]
+        assert "removed (exited)" in load_state(batches, "a").runs[0].error
+        # Absent: nothing to remove, still reconciled.
+        write_batch(batches, "b", [spec(candidate)])
+        leave_running(batches, "b", candidate, "smoke-y-2026-09-03T11-00")
+        absent = FakeContainers()
+        assert make_scheduler(batches, StubExecutor(), logs=logs, containers=absent).run_until_idle() == 0
+        assert absent.removed == [] and "container absent" in load_state(batches, "b").runs[0].error
+
+    @pytest.mark.parametrize("kind", ["fail_remove", "sticky", "fail_status"])
+    def test_failed_or_unconfirmed_removal_stops_the_scheduler_and_executes_nothing(self, batches: Path, candidate: Path, logs, kind: str) -> None:
+        write_batch(batches, "a", [spec(candidate), spec(candidate)])
+        write_batch(batches, "b", [spec(candidate)])
+        container = leave_running(batches, "a", candidate, "smoke-x-2026-09-03T11-00")
+        containers = FakeContainers({container: "running"}, **{kind: True})
+        executor = StubExecutor()
+        before = state_files(batches)
+        with pytest.raises(sched.ReconciliationError) as info:
+            make_scheduler(batches, executor, logs=logs, containers=containers).run_until_idle()
+        message = str(info.value)
+        assert container in message or "docker" in message
+        assert executor.calls == [], "nothing executes — not even another batch"
+        assert state_files(batches) == before, "the run stays recorded as running"
+        assert (batches / "runtime" / "a.json").exists(), "runtime metadata is kept for the next attempt"
+        assert sched.lock_status(batches).held is False
+
+    def test_replacement_host_recovery_fails_closed_with_an_actionable_diagnostic(self, batches: Path, candidate: Path, logs) -> None:
+        """Committed state says running; this host has no runtime metadata
+        (the run started elsewhere): nothing runs until --acknowledge-cleanup."""
+        write_batch(batches, "a", [spec(candidate), spec(candidate)])
+        write_batch(batches, "b", [spec(candidate)])
+        leave_running(batches, "a", candidate, "smoke-x-2026-09-03T11-00", runtime_host=None)
+        containers = FakeContainers()
+        executor = StubExecutor()
+        with pytest.raises(sched.ReconciliationError) as info:
+            make_scheduler(batches, executor, logs=logs, containers=containers).run_until_idle()
+        message = str(info.value)
+        assert "another host" in message and "silverquillm-smoke-x-2026-09-03T11-00" in message
+        assert "--acknowledge-cleanup a" in message
+        assert executor.calls == [] and containers.removed == []
+        assert load_state(batches, "a").runs[0].state == "running"
+        # The views report the same block.
+        _, block = sched.inspect_batch(batches, "a", hostname=HOST)
+        assert block is not None and block.kind == sched.BLOCK_ABANDONED_RUN and "--acknowledge-cleanup a" in block.message
+
+    def test_runtime_metadata_from_another_host_fails_closed(self, batches: Path, candidate: Path, logs) -> None:
+        write_batch(batches, "a", [spec(candidate)])
+        leave_running(batches, "a", candidate, "smoke-x-2026-09-03T11-00", runtime_host="other-host")
+        executor = StubExecutor()
+        with pytest.raises(sched.ReconciliationError, match="other-host"):
+            make_scheduler(batches, executor, logs=logs).run_until_idle()
+        assert executor.calls == []
+
+    def test_acknowledged_cleanup_marks_the_remote_run_failed_and_continues(self, batches: Path, candidate: Path, logs) -> None:
+        write_batch(batches, "a", [spec(candidate), spec(candidate)])
+        leave_running(batches, "a", candidate, "smoke-x-2026-09-03T11-00", runtime_host=None)
+        executor = StubExecutor()
+        containers = FakeContainers()
+        assert make_scheduler(batches, executor, logs=logs, containers=containers, acknowledge_cleanup=("a",)).run_until_idle() == 1
+        state = load_state(batches, "a")
+        assert state.runs[0].state == "failed" and state.runs[0].failure_class == "abandoned"
+        assert "acknowledged by the operator" in state.runs[0].error
+        assert state.runs[1].state == "done" and executor.calls[0].index == 1
+        assert containers.removed == [], "the operator's word replaces a local reconciliation"
+
+    def test_cleanup_acknowledgement_for_a_batch_with_nothing_running_refuses(self, batches: Path, candidate: Path, logs) -> None:
+        write_batch(batches, "a", [spec(candidate)])
+        executor = StubExecutor()
+        with pytest.raises(sched.AcknowledgementError, match="nothing to acknowledge"):
+            make_scheduler(batches, executor, logs=logs, acknowledge_cleanup=("a",)).run_until_idle()
+        assert executor.calls == []
+
+    def test_stale_runtime_metadata_after_a_terminal_transition_is_reconciled(self, batches: Path, candidate: Path, logs) -> None:
+        write_batch(batches, "a", [spec(candidate)])
+        state = sched.BatchState(batch="a", batch_file="a.toml")
+        state.runs.append(sched.RunState(index=0, spec=spec(candidate), state="done", run_id="smoke-x-2026-09-03T11-00", ok=True))
+        sched.save_state(batches, state, now=T0)
+        container = container_name("smoke-x-2026-09-03T11-00")
+        sched.save_runtime(batches, sched.RuntimeRecord(batch="a", index=0, run_id="smoke-x-2026-09-03T11-00", container=container, pid=1, hostname=HOST, started_at="x"))
+        containers = FakeContainers({container: "exited"})
+        assert make_scheduler(batches, StubExecutor(), logs=logs, containers=containers).run_until_idle() == 0
+        assert containers.removed == [container] and not (batches / "runtime" / "a.json").exists()
+        assert load_state(batches, "a").runs[0].state == "done"
+
+
+class TestInterruption:
+    def test_an_interrupted_run_has_its_container_removed_and_is_recorded_failed(self, batches: Path, candidate: Path, logs) -> None:
+        write_batch(batches, "a", [spec(candidate), spec(candidate)])
+        containers = FakeContainers()
+
+        def launch_then_interrupt(call: int, resolved: sched.ResolvedRun) -> None:
+            containers.present[resolved.container] = "running"
+            assert (batches / "runtime" / "a.json").exists()
+            raise Interrupted("Ctrl-C")
+
+        executor = StubExecutor(hook=launch_then_interrupt)
+        with pytest.raises(Interrupted):
+            make_scheduler(batches, executor, logs=logs, containers=containers).run_until_idle()
+        state = load_state(batches, "a")
+        assert [r.state for r in state.runs] == ["failed"] and state.runs[0].failure_class == "interrupted"
+        assert "Interrupted" in state.runs[0].summary and containers.present == {}
+        assert not (batches / "runtime" / "a.json").exists()
+        assert sched.lock_status(batches).held is False
+        # The next scheduler simply continues with entry 1.
+        assert make_scheduler(batches, StubExecutor(), logs=logs, containers=containers).run_until_idle() == 1
+
+    def test_sigterm_interrupts_the_run_in_flight_and_unwinds(self, batches: Path, candidate: Path, logs) -> None:
+        write_batch(batches, "a", [spec(candidate)])
+        containers = FakeContainers()
+
+        def send_sigterm(call: int, resolved: sched.ResolvedRun) -> None:
+            containers.present[resolved.container] = "running"
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(0.2)  # the handler raises before this returns
+
+        previous = signal.getsignal(signal.SIGTERM)
+        with pytest.raises(sched.SchedulerStopped):
+            make_scheduler(batches, StubExecutor(hook=send_sigterm), logs=logs, containers=containers).run_until_idle()
+        assert signal.getsignal(signal.SIGTERM) is previous, "the handler is restored"
+        state = load_state(batches, "a")
+        assert state.runs[0].state == "failed" and state.runs[0].summary == "interrupted (SIGTERM)"
+        assert containers.present == {} and not (batches / "runtime" / "a.json").exists()
+
+    def test_an_interrupt_whose_container_cannot_be_removed_leaves_the_run_running_for_startup(self, batches: Path, candidate: Path, logs) -> None:
+        write_batch(batches, "a", [spec(candidate), spec(candidate)])
+        containers = FakeContainers(fail_remove=True)
+
+        def launch_then_interrupt(call: int, resolved: sched.ResolvedRun) -> None:
+            containers.present[resolved.container] = "running"
+            raise Interrupted()
+
+        with pytest.raises(Interrupted):
+            make_scheduler(batches, StubExecutor(hook=launch_then_interrupt), logs=logs, containers=containers).run_until_idle()
+        assert load_state(batches, "a").runs[0].state == "running"
+        assert (batches / "runtime" / "a.json").exists()
+        # ... and the next startup fails closed until the container is really gone (SIGKILL looks the same).
+        with pytest.raises(sched.ReconciliationError):
+            make_scheduler(batches, StubExecutor(), logs=logs, containers=containers).run_until_idle()
+        containers.fail_remove = False
+        assert make_scheduler(batches, StubExecutor(), logs=logs, containers=containers).run_until_idle() == 1
+        assert [r.state for r in load_state(batches, "a").runs] == ["failed", "done"]
+
+
+# ---------------------------------------------------------------------------
+# Resolution, the production executor, git-agnosticism
+# ---------------------------------------------------------------------------
 
 
 class TestResolution:
@@ -473,3 +881,65 @@ class TestContractRunExecutor:
         assert seen["run_id"] == "smoke-x" and seen["budget_seconds"] == 123 and seen["mode"].name == "planned"
         assert seen["session_factory"] == "factory(engine)" and seen["container_user"] == "1000:1000"
         assert seen["results_repo"] == tmp_path / "rr" and seen["candidate"] == candidate
+
+
+class TestDockerContainerRuntime:
+    def test_status_and_remove_map_the_cli(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[list[str]] = []
+
+        def fake_run(argv, **kwargs):
+            calls.append(list(argv))
+            if argv[1] == "container":
+                if argv[-1] == "gone":
+                    return subprocess.CompletedProcess(argv, 1, "", "Error: No such container: gone")
+                if argv[-1] == "broken":
+                    return subprocess.CompletedProcess(argv, 1, "", "Cannot connect to the Docker daemon")
+                return subprocess.CompletedProcess(argv, 0, "exited\n", "")
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        runtime = sched.DockerContainerRuntime()
+        assert runtime.status("gone") is None and runtime.status("there") == "exited"
+        with pytest.raises(sched.ReconciliationError, match="daemon"):
+            runtime.status("broken")
+        runtime.remove("there")
+        assert calls[-1] == ["docker", "rm", "--force", "there"]
+        assert sched.reconcile_container(FakeContainers({"x": "running"}), "x") == "removed (running)"
+        assert sched.reconcile_container(FakeContainers(), "x") == "absent"
+
+
+class TestGitAgnostic:
+    def test_a_full_scheduler_pass_launches_no_git(self, monkeypatch: pytest.MonkeyPatch, batches: Path, candidate: Path, logs) -> None:
+        launched: list[list[str]] = []
+
+        def _guard(real):
+            def wrapper(args, *a, **kw):
+                argv = [str(x) for x in (args if isinstance(args, (list, tuple)) else [args])]
+                launched.append(argv)
+                if argv and Path(argv[0]).name == "git":
+                    raise AssertionError(f"the scheduler ran git: {argv}")
+                return real(args, *a, **kw)
+
+            return wrapper
+
+        for name in ("run", "Popen", "check_output", "check_call", "call"):
+            monkeypatch.setattr(subprocess, name, _guard(getattr(subprocess, name)))
+        monkeypatch.setattr(os, "system", lambda cmd: (_ for _ in ()).throw(AssertionError(cmd)))
+        write_batch(batches, "a", [spec(candidate)], admit=False)
+        write_batch(batches, "b", [spec(candidate), spec(candidate)])
+        leave_running(batches, "b", candidate, "smoke-x-2026-09-03T11-00")
+        containers = FakeContainers({container_name("smoke-x-2026-09-03T11-00"): "running"})
+        runner = make_scheduler(batches, StubExecutor([RuntimeError("boom")]), logs=logs, containers=containers, replay_without_state=("a",))
+        assert runner.run_until_idle() == 2
+        assert not any(Path(argv[0]).name == "git" for argv in launched if argv)
+
+    def test_the_lifecycle_modules_never_name_git(self) -> None:
+        for path in (
+            REPO_ROOT / "silverquillm" / "scheduler.py",
+            REPO_ROOT / "silverquillm" / "queue_view.py",
+            REPO_ROOT / "scripts" / "promote_candidate.py",
+            REPO_ROOT / "scripts" / "publish_results.py",
+        ):
+            source = path.read_text(encoding="utf-8")
+            assert re.search(r"""["']git["']""", source) is None, f"{path.name} names a git command"
+            assert not re.search(r"^\s*(?:import|from)\s+(?:git|dulwich|pygit2)\b", source, re.MULTILINE), path.name

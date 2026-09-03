@@ -39,7 +39,11 @@ validation.json
 benchmarks/*/analysis/*.json
 benchmarks/*/analysis/*.md
 
-# Batch queue: batch files are the operator's desired state (commit them or not,
-# your call); the scheduler's observed state and its lock are local.
-batches/state/
+# Batch queue: batch files and the scheduler's committed observed state
+# (batches/state/<id>.json — portable, no host-local data) are tracked; the
+# operator commits state checkpoints. The lock, the host-local runtime
+# metadata (container name, pid, hostname of the run in flight) and the
+# atomic-write temp files are never committed.
 batches/.scheduler.lock
+batches/runtime/
+batches/state/.*

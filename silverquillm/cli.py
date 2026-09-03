@@ -1752,12 +1752,30 @@ def _batches_dir(value: Path | None) -> Path:
     help="Results repo every run records into (or $SILVERQUILLM_RESULTS_REPO)",
 )
 @click.option("--container-user", default=None, help="uid:gid to run every container as (default: the image's user)")
+@click.option(
+    "--replay-without-state", "replay_without_state", multiple=True, metavar="BATCH_ID",
+    help=(
+        "Acknowledge, for this one batch, that it has no committed state and may start"
+        " from entry 0 (replaying may repeat completed runs and incur costs); creates"
+        " the empty batches/state/<id>.json. Repeatable; never global."
+    ),
+)
+@click.option(
+    "--acknowledge-cleanup", "acknowledge_cleanup", multiple=True, metavar="BATCH_ID",
+    help=(
+        "Confirm that the run this batch's committed state records as running — on"
+        " another host — has had its container cleaned up; marks it failed so the"
+        " batch can continue here. Repeatable; never global."
+    ),
+)
 def scheduler(
     batches_dir: Path | None,
     once: bool,
     poll_seconds: float | None,
     results_repo: Path | None,
     container_user: str | None,
+    replay_without_state: tuple[str, ...],
+    acknowledge_cleanup: tuple[str, ...],
 ) -> None:
     """Run the single-writer batch scheduler over batches/*.toml.
 
@@ -1765,25 +1783,37 @@ def scheduler(
     in file order (re-reading the file before every not-yet-started run),
     resolves and records each candidate's identity at run start, executes
     each run through the bundle run path (`silverquillm run --candidate`),
-    and writes per-run outcomes to batches/state/<batch>.json — never to a
-    batch file. A failed run is recorded and the batch continues. A second
-    scheduler on the same directory refuses to start.
+    and writes per-run outcomes to the committed, portable state file
+    batches/state/<batch>.json — never to a batch file; you commit the state
+    checkpoints. A batch with no state file is blocked (replay protection)
+    until --replay-without-state names it. Runs left running by a dead
+    scheduler are reconciled (container force-removed and confirmed gone)
+    before anything else runs; state from another host needs
+    --acknowledge-cleanup. A failed run is recorded and the batch continues.
+    A second scheduler on the same directory refuses to start.
     """
     from silverquillm.results_repo import resolve_results_repo
     from silverquillm.scheduler import (
         DEFAULT_POLL_SECONDS,
+        AcknowledgementError,
+        DockerContainerRuntime,
+        ReconciliationError,
         Scheduler,
         SchedulerLockedError,
+        SchedulerStopped,
         contract_run_executor,
     )
 
     runner = Scheduler(
         _batches_dir(batches_dir),
         executor=contract_run_executor(container_user=container_user),
+        container_runtime=DockerContainerRuntime(),
         repo_root=_REPO_ROOT,
         results_repo=resolve_results_repo(results_repo),
         poll_seconds=DEFAULT_POLL_SECONDS if poll_seconds is None else poll_seconds,
         log=lambda message: click.echo(f"{datetime.now(tz=UTC).isoformat(timespec='seconds')} {message}"),
+        replay_without_state=replay_without_state,
+        acknowledge_cleanup=acknowledge_cleanup,
     )
     try:
         if once:
@@ -1793,9 +1823,14 @@ def scheduler(
             runner.serve()
     except SchedulerLockedError as exc:
         raise click.ClickException(str(exc)) from exc
+    except (AcknowledgementError, ReconciliationError) as exc:
+        raise click.ClickException(f"scheduler stopped, nothing executed: {exc}") from exc
     except KeyboardInterrupt:
-        click.echo("scheduler stopped", err=True)
+        click.echo("scheduler stopped (interrupted)", err=True)
         raise SystemExit(130) from None
+    except SchedulerStopped:
+        click.echo("scheduler stopped (SIGTERM)", err=True)
+        raise SystemExit(143) from None
 
 
 @main.group()
@@ -1806,7 +1841,9 @@ def queue() -> None:
 @queue.command("ls")
 @_BATCHES_DIR_OPTION
 def queue_ls(batches_dir: Path | None) -> None:
-    """One-shot table: every batch, its not_before, per-run specs and states."""
+    """One-shot table: every batch, its not_before, per-run specs and states, and
+    whether it is blocked (missing committed state, unreadable state, a run
+    left running). Read-only."""
     from silverquillm.queue_view import build_queue_view, render_queue
 
     for line in render_queue(build_queue_view(_batches_dir(batches_dir))):
