@@ -56,9 +56,21 @@ Retired with the MSH benchmark: the checkpoint/capability-DAG design served boun
 
 **Candidate Bundle**
 
-The self-contained directory artifact a Benchmark Candidate is exchanged as: the worker-type definition + resolved pins (base image digest, knowledge pin) + vendored knowledge tree + adapter identity, secret values excluded. Exported by the-ozolith's tooling; the only thing `silverquillm run --candidate <path>` accepts. Candidate identity = (base image digest, instruction hash, adapter identity), recomputed and verified from the bundle — never trusted from a recorded value. Adapter-agnostic by contract: the format never hardcodes the adapter set.
+The self-contained directory artifact a Benchmark Candidate is exchanged as: the worker-type definition + resolved pins (base image digest, knowledge pin) + vendored knowledge tree + adapter identity, secret values excluded. Exported by the-ozolith's tooling (`theozolith candidate export`: `candidate.json` + generated `Dockerfile` + compiled knowledge tree + baked policy tree; `docs/specs/BENCH-CONTRACT.md`, `bundle_format_version` 2); the only thing `silverquillm run --candidate <path>` accepts (a bundle directory, or a checked-in `candidates/<slug>--<hash8>/` directory wrapping one under `bundle/`). Candidate identity = (base image digest, instruction hash, adapter identity), recomputed and verified from the bundle by TheOzolith's verifier (`silverquillm.candidate` consumes `verify_bundle`; the bench never reimplements the hash) — never trusted from a recorded value: a bundle whose recorded identity, or whose directory-name suffix, disagrees with the recomputed one is a hard refusal, as is a bundle carrying a secret value (#65). Adapter-agnostic by contract: the format never hardcodes the adapter set, and neither does the bench.
 
 *Avoid*: "worker-type TOML" as the candidate input (a bare TOML is not self-contained — it references Config Repo siblings), "candidate config"
+
+**Candidate Hash**
+
+The bench's key for a verified candidate: the SHA-256 of the canonical JSON of the whole identity triple `{"adapter", "base_digest", "instruction_hash"}` (`silverquillm.results_repo.candidate_hash`; the-ozolith's canonical identity omits the adapter name, so the instruction hash alone is not injective over the triple). Names `results/<candidate-hash>/` in the Results Repo and, as its first eight characters (`hash8`), the `candidates/<slug>--<hash8>/` directory of a checked-in candidate (#39 §4: identity-hash suffix, flat, deduplicating). A recorded value everywhere it appears: recomputed on every run and every test run.
+
+*Avoid*: "identity hash" for this key (the-ozolith's identity spec uses that phrase for the instruction hash), "candidate id"
+
+**Reference Candidate**
+
+One of the public vanilla candidates checked in under `candidates/` (#65): `vanilla-claude` and `vanilla-codex` — the stock TheOzolith run image for the adapter, no setup, no knowledge, no Agent Policy, the adapter's default model spelled as its most-pinned provider ID, the model's default effort. They vary nothing: the fixed points every operator can run (smoke, calibration, Pipeline Validation Runs) and compare against. Pi joins when its adapter exists.
+
+*Avoid*: "baseline agent", "default candidate"
 
 **Workload** *(retired — grilling 2026-08-27)*
 
@@ -290,13 +302,13 @@ The consolidated dataset produced by the harvest script from all Validated Resul
 
 **Results Repo**
 
-The dedicated private git repository that is the home of benchmark results (#39 §3), git-as-truth: `results/<candidate-hash>/<run-id>/` holding one Run Record each, a derived `runs.jsonl` index regenerated from the tree (never hand-edited, never authoritative), and a root `AGENTS.md` carrying the full schema so the repo is self-contained for analysis agents. Heavy artifacts (transcripts, snapshots, per-card trees) never enter it — records carry pointers. Written only through `silverquillm.results_repo`; laid out by `silverquillm results-init <clone>`; the legacy Validated Results corpus is backfilled into it by `scripts/migrate_validated_results.py`.
+The dedicated private git repository that is the home of benchmark results (#39 §3), git-as-truth: `results/<candidate-hash>/<run-id>/` holding one Run Record each, `results/<candidate-hash>/candidate/` holding the vendored Candidate Bundle of an `ozolith-v1` candidate (written once on its first run, verified at write time — the copy must recompute to the directory's Candidate Hash — immutable; #65), a derived `runs.jsonl` index regenerated from the tree (never hand-edited, never authoritative), and a root `AGENTS.md` carrying the full schema so the repo is self-contained for analysis agents. Heavy artifacts (transcripts, snapshots, per-card trees) never enter it — records carry pointers. Written only through `silverquillm.results_repo`; laid out by `silverquillm results-init <clone>`; the legacy Validated Results corpus is backfilled into it by `scripts/migrate_validated_results.py`.
 
 *Avoid*: "results dir" (the per-run `docker/<image>/results/` working output), "leaderboard repo" (publishing is a separate step, #66)
 
 **Run Record**
 
-One Benchmark Run's immutable entry in the Results Repo: `manifest.json` (candidate identity with `verified: false` until recomputed, `mode`, `benchmark` — never "workload" — `budget_seconds`, `leaderboard_valid`, `resumed_from`, `proposal_status`, `run_metadata`, `artifact_pointers`) plus `scores.json` (the three audited dimensions under the benchmark-neutral keys `card_correctness`, `fdn_regression`, `engine_regression`). Written once, atomically; never edited — corrections are new runs. `leaderboard_valid` has one owner, `derive_leaderboard_valid`: false for a `leaderboard.eligible: false` benchmark, a Resume Leg, a card filter that differs from the benchmark's card set after integer normalization of collector numbers, or a scored set that differs from it.
+One Benchmark Run's immutable entry in the Results Repo: `manifest.json` (candidate identity — `ozolith-v1` with `verified: true`, the triple recomputed from a Candidate Bundle, or `legacy` with `verified: false`, a label — `mode`, `benchmark` — never "workload" — `budget_seconds`, `leaderboard_valid`, `resumed_from`, `proposal_status`, `run_metadata`, `artifact_pointers`) plus `scores.json` (the three audited dimensions under the benchmark-neutral keys `card_correctness`, `fdn_regression`, `engine_regression`). Written once, atomically; never edited — corrections are new runs. `leaderboard_valid` has one owner, `derive_leaderboard_valid`: false for a `leaderboard.eligible: false` benchmark, a Resume Leg, a card filter that differs from the benchmark's card set after integer normalization of collector numbers, or a scored set that differs from it.
 
 *Avoid*: "run summary" (`run_summary.json` is the legacy per-run aggregate the record's scores are mapped from), "result" alone
 

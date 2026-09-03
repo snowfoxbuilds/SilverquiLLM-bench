@@ -9,6 +9,8 @@ Layout of a results repo::
 
     AGENTS.md                                   schema doc (results_repo_templates/)
     runs.jsonl                                  derived index — regenerated, never authoritative
+    results/<candidate-hash>/candidate/         the vendored Candidate Bundle (ozolith-v1 only;
+                                                write-once, verified at write time — candidate.py)
     results/<candidate-hash>/<run-id>/manifest.json
     results/<candidate-hash>/<run-id>/scores.json
 
@@ -20,8 +22,12 @@ Rules the module enforces:
 - **Every read re-proves the record.** :func:`read_run_record` requires the
   manifest's ``run_id`` to equal the directory name, the recomputed candidate
   hash to equal both the manifest's ``candidate_hash`` and the parent
-  directory name, and a recorded ``verified`` of exactly ``false`` — so the
-  index and the harvester fail loudly on a tampered or misplaced record
+  directory name, and the recorded ``verified`` to be the literal boolean its
+  scheme's provenance dictates — ``false`` for a ``legacy`` identity (a label,
+  never verified), ``true`` for an ``ozolith-v1`` identity (established only
+  through TheOzolith's verification path); deserialization preserves that
+  value and refuses the other combination or any coercible look-alike — so
+  the index and the harvester fail loudly on a tampered or misplaced record
   instead of emitting misattributed rows.
 - **The manifest records ``benchmark``, never ``workload``** (the term is
   retired — CONTEXT.md).  ``mode`` and ``benchmark`` are run-spec parameters,
@@ -33,18 +39,26 @@ Rules the module enforces:
   identity-bound: its location must be exactly
   :func:`legacy_tree_location` for the record's own candidate and run id, so
   a pointer can never select another candidate's artifacts.
-- **Candidate identity is never trusted from a recorded value.**
-  ``verified`` is ``False`` until the Candidate Bundle issue (#65) recomputes it.
-- **Legacy candidate keys are injective.** A legacy image dir must already be
-  one safe path segment (the same rule run ids obey) and is used unchanged as
-  the ``results/<candidate-hash>/`` key — nothing is sanitized, so two
-  distinct images can never collide into one directory.
+- **Candidate identity is never trusted from a recorded value.**  A ``legacy``
+  identity is a label and records ``verified: false``.  An ``ozolith-v1``
+  identity exists only as the output of recomputation from a Candidate Bundle
+  (:mod:`silverquillm.candidate`, over TheOzolith's verifier) and records
+  ``verified: true``; any other combination is malformed and refused on write
+  and on read.
+- **Candidate keys are injective.** A legacy image dir must already be one
+  safe path segment (the same rule run ids obey) and is used unchanged as the
+  ``results/<candidate-hash>/`` key — nothing is sanitized, so two distinct
+  images can never collide into one directory.  An ``ozolith-v1`` key is the
+  SHA-256 of the canonical JSON of the whole identity triple (base digest,
+  instruction hash, adapter) — see :func:`candidate_hash` — so two candidates
+  differing in any component of the triple never share a directory.
 - **``leaderboard_valid`` has one owner**, :func:`derive_leaderboard_valid`,
   shared by the writer's callers and the legacy migrator.
 
 Public API
 ----------
-``CandidateIdentity``, ``RunRecord``, ``candidate_hash``, ``legacy_image_dir``,
+``CandidateIdentity``, ``RunRecord``, ``candidate_hash``, ``candidate_hash8``,
+``candidate_dirname``, ``candidate_copy_dir``, ``legacy_image_dir``,
 ``legacy_tree_location``, ``derive_leaderboard_valid``,
 ``leaderboard_validity_reasons``, ``normalize_collector_number``,
 ``write_run_record``, ``read_run_record``, ``record_file_texts``,
@@ -55,6 +69,7 @@ Public API
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import re
@@ -66,6 +81,8 @@ from pathlib import Path
 from typing import Any
 
 __all__ = [
+    "CANDIDATE_DIRNAME",
+    "CANDIDATE_HASH8_LEN",
     "INDEX_FILENAME",
     "LEGACY_SCHEME",
     "LEGACY_TREE_KIND",
@@ -83,7 +100,10 @@ __all__ = [
     "ResultsRepoError",
     "RunRecord",
     "RunRecordExistsError",
+    "candidate_copy_dir",
+    "candidate_dirname",
     "candidate_hash",
+    "candidate_hash8",
     "derive_leaderboard_valid",
     "init_results_repo",
     "iter_run_dirs",
@@ -118,8 +138,22 @@ AGENTS_FILENAME = "AGENTS.md"
 #: Identity scheme of runs migrated from the legacy image lineage
 #: (``docker/<image>/``).  The image dir name is the whole identity.
 LEGACY_SCHEME = "legacy"
-#: Identity scheme of runs driven from a Candidate Bundle (lands with #65).
+#: Identity scheme of runs driven from a verified Candidate Bundle: the triple
+#: (base image digest, instruction hash, adapter name) TheOzolith's identity
+#: spec defines, recomputed by its verifier and never trusted from a record.
 OZOLITH_SCHEME = "ozolith-v1"
+
+#: The reserved entry under ``results/<candidate-hash>/`` holding the vendored
+#: Candidate Bundle of an ``ozolith-v1`` candidate (never a run id).
+CANDIDATE_DIRNAME = "candidate"
+#: The length of the short identity-hash suffix in ``<slug>--<hash8>`` names.
+CANDIDATE_HASH8_LEN = 8
+
+_DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}")
+_HEX64_RE = re.compile(r"[0-9a-f]{64}")
+# The SHAPE of an adapter name (one safe token) — deliberately not a set of
+# adapters: the bench never allowlists adapters (BENCH-CONTRACT.md).
+_ADAPTER_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
 #: The three audited dimensions under benchmark-neutral keys.  ``scores.json``
 #: carries exactly these keys, each holding the matching ``run_summary.json``
@@ -197,12 +231,16 @@ class InvalidRunRecordError(ResultsRepoError):
 class CandidateIdentity:
     """Who ran: (base image digest, instruction hash, adapter identity) + scheme.
 
-    ``verified`` is ``False`` until identity is recomputed from a Candidate
-    Bundle (#65).  It is never set ``True`` from a recorded value.
+    Under :data:`OZOLITH_SCHEME` the three fields are TheOzolith's identity
+    triple exactly as its verifier recomputed them from a Candidate Bundle
+    (:meth:`recomputed`), and ``verified`` is ``True`` — that is the only way
+    such an identity comes to exist; a recorded value is re-validated for
+    shape on read but is never what makes it verified.
 
     Under :data:`LEGACY_SCHEME` the three hash fields all carry
     ``legacy:<image-dir>``: in the legacy lineage the Docker image *was* the
-    whole agent configuration, so the tuple does not decompose.
+    whole agent configuration, so the tuple does not decompose — and
+    ``verified`` is ``False``, always.
     """
 
     base_image_digest: str
@@ -210,6 +248,24 @@ class CandidateIdentity:
     adapter_identity: str
     scheme: str
     verified: bool = False
+
+    @classmethod
+    def recomputed(
+        cls, base_image_digest: str, instruction_hash: str, adapter_identity: str
+    ) -> CandidateIdentity:
+        """The ``ozolith-v1`` identity of a Candidate Bundle *as recomputed by
+        TheOzolith's verifier* — :mod:`silverquillm.candidate` is the one
+        caller, after ``verify_bundle`` returned the triple.  Never build one
+        from a recorded manifest value."""
+        identity = cls(
+            base_image_digest=base_image_digest,
+            instruction_hash=instruction_hash,
+            adapter_identity=adapter_identity,
+            scheme=OZOLITH_SCHEME,
+            verified=True,
+        )
+        identity.validate()
+        return identity
 
     @classmethod
     def legacy(cls, image_dir: str) -> CandidateIdentity:
@@ -252,12 +308,12 @@ class CandidateIdentity:
             raise InvalidRunRecordError(
                 f"candidate identity verified must be a JSON boolean, got {self.verified!r}"
             )
-        if self.verified is not False:
-            raise InvalidRunRecordError(
-                "a recorded identity is never verified; #65 recomputes identity "
-                "from the Candidate Bundle"
-            )
         if self.scheme == LEGACY_SCHEME:
+            if self.verified is not False:
+                raise InvalidRunRecordError(
+                    "a legacy identity is a label, never verified; only an ozolith-v1 "
+                    "identity recomputed from a Candidate Bundle carries verified: true"
+                )
             token = self.base_image_digest
             prefix = f"{LEGACY_SCHEME}:"
             image_dir = token[len(prefix) :] if token.startswith(prefix) else ""
@@ -272,7 +328,29 @@ class CandidateIdentity:
                     f"'legacy:<image-dir>' token, got {token!r}, "
                     f"{self.instruction_hash!r}, {self.adapter_identity!r}"
                 )
-        elif self.scheme != OZOLITH_SCHEME:
+        elif self.scheme == OZOLITH_SCHEME:
+            if not _DIGEST_RE.fullmatch(self.base_image_digest):
+                raise InvalidRunRecordError(
+                    "an ozolith-v1 base_image_digest must be 'sha256:<64 hex>', got "
+                    f"{self.base_image_digest!r}"
+                )
+            if not _HEX64_RE.fullmatch(self.instruction_hash):
+                raise InvalidRunRecordError(
+                    "an ozolith-v1 instruction_hash must be 64 hex chars, got "
+                    f"{self.instruction_hash!r}"
+                )
+            if not _ADAPTER_RE.fullmatch(self.adapter_identity):
+                raise InvalidRunRecordError(
+                    "an ozolith-v1 adapter_identity must be one safe token "
+                    f"([A-Za-z0-9._-], no leading dot), got {self.adapter_identity!r}"
+                )
+            if self.verified is not True:
+                raise InvalidRunRecordError(
+                    "an ozolith-v1 identity exists only by recomputation from a "
+                    "Candidate Bundle and records verified: true; an unverified "
+                    "ozolith-v1 identity is malformed"
+                )
+        else:
             raise InvalidRunRecordError(f"unknown candidate identity scheme: {self.scheme!r}")
 
     def to_dict(self) -> dict[str, Any]:
@@ -324,19 +402,64 @@ def candidate_hash(identity: CandidateIdentity) -> str:
     """The ``results/<candidate-hash>/`` directory key for *identity*.
 
     Instruction-independent: derived from the identity, not the run, and
-    defined only for a valid identity (*identity* is validated first).  For
-    the legacy scheme it is the image dir name **unchanged** — legacy names
-    are already safe path segments, so the mapping is injective and two
-    distinct images can never share a directory.  The ``ozolith-v1`` key is
-    defined by the identity-hash spec that lands with #65.
+    defined only for a valid identity (*identity* is validated first).
+
+    For the legacy scheme it is the image dir name **unchanged** — legacy
+    names are already safe path segments, so the mapping is injective and two
+    distinct images can never share a directory.
+
+    For ``ozolith-v1`` it is the SHA-256 hex digest of the compact canonical
+    JSON (sorted keys, ``,``/``:`` separators) of the whole identity triple::
+
+        {"adapter": <adapter name>, "base_digest": <sha256:…>, "instruction_hash": <64 hex>}
+
+    The instruction hash alone would not do: TheOzolith's canonical identity
+    does not contain the adapter name (BENCH-CONTRACT.md, identity spec), so
+    two candidates on the same base with the same materialized setup and
+    different adapters share an instruction hash — hashing the triple keeps
+    the key injective over the identity.  The first :data:`CANDIDATE_HASH8_LEN`
+    characters are the ``<slug>--<hash8>`` suffix of a checked-in candidate
+    directory (:func:`candidate_dirname`).
     """
     identity.validate()
     if identity.scheme == LEGACY_SCHEME:
         return identity.base_image_digest[len(f"{LEGACY_SCHEME}:") :]
-    raise ResultsRepoError(
-        f"no candidate-hash rule for identity scheme {identity.scheme!r}; "
-        f"only {LEGACY_SCHEME!r} is defined until the Candidate Bundle issue (#65) lands"
+    canonical = json.dumps(
+        {
+            "adapter": identity.adapter_identity,
+            "base_digest": identity.base_image_digest,
+            "instruction_hash": identity.instruction_hash,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
     )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def candidate_hash8(identity: CandidateIdentity) -> str:
+    """The short suffix of :func:`candidate_hash` used in candidate directory names."""
+    return candidate_hash(identity)[:CANDIDATE_HASH8_LEN]
+
+
+def candidate_dirname(slug: str, identity: CandidateIdentity) -> str:
+    """The ``<slug>--<hash8>`` name a checked-in candidate directory carries
+    (``candidates/`` in the bench repo, issue #39 §4: identity-hash suffix,
+    flat, deduplicating)."""
+    if not _is_safe_segment(slug) or "--" in slug:
+        raise InvalidRunRecordError(
+            f"invalid candidate slug {slug!r}: one safe path segment without '--'"
+        )
+    return f"{slug}--{candidate_hash8(identity)}"
+
+
+def candidate_copy_dir(repo_root: Path, identity: CandidateIdentity) -> Path:
+    """Where the vendored Candidate Bundle of *identity* lives in a results repo:
+    ``results/<candidate-hash>/candidate/`` (``ozolith-v1`` only)."""
+    if identity.scheme != OZOLITH_SCHEME:
+        raise ResultsRepoError(
+            f"only an {OZOLITH_SCHEME!r} candidate is vendored; {identity.scheme!r} has no bundle"
+        )
+    return Path(repo_root) / RESULTS_DIRNAME / candidate_hash(identity) / CANDIDATE_DIRNAME
 
 
 def legacy_tree_location(image_dir: str, run_id: str) -> str:
@@ -718,7 +841,8 @@ def iter_run_dirs(repo_root: Path) -> Iterator[Path]:
     """Yield every ``results/<candidate-hash>/<run-id>/`` holding a manifest.
 
     Deterministic order: sorted by ``(candidate-hash, run-id)``.  Dot-prefixed
-    directories (in-flight temp dirs) are skipped.
+    directories (in-flight temp dirs) and the reserved vendored-bundle entry
+    (:data:`CANDIDATE_DIRNAME`) are skipped.
     """
     results_dir = Path(repo_root) / RESULTS_DIRNAME
     if not results_dir.is_dir():
@@ -727,7 +851,7 @@ def iter_run_dirs(repo_root: Path) -> Iterator[Path]:
         if candidate_dir.name.startswith("."):
             continue
         for run_dir in sorted(p for p in candidate_dir.iterdir() if p.is_dir()):
-            if run_dir.name.startswith("."):
+            if run_dir.name.startswith(".") or run_dir.name == CANDIDATE_DIRNAME:
                 continue
             if (run_dir / MANIFEST_FILENAME).is_file():
                 yield run_dir

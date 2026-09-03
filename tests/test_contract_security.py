@@ -29,6 +29,7 @@ from silverquillm.evaluator import FullEvalResult
 from silverquillm.jobdir import driver_git_dir, load_benchmark
 from silverquillm.modes import get_mode
 from silverquillm.proposal import PROPOSAL_APPLIED
+from tests.candidate_fixtures import fake_image_builder, make_candidate_dir
 from tests.contract_harness import make_rig
 
 PROPOSAL = {
@@ -69,20 +70,27 @@ def _spy_process_spawns(monkeypatch) -> list[list[str]]:
     return spawned
 
 
-def _drive(tmp_path: Path, rig, *, run_id: str):
+@pytest.fixture(scope="module")
+def candidate_dir(tmp_path_factory) -> Path:
+    """One fixture Candidate Bundle for the module (a real export)."""
+    return make_candidate_dir(tmp_path_factory.mktemp("candidate"))
+
+
+def _drive(tmp_path: Path, rig, *, run_id: str, candidate: Path):
     return drive_contract_run(
         run_dir=tmp_path / "run",
         run_id=run_id,
         benchmark=load_benchmark("smoke"),
         mode=get_mode("basic"),
         budget_seconds=600,
-        image="theozolith-run-claude:test",
+        candidate=candidate,
         session_factory=rig.session_factory,
+        image_builder=fake_image_builder,
     )
 
 
 class TestGateCommandsNeverRunOnTheHost:
-    def test_candidate_gate_toml_travels_the_jobs_channel_only(self, tmp_path: Path, monkeypatch, fast_eval) -> None:
+    def test_candidate_gate_toml_travels_the_jobs_channel_only(self, tmp_path: Path, monkeypatch, fast_eval, candidate_dir: Path) -> None:
         sentinel = tmp_path / "HOST_EXECUTED"
         command = f"python3 -c \"open({str(sentinel)!r}, 'w').close()\""
         gate_toml = "[steps.test]\nrun = " + json.dumps(command) + "\n"
@@ -105,7 +113,7 @@ class TestGateCommandsNeverRunOnTheHost:
             job_runner=container_side_runner,
         )
         spawned = _spy_process_spawns(monkeypatch)
-        result = _drive(tmp_path, rig, run_id="smoke-sentinel")
+        result = _drive(tmp_path, rig, run_id="smoke-sentinel", candidate=candidate_dir)
         job = result.job_dir
 
         # The sentinel never fired anywhere, and no process the benchmark
@@ -155,7 +163,7 @@ class TestGateCommandsNeverRunOnTheHost:
 
 
 class TestCandidateGitMetadataNeverRunsAtTheDriverCommit:
-    def test_planted_hooks_and_config_are_inert(self, tmp_path: Path, monkeypatch, fast_eval) -> None:
+    def test_planted_hooks_and_config_are_inert(self, tmp_path: Path, monkeypatch, fast_eval, candidate_dir: Path) -> None:
         hook_ran = tmp_path / "HOOK_RAN"
         fsmonitor_ran = tmp_path / "FSMONITOR_RAN"
         rig = make_rig(
@@ -171,7 +179,7 @@ class TestCandidateGitMetadataNeverRunsAtTheDriverCommit:
                 "proposal": PROPOSAL,
             },
         )
-        result = _drive(tmp_path, rig, run_id="smoke-hooks")
+        result = _drive(tmp_path, rig, run_id="smoke-hooks", candidate=candidate_dir)
         assert result.ok, [f.to_dict() for f in result.failures]
         assert result.commit_sha
         assert not hook_ran.exists() and not fsmonitor_ran.exists()
@@ -194,7 +202,7 @@ class TestCandidateGitMetadataNeverRunsAtTheDriverCommit:
 
 
 class TestTamperedManifestNeverRedirectsTheDriver:
-    def test_rewritten_workdir_does_not_move_commit_or_harvest(self, tmp_path: Path, monkeypatch, fast_eval) -> None:
+    def test_rewritten_workdir_does_not_move_commit_or_harvest(self, tmp_path: Path, monkeypatch, fast_eval, candidate_dir: Path) -> None:
         """The bind-mounted manifest is agent-writable from launch onward; the
         driver's post-exit steps use the path it *staged*, never a re-read."""
         outside = tmp_path / "outside-workdir"
@@ -217,7 +225,7 @@ class TestTamperedManifestNeverRedirectsTheDriver:
                 "proposal": PROPOSAL,
             },
         )
-        result = _drive(tmp_path, rig, run_id="smoke-tamper")
+        result = _drive(tmp_path, rig, run_id="smoke-tamper", candidate=candidate_dir)
         assert result.ok, [f.to_dict() for f in result.failures]
         final = result.run_dir / "workspace_final"
         assert (final / "cards" / "fdn" / "fdn_129" / "card_impl.py").is_file()
@@ -231,7 +239,7 @@ class TestTamperedManifestNeverRedirectsTheDriver:
 
 
 class TestHarvestNeverFollowsCandidateSymlinks:
-    def test_symlink_out_of_the_checkout_is_skipped(self, tmp_path: Path, monkeypatch, fast_eval) -> None:
+    def test_symlink_out_of_the_checkout_is_skipped(self, tmp_path: Path, monkeypatch, fast_eval, candidate_dir: Path) -> None:
         outside = tmp_path / "outside"
         outside.mkdir()
         (outside / "secret.txt").write_text("host file")
@@ -242,7 +250,7 @@ class TestHarvestNeverFollowsCandidateSymlinks:
                 "proposal": PROPOSAL,
             },
         )
-        result = _drive(tmp_path, rig, run_id="smoke-symlink")
+        result = _drive(tmp_path, rig, run_id="smoke-symlink", candidate=candidate_dir)
         final = result.run_dir / "workspace_final"
         assert not (final / "cards" / "fdn" / "leak").exists() and not (final / "cards" / "fdn" / "leak").is_symlink()
         assert not (final / "leak.txt").exists() and not (final / "leak.txt").is_symlink()

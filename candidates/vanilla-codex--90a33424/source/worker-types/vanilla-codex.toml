@@ -1,0 +1,30 @@
+# vanilla-codex — the Codex CLI reference candidate (SilverquiLLM-bench #65).
+#
+# Varies nothing: TheOzolith's stock codex run image (pinned by digest), no
+# setup instructions, no knowledge tree, no Agent Policy, the default model
+# spelled as its most-pinned provider ID (#39; `-latest` IDs float and are
+# refused by the adapter's pin rule), and NO effort: no (model, effort) pair
+# is proven enforceable for codex yet (the-ozolith#88 / spike #76), so the
+# adapter refuses every nonempty effort. driver/workspace/secrets are not
+# identity-bearing (BENCH-CONTRACT.md); the driver is the pipeline
+# Implementer so the derived image is exactly what a deployed implementer
+# runs (managed-scope bake).
+driver = "builtin:implementer"
+adapter = "codex"
+model = "gpt-5.2-codex"
+
+# ghcr.io/snowfoxbuilds/theozolith-run-codex at the-ozolith commit
+# 3c0a5df9609a6c9e1f517bd28a2083d11480c31d — the merge that carries the pinned worker revision
+# (19118cae; the worker tree is byte-identical between the two) — pinned by
+# the digest `theozolith candidate export` resolved anonymously from ghcr.io
+# (the image is public), equal to the publish job's push receipt.
+base = "ghcr.io/snowfoxbuilds/theozolith-run-codex:sha-3c0a5df9609a6c9e1f517bd28a2083d11480c31d@sha256:8071882367362695ecc44919b748835f53d7d2e637c37213ab35ab43d5958162"
+setup = []
+
+# Secret SLOT name only — the bench binds it from its environment. The codex
+# adapter's single registered credential (ADR-0052 §5) is the FULL ChatGPT-plan
+# auth.json document captured by a one-time `codex login --device-auth`;
+# `OPENAI_API_KEY` is on the adapter's steering blocklist (it would flip the
+# auth mode away from the delivered plan credential) and is not a slot.
+[secrets]
+CODEX_AUTH_JSON = ""

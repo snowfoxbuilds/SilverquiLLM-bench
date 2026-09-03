@@ -10,6 +10,10 @@ Last updated: 2026-08-28 (source) · vendored into this repo 2026-09-02
 
        Source: snowfoxbuilds/the-ozolith :: docs/specs/BENCH-CONTRACT.md
        Commit: 19118cae6dc4faf0543bd9bf18aa54621c971358
+       Vectors: docs/specs/bench-identity-vectors.json — the identity golden
+                vectors, vendored byte-identical from the same commit
+                (identity_spec_version 2); the consumed packages are pinned to
+                the same commit in pyproject.toml / silverquillm/contract_version.py.
        Fetch:  gh api repos/snowfoxbuilds/the-ozolith/contents/docs/specs/BENCH-CONTRACT.md \
                  -H "Accept: application/vnd.github.raw"
 -->

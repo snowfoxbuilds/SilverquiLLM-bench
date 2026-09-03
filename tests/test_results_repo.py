@@ -10,6 +10,7 @@ writer, the single-owner ``leaderboard_valid`` rule with the real ``"1"`` vs
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import json
 import pathlib
 import re
@@ -137,11 +138,34 @@ class TestCandidateIdentity:
     def test_legacy_image_dir_round_trips(self) -> None:
         assert rr.legacy_image_dir(rr.CandidateIdentity.legacy("img-b")) == "img-b"
 
-    def test_non_legacy_scheme_has_no_hash_rule_yet(self) -> None:
-        ident = rr.CandidateIdentity("sha256:abc", "h", "claude", rr.OZOLITH_SCHEME)
+    def test_ozolith_hash_is_the_sha256_of_the_canonical_triple(self) -> None:
+        """The ``ozolith-v1`` key hashes the WHOLE triple (adapter included —
+        TheOzolith's canonical identity omits the adapter name, so the
+        instruction hash alone is not injective over the identity)."""
+        ident = rr.CandidateIdentity.recomputed("sha256:" + "a" * 64, "b" * 64, "claude")
         assert rr.legacy_image_dir(ident) is None
-        with pytest.raises(rr.ResultsRepoError, match="#65"):
-            rr.candidate_hash(ident)
+        canonical = json.dumps(
+            {"adapter": "claude", "base_digest": "sha256:" + "a" * 64, "instruction_hash": "b" * 64},
+            sort_keys=True, separators=(",", ":"),
+        )
+        expected = hashlib.sha256(canonical.encode()).hexdigest()
+        assert rr.candidate_hash(ident) == expected
+        assert rr.candidate_hash8(ident) == expected[:8]
+        assert rr.candidate_dirname("vanilla-claude", ident) == f"vanilla-claude--{expected[:8]}"
+        # Adapter-injective: same base + instruction hash, different adapter, different key.
+        twin = rr.CandidateIdentity.recomputed("sha256:" + "a" * 64, "b" * 64, "pi")
+        assert rr.candidate_hash(twin) != expected
+        assert rr.candidate_copy_dir(Path("/repo"), ident) == Path("/repo/results") / expected / "candidate"
+
+    def test_candidate_dirname_rejects_unsafe_slugs(self) -> None:
+        ident = rr.CandidateIdentity.recomputed("sha256:" + "a" * 64, "b" * 64, "claude")
+        for bad in ("", ".hidden", "a b", "slug--with", "a/b"):
+            with pytest.raises(rr.InvalidRunRecordError, match="slug"):
+                rr.candidate_dirname(bad, ident)
+
+    def test_legacy_identity_has_no_vendored_copy(self) -> None:
+        with pytest.raises(rr.ResultsRepoError, match="vendored"):
+            rr.candidate_copy_dir(Path("/repo"), rr.CandidateIdentity.legacy("img-a"))
 
     @pytest.mark.parametrize("bad", ["", ".", "..", "a/b"])
     def test_legacy_rejects_unsafe_image_dirs(self, bad: str) -> None:
@@ -184,7 +208,10 @@ class TestCandidateIdentity:
         assert rr.CandidateIdentity.from_dict(ident.to_dict()) == ident
 
     @pytest.mark.parametrize("verified", [True, "false", "true", 1, 0, None])
-    def test_recorded_verified_must_be_the_literal_false(self, verified: Any) -> None:
+    def test_a_legacy_identity_records_verified_as_the_literal_false(self, verified: Any) -> None:
+        """Legacy provenance: a label, never verified — so ``verified`` must be
+        the literal ``false``, never coerced (the ``ozolith-v1`` counterpart,
+        the literal ``true``, is proven below)."""
         with pytest.raises(rr.InvalidRunRecordError, match="verified"):
             rr.CandidateIdentity.from_dict(_legacy_dict(verified=verified))
 
@@ -229,17 +256,45 @@ class TestCandidateIdentity:
         with pytest.raises(rr.InvalidRunRecordError, match="unknown candidate identity scheme"):
             rr.CandidateIdentity.from_dict(_legacy_dict(scheme="sha-magic"))
 
-    def test_ozolith_identity_deserializes_only_unverified(self) -> None:
+    def test_ozolith_identity_deserializes_only_verified_and_well_shaped(self) -> None:
+        """An ``ozolith-v1`` identity exists only as the verifier's output:
+        it records ``verified: true``, and an unverified one — or one whose
+        triple is not digest / 64-hex / safe-token shaped — is malformed."""
         data = {
             "scheme": rr.OZOLITH_SCHEME,
-            "base_image_digest": "sha256:abc",
-            "instruction_hash": "h",
+            "base_image_digest": "sha256:" + "a" * 64,
+            "instruction_hash": "b" * 64,
             "adapter_identity": "claude",
-            "verified": False,
+            "verified": True,
         }
-        assert rr.CandidateIdentity.from_dict(data).verified is False
-        with pytest.raises(rr.InvalidRunRecordError, match="#65"):
-            rr.CandidateIdentity.from_dict({**data, "verified": True})
+        ident = rr.CandidateIdentity.from_dict(data)
+        assert ident.verified is True
+        assert ident == rr.CandidateIdentity.recomputed("sha256:" + "a" * 64, "b" * 64, "claude")
+        with pytest.raises(rr.InvalidRunRecordError, match="verified"):
+            rr.CandidateIdentity.from_dict({**data, "verified": False})
+        with pytest.raises(rr.InvalidRunRecordError, match="base_image_digest"):
+            rr.CandidateIdentity.from_dict({**data, "base_image_digest": "sha256:abc"})
+        with pytest.raises(rr.InvalidRunRecordError, match="instruction_hash"):
+            rr.CandidateIdentity.from_dict({**data, "instruction_hash": "h"})
+        with pytest.raises(rr.InvalidRunRecordError, match="adapter_identity"):
+            rr.CandidateIdentity.from_dict({**data, "adapter_identity": "a b"})
+        # Any adapter TOKEN is admissible — the bench keeps no adapter allowlist.
+        assert rr.CandidateIdentity.from_dict({**data, "adapter_identity": "pi"}).adapter_identity == "pi"
+
+    def test_verified_ozolith_identity_round_trips_through_a_record(self, tmp_path: Path) -> None:
+        ident = rr.CandidateIdentity.recomputed("sha256:" + "a" * 64, "b" * 64, "codex")
+        run_dir = rr.write_run_record(tmp_path, _record(candidate=ident, artifact_pointers=[]))
+        assert run_dir.parent.name == rr.candidate_hash(ident)
+        record = rr.read_run_record(run_dir)
+        assert record.candidate == ident and record.candidate.verified is True
+
+    def test_vendored_candidate_entry_is_never_iterated_as_a_run(self, tmp_path: Path) -> None:
+        ident = rr.CandidateIdentity.recomputed("sha256:" + "a" * 64, "b" * 64, "codex")
+        run_dir = rr.write_run_record(tmp_path, _record(candidate=ident, artifact_pointers=[]))
+        copy = rr.candidate_copy_dir(tmp_path, ident)
+        copy.mkdir()
+        (copy / "manifest.json").write_text("{}")  # a decoy: still never a run
+        assert list(rr.iter_run_dirs(tmp_path)) == [run_dir]
 
 
 # ---------------------------------------------------------------------------
@@ -630,7 +685,7 @@ class TestLegacyTreePointerBinding:
             record.validate()
 
     def test_a_legacy_tree_pointer_requires_a_legacy_identity(self) -> None:
-        ident = rr.CandidateIdentity("sha256:abc", "h", "claude", rr.OZOLITH_SCHEME)
+        ident = rr.CandidateIdentity.recomputed("sha256:" + "a" * 64, "b" * 64, "claude")
         record = _record(
             candidate=ident,
             artifact_pointers=[

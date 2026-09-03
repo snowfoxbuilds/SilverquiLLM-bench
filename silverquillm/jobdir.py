@@ -13,9 +13,10 @@ What :func:`stage_job_dir` materializes (all via the published API):
 
 - ``input/manifest.json`` — a production :class:`~theozolith_worker.api.Manifest`
   (``mode: "run"``, ``round: 1``, stamped ``schema_version``, the production
-  default ``workdir``) written with :func:`~theozolith_worker.api.write_manifest`.
-  The real ``read_manifest`` rejects unknown keys, so the Benchmark Mode never
-  rides the manifest — it lives on the RunRecord and shapes only the task.
+  default ``workdir``, the Candidate Bundle's ``adapter`` verbatim) written
+  with :func:`~theozolith_worker.api.write_manifest`.  The real
+  ``read_manifest`` rejects unknown keys, so the Benchmark Mode never rides
+  the manifest — it lives on the RunRecord and shapes only the task.
 - ``input/prompt.md`` — the production implementer prompt, byte-for-byte from
   :func:`~theozolith_worker.api.render_run_prompt` (the task rides the synthetic
   issue body it wraps, never a bench-authored template).
@@ -349,6 +350,7 @@ def stage_job_dir(
     *,
     run_id: str,
     budget_seconds: int,
+    adapter: str,
 ) -> Path:
     """Stage ``run_dir/job/`` for one Contract Run and return the job dir.
 
@@ -359,7 +361,14 @@ def stage_job_dir(
     An existing ``run_dir/job`` or ``run_dir/driver.git`` is a loud
     :class:`JobDirConflictError`: a fresh or retried run never inherits a prior
     attempt's proposal, status, transcript, or checkout.
+
+    *adapter* is the Candidate Bundle's adapter name, stamped into the
+    production manifest verbatim — the in-image harness invokes that adapter.
+    It is an opaque field here: the bench keeps no adapter allowlist
+    (BENCH-CONTRACT.md — the format never hardcodes the adapter set).
     """
+    if not isinstance(adapter, str) or not adapter:
+        raise ValueError("stage_job_dir requires the candidate's adapter name")
     run_dir = Path(run_dir)
     job = run_dir / JOB_DIRNAME
     driver_repo = driver_git_dir(run_dir)
@@ -389,7 +398,7 @@ def stage_job_dir(
         manifest = api.Manifest(
             run_id=run_id,
             mode=api.MODE_RUN,
-            adapter="claude",
+            adapter=adapter,
             agent_timeout_seconds=float(budget_seconds),
             round=1,
             round_budget=0,

@@ -155,9 +155,11 @@ Agent Container
 | `benchmarks/sos/workspace/cards/fdn/` | Active | FDN per-card implementations | 276 card directories with 286 `card_impl.py` files; 174 cards implemented/upgraded in Items 1–15 |
 | `benchmarks/sos/workspace/cards/sos/` | Active | SOS benchmark targets | Empty/template impls before agent run; agent fills `card_impl.py` |
 | `benchmarks/sos/workspace/tests/` | Active | Workspace-internal tests | Engine unit tests, test_utils.py, conftest.py |
-| `silverquillm/` | Active | Benchmark runner package | CLI, workspace staging, evaluation, telemetry, live viewer, results |
+| `silverquillm/` | Active | Benchmark runner package | CLI, workspace staging, evaluation, telemetry, live viewer, results; the Contract Run driver (`contract.py`), Candidate Bundle ingestion (`candidate.py`), the results-repo schema (`results_repo.py`) |
 | `silverquillm/replay/` | Active | 17lands replay validation pipeline | Parser, state reconstruction, executor, divergence reporting |
-| `docker/` | Active | Agent container images | Image is the full agent config |
+| `candidates/` | Active | Public reference Benchmark Candidates (#65) | `<slug>--<hash8>/` — README + exported source + the Candidate Bundle under `bundle/`; `vanilla-claude`, `vanilla-codex`; identity recomputed by `tests/test_reference_candidates.py` |
+| `runs/` | Active (ignored) | Contract Run artifacts | `runs/<candidate-dir>/<run-id>/` — job dir, driver repo, `workspace_final/`, `contract_run.json`; never committed (records go to the results repo) |
+| `docker/` | Active | Agent container images (legacy entrypoint lineage, retired by #66) | Image is the full agent config |
 | `docker/homelab-pi-blind/` | Active | Pi blind-mode image (homelab) | Agent-specific entrypoint and model config |
 | `docker/local-pi-blind/` | Active | Pi blind-mode image (local) | Agent-specific entrypoint and model config |
 | `docker/copilot-gpt-4.1/` | Active | Copilot GPT-4.1 image | Agent-specific entrypoint |

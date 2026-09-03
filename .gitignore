@@ -27,6 +27,10 @@ venv/
 .DS_Store
 
 docker/*/results/
+# Contract Run artifacts (job dir, driver repo, workspace_final, evidence):
+# runs/<candidate>/<run-id>/ — heavy, never committed; records go to the
+# results repo.
+runs/
 
 aggregated_results.csv
 

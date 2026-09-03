@@ -28,9 +28,9 @@ REPO = Path(__file__).resolve().parents[1]
 CONTRACT_DOC = REPO / "docs" / "specs" / "BENCH-CONTRACT.md"
 
 
-def _pyproject_requirement() -> str:
+def _pyproject_requirement(name: str = cv.WORKER_DISTRIBUTION) -> str:
     data = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
-    reqs = [r for r in data["project"]["dependencies"] if r.startswith(cv.WORKER_DISTRIBUTION)]
+    reqs = [r for r in data["project"]["dependencies"] if r.startswith(f"{name} ")]
     assert len(reqs) == 1, reqs
     return reqs[0]
 
@@ -42,18 +42,48 @@ class TestThreeSourcesAgree:
         assert " @ git+" in cv.pinned_requirement()
         assert cv.pinned_requirement().endswith("#subdirectory=worker")
 
+    def test_every_consumed_package_is_pinned_to_the_one_revision(self) -> None:
+        """The verifier (control), its codegen (nodedaemon) and compiler
+        (knowledge) ride the same immutable revision as the worker."""
+        names = [pin.name for pin in cv.PINNED_DISTRIBUTIONS]
+        assert names == [
+            "theozolith-worker", "theozolith-control", "theozolith-nodedaemon", "theozolith-knowledge",
+        ]
+        for pin in cv.PINNED_DISTRIBUTIONS:
+            assert _pyproject_requirement(pin.name) == pin.requirement == cv.pinned_requirement(pin.name)
+            assert f"@{cv.PINNED_REVISION}#subdirectory={pin.subdirectory}" in pin.requirement
+            assert re.fullmatch(r"[0-9a-f]{64}", pin.tree_digest)
+        with pytest.raises(ValueError):
+            cv.pinned_requirement("theozolith-nonesuch")
+
     def test_vendored_contract_is_from_the_pinned_revision(self) -> None:
         text = CONTRACT_DOC.read_text(encoding="utf-8")
         match = re.search(r"Commit:\s*([0-9a-f]{40})", text)
         assert match, "the vendored contract carries no provenance commit"
         assert match.group(1) == cv.PINNED_WORKER_REVISION
 
-    def test_vendored_contract_publishes_the_schema_version_the_bench_enforces(self) -> None:
+    def test_vendored_contract_publishes_the_versions_the_bench_enforces(self) -> None:
         text = CONTRACT_DOC.read_text(encoding="utf-8")
         assert re.search(
             rf"\*\*`schema_version`\*\* \(currently {cv.CONTRACT_SCHEMA_VERSION},", text
         ), "BENCH-CONTRACT.md's schema_version differs from CONTRACT_SCHEMA_VERSION"
+        assert re.search(
+            rf"\*\*`bundle_format_version`\*\* \(currently {cv.CONTRACT_BUNDLE_FORMAT_VERSION},", text
+        )
+        assert re.search(
+            rf"\*\*`identity_spec_version`\*\* \(currently {cv.CONTRACT_IDENTITY_SPEC_VERSION},", text
+        )
         assert api.SCHEMA_VERSION == cv.CONTRACT_SCHEMA_VERSION
+        from theozolith_control import candidate as verifier
+
+        assert verifier.BUNDLE_FORMAT_VERSION == cv.CONTRACT_BUNDLE_FORMAT_VERSION
+        assert verifier.IDENTITY_SPEC_VERSION == cv.CONTRACT_IDENTITY_SPEC_VERSION
+
+    def test_vendored_identity_vectors_are_the_pinned_spec_version(self) -> None:
+        import json
+
+        vectors = json.loads((REPO / "docs" / "specs" / "bench-identity-vectors.json").read_text())
+        assert vectors["identity_spec_version"] == cv.CONTRACT_IDENTITY_SPEC_VERSION
 
 
 class TestInstalledWorkerIsThePinnedOne:
@@ -79,8 +109,53 @@ class TestInstalledWorkerIsThePinnedOne:
             # recorded and must be proven — never just the version.
             assert worker.revision == cv.PINNED_WORKER_REVISION, worker
 
+    def test_every_installed_package_tree_hashes_to_its_pin(self) -> None:
+        installed = cv.installed_contract()
+        assert set(installed) == {pin.name for pin in cv.PINNED_DISTRIBUTIONS}
+        for pin in cv.PINNED_DISTRIBUTIONS:
+            dist = installed[pin.name]
+            assert dist.version == cv.PINNED_VERSION, (pin.name, dist)
+            assert dist.tree_digest == pin.tree_digest, (pin.name, dist)
+            if dist.revision is not None or os.environ.get("GITHUB_ACTIONS"):
+                assert dist.revision == cv.PINNED_REVISION, (pin.name, dist)
+
 
 class TestRefusal:
+    def test_a_non_worker_package_tree_mismatch_is_refused(self) -> None:
+        """The verifier's own code is authenticated like the worker's: a
+        control tree that does not hash to the pin is refused."""
+        packages = dict(cv.installed_contract())
+        packages["theozolith-control"] = cv.InstalledDistribution(
+            version=cv.PINNED_VERSION, revision=None, source="file:///x", tree_digest="0" * 64
+        )
+        errors = cv.support_errors(packages[cv.WORKER_DISTRIBUTION], packages)
+        assert any("theozolith-control" in e and "tree digest" in e for e in errors)
+        assert not any("theozolith-worker" in e for e in errors)
+
+    def test_a_missing_package_is_refused(self, monkeypatch) -> None:
+        real = cv.installed_distribution
+
+        def missing(pin):
+            if pin.name == "theozolith-nodedaemon":
+                raise cv.UnsupportedContractError("theozolith-nodedaemon is not installed")
+            return real(pin)
+
+        monkeypatch.setattr(cv, "installed_distribution", missing)
+        errors = cv.support_errors()
+        assert any("theozolith-nodedaemon is not installed" in e for e in errors)
+        with pytest.raises(cv.UnsupportedContractError, match="nodedaemon"):
+            cv.check_contract_support()
+
+    @pytest.mark.parametrize("attr", ["BUNDLE_FORMAT_VERSION", "IDENTITY_SPEC_VERSION"])
+    def test_verifier_version_skew_is_refused(self, monkeypatch, attr) -> None:
+        from theozolith_control import candidate as verifier
+
+        monkeypatch.setattr(verifier, attr, getattr(verifier, attr) + 1)
+        errors = cv.support_errors()
+        assert any(attr.lower() in e for e in errors), errors
+        with pytest.raises(cv.UnsupportedContractError, match=attr.lower()):
+            cv.check_contract_support()
+
     def test_schema_skew_is_refused(self, monkeypatch) -> None:
         monkeypatch.setattr(api, "SCHEMA_VERSION", cv.CONTRACT_SCHEMA_VERSION + 1)
         errors = cv.support_errors()
