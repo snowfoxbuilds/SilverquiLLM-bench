@@ -12,14 +12,22 @@ dependencies = [
     "requests",
     "pyyaml",
     "click",
-    # TheOzolith's published worker package: the bench CONSUMES its Run Contract
-    # entry points (theozolith_worker.api) rather than reimplementing them, and
-    # pins the EXACT immutable revision docs/specs/BENCH-CONTRACT.md is vendored
-    # from (the package is not on PyPI and the-ozolith publishes no release
-    # tags). silverquillm/contract_version.py states the same revision and the
-    # driver refuses any other; tests/test_contract_pin.py keeps the three in
-    # agreement. Re-sync the vendored contract when moving this pin.
+    # TheOzolith's published packages: the bench CONSUMES its Run Contract
+    # entry points (theozolith_worker.api) and its Candidate Bundle verifier
+    # (theozolith_control.candidate — export, verify_bundle, the verified
+    # build, over theozolith_nodedaemon's Dockerfile codegen and tree hash and
+    # theozolith_knowledge's compiler) rather than reimplementing them, and
+    # pins EVERY one of them to the EXACT immutable revision
+    # docs/specs/BENCH-CONTRACT.md is vendored from (the packages are not on
+    # PyPI and the-ozolith publishes no release tags).
+    # silverquillm/contract_version.py states the same revision plus each
+    # package's tree digest and the driver refuses any other;
+    # tests/test_contract_pin.py keeps the sources in agreement. Re-sync the
+    # vendored contract and vectors when moving this pin.
     "theozolith-worker @ git+https://github.com/snowfoxbuilds/the-ozolith.git@19118cae6dc4faf0543bd9bf18aa54621c971358#subdirectory=worker",
+    "theozolith-control @ git+https://github.com/snowfoxbuilds/the-ozolith.git@19118cae6dc4faf0543bd9bf18aa54621c971358#subdirectory=control",
+    "theozolith-nodedaemon @ git+https://github.com/snowfoxbuilds/the-ozolith.git@19118cae6dc4faf0543bd9bf18aa54621c971358#subdirectory=nodedaemon",
+    "theozolith-knowledge @ git+https://github.com/snowfoxbuilds/the-ozolith.git@19118cae6dc4faf0543bd9bf18aa54621c971358#subdirectory=knowledge",
 ]
 
 [project.scripts]
