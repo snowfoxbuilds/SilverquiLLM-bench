@@ -1,16 +1,16 @@
-Status: DRAFT (rewritten for container architecture)
+Status: DRAFT
 
 Last updated: 2026-06-10
 
-Scope: SOS (V1). The complexity-tier weighting below applies to SOS only — the HOB-generation benchmarks (hob-easy/medium/hard) drop complexity tiers entirely and score raw pass/total; see [HOB-BENCHMARKS.md](HOB-BENCHMARKS.md) → Evaluation.
-
 # Scoring
 
-Three evaluation dimensions. No composite score.
+Three evaluation dimensions, scored independently with no composite score and raw scores only — no statistical significance tests or confidence intervals.
 
 ## Context
 
 The evaluator runs audited tests against the agent's output after the container exits. Agent tests are harvested as artifacts but not used for scoring in v1. Blind vs. tested mode comparisons are made across separate runs (different images), not as separate scoring categories.
+
+This spec covers SOS (V1) scoring: the complexity-tier weighting here applies to SOS only, while the HOB-generation benchmarks (hob-easy/medium/hard) drop complexity tiers and score raw pass/total (see [HOB-BENCHMARKS.md](HOB-BENCHMARKS.md) → Evaluation).
 
 ## Design
 
@@ -44,6 +44,8 @@ Measures whether the agent's engine extensions broke fundamental game mechanics.
 
 FDN Card Regression and Engine Regression are intertwined (both test the engine at different levels) but measure different things: Dimension 2 catches broken card behavior, Dimension 3 catches broken rules mechanics. An agent could pass all FDN card tests but fail engine tests if it hacked card-level workarounds that corrupt internal state.
 
+These three dimensions were simplified from an earlier four-category scheme (grilling 2026-05-13): the former blind and tested categories merged into the single SOS Card Correctness dimension, the former test-quality category was deferred (see Future Work), and the former engine-extension category was split into FDN Card Regression and Engine Regression.
+
 ### Agent envelope (HOB-generation benchmarks)
 
 For the HOB-generation benchmarks (hob-easy/medium/hard), the Writable Engine is **freely modifiable** — there is no additive-only rule and no diff policing (a departure from the SOS V1 contract; see [WORKSPACE-CONTRACT.md](WORKSPACE-CONTRACT.md) and [HOB-BENCHMARKS.md](HOB-BENCHMARKS.md) → Engine rules). The entire judgment is the same three audited dimensions, all run against the harvested engine, with **HOB Card Correctness** replacing SOS Card Correctness for this generation:
@@ -64,7 +66,7 @@ Audited tests judge card behavior by simulating gameplay (Implementation-Agnosti
 | Complex | Multi-step abilities, replacement effects, modal spells | 4x |
 | Expert | Planeswalkers, complex state machines, unusual mechanics | 5x |
 
-Weighted Score = Σ(w_c × pass(c)) / Σ(w_c), where pass(c) = 1 if all audited tests pass, 0 otherwise. Applied to Dimension 1 only.
+Weighted Score = Σ(w_c × pass(c)) / Σ(w_c), where pass(c) = 1 if all audited tests pass, 0 otherwise. Applied to Dimension 1 only; FDN and engine regression are pass/fail and need no weighting.
 
 Tiers assigned via automated heuristics: rules text length, keyword count, ability count, target requirements, zone interactions, card type. Thresholds calibrated from target set distribution.
 
@@ -109,12 +111,3 @@ Regression Summary
 **Self-eval**: Run each agent's tests against its own implementations. Useful for measuring self-serving test bias.
 
 **Test Quality scoring**: Audit survival rate, discrimination score, difficulty calibration, coverage. Requires cross-eval infrastructure.
-
-## Decisions
-
-- **Three evaluation dimensions**: SOS card correctness, FDN card regression, engine regression. Each measured independently. [SETTLED]
-- **Audited tests only for v1**: Agent tests are harvested as artifacts but not used for scoring. Cross-eval and self-eval deferred to future test harvester. [SETTLED]
-- **No blind vs. tested scoring categories**: Mode is baked into the image. Compare modes by running different images and comparing Dimension 1 results. [SETTLED]
-- **Complexity weighting on Dimension 1 only**: FDN and engine regression are pass/fail — no weighting needed. [SETTLED]
-- **Raw scores only**: No statistical significance tests or confidence intervals. [SETTLED]
-- **Grilling 2026-05-13: Simplified from 4 categories**: Former Category 1 (blind) and Category 2 (tested) merged into single SOS correctness dimension. Former Category 3 (test quality) deferred. Former Category 4 (engine extension) split into FDN regression + engine regression. [SETTLED]

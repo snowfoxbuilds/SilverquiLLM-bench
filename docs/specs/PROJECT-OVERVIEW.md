@@ -29,7 +29,11 @@ Existing coding benchmarks (HumanEval, SWE-bench) don't capture the structured c
 | Agentic tool | Docker container images: Pi (default), OpenCode, Claude Code, Aider (containerized black-box agents) |
 | Card scope | Full set (all card types) |
 
+These choices reflect deliberate trade-offs. Python is the target language because it is the most common LLM coding language with the broadest model support, and the engine is a Python port of XMage rather than a custom engine so it preserves battle-tested rules logic while staying LLM-friendly. MTG Foundations is the base set because its classic reprints cover all card types and give agents working examples; Secrets of Strixhaven is the target because — released 2026-04-24 — it is too new to appear in training data, and the full set is in scope to capture the full difficulty distribution and enable per-complexity-tier analysis. Each agent ships as a self-contained Docker image with its own entrypoint, so contamination is controlled structurally through container isolation; for v1, contamination control also relies on a new set plus no web access — simple and effective, avoiding complex sandboxing.
+
 ### Development Phases
+
+Development is harness-first: the benchmark runner is prototyped and validated early against real Strixhaven cards before the remaining Foundations cards are ported.
 
 **Phase 1 — Engine & Base Set** (COMPLETE)
 
@@ -51,7 +55,7 @@ Curate audited gold-standard tests for SOS cards. Run all agents across full SOS
 
 ### Evaluation Architecture
 
-Evaluation runs human-curated **audited tests** against every agent's implementation. There is no self-eval or N×N cross-eval — the current paradigm is audited tests plus cherry-picking (harvesting validated results and promoting strong cases into the audited suite). Three audited dimensions:
+Evaluation runs human-curated **audited tests** against every agent's implementation. There is no self-eval or N×N cross-eval — the current paradigm is audited tests plus cherry-picking (harvesting validated results and promoting strong cases into the audited suite); automated cross-eval and test-quality scoring remain a possible v2 Test Harvester. Three audited dimensions:
 
 1. **SOS Card Correctness** — audited SOS tests vs. each agent's `card_impl.py`
 2. **FDN Card Regression** — audited FDN tests vs. the agent's engine
@@ -63,15 +67,7 @@ The audited SOS suite is continuously improved by cherry-picking — see [AUDITE
 - **mage-bench** — XMage + MCP bridge for LLMs playing MTG (not implementing cards)
 - **ProxyWar** (ICSE 2026) — LLM game agent implementation via proxy patterns
 - **PlayCoder** — LLM code generation for general game mechanics
-## Decisions
 
-- **Python over Java**: Most common LLM coding language; broadest model support. [SETTLED]
-- **XMage port over custom engine**: Preserves battle-tested rules logic; Python is more LLM-friendly. [SETTLED]
-- **MTG Foundations as base set**: Classic reprints covering all card types; gives agents working examples. [SETTLED]
-- **Secrets of Strixhaven as target**: Released 2026-04-24 (set code SOS); too new to appear in training data. [SETTLED]
-- **Harness-first development**: Build runner prototype before porting remaining Foundations cards; validate pipeline early with real Strixhaven cards. [SETTLED]
-- **Multi-agent support**: Docker container images per agent. Each agent ships as a self-contained image with its own entrypoint. Contamination controlled structurally via container isolation. [UPDATED]
-- **New set + no web for contamination**: Simple and effective for v1; avoids complex sandboxing. [SETTLED]
-- **Full set scope**: Captures full difficulty distribution; enables per-complexity-tier analysis. [SETTLED]
-- **Work tracking in GitHub issues, not `TODO.md`**: pending work is filed as GitHub issues (HOB-generation tracking issue #67; candidate-contract master #39); the in-repo `TODO.md` / `docs/TODO_COMPLETED.md` work queue is retired and deleted — completed work is closed issues plus git history. [SETTLED — Grilling 2026-09-02]
-- **Audited-only evaluation**: SOS card correctness (audited tests vs. agent impls), FDN card regression (audited FDN tests vs. agent's engine), engine regression (core engine tests vs. agent's engine). Self-eval and N×N cross-eval were dropped in favor of audited tests refined by cherry-picking; automated cross-eval / test-quality scoring remains a possible v2 Test Harvester. [UPDATED]
+### Work tracking
+
+Pending work is filed as GitHub issues (grilling 2026-09-02) — the HOB-generation tracking issue #67 and the candidate-contract master #39 — not in an in-repo work queue. The former `TODO.md` / `docs/TODO_COMPLETED.md` queue is retired and deleted; completed work is recorded as closed issues plus git history.

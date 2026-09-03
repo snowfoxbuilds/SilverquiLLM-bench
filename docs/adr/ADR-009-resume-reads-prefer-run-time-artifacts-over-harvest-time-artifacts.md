@@ -6,21 +6,15 @@ Date: 2026-05-25
 
 ## Context
 
-`silverquillm resume <prior-run-id>` needs to read several pieces of information from the prior Benchmark Run at staging time:
-
-- `workspace_final/` existence as a directory
-- `docker_image` (for `--image` defaulting per ADR-008)
-- snapshot fallback bool + `snapshot_utc` (for Resume Preamble disclosure)
-- prior `--timeout` and wall-clock-used (for error-message hints)
-- `run_status` (to refuse `no_viable_output_produced` resume sources)
-Each piece of information lives in one or more of three categories of artifact, distinguished by *when* the artifact is written:
-
-1. **Staging-time artifacts**: `run_manifest.json` — written by the host runner immediately before container launch. Contains input fields (image, timeout, deadline). Cannot be partially written; either present and complete or absent.
-2. **Run-time artifacts**: snapshot ledger (`snapshots/.git/` plus `snapshot_telemetry.jsonl`) — written by the host runner every 60 seconds during container execution. Survives container crashes, Hard Timeout enforcement, and harvester failure.
-3. **Harvest-time artifacts**: `run_summary.json` — written by the host runner *after* the container exits and evaluation completes. Captures evaluation outcomes and aggregate metadata. May be partial or absent if the harvester or evaluator crashed.
-The naive read pattern is "always read `run_summary.json`" because it's the canonical post-run report. But that pattern silently breaks under harvester failure: the workspace and snapshot ledger may be intact, but the summary is missing or truncated. Resume is precisely the feature that needs to recover from partially-failed runs.
+`silverquillm resume <prior-run-id>` must read several fields from the prior Benchmark Run at staging time — `workspace_final/` existence, `docker_image`, snapshot-fallback state (`snapshot_utc`), prior `--timeout` and wall-clock-used, and `run_status`. Those fields live in different artifacts written at different times. The naive pattern of always reading `run_summary.json` (the canonical post-run report) silently breaks under harvester failure: the workspace and snapshot ledger may be intact while the summary is missing or truncated — and resume is precisely the feature that must recover from partially-failed runs.
 
 ## Decision
+
+Prior-run artifacts fall into three categories by *when* they are written:
+
+1. **Staging-time**: `run_manifest.json` — written immediately before container launch; input fields (image, timeout, deadline). Either present and complete, or absent.
+2. **Run-time**: the snapshot ledger (`snapshots/.git/` plus `snapshot_telemetry.jsonl`) — written every 60 seconds during execution. Survives container crashes, Hard Timeout enforcement, and harvester failure.
+3. **Harvest-time**: `run_summary.json` — written after the container exits and evaluation completes; evaluation outcomes and aggregate metadata. May be partial or absent if the harvester or evaluator crashed.
 
 For any field that exists in multiple artifact categories, **resume reads prefer staging-time and run-time artifacts over harvest-time artifacts**.
 

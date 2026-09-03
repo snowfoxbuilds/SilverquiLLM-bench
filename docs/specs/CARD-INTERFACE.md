@@ -14,6 +14,8 @@ The card interface is the primary contract between the game engine and LLM-gener
 
 ### Base Card Class
 
+Static card data is declared as class attributes; behavior comes from method overrides — declarative properties plus hook methods. Each card uses the standardized class name from `template.py` for cross-evaluation compatibility.
+
 ```python
 class Card:
     name: str
@@ -89,7 +91,7 @@ class Mode:
 
 ### Modal Spells
 
-Modal spells use declarative `get_modes()`. Mode selection handled by `Player` interface; tests use `DeterministicPlayer(actions=[CastSpell(..., mode=0)])`.
+Modal spells use declarative `get_modes()`, which exposes all modes. Mode selection is handled by the `Player` interface; tests use `DeterministicPlayer(actions=[CastSpell(..., mode=0)])` to select the mode.
 
 ```python
 def get_modes(self) -> list[Mode]:
@@ -160,11 +162,10 @@ class MultanisAcolyte(Creature):
         )
 ```
 
-## Decisions
+### Mechanics declaration
 
-- **Declarative properties + hook methods**: Static card data as class attributes; behavior via method overrides. [SETTLED]
-- **One file, one class per card**: Standardized class name from `template.py` for cross-evaluation compatibility. [SETTLED]
-- **Modal spells via get_modes()**: All modes available; DeterministicPlayer selects mode in tests. [SETTLED]
-- **Replacement effects separate from triggers**: `register_replacement_effects()` mechanism, no stack, "instead" semantics. [SETTLED]
-- **No mechanics declaration file**: Cut `mechanics_declaration.json`. Postmortem logs already capture file diffs per round, which is more reliable than agent self-reporting. Mechanic tagging can be derived from diffs + card spec keywords if needed later. [UPDATED]
-- **`json_collector_number`**** preserves source JSON**: `card_spec.json` stores `collector_number` as the directory-name override (drives the in-memory `collector_number` field used by the engine). `load_all_card_specs()` also preserves the raw JSON `collector_number` as `json_collector_number`. CLI `--cards` dual-matches against both fields so users can pass numeric collector numbers regardless of directory naming. [NEW]
+There is no `mechanics_declaration.json`; that file was cut. Postmortem logs already capture file diffs per round, which is more reliable than agent self-reporting, and mechanic tagging can be derived from diffs plus card spec keywords if needed later.
+
+### Collector numbers
+
+`card_spec.json` stores `collector_number` as the directory-name override, which drives the in-memory `collector_number` field used by the engine. `load_all_card_specs()` also preserves the raw JSON `collector_number` as `json_collector_number`, and the CLI `--cards` flag dual-matches against both fields so users can pass numeric collector numbers regardless of directory naming.

@@ -6,7 +6,7 @@ Date: 2026-05-23
 
 ## Context
 
-The 2026-05-23 run exposed a confidence-loop gap: agents extending the engine had no local way to verify they had not regressed core mechanics. Their only feedback was the Engine Regression score, computed post-run from host-side tests. The agent in that run made unverified engine assumptions (a non-existent `cast_zone` attribute, reuse of the `_omniscience_active` flag for a one-shot effect, manual stack bypass in fdn_194) that a local regression run would have caught.
+Agents extending the engine have no local way to verify they have not regressed core mechanics: their only feedback is the Engine Regression score, computed post-run from host-side tests. Without a local regression loop, an agent can make unverified engine assumptions — a non-existent attribute, reuse of an internal flag for a one-shot effect, a manual stack bypass — that a local run would have caught, and only discover the breakage after the run has ended.
 
 Existing policy ([BENCHMARK-RUNNER.md](../specs/BENCHMARK-RUNNER.md) Contamination Controls #1, the "Audited tests are evaluation-only" decision, the [CONTEXT.md](../../CONTEXT.md) relationship line) said audited test suites do not exist in the agent's workspace. This is correct for SOS audited tests (the SOS Card Correctness target — must stay hidden) and FDN audited tests (FDN Card Regression grades reference implementations the agent should not be modifying). It is over-broad for Engine Tests, which exercise generic engine APIs rather than benchmark-target cards.
 
@@ -18,7 +18,7 @@ Grading uses host-repo copies for all three dimensions; the staged copy is refer
 
 ## Consequences
 
-- **Positive**: Agents gain a local regression-check loop for engine modifications. Closes the silent-engine-regression failure mode the 2026-05-23 run exhibited. The agent's local validation surface now matches what Engine Regression actually grades.
+- **Positive**: Agents gain a local regression-check loop for engine modifications. Closes the silent-engine-regression failure mode. The agent's local validation surface now matches what Engine Regression actually grades.
 - **Positive**: SOS and FDN contamination walls remain intact.
 - **Negative**: Theoretical training-to-the-test risk for engine tests. Mitigated by the fact that engine tests exercise generic APIs (mana, stack, combat, state-based actions) that any correct engine must implement; "memorizing the test" is largely equivalent to "implementing the engine correctly."
 - **Negative**: Adds a new prompt invariant (no test modification) the agent could violate. Mitigated by host-copy grading: modifying staged tests does not change the score.

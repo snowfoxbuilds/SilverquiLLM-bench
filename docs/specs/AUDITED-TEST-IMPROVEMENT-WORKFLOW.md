@@ -4,11 +4,11 @@ Last updated: 2026-09-02
 
 # Audited Test-Improvement Workflow
 
-How audited tests are improved over time using harvested run results and a combined investigation/discovery skill. This is the manual v1 of the planned v2 Test Harvester, and the operational counterpart to the locking lifecycle in ADR-011. Everything here serves **Implementation-Agnostic Testing** (see [CONTEXT.md](../../CONTEXT.md)): tests assert what a card does and must pass against any correct implementation.
+How audited tests are improved over time using harvested run results and a combined investigation/discovery skill. This is the manual v1 of the planned v2 Test Harvester, and the operational counterpart to the locking lifecycle. Everything here serves **Implementation-Agnostic Testing** (see [CONTEXT.md](../../CONTEXT.md)): tests assert what a card does and must pass against any correct implementation.
 
 ## Overview
 
-Three pieces, all gated by Benchmark Tier (ADR-011) — test edits and promotion are legal only in Beta/Benchmarking:
+Three pieces, all gated by Benchmark Tier — test edits and promotion are legal only in Beta/Benchmarking:
 
 1. A **harvest script** that consolidates per-run results into a queryable dataset.
 2. A **combined investigation/discovery skill** an agent runs over that dataset.
@@ -51,12 +51,12 @@ The skill lives at `.claude/skills/test-investigation/SKILL.md` (Claude Code nat
   - *Investigation* — for a failing `(card, test_node)`, rank by cross-impl breadth, summarize the failure, and present a test-fault vs impl-fault hypothesis for a human to decide. Never edits audited tests automatically.
   - *Discovery* — mine agent-written `tests.py` for behaviors the audited suite does not cover and emit promotion candidates.
 - **Outputs**: a human-reviewable report (suspect tests ranked by breadth; candidate promotions), not committed test edits. A human applies all edits after review.
-- **Hard rules**: no oracle re-run for attribution (breadth-only triage); canonical-engine-API-only when drafting; obey ADR-011 tier locks; promotion candidates must pass the matching Test Oracle Impl gate (ADR-010) before human review.
+- **Hard rules**: no oracle re-run for attribution (breadth-only triage); canonical-engine-API-only when drafting; obey tier locks; promotion candidates must pass the matching Test Oracle Impl gate before human review.
 ## 3. Discovery → promotion bar
 
 - Candidate tests mined from agent-written `tests.py` are **never** promoted verbatim.
 - Rewrite to the audited standard: integration-style, behavioral/outcome-based, canonical-engine-API-only, `DeterministicPlayer`-scripted (see [AUDITED-TEST-SUITE.md](AUDITED-TEST-SUITE.md)).
-- Must pass the matching Test Oracle Impl gate (ADR-010) and the canonical-API-only check, then clear human review.
+- Must pass the matching Test Oracle Impl gate and the canonical-API-only check, then clear human review.
 - Legal only in Beta/Benchmarking. Released locks audited tests, so promotion stops at Release and published scores do not drift afterward.
 ## Cadence
 
@@ -68,10 +68,11 @@ This workflow is the manual v1 of the planned v2 Test Harvester: an automated pa
 
 ## Tier gating
 
-All test edits and promotions obey Benchmark Tier locks (ADR-011): `workspace/` locked at Benchmarking; oracle impls/engine and audited tests additionally locked at Released. The CI check enforces the base branch's tier.
+All test edits and promotions obey Benchmark Tier locks: `workspace/` locked at Benchmarking; oracle impls/engine and audited tests additionally locked at Released. The CI check enforces the base branch's tier.
 
 ## Relevant ADRs
 
 | ADR | Decision |
 | --- | --- |
+| [ADR-010](../adr/ADR-010-test-oracle-workspace-uses-independent-engine.md) | Test Oracle Workspace Uses Independent Engine |
 | [ADR-011](../adr/ADR-011-three-tier-benchmark-locking.md) | Three-Tier Benchmark Locking |

@@ -114,6 +114,8 @@ Field meanings:
 - Engine path lists are capped, for example to 50 paths, with a truncation flag and full count.
 In `snapshot_telemetry.jsonl`, card telemetry uses IDs only, not card names — this file is high-cadence and stays lean. Slow-cadence per-card artifacts (`status.json`, `result.json`) include `card_name` alongside `card_id` for human-readable triage. The live `[snapshot]` terminal channel resolves card names from `card_spec.json` at print time, so terminal output stays readable while the JSONL file stays lean.
 
+Per-card `result.json` also carries `tests_hash` and `test_nodes` (grilling 2026-06-10). `CardResult` adds two additive fields: the SHA-256 of the audited `tests.py` bytes (empty string when absent) and one `test_node`/`outcome` row per executed test node, captured via an inline `conftest.py` (no `pytest-reportlog` dependency). These are pass/fail only by design — skipped/xfail nodes are not enumerated, so `test_nodes` may be shorter than `tests_total`. They power the harvest rows; legacy Validated Results lack the fields and get back-compat handling (fail rows derived from `errors`, null hash).
+
 ### Output Directory
 
 `/output/` is observability only. It pipes agent and process output out of the container for live monitoring and debugging.
@@ -132,6 +134,8 @@ Optional conventions:
 
 No evaluatable state should depend on `/output/`.
 
+JavaScript entrypoints populate these channels with a `log()` helper that writes to `/output/system.log`, tee agent output to `/output/agent_stdout.log`, and pass agent output through `process.stdout.write()` so Docker logs still capture it. Future bash entrypoints follow the same file-based channel separation.
+
 ### Docker logs
 
 Independently of optional `/output/` files, the runner captures Docker process stdout and stderr.
@@ -144,6 +148,8 @@ docker/<image-dir>/results/<run_name>/docker_stderr.log
 ```
 
 Stream them live to the terminal while saving.
+
+Pipe-reader threads write `docker_stdout.log` and `docker_stderr.log` directly into `run_dir` in append mode. There is no `.tmp` intermediate and no post-run copy step; harvest reads the files in place.
 
 Live terminal output is labeled, colorized by type, and mirrored to a per-channel append-only file under the run directory. The tabbed viewer (`silverquillm logs --run`) reads from these files in both live (tail) and archived (static) modes.
 
@@ -166,7 +172,7 @@ Color behavior:
 - `--color never`
 Saved log files remain plain split-stream logs.
 
-v1 ships a `silverquillm logs --run` tabbed log viewer over the per-channel files above. Live labeled streaming remains the default; the viewer is opt-in for both live (tail) and archived (static) inspection.
+v1 ships a `silverquillm logs --run` tabbed log viewer over the per-channel files above, lifted into v1 once the runner stabilized and a run surfaced concrete triage pain (grilling 2026-05-23). Live labeled streaming remains the default; the viewer is opt-in for both live (tail) and archived (static) inspection.
 
 ### Run summary
 
@@ -188,7 +194,9 @@ v1 ships a `silverquillm logs --run` tabbed log viewer over the per-channel file
 - `resumed_image_changed` (Resume Leg only — true when `--image` differs from prior leg's `docker_image`)
 - three evaluation dimensions
 - telemetry/log artifact paths
-Resume Legs (Benchmark Runs with `resumed_from` set) are linked into a Resume Chain via `resumed_from`. Chain traversal is by repeated lookup; the runner does not aggregate results across legs. Resume Legs are never leaderboard-valid: any run with `resumed_from` set has `leaderboard_valid = false`.
+Resume Legs (Benchmark Runs with `resumed_from` set) are linked into a Resume Chain via `resumed_from`. Chain traversal is by repeated lookup; the runner does not aggregate results across legs. The `silverquillm chain <run-id>` reader ships alongside `silverquillm resume` so `resumed_from` always has at least one consumer. Resume Legs are never leaderboard-valid: any run with `resumed_from` set has `leaderboard_valid = false`.
+
+When a resume needs information about the prior run, the runner prefers artifacts written *during* the run (manifest at staging, snapshot ledger during execution) over artifacts written *at harvest* (`run_summary.json`). The manifest is the source of truth for input fields (image, timeout); the snapshot ledger is the source of truth for snapshot-fallback detection. `run_summary.json` is used only for fields it uniquely owns (notably `run_status`), and missing-summary handling is explicit per [BENCHMARK-RUNNER.md](BENCHMARK-RUNNER.md) → Resume.
 
 ### Filtered runs [SUPERSEDED — Grilling 2026-08-27]
 
@@ -227,25 +235,6 @@ Rules for the `silverquillm smoke` command:
 - Do not use real SOS cards.
 - Do not enter leaderboard or benchmark summaries.
 - Validate image boot, volume mounts, basic file writing, and auth/model reachability.
-## Decisions
-
-- **`workspace_final/`**** is canonical**: Evaluation reads from `docker/<image-dir>/results/<run_name>/workspace_final/`.
-- **Snapshots are full Workspace Git commits**: Snapshot every 60 seconds, host-side, outside the container.
-- **Snapshot fallback is whole-Workspace**: Do not mix final card implementations with earlier engine snapshots.
-- **Fallback viability uses Engine Regression only**: `engine_tests/` is the snapshot selection gate.
-- **No viable snapshot means no viable output**: Mark the run `no_viable_output_produced` and skip SOS/FDN correctness.
-- **Telemetry is filesystem-only**: Do not parse/import agent code for telemetry.
-- **`/output/`**** is optional telemetry**: No required files; no scoring dependency.
-- **Docker logs are captured by runner**: Stream live and save split stdout/stderr logs.
-- **Filtered runs are not leaderboard-valid** [SUPERSEDED — Grilling 2026-08-27]: card-subset ("workload") runs are retired — a Benchmark Run consumes the whole problem set. The `--cards` machinery survives only on the legacy entrypoint lineage until #66; cheap validation uses the dedicated smoke benchmark.
-- **The `silverquillm smoke` command is not a benchmark run**: it uses a synthetic Workspace and is excluded from scoring. Distinct from the smoke *benchmark* (`benchmarks/smoke/`), which IS a real benchmark run — it is simply never leaderboard-published (`leaderboard.eligible: false`).
-- **Each terminal channel has a backing file**: Every channel the runner prints is mirrored to an append-only file in the run directory (see Terminal channels above). This file-backed substrate makes the tabbed log viewer (`silverquillm logs --run`) a thin read-only consumer in both live and archived modes.
-- **v1 includes a tabbed post-run log viewer**: Originally deferred to a later version; lifted now that the runner is stable and the 2026-05-23 run surfaced concrete triage pain. Live labeled streaming remains the default for users who don't want to launch the viewer.
-- **JS entrypoint output channel pattern**: JavaScript entrypoints use a `log()` helper that writes to `/output/system.log`, tee agent output to `/output/agent_stdout.log`, and pass agent output through `process.stdout.write()` so Docker logs still capture it. Future bash entrypoints follow the same file-based channel separation.
-- **Docker logs are direct-written to ****`run_dir`**: Pipe-reader threads write `docker_stdout.log` and `docker_stderr.log` directly into `run_dir` in append mode. No `.tmp` intermediate, no post-run copy step. Harvest reads the files in place.
-- **Resume Legs link via ****`resumed_from`**: Each Resume Leg's `run_summary.json` records `resumed_from` (the immediate prior leg's `run_name`) and `resumed_image_changed` (bool). Chain traversal is by repeated lookup; the runner does not aggregate across legs. The `silverquillm chain <run-id>` reader ships alongside `silverquillm resume` to ensure `resumed_from` always has at least one consumer. See ADR-008. [NEW]
-- **Resume reads prefer run-time artifacts over harvest-time artifacts**: When a resume needs information about the prior run, the runner prefers artifacts written *during* the run (manifest at staging, snapshot ledger during execution) over artifacts written *at harvest* (`run_summary.json`). Manifest is the source of truth for input fields (image, timeout); the snapshot ledger is the source of truth for snapshot-fallback detection. `run_summary.json` is used only for fields it uniquely owns (notably `run_status`), and missing-summary handling is explicit per [BENCHMARK-RUNNER.md](BENCHMARK-RUNNER.md) → Resume. See ADR-009. [NEW]
-- **Per-card ****`result.json`**** carries ****`tests_hash`**** and ****`test_nodes`**: `CardResult` adds two additive fields — the SHA-256 of the audited `tests.py` bytes (empty string when absent) and one `test_node`/`outcome` row per executed test node, captured via an inline `conftest.py` (no `pytest-reportlog` dependency). Pass/fail only by design: skipped/xfail nodes are not enumerated, so `test_nodes` may be shorter than `tests_total`. Powers the harvest rows; legacy Validated Results lack the fields and get back-compat handling (fail rows derived from `errors`, null hash). [Drained from KEY_DECISIONS 2026-06-10]
 
 ## Relevant ADRs
 
