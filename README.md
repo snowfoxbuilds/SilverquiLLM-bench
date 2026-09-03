@@ -125,8 +125,42 @@ directory, with no adapter or model registry to update.
 | `silverquillm chain <run_id>` | Print the chain of resume legs leading to a run. |
 | `silverquillm rescore <run_id>` | Re-run audited tests against an existing run and rewrite its scores. |
 | `silverquillm logs --run <run_name>` | Tabbed, per-channel log viewer (live or archived). |
+| `silverquillm scheduler [--once]` | Run the single-writer batch scheduler over `batches/*.toml` (serial, name order then file order, `not_before` respected, identity resolved at run start). |
+| `silverquillm queue ls` | One-shot, read-only table of the batch queue: batches, `not_before`, per-run specs and states. |
+| `silverquillm top` | Live, read-only view of the queue (`q` quits). |
+| `scripts/promote_candidate.py <config-repo> <worker-type>` | Promote a worker-type definition into `candidates/` (vendor-at-promote is strict; never runs git). |
+| `scripts/publish_results.py --results-repo … --dest published/<subdir> RUN_ID…` | Stage Run Records into `published/` (traceability = hard refusal, validity = warning; never commits). |
 
 A `--cards` filter is available for development and pipeline validation, but filtered runs are **not** leaderboard-valid.
+
+---
+
+## Candidates, Batches, and Publishing
+
+The bench-side lifecycle of a candidate (`docs/specs/BENCHMARK-CANDIDATES.md`):
+
+1. **Promote.** `python scripts/promote_candidate.py <config-repo> <worker-type>`
+   copies a worker-type definition from your private Config Repo into
+   `candidates/<slug>--<hash8>/` — definition (base pinned by digest), the
+   knowledge and policy source trees it references, the exported bundle, and a
+   README stub you complete. A referenced knowledge tree must carry a
+   `PUBLISHABLE` marker at its root or the candidate cannot be promoted:
+   knowledge that cannot be published means its results cannot be published
+   either. Commit the directory yourself — the commit is the approval stamp.
+2. **Queue.** Write `batches/<id>.toml` (an optional `not_before` plus ordered
+   `[[runs]]` of candidate + mode + benchmark + budget; `batches/README.md`)
+   and run `silverquillm scheduler`. Batches execute serially; the file is
+   re-read before every not-yet-started run; each candidate's identity is
+   recomputed at run start; a failed run is recorded and the batch continues.
+   `silverquillm queue ls` and `silverquillm top` show the queue without
+   touching it.
+3. **Publish.** `python scripts/publish_results.py --results-repo <clone>
+   --dest published/<subdir> RUN_ID...` stages `manifest.json` + `scores.json`
+   per run into `published/`. A run whose candidate is not checked in under
+   `candidates/` (or does not verify) is refused outright; a run with
+   `leaderboard_valid: false` is a warning, publishable with `--allow-invalid`
+   and filtered out of any leaderboard mechanically. Review the diff and
+   commit.
 
 ---
 

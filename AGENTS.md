@@ -40,6 +40,7 @@ All specs, code, and agent instructions use these terms exactly.
 | `AUDITED-TEST-IMPROVEMENT-WORKFLOW.md` | Harvest script + combined investigation/discovery skill (manual v1 Test Harvester); harvest format, fault-attribution triage, promotion bar, cadence, tier gating |
 | `HOB-BENCHMARKS.md` | The three HOB-generation benchmarks (hob-easy/medium/hard): picked pools (23/5/5, selective subsets of the HOB set), run shape, engine freeze + tests-as-envelope, instruction docs, candidate contract |
 | `DECISION-MODEL.md` | V2 engine Player Query / Player Decision protocol, Game Symbols/Refs, Intents, DeterministicPlayer (V2) — engine-level, pool-neutral |
+| `BENCHMARK-CANDIDATES.md` | The bench-side candidate lifecycle (#39 §§4–5, #66): the curated `candidates/` tree and the promote gate (vendor-at-promote is strict), the file-backed batch queue and single-writer scheduler (`batches/`, `queue ls`, `top`), and the publish gate into `published/` (traceability = hard refusal, validity = warning; never commits) |
 | `BENCH-CONTRACT.md` | The contract TheOzolith must publish for a Benchmark Candidate to equal a worker-type definition: build-context authentication, candidate-identity triple, bench-implementer run fidelity (vendored read-only from the-ozolith) |
 | `KNOWN-ISSUES.md` | Known issues encountered during benchmark-runner development, with the fixes applied |
 
