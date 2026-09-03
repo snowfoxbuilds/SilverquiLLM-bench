@@ -51,7 +51,7 @@ binds from its own environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, …).
 
 ## The reference candidates
 
-Two vanilla candidates — the fixed points every operator can run and compare
+The vanilla candidates — the fixed points every operator can run and compare
 against — vary nothing: the stock TheOzolith run image for their adapter, no
 setup, no knowledge, no policy, the adapter's default model spelled as its
 most-pinned provider ID, the model's own default effort.
@@ -60,6 +60,12 @@ most-pinned provider ID, the model's own default effort.
 | --- | --- | --- |
 | `vanilla-claude--4e8b75b6/` | claude | claude-sonnet-5 |
 | `vanilla-codex--90a33424/` | codex | gpt-5.2-codex |
+
+These are the *current* references, not a closed set. The model IDs are
+identity-bearing decisions of record (2026-09-03): a different model, effort,
+adapter or base is a different candidate — one more export, one more
+directory, nothing to register. Which adapters TheOzolith can materialize is
+its verifier's call at ingestion; the bench keeps no list.
 
 Both pin their base image to `ghcr.io/snowfoxbuilds/theozolith-run-<adapter>`
 at the-ozolith commit `3c0a5df9609a6c9e1f517bd28a2083d11480c31d` — the merge

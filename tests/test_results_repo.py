@@ -208,7 +208,10 @@ class TestCandidateIdentity:
         assert rr.CandidateIdentity.from_dict(ident.to_dict()) == ident
 
     @pytest.mark.parametrize("verified", [True, "false", "true", 1, 0, None])
-    def test_recorded_verified_must_be_the_literal_false(self, verified: Any) -> None:
+    def test_a_legacy_identity_records_verified_as_the_literal_false(self, verified: Any) -> None:
+        """Legacy provenance: a label, never verified — so ``verified`` must be
+        the literal ``false``, never coerced (the ``ozolith-v1`` counterpart,
+        the literal ``true``, is proven below)."""
         with pytest.raises(rr.InvalidRunRecordError, match="verified"):
             rr.CandidateIdentity.from_dict(_legacy_dict(verified=verified))
 

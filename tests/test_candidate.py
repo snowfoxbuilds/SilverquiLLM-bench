@@ -340,10 +340,15 @@ class TestRefusals:
 
 
 class TestNoAdapterAllowlist:
-    def test_an_unknown_adapter_passes_bench_ingestion(self, tmp_path: Path) -> None:
-        """The bench layer imposes nothing on the adapter name: with the
-        verifier answering for an adapter the bench has never heard of, the
-        identity, the key, and the manifest all carry it verbatim."""
+    def test_an_arbitrary_adapter_reaches_the_injected_verifier_without_a_bench_allowlist(
+        self, tmp_path: Path
+    ) -> None:
+        """The bench layer imposes nothing on the adapter name: a structurally
+        valid adapter token the bench has never heard of reaches the verifier
+        untouched, and when the (injected) verifier answers for it, the
+        identity, the key, and the manifest all carry it verbatim.  This says
+        nothing about whether TheOzolith admits the adapter — that is the real
+        verifier's call (next test), never a bench rule."""
         bundle_dir, summary = export_bundle(tmp_path)
         rewrite_manifest(bundle_dir, adapter="pi")
         pi = ozcandidate.CandidateSummary(
@@ -355,8 +360,11 @@ class TestNoAdapterAllowlist:
         assert bundle.candidate_hash != candidate_hash(identity_of(summary))  # adapter is key-bearing
 
     def test_which_adapters_exist_is_the_verifiers_gate_not_the_benchs(self, tmp_path: Path) -> None:
-        """A bundle naming an adapter TheOzolith cannot map is refused by its
-        parse gate — reported as a verification refusal, never a bench rule."""
+        """The REAL verifier: a bundle naming an adapter TheOzolith cannot
+        materialize is refused by its parse gate — reported as a verification
+        refusal, never a bench rule.  So the complete real path admits exactly
+        the adapters TheOzolith admits, with no bench-side list in either
+        direction."""
         bundle_dir, _ = export_bundle(tmp_path)
         rewrite_manifest(bundle_dir, adapter="pi")
         with pytest.raises(CandidateRefusedError, match="verification") as refusal:

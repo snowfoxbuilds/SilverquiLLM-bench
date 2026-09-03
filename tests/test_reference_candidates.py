@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,7 @@ from theozolith_control import candidate as ozcandidate
 
 from silverquillm.candidate import BUNDLE_SUBDIR, load_candidate_bundle
 from silverquillm.results_repo import OZOLITH_SCHEME, candidate_dirname
+from tests.candidate_fixtures import CODEX_BASE, make_candidate_dir
 
 REPO = Path(__file__).resolve().parents[1]
 CANDIDATES = REPO / "candidates"
@@ -30,8 +32,10 @@ DIRNAME = re.compile(r"(?P<slug>[A-Za-z0-9][A-Za-z0-9._-]*?)--(?P<hash8>[0-9a-f]
 FLOATING_MODEL_NAMES = {"sonnet", "opus", "haiku", "fable", "default", "opusplan"}
 
 
-def _candidate_dirs() -> list[Path]:
-    return sorted(p for p in CANDIDATES.iterdir() if p.is_dir() and not p.name.startswith("."))
+def _candidate_dirs(root: Path = CANDIDATES) -> list[Path]:
+    """Every candidate directory under *root* — discovered, never enumerated:
+    a further checked-in candidate joins with nothing to register."""
+    return sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith("."))
 
 
 def _slug(path: Path) -> str:
@@ -43,11 +47,40 @@ def _slug(path: Path) -> str:
 CANDIDATE_DIRS = _candidate_dirs()
 
 
-def test_the_two_vanilla_reference_candidates_are_checked_in() -> None:
+def test_the_current_vanilla_reference_candidates_are_checked_in() -> None:
+    """The two current references must be present; nothing here caps how many
+    candidates the tree may hold."""
     slugs = sorted(_slug(path) for path in CANDIDATE_DIRS)
     assert "vanilla-claude" in slugs and "vanilla-codex" in slugs
     assert len(slugs) == len(set(slugs)), "candidates/ is flat and deduplicating"
     assert (CANDIDATES / "README.md").is_file()
+
+
+def test_discovery_admits_a_further_candidate_with_nothing_to_register(tmp_path: Path) -> None:
+    """A candidates tree holding the checked-in references plus a candidate
+    that does not exist yet (another adapter/model identity, exported the
+    same way) is discovered whole, and every entry ingests through the same
+    path — no model registry, no adapter list, no maximum."""
+    tree = tmp_path / "candidates"
+    tree.mkdir()
+    for path in CANDIDATE_DIRS:
+        shutil.copytree(path, tree / path.name)
+    newcomer = make_candidate_dir(
+        tree, slug="future-codex", name="future-codex", adapter="codex",
+        model="gpt-5.3-codex", base=CODEX_BASE, secrets=("OPENAI_API_KEY",),
+    )
+    assert newcomer.parent == tree and newcomer.name.startswith("future-codex--")
+    discovered = _candidate_dirs(tree)
+    assert [p.name for p in discovered] == sorted(
+        [p.name for p in CANDIDATE_DIRS] + [newcomer.name]
+    )
+    assert len(discovered) == len(CANDIDATE_DIRS) + 1
+    identities = {}
+    for path in discovered:
+        bundle = load_candidate_bundle(path)
+        assert path.name == candidate_dirname(_slug(path), bundle.identity)
+        identities[path.name] = bundle.candidate_hash
+    assert len(set(identities.values())) == len(discovered)  # every identity distinct
 
 
 @pytest.mark.parametrize("candidate_dir", CANDIDATE_DIRS, ids=[p.name for p in CANDIDATE_DIRS])

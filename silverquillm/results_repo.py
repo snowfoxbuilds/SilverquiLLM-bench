@@ -22,8 +22,12 @@ Rules the module enforces:
 - **Every read re-proves the record.** :func:`read_run_record` requires the
   manifest's ``run_id`` to equal the directory name, the recomputed candidate
   hash to equal both the manifest's ``candidate_hash`` and the parent
-  directory name, and a recorded ``verified`` of exactly ``false`` — so the
-  index and the harvester fail loudly on a tampered or misplaced record
+  directory name, and the recorded ``verified`` to be the literal boolean its
+  scheme's provenance dictates — ``false`` for a ``legacy`` identity (a label,
+  never verified), ``true`` for an ``ozolith-v1`` identity (established only
+  through TheOzolith's verification path); deserialization preserves that
+  value and refuses the other combination or any coercible look-alike — so
+  the index and the harvester fail loudly on a tampered or misplaced record
   instead of emitting misattributed rows.
 - **The manifest records ``benchmark``, never ``workload``** (the term is
   retired — CONTEXT.md).  ``mode`` and ``benchmark`` are run-spec parameters,
