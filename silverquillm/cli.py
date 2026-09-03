@@ -37,6 +37,8 @@ from silverquillm._bootstrap import ensure_workspace_on_path
 # resolve in the CLI process and in subprocesses that inherit our env.
 ensure_workspace_on_path()
 
+from theozolith_worker import api
+
 from silverquillm.card_loader import load_all_card_specs
 from silverquillm.card_names import build_card_name_map
 from silverquillm.replay.cli import validate as _replay_validate
@@ -856,6 +858,139 @@ def smoke(image: str) -> None:
     finally:
         _runner_log_dir = None
         shutil.rmtree(staging_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# run-contract command (Contract Run driver)
+# ---------------------------------------------------------------------------
+
+
+def _agent_env() -> dict[str, str]:
+    """The model credential(s) for the run container, by name.
+
+    Handed to the production ``DockerEngine`` as ``ContainerSpec.env``: it
+    passes each as a bare ``--env NAME`` and supplies the value through its own
+    process environment, so no secret ever appears in argv.
+    """
+    return {key: os.environ[key] for key in _API_KEY_ENV_VARS if os.environ.get(key)}
+
+
+def _report_contract_run(result) -> None:
+    """Echo a Contract Run's outcome (every classified failure included)."""
+    for warning in result.warnings:
+        _runner_log(warning, err=True)
+    agent = result.agent_outcome.describe() if result.agent_outcome is not None else "n/a"
+    harness = (result.harness_status or {}).get("phase", "n/a")
+    gate = " -> ".join(result.gate.steps_run) or "not run"
+    if not result.gate.clean:
+        gate += " (findings)"
+    _runner_log(f"Agent: {agent}  Harness: {harness}  Gate: {gate}")
+    _runner_log(f"Proposal status: {result.proposal_status}")
+    if result.eval_result is not None:
+        _runner_log(
+            "Scores — "
+            f"card_correctness={result.eval_result.sos_pass_rate:.3f} "
+            f"fdn_regression={result.eval_result.fdn_pass_rate:.3f} "
+            f"engine_regression={result.eval_result.engine_pass_rate:.3f}"
+        )
+    else:
+        _runner_log("Scores — not evaluated", err=True)
+    if result.record_dir is not None:
+        _runner_log(f"RunRecord written: {result.record_dir}")
+    elif result.record_error:
+        _runner_log(f"RunRecord NOT written: {result.record_error}", err=True)
+    _runner_log(f"Evidence: {result.run_dir / 'contract_run.json'}")
+    for failure in result.failures:
+        _runner_log(
+            f"FAILED [{failure.failure_class}] at {failure.phase}: {failure.reason}", err=True
+        )
+    _runner_log(f"Contract run {'complete' if result.ok else 'FAILED'}: {result.run_id}")
+
+
+@main.command("run-contract")
+@click.option(
+    "--image", required=True,
+    help=(
+        "A TheOzolith run image: its entrypoint is the in-image agent harness "
+        "(theozolith-harness). Candidate-Bundle identity lands with #65."
+    ),
+)
+@click.option("--benchmark", "benchmark_id", required=True, help="Benchmark id (e.g. smoke)")
+@click.option("--mode", "mode_name", default="basic", show_default=True, help="Benchmark Mode (basic|planned)")
+@click.option(
+    "--timeout", default=3600, type=int, show_default=True,
+    help="Agent budget in seconds (the harness's hard agent timeout)",
+)
+@click.option(
+    "--container-user", default=None,
+    help="uid:gid to run the container as (default: the image's user)",
+)
+@click.option(
+    "--results-dir", default=None, type=click.Path(file_okay=False, path_type=Path),
+    help="Run-artifacts directory (default: docker/<image_dir>/results/)",
+)
+@click.option(
+    "--results-repo", default=None, type=click.Path(file_okay=False, path_type=Path),
+    help="Results repo to write the RunRecord into (or $SILVERQUILLM_RESULTS_REPO)",
+)
+def run_contract(
+    image: str,
+    benchmark_id: str,
+    mode_name: str,
+    timeout: int,
+    container_user: str | None,
+    results_dir: Path | None,
+    results_repo: Path | None,
+) -> None:
+    """Drive a candidate through TheOzolith's implementer Run Contract.
+
+    Stages the production job dir, launches the image through the production
+    session protocol (the in-image harness runs the agent and serves the gate
+    over the jobs channel), applies the Output Proposal post-exit, grades the
+    checkout, and records the run. Exits 1 when the run carries a classified
+    failure; the evidence is in the run dir's contract_run.json either way.
+    """
+    from silverquillm.contract import drive_contract_run
+    from silverquillm.jobdir import BenchmarkNotRunnableError, load_benchmark
+    from silverquillm.modes import UnknownModeError, get_mode
+    from silverquillm.results_repo import resolve_results_repo
+
+    global _runner_log_dir
+    try:
+        benchmark = load_benchmark(benchmark_id)
+        mode = get_mode(mode_name)
+    except (BenchmarkNotRunnableError, UnknownModeError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if results_dir is None:
+        results_dir = _image_results_dir(image)
+    run_name = _make_run_name(set_code=benchmark.id, image=image, results_dir=results_dir)
+    run_dir = results_dir / run_name
+    run_dir.mkdir(parents=True, exist_ok=True)
+    _runner_log_dir = run_dir
+
+    repo = resolve_results_repo(results_repo)
+
+    _runner_log(f"Starting contract run: {run_name}")
+    _runner_log(f"Image: {image}  Benchmark: {benchmark.id}  Mode: {mode.name}  Timeout: {timeout}s")
+    try:
+        result = drive_contract_run(
+            run_dir=run_dir,
+            run_id=run_name,
+            benchmark=benchmark,
+            mode=mode,
+            budget_seconds=timeout,
+            image=image,
+            session_factory=api.container_session_factory(api.DockerEngine()),
+            results_repo=repo,
+            agent_env=_agent_env(),
+            container_user=container_user,
+        )
+        _report_contract_run(result)
+    finally:
+        _runner_log_dir = None
+    if not result.ok:
+        raise SystemExit(1)
 
 
 # ---------------------------------------------------------------------------

@@ -1,2 +1,9 @@
 line-length = 100
 target-version = "py312"
+
+[lint.per-file-ignores]
+# The Contract Run driver's durable failure lifecycle catches every exception
+# by design: each phase converts whatever escapes into a classified RunFailure
+# with its traceback in contract_run.json, so a Run always ends in evidence and
+# an attempted RunRecord, never an unrecorded crash (BENCH-CONTRACT.md / #64).
+"silverquillm/contract.py" = ["BLE001"]

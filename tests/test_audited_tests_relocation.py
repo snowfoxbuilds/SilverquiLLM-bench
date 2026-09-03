@@ -46,22 +46,23 @@ class TestAuditedTestsRelocation:
             f"No soa_* test directories found in {sos_dir}"
         )
 
-    def test_evaluator_references_new_audited_path(self) -> None:
-        """silverquillm/evaluator.py must reference the new audited tests path."""
-        evaluator = REPO_ROOT / "silverquillm" / "evaluator.py"
-        content = evaluator.read_text()
-        # Must contain the new path
-        assert "benchmarks" in content and "sos" in content and "data" in content, (
-            "evaluator.py does not reference benchmarks/sos/data/ path"
+    def test_evaluator_resolves_new_audited_path(self) -> None:
+        """The evaluator must resolve audited suites from the relocated path.
+
+        The audited path used to be a hardcoded literal; it now lives in
+        ``resolve_eval_paths`` (which every scoring path — legacy ``evaluate``
+        and the Contract-Run ``evaluate_run`` — goes through). Assert the
+        resolved SOS paths, so the relocation guarantee is behavior-based
+        rather than pinned to a source string.
+        """
+        from silverquillm.evaluator import resolve_eval_paths
+
+        paths = resolve_eval_paths(REPO_ROOT / "benchmarks" / "sos", "sos")
+        assert paths.audited_target == (
+            REPO_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos"
         )
-        # Specifically check the audited_sos and audited_fdn assignments
-        assert 'benchmarks" / "sos" / "data" / "tests" / "audited" / "sos"' in content or \
-               'benchmarks/sos/data/tests/audited/sos' in content, (
-            "evaluator.py does not reference new audited SOS path"
-        )
-        assert 'benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn"' in content or \
-               'benchmarks/sos/data/tests/audited/fdn' in content, (
-            "evaluator.py does not reference new audited FDN path"
+        assert paths.audited_fdn == (
+            REPO_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn"
         )
 
     def test_evaluator_no_old_audited_path(self) -> None:

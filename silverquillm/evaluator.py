@@ -42,6 +42,10 @@ import sys
 import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from silverquillm.jobdir import BenchmarkRef
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +56,12 @@ __all__ = [
     "CardResult",
     "EngineResult",
     "EnginePatchError",
+    "EvalPaths",
     "EvalResult",
     "FullEvalResult",
     "evaluate",
+    "evaluate_run",
+    "resolve_eval_paths",
     "run_tests",
     "run_self_eval",
     "run_self_eval_flat",
@@ -975,22 +982,42 @@ def _eval_engine(
     engine_work: Path,
     engine_tests_dir: Path,
     timeout: int = 120,
+    *,
+    test_utils: Path | None = None,
 ) -> EngineResult:
     """Dimension 3: Engine Regression.
 
-    Run core engine tests against the agent's engine_work/.
+    Run the host-authoritative engine tests against the agent's engine_work/.
+    When *test_utils* is given (the Contract Run path), the authoritative
+    ``test_utils.py`` is staged ahead of the candidate engine on ``PYTHONPATH``
+    so a candidate that tampered with its own ``test_utils`` cannot influence the
+    engine regression score; a missing authoritative copy fails visibly.  Legacy
+    callers pass ``None`` and keep the prior behavior.
     """
     if not engine_tests_dir.exists():
         return EngineResult(errors=[f"No engine tests at {engine_tests_dir}"])
 
-    pp = []
+    support_dir: str | None = None
+    pp: list[str] = []
+    if test_utils is not None:
+        if not test_utils.is_file():
+            return EngineResult(
+                errors=[f"authoritative test_utils.py not found at {test_utils}"]
+            )
+        support_dir = tempfile.mkdtemp(prefix="eval_engine_support_")
+        shutil.copy2(test_utils, Path(support_dir) / "test_utils.py")
+        pp.append(support_dir)  # authoritative test_utils FIRST
     if engine_work.exists():
         pp.append(str(engine_work.parent))
     pp.append(str(_REPO_ROOT))
 
-    passed, failed, total, errors = _run_pytest_with_pythonpath(
-        engine_tests_dir, pp, timeout=timeout,
-    )
+    try:
+        passed, failed, total, errors = _run_pytest_with_pythonpath(
+            engine_tests_dir, pp, timeout=timeout,
+        )
+    finally:
+        if support_dir is not None:
+            shutil.rmtree(support_dir, ignore_errors=True)
     return EngineResult(
         tests_passed=passed,
         tests_failed=failed,
@@ -998,6 +1025,221 @@ def _eval_engine(
         pass_rate=passed / total if total > 0 else 0.0,
         errors=errors,
     )
+
+
+# ---------------------------------------------------------------------------
+# Benchmark-parameterized evaluation (Contract Run path)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class EvalPaths:
+    """The suites and support files the Audited Eval resolves per benchmark.
+
+    ``target_set`` cards are what the agent implements (Dimension 1); ``fdn``
+    is the FDN regression population (Dimension 2); ``engine_tests`` is the
+    engine suite (Dimension 3).  All are resolved from the benchmark root so a
+    new benchmark needs no code change — and the ``sos`` resolution reproduces
+    the paths the legacy :func:`evaluate` hardcoded (see the resolution
+    regression test).
+    """
+
+    benchmark_root: Path
+    target_set: str
+    cards_dir: Path
+    engine_dir: Path
+    audited_target: Path
+    audited_fdn: Path
+    engine_tests: Path
+    test_utils: Path
+
+
+def resolve_eval_paths(benchmark_root: Path, target_set: str) -> EvalPaths:
+    """Resolve the Audited Eval paths for a benchmark rooted at *benchmark_root*.
+
+    ``test_utils`` prefers the oracle workspace copy (as SOS uses today) and
+    falls back to the staged workspace copy for benchmarks that ship only the
+    latter (e.g. smoke).
+    """
+    benchmark_root = Path(benchmark_root)
+    tests_audited = benchmark_root / "data" / "tests" / "audited"
+    oracle_test_utils = benchmark_root / "data" / "test_oracle_workspace" / "test_utils.py"
+    workspace_test_utils = benchmark_root / "workspace" / "test_utils.py"
+    return EvalPaths(
+        benchmark_root=benchmark_root,
+        target_set=target_set,
+        cards_dir=benchmark_root / "workspace" / "cards",
+        engine_dir=benchmark_root / "workspace" / "engine",
+        audited_target=tests_audited / target_set,
+        audited_fdn=tests_audited / "fdn",
+        engine_tests=benchmark_root / "workspace" / "engine_tests",
+        test_utils=oracle_test_utils if oracle_test_utils.is_file() else workspace_test_utils,
+    )
+
+
+_GRADING_IGNORE = shutil.ignore_patterns("__pycache__", ".pytest_cache", ".git")
+
+
+def _grade_audited_card(
+    card_id: str,
+    test_file: Path,
+    overlay: Path,
+    timeout: int,
+    *,
+    test_utils: Path | None,
+) -> CardResult:
+    """Grade one card's authoritative audited suite against the agent's tree.
+
+    Grading isolation (BENCH-CONTRACT.md / #64): grading tests and grading
+    support code are host-authoritative and candidate-immutable.  The audited
+    ``tests.py`` and the *authoritative* ``test_utils.py`` are copied into an
+    isolated temp dir that precedes the agent's *overlay* on ``PYTHONPATH``, so
+    ``import test_utils`` always resolves to the host copy — a candidate that
+    overwrites, deletes, or corrupts ``workspace/test_utils.py`` cannot influence
+    the score — while the card's own ``cards.<set>.<card>.card_impl`` and
+    ``engine`` still resolve from the tree the agent left behind (the evidence).
+    A card-directory ``conftest.py`` is preserved as authoritative fixtures.
+    Missing authoritative support fails visibly rather than scoring as zero.
+    """
+    if not test_file.exists():
+        return CardResult(
+            collector_number=card_id, skipped=True,
+            errors=[f"No audited tests at {test_file}"],
+        )
+    if test_utils is None or not test_utils.is_file():
+        return CardResult(
+            collector_number=card_id, skipped=True,
+            errors=[f"authoritative test_utils.py not found at {test_utils}"],
+        )
+    tmp_dir = tempfile.mkdtemp(prefix="eval_contract_")
+    try:
+        tmp = Path(tmp_dir)
+        shutil.copy2(test_utils, tmp / "test_utils.py")
+        card_conftest = test_file.parent / "conftest.py"
+        if card_conftest.is_file():
+            shutil.copy2(card_conftest, tmp / "conftest.py")
+        shutil.copy2(test_file, tmp / "tests.py")
+        # Grading support FIRST, candidate overlay SECOND: the authoritative
+        # test_utils wins; candidate cards/engine still resolve from the overlay.
+        pp = [str(tmp), str(overlay), str(_REPO_ROOT)]
+        passed, failed, total, errors, test_nodes = _run_pytest_with_pythonpath(
+            tmp / "tests.py", pp, timeout=timeout, capture_test_nodes=True,
+        )
+        cr = _make_card_result(card_id, passed, failed, total, errors)
+        cr.test_nodes = test_nodes
+        try:
+            cr.tests_hash = hashlib.sha256(test_file.read_bytes()).hexdigest()
+        except OSError:
+            cr.tests_hash = ""
+        return cr
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def _target_card_id(target_set: str, collector_number: str, audited_target: Path) -> str:
+    """Map a config collector number to its audited card-id directory name."""
+    stripped = (
+        f"{target_set}_{int(collector_number)}"
+        if collector_number.isdigit() else f"{target_set}_{collector_number}"
+    )
+    raw = f"{target_set}_{collector_number}"
+    if not (audited_target / stripped).is_dir() and (audited_target / raw).is_dir():
+        return raw
+    return stripped
+
+
+def _eval_target_cards(
+    overlay: Path,
+    target_set: str,
+    target_cards: list[str],
+    audited_target: Path,
+    timeout: int,
+    *,
+    test_utils: Path | None,
+) -> dict[str, CardResult]:
+    """Dimension 1: correctness of the benchmark's target cards."""
+    results: dict[str, CardResult] = {}
+    for cn in target_cards:
+        card_id = _target_card_id(target_set, cn, audited_target)
+        test_file = audited_target / card_id / "tests.py"
+        results[card_id] = _grade_audited_card(
+            card_id, test_file, overlay, timeout, test_utils=test_utils
+        )
+    return results
+
+
+def _eval_audited_dir(
+    overlay: Path,
+    audited_dir: Path,
+    timeout: int,
+    *,
+    test_utils: Path | None,
+) -> dict[str, CardResult]:
+    """Dimension 2: every card with an audited suite under *audited_dir* graded
+    against the agent's tree (FDN regression)."""
+    results: dict[str, CardResult] = {}
+    if not audited_dir.is_dir():
+        return results
+    for card_dir in sorted(audited_dir.iterdir()):
+        test_file = card_dir / "tests.py"
+        if not card_dir.is_dir() or not test_file.exists():
+            continue
+        results[card_dir.name] = _grade_audited_card(
+            card_dir.name, test_file, overlay, timeout, test_utils=test_utils,
+        )
+    return results
+
+
+def evaluate_run(
+    run_dir: Path,
+    benchmark: BenchmarkRef,
+    timeout: int = 60,
+) -> FullEvalResult:
+    """Run the three-dimension Audited Eval for a Contract Run.
+
+    *benchmark* is a :class:`silverquillm.jobdir.BenchmarkRef` (duck-typed:
+    ``root``, ``cards``, ``target_set``).  The agent's harvested tree at
+    ``run_dir/workspace_final/`` is the evidence: every suite is resolved from
+    the benchmark root and run against a throwaway copy of that tree, so
+    ``cards``/``engine``/``test_utils`` resolve from what the agent left and the
+    authoritative host-side suites do the grading.
+    """
+    run_dir = Path(run_dir)
+    paths = resolve_eval_paths(benchmark.root, benchmark.target_set)
+    result = FullEvalResult()
+
+    agent_ws = run_dir / "workspace_final"
+    if not agent_ws.is_dir():
+        result.engine_result = EngineResult(
+            errors=[f"no harvested workspace_final/ at {agent_ws}"]
+        )
+        result.compute_aggregates()
+        return result
+
+    overlay_root = tempfile.mkdtemp(prefix="eval_overlay_")
+    overlay = Path(overlay_root) / "workspace"
+    try:
+        shutil.copytree(agent_ws, overlay, ignore=_GRADING_IGNORE)
+
+        # Dimension 1 — target-card correctness.
+        result.sos_results = _eval_target_cards(
+            overlay, benchmark.target_set, list(benchmark.cards),
+            paths.audited_target, timeout, test_utils=paths.test_utils,
+        )
+        # Dimension 2 — FDN card regression.
+        result.fdn_results = _eval_audited_dir(
+            overlay, paths.audited_fdn, timeout, test_utils=paths.test_utils,
+        )
+        # Dimension 3 — engine regression (authoritative suite + support, agent engine).
+        result.engine_result = _eval_engine(
+            overlay / "engine", paths.engine_tests, timeout=timeout,
+            test_utils=paths.test_utils,
+        )
+    finally:
+        shutil.rmtree(overlay_root, ignore_errors=True)
+
+    result.compute_aggregates()
+    return result
 
 
 def evaluate(
@@ -1047,10 +1289,13 @@ def evaluate(
         engine_prep_error = str(exc)
         engine_work, staging_dir = engine_dir, None
 
-    # Audited test directories
-    audited_sos = _REPO_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "sos"
-    audited_fdn = _REPO_ROOT / "benchmarks" / "sos" / "data" / "tests" / "audited" / "fdn"
-    engine_tests = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "engine_tests"
+    # Audited test directories — resolved from the SOS benchmark root (the
+    # resolver reproduces the paths this function used to hardcode; a
+    # regression test pins that equivalence).
+    _sos_paths = resolve_eval_paths(_REPO_ROOT / "benchmarks" / "sos", "sos")
+    audited_sos = _sos_paths.audited_target
+    audited_fdn = _sos_paths.audited_fdn
+    engine_tests = _sos_paths.engine_tests
 
     try:
         # Dimension 1: SOS Card Correctness

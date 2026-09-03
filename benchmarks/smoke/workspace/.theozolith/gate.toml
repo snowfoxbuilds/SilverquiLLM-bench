@@ -1,0 +1,12 @@
+# First-party quality gate for the smoke benchmark.
+#
+# The bench replays TheOzolith's production gate sequence (test -> docs -> lint)
+# over the checkout via theozolith_worker.api.run_gate (BENCH-CONTRACT.md: "a
+# bench run without test -> docs -> lint measures a different thing than what
+# deploys"; task repos must be gate-runnable). Steps stay fast and deterministic
+# so a Contract Run does not pay a heavy gate cost on every run.
+[steps.test]
+run = "python3 -m pytest engine_tests/test_test_utils.py -q"
+
+[steps.lint]
+run = "python3 -m compileall -q cards engine test_utils.py"

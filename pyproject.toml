@@ -12,6 +12,14 @@ dependencies = [
     "requests",
     "pyyaml",
     "click",
+    # TheOzolith's published worker package: the bench CONSUMES its Run Contract
+    # entry points (theozolith_worker.api) rather than reimplementing them, and
+    # pins the EXACT immutable revision docs/specs/BENCH-CONTRACT.md is vendored
+    # from (the package is not on PyPI and the-ozolith publishes no release
+    # tags). silverquillm/contract_version.py states the same revision and the
+    # driver refuses any other; tests/test_contract_pin.py keeps the three in
+    # agreement. Re-sync the vendored contract when moving this pin.
+    "theozolith-worker @ git+https://github.com/snowfoxbuilds/the-ozolith.git@19118cae6dc4faf0543bd9bf18aa54621c971358#subdirectory=worker",
 ]
 
 [project.scripts]
@@ -33,7 +41,9 @@ dev = [
 include = ["silverquillm*"]
 
 [tool.setuptools.package-data]
-# The results-repo schema doc that `silverquillm results-init` writes.
+# The results-repo schema doc that `silverquillm results-init` writes.  (The
+# job dir's input/prompt.md now comes from the production prompt renderer, so
+# there are no bench-side task templates to package.)
 silverquillm = ["results_repo_templates/*.md"]
 
 [tool.pytest.ini_options]
