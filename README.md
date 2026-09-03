@@ -97,7 +97,7 @@ Smoke runs validate that a container starts and produces output — they use a t
 ```bash
 # A Candidate Bundle through TheOzolith's Run Contract (the current contract):
 silverquillm run --candidate candidates/vanilla-claude--4e8b75b6 --benchmark smoke --timeout 3600
-# The legacy entrypoint lineage (retired by #66):
+# The legacy entrypoint lineage (being phased out):
 silverquillm run --image my-agent:latest --timeout 7200
 ```
 
@@ -119,7 +119,7 @@ directory, with no adapter or model registry to update.
 | Command | Purpose |
 | --- | --- |
 | `silverquillm run --candidate <bundle> --benchmark … [--mode basic\|planned] [--results-repo …]` | Drive a Candidate Bundle through TheOzolith's implementer Run Contract: bundle verification + identity recomputation, vendored results-repo copy, verified image build, production job dir, gate over the jobs channel, post-exit proposal application, Audited Eval, RunRecord under the verified identity. |
-| `silverquillm run --image … --timeout …` | Launch a legacy entrypoint-lineage run (retired by #66). |
+| `silverquillm run --image … --timeout …` | Launch a legacy entrypoint-lineage run (being phased out). |
 | `silverquillm smoke --image …` | Validate that an image starts and produces output. |
 | `silverquillm resume <run_id> --timeout …` | Continue from a prior run's final state as an independent leg. |
 | `silverquillm chain <run_id>` | Print the chain of resume legs leading to a run. |

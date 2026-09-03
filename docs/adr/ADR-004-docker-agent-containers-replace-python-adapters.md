@@ -21,7 +21,7 @@ The file-based contract is:
 - API credentials passed as environment variables
 - Agent implementations harvested from `/workspace/cards/sos/*/card_impl.py`
 - Agent tests harvested from `/workspace/cards/sos/*/tests.py`
-- Agent engine modifications harvested from `/workspace/engine/` (amended 2026-09-03, ADR-005 — engine is edited in place; there is no separate `engine_work/`)
+- Agent engine modifications harvested from `/workspace/engine/`, which the agent edits in place — there is no separate `engine_work/` (amended 2026-09-03)
 - Progress and logs harvested from `/output/`
 Python adapters, per-card workspaces, strategy classes, harness-managed rounds, and application-level contamination checking are legacy implementation details to remove or migrate away from. Agent-internal iteration belongs inside the container entrypoint or the agent itself, not the host runner.
 
@@ -43,3 +43,7 @@ Python adapters, per-card workspaces, strategy classes, harness-managed rounds, 
 - **Per-card workspaces**: Rejected because the workload is artificial and prevents agents from demonstrating long-running planning and reusable engine-extension behavior.
 - **Host-orchestrated strategy classes**: Rejected because the host runner should not encode agent iteration behavior. Agent strategy belongs in the image/entrypoint.
 - **Application-level contamination checker**: Rejected as the primary isolation mechanism. It remains useful as a diagnostic during migration, but structural container isolation is the v1 guarantee.
+
+## Amendments
+
+- **2026-09-03**: Clarified that the agent's engine modifications are harvested from `/workspace/engine/`, edited in place — there is no separate `engine_work/` directory (aligns with ADR-005).

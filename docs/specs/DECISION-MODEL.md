@@ -108,6 +108,12 @@ class PostconditionError(IntentError): ...
 
 **Baseline Intent slot** — a regular Intent with an empty pattern held in a dedicated slot on the player, consulted only when no card intent matches; at most one set at a time.
 
+### Implementation sequencing and V1 migration
+
+The query/decision/intent layer is the MSH workspace's task #1 (grilling 2026-06-10): Player Query, Player Decision, and Intent land before any MSH oracle test is authored. Player Query is a native engine protocol with no V1 adapter — boundary validation requires engine-side option structure an adapter cannot provide, so the MSH engine mints instance ids, owns the Game Refs registry, and routes every player interaction through structured queries. The duplicated V1 two-channel `test_utils` / `DeterministicPlayer` are deleted, not deprecated (zero MSH tests depend on them yet, so the migration is free); `engine_tests/` are updated in the same change series, and any V1 regression coverage that cannot be re-expressed is explicitly logged, never silently dropped.
+
+The MSH player keeps the name `DeterministicPlayer` (grilling 2026-06-10): benchmark-scoped glossary entries in [CONTEXT.md](../../CONTEXT.md) (`DeterministicPlayer (SOS)` vs `DeterministicPlayer (MSH)`) disambiguate it from the frozen V1 two-channel player, and the classes live in per-benchmark workspaces that never import each other.
+
 ### Intent-driven answering (audited tests only)
 
 - **Lifecycle**: `start_intent(player, name)` → imperative actions → `end_intent(player, name)`, where the postcondition is checked. Multiple intents may be active; intent status is driven by the test.
@@ -137,24 +143,3 @@ For "T, Pay 1 life: Add one mana of any color. Spend this mana only to cast an i
 - **Query**: source = the land's decisions; options = five MANA decisions (W, U, B, R, G), each carrying the `spend: instant_or_sorcery` Modifier; min = max = 1.
 - **Intent**: preference = the general RED mana decision; postcondition = pool gains a red mana. The player picks the offered restricted-red because it satisfies RED (extra Modifiers never block matching). The Modifier is the spend restriction.
 - **Suite spread**: one test per color (each must succeed — proves genuinely any-color), plus a spend-time check that the restricted mana cannot pay for a creature.
-## Decisions
-
-- **Player Decisions are immutable data structs, not a class hierarchy**; `satisfies()` is a free harness function. [SETTLED — 2026-06-10]
-- **Flat struct + smart constructors** over a per-kind tagged union. [SETTLED — 2026-06-10]
-- **attrs vs Modifiers split by role in matching**; Modifiers invisible to `satisfies()`. [SETTLED — 2026-06-10]
-- **Extension policy**: kinds closed; attrs surplus-tolerant; Modifiers open-but-canonical-when-audited. [SETTLED — 2026-06-10]
-- **Number satisfaction = exact equality**. [SETTLED — 2026-06-10]
-- **Game Ref = hierarchical provenance** (player/zone/card/object/ability) in the Game Symbols vocabulary; object carries the only opaque instance id. [SETTLED — 2026-06-10]
-- **Engine and action layer stay imperative**; the intent framework exists only in audited tests. [SETTLED — 2026-06-10]
-- **Explicit intent lifecycle**: `start_intent` / `end_intent` with postcondition; multiple concurrent intents. [SETTLED — 2026-06-10]
-- **Ambiguous intent match = hard test-authoring error** (rare under good ref design). [SETTLED — 2026-06-10]
-- **Baseline Intent** for system-level queries; unmatched queries fail explicitly. [SETTLED — 2026-06-10]
-- **Determinism**: implementation-ordered options + greedy first-intended-and-valid; no search. [SETTLED — 2026-06-10]
-- **must/may-achieve is suite design guidance**: one test per option; separate decline test; `min=0` carries declinability. [SETTLED — 2026-06-10]
-- **Sequencing: the intent layer is task #1 in the msh workspace** — Player Query / Player Decision / Intent land before any MSH oracle test is authored; the dup'd V1 two-channel `test_utils` / `DeterministicPlayer` are deleted, not deprecated (zero MSH tests depend on them yet, so the migration is free). [SETTLED — Grilling 2026-06-10]
-- **Player Query is a native engine protocol — no V1 adapter**: the MSH engine mints instance ids, owns the Game Refs registry, and routes every player interaction through structured queries (boundary validation requires engine-side option structure an adapter cannot provide). `engine_tests/` are updated in the same change series; any V1 regression coverage that cannot be re-expressed is explicitly logged, never silently dropped. [SETTLED — Grilling 2026-06-10]
-- **The MSH player keeps the name ****`DeterministicPlayer`**: benchmark-scoped glossary entries in [CONTEXT.md](../../CONTEXT.md) (`DeterministicPlayer (SOS)` vs `DeterministicPlayer (MSH)`) disambiguate it from the frozen V1 two-channel player; the classes live in per-benchmark workspaces that never import each other. [SETTLED — Grilling 2026-06-10]
-- **Concrete protocol surface locked**: module layout (`decisions.py` / `queries.py` / `refs_registry.py` / `player.py` / `intent_player.py`); `ProtocolError` vs `IntentError` exception split; `Answer(selected=...)` with empty-tuple decline; ordering queries as `min == max == len(options)` with answer order = assignment order; frozen `Intent(pattern, preferences, postcondition)`; single baseline-intent slot. Locked with the Task #1 implementation prompt so the implementing agent has no open micro-decisions; see Concrete protocol surface above. [SETTLED — 2026-06-10]
-- **Instance ids are stint-based, hooked at ****`move_to_zone`**: the engine notifies the Game Refs registry on every zone change so id continuity breaks even for unobserved stints; minting stays lazy. Observation-only tracking rejected. [SETTLED — PR #25 review, 2026-06-10]
-- **`preference_miss`**** is a transcript flag, not an exception**: a matched intent with zero preferred hits still answers (first valid option) and marks the transcript record; the locked exception hierarchy is unchanged. [SETTLED — PR #25 review, 2026-06-10]
-- **Card implementations never catch query-helper exceptions**: `ProtocolError` / `IntentError` faults must propagate for attribution; only return-value failure APIs (e.g. `pay()`) are guarded. All `except Exception` wrappers removed from `cards/` in PR #25. [SETTLED — PR #25 review, 2026-06-10]

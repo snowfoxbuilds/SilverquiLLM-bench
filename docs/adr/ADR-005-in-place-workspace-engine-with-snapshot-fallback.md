@@ -18,7 +18,7 @@ The baseline engine remains on the host side, outside the container. The runner 
 
 During execution, the runner captures full Workspace snapshots every 60 seconds as host-side Git commits. The `.git` directory is not mounted into the container.
 
-If the final Workspace has unusable engine state, the runner may walk backward through snapshot commits and select the latest whole-Workspace snapshot whose engine passes `tests/engine/`. The selected snapshot is materialized as `results/{run_name}/workspace_final/` and becomes the official evaluation Workspace.
+If the final Workspace has unusable engine state, the runner may walk backward through snapshot commits and select the latest whole-Workspace snapshot whose engine passes `engine_tests/`. The selected snapshot is materialized as `results/{run_name}/workspace_final/` and becomes the official evaluation Workspace.
 
 Snapshot fallback is whole-Workspace fallback. The runner must not combine final card implementations with an earlier engine snapshot.
 

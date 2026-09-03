@@ -14,30 +14,31 @@ XMage is the reference open-source Java implementation (28,000+ cards, battle-te
 
 ### Porting Strategy
 
-Source: `github.com/magefree/mage` (Java, MIT)
+Source: `github.com/magefree/mage` (Java, MIT — license-compatible with SilverquiLLM-bench, which is likewise MIT)
 
 **What to port:**
 
 - Core rules engine — game loop, stack, priority, combat, state-based actions, continuous effects, zones
 - Card framework — base classes and ability infrastructure
-- MTG Foundations cards — ~260 cards as the base set
+- MTG Foundations cards — the fixed 301-card Base Set pool (see Base Set below)
 **How to port:**
 
 - Preserve XMage's class hierarchy; translate to Pythonic idioms (snake_case, dataclasses, type hints). Requires Python ≥3.12. All project config (`pyproject.toml`, `ruff.toml`) must target 3.12.
 - 1:1 logic mapping — each XMage Java method gets a corresponding Python method
 - Tests alongside port — verify each subsystem and card matches XMage behavior
+- Base-set validation via Replay Validation — engine correctness is checked by replaying 17lands MTGA game data against game-state checkpoints, rather than XMage differential testing (MTGA is closer to ground truth and avoids cross-language comparison complexity)
 - Incremental — port in dependency order: zones → mana → stack → combat → triggers → continuous effects → cards
 ### Core Systems
 
 **Turn Structure**: Full MTG turn (untap → upkeep → draw → main 1 → combat → main 2 → end → cleanup). Priority passes at appropriate points.
 
-**Mana System**: 5 colors + colorless + generic. Mana abilities resolve immediately. Supports hybrid, Phyrexian, and X costs.
+**Mana System**: 5 colors + colorless + generic. Mana abilities resolve immediately. Supports hybrid, Phyrexian, and X costs. When explicit `choices` are provided, generic mana is deducted from the pool before `_solve_hybrid()` runs, so the solver cannot steal reserved mana (grilling 2026-05-10). Cost-reduction hooks need the controller: `get_cost_reduction()` temporarily sets `card.controller` before calling the hook and restores it afterward, and `cast_spell()` sets the controller early for the same reason (grilling 2026-05-10).
 
 **The Stack**: LIFO resolution. Priority passing before each resolution. State-based actions checked after each resolution.
 
 **Combat**: Attacker/blocker declaration with legality checks, damage assignment order, first/double strike, trample, combat triggers.
 
-**Triggered Abilities**: Event-driven system. Engine emits events; cards register listeners. Triggers go on the stack. Supports: ETB, LTB, dies, deals damage, phase triggers, cast triggers, state change triggers.
+**Triggered Abilities**: Event-driven system. Engine emits events; cards register listeners. Triggers go on the stack. Supports: ETB, LTB, dies, deals damage, phase triggers, cast triggers, state change triggers. Self-ETB effects run directly in `on_resolve()` rather than as triggers, because `register_triggers()` fires after the ETB event and self-ETB triggers would never match during normal resolution (e.g. Embercleave auto-attach) (grilling 2026-05-10).
 
 **Activated Abilities**: Cost → effect pattern. Timing restrictions (sorcery vs instant speed). Goes on stack (except mana abilities).
 
@@ -45,18 +46,17 @@ Source: `github.com/magefree/mage` (Java, MIT)
 
 **State-Based Actions**: Checked when a player would receive priority. Lethal damage/toughness, 0 life, legend rule, counter cancellation, aura/equipment legality.
 
-**Continuous Effects & Layers**: 7-layer system (copy → control → text → type → color → ability → P/T). Timestamp ordering within layers.
+**Continuous Effects & Layers**: 7-layer system (copy → control → text → type → color → ability → P/T). Timestamp ordering within layers. Equipment and aura P/T bonuses apply in Layer 7 `SubLayer.MODIFY_PT` (7c) while keywords apply in Layer 6, preventing CDAs (Layer 7a) from overwriting P/T bonuses; protection is a continuous effect reapplied on each layer pass — cleared during `_reset_characteristics()` rather than stored as a sticky attribute (grilling 2026-05-10).
 
 ### Base Set: MTG Foundations Draft Set
 
-The Foundations card pool is the primary reference set that agents can browse during benchmarking. The initial target is ~260 cards from the MTG Foundations set, but the pool should be **expanded beyond vanilla Foundations** to ensure agents have working examples of diverse mechanics they'll encounter in target sets.
+The Base Set is the primary reference set agents can browse during benchmarking: a fixed pool of **301 limited-format cards — FDN 001–291 plus SPG 074–083 Special Guests** — a direct XMage port of the MTG Foundations Draft Set, sourced from Scryfall/MTGJson. The pool is fixed: there is no Expanded Pool of extra reference cards, and none is planned. Agents implement new mechanics from scratch using oracle text plus the comprehensive rules, with no curated reference implementations for target-set mechanics.
 
-**Core pool (FDN 001–291, limited format cards):** Direct XMage port of MTG Foundations limited format pool. Serves as:
+The Base Set serves as:
 
-1. Engine validation — all Foundations tests passing = core mechanics correct
+1. Engine validation — validated via Replay Validation against 17lands data; all Foundations tests passing = core mechanics correct
 2. Agent reference — agents browse these as working examples during benchmarking
 3. Regression suite — catches engine regressions
-*(The originally planned Expanded Pool of extra reference cards was dropped; see Decisions and Historical Context.)*
 
 ### Game State API (Draft)
 
@@ -108,7 +108,7 @@ class Player(ABC):
     def choose_card(self, game, cards, message) -> Card: ...
 ```
 
-All tests use `DeterministicPlayer` with scripted actions (set up → act → assert). No AI decision-making in v1.
+All tests use `DeterministicPlayer` with scripted actions (set up → act → assert), against pre-determined board states. No AI decision-making in v1; an AI `StrategyPlayer` is deferred.
 
 ```python
 player = DeterministicPlayer(
@@ -146,9 +146,9 @@ During benchmark runs, the engine is **writable** — agents may add new mechani
 
 Multiplayer, sideboard/best-of-three, companion/partner, dungeons/Ring, day/night, voting, ante. Architecture supports these via XMage; just not ported for v1.
 
-## Oracle Workspace Engine Extensions (ADR-010)
+## Oracle Workspace Engine Extensions
 
-Engine primitives and mechanic implementations added to the **Test Oracle Workspace** engine (`benchmarks/sos/data/test_oracle_workspace/engine/`) to support SOS Test Oracle Impls. Per ADR-010 these are additive extensions to the oracle's 1:1 mirror of the canonical engine; they document how specific SOS mechanics are modeled for reference. *(Drained from ****`KEY_DECISIONS.md`****, 2026-05-30.)*
+Engine primitives and mechanic implementations added to the **Test Oracle Workspace** engine (`benchmarks/sos/data/test_oracle_workspace/engine/`) to support SOS Test Oracle Impls. These are additive extensions to the oracle's 1:1 mirror of the canonical engine; they document how specific SOS mechanics are modeled for reference. *(Drained from ****`KEY_DECISIONS.md`****, 2026-05-30.)*
 
 ### Resolution & the stack
 
@@ -176,18 +176,9 @@ Engine primitives and mechanic implementations added to the **Test Oracle Worksp
 
 - **Surveil uses scripted choices**: surveil N consults the player's scripted choices to decide keep-on-top vs to-graveyard per card, rather than always milling.
 - **Paradigm = self-exile replacement + recurring cast trigger**: self-exile reuses the `ReplacementManager` / `_SpellToGraveyardReplacementEvent` mechanism; a recurring "may cast from exile" trigger fires from `BeginningOfMainPhaseEvent` wired into `advance_phase()`, casting via `cast_spell_free` (sos_120).
-## Decisions
 
-- **Port XMage, not build from scratch**: XMage's rules logic is the ground truth. [SETTLED]
-- **Porting scope: Foundations Draft Set only**: Core set is the FDN Draft Set (FDN 001–291 + SPG 074–083 = 301 cards). No Expanded Pool — agents implement new mechanics from scratch. [UPDATED]
-- **Base set validated via Replay Validation**: Engine correctness verified by replaying 17lands MTGA game data and checking game-state checkpoints. Replaces XMage differential testing — MTGA is closer to ground truth and avoids cross-language comparison complexity. [SETTLED]
-- **MIT license**: SilverquiLLM-bench and XMage are both MIT licensed. [SETTLED]
-- **DeterministicPlayer only for v1**: Pre-determined board states, no AI player. StrategyPlayer deferred. [SETTLED]
-- **Foundations card audit deferred to implementation**: Pull card list from Scryfall/MTGJson during Phase 1. [SETTLED]
-- **Engine writable during benchmark runs**: Agents may extend the engine to support new mechanics. Changes persist throughout a run. Regressions detected via post-run evaluation. [SETTLED]
-- **Expanded Pool dropped**: Agents implement new mechanics from scratch using oracle text + comprehensive rules. No curated reference implementations for target set mechanics. [SETTLED]
-- **Grilling 2026-05-10: Self-ETB effects use ****`on_resolve()`****, not triggers**: `register_triggers()` fires AFTER the ETB event, so self-ETB triggers never match during normal resolution. Cards with self-ETB effects (e.g., Embercleave auto-attach) perform the action directly in `on_resolve()`. [SETTLED]
-- **Grilling 2026-05-10: P/T bonuses in Layer 7c, keywords in Layer 6**: Equipment/aura P/T bonuses use Layer 7 SubLayer.MODIFY_PT (7c). Keywords use Layer 6. Prevents CDAs (Layer 7a) from overwriting P/T bonuses. [SETTLED]
-- **Grilling 2026-05-10: Protections cleared during ****`_reset_characteristics()`**: Protection is a continuous effect reapplied each layer pass, not a sticky attribute. [SETTLED]
-- **Grilling 2026-05-10: Hybrid mana — deduct generic before solving hybrid**: When explicit `choices` provided, deduct generic mana from pool BEFORE `_solve_hybrid()` to prevent solver stealing reserved mana. [SETTLED]
-- **Grilling 2026-05-10: Cost reduction — controller set before hook**: `get_cost_reduction()` temporarily sets `card.controller = controller` before calling the hook, then restores. `cast_spell()` also sets controller early. [SETTLED]
+## Relevant ADRs
+
+| ADR | Decision |
+|---|---|
+| [ADR-010](../adr/ADR-010-test-oracle-workspace-uses-independent-engine.md) | Test Oracle Workspace Uses Independent Engine |

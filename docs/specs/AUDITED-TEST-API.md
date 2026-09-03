@@ -1,9 +1,14 @@
-> 🎯 **Status:** DRAFT — proposed 2026-06-03; sharpened in Grilling 2026-06-03 – 06-04 (added combat declarations, combat illegality, and deferred-capability scoping).
-> **Owner:** @Anonymous
-> 
-> **Purpose:** Define the *only* sanctioned API audited tests may use to interact with the engine. If a behavior cannot be set up, driven, or observed through this API, the API is missing something — fix the API, do not reach around it.
-> 
-> **Scope:** **SOS (V1) only.** This two-channel API is the frozen SOS paradigm. The HOB-generation benchmarks replace it with the native Player Query / Player Decision intent protocol — see [DECISION-MODEL.md](DECISION-MODEL.md). Nothing in this spec applies to the HOB-generation benchmarks (`benchmarks/hob-*/`).
+Status: DRAFT
+
+Last updated: 2026-06-04
+
+# Audited Test API
+
+The only sanctioned API audited tests may use to interact with the engine: if a behavior cannot be set up, driven, or observed through this API, the API is missing something — fix the API, do not reach around it.
+
+## Context
+
+Audited tests must exercise the engine without reaching into its internals, so they need one canonical surface for setting up state, driving play, and observing outcomes. This spec defines that surface. Scope is **SOS (V1) only** — this two-channel API is the frozen SOS paradigm; the HOB-generation benchmarks (`benchmarks/hob-*/`) instead use the native Player Query / Player Decision intent protocol (see [DECISION-MODEL.md](DECISION-MODEL.md)), and nothing in this spec applies to them.
 
 ## Philosophy
 
@@ -128,11 +133,13 @@ Fast-forwards turn structure to reach a phase/step you want to test.
 advance_to_phase(game, phase: Phase, step: Step | None = None) -> None
 ```
 
-> ⚠️ **Use sparingly, and know exactly what it runs.** Fast-forward **processes** the engine's turn-based actions, triggered abilities, and end-of-turn cleanup as it passes each phase/step, so state is correct on arrival (e.g. *until-end-of-turn* effects like sos_257 prowess actually reset). What it does **not** do is open **priority windows** — players take no directives during a fast-forward. The one exception: if a triggered ability *forces a choice* (target / selection / yes-no), that choice is still made, answered FIFO from the player's **choice script** (Channel 2); a dry choice script there fails the test like anywhere else. Only use fast-forward to *reach* the interesting part of the turn; never to skip behavior you assert on. If a player-initiated (priority) action would be needed in a skipped window, raise (test fails) rather than discard it.
+> ⚠️ **Use sparingly, and know exactly what it runs.** Fast-forward **processes** the engine's turn-based actions, triggered abilities, and end-of-turn cleanup as it passes each phase/step, so state is correct on arrival (e.g. *until-end-of-turn* effects like sos_257 prowess actually reset). What it does **not** do is open **priority windows** — players take no directives during a fast-forward. The one exception: if a triggered ability *forces a choice* (target / selection / yes-no), that choice is still made, answered FIFO from the player's **choice script** (Channel 2); a dry choice script there fails the test like anywhere else. Only use fast-forward to *reach* the interesting part of the turn; never to skip behavior you assert on. If a player-initiated (priority) action would be needed in a skipped window, raise (test fails) rather than discard it. (grilling 2026-06-04)
 
-> ⚔️ **Combat declarations are choice-script answers, not directives.** The canonical combat steps prompt the active/defending player through the public `choose`: `declare_attackers_step` asks for a **list** of attackers, `declare_blockers_step` for a **dict** `{blocker: attacker}`, and multi-block ordering comes from `assign_damage_order`. So attacking and blocking are scripted on **Channel 2** (the `choices` queue) and answered when `advance_to_phase(COMBAT, …)` runs the declare steps — **no new directive and no engine change**, since combat already flows through `choose`. One choice-script entry supplies the whole attacker list (or the whole block dict). sos_1's attack trigger then fires off the declared attacker, and its own targets/choices come from the same `choices` queue.
+> ⚔️ **Combat declarations are choice-script answers, not directives.** The canonical combat steps prompt the active/defending player through the public `choose`: `declare_attackers_step` asks for a **list** of attackers, `declare_blockers_step` for a **dict** `{blocker: attacker}`, and multi-block ordering comes from `assign_damage_order`. So attacking and blocking are scripted on **Channel 2** (the `choices` queue) and answered when `advance_to_phase(COMBAT, …)` runs the declare steps — **no new directive and no engine change**, since combat already flows through `choose`. One choice-script entry supplies the whole attacker list (or the whole block dict). sos_1's attack trigger then fires off the declared attacker, and its own targets/choices come from the same `choices` queue. (grilling 2026-06-04)
 
-`game.run()`, `run_game()`, and `run_turn()` remain **prohibited** in audited tests (they hand control of the whole game to the players and make targeted assertions impossible). Keep the `pytest-timeout` backstop (currently 30s) so a runaway `priority_loop` fails fast instead of hanging the suite.
+`game.run()`, `run_game()`, and `run_turn()` remain **prohibited** in audited tests (they hand control of the whole game to the players and make targeted assertions impossible). Keep the `pytest-timeout` backstop (300s, configured in the workspace `pytest.ini` and the host `pyproject.toml`) so a runaway `priority_loop` fails fast instead of hanging the suite.
+
+> 🧱 **Deferred until a card forces it (YAGNI, tracked on the Backlog).** Two turn-structure capabilities stay intentionally unspecified: **multi-player turn control** — all 10 audited cards test within P0's turn (P0 attacks, P1 defends via the choice script) and `create_game` starts P0 active, so there is no `set_active_player` / start-of-turn helper until a future card needs P1's turn or a turn-boundary crossing; and **simultaneous-trigger ordering** — no audited card stacks multiple simultaneous triggers needing a chosen APNAP / controller order, so the ordering machinery stays unspecified until a future card forces it (grilling 2026-06-04).
 
 ---
 
@@ -168,6 +175,10 @@ ActivateAbility(source, ability, targets=[], x=None)   # `ability` = index into 
 PlayLand(name)
 ```
 
+> 🔢 **Identifying an activated ability.** `ability` is an **index** into the card's `get_activated_abilities()` / `get_loyalty_abilities()` (printed order — e.g. Ral Zarek's +1 / −1 / −2 / −7); no engine change, no text matching, and no new ability id (grilling 2026-06-04).
+
+> 🧾 **No `SpecialAction` directive.** None of the 10 audited cards require a special action, so the directive vocabulary stays `CastSpell` / `CastSpellFree` / `ActivateAbility` / `PlayLand`; add one narrowly only if a future card needs it (YAGNI) (grilling 2026-06-04).
+
 > 🎯 **Where targets come from.** The distinction is *who puts the object on the stack.* **Player-initiated** casts and activations carry their targets on the directive — `CastSpell(name, targets=[...])`, `ActivateAbility(source, ability, targets=[...])` — and the driver passes them to the canonical entrypoint. **Engine-initiated** objects (triggered abilities: sos_1's attack trigger, sos_257's prowess, sos_120's Paradigm recur) take no directive — the trigger goes on the stack on its own, so its targets and may-choices come from the **choice script** (Channel 2). This replaces the old `_resolve_targets` internal poke.
 
 > 🧪 **Non-standard casts compose canonical helpers.** A player can cast from a non-hand zone or at an alternative cost — sos_13 Emeritus // Swords (*Prepared*) casts its back face from **exile** for {W}. The test API supplies these as thin helpers that duplicate the canonical cast path for the alternate zone/cost (`cast_spell_from_exile`, a copy of `cast_spell` that pulls from exile); the engine is never touched. `CastSpell(..., from_zone=Zone.EXILE)` and `CastSpellFree(from_zone=...)` resolve to these helpers.
@@ -187,7 +198,7 @@ PlayLand(name)
 This makes both directions of legality a first-class, observable assertion: `perform_illegal_action(CastSpell("Lightning Bolt", targets=["a land"]))` *is* the test that bolt cannot target a land.
 
 > ⚖️ **"Illegal" spans two canonical signals.** Cast/play directives surface rejection as `CastingError`; activate / mana-ability directives surface it as `AbilityError`. The driver treats **either** as the rejection signal — the test author never catches these exceptions directly.
-> **Combat is the exception:** the engine **silently filters** illegal attackers/blockers (a non-flyer assigned to a flyer, a summoning-sick or tapped attacker) with no exception raised, so `perform_illegal_action` does not apply to combat — assert combat illegality by **outcome** instead (e.g. the flyer's damage reached the player because the illegal block was dropped). `perform_illegal_action` stays for exception-signaled illegality, including sos_97's once-per-turn loyalty re-activation, which does raise `AbilityError`.
+> **Combat is the exception:** the engine **silently filters** illegal attackers/blockers (a non-flyer assigned to a flyer, a summoning-sick or tapped attacker) with no exception raised, so `perform_illegal_action` does not apply to combat — assert combat illegality by **outcome** instead (e.g. the flyer's damage reached the player because the illegal block was dropped). `perform_illegal_action` stays for exception-signaled illegality, including sos_97's once-per-turn loyalty re-activation, which does raise `AbilityError`. (grilling 2026-06-04)
 
 ### Resolution-time choices
 
@@ -208,7 +219,7 @@ All assertions read observable state through public accessors only.
 | Zones | `assert_zone_exact(game, player, zone, [cards])` | Zone contents match exactly (order-insensitive) |
 | Library | `assert_library_order(game, player, [top..bottom])` | Ordered library contents |
 | Permanent | `assert_tapped(game, perm, tapped=True)` | Tapped / untapped state |
-| Permanent | `assert_counters(game, perm, {"+1/+1": 2})` | Counter amounts. Canonical tracks only `+1/+1`, `-1/-1`, `loyalty`; arbitrary counter types are out of scope (deferred — add only if a future audited card forces it). Assert a counter's observable *effect* (P/T, mana, ability), not its presence |
+| Permanent | `assert_counters(game, perm, {"+1/+1": 2})` | Counter amounts. Canonical tracks only `+1/+1`, `-1/-1`, `loyalty` (grilling 2026-06-04); arbitrary counter types are out of scope (deferred — add only if a future audited card forces it). Assert a counter's observable *effect* (P/T, mana, ability), not its presence |
 | Permanent | `assert_damage(game, perm, n)` | Marked damage |
 | Permanent | `assert_power_toughness(game, perm, power, toughness)` | Current P/T (after all effects) |
 | Stack | `assert_stack(game, [names top..bottom])` | Ordered stack contents |
@@ -236,13 +247,4 @@ Audited tests may use **only** the following to touch the engine. Anything else 
 
 - **Revises **[**TESTING-CONVENTIONS.md**](TESTING-CONVENTIONS.md)** Rule 5.** Entering the priority loop is now *required*, not forbidden — but only via `priority_loop` / `advance_to_phase`. `game.run()` / `run_game()` / `run_turn()` stay banned.
 - **Replaces the free-function step helpers for audited tests.** The old `cast_spell(game, ...)` and `resolve_top(game)` shortcuts bypass priority and are no longer permitted in audited tests; casting and resolution now happen through `DeterministicPlayer` directives inside `priority_loop`. (Those helpers may still exist for the engine's own internal unit tests — they are simply outside the audited allow-list.)
-- **Keep the ****`pytest-timeout`**** 30s backstop** so a misused loop fails fast.
-## Open questions
-
-- [x] ~~Canonical counter key names~~ — resolved: canonical tracks only `+1/+1`, `-1/-1`, `loyalty`; string keys for those three.
-- [x] ~~`advance_to_phase`~~~~ semantics~~ — resolved: processes turn-based actions, triggers & end-of-turn cleanup (state correct on arrival) but opens no priority windows; a triggered ability that forces a choice is still answered from the choice script (dry → fail).
-- [x] ~~How to identify an activated ability~~ — resolved: `ability` is an index into the card's `get_activated_abilities()` / `get_loyalty_abilities()` (printed order assumed, e.g. Ral Zarek +1/−1/−2/−7); no engine change, no text matching, no new id.
-- [x] ~~`SpecialAction`~~~~ directive~~ — resolved: not needed. None of the 10 audited cards require a special action, so the directive vocabulary stays `CastSpell` / `CastSpellFree` / `ActivateAbility` / `PlayLand`. Add one narrowly only if/when a future card needs it (YAGNI).
-- [x] ~~Combat declarations & combat illegality~~ — resolved: attackers/blockers are choice-script answers (attackers = a list, blockers = a `{blocker: attacker}` dict, ordering via `assign_damage_order`), reached via `advance_to_phase(COMBAT, …)` — no new directive, no engine change. Illegal attacks/blocks are **silently filtered** by the engine, so they are asserted by *outcome*; `perform_illegal_action` is reserved for exception-signaled illegality (`CastingError` / `AbilityError`).
-- [x] ~~Multi-player turn control~~ — resolved: **deferred (YAGNI)**. All 10 audited cards test within P0's turn (P0 attacks, P1 defends via the choice script), and `create_game` starts P0 active; no `set_active_player` / start-of-turn helper until a future card needs P1's turn or a turn-boundary crossing. Tracked on the Backlog.
-- [x] ~~Simultaneous-trigger ordering~~ — resolved: **deferred (YAGNI)**. No audited card stacks multiple simultaneous triggers needing a chosen APNAP / controller order; ordering machinery is unspecified until a future card forces it. Tracked on the Backlog.
+- **Keep the ****`pytest-timeout`**** 300s backstop** (the value set in the workspace `pytest.ini` / host `pyproject.toml`) so a misused loop fails fast.

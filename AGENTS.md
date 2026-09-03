@@ -11,9 +11,10 @@ LLM benchmark that evaluates coding ability by tasking models with implementing 
 - Agents: Docker-based black-box containers (one image per agent+mode+strategy variant)
 - License: MIT (matching XMage)
 - Card implementations: one class per card, subclassing `CardImpl`
-- Tests: pytest with `test_utils` helpers, max 30 per card. Run with `--ignore=tests/audited/` unless working on card implementations specifically. 
+- Tests: pytest with `test_utils` helpers, max 30 per card. Audited grader tests are host-side only, not run from the agent workspace.
 - Three evaluation dimensions: target-set card correctness (SOS card correctness for SOS; HOB card correctness for the HOB generation), FDN card regression, engine regression
 - Development phases: Phase 1 (engine port) → Phase 2 (container harness + audited tests) → Phase 3 (FDN completion + replay validation) → Phase 4 (SOS benchmark runs + leaderboard)
+
 ## Domain Language
 
 See [CONTEXT.md](CONTEXT.md) for the project's domain glossary.
@@ -39,7 +40,7 @@ All specs, code, and agent instructions use these terms exactly.
 | `AUDITED-TEST-IMPROVEMENT-WORKFLOW.md` | Harvest script + combined investigation/discovery skill (manual v1 Test Harvester); harvest format, fault-attribution triage, promotion bar, cadence, tier gating |
 | `HOB-BENCHMARKS.md` | The three HOB-generation benchmarks (hob-easy/medium/hard): picked pools (23/5/5, selective subsets of the HOB set), run shape, engine freeze + tests-as-envelope, instruction docs, candidate contract |
 | `DECISION-MODEL.md` | V2 engine Player Query / Player Decision protocol, Game Symbols/Refs, Intents, DeterministicPlayer (V2) — engine-level, pool-neutral |
-| `BENCH-CONTRACT.md` | The contract TheOzolith must publish for a Benchmark Candidate to equal a worker-type definition: build-context authentication, candidate-identity triple, bench-implementer run fidelity (vendored read-only from the-ozolith; decision record is that repo's ADR-0054) |
+| `BENCH-CONTRACT.md` | The contract TheOzolith must publish for a Benchmark Candidate to equal a worker-type definition: build-context authentication, candidate-identity triple, bench-implementer run fidelity (vendored read-only from the-ozolith) |
 | `KNOWN-ISSUES.md` | Known issues encountered during benchmark-runner development, with the fixes applied |
 
 Each spec's own **Relevant ADRs** appendix links the architectural decisions behind it; there is no separate ADR index here.
