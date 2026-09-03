@@ -126,13 +126,13 @@ _Avoid_: "engine modification" (neutral — use "engine extension" to imply addi
 
 **Engine Regression**
 
-Post-run evaluation dimension: core engine tests (`tests/engine/`) run against the agent's final Writable Engine. Detects whether engine extensions broke fundamental game mechanics (mana, stack, combat, state-based actions, etc.). Separate from FDN Card Regression — an agent could pass all FDN card tests but fail engine tests if card-level workarounds corrupt internal state.
+Post-run evaluation dimension: core engine tests (`engine_tests/`) run against the agent's final Writable Engine. Detects whether engine extensions broke fundamental game mechanics (mana, stack, combat, state-based actions, etc.). Separate from FDN Card Regression — an agent could pass all FDN card tests but fail engine tests if card-level workarounds corrupt internal state.
 
 _Avoid_: "engine test" alone (ambiguous — specify "engine regression tests")
 
 **Engine Tests**
 
-Maintainer-authored core MTG-engine mechanics tests at `tests/engine/` — the input to the Engine Regression evaluation dimension (mana, stack, combat, state-based actions, etc.), run against the agent's final Writable Engine post-run. Staged into `workspace/tests/engine/` per ADR-006 so agents can self-verify Engine Extensions, but grading uses the host-repo copy. A separate bucket from Audited Tests (which grade card behavior) and Platform Tests (which test the tooling).
+Maintainer-authored core MTG-engine mechanics tests at `engine_tests/` — the input to the Engine Regression evaluation dimension (mana, stack, combat, state-based actions, etc.), run against the agent's final Writable Engine post-run. They live in the workspace at `workspace/engine_tests/` per ADR-006 so agents can self-verify Engine Extensions; grading uses the host-repo copy. A separate bucket from Audited Tests (which grade card behavior) and Platform Tests (which test the tooling).
 
 _Avoid_: "engine test" alone (ambiguous — say "Engine Tests" / "Engine Regression"), folding under "audited tests"
 
@@ -222,7 +222,7 @@ _Avoid_: "test run" (ambiguous), "dry run" (has a different meaning — `--dry-r
 
 **Platform Tests**
 
-Maintainer-authored tests for the SilverquiLLM repository's own tooling — runner, harvester, evaluator, telemetry, and `scripts/` — living under `tests/` (excluding `tests/audited/` and `tests/engine/`). They verify that the benchmark *software* works; they do not grade agent output. E.g. `tests/test_harvest_rows.py`, `tests/test_check_promotion_candidate.py`, `tests/test_evaluator.py`. Distinct from Audited Tests, Engine Tests, and Agent Tests.
+Maintainer-authored tests for the SilverquiLLM repository's own tooling — runner, harvester, evaluator, telemetry, and `scripts/` — living under the repository's top-level `tests/` (the grading suites live elsewhere: Audited Tests under `benchmarks/<benchmark>/data/tests/audited/`, Engine Tests under `benchmarks/<benchmark>/workspace/engine_tests/`). They verify that the benchmark *software* works; they do not grade agent output. E.g. `tests/test_harvest_rows.py`, `tests/test_check_promotion_candidate.py`, `tests/test_evaluator.py`. Distinct from Audited Tests, Engine Tests, and Agent Tests.
 
 _Avoid_: "repository tests" (ambiguous — Audited Tests and Engine Tests also live in the repo), "unit tests" alone (some are integration-level), "harness tests" (collides with the audited validation harness)
 
@@ -342,7 +342,7 @@ _Avoid_: "workload", "card subset", "filtered run"
 
 **Workspace**
 
-The per-benchmark directory at `benchmarks/<benchmark>/workspace/` in the bench repo (e.g. `benchmarks/sos/workspace/`, `benchmarks/hob-medium/workspace/`), copied wholesale to a per-run tmp path and mounted into the agent container at `/workspace/`. Contains the engine (canonical single copy, shared with bench tooling), all cards (FDN reference implementations + SOS Card Stubs), tests (`tests/conftest.py`, `tests/test_utils.py`, `tests/engine/`), agent-facing documentation (`AGENTS.md`, `PROJECT_MAP.md`, `rulebook.txt`), and supporting files (`pytest.ini`, `.gitignore`). Per-run files (`prompt.md`, `run_manifest.json`) are written into the copy at stage time, followed by an initial `git init && git commit` so the agent has clean version-control state. The resume staging variant (see Resume Chain) skips `git init` and preserves the prior run's `workspace_final/` `.git` history instead. The agent has read-write access to the entire workspace.
+The per-benchmark directory at `benchmarks/<benchmark>/workspace/` in the bench repo (e.g. `benchmarks/sos/workspace/`, `benchmarks/hob-medium/workspace/`), copied wholesale to a per-run tmp path and mounted into the agent container at `/workspace/`. Contains the engine (canonical single copy, shared with bench tooling), all cards (FDN reference implementations + SOS Card Stubs), test scaffolding (`conftest.py`, `test_utils.py`, `engine_tests/`), agent-facing documentation (`AGENTS.md`, `PROJECT_MAP.md`, `rulebook.txt`), and supporting files (`pytest.ini`, `.gitignore`). Per-run files (`prompt.md`, `run_manifest.json`) are written into the copy at stage time, followed by an initial `git init && git commit` so the agent has clean version-control state. The resume staging variant (see Resume Chain) skips `git init` and preserves the prior run's `workspace_final/` `.git` history instead. The agent has read-write access to the entire workspace.
 
 _Avoid_: "working directory", "sandbox", "per-card workspace" (deprecated — workspace is per-run), "staged from scratch" (deprecated — workspace is a pre-built directory copied wholesale)
 
@@ -361,7 +361,7 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 - The agent has a Writable Engine (`/workspace/engine/`) and may extend it freely throughout the run.
 - All evaluation is post-run. After the container exits, the evaluator runs tests against harvested implementations and the final engine state.
 - FDN Card Regression: evaluator runs `tests/audited/fdn/` against pre-filled FDN card impls + agent's final Writable Engine. Detects broken card behavior.
-- Engine Regression: evaluator runs `tests/engine/` against agent's final Writable Engine. Detects broken rules mechanics.
+- Engine Regression: evaluator runs `engine_tests/` against agent's final Writable Engine. Detects broken rules mechanics.
 - Self-eval / N×N cross-eval are retired; the Test Harvester (manual v1, automated v2) improves audited tests instead. Automated v2 test-quality scoring is future work.
 - The Base Set forms the reference codebase agents can browse. No Expanded Pool — agents implement new mechanics from scratch.
 - A Draft Set may span multiple Scryfall set codes (e.g., FDN + SPG).
@@ -374,7 +374,7 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 - The runner does NOT orchestrate test iteration — the agent self-manages. The runner stages, launches, harvests, evaluates.
 - On container timeout, the runner harvests partial results. Completed cards are evaluated normally; unfinished cards scored as zero.
 - Two benchmark modes: **Blind** (prompt omits test instructions) and **Tested** (prompt includes test instructions). Both produce `card_impl.py`. Distinction is prompt-only for v1. Compare modes via separate runs.
-- SOS and FDN audited tests are evaluation-only artifacts — never staged in the agent's workspace, never in results directories. Engine tests are staged at `workspace/tests/engine/` per ADR-006 so agents can locally verify engine extensions; grading still uses host-repo copies for all three dimensions. FDN Reference Tests are colocated with the FDN card implementations at `workspace/cards/fdn/{collector_number}/tests.py` as additional reference for agents. Audited SOS grader tests live host-side only — there is no `workspace/tests/cards/` directory.
+- SOS and FDN audited tests are evaluation-only artifacts — never staged in the agent's workspace, never in results directories. Engine tests are staged at `workspace/engine_tests/` per ADR-006 so agents can locally verify engine extensions; grading still uses host-repo copies for all three dimensions. FDN Reference Tests are colocated with the FDN card implementations at `workspace/cards/fdn/{collector_number}/tests.py` as additional reference for agents. Audited SOS grader tests live host-side only — there is no `workspace/tests/cards/` directory.
 - The runner is the hard timeout authority. Agent Containers may read the Run Manifest for pacing, but correctness does not depend on honoring it.
 - Output Snapshots are runner-owned, Workspace-only, and independent of Agent Container cooperation. The runner may use prior snapshot commits as fallback if final engine state is corrupted.
 - The runner writes the User Prompt to `/workspace/prompt.md`; Agent Containers bake System Prompts into their entrypoints.

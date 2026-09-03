@@ -8,7 +8,7 @@ Date: 2026-05-24
 
 Earlier staging logic assembled the Workspace per-run by copying files from multiple source locations: engine source from `engine/`, cards from `cards/`, separate reference docs (`engine_api.md`, `base_classes.py`, `test_utils.md`), and writing per-run files. Each new agent-visible artifact required a code change in `stage_workspace()` and a corresponding spec update, creating drift between the staging code and the Workspace contract spec.
 
-This pattern is fragile: spec docs reference reference docs that have already been archived; new artifacts (`AGENTS.md`, `PROJECT_MAP.md`, test scaffolding, `tests/cards/fdn/`, `.gitignore`) need staging steps that may not yet be implemented; and the assembled Workspace never exists as a single browseable directory anyone can inspect or test against in dev.
+This pattern is fragile: spec docs reference reference docs that have already been archived; new artifacts (`AGENTS.md`, `PROJECT_MAP.md`, test scaffolding, colocated FDN card tests, `.gitignore`) need staging steps that may not yet be implemented; and the assembled Workspace never exists as a single browseable directory anyone can inspect or test against in dev.
 
 ## Decision
 
@@ -20,7 +20,7 @@ The Workspace source-of-truth is a real directory in the bench repo at `benchmar
 4. Mount the copy at `/workspace/` when launching the agent container.
 The canonical engine lives at `benchmarks/sos/workspace/engine/` as a single source. Bench tooling imports from there (`from benchmarks.sos.workspace.engine import ...`), so agent-engine and eval-engine are identical by construction.
 
-Workspace tests must be runnable locally from the workspace directory in dev: `cd benchmarks/sos/workspace && pytest cards/fdn/ && pytest tests/engine/` must pass as a meta-check that the workspace itself is valid before staging.
+Workspace tests must be runnable locally from the workspace directory in dev: `cd benchmarks/sos/workspace && pytest cards/fdn/ && pytest engine_tests/` must pass as a meta-check that the workspace itself is valid before staging.
 
 ADRs are not staged into the Workspace. They live host-side under the Notion ADRs container and sync to the SilverquiLLM repo as needed; the agent never sees them.
 

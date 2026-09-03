@@ -20,7 +20,7 @@ Source: `github.com/magefree/mage` (Java, MIT — license-compatible with Silver
 
 - Core rules engine — game loop, stack, priority, combat, state-based actions, continuous effects, zones
 - Card framework — base classes and ability infrastructure
-- MTG Foundations cards — ~260 cards as the base set
+- MTG Foundations cards — the fixed 301-card Base Set pool (see Base Set below)
 **How to port:**
 
 - Preserve XMage's class hierarchy; translate to Pythonic idioms (snake_case, dataclasses, type hints). Requires Python ≥3.12. All project config (`pyproject.toml`, `ruff.toml`) must target 3.12.
@@ -50,14 +50,13 @@ Source: `github.com/magefree/mage` (Java, MIT — license-compatible with Silver
 
 ### Base Set: MTG Foundations Draft Set
 
-The Foundations card pool is the primary reference set that agents can browse during benchmarking. The initial target is ~260 cards from the MTG Foundations set, but the pool should be **expanded beyond vanilla Foundations** to ensure agents have working examples of diverse mechanics they'll encounter in target sets. The exact card list is pulled from Scryfall/MTGJson during Phase 1; the card audit is deferred to implementation.
+The Base Set is the primary reference set agents can browse during benchmarking: a fixed pool of **301 limited-format cards — FDN 001–291 plus SPG 074–083 Special Guests** — a direct XMage port of the MTG Foundations Draft Set, sourced from Scryfall/MTGJson. The pool is fixed: there is no Expanded Pool of extra reference cards, and none is planned. Agents implement new mechanics from scratch using oracle text plus the comprehensive rules, with no curated reference implementations for target-set mechanics.
 
-**Core pool (FDN 001–291 + SPG 074–083 = 301 limited-format cards):** Direct XMage port of the MTG Foundations limited-format pool. Serves as:
+The Base Set serves as:
 
-1. Engine validation — all Foundations tests passing = core mechanics correct
+1. Engine validation — validated via Replay Validation against 17lands data; all Foundations tests passing = core mechanics correct
 2. Agent reference — agents browse these as working examples during benchmarking
 3. Regression suite — catches engine regressions
-*(The originally planned Expanded Pool of extra reference cards was dropped — agents implement new mechanics from scratch using oracle text plus the comprehensive rules, with no curated reference implementations for target-set mechanics.)*
 
 ### Game State API (Draft)
 

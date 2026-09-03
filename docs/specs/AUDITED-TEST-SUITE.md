@@ -8,7 +8,7 @@ Last updated: 2026-06-10
 
 ## Context
 
-Unlike traditional benchmarks with pre-built test suites, SilverquiLLM-bench has agents generate tests as part of the benchmark — test quality is itself part of the evaluation, not pre-built. In v1, only audited tests are used for scoring. Agent-written tests are harvested for future promotion to the audited suite via a test harvester pipeline.
+Unlike traditional benchmarks with pre-built test suites, SilverquiLLM-bench has agents generate their own `tests.py` as part of a Tested Mode run. Those agent-written tests are harvested as artifacts and as promotion candidates for the audited suite, but their **quality is not a v1 scoring dimension** — test-quality scoring is future Test Harvester work (v2). In v1, only the maintainer-curated audited tests are used for scoring.
 
 This spec is scoped to SOS (V1): the `DeterministicPlayer` scripting, two-channel host-side driver, and test-API conventions below are the frozen SOS paradigm. HOB-generation audited tests instead use the Player Query / Player Decision intent protocol — see [DECISION-MODEL.md](DECISION-MODEL.md).
 
@@ -116,7 +116,7 @@ These constraints govern **Agent tests** (written by agents in Tested Mode, harv
 
 ```python
 import pytest
-from silverquillm.test_utils import (
+from test_utils import (
     create_game, set_board_state, cast_spell,
     advance_to_phase, assert_zone_contains,
     assert_life_total, assert_battlefield_count,
@@ -202,7 +202,7 @@ Audited tests are simulation-only. They advance via a host-side driver (`priorit
 
 ### Conformance gate
 
-A curated conformance gate enforces the simulation paradigm statically: it flags banned simple-name calls (a curated AST ban-list) and any leading-underscore attribute access (except `__init__` and attributes on `self`); imports are never flagged; fixture-card hook bodies are exempt (card-impl-kind code); collection-method names (`pop`, `add`, …) are flagged only when the receiver carries an engine marker. It scans the oracle audited tree plus the canonical copies so the two can't drift in conformance. Known limits: an engine object aliased to a neutral name slips the generic-name rule, and the repo has no CI workflow — the gate runs wherever `pytest tests/` runs (grilling 2026-06-10).
+A curated conformance gate enforces the simulation paradigm statically: it flags banned simple-name calls (a curated AST ban-list) and any leading-underscore attribute access (except `__init__` and attributes on `self`); imports are never flagged; fixture-card hook bodies are exempt (card-impl-kind code); collection-method names (`pop`, `add`, …) are flagged only when the receiver carries an engine marker. It scans the oracle audited tree plus the canonical copies so the two can't drift in conformance. Known limit: an engine object aliased to a neutral name slips the generic-name rule. The gate runs wherever `pytest tests/` runs, including the GitHub Actions CI suite (`python -m pytest tests/` on every push and pull request) (grilling 2026-06-10).
 
 ### Phase 18 rewrite and per-card notes
 

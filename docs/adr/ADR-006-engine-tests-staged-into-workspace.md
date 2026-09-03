@@ -12,7 +12,7 @@ Existing policy ([BENCHMARK-RUNNER.md](../specs/BENCHMARK-RUNNER.md) Contaminati
 
 ## Decision
 
-Stage `tests/engine/` into the workspace at `workspace/tests/engine/`. SOS and FDN audited tests remain hidden.
+Engine tests live in the workspace at `workspace/engine_tests/` (amended 2026-09-03), visible to the agent. SOS and FDN audited tests remain hidden.
 
 Grading uses host-repo copies for all three dimensions; the staged copy is reference-only. The agent prompt forbids modification of staged tests — modifying them produces a false-positive local signal without affecting the score, which is strictly worse than no signal.
 
@@ -29,3 +29,7 @@ Grading uses host-repo copies for all three dimensions; the staged copy is refer
 - **Document the engine contract more thoroughly; stage no tests**: Considered. Documentation work (Phase 13 item on `engine_api.md`) is complementary, not a substitute — even a perfect `engine_api.md` cannot tell the agent whether a specific change broke a specific test.
 - **Synthetic engine smoke fixtures instead of real tests**: Considered. Adds maintenance overhead and lags behind real engine evolution. The real test suite is the right artifact.
 - **Container-level chmod read-only on staged tests**: Rejected. Brittle across runtimes and unnecessary given grading uses host copies. Enforce via prompt instead.
+
+## Amendments
+
+- **2026-09-03**: Updated the staged engine-test path from `workspace/tests/engine/` to `workspace/engine_tests/`, matching the flattened workspace layout adopted in ADR-007 (the workspace is now a pre-built directory copied wholesale rather than assembled by per-file staging). The decision is unchanged — engine tests are agent-visible; SOS and FDN audited tests stay hidden.
